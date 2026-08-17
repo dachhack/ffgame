@@ -6,7 +6,7 @@
 // belongs in the screen that uses it.
 import { type ReactNode } from 'react';
 import { Text, View, Pressable, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
-import { useTheme, MONO, alpha } from '../theme.native';
+import { useTheme, MONO, alpha, fs } from '../theme.native';
 import { tap } from './feedback';
 
 type Tone = 'text' | 'dim' | 'faint' | 'mid' | 'you' | 'opp' | 'warn';
@@ -23,11 +23,13 @@ export function Mono({ children, size = 10, tone = 'dim', weight, track, style, 
   style?: StyleProp<TextStyle>;
 }) {
   const t = useTheme();
+  // fs(): every caller's size rides the global type scale (theme.native).
+  const sz = fs(size);
   return (
     <Text numberOfLines={numberOfLines} style={[
-      { fontFamily: MONO, fontSize: size, color: t[tone], lineHeight: size * 1.45 },
+      { fontFamily: MONO, fontSize: sz, color: t[tone], lineHeight: sz * 1.45 },
       weight ? { fontWeight: weight } : null,
-      track ? { letterSpacing: track * size } : null,
+      track ? { letterSpacing: track * sz } : null,
       style,
     ]}>{children}</Text>
   );
@@ -40,7 +42,7 @@ export function Display({ children, size = 14, tone = 'text', style }: {
   children: ReactNode; size?: number; tone?: Tone; style?: StyleProp<TextStyle>;
 }) {
   const t = useTheme();
-  return <Text style={[{ fontSize: size, fontWeight: '700', color: t[tone] }, style]}>{children}</Text>;
+  return <Text style={[{ fontSize: fs(size), fontWeight: '700', color: t[tone] }, style]}>{children}</Text>;
 }
 
 /** The web app's `card` style object: surface fill, hairline border, radius 8. */
@@ -82,7 +84,7 @@ export function Chip({ label, on, disabled, dim, onPress }: {
         opacity: disabled ? 0.5 : dim ? 0.6 : pressed ? 0.75 : 1,
       })}
     >
-      <Text style={{ fontSize: 11.5, fontWeight: '700', color: on ? t.onAccent : t.text }}>{label}</Text>
+      <Text style={{ fontSize: fs(11.5), fontWeight: '700', color: on ? t.onAccent : t.text }}>{label}</Text>
     </Pressable>
   );
 }
@@ -100,7 +102,7 @@ export function PrimaryButton({ label, disabled, onPress }: { label: string; dis
         opacity: disabled ? 0.6 : pressed ? 0.85 : 1,
       })}
     >
-      <Text style={{ fontSize: 15, fontWeight: '700', letterSpacing: 0.3, color: t.onAccent }}>{label}</Text>
+      <Text style={{ fontSize: fs(15), fontWeight: '700', letterSpacing: 0.3, color: t.onAccent }}>{label}</Text>
     </Pressable>
   );
 }
@@ -110,7 +112,7 @@ export function LinkButton({ label, tone = 'dim', onPress }: { label: string; to
   const t = useTheme();
   return (
     <Pressable onPress={() => { tap(); onPress(); }} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: t[tone] }}>{label}</Text>
+      <Text style={{ fontSize: fs(13), fontWeight: '600', color: t[tone] }}>{label}</Text>
     </Pressable>
   );
 }
@@ -121,7 +123,7 @@ export function PosPill({ pos, size = 9 }: { pos: string; size?: number }) {
   const c = t.pos[pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   return (
     <View style={{ backgroundColor: c.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: c.bd, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
-      <Text style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: c.fg }}>{pos}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(size), fontWeight: '700', color: c.fg }}>{pos}</Text>
     </View>
   );
 }

@@ -100,6 +100,18 @@ import { Platform } from 'react-native';
 
 export const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })!;
 
+/** Global type scale (v0.265.0). The app's sizes were ported 1:1 from the
+ *  web's CSS pixels, and what reads fine at arm's length on a laptop is
+ *  squinty on a phone — the founder's call: "the font could use a bump up."
+ *  Every size that flows through the prims (Mono, Display, Chip,
+ *  PrimaryButton, LinkButton, PosPill, Overlay chrome) multiplies by this ONE
+ *  knob, quarter-point rounded so line heights stay crisp. Raw <Text> sites on
+ *  the game surfaces (the board, the field, score digits) are deliberately NOT
+ *  scaled — those layouts are tuned to the pixel; bump them individually or
+ *  not at all. */
+export const TYPE_SCALE = 1.15;
+export const fs = (n: number) => Math.round(n * TYPE_SCALE * 4) / 4;
+
 export const type = {
   mono: { fontFamily: MONO },
   grotesk: { fontWeight: '700' as const },
