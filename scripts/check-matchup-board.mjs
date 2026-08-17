@@ -10,6 +10,7 @@
 // starting spot is not "yet to play".
 import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
+import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
 const ok = (name, cond, got) => {
   if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
@@ -113,6 +114,31 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   ok('an UNKNOWN team is never a bye — no team, no claim',
     !isBye('', wk1) && !isBye(null, wk1) && !isBye(undefined, wk1));
   ok('an UNLOADED slate never makes anyone a bye', !isBye('KC', []) && !isBye('KC', null));
+}
+
+// ── Who IS this player? (v0.246.0) ─────────────────────────────────────────
+// It lives in the board suite because the board is where getting it wrong
+// showed: an unresolvable player read as a BYE, and — because mkPlayer takes a
+// position from here — was scored as a WR.
+{
+  clearSlugMetaOverrides();
+  // A player with baked 2025 plays still answers from the PBP bake, whose team
+  // is what that play stream's possession gating is written against.
+  ok('a baked player still resolves from the PBP bake', slugMeta('saquon-barkley').pos === 'RB');
+  // The case the founder hit: a 2026 rookie has no 2025 plays, so the PBP bake
+  // cannot contain him at any freshness. The DIRECTORY bake can.
+  const tate = slugMeta('carnell-tate');
+  ok('a 2026 rookie resolves from the directory bake', tate.pos === 'WR' && tate.team === 'TEN', tate);
+  ok('…and is NOT the WR/"" default that read as a bye', tate.team !== '');
+  // Genuinely unknown still degrades quietly rather than throwing.
+  ok('an unknown slug still degrades to a neutral answer',
+    slugMeta('nobody-at-all').team === '' && slugMeta('').pos === 'WR');
+  // Team units keep their shortcuts.
+  ok('DST and K slugs are unchanged', slugMeta('kc-dst').pos === 'DEF' && slugMeta('kc-k').pos === 'K');
+  // The live overlay still wins over both bakes.
+  setSlugMetaOverrides([{ slug: 'carnell-tate', pos: 'RB', team: 'KC' }]);
+  ok('a live pool override still beats every bake', slugMeta('carnell-tate').team === 'KC');
+  clearSlugMetaOverrides();
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
