@@ -67,7 +67,11 @@ export function Recruit({ onBack, onJoined }: {
   // defaults the game type picks, adjustable from ⚑ COMMISH until the draft.
   const [canCreate, setCanCreate] = useState(false);
   const [makeOpen, setMakeOpen] = useState(false);
-  const [game, setGame] = useState<'drip' | 'classic'>('drip');
+  // NO DEFAULT (v0.251.0) — same rule as the web. This used to start on
+  // 'drip', and a commissioner who never tapped 🏈 NORMAL got a drip league
+  // with a normie name; the choice freezes at the draft, so the mistake is
+  // permanent. The form refuses to submit until the game is chosen.
+  const [game, setGame] = useState<'drip' | 'classic' | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
@@ -182,8 +186,10 @@ export function Recruit({ onBack, onJoined }: {
   // leagues screen either way (it exists; it just needs another go).
   const doCreate = async () => {
     const nm = nameDraft.trim();
-    if (!nm || busy) return;
-    setBusy(true); setErr(null); setMakeNote('Creating your league…');
+    if (!nm || busy || !game) return;
+    // The busy note NAMES the game — the last chance to notice a wrong tap
+    // before it freezes at the draft.
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       // Same defaults the web derives from the game type (v0.221.0): drip
@@ -200,7 +206,9 @@ export function Recruit({ onBack, onJoined }: {
       const sched = await nativeGenerateSchedule(r.league_id, 14);
       if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from ⚑ COMMISH')); return; }
       commit();
-      setJoined(`${nm} — you're its commissioner`);
+      // The success note names the game too — created is the moment a wrong
+      // mode is cheapest to notice.
+      setJoined(`${nm}, a ${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
       setMakeOpen(false); setNameDraft('');
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); setMakeNote(''); onJoined(); await load(); }
@@ -273,9 +281,11 @@ export function Recruit({ onBack, onJoined }: {
                   <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
                 </View>
                 <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-                  {game === 'drip'
-                    ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
-                    : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
+                  {game === null
+                    ? 'Pick one — this is the choice that decides what your league plays, and it locks in at the draft.'
+                    : game === 'drip'
+                      ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
+                      : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
                 </Mono>
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
@@ -304,13 +314,20 @@ export function Recruit({ onBack, onJoined }: {
                   style={{ width: 62, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
               </View>
               <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-                {game === 'classic'
-                  ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
-                  : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
+                {game === null
+                  ? 'The roster shape follows the game you pick above.'
+                  : game === 'classic'
+                    ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
+                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
                 {' '}You take seat 1 as commissioner and a 14-week schedule is generated automatically.
               </Mono>
-              <PrimaryButton label={busy ? (makeNote || 'CREATING…') : '⚡ CREATE LEAGUE'}
-                disabled={busy || !nameDraft.trim()} onPress={() => void doCreate()} />
+              {/* The button NAMES the game it will create — the confirmation
+                  lives in the moment of commitment, not in a dialog after. */}
+              <PrimaryButton
+                label={busy ? (makeNote || 'CREATING…')
+                  : game === null ? 'PICK A GAME TO CREATE'
+                  : game === 'classic' ? '⚡ CREATE 🏈 NORMAL LEAGUE' : '⚡ CREATE ◈ DRIP LEAGUE'}
+                disabled={busy || !nameDraft.trim() || !game} onPress={() => void doCreate()} />
             </View>
           )}
         </Card>

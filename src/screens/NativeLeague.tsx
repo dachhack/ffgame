@@ -116,7 +116,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // game IS — scoring, the lineup, the whole weekly loop — so it comes first,
   // and it's the only new control: everything it needs beyond a flag (roster
   // size, position caps) it sets as a DEFAULT rather than as another question.
-  const [game, setGame] = useState<'drip' | 'classic'>('drip');
+  //
+  // NO DEFAULT (v0.251.0). This used to start on 'drip', and a commissioner
+  // who never tapped 🏈 NORMAL got a drip league with a normie name — which is
+  // exactly how the founder's "Normie Test" happened, and the choice FREEZES
+  // at the draft, so the mistake is permanent. The form now refuses to submit
+  // until the game is chosen. Mocks are exempt: a mock is a draft with no
+  // season behind it, so it drafts the drip shape without asking.
+  const [game, setGame] = useState<'drip' | 'classic' | null>(null);
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -154,7 +161,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     : capsToPosCaps({ QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
 
   const create = async () => {
-    if (busy || (kind === 'league' && !name.trim())) return;
+    if (busy || (kind === 'league' && (!name.trim() || !game))) return;
+    // Mocks never ask — they draft the drip shape (the choice is a season
+    // property, and a mock has no season).
+    const chosenGame: 'drip' | 'classic' = game ?? 'drip';
     setBusy(true); setErr(null);
     try {
       const pickSecs = pace === 'slow' ? clockHrs * 3600 : clock;
@@ -174,9 +184,12 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         onDone(r.league_id, r.roster_id ?? 1);
         return;
       }
-      setNote('Creating your league…');
+      // The busy note NAMES the game, so the moment of creation says what is
+      // being created — the last chance to notice a wrong tap before it
+      // freezes at the draft.
+      setNote(`Creating your ${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
-        mode === 'auction' ? maxLots : 1, null, null, caps, game);
+        mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -232,9 +245,11 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
               <Chip on={game === 'classic'} onClick={() => setGame('classic')}>🏈 NORMAL</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-              {game === 'drip'
-                ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
-                : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
+              {game === null
+                ? 'Pick one — this is the choice that decides what your league plays, and it locks in at the draft.'
+                : game === 'drip'
+                  ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
+                  : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
             </div>
             <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
@@ -276,18 +291,25 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             commissioner's ROSTER tab until the draft starts. Say what you're
             getting; don't make them configure it before the league exists. */}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
-          {game === 'classic' && kind === 'league'
-            ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
-            : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Roster size, position limits and the overnight draft pause are all adjustable in league settings until the draft starts.`}
+          {kind === 'league' && game === null
+            ? 'The roster shape follows the game you pick above.'
+            : game === 'classic' && kind === 'league'
+              ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
+              : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Roster size, position limits and the overnight draft pause are all adjustable in league settings until the draft starts.`}
         </div>
         {pace === 'slow' && (
           <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
             Slow drafts run for days. Fairness is built in: any bid restarts the full bid window (no sniping), hidden max bids answer for you while you're away, and a missed turn nominates from your own queue.
           </div>
         )}
-        <button onClick={create} disabled={busy || (kind === 'league' && !name.trim())} className="mono"
-          style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || (kind === 'league' && !name.trim()) ? 0.6 : 1 }}>
-          {busy ? (note || 'CREATING…') : kind === 'mock' ? '🤖 START THE MOCK →' : 'CREATE LEAGUE →'}
+        {/* The button NAMES the game it will create — the confirmation lives
+            in the moment of commitment, not in a dialog after the fact. */}
+        <button onClick={create} disabled={busy || (kind === 'league' && (!name.trim() || !game))} className="mono"
+          style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || (kind === 'league' && (!name.trim() || !game)) ? 0.6 : 1 }}>
+          {busy ? (note || 'CREATING…')
+            : kind === 'mock' ? '🤖 START THE MOCK →'
+            : game === null ? 'PICK A GAME TO CREATE'
+            : game === 'classic' ? 'CREATE 🏈 NORMAL LEAGUE →' : 'CREATE ◈ DRIP LEAGUE →'}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
