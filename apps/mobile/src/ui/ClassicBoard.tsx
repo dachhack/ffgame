@@ -301,7 +301,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     let stop = false;
     // Best ball fills from the opponent's FULL roster, so fetch it once.
     const oppRoster = matchup.home_roster_id === rosterId ? matchup.away_roster_id : matchup.home_roster_id;
-    if (bestball.length) myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
+    // The opponent's ROSTER, always — not just in best-ball leagues. Since
+    // v0.248.0 an unmanaged seat (no app_user_id, so sealed_pick has nowhere to
+    // store a lineup) fields its best projected lineup from its roster, and
+    // without this the board would show that seat empty while the resolver
+    // scored it. In the founder's own leagues that is seven seats in eight.
+    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows] = await Promise.all([getRevealedPicks(matchup.id), weekLivePlays(matchup.week)]);
@@ -319,7 +324,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     void load();
     const id = setInterval(() => { void load(); }, 60_000);
     return () => { stop = true; clearInterval(id); };
-  }, [matchup, userId, leagueId, rosterId, bestball.length]);
+  }, [matchup, userId, leagueId, rosterId]);
 
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   // The league's configured lineup (0161) — slot names, types, eligibility.
@@ -355,9 +360,22 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         out[d.slot] = manual[d.slot] ?? null;
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
+      // exp rides along (0172) so tenure-filtered spots fill honestly.
+      const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
+      // THE SEAT NOBODY MANAGES (v0.248.0). sealed_pick hangs off a user, so a
+      // seat with no claimed manager cannot store a lineup at all — the worker's
+      // auto-slot never reaches it. The engine fields its best projected lineup
+      // from the roster instead (classicLineup), and this is the same call, so
+      // what this board draws is what the resolver scores. Only when the side
+      // stored NOTHING: a seat with rows is managed, and everything it stored
+      // stands, empty spots included.
+      if (!Object.keys(manual).length && ros.length) {
+        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, (pl) => PROJ_2026.get(pl.id) ?? 0)) {
+          out[r.slot] = r.player;
+          manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
+        }
+      }
       if (matchup && bb.size) {
-        // exp rides along (0172) so tenure-filtered spots fill honestly.
-        const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
         // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
         // itself with whoever scores most, so before anyone has scored it used
         // to render empty and count ZERO toward the projected total —

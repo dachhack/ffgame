@@ -413,23 +413,48 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   if (gameMode.mode === 'classic') {
     // ── CLASSIC league (0157): standard fantasy, one weekly lineup, no buffs,
     //    no bonuses, no coin. Only 'wk' picks count — a drip-shaped auto-lineup
-    //    from the fallback paths must not leak into a classic score, so a side
-    //    with no 'wk' rows simply fields nothing (classic's honest missed-lineup:
-    //    empty slots score zero, present slots still score). ──
+    //    from the fallback paths must not leak into a classic score. A side that
+    //    STORED a lineup gets exactly what it stored, empty spots included. A
+    //    side with NO 'wk' rows at all is an unmanaged seat (v0.248.0) and the
+    //    engine fields its best projected lineup from the roster. ──
     const classify = (picks) => (picks ?? [])
       .filter((p) => p.win === CLASSIC_WIN && p.slug)
       .map((p) => ({ slot: p.slot, player: player(p.slug) }));
-    // Best ball (0159): the flagged slots pick from the FULL drafted roster,
-    // so those sides carry it. One 2-row query, only for best-ball leagues.
+    // "Did this side store anything?" — and it has to be asked of the DATABASE,
+    // not of `picks`. Every path that reaches here has already dropped rows with
+    // a null player_slug (matchupSealedRows filters them, and so does the ctx
+    // prefetch), so a manager who deliberately emptied every spot arrives
+    // looking exactly like a seat that never had a lineup. Lifting that filter
+    // would be the tidier fix and is not safe: the same rows feed the DRIP
+    // paths, where "no rows" means AI-rebuild and "rows, none locked" means
+    // field nothing — flipping a drip seat between those is not this change's
+    // business. So classic asks its own question, and only when a side looks
+    // unmanaged, which is at most one extra read per classic matchup.
+    const storedBy = new Set();
+    if (homePicks == null || awayPicks == null) {
+      const uids = [homeMem?.app_user_id, awayMem?.app_user_id].filter(Boolean);
+      if (uids.length) {
+        const { data: anyRows } = await db().from('sealed_pick')
+          .select('app_user_id')
+          .eq('matchup_id', matchup.id).eq('game_window', CLASSIC_WIN).in('app_user_id', uids);
+        for (const r of anyRows ?? []) storedBy.add(r.app_user_id);
+      }
+    }
+    const hasRows = (picks, rosterId) => picks != null
+      || storedBy.has(byRoster.get(rosterId)?.app_user_id);
+    // The roster feeds BOTH auto-fills — best ball's (0159) and the unmanaged
+    // seat's — so it is loaded for every classic matchup now, not just
+    // best-ball ones. Two extra rows per matchup against seven-eighths of the
+    // founder's seats fielding nothing.
     const rosters = new Map();
     const bestball = leagueBestball(gameMode);
     const slotDefs = leagueSlotDefs(gameMode);
-    if (bestball.length) {
+    {
       const { data: ros } = await db().from('native_roster').select('roster_id,slug')
         .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
         .in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
       // Per-slot tenure filters (0172) check years_exp — visible only via
-      // league_pool, so fetch it when a best-ball spot actually has a window.
+      // league_pool, so fetch it when a spot actually filters on it.
       const expBySlug = new Map();
       if (slotDefs.some((d) => d.flt && (d.flt.min_exp != null || d.flt.max_exp != null))) {
         const { data: lp } = await db().from('league_pool').select('slug,exp')
@@ -443,6 +468,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     }
     const sideOf = (picks, rosterId) => ({
       picks: classify(picks),
+      hasLineup: hasRows(picks, rosterId),
       roster: rosters.get(rosterId) ?? [],
       bestball,
     });

@@ -17,8 +17,9 @@
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy,
-  optimalLineup, autoSlotPlan,
+  optimalLineup, autoSlotPlan, classicLineup,
 } from '../packages/core/src/engine/classic';
+import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 
 let fails = 0;
@@ -452,6 +453,65 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // the rest still open. The fill has to be optimal OVER WHAT IS LEFT.
   ok('the fill is optimal over the spots that are still open',
     JSON.stringify(plan({ S3: 'rb1' })) === JSON.stringify({ S1: 'qb', S2: 'rb2' }), plan({ S3: 'rb1' }));
+}
+
+// ── The seat nobody manages (v0.248.0) ─────────────────────────────────────
+// sealed_pick.app_user_id is NOT NULL, so an unclaimed seat has nowhere to
+// store a lineup and the worker's auto-slot can never reach it — seven of eight
+// seats in the founder's own leagues. classicLineup fields its best projected
+// lineup from the roster instead, and the rule that keeps that safe is the one
+// worth asserting: it fires ONLY when the side stored nothing.
+{
+  // Real slugs, so the ranking is the real PROJ_2026 the resolver will use.
+  const R = (id, pos, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', stats: {}, ...extra });
+  const roster = [
+    R('jonathan-taylor', 'RB'),   // 20.0
+    R('josh-allen', 'QB'),        // 23.5
+    R('puka-nacua', 'WR'),        // 21.4
+    R('trevor-lawrence', 'QB'),   // 18.0
+  ];
+  const s = spots({ pos: ['QB'] }, { pos: ['RB', 'WR', 'TE'] });
+  const seatedOf = (picks) => Object.fromEntries(picks.map((p) => [p.slot, p.player.id]));
+
+  ok('the projections these assertions lean on are still the baked ones',
+    PROJ_2026.get('josh-allen') === 23.5 && PROJ_2026.get('trevor-lawrence') === 18
+      && PROJ_2026.get('puka-nacua') === 21.4,
+    [PROJ_2026.get('josh-allen'), PROJ_2026.get('trevor-lawrence'), PROJ_2026.get('puka-nacua')]);
+
+  // No rows at all → the seat is unmanaged, and fields its best legal lineup.
+  {
+    const got = seatedOf(classicLineup({ picks: [], roster, bestball: [] }, 1, 1, s));
+    ok('an unmanaged seat fields its best projected lineup',
+      got.S1 === 'josh-allen' && got.S2 === 'puka-nacua', got);
+  }
+  // THE ONE THAT KEEPS IT SAFE. Rows exist but hold nobody — a manager who
+  // emptied every spot. hasLineup says so, and nothing is filled in.
+  {
+    const got = seatedOf(classicLineup({ picks: [], roster, bestball: [], hasLineup: true }, 1, 1, s));
+    ok('a MANAGED seat that emptied every spot still fields nothing',
+      Object.keys(got).length === 0, got);
+  }
+  // A stored lineup stands exactly as stored, weaker player and empty spot both.
+  {
+    const got = seatedOf(classicLineup(
+      { picks: [{ slot: 'S1', player: R('trevor-lawrence', 'QB') }], roster, bestball: [] }, 1, 1, s));
+    ok('a stored pick is never upgraded to the better player', got.S1 === 'trevor-lawrence', got);
+    ok('…and the spot they left empty stays empty', got.S2 === undefined, got);
+  }
+  // Degenerate inputs stay quiet rather than throwing.
+  ok('an unmanaged seat with no roster fields nothing',
+    classicLineup({ picks: [], roster: [], bestball: [] }, 1, 1, s).length === 0);
+  ok('an unmanaged seat with nobody eligible fields nothing',
+    classicLineup({ picks: [], roster, bestball: [] }, 1, 1, spots({ pos: ['K'] })).length === 0);
+  // A best-ball spot is not the fallback's business — it fills itself at
+  // scoring time, and filling it here would reserve a player twice.
+  {
+    const t = spots({ pos: ['QB'] }, { pos: ['RB', 'WR', 'TE'], bb: true });
+    const got = seatedOf(classicLineup({ picks: [], roster, bestball: ['S2'] }, 1, 1, t));
+    ok('the fallback leaves best-ball spots to best ball', got.S1 === 'josh-allen', got);
+    ok('…and never starts one player in two spots',
+      new Set(Object.values(got)).size === Object.values(got).length, got);
+  }
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

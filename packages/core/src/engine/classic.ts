@@ -23,6 +23,7 @@
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor } from '../data/commish';
+import { PROJ_2026 } from '../data/proj2026';
 
 export const CLASSIC_WIN = 'wk';
 
@@ -806,11 +807,14 @@ export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): Spo
 // `valueOf` is the caller's, exactly as in `bestballFillBy` — projections
 // before kickoff, real points after — so this never has an opinion about what
 // "best" means, only about how to arrange it.
-export function optimalLineup(
+// Generic in the player type so a caller holding full engine `Player`s gets
+// `Player`s back — `classicLineup` needs the real objects to score, and a cast
+// at the boundary would be a lie the compiler stopped checking.
+export function optimalLineup<T extends SpotPlayer>(
   slots: ClassicSlotDef[],
-  players: SpotPlayer[],
-  valueOf: (p: SpotPlayer) => number,
-): SpotAssignment {
+  players: T[],
+  valueOf: (p: T) => number,
+): { spots: { def: ClassicSlotDef; player: T | null }[]; bench: T[] } {
   // Value once per player: `matchSpots` is called on the sorted list, and a
   // comparator that re-derives a projection per comparison is the expensive
   // half of this on a full roster.
@@ -899,8 +903,43 @@ export function planSpotMove(
 }
 
 /** One side of a classic matchup. `bestball` + `roster` drive the auto-fill;
- *  without them the side is fully manual (the 0157 behavior, unchanged). */
-export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[] }
+ *  without them the side is fully manual (the 0157 behavior, unchanged).
+ *
+ *  `hasLineup` answers "does this side have STORED ROWS", which is not the same
+ *  question as "does `picks` have entries": callers filter picks down to rows
+ *  holding a player, so a manager who deliberately emptied every spot arrives
+ *  here looking identical to a seat that never had a lineup at all. The
+ *  unmanaged-seat fallback below turns on exactly that distinction, so it has
+ *  to be passed rather than inferred. Omitted → inferred from `picks`, which is
+ *  right for every caller that has no rows to speak of. */
+export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[]; hasLineup?: boolean }
+
+// ── The seat nobody manages (v0.248.0) ─────────────────────────────────────
+// `sealed_pick.app_user_id` is `not null references app_user(id)`, so a seat
+// with no claimed manager has NOWHERE to store a lineup. The worker's auto-slot
+// therefore cannot reach one, and in the founder's own leagues that is seven
+// seats out of eight — every one of them fielding nothing and losing 0–x every
+// week while its roster sat on the bench.
+//
+// It doesn't need a row. `PROJ_2026` is a baked constant, so "the best lineup
+// this roster can field" is the SAME ANSWER all week — which means it can be
+// computed at scoring time instead of stored, and the boards and the resolver
+// reach it through this one function and cannot disagree. (The one thing that
+// would move it is re-baking proj2026.ts mid-week; nothing is frozen against
+// that, and freezing it would need the row we haven't got.)
+//
+// It fires only when the side has NO STORED ROWS. A seat the worker has written
+// is a managed seat, and everything it stored — including a spot cleared on
+// purpose — stands exactly as stored. So this can never overrule a manager; it
+// only speaks for seats that have no manager to overrule.
+function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>): ClassicPick[] {
+  const roster = s.roster ?? [];
+  if (!roster.length) return [];
+  const open = slots.filter((d) => !bb.has(d.slot));
+  const cands = roster.filter((p) => !flagRulesFor(p.id).noStart);
+  return optimalLineup(open, cands, (p) => PROJ_2026.get(p.id) ?? 0)
+    .spots.flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
+}
 
 /** A side's EFFECTIVE lineup: manual picks (best-ball slots' stored rows
  *  ignored) + the best-ball fills. Exported so the boards can render exactly
@@ -908,7 +947,12 @@ export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball
 export function classicLineup(s: ClassicSide, week: number, sc?: number | Partial<ClassicScoring>, slots: ClassicSlotDef[] = CLASSIC_SLOTS): ClassicPick[] {
   const bb = new Set(s.bestball ?? []);
   const manual = s.picks.filter((p) => !bb.has(p.slot));
-  return [...manual, ...bestballFill(manual, s.bestball ?? [], s.roster ?? [], week, sc, slots)];
+  // An unmanaged seat's auto-lineup takes the MANUAL side of the contract: it
+  // reserves its players against the best-ball fill exactly as a set lineup
+  // would, so one player can't be started twice.
+  const stored = s.hasLineup ?? s.picks.length > 0;
+  const started = stored ? manual : unmanagedStart(s, slots, bb);
+  return [...started, ...bestballFill(started, s.bestball ?? [], s.roster ?? [], week, sc, slots)];
 }
 
 /** Resolve one classic matchup: each starter's points, summed — nothing else.
