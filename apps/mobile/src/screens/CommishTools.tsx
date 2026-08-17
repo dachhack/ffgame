@@ -12,7 +12,7 @@
 // The server is the real gate on all of it — every RPC here checks the caller
 // is the league's commissioner or an admin; the tab merely hides the door.
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
@@ -100,6 +100,9 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   // chip pops the section up FROM BELOW as a bottom sheet — the app's own
   // idiom (Overlay) over the web console's tap-into-a-lone-panel pattern.
   const [section, setSection] = useState<string | null>(null);
+  // The roster builder's drag-to-reorder (v0.267.0) freezes the sheet's
+  // scroll while a row rides the finger — two vertical gestures, one winner.
+  const [sheetScroll, setSheetScroll] = useState(true);
   // Remount lever for the child cards after a settings save — rules changes
   // (roster caps, coin budget) alter what CommishPlayers/CommishTeams show.
   const [epoch, setEpoch] = useState(0);
@@ -212,8 +215,8 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
       {section != null && !['waivers', 'playoffs', 'board'].includes(section) && (
         <Overlay visible
           title={NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === section)?.label ?? section}
-          onClose={() => setSection(null)}>
-          <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+          onClose={() => { setSection(null); setSheetScroll(true); }}>
+          <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled scrollEnabled={sheetScroll}>
             {section === 'kit' && <CommishToolsCard leagueId={leagueId} />}
             {section === 'seats' && (
               <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
@@ -221,7 +224,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
             )}
             {section === 'activity' && <CommishSeen leagueId={leagueId} />}
             {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
-            {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" />}
+            {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
             {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
             {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
             {section === 'coin' && (
@@ -1107,8 +1110,13 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // only offers itself where the founder's per-league flag (0158) is on.
 // A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
 // (0172) as raw input strings, so partial typing never fights the keyboard.
-type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
+// `k` is a client-only stable key: drag-to-reorder (v0.267.0) needs row views
+// that SURVIVE a reorder — index keys would remount the row mid-gesture and
+// kill the pan responder. Never sent to the server (fromSpotDraft ignores it).
+type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
+let spotKeySeq = 1;
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
+  k: spotKeySeq++,
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
@@ -1252,7 +1260,12 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
   );
 }
 
-function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'mode' | 'lineup' | 'scoring' }) {
+function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
+  leagueId: string; view?: 'mode' | 'lineup' | 'scoring';
+  /** Reorder drag in progress — the hosting sheet freezes its scroll so the
+   *  row follows the finger instead of the list following it (v0.267.0). */
+  onDragActive?: (active: boolean) => void;
+}) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
@@ -1260,8 +1273,23 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
-  // Which spot's PER-SLOT filter editor (0172) is open.
-  const [fltOpen, setFltOpen] = useState<number | null>(null);
+  // Which spot's EDITOR sheet (label / filters / remove) is open (v0.267.0 —
+  // the founder's "button to pop up a position label editor"; the 0172 filter
+  // popover folded into it so the row itself never wraps).
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  // ── Drag-to-reorder (v0.267.0, replacing the ▲▼ arrows) ──
+  // One drag at a time: the lifted row's key (styling), its live index (ref —
+  // gesture handlers read refs so re-renders mid-drag never go stale), the
+  // per-key measured heights (rows vary), and the accumulated offset of rows
+  // already crossed, so the transform stays finger-relative after each swap.
+  const [dragK, setDragK] = useState<number | null>(null);
+  const dragIdxRef = useRef(-1);
+  const dragAccum = useRef(0);
+  const rowH = useRef<Record<number, number>>({});
+  const dragY = useRef(new Animated.Value(0)).current;
+  // Current key order, refreshed every render AND spliced eagerly on swap, so
+  // a fast drag crossing two rows in one frame reads correct neighbours.
+  const orderRef = useRef<number[]>([]);
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
@@ -1337,6 +1365,59 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
     } catch { warn(); }
     finally { setBusy(false); }
   };
+  // ── Drag-to-reorder mechanics (v0.267.0) ──
+  // Swap-on-cross: the lifted row translates with the finger; passing more
+  // than half of a neighbour swaps with it in state (rows re-layout), and the
+  // accumulated height of crossed rows keeps the transform finger-relative.
+  // Handlers read refs, never closure state — the gesture outlives re-renders.
+  if (spots) orderRef.current = spots.map((s) => s.k);
+  const liftRow = (i: number, k: number) => {
+    tap();
+    dragIdxRef.current = i; dragAccum.current = 0; dragY.setValue(0);
+    setDragK(k); setEditIdx(null); onDragActive?.(true);
+  };
+  const moveRow = (dy: number) => {
+    let idx = dragIdxRef.current;
+    if (idx < 0) return;
+    const ord = orderRef.current;
+    let eff = dy - dragAccum.current;
+    for (;;) {
+      if (eff > 0 && idx < ord.length - 1) {
+        const h = rowH.current[ord[idx + 1]] ?? 44;
+        if (eff > h * 0.55) {
+          const [k] = ord.splice(idx, 1); ord.splice(idx + 1, 0, k);
+          setSpots((cur) => { if (!cur) return cur; const n = cur.slice(); const [r] = n.splice(idx, 1); n.splice(idx + 1, 0, r); return n; });
+          setSpotsDirty(true); dragAccum.current += h; idx++; eff = dy - dragAccum.current; continue;
+        }
+      } else if (eff < 0 && idx > 0) {
+        const h = rowH.current[ord[idx - 1]] ?? 44;
+        if (eff < -h * 0.55) {
+          const [k] = ord.splice(idx, 1); ord.splice(idx - 1, 0, k);
+          setSpots((cur) => { if (!cur) return cur; const n = cur.slice(); const [r] = n.splice(idx, 1); n.splice(idx - 1, 0, r); return n; });
+          setSpotsDirty(true); dragAccum.current -= h; idx--; eff = dy - dragAccum.current; continue;
+        }
+      }
+      break;
+    }
+    dragIdxRef.current = idx;
+    dragY.setValue(eff);
+  };
+  const dropRow = () => {
+    if (dragIdxRef.current < 0) return;
+    dragIdxRef.current = -1; dragAccum.current = 0; dragY.setValue(0);
+    setDragK(null); onDragActive?.(false); commit();
+  };
+  // A fresh responder object each render is fine: the grip VIEW is stable
+  // (key = sp.k) and RN re-binds its handler props, which read the refs above.
+  const gripPan = (i: number, k: number) => PanResponder.create({
+    onStartShouldSetPanResponder: () => !busy,
+    onMoveShouldSetPanResponder: () => !busy,
+    onPanResponderGrant: () => liftRow(i, k),
+    onPanResponderMove: (_e, g) => moveRow(g.dy),
+    onPanResponderRelease: dropRow,
+    onPanResponderTerminate: dropRow,
+  }).panHandlers;
+
   const saveSpots = async () => {
     if (busy || !spots || !spots.length) return;
     setBusy(true); setNote(null);
@@ -1448,70 +1529,116 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
             {spotsDirty && <Pill on label="SAVE LINEUP" onPress={() => void saveSpots()} />}
           </View>
           <View style={{ gap: 5, marginTop: 6 }}>
-            {spots.map((sp, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 }}>
-                <Mono size={8.5} weight="700" tone="dim" style={{ width: 16 }}>{i + 1}</Mono>
-                {[...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))].map((p) => {
-                  const on = sp.pos.includes(p);
-                  // A lit chip wears the POSITION's colour (v0.216.1) — same
-                  // palette PosPill uses, so the builder speaks the draft
-                  // board's language. Unknown tokens fall back to neutral.
-                  const c = t.pos[p as keyof typeof t.pos] ?? { bg: t.you, fg: t.onAccent, bd: t.you };
-                  return (
-                    <Pressable key={p} disabled={busy}
-                      onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
-                      style={{ borderRadius: 3, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
-                      <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
-                    </Pressable>
-                  );
-                })}
-                <Pressable disabled={busy}
-                  onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
-                  style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
-                  <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯 BB</Text>
-                </Pressable>
-                <Pressable disabled={busy} onPress={() => { tap(); setFltOpen((cur) => cur === i ? null : i); }}
-                  style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: spotHasFlt(sp) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: spotHasFlt(sp) ? t.you : t.bd }}>
-                  <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: spotHasFlt(sp) ? t.onAccent : t.dim }}>🔎</Text>
-                </Pressable>
-                {/* Touch has no drag-and-drop, so reordering is ▲▼ here — same
-                    result as the web builder's handle. */}
-                <Pressable disabled={busy || i === 0} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i - 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: i === 0 ? t.faint : t.dim }}> ▲ </Text>
-                </Pressable>
-                <Pressable disabled={busy || i === spots.length - 1} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i + 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: i === spots.length - 1 ? t.faint : t.dim }}> ▼ </Text>
-                </Pressable>
-                <Pressable disabled={busy || spots.length <= 1} onPress={() => { tap(); setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: t.opp }}> ✕ </Text>
-                </Pressable>
-                {/* PER-SLOT FILTER (0172): who may FILL this spot — teams and/or
-                    a tenure window (0 = rookie). Never shrinks the draft pool. */}
-                {fltOpen === i && (
-                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
-                    <TextInput value={sp.fTeams} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }}
-                      placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, flexGrow: 1, minWidth: 130 }} />
-                    <TextInput value={sp.fMin} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: v })); setSpotsDirty(true); }}
-                      placeholder="min" keyboardType="number-pad" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
-                    <TextInput value={sp.fMax} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: v })); setSpotsDirty(true); }}
-                      placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
-                    <TextInput value={sp.label} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
-                      placeholder="name this spot (e.g. Only NFC Players)" placeholderTextColor={t.faint} maxLength={24}
-                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 6, paddingVertical: 4, width: '100%' }} />
-                    <Mono size={7.5} tone="faint">rookies → max 0 · the name is a label; chips + filters decide who may fill it · SAVE LINEUP applies</Mono>
-                    <TeamChips value={sp.fTeams} disabled={busy}
-                      onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
+            {spots.map((sp, i) => {
+              const dragging = dragK === sp.k;
+              const marked = spotHasFlt(sp) || !!sp.label.trim();
+              return (
+                // Stable key (sp.k): a reorder must NOT remount the row — the
+                // active pan responder lives on its grip view.
+                <Animated.View key={sp.k}
+                  onLayout={(e) => { rowH.current[sp.k] = e.nativeEvent.layout.height + 5; }}
+                  style={[
+                    { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: dragging ? t.you : t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 5, backgroundColor: t.surface },
+                    dragging ? { transform: [{ translateY: dragY }], zIndex: 10, elevation: 6, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } } : null,
+                  ]}>
+                  {/* the DRAG GRIP (v0.267.0) — hold and move to reorder;
+                      replaced the ▲▼ arrows */}
+                  <View {...gripPan(i, sp.k)} hitSlop={10} style={{ paddingHorizontal: 3, paddingVertical: 6 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: dragging ? t.you : t.faint }}>⠿</Text>
                   </View>
-                )}
-              </View>
-            ))}
+                  <Mono size={8.5} weight="700" tone="dim" style={{ width: 18 }}>{i + 1}</Mono>
+                  {/* the chips get the row's flexible middle; controls stay
+                      pinned right so the ROW never wraps (founder). A custom
+                      label reads as its own line inside the card. */}
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {[...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))].map((p) => {
+                      const on = sp.pos.includes(p);
+                      // A lit chip wears the POSITION's colour (v0.216.1) — same
+                      // palette PosPill uses, so the builder speaks the draft
+                      // board's language. Unknown tokens fall back to neutral.
+                      const c = t.pos[p as keyof typeof t.pos] ?? { bg: t.you, fg: t.onAccent, bd: t.you };
+                      return (
+                        <Pressable key={p} disabled={busy}
+                          onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
+                          style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
+                          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
+                        </Pressable>
+                      );
+                    })}
+                    {!!sp.label.trim() && (
+                      <Mono size={7.5} tone="you" numberOfLines={1} style={{ width: '100%' }}>“{sp.label.trim()}”</Mono>
+                    )}
+                  </View>
+                  <Pressable disabled={busy}
+                    onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
+                    style={{ borderRadius: 999, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯</Text>
+                  </Pressable>
+                  {/* the spot EDITOR (v0.267.0): label, filters, remove — one
+                      button popping a sheet, instead of three inline controls */}
+                  <Pressable disabled={busy} onPress={() => { tap(); setEditIdx(i); }}
+                    style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: marked ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: marked ? t.you : t.bd }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: marked ? t.onAccent : t.dim }}>✏️</Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
+            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
+            <Mono size={7.5} tone="faint">⠿ drag to reorder · 🎯 best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
           </View>
+
+          {/* ── The SPOT EDITOR sheet (v0.267.0): the founder's "button to pop
+              up a position label editor". Label front and center; the 0172
+              per-slot filters and the remove action ride along, so the row
+              itself stays one clean line. Edits are live; SAVE LINEUP applies. */}
+          <Overlay visible={editIdx != null && editIdx < spots.length}
+            title={`✏️ Spot ${(editIdx ?? 0) + 1}`}
+            subtitle="Name it, limit who may fill it, or remove it — then SAVE LINEUP."
+            onClose={() => setEditIdx(null)}>
+            {editIdx != null && spots[editIdx] && (() => { const sp = spots[editIdx]; const i = editIdx; return (
+              <View>
+                <Mono size={9} tone="faint" weight="700" track={0.12}>LABEL</Mono>
+                <TextInput value={sp.label} autoFocus maxLength={24}
+                  onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
+                  placeholder={`e.g. FLEX, Only NFC Players — empty = ${sp.pos.join('/')}`} placeholderTextColor={t.faint}
+                  style={{ fontFamily: MONO, fontSize: fs(13), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, marginTop: 6, backgroundColor: t.bg }} />
+                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
+                  Shows on the draft board and lineups in place of the position list. The position chips and the filters below decide who may actually fill it.
+                </Mono>
+
+                <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>WHO MAY FILL IT (0172)</Mono>
+                <TextInput value={sp.fTeams}
+                  onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }}
+                  placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
+                  style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, marginTop: 6 }} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                  <Mono size={9} tone="faint">TENURE</Mono>
+                  <TextInput value={sp.fMin}
+                    onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: v })); setSpotsDirty(true); }}
+                    placeholder="min" keyboardType="number-pad" placeholderTextColor={t.faint}
+                    style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, width: 60, textAlign: 'center' }} />
+                  <TextInput value={sp.fMax}
+                    onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: v })); setSpotsDirty(true); }}
+                    placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
+                    style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, width: 60, textAlign: 'center' }} />
+                  <Mono size={8} tone="faint" style={{ flex: 1 }}>years — rookies = max 0 (tenure needs a pool re-seed)</Mono>
+                </View>
+                <View style={{ marginTop: 6 }}>
+                  <TeamChips value={sp.fTeams} disabled={busy}
+                    onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
+                </View>
+
+                <View style={{ marginTop: 16, alignItems: 'center' }}>
+                  {spots.length > 1
+                    ? <LinkButton label="✕ remove this spot" tone="opp"
+                        onPress={() => { tap(); setEditIdx(null); setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }} />
+                    : <Mono size={8.5} tone="faint">the last spot can’t be removed</Mono>}
+                </View>
+              </View>
+            ); })()}
+          </Overlay>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
