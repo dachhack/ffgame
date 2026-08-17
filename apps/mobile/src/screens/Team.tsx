@@ -151,7 +151,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'league'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'standings'>('roster');
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -370,7 +370,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ['roster', '🧢 ROSTER'],
           ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
           ['trades', '⇄ TRADES'],
-          ['league', '🏆 LEAGUE'],
+          // "LEAGUE" collided with the 🏠 LEAGUE tab on the nav strip above and
+          // named the wrong thing besides: the panel is the standings + the
+          // playoff bracket (founder).
+          ['standings', '🏆 STANDINGS'],
         ] as const).map(([id, label]) => (
           <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
         ))}
@@ -519,7 +522,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       </>)}
 
       {/* standings + the bracket — every member's read */}
-      {tab === 'league' && (<>
+      {tab === 'standings' && (<>
       <Standings leagueId={leagueId} myRoster={myRoster} />
       <Playoffs leagueId={leagueId} />
       </>)}
