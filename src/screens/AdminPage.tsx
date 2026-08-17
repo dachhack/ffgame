@@ -14,6 +14,7 @@ import {
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
+  keeperState, setKeeperCount, rolloverLeague, type KeeperState,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -277,7 +278,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 export type LeagueTab =
   | 'overview' | 'waivers' | 'admin'
   | 'mode' | 'lineup' | 'scoring'
-  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
+  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
@@ -1109,6 +1110,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         ...(native ? [
           { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
           { id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>,
+          { id: 'dynasty', label: '🔁 NEXT SEASON' } as TabDef<LeagueTab>,
         ] : []),
       ],
     },
@@ -1216,6 +1218,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {/* the endgame: standings, bracket, champion (native leagues only) */}
       {tab === 'playoffs' && l.provider === 'native' && <PlayoffPanel leagueId={l.league_id} />}
+
+      {/* dynasty (0182): keepers + the rollover into next season */}
+      {tab === 'dynasty' && l.provider === 'native' && <DynastyPanel leagueId={l.league_id} leagueName={l.name} />}
 
       {tab === 'overview' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2953,6 +2958,124 @@ function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; v
 // ── PLAYOFFS tab (native leagues, 0073): settings → standings/seeds →
 // bracket → champion. advance_playoffs is idempotent, so every load calls it
 // first — finished rounds roll forward without anyone pressing a button.
+// ── Dynasty (0182): keepers + the rollover into next season ──────────────────
+// The rollover names the game it carries (v0.251.0 rule) — the confirm and the
+// success line both say DRIP or NORMAL out loud.
+function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: string | null }) {
+  const [st, setSt] = useState<KeeperState | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [count, setCount] = useState('');
+  const [rookieOnly, setRookieOnly] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = async () => {
+    const s = await keeperState(leagueId);
+    if (s.error || !s.ok) { setMsg(s.error ?? 'could not load'); return; }
+    setSt(s); setCount(String(s.keeper_count));
+  };
+  useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
+  useEffect(() => {
+    leaguePool(leagueId)
+      .then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p.full_name]))))
+      .catch(() => {});
+  }, [leagueId]);
+  if (!st) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading…'}</div>;
+
+  const modeName = st.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP';
+  const rolled = !!st.rolled_league_id;
+  const drafted = st.draft_status === 'complete';
+  const playerName = (s: string) => names[s] ?? s;
+  const saveCount = async () => {
+    const n = parseInt(count, 10);
+    if (busy || Number.isNaN(n)) return;
+    setBusy(true); setMsg(null);
+    try { const r = await setKeeperCount(leagueId, n); setMsg(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work')); await load(); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const roll = async () => {
+    if (busy || !st.next_season) return;
+    const keeps = st.keeper_count > 0 ? `every team keeps its ${st.keeper_count} (declared first, best-ranked fill the rest), and the draft runs ${st.roster_size - st.keeper_count} rounds` : 'every roster redrafts in full';
+    if (!window.confirm(`Roll “${leagueName ?? 'this league'}” into ${st.next_season} as a ${modeName} league?\n\nSame settings, scoring and seats; ${keeps}${rookieOnly ? '; the draft pool is pinned ROOKIES-ONLY (reseed the pool from the draft room before starting)' : ''}. Wallets start the new season fresh. This season's league stays as history.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await rolloverLeague(leagueId, 14, rookieOnly);
+      setMsg(r.ok
+        ? `✓ rolled into ${r.season} — a ${r.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league, ${r.kept} keepers carried, ${r.draft_rounds}-round draft pending. Invite code ${r.invite_code}.`
+        : (r.error ?? 'that didn’t work'));
+      await load();
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={subhead}>KEEPERS</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mono" style={{ ...mono, fontSize: 12 }}>each team keeps</span>
+          <input value={count} onChange={(e) => setCount(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
+            disabled={busy || rolled} style={{ ...inp, width: 52, textAlign: 'center' }} />
+          <span className="mono" style={{ ...mono, fontSize: 12 }}>of {st.roster_size} into {st.next_season ?? 'next season'}</span>
+          <button onClick={saveCount} disabled={busy || rolled} className="mono" style={{ ...btn, fontSize: 11.5 }}>save</button>
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          Managers declare their keepers on their TEAM screen once the season’s draft is done. A seat that declares nothing keeps its best-ranked players automatically.
+        </div>
+      </div>
+
+      {st.keeper_count > 0 && (
+        <div>
+          <div style={subhead}>WHO KEEPS WHOM {rolled ? '(as carried)' : '(as of now)'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {st.teams.map((t) => (
+              <div key={t.roster_id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, minWidth: 110 }}>{t.team ?? `Team ${t.roster_id}`}</span>
+                {t.keep.length === 0
+                  ? <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>rosters arrive at the draft</span>
+                  : t.keep.map((k) => (
+                    <span key={k.slug} className="mono" style={{ ...chip, fontSize: 11 }} title={k.declared ? 'declared by the manager' : 'auto: best by rank'}>
+                      {k.declared ? '★ ' : ''}{playerName(k.slug)}
+                    </span>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div style={subhead}>ROLL INTO {st.next_season ?? 'NEXT SEASON'}</div>
+        {rolled ? (
+          <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--you)' }}>
+            ✓ this season already rolled into {st.next_season}. Open the new league from LEAGUES to run its draft.
+          </div>
+        ) : !drafted ? (
+          <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>
+            The rollover opens once this season’s draft is complete.
+          </div>
+        ) : (
+          <>
+            <label className="mono" style={{ ...mono, fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={rookieOnly} onChange={(e) => setRookieOnly(e.target.checked)} disabled={busy} />
+              rookie draft — next season’s pool is pinned to first-year players (reseed the pool from the draft room before starting it)
+            </label>
+            <button onClick={roll} disabled={busy} className="mono"
+              style={{ ...btn, fontSize: 12, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', borderColor: 'var(--you)' }}>
+              {busy ? '…' : `🔁 ROLL INTO ${st.next_season ?? '—'} · ${modeName}`}
+            </button>
+            <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+              Creates the {st.next_season} league: same settings and seats, keepers on the rosters, a fresh {st.keeper_count > 0 ? `${st.roster_size - st.keeper_count}-round` : 'full'} draft waiting, schedule generated. Coin wallets start fresh — the weekly budget funds the new season.
+            </div>
+          </>
+        )}
+      </div>
+
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [teams, setTeams] = useState(4);

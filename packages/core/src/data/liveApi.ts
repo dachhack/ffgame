@@ -1708,6 +1708,51 @@ export const seedLeaguePool = (leagueId: string, players: { slug: string; full: 
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
 
+// ── Dynasty (0182): keepers + season rollover ────────────────────────────────
+
+/** Commissioner: how many players every team keeps into next season (0 clears). */
+export const setKeeperCount = (leagueId: string, count: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; keeper_count?: number }>('set_keeper_count',
+    { p_league_id: leagueId, p_count: count }), 'set_keeper_count');
+
+/** A manager (or commish) declares a roster's keepers. Replace-all semantics. */
+export const setKeepers = (leagueId: string, rosterId: number, slugs: string[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; declared?: number }>('set_keepers',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_slugs: slugs }), 'set_keepers');
+
+export interface KeeperTeam {
+  roster_id: number; team: string | null; claimed: boolean;
+  declared: string[];
+  /** What rollover would keep TODAY: declared first, topped up by pool rank. */
+  keep: { slug: string; declared: boolean }[];
+}
+export interface KeeperState {
+  ok?: boolean; error?: string;
+  keeper_count: number; roster_size: number; draft_status: string;
+  season: string; next_season: string | null;
+  game_mode: 'drip' | 'classic';
+  /** Non-null ⇒ this season already rolled over, into that league. */
+  rolled_league_id: string | null;
+  my_roster_id: number | null;
+  teams: KeeperTeam[];
+}
+export const keeperState = (leagueId: string) =>
+  rpc<KeeperState>('keeper_state', { p_league_id: leagueId });
+
+/** Commissioner, post-season: clone the league into season+1 — same settings
+ *  and seats, keepers carried onto the new rosters, a fresh pending draft
+ *  (rounds − keepers picks) and a generated schedule. Wallets start fresh.
+ *  rookieOnly (dynasty phase 2) carries only the keepers into the new pool and
+ *  pins pool_filter to rookies-only, so the pre-draft reseed builds a rookie
+ *  draft. The response NAMES the game mode it carried (v0.251.0 rule). */
+export const rolloverLeague = (leagueId: string, weeks = 14, rookieOnly = false) =>
+  tracked(rpc<{
+    ok: boolean; error?: string; league_id?: string; season?: string;
+    game_mode?: 'drip' | 'classic'; keeper_slots?: number; kept?: number;
+    draft_rounds?: number; roster_size?: number; rookie_only?: boolean;
+    invite_code?: string;
+  }>('rollover_league', { p_league_id: leagueId, p_weeks: weeks, p_rookie_only: rookieOnly }), 'rollover_league');
+
 export const startDraft = (leagueId: string, order?: number[]) =>
   rpc<{ ok: boolean; error?: string; order?: number[] }>('start_draft', { p_league_id: leagueId, p_order: order ?? null });
 export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; price?: number | null; }
@@ -1738,6 +1783,10 @@ export interface DraftState {
   is_mock?: boolean;
   /** Per-position roster limits (null value = uncapped). */
   pos_caps?: PosCaps;
+  /** Dynasty (0182): `rounds` is the rounds actually DRAFTED. keeper_slots
+   *  roster spots arrived pre-filled; roster_size = rounds + keeper_slots. */
+  keeper_slots?: number;
+  roster_size?: number;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Replace a seat's private draft queue with an ordered slug list. */
