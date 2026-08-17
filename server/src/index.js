@@ -16,6 +16,7 @@ import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
+import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
@@ -190,6 +191,12 @@ async function tickContext(ctx, season) {
   // BEFORE lockDueMatchups, so a week that comes due on this same tick seals a
   // real lineup rather than a blank card. Idempotent — it only writes spots
   // that have no row, so a set lineup costs one read and nothing else.
+  try {
+    // SEAT AGENTS (0180) first, so a just-created league's empty seats are
+    // agented before the same tick's auto-slot writes lineups.
+    const agents = await ensureSeatAgents();
+    if (agents) log(`[${ctx.tag}] provisioned`, agents, 'seat agents');
+  } catch (e) { log(`[${ctx.tag}] seat agents`, e.message); }
   try {
     // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
     // injuries come from injury_status inside.

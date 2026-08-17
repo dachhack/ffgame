@@ -38,17 +38,18 @@ select m.week,
        left(m.id::text, 8)                as matchup,
        s.roster_id,
        (mem.app_user_id is not null)      as has_user,
+       (sa.agent_user_id is not null)     as has_agent,   -- 0180: an unclaimed seat with an agent writes rows
        (select count(*) from native_roster r
          where r.league_id = m.league_id
            and r.roster_id = s.roster_id
            and r.spot = 'active')         as roster_n,
        (select count(*) from sealed_pick sp
          where sp.matchup_id = m.id
-           and sp.app_user_id = mem.app_user_id
+           and sp.app_user_id = coalesce(mem.app_user_id, sa.agent_user_id)
            and sp.game_window = 'wk')     as wk_rows,
        (select count(*) from sealed_pick sp
          where sp.matchup_id = m.id
-           and sp.app_user_id = mem.app_user_id
+           and sp.app_user_id = coalesce(mem.app_user_id, sa.agent_user_id)
            and sp.game_window = 'wk'
            and sp.player_slug is not null) as wk_filled
   from matchup m
@@ -57,6 +58,9 @@ select m.week,
   left join league_membership mem
          on mem.league_id = m.league_id
         and mem.sleeper_roster_id = s.roster_id
+  left join seat_agent sa
+         on sa.league_id = m.league_id
+        and sa.roster_id = s.roster_id
  where coalesce(l.settings_json ->> 'game_mode', 'drip') = 'classic'
    and m.status = 'scheduled'
  order by m.week, m.id, s.roster_id
