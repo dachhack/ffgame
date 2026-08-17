@@ -176,6 +176,64 @@ begin
   perform assert_true((select player_slug from sealed_pick where matchup_id = mid and roster_slot = 'S2') = 'bye-man',
     'ol11 a sealed pick is still immutable (RLS refuses the write)');
 
+  -- ── THE ROSTER (0179): a started player stops moving ─────────────────────
+  -- The lineup rule above has a roster half: IR, a drop, or an add all move a
+  -- player just as surely as a lineup swap does. One trigger on native_roster
+  -- covers every door, so these assert through the RPCs a manager really uses.
+  reset role; perform probe_as_server();
+  update draft set status = 'complete' where league_id = lid;   -- roster moves need a finished draft
+  insert into native_roster (league_id, roster_id, slug, acquired) values
+    (lid, 1, 'thursday-man', 'draft'), (lid, 1, 'sunday-man', 'draft');
+  set local role authenticated; perform probe_as('c');
+  -- Wrong seat first: roster_id 1 is b's (c joined second), so c is refused for
+  -- a reason that has nothing to do with kickoffs. Guards the guard.
+  perform assert_true((drop_player(lid, 1, 'sunday-man') ->> 'error') = 'forbidden', 'ol20 the permission check still runs first');
+  perform probe_as('b');
+  -- Sunday's player still moves: his game is ahead.
+  perform assert_ok(drop_player(lid, 1, 'sunday-man'), 'ol21 a player yet to kick off can still be dropped');
+  -- Thursday's cannot — he is mid-game.
+  begin
+    perform drop_player(lid, 1, 'thursday-man');
+    raise exception 'PROBE FAIL ol22 — a player mid-game was dropped';
+  exception when check_violation then null;
+  end;
+  -- IR needs a real designation and a spot to put him in, so give him both:
+  -- otherwise set_roster_spot refuses for its OWN reasons and proves nothing
+  -- about kickoffs. (That is the trap this probe was written wrong once for.)
+  reset role; perform probe_as_server();
+  insert into injury_status (player_slug, status) values ('thursday-man', 'O')
+    on conflict (player_slug) do update set status = 'O';
+  -- The shape RPC locks once the draft starts, so set it as the server: this
+  -- probe is about kickoffs, not about who may reshape a roster.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || jsonb_build_object('roster_shape', jsonb_build_object('bench', 6, 'taxi', 0, 'ir', 2))
+    where id = lid;
+  set local role authenticated; perform probe_as('b');
+  begin
+    perform set_roster_spot(lid, 'thursday-man', 'ir');
+    raise exception 'PROBE FAIL ol23 — a player mid-game was moved to IR';
+  exception when check_violation then null;
+  end;
+  -- And the BEST-BALL exploit: adding someone whose game has already been
+  -- played, so a best-ball spot could field him with his score known.
+  -- Free him up OUTSIDE the exception block: a caught exception rolls the whole
+  -- block back, so staging done inside it would be undone with the failure.
+  reset role; perform probe_as_server();
+  update league_pool set waived_until = null where league_id = lid and slug = 'thursday-man';
+  delete from native_roster where league_id = lid and slug = 'thursday-man';
+  set local role authenticated; perform probe_as('b');
+  begin
+    perform add_free_agent(lid, 1, 'thursday-man');
+    raise exception 'PROBE FAIL ol24 — a player whose game had started was added';
+  exception when check_violation then null;
+  end;
+  -- The SERVER still moves anyone: the worker must never jam mid-Sunday.
+  reset role; perform probe_as_server();
+  insert into native_roster (league_id, roster_id, slug, acquired) values (lid, 1, 'thursday-man', 'fa');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and slug = 'thursday-man'),
+    'ol25 the server is exempt');
+  set local role authenticated; perform probe_as('b');
+
   -- ── DRIP IS UNTOUCHED ─────────────────────────────────────────────────────
   perform probe_as('b');
   drip_lid := (create_native_league('Still Hidden', '2026', 4, 12, 60) ->> 'league_id')::uuid;
@@ -196,6 +254,15 @@ begin
   set local role authenticated; perform probe_as('b');
   perform assert_true((select count(*) from sealed_pick where matchup_id = drip_mid) = 1,
     'ol14 DRIP: a LOCKED pick is readable, exactly as before');
+
+  -- A DRIP roster is untouched by 0179 even for the same kicked-off player.
+  reset role; perform probe_as_server();
+  update draft set status = 'complete' where league_id = drip_lid;
+  insert into league_pool (league_id, slug, full_name, pos, team, rank)
+    values (drip_lid, 'thursday-man', 'Thursday Man', 'RB', 'BUF', 1) on conflict do nothing;
+  insert into native_roster (league_id, roster_id, slug, acquired) values (drip_lid, 1, 'thursday-man', 'draft');
+  set local role authenticated; perform probe_as('b');
+  perform assert_ok(drop_player(drip_lid, 1, 'thursday-man'), 'ol15a DRIP: roster moves are not gated on kickoff');
 
   -- DRIP's window rule still bites: 'thu' kicked off two hours ago.
   perform probe_as('c');

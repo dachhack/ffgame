@@ -301,6 +301,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     const t = window.setInterval(() => setNowTs(Date.now()), 30_000);
     return () => window.clearInterval(t);
   }, []);
+  // Escape closes the picker — a dialog you can only dismiss with a mouse is a
+  // dialog a keyboard user is stuck in.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickerSlot(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // The opponent's lineup + roster (best ball fills from it) + the week's live
   // plays, on a minute cadence. Since 0178 a classic league's lineups are OPEN
@@ -677,41 +684,63 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       )}
       {saveNote && <div className="mono" style={{ fontSize: 9.5, color: saveNote === 'saved' ? 'var(--faint)' : 'var(--warn, #c66)' }}>{saveNote === 'saved' ? (saving ? 'saving…' : '✓ lineup saved') : saveNote}</div>}
 
-      {/* Picker: eligible, unused roster players for the open slot */}
-      {pickerSlot && canEdit(pickerSlot) && (
-        <div style={card}>
-          {(() => {
-            const d = slotDefs.find((x) => x.slot === pickerSlot);
-            const f = slotFilterLabel(d?.flt);
-            return (
-              <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>
-                SET {d ? nameOf(d) : pickerSlot} — {d?.pos.join(' / ')}
-                {f ? <span style={{ color: 'var(--you)' }}> · {f}</span> : null}
+      {/* ── THE PICKER, as a card over the board ───────────────────────────
+          It used to render inline UNDER the whole board, which meant tapping a
+          spot near the top scrolled the answer off screen: you pressed a thing
+          and nothing appeared to happen. A spot is a question ("who goes
+          here?"), so the answer belongs over the question — dismissed by the
+          backdrop, ✕, or Escape, like the draft room's player card.
+
+          It lists ONLY what may legally go in this spot: the spot's own
+          position + filter rules (slotAllows), minus anyone already started,
+          minus anyone whose game has kicked off — because the database would
+          refuse all three and a picker that offers a refusal is a trap. */}
+      {pickerSlot && canEdit(pickerSlot) && (() => {
+        const d = slotDefs.find((x) => x.slot === pickerSlot);
+        const f = slotFilterLabel(d?.flt);
+        const eligible = bench
+          .filter((p) => d && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+          .filter((p) => !kickedOff(p.slug));
+        return (
+          <div onClick={() => setPickerSlot(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{d ? nameOf(d) : pickerSlot}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
+                    takes {d?.pos.join(' / ')}
+                    {f ? <span style={{ color: 'var(--you)' }}> · {f}</span> : null}
+                  </div>
+                </div>
+                <button onClick={() => setPickerSlot(null)} className="mono" aria-label="close"
+                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
               </div>
-            );
-          })()}
-          {mine[pickerSlot] && (
-            <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
-              style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '7px 8px', marginBottom: 4, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>
-              ✕ CLEAR SLOT
-            </button>
-          )}
-          {bench
-            .filter((p) => slotAllows(slotDefs.find((d) => d.slot === pickerSlot)!, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-            // A player whose game has kicked off can't be started — the DB
-            // refuses it (0178), so the picker must not offer him.
-            .filter((p) => !kickedOff(p.slug))
-            .map((p) => (
-            <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 2, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
-              <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
-              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{shortName(p.full)}</span>
-              <PosPill pos={p.pos as Pos} />
-              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team}</span>
-            </button>
-          ))}
-        </div>
-      )}
+              {mine[pickerSlot] && (
+                <button onClick={() => { void assign(pickerSlot, null); setPickerSlot(null); }} className="mono"
+                  style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '8px 9px', marginBottom: 6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>
+                  ✕ LEAVE THIS SPOT EMPTY
+                </button>
+              )}
+              {eligible.length === 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
+                  Nobody on your bench can fill this spot right now — everyone eligible is either already starting or has kicked off.
+                </div>
+              )}
+              {eligible.map((p) => (
+                <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); setPickerSlot(null); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
+                  <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
+                  <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{shortName(p.full)}</span>
+                  <PosPill pos={p.pos as Pos} />
+                  <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30, textAlign: 'right' }}>{p.team}</span>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{(PROJ_2026.get(p.slug) ?? 0).toFixed(1)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
           game lines, so this would otherwise be the same players twice. */}

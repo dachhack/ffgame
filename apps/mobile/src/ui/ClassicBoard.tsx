@@ -26,6 +26,7 @@ import {
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
+import { Overlay } from './Overlay';
 
 /** One team in the scoreboard: crest, name, record + seed, and the headline
  *  number.
@@ -618,31 +619,57 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       )}
       {saveNote && <Mono size={9} tone={saveNote.startsWith('✓') ? 'faint' : 'warn'}>{saveNote}</Mono>}
 
-      {/* Picker */}
-      {pickerSlot && slotDef && canEdit(pickerSlot) && (
-        <Card>
-          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>SET {nameOf(slotDef)} — {slotDef.pos.join(' / ')}{slotFilterLabel(slotDef.flt) ? ` · ${slotFilterLabel(slotDef.flt)}` : ''}</Mono>
-          {mine[pickerSlot] && (
-            <Pressable onPress={() => { void assign(pickerSlot, null); }} style={{ paddingVertical: 7 }}>
-              <Mono size={10} tone="dim">✕ CLEAR SLOT</Mono>
-            </Pressable>
-          )}
-          {bench
+      {/* ── THE PICKER, as a sheet over the board ──────────────────────────
+          It used to render inline BELOW the whole board, so tapping a spot near
+          the top scrolled the answer off screen — you pressed a thing and
+          nothing appeared to happen. A spot is a question ("who goes here?"),
+          so the answer comes up over it, in the app's own bottom-sheet idiom
+          (ui/Overlay: enters from the thumb's edge, drag to dismiss).
+
+          It lists ONLY what may legally go in this spot: the spot's own
+          position + filter rules (slotAllows), minus anyone already starting,
+          minus anyone whose game has kicked off — the database refuses all
+          three, and a picker that offers a refusal is a trap. */}
+      <Overlay
+        visible={!!(pickerSlot && slotDef && canEdit(pickerSlot))}
+        title={slotDef ? nameOf(slotDef) : 'Set spot'}
+        subtitle={slotDef
+          ? `TAKES ${slotDef.pos.join(' / ')}${slotFilterLabel(slotDef.flt) ? ` · ${slotFilterLabel(slotDef.flt)}` : ''}`
+          : undefined}
+        onClose={() => setPickerSlot(null)}>
+        {pickerSlot && slotDef && (() => {
+          const eligible = bench
             .filter((p) => slotAllows(slotDef, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-            // A player whose game has kicked off can't be started — the DB
-            // refuses it (0178), so the picker must not offer him.
-            .filter((p) => !kickedOff(p.slug))
-            .map((p) => (
-            <Pressable key={p.slug} onPress={() => { void assign(pickerSlot, p.slug); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 }}>
-              <Face slug={p.slug} />
-              <Display size={12.5} style={{ flexShrink: 1 }}>{shortName(p.full)}</Display>
-              <PosPill pos={p.pos} />
-              <Mono size={8.5} tone="faint">{p.team}</Mono>
-            </Pressable>
-          ))}
-        </Card>
-      )}
+            .filter((p) => !kickedOff(p.slug));
+          return (
+            <View>
+              {!!mine[pickerSlot] && (
+                <Pressable onPress={() => { tap(); void assign(pickerSlot, null); setPickerSlot(null); }}
+                  style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Mono size={10} tone="dim">✕ LEAVE THIS SPOT EMPTY</Mono>
+                </Pressable>
+              )}
+              {eligible.length === 0 && (
+                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
+                  Nobody on your bench can fill this spot right now — everyone eligible is either already starting or has kicked off.
+                </Mono>
+              )}
+              {eligible.map((p) => (
+                <Pressable key={p.slug} onPress={() => { tap(); void assign(pickerSlot, p.slug); setPickerSlot(null); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Face slug={p.slug} />
+                  <Display size={12.5} style={{ flex: 1 }}>{shortName(p.full)}</Display>
+                  <PosPill pos={p.pos} />
+                  <Mono size={8.5} tone="faint" style={{ width: 28, textAlign: 'right' }}>{p.team}</Mono>
+                  <Mono size={10} tone="dim" weight="700" style={{ width: 32, textAlign: 'right' }}>
+                    {(PROJ_2026.get(p.slug) ?? 0).toFixed(1)}
+                  </Mono>
+                </Pressable>
+              ))}
+            </View>
+          );
+        })()}
+      </Overlay>
 
       {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
           game lines, so this would otherwise be the same players twice. */}
