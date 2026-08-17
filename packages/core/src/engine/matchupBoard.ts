@@ -234,6 +234,28 @@ export function gameFor(team: string | null | undefined, slate: { home: string; 
   return { opponent: isHome ? g.away : g.home, kickoff: g.kickoff ?? null, home: isHome };
 }
 
+/** Is this player genuinely on a BYE — or do we just not know?
+ *
+ *  `gameFor` answers null for BOTH "this team isn't playing" and "I have no
+ *  idea who this player is", and the board used to print BYE for either. That
+ *  is a claim we often could not support: a player the baked slug map doesn't
+ *  know (a 2026 rookie, before a re-bake) resolves with an EMPTY team, and an
+ *  empty team is in nobody's slate — so a rookie starting his season opener
+ *  read "BYE · No game this week" beside the real kickoff of the man next to
+ *  him.
+ *
+ *  So a bye has to be PROVEN, and it takes two things we frequently lack:
+ *    • a KNOWN team — no team, no claim;
+ *    • a LOADED slate — an unsynced week would otherwise call all 32 teams
+ *      idle at once.
+ *  Anything else answers false, and the caller says nothing rather than
+ *  something false. */
+export function isBye(team: string | null | undefined, slate: { home: string; away: string }[]): boolean {
+  if (!team) return false;
+  if (!slate?.length) return false;
+  return gameFor(team, slate as { home: string; away: string; kickoff?: string | null }[]) == null;
+}
+
 /** Which TEAM's building a game is played in — the home side. Neutral-site
  *  games (London, Munich, São Paulo) are wrong here and knowably so; see the
  *  limits documented in data/stadiums.ts. */

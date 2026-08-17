@@ -12,11 +12,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import {
@@ -55,7 +55,7 @@ function GameCard({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' 
     <div style={box}>
       <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
         <div className="mono" style={{ fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {bye ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}
+          {bye ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed')}
           {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
           {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
         </div>
@@ -276,6 +276,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         }).catch(() => {});
         const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId)]);
         setPool(pl);
+        // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie
+        // the baked slug map has never heard of otherwise resolves to WR with
+        // an EMPTY team — which reads as a bye on the board and scores as a WR
+        // in classicPoints. The pool row knows his real position and team.
+        setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
         const map: Record<string, string | null> = {};
         const seal: Record<string, boolean> = {};
         for (const p of pk) {
@@ -328,7 +333,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     if (!matchup || !ros) return;
     let stop = false;
     const oppRoster = matchup.home_roster_id === ros.rosterId ? matchup.away_roster_id : matchup.home_roster_id;
-    if (bestball.length) myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) setOppPool(p); }).catch(() => {});
+    if (bestball.length) myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows] = await Promise.all([getRevealedPicks(matchup.id), weekLivePlays(matchup.week)]);
@@ -448,7 +453,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         proj: PROJ_2026.get(slug) ?? 0,
         state: g ? entryState(g.kickoff, m.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
-        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : 'BYE',
+        // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
+        // slate. Without both this says nothing — a player the bake doesn't
+        // know used to read "BYE" on the day he played his opener.
+        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(m.team, slate) ? 'BYE' : null),
         injury: injuryFor(matchup?.week ?? 1, slug),
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
@@ -477,6 +485,19 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     });
   }, [matchup, ros, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
 
+  /** The next kickoff that will freeze one of MY spots — the honest
+   *  replacement for a league-wide lock time that no longer exists. */
+  const nextLockLabel = useMemo(() => {
+    const now = nowTs;
+    const ks = slotDefs
+      .map((d) => effective.mine[d.slot])
+      .filter(Boolean)
+      .map((slug) => gameFor(slugMeta(slug!).team, slate)?.kickoff)
+      .map((k) => (k ? Date.parse(k) : NaN))
+      .filter((ms) => Number.isFinite(ms) && ms > now);
+    if (!ks.length) return 'nothing left to lock';
+    return fmtLock(new Date(Math.min(...ks)).toISOString());
+  }, [slotDefs, effective, slate, nowTs]);
   /** Has this player's game started? The one question that decides everything
    *  editable on this screen now. A player with no game (bye) never starts. */
   const kickedOff = (slug: string | null | undefined): boolean => {
@@ -567,9 +588,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         <div style={card}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
             <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
+            {/* NO OVERALL LOCK IN CLASSIC (founder). Since 0178 each spot locks
+                at its own player's kickoff, so a single "LOCKS Wed 8:20 PM" was
+                simply untrue — it was matchup.lock_at, the drip lead, which now
+                only decides when the matchup flips to live. What IS true and
+                useful is the NEXT one of your spots to freeze. */}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap' }}>
-              {locked ? 'LIVE' : 'LOCKS'}
-              {!locked && <div style={{ fontSize: 9, marginTop: 3 }}>{fmtLock(matchup?.lock_at ?? null)}</div>}
+              {locked ? 'LIVE' : 'NEXT LOCK'}
+              {!locked && <div style={{ fontSize: 9, marginTop: 3 }}>{nextLockLabel}</div>}
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
