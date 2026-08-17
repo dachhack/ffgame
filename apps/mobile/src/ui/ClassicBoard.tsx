@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
-import { buildMatchupBoard, gameFor, entryState, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
+import { roofFor } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -26,12 +27,19 @@ import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 
-/** One team in the scoreboard: crest, name, record + seed, live score, and
- *  the projected final beneath it. */
-function TeamHead({ side, align, scoreless = false }: { side: BoardSide; align: 'left' | 'right'; scoreless?: boolean }) {
+/** One team in the scoreboard: crest, name, record + seed, and the headline
+ *  number.
+ *
+ *  `mode`: 'live' — points. 'proj' — nothing has kicked off, so the projected
+ *  total is the headline. 'hidden' — the opponent's lineup is sealed until
+ *  kickoff (RLS, not shyness), so there is no number to show and a 0.00 would
+ *  read as "they have nobody". */
+function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'right'; mode: 'live' | 'proj' | 'hidden' }) {
   const t = useTheme();
   const rec = side.record;
   const right = align === 'right';
+  const big = mode === 'hidden' ? '—' : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
+  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : `proj ${side.projected.toFixed(1)}`;
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
@@ -47,8 +55,8 @@ function TeamHead({ side, align, scoreless = false }: { side: BoardSide; align: 
           {rec.wins}-{rec.losses}{rec.ties ? `-${rec.ties}` : ''}{rec.rank ? ` (#${rec.rank})` : ''}
         </Mono>
       )}
-      <Display size={24} style={{ marginTop: 3 }}>{scoreless ? '—' : side.live.toFixed(2)}</Display>
-      {!scoreless && <Mono size={8.5} tone="dim">proj {side.projected.toFixed(1)}</Mono>}
+      <Display size={24} style={{ marginTop: 3 }}>{big}</Display>
+      <Mono size={8.5} tone={mode === 'hidden' ? 'faint' : 'dim'}>{sub}</Mono>
     </View>
   );
 }
@@ -92,9 +100,46 @@ function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right'
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
-      <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
-        {e.opponent === 'BYE' ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}
-      </Text>
+    </View>
+  );
+}
+
+/** The sub-card under a name: WHERE and WHEN the game is, and the number.
+ *
+ *  Sleeper's board puts three things here — kickoff, venue conditions and the
+ *  score. We show two. The third is WEATHER, which we have no feed for, so the
+ *  markers are only the two facts we hold: a roof (data/stadiums.ts) and a
+ *  night kickoff (isPrimetime). A made-up sun icon would be worse than none.
+ *
+ *  The NUMBER says which it is, because a bare figure beside "Yet to play" is
+ *  ambiguous exactly when a manager is deciding something: before kickoff it
+ *  reads `proj 15.3` quietly, once live it's points, in full. */
+function GameCard({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
+  const t = useTheme();
+  const right = align === 'right';
+  const box = {
+    backgroundColor: t.bg, borderWidth: 1, borderColor: t.bd, borderRadius: 8,
+    paddingHorizontal: 9, paddingVertical: 6, flex: 1, minWidth: 0,
+    flexDirection: (right ? 'row-reverse' : 'row') as 'row' | 'row-reverse',
+    alignItems: 'center' as const, gap: 8,
+  };
+  if (!e) return <View style={[box, { opacity: 0.5 }]}><Mono size={10} tone="faint">—</Mono></View>;
+  const bye = e.opponent === 'BYE';
+  const pre = e.state === 'pre';
+  const roof = e.roof && e.roof !== 'open' ? e.roof : null;
+  return (
+    <View style={box}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Mono size={9.5} tone={bye ? 'warn' : 'dim'} numberOfLines={1} style={{ textAlign: right ? 'right' : 'left' }}>
+          {`${bye ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}${roof ? '  \u{1F3DF}' : ''}${e.primetime ? '  \u263E' : ''}`}
+        </Mono>
+        <Mono size={8.5} tone="faint" numberOfLines={1} style={{ textAlign: right ? 'right' : 'left' }}>
+          {bye ? 'No game this week' : e.state === 'done' ? 'Final' : e.state === 'live' ? 'In progress' : 'Yet to play'}
+        </Mono>
+      </View>
+      <Mono size={pre ? 10 : 12} tone={pre ? 'faint' : 'text'} weight="700">
+        {pre ? `proj ${e.proj.toFixed(1)}` : e.live.toFixed(2)}
+      </Mono>
     </View>
   );
 }
@@ -324,6 +369,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : 'BYE',
         injury: injuryFor(matchup?.week ?? 1, slug),
+        // Where the game is played, and whether it's a night game — both facts,
+        // both read off the slate the board already has. NOT weather (0237).
+        roof: g && meta.team ? roofFor(venueTeam(meta.team, g)) : null,
+        primetime: isPrimetime(g?.kickoff),
       };
     };
   }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer]);
@@ -390,12 +439,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       {board && (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TeamHead side={board.home} align="left" />
+            <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
             <View style={{ alignItems: 'center' }}>
               <Mono size={8.5} tone="faint">{locked ? 'LIVE' : 'LOCKS'}</Mono>
               {!locked && <Mono size={8} tone="faint" style={{ marginTop: 2 }}>{fmtLock(matchup?.lock_at ?? null)}</Mono>}
             </View>
-            <TeamHead side={board.away} align="right" scoreless={!locked} />
+            <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'hidden'} />
           </View>
           {locked && (
             <>
@@ -420,21 +469,46 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         </Card>
       )}
 
-      {/* ── STARTERS, head to head. Locked only: pre-lock this screen is a
-          LINEUP SETTER and the editable grid below is the right tool. ── */}
-      {locked && board && (
+      {/* ── STARTERS, head to head ─────────────────────────────────────────
+          Renders BEFORE the lock too (v0.237.0): a manager wants the week —
+          kickoffs, projections, byes — while they can still act on it. YOUR
+          rows stay tappable into the picker (this is the only lineup screen
+          the app has), and THEIR column is absent rather than blank, because
+          sealed_pick's RLS hands out an opponent's picks only once locked. */}
+      {board && (
         <>
           <Card style={{ paddingVertical: 2 }}>
-            <Mono size={8.5} tone="faint" weight="700" track={0.1} style={{ paddingVertical: 6 }}>STARTERS</Mono>
-            {board.starters.map((row) => (
-              <View key={row.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
-                <BoardCell e={row.home} align="left" />
-                <Mono size={11} weight="700" style={{ width: 42, textAlign: 'right' }}>{row.home ? row.home.live.toFixed(2) : '—'}</Mono>
-                <SlotPill pos={row.pos} label={row.label} />
-                <Mono size={11} weight="700" style={{ width: 42 }}>{row.away ? row.away.live.toFixed(2) : '—'}</Mono>
-                <BoardCell e={row.away} align="right" />
-              </View>
-            ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 6 }}>
+              <Mono size={8.5} tone="faint" weight="700" track={0.1}>STARTERS</Mono>
+              {!locked && <Mono size={8} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>{`${names.opp} is sealed until kickoff`}</Mono>}
+            </View>
+            {board.starters.map((row) => {
+              const auto = bb.has(row.slot);
+              const settable = !locked && !auto;
+              const d = slotDefs.find((x) => x.slot === row.slot);
+              const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+              return (
+                <View key={row.slot} style={{ paddingTop: 8, paddingBottom: 9, borderTopWidth: 1, borderTopColor: t.bd }}>
+                  <Pressable
+                    onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {row.home ? <BoardCell e={row.home} align="left" />
+                      : <View style={{ flex: 1 }}>
+                          <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto && !locked ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
+                          {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
+                        </View>}
+                    <SlotPill pos={row.pos} label={row.label} />
+                    {locked && <BoardCell e={row.away} align="right" />}
+                  </Pressable>
+                  {(row.home || (locked && row.away)) && (
+                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                      {row.home ? <GameCard e={row.home} align="left" /> : <View style={{ flex: 1 }} />}
+                      {locked ? (row.away ? <GameCard e={row.away} align="right" /> : <View style={{ flex: 1 }} />) : null}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </Card>
           {(['bench', 'ir'] as const).map((k) => (
             board[k].home.length > 0 ? (
@@ -443,9 +517,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
                 </Mono>
                 {board[k].home.map((e) => (
-                  <View key={e.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                    <BoardCell e={e} align="left" />
-                    <Mono size={10.5} tone="dim" weight="700" style={{ width: 52, textAlign: 'right' }}>{e.live.toFixed(2)}</Mono>
+                  <View key={e.slug} style={{ paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <BoardCell e={e} align="left" />
+                      <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
+                    </View>
+                    <View style={{ flexDirection: 'row', marginTop: 6 }}><GameCard e={e} align="left" /></View>
                   </View>
                 ))}
               </Card>
@@ -454,9 +531,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         </>
       )}
 
-      {/* Lineup — the SETTER (pre-lock), and the fallback whenever the board
-          can't assemble. */}
-      {!(locked && board) && (
+      {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
+          sides of the lock since v0.237.0, but if it can't assemble this is
+          still a working lineup editor rather than a blank screen. */}
+      {!board && (
       <Card style={{ paddingVertical: 2 }}>
         {slotDefs.map((d, i) => {
           const auto = bb.has(d.slot);
@@ -529,7 +607,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         </Card>
       )}
 
-      {/* Bench */}
+      {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
+          game lines, so this would otherwise be the same players twice. */}
+      {!board && (
       <Card>
         <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>BENCH</Mono>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -539,6 +619,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           {!bench.length && <Mono size={10} tone="faint">everyone's starting</Mono>}
         </View>
       </Card>
+      )}
 
       <Mono size={8.5} tone="faint" style={{ lineHeight: 14 }}>
         CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.

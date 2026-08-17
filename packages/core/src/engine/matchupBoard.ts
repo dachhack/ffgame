@@ -14,6 +14,7 @@
 // projection and win-probability maths testable at all.
 import type { Pos } from '../types';
 import type { ClassicSlotDef } from './classic';
+import type { Roof } from '../data/stadiums';
 
 /** One player as the board needs them — the caller resolves identity, we do
  *  the arithmetic. `live` is points ALREADY scored; `proj` is the full-game
@@ -37,6 +38,12 @@ export interface BoardEntry {
   opponent?: string | null;
   /** 'Q' | 'O' | 'D' | 'IR' — rendered as a tag beside the position. */
   injury?: string | null;
+  /** The roof over the VENUE, when the team is known (data/stadiums.ts). The
+   *  board marks a roofed game so a manager knows weather is off the table
+   *  there — it is never a claim about the weather itself. */
+  roof?: Roof | null;
+  /** Thursday/Sunday/Monday night — see isPrimetime. */
+  primetime?: boolean;
 }
 
 export interface BoardSlotRow {
@@ -225,6 +232,37 @@ export function gameFor(team: string | null | undefined, slate: { home: string; 
   if (!g) return null;
   const isHome = g.home?.toUpperCase() === up;
   return { opponent: isHome ? g.away : g.home, kickoff: g.kickoff ?? null, home: isHome };
+}
+
+/** Which TEAM's building a game is played in — the home side. Neutral-site
+ *  games (London, Munich, São Paulo) are wrong here and knowably so; see the
+ *  limits documented in data/stadiums.ts. */
+export function venueTeam(team: string, g: { opponent: string; home: boolean }): string {
+  return g.home ? team : g.opponent;
+}
+
+/** Is this kickoff in PRIMETIME — the Thursday/Sunday/Monday night windows a
+ *  manager plans around?
+ *
+ *  Derived, not fetched: 7pm ET or later. The NFL's night windows all kick
+ *  8:15–8:20pm ET and no afternoon window starts past 4:25, so the boundary has
+ *  a wide margin either side of it — which matters, because this is the one
+ *  place a timezone slip would show up as a wrong icon. Everything is evaluated
+ *  in AMERICA/NEW_YORK regardless of where the reader is sitting: primetime is
+ *  a property of the game, not of who's looking at it, and a west-coast reader
+ *  must not see a 5:15pm local Monday nighter lose its marker. */
+export function isPrimetime(kickoff: string | null | undefined): boolean {
+  if (!kickoff) return false;
+  const t = Date.parse(kickoff);
+  if (!Number.isFinite(t)) return false;
+  try {
+    const h = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
+      .format(new Date(t));
+    const hour = Number(h);
+    return Number.isFinite(hour) && hour >= 19;
+  } catch {
+    return false;   // no tz database — say nothing rather than guess
+  }
 }
 
 /** 'pre' | 'live' | 'done' for a player, from their game's kickoff and whether
