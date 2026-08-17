@@ -1,6 +1,109 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-16 · Build `v0.234.0`_
+_Last updated: 2026-08-17 · Build `v0.258.0`_
+
+## Where this session left off (v0.258.0, 2026-08-17)
+
+**Fourteen versions in one sitting, v0.245.0 → v0.258.0.** Classic (normie)
+mode went from "board exists" to launch-shaped, the acquisition surfaces
+caught up, and every item on the previous session's NEXT list shipped. The
+section below this one describes v0.234.0 — treat it as history.
+
+### The classic arc, in dependency order
+
+- **v0.245–v0.246 — who IS this player.** `slugMeta` gained the DIRECTORY bake
+  as its second source (the PBP bake structurally cannot know a rookie), and
+  `isBye` now demands proof — a known team AND a loaded slate.
+- **v0.247 — every team starts the week with a lineup.** `optimalLineup` in
+  `engine/classic.ts`: max-weight assignment via matroid greedy over Kuhn's
+  matching. The safety rule everything since rests on: a spot with NO stored
+  row was never decided; a row holding NULL is a manager's decision. The
+  worker auto-slots each week; boards fill on open.
+- **v0.248–v0.249 — the seat nobody manages.** `sealed_pick.app_user_id` is
+  NOT NULL, so an unclaimed seat (7 of 8 in the founder's leagues — read the
+  diag, not the assumption) had nowhere to store a lineup. `classicLineup`
+  computes an unmanaged side's best projected lineup at scoring time; both
+  benches render on the matchup screen.
+- **v0.250 — the best-ball fill is exact.** `assignByValue` (successive
+  most-profitable augmenting paths) replaced the most-specific-first greedy,
+  whose optimality argument died at 0172. Shipped pre-season ON PURPOSE:
+  changing scores is only free while nothing has resolved.
+- **v0.252 — fills learn the calendar.** `slateAwareProj`: projections zeroed
+  on EVIDENCE (proven bye, injury O/IR via the caller's own predicate — never
+  `injuryFor` by default, whose baked-2025 fallback is the server's resting
+  state). Teams normalize both sides (LAR vs LA — the phantom-bye trap).
+- **v0.254 — the seat agent (migration 0180).** The durable answer: one
+  synthetic user per unclaimed classic seat (`seat_agent`, worker-provisioned
+  via the admin API), rows written AS the agent, re-planned each tick while
+  unlocked (a diligent manager, not a Tuesday snapshot), frozen by the
+  per-player seal. The claim trigger hands rows to whoever takes the seat.
+  Membership stays NULL — every open-seat query is untouched.
+
+### Everything else that shipped
+
+- **v0.251** create form has NO default game; the button names what it creates.
+- **v0.253** `myRoster()` refuses when ambiguous instead of guessing.
+- **v0.255** the web LEAGUE BOARD (`src/screens/LeagueBoard.tsx`, LiveOnboard
+  view 'board') — browse/preview/claim/post, same RPCs as the app's Recruit.
+- **v0.256** mode chip on `Matchup.tsx` + the app's WeekNav; **web
+  `LivePicks.tsx` deleted** (unmounted since Matchup took over at v0.234.0 —
+  both hosts compile without it).
+- **v0.257** the spec SHRINK HATCH (migration 0181): post-draft, the only
+  legal edit is a strict prefix of the stored spec, compared in cleaned form.
+- **v0.258** team units pass tenure bands — `tenureMatches` mirrors
+  `slotAllows`' K/DEF/HC/P exemption.
+
+### Lessons this session paid for (do not relearn)
+
+- **The probe PRNG was fake.** The old LCG's low bits cycle with period n, so
+  two "400 random cases" brute-force suites each ran ONE case 400 times.
+  xorshift32 now, and every random block asserts its cases differ AND that a
+  strawman fails some of them — a check nothing can fail is decoration.
+- **`modeOfSettings` is the only door.** `settings_json` stores the builder
+  spec as `roster_slots`; `leagueSlotDefs` reads `slots`. Raw settings passed
+  through silently yields the DEFAULT NINE SPOTS. Exported from `resolve.js`.
+- **Copy trigger/function bodies from the LIVE migration, checked not
+  remembered** — 0178's near-miss (stale 0058 copy) almost repeated at 0181.
+- **`sealed_pick` rows with null `player_slug` never reach the resolver**
+  (every path filters them), so "manager emptied every spot" and "no lineup"
+  are indistinguishable there — classic asks the DB its own question.
+
+### NEXT, in priority order
+
+1. **Verify the seat agents in production** — run
+   `scripts/db/classic-autoslot-diag.sql` (Actions → Run a database query):
+   the unclaimed seats should read `has_agent = t` with `wk_rows` filled.
+   Deploy + migration went green 2026-08-17 ~15:12Z; the provisioning line
+   lands after the log capture window, so the diag is the confirmation.
+2. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** (PROJ_AS_OF is
+   2026-07-28). The auto-slot, the agents and the previews all rank by it.
+   Note: a mid-week re-bake shifts computed (v0.248-fallback) lineups; agent
+   ROWS are frozen — another reason rows won.
+3. **The live web drip surface never installs pool `slugMeta` overrides.**
+   v0.253 fixed the dead LivePicks copy; `Matchup.tsx`/`cardTable` (the real
+   web drip host) still resolves rookies through the bake alone in whatever
+   consumers read `slugMeta`. Audit those consumers; install
+   `setSlugMetaOverrides(pool)` where the live league's pool is loaded.
+4. **Audit server-side `injuryFor` callers** — the engine's `healthy()` path.
+   With no live install and no season set, it serves the BAKED 2025 report;
+   v0.252 designed around it for the fills, but any other server-side caller
+   may be eating last year's injuries. Verify or make it structural.
+5. **Solo / pods / weekly / DFS in the app** — the big absent surface, and
+   the stated phase goal (solo onboarding). A project, not a sitting.
+6. Sleeper/ESPN import + platform-league join, app-side. Targeted power-ups,
+   app-side. The window pot, app-side. Standings drift risk
+   (`leagueStandings` vs `playoffState.standings`).
+
+### Diagnostics you now have (this session's additions)
+
+- `scripts/db/classic-autoslot-diag.sql` — per seat of every scheduled classic
+  matchup: `has_user`, `has_agent` (0180), `roster_n`, `wk_rows`, `wk_filled`.
+  Separates "skipped by design" from "worker never reached it" at a glance.
+- `scripts/db/seat-agent-probes.sql` — the claim transfer, in the scratch suite.
+- `scripts/check-draft-spots.mjs` — 110 assertions: assignment, exact fills,
+  slate-aware values, tenure bands. In `check:parity`.
+
+---
 
 ## Where this session left off (v0.234.0, 2026-08-16)
 
@@ -79,7 +182,7 @@ because each one is a trap the next person can fall into.
    as locked, which would have sealed lineups across every league with an
    unbackfilled `lock_at`. **Do not make that change.**
 
-### NEXT, in priority order
+### NEXT, in priority order (v0.234.0 — ALL SIX SHIPPED, see the v0.258.0 section above)
 
 1. **Draft TEAMS panel by roster spot** — the founder's open ask, and the
    largest remaining piece. Today the draft room lists picks as R1..R12; it
