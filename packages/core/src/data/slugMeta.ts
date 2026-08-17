@@ -4,6 +4,8 @@
 // can be slate-gated to its game window without any further normalization.
 import type { Pos } from '../types';
 import { BAKED_SLUGS } from './bakedSlugs';
+import { PLAYER_BIO } from './playerBio';
+import { teamFor } from './playerTeam';
 
 // Relocation / alt codes → the slate's codes (matches buildLeague.normTeam).
 export function normTeam(t: string): string {
@@ -42,5 +44,23 @@ export function slugMeta(slug: string): { pos: Pos; team: string } {
   const o = overlay.get(slug);
   if (o) return o;
   const b = BAKED_SLUGS[slug];
-  return b ? { pos: b.pos as Pos, team: normTeam(b.team) } : { pos: 'WR', team: '' };
+  if (b) return { pos: b.pos as Pos, team: normTeam(b.team) };
+  // THE BAKE IS 2025 PLAY-BY-PLAY, so it structurally CANNOT know a 2026
+  // rookie: genRealPbp only mints a slug for someone who has NFL plays. That
+  // is why re-baking it never fixed rookies, and why every one of them fell
+  // through to the WR/'' default below — reading as a bye on the matchup board
+  // and, worse, being SCORED as a WR by classicPoints (mkPlayer resolves a
+  // player's position through here).
+  //
+  // The DIRECTORY bake knows them, with a real position and team, so it is the
+  // second source. Deliberately AFTER BAKED_SLUGS and never before it: that
+  // map's team is the player's MAJORITY 2025 team, which is what the baked
+  // play stream's possession gating is written against — overruling it with a
+  // current-season team would quietly change how baked plays score.
+  //
+  // Team goes through teamFor, so the worker's live override layer (0142)
+  // beats the bake for anyone who has since moved.
+  const bio = PLAYER_BIO[slug];
+  if (bio?.pos) return { pos: bio.pos as Pos, team: normTeam(teamFor(slug) ?? bio.team ?? '') };
+  return { pos: 'WR', team: '' };
 }
