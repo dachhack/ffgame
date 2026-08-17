@@ -26,7 +26,6 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
-import { PushPrefs } from '../ui/SettingsModal';
 import { Playoffs, Standings } from '../ui/LeagueExtras';
 import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -152,7 +151,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'league' | 'alerts'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'league'>('roster');
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -334,7 +333,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         </View>
         {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
         {identityCard}
-        <Card><PushPrefs /></Card>
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
           <Mono size={10} style={{ marginTop: 8, lineHeight: fs(16) }}>
@@ -373,7 +371,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
           ['trades', '⇄ TRADES'],
           ['league', '🏆 LEAGUE'],
-          ['alerts', '🔔 ALERTS'],
         ] as const).map(([id, label]) => (
           <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
         ))}
@@ -388,8 +385,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           </Mono>
         </Card>
       )}
-
-      {tab === 'alerts' && <Card><PushPrefs /></Card>}
 
       {/* my roster */}
       {tab === 'roster' && (<>

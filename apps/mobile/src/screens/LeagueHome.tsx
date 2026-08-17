@@ -12,6 +12,7 @@ import { tap } from '../ui/feedback';
 import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
+import { PushPrefs } from '../ui/SettingsModal';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -36,6 +37,9 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
   const [teamsOpen, setTeamsOpen] = useState(false);
+  // 🔔 Alerts (v0.272.0 — off the MY TEAM tabs, founder's call): push prefs
+  // in a sheet. Device-level settings, so any member gets the tile.
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [champion, setChampion] = useState<string | null>(null);
   useEffect(() => {
@@ -123,8 +127,18 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
       {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
       {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
         { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}
+      {tile('🔔', 'Alerts', 'push notifications — what pings your phone', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
 
       {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)} />}
+
+      {/* 🔔 push prefs, in a sheet — lived on the MY TEAM tabs (v0.268.0),
+          moved here because alerts are league-wide plumbing, not roster
+          management. */}
+      <Overlay visible={alertsOpen} title="🔔 Alerts" subtitle="WHAT PINGS YOUR PHONE" onClose={() => setAlertsOpen(false)}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+          <PushPrefs />
+        </ScrollView>
+      </Overlay>
     </ScrollView>
   );
 }
