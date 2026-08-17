@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img } from '../app/ui';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, playoffState,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -107,8 +107,15 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const [chatOpen, setChatOpen] = useState(false);
   const [rostersOpen, setRostersOpen] = useState(false);
   const [champion, setChampion] = useState<string | null>(null);
+  // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
+  // founder). Defaults false — drip is the common case, and a tile popping in
+  // would be worse than one briefly showing.
+  const [classic, setClassic] = useState(false);
 
   useEffect(() => {
+    leagueGameMode(e.league_id)
+      .then((gm) => { if (gm.ok && gm.mode === 'classic') setClassic(true); })
+      .catch(() => {});
     // The note lives HERE now (0182.1 — off the board, founder's call), so the
     // commissioner's empty-state prompt shows too, not just a standing note.
     leagueNote(e.league_id)
@@ -196,8 +203,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
 
         <Tile icon="▦" title="All matchups & standings" sub="every pairing, every week, the table" onClick={onResults} />
 
-        <Tile icon="◈" title="Power-up shop" sub="spend drip coin on this week's edge — opens on your board"
-          onClick={guard(() => void play('shop'))} disabled={building || pending} />
+        {!classic && (
+          <Tile icon="◈" title="Power-up shop" sub="spend drip coin on this week's edge — opens on your board"
+            onClick={guard(() => void play('shop'))} disabled={building || pending} />
+        )}
 
         {native && (
           <>

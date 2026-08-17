@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -42,7 +42,14 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [champion, setChampion] = useState<string | null>(null);
+  // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
+  // founder). Defaults false — the tile shows until the answer lands, since
+  // drip is the common case and a popping-in tile would be worse.
+  const [classic, setClassic] = useState(false);
   useEffect(() => {
+    leagueGameMode(leagueId)
+      .then((gm) => { if (gm.ok && gm.mode === 'classic') setClassic(true); })
+      .catch(() => {});
     leagueNote(leagueId)
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
@@ -119,7 +126,7 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
         unread.n > 0 || sig.polls > 0
           ? { badge: [unread.n > 0 ? `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` : '', sig.polls > 0 ? `📊 ${sig.polls}` : ''].filter(Boolean).join(' · ') }
           : undefined)}
-      {rosterId != null && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
+      {rosterId != null && !classic && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
       {rosterId != null && tile('▦', 'Fields', 'every game with a slotted player, live — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'fields' }); onFields(); })}
       {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); },
         sig.waivers > 0 ? { badge: `✚ ${sig.waivers}` } : undefined)}
