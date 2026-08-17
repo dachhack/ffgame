@@ -16,7 +16,7 @@
 // than it BEHAVES is the bug the 0174 label was one edit away from causing.
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
-  classicSlotsFromSpec, classicSlots,
+  classicSlotsFromSpec, classicSlots, planSpotMove,
 } from '../packages/core/src/engine/classic';
 
 let fails = 0;
@@ -216,6 +216,39 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('the accepts line names exactly the rule slotAllows enforces',
     slotAcceptsLabel(s) === 'WR/TE · PHI' && slotAllows(s, legal) && !slotAllows(s, wrongTeam) && !slotAllows(s, wrongPos),
     slotAcceptsLabel(s));
+}
+
+// ── Moving a player who is already starting somewhere ──────────────────────
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['TE'] }, { pos: ['RB', 'WR', 'TE'] });   // S1 RB, S2 TE, S3 FLEX
+  const legal = (slot, slug) => {
+    const d = s.find((x) => x.slot === slot);
+    const pos = { rb1: 'RB', te1: 'TE', rb2: 'RB', wr1: 'WR' }[slug];
+    return !!d && slotAllows(d, { pos, team: 'KC', exp: 3 });
+  };
+  // From the BENCH: one write, nothing vacated.
+  ok('a bench player is a single write',
+    JSON.stringify(planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: null }, 'S3', 'wr1', legal))
+      === JSON.stringify([{ slot: 'S3', player: 'wr1' }]));
+  // SWAP: the TE in S2 moves to the flex, and the flex's RB is legal in… no he
+  // isn't — S2 only takes TE — so S2 is emptied rather than filled illegally.
+  ok('a displaced player who cannot stand in the vacated spot leaves it EMPTY',
+    JSON.stringify(planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: 'rb2' }, 'S3', 'te1', legal))
+      === JSON.stringify([{ slot: 'S3', player: 'te1' }, { slot: 'S2', player: null }]),
+    planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: 'rb2' }, 'S3', 'te1', legal));
+  // A true SWAP, where the displaced man IS legal in the vacated spot.
+  ok('two RB-eligible spots swap their occupants',
+    JSON.stringify(planSpotMove(s, { S1: 'rb1', S2: null, S3: 'rb2' }, 'S3', 'rb1', legal))
+      === JSON.stringify([{ slot: 'S3', player: 'rb1' }, { slot: 'S1', player: 'rb2' }]),
+    planSpotMove(s, { S1: 'rb1', S2: null, S3: 'rb2' }, 'S3', 'rb1', legal));
+  // Moving into an EMPTY spot vacates the old one with nobody to backfill.
+  ok('moving into an empty spot leaves the old one empty',
+    JSON.stringify(planSpotMove(s, { S1: 'rb1', S2: null, S3: null }, 'S3', 'rb1', legal))
+      === JSON.stringify([{ slot: 'S3', player: 'rb1' }, { slot: 'S1', player: null }]));
+  // The vacated spot is ALWAYS written: "he left S1" is a change to S1, and a
+  // picker that only wrote the target would leave the same player in two spots.
+  ok('the vacated spot is always part of the plan',
+    planSpotMove(s, { S1: 'rb1', S2: null, S3: null }, 'S3', 'rb1', legal).length === 2);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

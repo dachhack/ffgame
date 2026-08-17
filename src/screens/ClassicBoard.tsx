@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -479,18 +479,36 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const canEdit = (slot: string): boolean =>
     !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
-  const assign = async (slot: string, slug: string | null) => {
-    if (!matchup) return;
-    const next = { ...mine, [slot]: slug };
+  /** Write one or more spots in a single save. A MOVE touches two (the target
+   *  and the spot the player left), and they have to travel together — writing
+   *  only the target would leave the same player standing in two spots until
+   *  the next poll. */
+  const applyMove = async (writes: { slot: string; player: string | null }[]) => {
+    if (!matchup || !writes.length) return;
+    const before = mine;
+    const next = { ...mine };
+    for (const w of writes) next[w.slot] = w.player;
     setMine(next); setPickerSlot(null); setSaving(true); setSaveNote(null);
     try {
-      await savePicks(matchup.id, userId, [{ game_window: CLASSIC_WIN, roster_slot: slot, player_slug: slug, metric_id: null }]);
+      await savePicks(matchup.id, userId, writes.map((w) => ({
+        game_window: CLASSIC_WIN, roster_slot: w.slot, player_slug: w.player, metric_id: null,
+      })));
       setSaveNote('saved');
     } catch (e) {
-      setMine(mine); // revert — the server refused (locked, cap, …)
+      setMine(before); // revert — the server refused (kicked off, cap, …)
       setSaveNote(friendlyError(e));
     } finally { setSaving(false); }
   };
+  const assign = (slot: string, slug: string | null) => applyMove([{ slot, player: slug }]);
+  /** Picking someone already starting elsewhere is a MOVE, and core decides
+   *  whether the displaced player can swap back into the vacated spot. */
+  const pickInto = (slot: string, slug: string) =>
+    applyMove(planSpotMove(slotDefs, effective.mine, slot, slug,
+      (target, cand) => {
+        const d = slotDefs.find((x) => x.slot === target);
+        const p = pool.find((x) => x.slug === cand);
+        return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
+      }));
 
   if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
   if (state === 'none') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>No matchup this week.</div>;
@@ -709,9 +727,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       {pickerSlot && canEdit(pickerSlot) && (() => {
         const d = slotDefs.find((x) => x.slot === pickerSlot);
         const f = slotFilterLabel(d?.flt);
-        const eligible = bench
+        // EVERY eligible player on the roster, not just the bench (founder):
+        // "put my TE in the flex" was a two-step dance — empty the TE spot,
+        // then fill the flex — when it is one move. A player already starting
+        // shows where he stands, and choosing him moves him.
+        const spotOf = new Map<string, string>();
+        for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
+        const eligible = pool
+          .filter((p) => !stashed.has(p.slug))                       // taxi/IR can't start
           .filter((p) => d && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-          .filter((p) => !kickedOff(p.slug));
+          .filter((p) => !kickedOff(p.slug))
+          .filter((p) => spotOf.get(p.slug) !== pickerSlot)          // already here
+          // If he is starting somewhere his game has locked, he cannot leave —
+          // the DB would refuse the vacating write, so don't offer the move.
+          .filter((p) => { const from = spotOf.get(p.slug); return !from || canEdit(from); });
         return (
           <div onClick={() => setPickerSlot(null)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -728,21 +757,28 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
               </div>
               {mine[pickerSlot] && (
-                <button onClick={() => { void assign(pickerSlot, null); setPickerSlot(null); }} className="mono"
+                <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
                   style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '8px 9px', marginBottom: 6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>
                   ✕ LEAVE THIS SPOT EMPTY
                 </button>
               )}
               {eligible.length === 0 && (
                 <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
-                  Nobody on your bench can fill this spot right now — everyone eligible is either already starting or has kicked off.
+                  Nobody on your roster can fill this spot right now — everyone eligible has already kicked off.
                 </div>
               )}
               {eligible.map((p) => (
-                <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); setPickerSlot(null); }}
+                <button key={p.slug} onClick={() => { void pickInto(pickerSlot, p.slug); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
                   <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
-                  <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{shortName(p.full)}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>
+                    {shortName(p.full)}
+                    {spotOf.get(p.slug) && (
+                      <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
+                        in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
+                      </span>
+                    )}
+                  </span>
                   <PosPill pos={p.pos as Pos} />
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30, textAlign: 'right' }}>{p.team}</span>
                   <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{(PROJ_2026.get(p.slug) ?? 0).toFixed(1)}</span>

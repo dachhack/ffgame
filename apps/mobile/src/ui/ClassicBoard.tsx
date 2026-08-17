@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
@@ -428,19 +428,36 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const canEdit = (slot: string): boolean =>
     !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
-  const assign = async (slot: string, slug: string | null) => {
-    if (!matchup) return;
-    const prev = mine;
-    setMine({ ...mine, [slot]: slug }); setPickerSlot(null); setSaveNote(null);
+  /** Write one or more spots in a single save. A MOVE touches two — the target
+   *  and the spot the player left — and they must travel together, or the same
+   *  player stands in two spots until the next poll. */
+  const applyMove = async (writes: { slot: string; player: string | null }[]) => {
+    if (!matchup || !writes.length) return;
+    const before = mine;
+    const next = { ...mine };
+    for (const w of writes) next[w.slot] = w.player;
+    setMine(next); setPickerSlot(null); setSaveNote(null);
     try {
-      await savePicks(matchup.id, userId, [{ game_window: CLASSIC_WIN, roster_slot: slot, player_slug: slug, metric_id: null }]);
+      await savePicks(matchup.id, userId, writes.map((w) => ({
+        game_window: CLASSIC_WIN, roster_slot: w.slot, player_slug: w.player, metric_id: null,
+      })));
       commit();
-      setSaveNote('✓ lineup saved');
+      setSaveNote('✓ saved');
     } catch (e) {
-      setMine(prev);
+      setMine(before);
       setSaveNote(friendlyError(e));
     }
   };
+  const assign = (slot: string, slug: string | null) => applyMove([{ slot, player: slug }]);
+  /** Picking someone already starting elsewhere is a MOVE; core decides whether
+   *  the displaced player can swap back into the vacated spot. */
+  const pickInto = (slot: string, slug: string) =>
+    applyMove(planSpotMove(slotDefs, effective.mine, slot, slug, (target, cand) => {
+      const d = slotDefs.find((x) => x.slot === target);
+      const p = pool.find((x) => x.slug === cand);
+      return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
+    }));
+
 
   if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
   if (state === 'none') return <View style={{ padding: 24 }}><Mono size={10} tone="faint">No matchup this week.</Mono></View>;
@@ -628,11 +645,23 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           : undefined}
         onClose={() => setPickerSlot(null)}>
         {pickerSlot && slotDef && (() => {
-          const eligible = bench
+          // EVERY eligible player on the roster, not just the bench (founder):
+          // "put my TE in the flex" was a two-step dance when it is one move.
+          const spotOf = new Map<string, string>();
+          for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
+          const eligible = pool
+            .filter((p) => !stashed.has(p.slug))
             .filter((p) => slotAllows(slotDef, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-            .filter((p) => !kickedOff(p.slug));
+            .filter((p) => !kickedOff(p.slug))
+            .filter((p) => spotOf.get(p.slug) !== pickerSlot)
+            // Starting in a spot that has locked means he cannot leave it: the
+            // DB refuses the vacating write, so don't offer the move.
+            .filter((p) => { const from = spotOf.get(p.slug); return !from || canEdit(from); });
           return (
-            <View>
+            // The body must be able to SHRINK or the sheet clips its own bottom
+            // — the one contract ui/Overlay asks of every caller, and the bug
+            // the founder hit: `flexShrink: 1` on a ScrollView, not a View.
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
               {!!mine[pickerSlot] && (
                 <Pressable onPress={() => { tap(); void assign(pickerSlot, null); setPickerSlot(null); }}
                   style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
@@ -641,14 +670,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               )}
               {eligible.length === 0 && (
                 <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
-                  Nobody on your bench can fill this spot right now — everyone eligible is either already starting or has kicked off.
+                  Nobody on your roster can fill this spot right now — everyone eligible has already kicked off.
                 </Mono>
               )}
               {eligible.map((p) => (
-                <Pressable key={p.slug} onPress={() => { tap(); void assign(pickerSlot, p.slug); setPickerSlot(null); }}
+                <Pressable key={p.slug} onPress={() => { tap(); void pickInto(pickerSlot, p.slug); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
                   <Face slug={p.slug} />
-                  <Display size={12.5} style={{ flex: 1 }}>{shortName(p.full)}</Display>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Display size={12.5}>{shortName(p.full)}</Display>
+                    {!!spotOf.get(p.slug) && (
+                      <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
+                    )}
+                  </View>
                   <PosPill pos={p.pos} />
                   <Mono size={8.5} tone="faint" style={{ width: 28, textAlign: 'right' }}>{p.team}</Mono>
                   <Mono size={10} tone="dim" weight="700" style={{ width: 32, textAlign: 'right' }}>
@@ -656,7 +690,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   </Mono>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
           );
         })()}
       </Overlay>
