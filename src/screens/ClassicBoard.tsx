@@ -506,14 +506,24 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
+    // Benched = on the roster and NOT in the EFFECTIVE lineup. Deliberately not
+    // the stored picks: a best-ball spot's occupant and an unmanaged seat's
+    // auto-filled starter have no row of their own, so keying off stored picks
+    // listed them under BENCH and in a starting spot at the same time.
+    const benchOf = (roster: PoolPlayer[], lineup: Record<string, string | null>) => {
+      const starting = new Set(Object.values(lineup).filter(Boolean) as string[]);
+      return roster.filter((p) => !starting.has(p.slug));
+    };
     return buildMatchupBoard({
       week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
-      home: mkSide(ros.rosterId, names.me, avatars.me, effective.mine, bench),
-      // The opponent's bench is not readable pre-lock (and shouldn't be) —
-      // their rows exist only as starters, which is what the board shows.
-      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, []),
+      home: mkSide(ros.rosterId, names.me, avatars.me, effective.mine, benchOf(pool, effective.mine)),
+      // THEIR BENCH TOO (v0.249.0, founder). Classic lineups are open all week
+      // (0178) and the board already fills their spots from that same roster —
+      // so there was never anything here to withhold, only a column nobody had
+      // wired up.
+      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
-  }, [matchup, ros, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
+  }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
   /** The next kickoff that will freeze one of MY spots — the honest
    *  replacement for a league-wide lock time that no longer exists. */
@@ -758,29 +768,42 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               );
             })}
           </div>
-          {/* BENCH and the stashes — mine only. The opponent's bench isn't
-              readable (nor should it be); showing an empty column beside mine
-              would imply they had nobody rather than that I can't see it. */}
-          {(['bench', 'ir'] as const).map((k) => (
-            board[k].home.length > 0 && (
+          {/* BENCH and the stashes, BOTH SIDES (v0.249.0, founder). Classic
+              lineups are open all week (0178), so there was never anything to
+              withhold here — the board already fills their starting spots from
+              this very roster. Rows pair by INDEX and nothing more, because two
+              benches are just two lists: whichever side runs out first leaves
+              its half of the row empty rather than stretching to match. */}
+          {(['bench', 'ir'] as const).map((k) => {
+            const rows = Math.max(board[k].home.length, board[k].away.length);
+            if (!rows) return null;
+            return (
               <div key={k} style={{ ...card, padding: 0, overflow: 'hidden' }}>
                 <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', padding: '10px 14px 6px' }}>
                   {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
                 </div>
-                {board[k].home.map((e) => (
-                  <div key={e.slug} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 10 }}>
-                      <BoardCell e={e} align="left" />
-                      <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
-                        {k === 'bench' ? 'BN' : 'IR'}
-                      </span>
+                {Array.from({ length: rows }, (_, i) => {
+                  const h = board[k].home[i] ?? null;
+                  const a = board[k].away[i] ?? null;
+                  return (
+                    <div key={i} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
+                        {h ? <BoardCell e={h} align="left" /> : <span />}
+                        <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
+                          {k === 'bench' ? 'BN' : 'IR'}
+                        </span>
+                        {a ? <BoardCell e={a} align="right" /> : <span />}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 7 }}>
+                        {h ? <GameCard e={h} align="left" /> : <span />}
+                        {a ? <GameCard e={a} align="right" /> : <span />}
+                      </div>
                     </div>
-                    <div style={{ marginTop: 7 }}><GameCard e={e} align="left" /></div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            )
-          ))}
+            );
+          })}
         </>
       )}
 

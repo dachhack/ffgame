@@ -458,14 +458,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
+    // Benched = on the roster and NOT in the EFFECTIVE lineup. Deliberately not
+    // the stored picks: a best-ball spot's occupant and an unmanaged seat's
+    // auto-filled starter have no row of their own, so keying off stored picks
+    // listed them under BENCH and in a starting spot at the same time.
+    const benchOf = (roster: PoolPlayer[], lineup: Record<string, string | null>) => {
+      const starting = new Set(Object.values(lineup).filter(Boolean) as string[]);
+      return roster.filter((p) => !starting.has(p.slug));
+    };
     return buildMatchupBoard({
       week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
-      home: mkSide(rosterId, names.me, avatars.me, effective.mine, bench),
-      // The opponent's bench isn't readable, and shouldn't be — an empty
-      // column beside mine would imply they had nobody, not that I can't see.
-      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, []),
+      home: mkSide(rosterId, names.me, avatars.me, effective.mine, benchOf(pool, effective.mine)),
+      // THEIR BENCH TOO (v0.249.0, founder). Classic lineups are open all week
+      // (0178) and the board already fills their spots from that same roster —
+      // so there was never anything here to withhold, only a column nobody had
+      // wired up.
+      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
-  }, [matchup, rosterId, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
+  }, [matchup, rosterId, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
   /** The next kickoff that will freeze one of MY spots — the honest
    *  replacement for a league-wide lock time that no longer exists. */
@@ -663,22 +673,42 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               );
             })}
           </Card>
-          {(['bench', 'ir'] as const).map((k) => (
-            board[k].home.length > 0 ? (
+          {/* BENCH and the stashes, BOTH SIDES (v0.249.0, founder). Classic
+              lineups are open all week (0178), so there was never anything to
+              withhold here — the board already fills their starting spots from
+              this very roster. Rows pair by INDEX and nothing more, because two
+              benches are just two lists: whichever side runs out first leaves
+              its half of the row empty rather than stretching to match.
+              Column widths mirror the STARTERS rows above so the two cards read
+              as one board rather than two tables. */}
+          {(['bench', 'ir'] as const).map((k) => {
+            const rows = Math.max(board[k].home.length, board[k].away.length);
+            if (!rows) return null;
+            return (
               <Card key={k} style={{ paddingVertical: 2 }}>
                 <Mono size={8.5} tone="faint" weight="700" track={0.1} style={{ paddingVertical: 6 }}>
                   {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
                 </Mono>
-                {board[k].home.map((e) => (
-                  <View key={e.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                    <BoardCell e={e} align="left" />
-                    <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
-                    <Mono size={11} weight="700" tone={e.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>{scoreOf(e)}</Mono>
-                  </View>
-                ))}
+                {Array.from({ length: rows }, (_, i) => {
+                  const h = board[k].home[i] ?? null;
+                  const a = board[k].away[i] ?? null;
+                  return (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
+                      {h ? <BoardCell e={h} align="left" /> : <View style={{ flex: 1 }} />}
+                      <Mono size={11} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>
+                        {h ? scoreOf(h) : ''}
+                      </Mono>
+                      <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
+                      <Mono size={11} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
+                        {a ? scoreOf(a) : ''}
+                      </Mono>
+                      {a ? <BoardCell e={a} align="right" /> : <View style={{ flex: 1 }} />}
+                    </View>
+                  );
+                })}
               </Card>
-            ) : null
-          ))}
+            );
+          })}
         </>
       )}
 
