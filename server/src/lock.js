@@ -9,8 +9,7 @@
 // integrity window.
 import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
-import { PROJ_2026 } from '../../packages/core/src/data/proj2026.ts';
-import { autoSlotPlan, leagueSlotDefs, leagueBestball, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
+import { autoSlotPlan, leagueSlotDefs, leagueBestball, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
@@ -266,10 +265,20 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
  *  there is nowhere to put the row. Those score the honest zero they always did.
  *
  *  Returns the number of spots slotted. */
-export async function autoSlotClassicLineups(week) {
+export async function autoSlotClassicLineups(week, slate = null) {
   const { data: ms } = await db().from('matchup')
     .select('id,league_id,home_roster_id,away_roster_id').eq('week', week).eq('status', 'scheduled');
   if (!ms?.length) return 0;
+  // SLATE-AWARE VALUES (v0.252.0). PROJ_2026 is a season constant that knows
+  // neither byes nor Friday's injury report, so ranking by it raw seats a
+  // 20-point projection who is guaranteed to score zero. The tick's slate
+  // proves byes; injury_status (the worker's own ESPN poll) proves ruled-out.
+  // Only O and IR — questionable and doubtful players play often enough that
+  // benching them automatically would overrule real decisions.
+  const { data: injRows } = await db().from('injury_status')
+    .select('player_slug').in('status', ['O', 'IR']);
+  const outs = new Set((injRows ?? []).map((r) => r.player_slug));
+  const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
   const { data: lgs } = await db().from('league')
     .select('id,settings_json,lineup_policy').in('id', [...new Set(ms.map((m) => m.league_id))]);
   // Through modeOfSettings, never raw: settings_json calls the builder spec
@@ -348,7 +357,7 @@ export async function autoSlotClassicLineups(week) {
         const roster = rosterOf.get(rosterId);
         if (!uid || !roster?.length) continue;
         const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
-        for (const p of autoSlotPlan(slots, bestball, stored, roster, (x) => PROJ_2026.get(x.id) ?? 0)) {
+        for (const p of autoSlotPlan(slots, bestball, stored, roster, valueOf)) {
           payload.push({
             matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
             roster_slot: p.slot, player_slug: p.player, metric_id: null, locked: false,

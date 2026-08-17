@@ -24,6 +24,8 @@ import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor } from '../data/commish';
 import { PROJ_2026 } from '../data/proj2026';
+import { normTeam } from '../data/slugMeta';
+import { hasSlate, nflGameForTeam } from '../data/nflSlate';
 
 export const CLASSIC_WIN = 'wk';
 
@@ -1025,7 +1027,61 @@ export function planSpotMove(
  *  unmanaged-seat fallback below turns on exactly that distinction, so it has
  *  to be passed rather than inferred. Omitted → inferred from `picks`, which is
  *  right for every caller that has no rows to speak of. */
-export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[]; hasLineup?: boolean }
+export interface ClassicSide {
+  picks: ClassicPick[]; roster?: Player[]; bestball?: string[]; hasLineup?: boolean;
+  /** Slugs provably ruled out (injury O/IR) for this week — the caller's own
+   *  evidence (the worker reads injury_status). Feeds the unmanaged seat's
+   *  value function; never a guess, so absent means no claim. */
+  ruledOut?: Set<string>;
+}
+
+// ── What a player is WORTH to an auto-fill (v0.252.0) ───────────────────────
+// PROJ_2026 is a SEASON constant — it does not know that week 7 is a player's
+// bye or that he was ruled Out on Friday. Every auto-fill that ranked by it
+// raw would happily seat a 20-point projection who is guaranteed to score
+// zero: the worker's Tuesday auto-slot, the boards' on-open fill, the
+// best-ball preview, and the unmanaged seat's computed lineup — which is the
+// worst of them, because no manager exists to fix it.
+//
+// So the fills rank by THIS: the projection, zeroed when the player provably
+// cannot score. Two zeroes, both under the house no-guess rule (the same one
+// isBye and slotAllows follow):
+//   • BYE — a KNOWN team absent from a LOADED slate. An unknown team is never
+//     a bye, and an empty slate zeroes nobody. Teams normalize on BOTH sides,
+//     because the pool says LAR/WSH/JAC where the slate says LA/WAS/JAX, and
+//     an un-normalized compare would bench every Rams player as a phantom bye.
+//   • RULED OUT — only through the caller's own predicate. Deliberately NOT
+//     injuryFor by default: that helper falls back to the BAKED 2025 report
+//     when no live feed is installed and the season was never set, which is
+//     exactly the server's resting state — the worker would have benched 2026
+//     players for last year's injuries. No predicate, no claim. (Q and D stay
+//     at full value even with a predicate available: doubtful players play
+//     often enough that auto-benching them would overrule real decisions.)
+//
+// `slate` rows are the caller's own (the board's liveSlate, the worker's tick
+// slate). Omitted, the module slate answers — the runtime override the worker
+// installs each tick, else the baked 2025 slate, which is correct for exactly
+// the 2025 replay path that uses it.
+export function slateAwareProj(
+  week: number,
+  slate?: { home?: string | null; away?: string | null }[] | null,
+  ruledOut?: (slug: string) => boolean,
+): (p: { id: string; team?: string | null }) => number {
+  const onBye = (team: string | null | undefined): boolean => {
+    const t = normTeam(team ?? '');
+    if (!t) return false;                          // unknown team: no claim
+    if (Array.isArray(slate)) {
+      if (!slate.length) return false;             // unloaded slate: no claim
+      return !slate.some((g) => normTeam(g.home ?? '') === t || normTeam(g.away ?? '') === t);
+    }
+    return hasSlate(week) && !nflGameForTeam(week, t);
+  };
+  return (p) => {
+    if (ruledOut?.(p.id)) return 0;
+    if (onBye(p.team)) return 0;
+    return PROJ_2026.get(p.id) ?? 0;
+  };
+}
 
 // ── The seat nobody manages (v0.248.0) ─────────────────────────────────────
 // `sealed_pick.app_user_id` is `not null references app_user(id)`, so a seat
@@ -1045,12 +1101,16 @@ export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball
 // is a managed seat, and everything it stored — including a spot cleared on
 // purpose — stands exactly as stored. So this can never overrule a manager; it
 // only speaks for seats that have no manager to overrule.
-function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>): ClassicPick[] {
+function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>, week: number): ClassicPick[] {
   const roster = s.roster ?? [];
   if (!roster.length) return [];
   const open = slots.filter((d) => !bb.has(d.slot));
   const cands = roster.filter((p) => !flagRulesFor(p.id).noStart);
-  return optimalLineup(open, cands, (p) => PROJ_2026.get(p.id) ?? 0)
+  // Slate-aware (v0.252.0): a bye or ruled-out player is worth zero here, so
+  // the computed lineup benches him for the best healthy body — the one
+  // correction no manager exists to make on this seat.
+  const value = slateAwareProj(week, undefined, s.ruledOut ? (slug) => s.ruledOut!.has(slug) : undefined);
+  return optimalLineup(open, cands, value)
     .spots.flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
 }
 
@@ -1064,7 +1124,7 @@ export function classicLineup(s: ClassicSide, week: number, sc?: number | Partia
   // reserves its players against the best-ball fill exactly as a set lineup
   // would, so one player can't be started twice.
   const stored = s.hasLineup ?? s.picks.length > 0;
-  const started = stored ? manual : unmanagedStart(s, slots, bb);
+  const started = stored ? manual : unmanagedStart(s, slots, bb, week);
   return [...started, ...bestballFill(started, s.bestball ?? [], s.roster ?? [], week, sc, slots)];
 }
 

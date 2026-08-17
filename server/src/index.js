@@ -191,7 +191,9 @@ async function tickContext(ctx, season) {
   // real lineup rather than a blank card. Idempotent — it only writes spots
   // that have no row, so a set lineup costs one read and nothing else.
   try {
-    const auto = await autoSlotClassicLineups(week);
+    // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
+    // injuries come from injury_status inside.
+    const auto = await autoSlotClassicLineups(week, slate);
     if (auto) log(`[${ctx.tag}] auto-slotted`, auto, 'classic spots');
   } catch (e) { log(`[${ctx.tag}] auto-slot`, e.message); }
 
