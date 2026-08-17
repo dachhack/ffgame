@@ -627,11 +627,24 @@ export interface LiveMatchup { id: string; league_id: string; week: number; stat
 export interface PoolPlayer { slug: string; full: string; pos: string; team: string; grp: PoolGroup; }
 export interface PickRow { game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null; locked?: boolean; }
 
-/** The caller's enrolled roster in a league (first enrolled membership). */
+/** The caller's enrolled roster — when that is UNAMBIGUOUS.
+ *
+ *  This used to be `limit(1)` with no ORDER BY: an arbitrary enrolled
+ *  membership, different between calls at the database's whim. Every live
+ *  screen passes leagueId/rosterId explicitly now, so this is the fallback for
+ *  a board opened with neither — and a fallback that GUESSES between leagues
+ *  quietly opens a board that is correct about a league you did not mean,
+ *  which reads as wrong data rather than wrong league (HANDOFF #3, v0.231.0's
+ *  league-name chip was the visibility half of this fix).
+ *
+ *  One enrollment → that league. More than one → null, the same answer as
+ *  none: the caller renders its no-board state and the user opens the league
+ *  they meant. Refusing is the point — an ORDER BY would be stable and still
+ *  a guess. */
 export async function myRoster(userId: string): Promise<{ leagueId: string; rosterId: number } | null> {
   const { data } = await (await client()).from('league_membership')
-    .select('league_id, sleeper_roster_id').eq('app_user_id', userId).eq('enrolled', true).limit(1).maybeSingle();
-  return data ? { leagueId: data.league_id, rosterId: data.sleeper_roster_id } : null;
+    .select('league_id, sleeper_roster_id').eq('app_user_id', userId).eq('enrolled', true).limit(2);
+  return data?.length === 1 ? { leagueId: data[0].league_id, rosterId: data[0].sleeper_roster_id } : null;
 }
 
 /** The caller's next/earliest matchup in a league. */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { WINDOWS, METRICS, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel } from '@drip/core/data/nflSlate';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import type { Pos, WindowId } from '@drip/core/types';
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
@@ -24,7 +24,10 @@ import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 // a light one (zero stats — the setup board only displays name/pos/team/headshot).
 const ZERO_STATS = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 function poolToPlayer(p: PoolPlayer): Player {
-  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
+  // The pool row's team first (the league's own, most current answer), the
+  // bake second — the app's poolToPlayer has read it this way since 0200.1,
+  // and the bake alone leaves a 2026 rookie with an empty team chip.
+  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: p.team || slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
 }
 
 // The metric unlocks a manager can arm, in display order (ids match powerups.ts).
@@ -136,6 +139,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
         }
         setWinKickIso(wkick);
         setPool(pl);
+        // The league's OWN roster meta beats the bake (0200.1): a rookie the
+        // baked slug map has never heard of otherwise resolves WR/'' in every
+        // slugMeta consumer on this screen. The app has installed this since
+        // v0.245.0; the web board now matches.
+        setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
         const map: Record<string, { player_slug: string | null; metric_id: string | null }> = {};
         const xs: { win: string | null; player_slug: string | null; metric_id: string | null }[] = [];
         const lw = new Set<string>();
@@ -388,12 +396,11 @@ export function LivePicks({ userId, leagueId, rosterId, onBack }: { userId: stri
           Now the mode is stated where the game is played, not only in the
           commissioner's settings. */}
       {/* WHICH LEAGUE (v0.231.0). The chip below said what GAME was being
-          played but never which LEAGUE — and when no leagueId reaches this
-          screen it falls back to myRoster(), which is `limit(1)` with no
-          ORDER BY: an arbitrary enrolled membership. So "my week 1 matchup"
-          could quietly open a different league than the one you were just
-          looking at, and the board would be correct about a league you did not
-          mean. Naming it here makes that visible where it matters. */}
+          played but never which LEAGUE. Naming it here makes that visible
+          where it matters. (The other half closed in v0.253.0: the
+          myRoster() fallback this screen uses when no leagueId reaches it now
+          REFUSES when the user is enrolled in more than one league, rather
+          than guessing an arbitrary membership.) */}
       {leagueName && (
         <span className="mono" title="the league this board is showing"
           style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
