@@ -21,7 +21,7 @@ import {
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
@@ -81,7 +81,7 @@ function FilterChip({ label, on, tone, onPress }: { label: string; on: boolean; 
   return (
     <Pressable onPress={() => { tap(); onPress(); }}
       style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: on ? tone : t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? tone : t.bd }}>
-      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
     </Pressable>
   );
 }
@@ -138,7 +138,7 @@ export function CommishKit({ leagueId, onChanged }: {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 }}>
       <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>⚖ {scoringLabel(scoring)}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.warn }}>⚖ {scoringLabel(scoring)}</Text>
       </View>
     </View>
   );
@@ -205,11 +205,11 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
       <Mono size={8} tone="faint">{tag}</Mono>
       <Pressable hitSlop={4} onPress={() => { tap(); set(Math.round(Math.max(min, v - step) * 10) / 10); }}>
-        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>−</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), color: t.dim, paddingHorizontal: 4 }}>−</Text>
       </Pressable>
-      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', minWidth: 28, textAlign: 'center', color: v !== dflt ? t.warn : t.dim }}>{fmt(v)}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', minWidth: 28, textAlign: 'center', color: v !== dflt ? t.warn : t.dim }}>{fmt(v)}</Text>
       <Pressable hitSlop={4} onPress={() => { tap(); set(Math.round(Math.min(max, v + step) * 10) / 10); }}>
-        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>＋</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), color: t.dim, paddingHorizontal: 4 }}>＋</Text>
       </Pressable>
     </View>
   );
@@ -220,14 +220,14 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
         <Pressable onPress={() => { tap(); set(Math.round(Math.max(b.min, v - b.step) * 10) / 10); }}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 13, paddingVertical: 6 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>−</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: t.text }}>−</Text>
         </Pressable>
-        <Text style={{ fontFamily: MONO, fontSize: 16, fontWeight: '700', color: t.text, minWidth: 48, textAlign: 'center' }}>{fmt(v)}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(16), fontWeight: '700', color: t.text, minWidth: 48, textAlign: 'center' }}>{fmt(v)}</Text>
         <Pressable onPress={() => { tap(); set(Math.round(Math.min(b.max, v + b.step) * 10) / 10); }}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 13, paddingVertical: 6 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>＋</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: t.text }}>＋</Text>
         </Pressable>
-        <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: 12 }}>{hint}</Mono>
+        <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: fs(12) }}>{hint}</Mono>
       </View>
     </View>
   );
@@ -245,7 +245,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
             </View>
             <Pressable disabled={busy} onPress={() => { tap(); void save(DEFAULT_SCORING.tdBonus, DEFAULT_SCORING.ydMult, DEFAULT_SCORING.toPenalty, []); }}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>RESET</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.dim }}>RESET</Text>
             </Pressable>
           </View>
         </>
@@ -259,14 +259,14 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
           filters — rules that pay only players matching the scope. */}
       <View style={{ marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 12 }}>
         <Mono size={9} tone="faint" track={0.12}>SCOPED BONUSES</Mono>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: 12 }}>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
           Bonuses for players matching a position / team / tenure scope. Rules stack — multipliers multiply, points sum.
         </Mono>
         {scoped.map((r, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-            <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn, lineHeight: 13 }}>⚖ {scopedRuleLabel(r)}</Text>
+            <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.warn, lineHeight: fs(13) }}>⚖ {scopedRuleLabel(r)}</Text>
             <Pressable hitSlop={6} disabled={busy} onPress={() => { tap(); setScoped(scoped.filter((_, j) => j !== i)); }}>
-              <Text style={{ fontSize: 13, color: t.opp }}>✕</Text>
+              <Text style={{ fontSize: fs(13), color: t.opp }}>✕</Text>
             </Pressable>
           </View>
         ))}
@@ -287,7 +287,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
           {mini('TD', dTd, setDTd, -3, 6, 1, 0, (n) => `${n > 0 ? '+' : ''}${n}`)}
           <Pressable onPress={addRule}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>＋ ADD RULE</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>＋ ADD RULE</Text>
           </Pressable>
         </View>
       </View>
@@ -320,11 +320,11 @@ export function CommishToolsCard({ leagueId }: { leagueId: string }) {
 
   const row = (icon: string, label: string, value: string, warnTone: boolean, tool: 'note' | 'flags' | 'scoring', cta: string) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: FLAG_PURPLE, width: 74 }}>{icon} {label}</Text>
-      <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: warnTone ? t.warn : t.dim }}>{value}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.8, color: FLAG_PURPLE, width: 74 }}>{icon} {label}</Text>
+      <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: fs(9.5), lineHeight: fs(13), color: warnTone ? t.warn : t.dim }}>{value}</Text>
       <Pressable onPress={() => { tap(); setOpenTool(tool); }}
         style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{cta}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>{cta}</Text>
       </Pressable>
     </View>
   );
@@ -332,7 +332,7 @@ export function CommishToolsCard({ leagueId }: { leagueId: string }) {
     <>
       <View style={{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, padding: 12 }}>
         <Mono size={9} tone="faint" track={0.12}>⚑ COMMISH KIT</Mono>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 3, marginBottom: 6, lineHeight: 12 }}>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 3, marginBottom: 6, lineHeight: fs(12) }}>
           The board banner's tools, here too. League-visible; rules and scoring apply from the next tick.
         </Mono>
         {row('⚑', 'NOTE', note == null ? 'loading…' : note.text ?? 'nothing posted', false, 'note', note?.text ? '✎ EDIT' : '✎ WRITE')}
@@ -375,7 +375,7 @@ function NoteEditor({ visible, leagueId, initial, onDone, onClose }: {
       <TextInput value={draft} multiline maxLength={500} onChangeText={setDraft}
         placeholder="e.g. Practice week is open — set your boards by Friday 6PM ET."
         placeholderTextColor={t.faint}
-        style={{ minHeight: 84, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, lineHeight: 18, color: t.text, backgroundColor: t.bg }} />
+        style={{ minHeight: 84, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), lineHeight: fs(18), color: t.text, backgroundColor: t.bg }} />
       {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
         <View style={{ flex: 1 }}>
@@ -384,7 +384,7 @@ function NoteEditor({ visible, leagueId, initial, onDone, onClose }: {
         {!!initial && (
           <Pressable disabled={busy} onPress={() => { tap(); void save(null); }}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 13, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.opp }}>CLEAR</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.opp }}>CLEAR</Text>
           </Pressable>
         )}
       </View>
@@ -493,18 +493,18 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
     return (
       <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
         {src ? <Image source={{ uri: src }} style={{ width: 22, height: 22 }} resizeMode="cover" />
-          : <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>?</Text>}
+          : <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint }}>?</Text>}
       </View>
     );
   };
   const mini = (v: number, dflt: number, min: number, max: number, step: number, key: 'bonus_mult' | 'bonus_pts', fmt: (n: number) => string) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
       <Pressable hitSlop={4} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [key]: Math.round(Math.max(min, v - step) * 10) / 10 }); }}>
-        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>−</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), color: t.dim, paddingHorizontal: 4 }}>−</Text>
       </Pressable>
-      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', minWidth: 26, textAlign: 'center', color: v !== dflt ? t.warn : t.dim }}>{fmt(v)}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', minWidth: 26, textAlign: 'center', color: v !== dflt ? t.warn : t.dim }}>{fmt(v)}</Text>
       <Pressable hitSlop={4} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [key]: Math.round(Math.min(max, v + step) * 10) / 10 }); }}>
-        <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>＋</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), color: t.dim, paddingHorizontal: 4 }}>＋</Text>
       </Pressable>
     </View>
   );
@@ -515,7 +515,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         return (
           <Pressable key={d.key} onPress={() => { tap(); setRulesDraft({ ...rulesDraft, [d.key]: on ? undefined : true }); }}
             style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: on ? FLAG_PURPLE : t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? FLAG_PURPLE : t.bd }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{d.label}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{d.label}</Text>
           </Pressable>
         );
       })}
@@ -531,10 +531,10 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
         <TextInput value={labelDraft} autoFocus maxLength={40} onChangeText={setLabelDraft}
           placeholder="keeper · out for season…" placeholderTextColor={t.faint}
-          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 11.5, color: t.text, backgroundColor: t.bg }} />
+          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(11.5), color: t.text, backgroundColor: t.bg }} />
         <Pressable disabled={busy || !effective} onPress={() => { tap(); effective && void save(slug, effective); }}
           style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 10, justifyContent: 'center', opacity: busy || !effective ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.onAccent }}>SET</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.onAccent }}>SET</Text>
         </Pressable>
       </View>
     );
@@ -546,7 +546,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
     <>
       <TextInput value={labelDraft} maxLength={40} onChangeText={setLabelDraft}
         placeholder="label — leave empty and the rules name it…" placeholderTextColor={t.faint}
-        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg }} />
       {ruleControls}
       {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
@@ -556,15 +556,15 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         </View>
         <Pressable disabled={busy || !selected.size} onPress={() => { tap(); void unflag([...selected]); }}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !selected.size ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>✕ UNFLAG</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.opp }}>✕ UNFLAG</Text>
         </Pressable>
       </View>
       {!labelDraft.trim() && selected.size > 0 && (
         autoLabel(rulesDraft)
-          ? <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.dim, marginTop: 5, lineHeight: 12 }}>
+          ? <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dim, marginTop: 5, lineHeight: fs(12) }}>
               no label — the flag will read “{autoLabel(rulesDraft)}”
             </Text>
-          : <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.warn, marginTop: 5, lineHeight: 12 }}>
+          : <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.warn, marginTop: 5, lineHeight: fs(12) }}>
               ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
             </Text>
       )}
@@ -589,7 +589,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
                 { text: 'Remove', style: 'destructive', onPress: () => void unflag(rows!.map((f) => f.slug)) },
               ]);
             }}>
-            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.opp, opacity: busy ? 0.5 : 1 }}>✕ CLEAR ALL {rows!.length}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp, opacity: busy ? 0.5 : 1 }}>✕ CLEAR ALL {rows!.length}</Text>
           </Pressable>
         )}
       </View>
@@ -598,16 +598,16 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       {rows?.map((f) => (
         <View key={f.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, flexWrap: 'wrap' }}>
           {face(f.slug)}
-          <Text style={{ fontSize: 12, color: t.text }}>{prettify(f.slug)}</Text>
+          <Text style={{ fontSize: fs(12), color: t.text }}>{prettify(f.slug)}</Text>
           {labelFor === f.slug
             ? <>{labelInput(f.slug)}{ruleControls}</>
             : <>
-                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: FLAG_PURPLE }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: FLAG_PURPLE }}>⚑ {f.label}{ruleGlyphs(f.rules) ? ` · ${ruleGlyphs(f.rules)}` : ''}</Text>
                 <Pressable hitSlop={6} onPress={() => { tap(); setLabelFor(f.slug); setLabelDraft(f.label); setRulesDraft(f.rules ?? {}); }}>
-                  <Text style={{ fontSize: 12, color: t.dim }}>✎</Text>
+                  <Text style={{ fontSize: fs(12), color: t.dim }}>✎</Text>
                 </Pressable>
                 <Pressable hitSlop={6} disabled={busy} onPress={() => { tap(); void save(f.slug, null); }}>
-                  <Text style={{ fontSize: 12, color: t.opp }}>✕</Text>
+                  <Text style={{ fontSize: fs(12), color: t.opp }}>✕</Text>
                 </Pressable>
               </>}
         </View>
@@ -617,13 +617,13 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         <Mono size={9} tone="faint" track={0.12}>{bulk ? `FLAG MANY — ${selected.size} SELECTED` : 'FLAG A PLAYER'}</Mono>
         <View style={{ flex: 1 }} />
         <Pressable hitSlop={6} onPress={() => { tap(); setBulk((v) => !v); setSelected(new Set()); setLabelFor(null); }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: bulk ? t.warn : t.dim }}>{bulk ? '✓ BULK ON' : '⧉ BULK'}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: bulk ? t.warn : t.dim }}>{bulk ? '✓ BULK ON' : '⧉ BULK'}</Text>
         </Pressable>
       </View>
       <TextInput value={q} onChangeText={(v) => { setQ(v); setLabelFor(null); }}
         placeholder="search any NFL player…" placeholderTextColor={t.faint}
         autoCapitalize="none" autoCorrect={false}
-        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginTop: 6 }} />
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginTop: 6 }} />
       {bulk && (
         <>
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
@@ -641,12 +641,12 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
               {matches.length > 0 && (
                 <Pressable hitSlop={4} onPress={() => { tap(); setSelected(new Set(matches)); }}
                   style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>☑ SELECT ALL {matches.length}</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>☑ SELECT ALL {matches.length}</Text>
                 </Pressable>
               )}
               {selected.size > 0 && (
                 <Pressable hitSlop={6} onPress={() => { tap(); setSelected(new Set()); }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>clear</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>clear</Text>
                 </Pressable>
               )}
             </View>
@@ -657,17 +657,17 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         {matches.map((slug) => (
           <View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, flexWrap: 'wrap' }}>
             {face(slug)}
-            <Text style={{ fontSize: 12, color: t.text, flexShrink: 1 }} numberOfLines={1}>{prettify(slug)}</Text>
+            <Text style={{ fontSize: fs(12), color: t.text, flexShrink: 1 }} numberOfLines={1}>{prettify(slug)}</Text>
             {labelFor !== slug && <View style={{ flex: 1 }} />}
             {bulk
               ? <Pressable hitSlop={6} onPress={() => { tap(); setSelected((cur) => { const n = new Set(cur); if (n.has(slug)) n.delete(slug); else n.add(slug); return n; }); }}>
-                  <Text style={{ fontSize: 15, color: selected.has(slug) ? t.you : t.faint }}>{selected.has(slug) ? '☑' : '☐'}</Text>
+                  <Text style={{ fontSize: fs(15), color: selected.has(slug) ? t.you : t.faint }}>{selected.has(slug) ? '☑' : '☐'}</Text>
                 </Pressable>
               : labelFor === slug
                 ? <>{labelInput(slug)}{ruleControls}</>
                 : <Pressable onPress={() => { tap(); setLabelFor(slug); setLabelDraft(''); setRulesDraft({}); }}
                     style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: FLAG_PURPLE }}>⚑ FLAG</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: FLAG_PURPLE }}>⚑ FLAG</Text>
                   </Pressable>}
           </View>
         ))}

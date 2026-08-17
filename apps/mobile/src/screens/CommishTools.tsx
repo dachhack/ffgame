@@ -33,7 +33,7 @@ import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -170,7 +170,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
           {/* ⚑ SETTINGS is gone (v0.264.0) — its slices live in the map below
               as ⇄ WAIVERS & TRADES, 🏆 PLAYOFFS and 📣 LEAGUE BOARD. */}
           <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
           </Pressable>
         </View>
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
@@ -193,7 +193,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
                 return (
                   <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}
                     style={{ borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
                   </Pressable>
                 );
               })}
@@ -299,7 +299,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
 
   const inp = (w: number) => ({
     width: w, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6,
-    paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg,
+    paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg,
   } as const);
 
   const doClear = () => {
@@ -342,7 +342,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
               (r) => setNote(`✓ credited ${Number(r.credited ?? 0)} team${Number(r.credited ?? 0) === 1 ? '' : 's'} for week ${wk}`));
           }} />
       </View>
-      <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
         The allowance drops by itself as each week's games arrive — set it and forget it. GRANT WEEK is the manual catch-up (a missed week, an off-schedule top-up); auto and manual share one receipt per week, so nothing ever pays twice.
       </Mono>
 
@@ -365,7 +365,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <View style={{ flex: 1 }}>
-          <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
             Every adjustment here lands on the coin ledger — nothing is edited in place.
           </Mono>
         </View>
@@ -404,7 +404,7 @@ function GrantSheet({ visible, title, subtitle, unit, busy, grantLabel, dockLabe
           onChangeText={(v) => setDraft(v.replace(/\D/g, ''))}
           style={{
             flex: 1, minWidth: 90, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6,
-            paddingHorizontal: 9, paddingVertical: 7, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg,
+            paddingHorizontal: 9, paddingVertical: 7, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg,
           }} />
       </View>
       <View style={{ marginTop: 10 }}>
@@ -469,19 +469,19 @@ function CoinByTeam({ leagueId }: { leagueId: string }) {
                 <Pressable key={m.roster_id} onPress={() => { tap(); setTarget(m); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3 }}>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                    <Text numberOfLines={1} style={{ fontSize: fs(13), fontWeight: '600', color: t.text }}>
                       {m.team || `Roster ${m.roster_id}`}
                     </Text>
                     {!m.enrolled && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>not joined</Mono>}
                   </View>
-                  <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: Number(m.coin ?? 0) > 0 ? t.you : t.faint }}>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: Number(m.coin ?? 0) > 0 ? t.you : t.faint }}>
                     ◇ {coinFmt(m.coin)}
                   </Text>
-                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim }}>›</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.dim }}>›</Text>
                 </Pressable>
               ))}
             </View>
-            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
               Tap a team to grant or dock. Adjustments are additive and immediate, and land on the coin ledger like any other move. DRIP COIN buys power-ups and live buffs — it is NOT the FAAB waiver budget, which has its own wallet under 💰 FAAB.
             </Mono>
           </>
@@ -578,12 +578,12 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Mono size={9} tone="faint" track={0.12}>🔁 NEXT SEASON</Mono>
         <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: st.continuity === 'redraft' ? t.bd : t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: st.continuity === 'redraft' ? t.dim : t.you }}>{contName}{st.continuity !== 'redraft' ? ' LEAGUE' : ''}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.5, color: st.continuity === 'redraft' ? t.dim : t.you }}>{contName}{st.continuity !== 'redraft' ? ' LEAGUE' : ''}</Text>
         </View>
       </View>
-      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5, lineHeight: 14 }}>{note}</Mono>}
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5, lineHeight: fs(14) }}>{note}</Mono>}
 
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         {st.continuity === 'redraft'
           ? 'Nothing carries over — switch to keeper or dynasty under 🎮 MODE.'
           : st.continuity === 'keeper'
@@ -596,14 +596,14 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>WHO KEEPS WHOM {rolled ? '(as carried)' : '(as of now)'}</Mono>
           {st.teams.map((tm) => (
             <View key={tm.roster_id} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 6 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
+              <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
                 {tm.team ?? `Team ${tm.roster_id}`}
               </Text>
               {tm.keep.length === 0
                 ? <Mono size={9} tone="faint">rosters arrive at the draft</Mono>
                 : tm.keep.map((k) => (
                   <View key={k.slug} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
                   </View>
                 ))}
             </View>
@@ -614,21 +614,21 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
       {futurePicks.length > 0 && (
         <>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>ROOKIE DRAFT PICKS · WHO OWNS WHAT</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
             Every team’s picks for the next three seasons — tradeable assets that move in ordinary trades; the rollover carries ownership into each season’s rookie draft.
           </Mono>
           {st.teams.map((tm) => {
             const owned = futurePicks.filter((p) => p.owner === tm.roster_id);
             return (
               <View key={`pk-${tm.roster_id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 6 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
                   {tm.team ?? `Team ${tm.roster_id}`}
                 </Text>
                 {owned.length === 0
                   ? <Mono size={9} tone="opp">traded every pick away</Mono>
                   : owned.map((p) => (
                     <View key={`${p.season}:${p.round}:${p.orig}`} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim }}>
+                      <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>
                         ’{p.season.slice(2)} R{p.round}{p.orig !== p.owner ? ` ⇄ ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
                       </Text>
                     </View>
@@ -641,14 +641,14 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
 
       <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>ROLL INTO {st.next_season ?? 'NEXT SEASON'}</Mono>
       {rolled ? (
-        <Mono size={9.5} tone="you" style={{ marginTop: 6, lineHeight: 14 }}>
+        <Mono size={9.5} tone="you" style={{ marginTop: 6, lineHeight: fs(14) }}>
           ✓ this season already rolled into {st.next_season}. Open the new league from MY LEAGUES to run its draft.
         </Mono>
       ) : !drafted ? (
         <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>The rollover opens once this season’s draft is complete.</Mono>
       ) : !canRoll ? (
         // the Super Bowl gate (0185): the option APPEARS when the season ends
-        <Mono size={9.5} tone="faint" style={{ marginTop: 6, lineHeight: 14 }}>
+        <Mono size={9.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(14) }}>
           🏈 The rollover opens after the Super Bowl{st.next_season ? ` (Feb 15, ${st.next_season})` : ''}. Keeper declarations and pick trades run all season — the roll into {st.next_season ?? 'next season'} appears here when the season is over.
         </Mono>
       ) : (
@@ -656,21 +656,21 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
           <Pressable onPress={() => { tap(); setRookieOnly((v) => !v); }} disabled={busy}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 }}>
             <View style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, borderColor: rookieOnly ? t.you : t.bd, backgroundColor: rookieOnly ? t.you : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-              {rookieOnly && <Text style={{ fontSize: 9, color: t.onAccent, fontWeight: '700' }}>✓</Text>}
+              {rookieOnly && <Text style={{ fontSize: fs(9), color: t.onAccent, fontWeight: '700' }}>✓</Text>}
             </View>
-            <Mono size={9.5} style={{ flex: 1, lineHeight: 13 }}>
+            <Mono size={9.5} style={{ flex: 1, lineHeight: fs(13) }}>
               rookie draft — next season’s pool is pinned to first-year players (reseed the pool from the draft room before starting it)
             </Mono>
           </Pressable>
           {!!st.admin && !st.season_over && (
-            <Mono size={9} tone="warn" style={{ marginTop: 8, lineHeight: 13 }}>
+            <Mono size={9} tone="warn" style={{ marginTop: 8, lineHeight: fs(13) }}>
               ⚠ admin bypass — the season isn’t over yet; commissioners see this button after the Super Bowl
             </Mono>
           )}
           <View style={{ marginTop: 10 }}>
             <PrimaryButton label={busy ? '…' : `🔁 ROLL INTO ${st.next_season ?? '—'} · ${modeName}`} onPress={roll} disabled={busy} />
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
             Creates the {st.next_season} league: same settings and seats, keepers on the rosters, a fresh {st.keeper_count > 0 ? `${st.roster_size - st.keeper_count}-round` : 'full'} draft waiting, schedule generated. Coin wallets start fresh — the weekly budget funds the new season.
           </Mono>
         </>
@@ -734,7 +734,7 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
             {mode != null && !live && (
               <View style={{ marginTop: 8 }}>
                 <Notice tone="warn">
-                  <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>
+                  <Mono size={9} tone="warn" style={{ lineHeight: fs(13) }}>
                     This league runs {mode === 'standings' ? 'standings-order' : 'rolling-priority'} waivers, so grants are refused. Switch waivers to FAAB in ⚑ SETTINGS first — and note that the switch itself resets every balance to the season budget, which is exactly why a grant made now would evaporate.
                   </Mono>
                 </Notice>
@@ -752,19 +752,19 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
                 <Pressable key={x.roster_id} disabled={!live} onPress={() => { tap(); setTarget(x); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3, opacity: live ? 1 : 0.75 }}>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                    <Text numberOfLines={1} style={{ fontSize: fs(13), fontWeight: '600', color: t.text }}>
                       {x.team || `Roster ${x.roster_id}`}
                     </Text>
                     {!x.touched && <Mono size={8.5} tone="faint" style={{ marginTop: 2 }}>untouched — still on the league default</Mono>}
                   </View>
-                  <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: x.faab > 0 ? t.you : t.faint }}>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: x.faab > 0 ? t.you : t.faint }}>
                     ${x.faab.toLocaleString()}
                   </Text>
-                  {live && <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim }}>›</Text>}
+                  {live && <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.dim }}>›</Text>}
                 </Pressable>
               ))}
             </View>
-            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
               Grants are additive — a claw-back is a negative, and a balance never drops below $0 (the claim resolver assumes a bid can always be paid). Changing the waiver mode or the season budget resets every balance to the default. FAAB buys players; it is NOT drip coin, which buys power-ups.
             </Mono>
           </>
@@ -874,7 +874,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
         return (
           <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
+              <Text numberOfLines={1} style={{ fontSize: fs(12.5), fontWeight: '700', color: t.text }}>
                 {m.team ?? `Roster ${m.roster_id}`}{self ? '  (you)' : ''}
               </Text>
               <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>
@@ -937,13 +937,13 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           <Mono size={9} tone="warn" track={0.12}>⏳ WAITING ROOM ({joiners.length})</Mono>
           {joiners.map((j) => (
             <View key={j.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, flexWrap: 'wrap' }}>
-              <Text numberOfLines={1} style={{ flex: 1, minWidth: 120, fontSize: 12, color: t.text }}>{j.email ?? j.app_user_id.slice(0, 8)}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, minWidth: 120, fontSize: fs(12), color: t.text }}>{j.email ?? j.app_user_id.slice(0, 8)}</Text>
               <Chip label="SEAT →" onPress={() => { tap(); setSeatPickFor(j); }} />
             </View>
           ))}
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         Unassigned teams keep their players and can sit open as long as you like. Assigning by email seats them instantly if they have an account, or holds the seat until they sign in with it.
       </Mono>
 
@@ -952,7 +952,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
         subtitle="The seat goes to this email — instantly if they have an account, held for them if not." onClose={() => setAssignFor(null)}>
         <TextInput value={emailDraft} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
           placeholder="manager@email.com" placeholderTextColor={t.faint} onChangeText={setEmailDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '✓ ASSIGN THE SEAT'} disabled={busy || !emailDraft.trim()} onPress={doAssign} />
         </View>
@@ -967,7 +967,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           <Chip label="− DOCK" on={coinSign === -1} onPress={() => { tap(); setCoinSign(-1); }} />
           <TextInput value={coinDraft} autoFocus keyboardType="number-pad" placeholder="amount" placeholderTextColor={t.faint}
             onChangeText={(v) => setCoinDraft(v.replace(/\D/g, ''))}
-            style={{ width: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+            style={{ width: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
         </View>
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : coinSign === 1 ? '💰 GRANT' : '− DOCK'} disabled={busy || !coinDraft}
@@ -984,7 +984,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
       {/* rename any team (commish) */}
       <Overlay visible={!!renameFor} title={renameFor ? `Rename ${renameFor.team ?? `roster ${renameFor.roster_id}`}` : ''} onClose={() => setRenameFor(null)}>
         <TextInput value={renameDraft} autoFocus maxLength={40} onChangeText={setRenameDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '✓ SAVE NAME'} disabled={busy || !renameDraft.trim()}
             onPress={() => {
@@ -1007,7 +1007,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
         subtitle="They steer the same lineup as the owner — one team, more thumbs. Must already have an account." onClose={() => setMgrFor(null)}>
         <TextInput value={mgrDraft} autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
           placeholder="comanager@email.com" placeholderTextColor={t.faint} onChangeText={setMgrDraft}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '＋ ADD CO-MANAGER'} disabled={busy || !mgrDraft.trim()}
             onPress={() => {
@@ -1029,7 +1029,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
             return (
               <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{m.team ?? `Roster ${m.roster_id}`}</Text>
+                  <Text numberOfLines={1} style={{ fontSize: fs(12.5), fontWeight: '700', color: t.text }}>{m.team ?? `Roster ${m.roster_id}`}</Text>
                   <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>{openSeat ? 'open — seat as owner' : `${m.email ?? m.claim_email ?? 'taken'} — add as co-manager`}</Mono>
                 </View>
                 <Chip label={openSeat ? 'OWNER' : '＋ CO-MGR'} on={openSeat} disabled={busy}
@@ -1083,11 +1083,11 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
           {rows?.length === 0 && <Mono size={10} tone="faint">No members yet.</Mono>}
           {rows?.map((m) => (
             <View key={m.id} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-              <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.text }}>{m.name}</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: tone(m.last_at) }}>{seenAgoLabel(m.last_at)}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: fs(12.5), color: t.text }}>{m.name}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: tone(m.last_at) }}>{seenAgoLabel(m.last_at)}</Text>
             </View>
           ))}
-          <Mono size={8.5} tone="faint" style={{ marginTop: 2, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 2, lineHeight: fs(13) }}>
             When each member last opened this league — web or app. NEVER means a claimed seat that hasn't been in yet.
           </Mono>
         </View>
@@ -1166,7 +1166,7 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
       {ALL_TEAMS.map((tm) => (
         <Pressable key={tm} disabled={disabled} onPress={() => { tap(); onChange(toggleTeam(value, tm)); }}
           style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: on.has(tm) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on.has(tm) ? t.you : t.bd, opacity: disabled ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: on.has(tm) ? t.onAccent : t.dim }}>{tm}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: on.has(tm) ? t.onAccent : t.dim }}>{tm}</Text>
         </Pressable>
       ))}
     </View>
@@ -1228,17 +1228,17 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
         {cmode !== 'redraft' && (
           <TextInput value={n} onChangeText={(v) => setN(v.replace(/\D/g, ''))} keyboardType="number-pad"
             editable={!busy && !rolled}
-            style={{ fontFamily: MONO, fontSize: 12, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, minWidth: 42, textAlign: 'center' }} />
+            style={{ fontFamily: MONO, fontSize: fs(12), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, minWidth: 42, textAlign: 'center' }} />
         )}
         {cmode !== 'redraft' && (
           <Mono size={9} tone="faint">{cmode === 'keeper' ? `keepers of ${st.roster_size}` : 'rookie rounds'}</Mono>
         )}
         <Pressable disabled={busy || rolled} onPress={() => { tap(); void save(); }}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, opacity: busy || rolled ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>SAVE</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.dim }}>SAVE</Text>
         </Pressable>
       </View>
-      <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+      <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
         {rolled
           ? 'This season already rolled over — continuity is set on the new league.'
           : cmode === 'redraft'
@@ -1370,7 +1370,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
   const Pill = ({ on, label, onPress }: { on: boolean; label: string; onPress: () => void }) => (
     <Pressable disabled={busy || mode === null} onPress={() => { tap(); onPress(); }}
       style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, opacity: busy || mode === null ? 0.5 : 1 }}>
-      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
     </Pressable>
   );
   return (
@@ -1379,7 +1379,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Mono size={9.5} weight="700" track={0.12} tone="faint">🎮 GAME MODE</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: 12 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
             DRIP is the full game. CLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.
           </Mono>
         </View>
@@ -1399,7 +1399,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
       {kdst && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
           <Mono size={8.5} tone="faint" weight="700" track={0.12}>K / D-ST FILL</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 12 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(12) }}>
             {kdst.needs_k || kdst.needs_def
               ? `This league doesn't roster ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} — fill them so the Banker / Suppress metrics are playable. Takes effect on the next sync.`
               : 'This league rosters both K and DEF — no fill needed.'}
@@ -1411,7 +1411,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
             ))}
           </View>
           {kdst.mode === 'manual' && (
-            <Mono size={8} tone="warn" style={{ marginTop: 6, lineHeight: 12 }}>
+            <Mono size={8} tone="warn" style={{ marginTop: 6, lineHeight: fs(12) }}>
               Manual is on, but the per-team K/DEF picker is web-only — assign them from the league console. Any team left blank falls back to a random not-on-bye pick.
             </Mono>
           )}
@@ -1424,18 +1424,18 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
       {/* The RECEPTIONS pills moved into the scoring presets (web parity) —
           receptions are a scoring decision. */}
       {mode === 'classic' && (
-        <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
+        <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: fs(12) }}>
           The lineup lives under 🧩 ROSTER; receptions and every other value under ⚖ SCORING.
         </Mono>
       )}
       </>)}
       {view === 'lineup' && mode !== 'classic' && mode !== null && (
-        <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+        <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
           A DRIP league has no lineup builder — everyone fields 8 weekly starters, any position. Roster size and position caps live on the web console's ROSTER tab.
         </Mono>
       )}
       {view === 'scoring' && mode !== 'classic' && mode !== null && (
-        <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+        <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
           DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under 🎮 MODE for the full scoring editor.
         </Mono>
       )}
@@ -1461,29 +1461,29 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
                     <Pressable key={p} disabled={busy}
                       onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
                       style={{ borderRadius: 3, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
                     </Pressable>
                   );
                 })}
                 <Pressable disabled={busy}
                   onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯 BB</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯 BB</Text>
                 </Pressable>
                 <Pressable disabled={busy} onPress={() => { tap(); setFltOpen((cur) => cur === i ? null : i); }}
                   style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: spotHasFlt(sp) ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: spotHasFlt(sp) ? t.you : t.bd }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: spotHasFlt(sp) ? t.onAccent : t.dim }}>🔎</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: spotHasFlt(sp) ? t.onAccent : t.dim }}>🔎</Text>
                 </Pressable>
                 {/* Touch has no drag-and-drop, so reordering is ▲▼ here — same
                     result as the web builder's handle. */}
                 <Pressable disabled={busy || i === 0} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i - 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: 10, color: i === 0 ? t.faint : t.dim }}> ▲ </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: i === 0 ? t.faint : t.dim }}> ▲ </Text>
                 </Pressable>
                 <Pressable disabled={busy || i === spots.length - 1} onPress={() => { tap(); setSpots((cur) => { const n = cur!.slice(); const [r] = n.splice(i, 1); n.splice(i + 1, 0, r); return n; }); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: 10, color: i === spots.length - 1 ? t.faint : t.dim }}> ▼ </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: i === spots.length - 1 ? t.faint : t.dim }}> ▼ </Text>
                 </Pressable>
                 <Pressable disabled={busy || spots.length <= 1} onPress={() => { tap(); setSpots((cur) => cur!.filter((_, j) => j !== i)); setSpotsDirty(true); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: 10, color: t.opp }}> ✕ </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10), color: t.opp }}> ✕ </Text>
                 </Pressable>
                 {/* PER-SLOT FILTER (0172): who may FILL this spot — teams and/or
                     a tenure window (0 = rookie). Never shrinks the draft pool. */}
@@ -1491,16 +1491,16 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
                   <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
                     <TextInput value={sp.fTeams} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }}
                       placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, flexGrow: 1, minWidth: 130 }} />
+                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, flexGrow: 1, minWidth: 130 }} />
                     <TextInput value={sp.fMin} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMin: v })); setSpotsDirty(true); }}
                       placeholder="min" keyboardType="number-pad" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
+                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
                     <TextInput value={sp.fMax} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fMax: v })); setSpotsDirty(true); }}
                       placeholder="max" keyboardType="number-pad" placeholderTextColor={t.faint}
-                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
+                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, width: 48 }} />
                     <TextInput value={sp.label} onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
                       placeholder="name this spot (e.g. Only NFC Players)" placeholderTextColor={t.faint} maxLength={24}
-                      style={{ fontFamily: MONO, fontSize: 9.5, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 6, paddingVertical: 4, width: '100%' }} />
+                      style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 6, paddingVertical: 4, width: '100%' }} />
                     <Mono size={7.5} tone="faint">rookies → max 0 · the name is a label; chips + filters decide who may fill it · SAVE LINEUP applies</Mono>
                     <TeamChips value={sp.fTeams} disabled={busy}
                       onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
@@ -1515,19 +1515,19 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>{label}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>{label}</Text>
                 <Pressable disabled={busy || shape[key] === 0} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) }); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.you }}> − </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.you }}> − </Text>
                 </Pressable>
-                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you, minWidth: 12, textAlign: 'center' }}>{shape[key]}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you, minWidth: 12, textAlign: 'center' }}>{shape[key]}</Text>
                 <Pressable disabled={busy || shape[key] >= max} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.min(max, shape[key] + 1) }); }} hitSlop={6}>
-                  <Text style={{ fontFamily: MONO, fontSize: 11, color: t.you }}> ＋ </Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.you }}> ＋ </Text>
                 </Pressable>
               </View>
             ))}
             <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS</Mono>
           </View>
-          <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+          <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
             Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
@@ -1538,11 +1538,11 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
             <Mono size={8.5} tone="faint" weight="700">🔎 PLAYER FILTERS · who's allowed in the pool</Mono>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <TextInput value={fltTeams} onChangeText={setFltTeams} placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
-                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, flexGrow: 1, minWidth: 150 }} />
+                style={{ fontFamily: MONO, fontSize: fs(10), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, flexGrow: 1, minWidth: 150 }} />
               <TextInput value={fltMin} onChangeText={setFltMin} placeholder="min yrs" keyboardType="number-pad" placeholderTextColor={t.faint}
-                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
+                style={{ fontFamily: MONO, fontSize: fs(10), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
               <TextInput value={fltMax} onChangeText={setFltMax} placeholder="max yrs" keyboardType="number-pad" placeholderTextColor={t.faint}
-                style={{ fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
+                style={{ fontFamily: MONO, fontSize: fs(10), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, width: 62 }} />
               <Pressable disabled={busy} onPress={() => { tap(); void (async () => {
                 const teams = fltTeams.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
                 const mn = fltMin.trim() === '' ? null : Number(fltMin);
@@ -1550,11 +1550,11 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
                 const r = await setLeaguePoolFilter(leagueId, (!teams.length && mn == null && mx == null) ? null : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx });
                 setNote(r.ok ? '✓ filter saved — refresh the player pool to apply' : (r.error ?? 'failed'));
               })(); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>SAVE</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.you }}>SAVE</Text>
               </Pressable>
               <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
             </View>
-            <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: 11 }}>
+            <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(11) }}>
               Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
             </Mono>
           </View>
@@ -1571,7 +1571,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
             {SCORING_PRESETS.map((pr) => (
               <Pressable key={pr.id} disabled={busy} onPress={() => { tap(); void applyPreset(pr); }}
                 style={{ borderRadius: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: armed === pr.id ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: armed === pr.id ? t.you : t.bd }}>
-                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: armed === pr.id ? t.onAccent : t.dim }}>{armed === pr.id ? `CONFIRM ${pr.label}` : pr.label}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: armed === pr.id ? t.onAccent : t.dim }}>{armed === pr.id ? `CONFIRM ${pr.label}` : pr.label}</Text>
               </Pressable>
             ))}
             <Mono size={8} tone="faint">RECEPTIONS: {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? '½ PPR' : 'NON-PPR'}</Mono>
@@ -1581,7 +1581,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
             {SCORING_TABS.map((tb) => (
               <Pressable key={tb.id} onPress={() => { tap(); setScTab(tb.id); }}
                 style={{ borderRadius: 3, paddingHorizontal: 7, paddingVertical: 4, backgroundColor: scTab === tb.id ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: scTab === tb.id ? t.you : t.bd }}>
-                <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: scTab === tb.id ? t.onAccent : t.dim }}>{tb.label}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: scTab === tb.id ? t.onAccent : t.dim }}>{tb.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -1598,7 +1598,7 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
                           <Mono size={7} tone={changed ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}</Mono>
                           <TextInput value={scDraft[f.key] ?? ''} keyboardType="numbers-and-punctuation"
                             onChangeText={(v) => setScDraft((d) => ({ ...d, [f.key]: v }))}
-                            style={{ fontFamily: MONO, fontSize: 11, color: t.text, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: changed ? t.you : t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 5, marginTop: 2 }} />
+                            style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: changed ? t.you : t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 5, marginTop: 2 }} />
                         </View>
                       );
                     })}
@@ -1639,13 +1639,13 @@ function LiveBuffsCard({ leagueId }: { leagueId: string }) {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Mono size={9.5} weight="700" track={0.12} tone="faint">◈ REAL-TIME POWER-UPS</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: 12 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
             The armed live buffs — overtime, momentum, amps, counters. Off blocks new arms league-wide; already-armed buffs stay reclaimable.
           </Mono>
         </View>
         <Pressable disabled={on === null || busy} onPress={() => { tap(); void flip(); }}
           style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, opacity: on === null || busy ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: on ? t.onAccent : t.dim }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: on ? t.onAccent : t.dim }}>
             {on === null ? '…' : on ? 'ON' : 'OFF'}
           </Text>
         </Pressable>

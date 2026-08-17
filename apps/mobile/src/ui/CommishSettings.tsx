@@ -18,7 +18,7 @@ import {
   leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
   type PosCaps, type TradeReview, type WaiverMode,
 } from '@drip/core/data/liveApi';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Chip, LinkButton, Mono, Notice, PrimaryButton } from './prims';
 import { PlayoffControls } from './LeagueExtras';
@@ -39,14 +39,14 @@ function TimeStep({ label, value, onChange }: { label: string; value: number; on
   const btn = (txt: string, d: number) => (
     <Text
       onPress={() => { tap(); onChange(wrap(value + d)); }}
-      style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.you, paddingHorizontal: 12, paddingVertical: 4 }}
+      style={{ fontFamily: MONO, fontSize: fs(15), fontWeight: '700', color: t.you, paddingHorizontal: 12, paddingVertical: 4 }}
     >{txt}</Text>
   );
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
       <Mono size={9} tone="faint" style={{ width: 46 }}>{label}</Mono>
       {btn('−', -STEP)}
-      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text, width: 72, textAlign: 'center' }}>{fmtEt(value)} ET</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: t.text, width: 72, textAlign: 'center' }}>{fmtEt(value)} ET</Text>
       {btn('＋', STEP)}
     </View>
   );
@@ -224,7 +224,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <Chip label="🔒 PRIVATE — INVITE ONLY" on={!listed} onPress={() => void setVisibility(false)} />
             <Chip label="🔎 PUBLIC ON THE BOARD" on={listed} onPress={() => void setVisibility(true)} />
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
             {listed
               ? 'Anyone browsing the league board can take an open seat. It comes off the board the moment you go private or the seats fill.'
               : 'Only people you hand the invite code to can join — share it from the RECRUIT button.'}
@@ -233,7 +233,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <View style={{ marginTop: 8 }}>
               <TextInput value={blurbDraft} maxLength={280} multiline placeholder="The pitch shown on the board…" placeholderTextColor={t.faint}
                 onChangeText={setBlurbDraft}
-                style={{ minHeight: 56, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
+                style={{ minHeight: 56, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg }} />
               <View style={{ alignItems: 'flex-end', marginTop: 4 }}>
                 <LinkButton label="update pitch" tone="you" onPress={() => void saveBlurb()} />
               </View>
@@ -250,7 +250,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <Chip label="REVERSE STANDINGS" on={mode === 'standings'} onPress={() => { tap(); setMode('standings'); }} />
             <Chip label="💰 FAAB" on={mode === 'faab'} onPress={() => { tap(); setMode('faab'); }} />
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
             {mode === 'rolling' ? 'A queue: winning a claim sends you to the back.'
               : mode === 'standings' ? "Sleeper's default: priority is the reverse of the live standings at every clear — winning a claim costs nothing, only winning games does."
               : 'Blind bids from a season budget; highest bid wins, only the winner pays.'}
@@ -259,11 +259,11 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <Mono size={9} tone="faint">SEASON BUDGET $</Mono>
               <TextInput value={budgetDraft} keyboardType="number-pad" onChangeText={(v) => setBudgetDraft(v.replace(/\D/g, ''))}
-                style={{ width: 76, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+                style={{ width: 76, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
             </View>
           )}
           {init.mode !== mode || (mode === 'faab' && budget !== init.budget) ? (
-            <Mono size={8.5} tone="warn" style={{ marginTop: 6, lineHeight: 13 }}>
+            <Mono size={8.5} tone="warn" style={{ marginTop: 6, lineHeight: fs(13) }}>
               Changing the system or the budget hands every team a fresh full balance — season spending so far is forgotten.
             </Mono>
           ) : null}
@@ -303,7 +303,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               <Chip key={d} label={`${d} DAY${d > 1 ? 'S' : ''}`} on={holdDays === d} onPress={() => { tap(); setHoldDays(d); }} />
             ))}
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
             {clearMin === null
               ? 'Rolling: each dropped player clears exactly 24h × hold after the drop.'
               : 'Daily: claims resolve at the set time once the hold has passed.'}
@@ -336,7 +336,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
                 }} />
             ))}
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
             On checked days, adds open only after the waiver clear time ({fmtEt(clearMin ?? 180)} ET) has passed.
           </Mono>
 
@@ -367,7 +367,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               ))}
             </View>
           )}
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
             Tap a position to cycle its limit: ∞ → 0 → 1 … 8 → ∞. Enforced at the draft, free agency, waivers, and auction bids; rosters already over a lowered limit keep their players — the limit blocks new adds.
           </Mono>
           <View style={{ marginTop: 10 }}>

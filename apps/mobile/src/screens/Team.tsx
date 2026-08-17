@@ -21,7 +21,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -96,20 +96,20 @@ function KeepersCard({ leagueId, myRoster, mine }: {
       </Mono>
       {rolled ? (
         <>
-          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: 15 }}>
+          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: fs(15) }}>
             The season rolled over — these carried into {st.next_season}:
           </Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {carried.map((k) => (
               <View key={k.slug} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.text }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
               </View>
             ))}
           </View>
         </>
       ) : (
         <>
-          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: 15 }}>
+          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: fs(15) }}>
             Pick up to {st.keeper_count} to carry into next season. Spots you leave open auto-fill with your best-ranked players when the commissioner rolls the league over.
           </Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
@@ -118,7 +118,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
               return (
                 <Pressable key={p.slug} disabled={busy} onPress={() => toggle(p.slug)}
                   style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.6 : 1 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{on ? '★ ' : ''}{p.full_name}</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{on ? '★ ' : ''}{p.full_name}</Text>
                 </Pressable>
               );
             })}
@@ -293,11 +293,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ) : (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TextInput value={nameDraft} autoFocus maxLength={40} onChangeText={setNameDraft}
-                style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+                style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
               <Pressable disabled={busy || !nameDraft.trim()}
                 onPress={() => { if (nameDraft.trim() && myRoster != null) void run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); }}
                 style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !nameDraft.trim() ? 0.5 : 1 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.onAccent }}>SAVE</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.onAccent }}>SAVE</Text>
               </Pressable>
             </View>
           )}
@@ -307,7 +307,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           <LinkButton label="🖼 team art" onPress={() => { tap(); setMyArtOpen(true); }} />
         </View>
         <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
         </Pressable>
       </View>
     </Card>
@@ -333,7 +333,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         <Card><PushPrefs /></Card>
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
-          <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
+          <Mono size={10} style={{ marginTop: 8, lineHeight: fs(16) }}>
             Waivers and free agency open once the draft is complete. Set your team name now — it shows on the draft board. Use RECRUIT to bring friends in before draft night.
           </Mono>
           <View style={{ marginTop: 12 }}>
@@ -364,7 +364,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       {team.roster_issue && (
         <Card style={{ borderLeftWidth: 3, borderLeftColor: t.opp }}>
           <Display size={13} tone="opp">⚠ Roster over its limits</Display>
-          <Mono size={9.5} style={{ marginTop: 6, lineHeight: 15 }}>
+          <Mono size={9.5} style={{ marginTop: 6, lineHeight: fs(15) }}>
             {team.roster_issue}. Adds, waiver claims, and weekly lineups are locked until your roster is legal — drops always work.
           </Mono>
         </Card>
@@ -383,7 +383,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
             <Face slug={p.slug} pos={p.pos} />
             <PosPill pos={p.pos} size={8} />
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
             <FlagChip slug={p.slug} size={7.5} />
             {p.spot !== 'active' && <Mono size={7.5} weight="700" tone="opp">{p.spot.toUpperCase()}</Mono>}
             <Mono size={9} tone="faint">{p.team}</Mono>
@@ -394,15 +394,15 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
               const next = p.spot === 'active' ? 'taxi' : p.spot === 'taxi' ? 'ir' : 'active';
               void run(() => setRosterSpot(leagueId, p.slug, next as 'active' | 'taxi' | 'ir'));
             }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>{p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}</Text>
             </Pressable>
             <Pressable disabled={busy} onPress={() => { tap(); myRoster != null && void run(() => dropPlayer(leagueId, myRoster, p.slug)); }}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.opp }}>DROP</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp }}>DROP</Text>
             </Pressable>
           </View>
         ))}
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 14 }}>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(14) }}>
           Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week.
         </Mono>
       </Card>
@@ -417,7 +417,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           {pendingClaims.map((c) => (
             <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 12, color: t.text }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}</Text>
+                <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}</Text>
                 {c.drop_slug && <Mono size={9} tone="faint">dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</Mono>}
               </View>
               {team.waiver_mode === 'faab' && <Mono size={9.5} tone="you" weight="700">${c.bid ?? 0}</Mono>}
@@ -427,7 +427,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ))}
           {recentClaims.map((c) => (
             <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.dim }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: t.dim }}>
                 ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}{c.note ? ` — ${c.note}` : ''}
               </Text>
               <Mono size={8} tone={c.status === 'won' ? 'you' : 'faint'} track={0.06}>{c.status.toUpperCase()}</Mono>
@@ -443,7 +443,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
         </Mono>
         <TextInput value={q} onChangeText={setQ} placeholder="Search players or teams…" placeholderTextColor={t.faint}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
           {POS_FILTERS.map((p) => <Chip key={p} label={p} on={pos === p} onPress={() => { tap(); setPos(p); }} />)}
           <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
@@ -476,7 +476,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
               <Mono size={8.5} tone="faint" style={{ width: 28 }}>#{p.rank}</Mono>
               <Face slug={p.slug} pos={p.pos} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>
+                <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>
                   {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
@@ -488,7 +488,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
               </View>
               <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
                 style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
                   {left != null ? 'CLAIM' : 'ADD'}
                 </Text>
               </Pressable>
@@ -513,13 +513,13 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         {[...team.waiver_order].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99)).map((w, i) => (
           <View key={w.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, marginTop: i ? 0 : 6 }}>
             <Mono size={9.5} tone="faint" style={{ width: 16 }}>{i + 1}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: w.roster_id === myRoster ? t.you : t.text, fontWeight: w.roster_id === myRoster ? '700' : '400' }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: w.roster_id === myRoster ? t.you : t.text, fontWeight: w.roster_id === myRoster ? '700' : '400' }}>
               {w.team ?? `Team ${w.roster_id}`}
             </Text>
             {team.waiver_mode === 'faab' && w.faab != null && <Mono size={9} weight="700">${w.faab}</Mono>}
           </View>
         ))}
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 14 }}>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(14) }}>
           {team.waiver_mode === 'faab'
             ? 'FAAB: claims carry blind bids from your season budget — highest bid wins, the order above only breaks ties. Winners still rotate to the back.'
             : 'Winning a claim sends you to the back of the line.'}
@@ -536,12 +536,12 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <TextInput value={bidDraft} autoFocus keyboardType="number-pad" placeholder="$0" placeholderTextColor={t.faint}
             onChangeText={(v) => setBidDraft(v.replace(/\D/g, ''))}
-            style={{ width: 90, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+            style={{ width: 90, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
           <View style={{ flex: 1 }}>
             <PrimaryButton label="SUBMIT CLAIM" disabled={busy} onPress={submitClaimBid} />
           </View>
         </View>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: 14 }}>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(14) }}>
           Highest bid wins when waivers clear; only the winner pays. $0 is a legal bid.
         </Mono>
       </Overlay>
@@ -554,10 +554,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
               <Face slug={p.slug} pos={p.pos} />
               <PosPill pos={p.pos} size={8} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
               <Pressable disabled={busy} onPress={() => { tap(); pendingAdd && doAdd(pendingAdd, p.slug); }}
                 style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.opp }}>DROP</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp }}>DROP</Text>
               </Pressable>
             </View>
           ))}
