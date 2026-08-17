@@ -1,10 +1,50 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.258.0`_
+_Last updated: 2026-08-17 · Build `v0.259.0`_
 
-## Where this session left off (v0.258.0, 2026-08-17)
+## NEXT SESSION: DYNASTY — read this first
 
-**Fourteen versions in one sitting, v0.245.0 → v0.258.0.** Classic (normie)
+The founder's pick for the next arc: **dynasty leagues** — season rollover,
+keepers, rookie drafts, eventually tradeable picks. Three facts settle the
+architecture; they were CHECKED, not assumed:
+
+- **`draft.league_id` is the PRIMARY KEY** (0064). One draft per league,
+  structurally — every piece of draft machinery (draft_pick, the room, the
+  autopick AI, slow-draft clocks) keys on league_id. A second draft on an
+  existing league row means surgery on all of it.
+- **`league` is `unique(sleeper_league_id, season)`** (0001). The same league
+  can exist once PER SEASON. A new season is a NEW league row — which gets its
+  own draft slot for free.
+- **`setLeaguePoolFilter` already does rookies-only** (0171/0172:
+  `max_exp: 0`), and `buildDraftPool` honors it.
+
+So the arc that works WITH the schema instead of against it:
+
+1. **ROLLOVER FIRST** (`rollover_league` RPC, commish-triggered post-season):
+   clone the league row to season+1 (same `sleeper_league_id`, same
+   settings_json/scoring/spec, same memberships and team names), carry KEEPER
+   rosters onto `native_roster` (commissioner sets keeper count; managers
+   declare, or default to top-N by projection), generate the schedule, leave a
+   fresh `draft` row pending. Seat agents (0180) re-provision on unclaimed
+   seats automatically — that machinery is season-agnostic.
+2. **The ROOKIE DRAFT falls out of rollover**: the new season's draft with the
+   pool filter set to rookies-only and rounds = roster − keepers. Almost no
+   new machinery — the draft room, autopick, and pool seeding all exist.
+3. **PICK ASSETS later** (tradeable future picks): a real new table + trade
+   integration. Do NOT start here.
+
+Watch for: `_sync_classic_rounds` and the spec freeze operate per league row —
+a rolled-over league starts pre-draft, so everything unfreezes naturally.
+`nativeGenerateSchedule(leagueId, 14)` is the schedule call. The create-form
+default rule (v0.251.0) applies: rollover must NAME the mode it carries.
+Wallets (`team_wallet`) are league+roster keyed — decide explicitly whether
+coin resets (recommended: yes, fresh season seed).
+
+---
+
+## Where this session left off (v0.259.0, 2026-08-17)
+
+**Sixteen versions in one sitting, v0.245.0 → v0.259.0.** Classic (normie)
 mode went from "board exists" to launch-shaped, the acquisition surfaces
 caught up, and every item on the previous session's NEXT list shipped. The
 section below this one describes v0.234.0 — treat it as history.
@@ -52,6 +92,11 @@ section below this one describes v0.234.0 — treat it as history.
   legal edit is a strict prefix of the stored spec, compared in cleaned form.
 - **v0.258** team units pass tenure bands — `tenureMatches` mirrors
   `slotAllows`' K/DEF/HC/P exemption.
+- **v0.259** the commish tools get a MAP: narrow web swaps the 17-option
+  `<select>` for a `NavHub` tile grid (whole map, one tap in, "⊞ ALL
+  SETTINGS" back), the narrow panel body is overflow-safe, the app's
+  MODE & SCORING mega-scroll split into MODE / ROSTER / SCORING via a `view`
+  prop, and web MEMBERS renamed 👥 SEATS to match the app.
 
 ### Lessons this session paid for (do not relearn)
 
