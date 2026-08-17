@@ -1,44 +1,153 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.259.0`_
+_Last updated: 2026-08-17 · Build `v0.261.0`_
 
-## NEXT SESSION: DYNASTY — read this first
+## NEXT SESSION — read this first
 
-The founder's pick for the next arc: **dynasty leagues** — season rollover,
-keepers, rookie drafts, eventually tradeable picks. Three facts settle the
-architecture; they were CHECKED, not assumed:
+The ENTIRE dynasty arc shipped this session: v0.260.0 (rollover + keepers +
+the rookie draft, migration 0182) and v0.261.0 (tradeable pick assets,
+migration 0183 — the founder's "dynasty needs rookie draft rounds and
+assigned rookie draft picks per team. These are tradeable picks."). The two
+sections below carry the design decisions. What's next:
 
-- **`draft.league_id` is the PRIMARY KEY** (0064). One draft per league,
-  structurally — every piece of draft machinery (draft_pick, the room, the
-  autopick AI, slow-draft clocks) keys on league_id. A second draft on an
-  existing league row means surgery on all of it.
-- **`league` is `unique(sleeper_league_id, season)`** (0001). The same league
-  can exist once PER SEASON. A new season is a NEW league row — which gets its
-  own draft slot for free.
-- **`setLeaguePoolFilter` already does rookies-only** (0171/0172:
-  `max_exp: 0`), and `buildDraftPool` honors it.
+1. **Live-fire the dynasty loop** on a real league before relying on it:
+   set a keeper count + rookie rounds, declare keepers on one seat, trade a
+   pick, roll, open the new league on both hosts, and run the draft —
+   confirming the traded slot lands on the acquirer's clock. The probe
+   suites cover the SQL end to end but no production league has rolled yet.
+2. **Verify the seat agents in production** (carried from v0.259.0) — run
+   `scripts/db/classic-autoslot-diag.sql` via Actions → Run a database
+   query: unclaimed seats should read `has_agent = t` with `wk_rows` filled.
+3. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** (PROJ_AS_OF is
+   2026-07-28). The auto-slot, the seat agents, the previews — and now the
+   keeper top-N default via pool rank at the NEXT reseed — all rank by it.
+4. **The live web drip surface never installs pool `slugMeta` overrides**
+   (carried): audit `Matchup.tsx`/`cardTable` consumers; install
+   `setSlugMetaOverrides(pool)` where the live league's pool is loaded.
+5. **Audit server-side `injuryFor` callers** (carried): with no live install
+   and no season set it serves the BAKED 2025 report.
+6. Dynasty polish when it earns a session: multi-year futures (assets one
+   season out only today), draft-day pick trades (propose_trade still gates
+   on draft complete), and resizing a ROLLED league's pending rookie draft
+   (set_rookie_rounds only provisions season+1 futures).
 
-So the arc that works WITH the schema instead of against it:
+---
 
-1. **ROLLOVER FIRST** (`rollover_league` RPC, commish-triggered post-season):
-   clone the league row to season+1 (same `sleeper_league_id`, same
-   settings_json/scoring/spec, same memberships and team names), carry KEEPER
-   rosters onto `native_roster` (commissioner sets keeper count; managers
-   declare, or default to top-N by projection), generate the schedule, leave a
-   fresh `draft` row pending. Seat agents (0180) re-provision on unclaimed
-   seats automatically — that machinery is season-agnostic.
-2. **The ROOKIE DRAFT falls out of rollover**: the new season's draft with the
-   pool filter set to rookies-only and rounds = roster − keepers. Almost no
-   new machinery — the draft room, autopick, and pool seeding all exist.
-3. **PICK ASSETS later** (tradeable future picks): a real new table + trade
-   integration. Do NOT start here.
+## Where this session left off, part 2 (v0.261.0, 2026-08-17)
 
-Watch for: `_sync_classic_rounds` and the spec freeze operate per league row —
-a rolled-over league starts pre-draft, so everything unfreezes naturally.
-`nativeGenerateSchedule(leagueId, 14)` is the schedule call. The create-form
-default rule (v0.251.0) applies: rollover must NAME the mode it carries.
-Wallets (`team_wallet`) are league+roster keyed — decide explicitly whether
-coin resets (recommended: yes, fresh season seed).
+**Dynasty phase 3 (migration 0183): pick assets.** `pick_asset` is
+(league, SEASON, round, original seat) → owner. The SEASON tag is the design:
+on league L (season S) the S+1 rows are the tradeable futures; rollover
+copies them to the new league, where the tag equals the league's OWN season —
+which is exactly the rule `_start_draft_now` uses to find "the assets for
+THIS draft" — then re-provisions S+2 futures from the carried
+`rookie_rounds`, so dynasty continuity needs nobody to re-enable anything.
+
+- **`set_rookie_rounds` (commish, 0–10)** deals one asset per seat per round
+  (owner = original). Grow adds; shrink refuses if a removed round holds a
+  traded pick — a settings change cannot delete someone's acquired property.
+- **Trades**: `trade_proposal.give_picks/get_picks`; `propose_trade` (old
+  6-arg signature DROPPED — the overload trap 0175 documented) validates
+  ownership both ways; `execute_trade` RE-validates and flips owners — two
+  pending deals offering the same pick: the first to execute kills the
+  second at its own execute, which stays pending with "picks moved". Picks
+  occupy no roster spot, so `trade_cap_error` still refuses lopsided PLAYER
+  counts unchanged (a probe fixture tripped exactly this and was corrected,
+  not worked around).
+- **The draft honors ownership** via `draft.pick_owners`, built at START
+  (when the base order is fixed): LINEAR rounds in base order — a pick asset
+  is "round R, seat X's slot", which snaking would relabel every other
+  round — with `draft_on_clock` returning `pick_owners[overall-1]`.
+  Completion keys on the asset count, NOT (rounds − keepers) × teams. A team
+  holding extra picks drafts past its cap into the existing over-limit
+  lockout (0179) — deliberate, that's how real dynasty works. NO assets ⇒
+  byte-identical snake behavior (dynasty suite re-passes untouched).
+- UI: ⛏ DRAFT PICKS checklists in both hosts' trade composers, pick lines
+  in trade rows, ROOKIE DRAFT PICKS (rounds + per-team ownership map) in
+  both dynasty panels. `pick-asset-probes.sql` is the 35th suite.
+
+---
+
+## Where this session left off (v0.260.0, 2026-08-17)
+
+**Dynasty phases 1+2 in one migration (0182): season rollover, keepers, and
+the rookie draft.** Built on the three facts the previous handoff checked:
+draft.league_id is the PK, league is unique(sleeper_league_id, season), and
+the 0171 pool filter already does rookies-only. A new season is a NEW league
+row at season+1 — `rollover_league` clones settings_json wholesale (mode,
+scoring, spec, pos caps, keeper policy), the commissioner, and every seat
+with its manager and team name; carries keepers onto `native_roster` as
+`acquired='keeper'`; copies the pool (waiver clocks cleared); inserts a fresh
+pending draft; generates the schedule. The response NAMES the game mode
+(v0.251.0 rule) and both hosts' confirms say ◈ DRIP / 🏈 NORMAL out loud.
+
+### The design decisions worth not re-deriving
+
+- **`draft.rounds` still means ROSTER SIZE, and that is the whole trick.**
+  Keepers split "picks each team makes" from "roster cap", and the cap
+  meaning won: every cap consumer (add_free_agent, submit_waiver_claim,
+  process_waivers, the trade validator, auction_spots_left/max-bid,
+  native_team_state, _sync_classic_rounds, set_league_roster_shape) is
+  UNTOUCHED and still correct. New `draft.keeper_slots` teaches only the
+  pick-count logic: `native_exec_pick` completes the snake at
+  (rounds − keeper_slots) × teams, `_start_draft_now` counts FREE pool
+  players (not pool rows — keepers sit in the pool AND on rosters) against
+  the picks actually made and refuses keepers that fill the whole roster,
+  `draft_state` reports 'rounds' as the rounds actually DRAFTED plus
+  keeper_slots/roster_size. Auctions needed NOTHING — they complete off
+  spots_left = rounds − roster count, which counts keepers by itself.
+- **`seed_league_pool`'s delete-all used to eat keepers.** native_roster's
+  FK into league_pool is ON DELETE CASCADE, so the reseed's
+  `delete from league_pool` silently dropped every rostered player. Before
+  0182 that state was unreachable (rosters were only ever nonempty
+  post-draft, and seeding refuses post-draft); a rolled league is pre-draft
+  WITH rosters. The reseed now preserves rostered slugs — probed by
+  reseeding a rolled league with a disjoint player set and counting the
+  roster after.
+- **One resolver serves the preview and the carry.** `_keeper_resolve`
+  (declared first, then top-up by pool rank — the pool is seeded ranked by
+  projection, so "top-N by projection" is the same statement server-side)
+  is called by both `keeper_state` and `rollover_league`. What the screen
+  shows is what the rollover does, structurally.
+- **Declarations self-retract.** `keeper_pick` carries an FK into
+  native_roster ON DELETE CASCADE — drop or trade a declared player and the
+  declaration disappears with him. And everything freezes once the season
+  rolls: `_rollover_target()` (same sleeper_league_id at season+1) gates
+  set_keeper_count, set_keepers, and a second rollover.
+- **Wallets: fresh season seed, by doing nothing.** team_wallet/coin_ledger
+  key on the league row, so the new season starts at ◎0 and the copied
+  `weekly_budget` funds it from week 1. FAAB balances and waiver_priority
+  reset the same way (not copied); taxi/IR come back 'active'. Seat agents
+  are NOT copied — seat_agent is unique(agent_user_id) so an old agent
+  can't serve the new row anyway; agent seats arrive open and the worker
+  re-provisions (0180 is season-agnostic).
+- **The rookie draft is a pool decision, not draft machinery** (the 0171
+  rule: league_pool IS the gate). `p_rookie_only` carries ONLY the kept
+  players into the new pool and pins settings_json.pool_filter to
+  {max_exp: 0}; the draft REFUSES to start (no free players) until the
+  commissioner reseeds from the draft room, where buildDraftPool applies
+  the filter — so the pool becomes keepers + rookies and autopick can only
+  take rookies. Consequence to say out loud when it comes up: in a
+  rookie-only rollover, unkept veterans are OUT of that league's universe
+  (not FAs) — that is the 0171 gate's semantics, accepted deliberately.
+
+### What landed where
+
+- `supabase/migrations/0182_dynasty_rollover.sql` — keeper_pick,
+  draft.keeper_slots, 'keeper' acquisition kind, set_keeper_count /
+  set_keepers / keeper_state / _keeper_resolve / _rollover_target /
+  rollover_league, and patched LIVE bodies (0071 native_exec_pick, 0177
+  _start_draft_now + draft_state, 0172 seed_league_pool — copied checked,
+  not remembered).
+- `liveApi`: setKeeperCount / setKeepers / keeperState / rolloverLeague;
+  DraftState gains keeper_slots + roster_size.
+- Web: 🔁 NEXT SEASON panel in the league console (AdminPage `DynastyPanel`),
+  ★ KEEPERS card on TeamManage (NativeLeague). App: `DynastyCard` in
+  CommishTools, `KeepersCard` in Team. Both draft rooms note "+N keepers
+  already on rosters".
+- `scripts/db/dynasty-probes.sql` — the 34th suite, 22 assertions,
+  including declared-beats-rank, the preview==carry equivalence, the
+  cap-vs-picks split, and the keeper-surviving reseed.
 
 ---
 

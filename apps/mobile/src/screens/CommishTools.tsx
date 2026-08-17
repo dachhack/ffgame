@@ -25,6 +25,7 @@ import {
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   keeperState, setKeeperCount, rolloverLeague, leaguePool, type KeeperState,
+  setRookieRounds, pickAssets, type PickAssetRow,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
@@ -490,6 +491,9 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   const [names, setNames] = useState<Record<string, string>>({});
   const [count, setCount] = useState('');
   const [rookieOnly, setRookieOnly] = useState(false);
+  const [picks, setPicks] = useState<PickAssetRow[]>([]);
+  const [futureSeason, setFutureSeason] = useState<string | null>(null);
+  const [rr, setRr] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -497,6 +501,8 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
     const s = await keeperState(leagueId);
     if (s.error || !s.ok) { setNote(friendlyError(s.error ?? 'could not load')); return; }
     setSt(s); setCount(String(s.keeper_count));
+    const a = await pickAssets(leagueId).catch(() => null);
+    if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); setRr(String(a.rookie_rounds)); }
   };
   useEffect(() => {
     void load().catch((e) => setNote(friendlyError(e)));
@@ -518,6 +524,18 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
     setBusy(true); setNote(null);
     try {
       const r = await setKeeperCount(leagueId, n);
+      if (r.ok) { commit(); setNote('✓ saved'); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveRookieRounds = async () => {
+    const n = parseInt(rr, 10);
+    if (busy || Number.isNaN(n)) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setRookieRounds(leagueId, n);
       if (r.ok) { commit(); setNote('✓ saved'); await load(); }
       else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
@@ -589,6 +607,45 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
                 ))}
             </View>
           ))}
+        </>
+      )}
+
+      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>ROOKIE DRAFT PICKS{futureSeason ? ` · ${futureSeason}` : ''}</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+        <Mono size={10}>next season’s rookie draft runs</Mono>
+        <TextInput value={rr} onChangeText={(v) => setRr(v.replace(/\D/g, ''))} keyboardType="number-pad"
+          editable={!busy}
+          style={{ fontFamily: MONO, fontSize: 12, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, minWidth: 46, textAlign: 'center' }} />
+        <Mono size={10}>rounds</Mono>
+        <Pressable disabled={busy} onPress={() => { tap(); void saveRookieRounds(); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, opacity: busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>SAVE</Text>
+        </Pressable>
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+        Setting rounds deals every team its picks — one per round — as TRADEABLE assets: they move in ordinary trades all season, and the rollover carries ownership into the draft. Shrinking refuses to delete a round holding a traded pick.
+      </Mono>
+      {picks.some((p) => p.season === futureSeason) && (
+        <>
+          {st.teams.map((tm) => {
+            const owned = picks.filter((p) => p.season === futureSeason && p.owner === tm.roster_id);
+            return (
+              <View key={`pk-${tm.roster_id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 6 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
+                  {tm.team ?? `Team ${tm.roster_id}`}
+                </Text>
+                {owned.length === 0
+                  ? <Mono size={9} tone="opp">traded every pick away</Mono>
+                  : owned.map((p) => (
+                    <View key={`${p.round}:${p.orig}`} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim }}>
+                        R{p.round}{p.orig !== p.owner ? ` ⇄ ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+            );
+          })}
         </>
       )}
 

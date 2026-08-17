@@ -14,8 +14,8 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
-  tradeSignals, setTradeSignal,
-  type LeaguePoolPlayer, type TradeRow, type TradeSignalRow,
+  tradeSignals, setTradeSignal, pickAssets,
+  type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -34,11 +34,14 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const t = useTheme();
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [signals, setSignals] = useState<TradeSignalRow[]>([]);
+  const [assets, setAssets] = useState<PickAssetRow[]>([]);          // tradeable future picks (0183)
   const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [partner, setPartner] = useState<number | null>(null);
   const [give, setGive] = useState<string[]>([]);
   const [get, setGet] = useState<string[]>([]);
+  const [givePicks, setGivePicks] = useState<PickAssetRow[]>([]);
+  const [getPicks, setGetPicks] = useState<PickAssetRow[]>([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -46,6 +49,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
+    pickAssets(leagueId).then((a) => {
+      // only the future season's picks are tradeable; a rolled league's
+      // pending-draft assets belong to the draft room
+      if (a.ok) setAssets(a.picks.filter((p) => p.season === a.future_season));
+    }),
   ]).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
@@ -54,6 +62,21 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) => {
     tap();
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
+  };
+  const samePick = (a: { round: number; orig: number }, b: { round: number; orig: number }) =>
+    a.round === b.round && a.orig === b.orig;
+  const togglePick = (list: PickAssetRow[], set: (v: PickAssetRow[]) => void, p: PickAssetRow) => {
+    tap();
+    set(list.some((x) => samePick(x, p)) ? list.filter((x) => !samePick(x, p)) : [...list, p]);
+  };
+  /** "2027 R1" — plus whose original slot it is when it was acquired. */
+  const pickAssetLabel = (p: { season: string; round: number; orig: number }, holder: number) =>
+    `${p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+  const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
+    const slugs = (side === 'give' ? x.give : x.get).map(pname);
+    const rid = side === 'give' ? x.from_roster : x.to_roster;
+    const picks = ((side === 'give' ? x.give_picks : x.get_picks) ?? []).map((p) => `⛏ ${pickAssetLabel(p, rid)}`);
+    return [...slugs, ...picks].join(', ') || '—';
   };
 
   // Standing signals (0140): the shared block and the interest marks. All
@@ -71,7 +94,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   // pointed at the right team with the right player checked.
   const openPreset = (partnerRid: number, giveSlugs: string[], getSlugs: string[]) => {
     tap();
-    setPartner(partnerRid); setGive(giveSlugs); setGet(getSlugs); setErr(null); setOpen(true);
+    setPartner(partnerRid); setGive(giveSlugs); setGet(getSlugs);
+    setGivePicks([]); setGetPicks([]); setErr(null); setOpen(true);
   };
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -86,13 +110,16 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   };
 
   const propose = async () => {
-    if (busy || myRoster == null || partner == null || give.length + get.length === 0) return;
+    if (busy || myRoster == null || partner == null
+        || give.length + get.length + givePicks.length + getPicks.length === 0) return;
     setBusy(true); setErr(null);
     try {
-      const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined);
+      const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
+        givePicks.map((p) => ({ round: p.round, orig: p.orig })),
+        getPicks.map((p) => ({ round: p.round, orig: p.orig })));
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       commit();
-      setOpen(false); setPartner(null); setGive([]); setGet([]); setNote('');
+      setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
       await load();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -141,6 +168,29 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 
   const shown = trades.slice(0, 8);
 
+  // A side's tradeable draft picks (0183), below its player list. Renders
+  // nothing until the commissioner provisions rookie rounds.
+  const pickAssetList = (rid: number | null, sel: PickAssetRow[], set: (v: PickAssetRow[]) => void) => {
+    const owned = assets.filter((a) => a.owner === rid);
+    if (owned.length === 0) return null;
+    return (
+      <View style={{ marginTop: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }}>
+        <Mono size={7.5} tone="faint" track={0.1} style={{ marginBottom: 2 }}>⛏ DRAFT PICKS</Mono>
+        {owned.map((a) => {
+          const on = sel.some((x) => samePick(x, a));
+          return (
+            <Pressable key={`${a.round}:${a.orig}`} onPress={() => togglePick(sel, set, a)}
+              style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
+              <Text style={{ fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
+                {on ? '☑' : '☐'} {pickAssetLabel(a, a.owner)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -159,9 +209,9 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
             <Text style={{ flex: 1, fontSize: 11.5, color: t.text, lineHeight: 17 }}>
               <Text style={{ fontWeight: '700', color: x.from_roster === myRoster ? t.you : t.text }}>{teamName(x.from_roster)}</Text>
-              {' '}sends {x.give.map(pname).join(', ') || '—'}{'\n'}
+              {' '}sends {tradeLine(x, 'give')}{'\n'}
               <Text style={{ fontWeight: '700', color: x.to_roster === myRoster ? t.you : t.text }}>{teamName(x.to_roster)}</Text>
-              {' '}sends {x.get.map(pname).join(', ') || '—'}
+              {' '}sends {tradeLine(x, 'get')}
             </Text>
             {statusChip(x)}
           </View>
@@ -288,10 +338,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             <View style={{ flex: 1 }}>
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU SEND</Mono>
               {pickList(myRoster, give, setGive)}
+              {pickAssetList(myRoster, givePicks, setGivePicks)}
             </View>
             <View style={{ flex: 1 }}>
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU GET</Mono>
               {pickList(partner, get, setGet, true)}
+              {pickAssetList(partner, getPicks, setGetPicks)}
             </View>
           </View>
         )}
@@ -301,7 +353,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '⇄ SEND THE OFFER'}
-            disabled={busy || partner == null || give.length + get.length === 0}
+            disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length === 0}
             onPress={() => void propose()} />
         </View>
       </Overlay>

@@ -111,3 +111,4 @@ $RUN -f scripts/db/draft-schedule-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-SCH
 $RUN -f scripts/db/classic-open-lineups-probes.sql | grep -E "PROBE FAIL|ALL CLASSIC-OPEN-LINEUP PROBES" || { echo "CLASSIC-OPEN-LINEUP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/seat-agent-probes.sql | grep -E "PROBE FAIL|ALL SEAT-AGENT PROBES" || { echo "SEAT-AGENT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/dynasty-probes.sql | grep -E "PROBE FAIL|ALL DYNASTY PROBES" || { echo "DYNASTY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/pick-asset-probes.sql | grep -E "PROBE FAIL|ALL PICK-ASSET PROBES" || { echo "PICK-ASSET PROBES FAILED"; exit 1; }
