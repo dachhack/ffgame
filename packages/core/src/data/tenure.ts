@@ -22,10 +22,21 @@ export const TENURE_BANDS: { id: TenureBand; label: string; short: string }[] = 
   { id: 'y8', label: '8+ YEARS', short: '8+' },
 ];
 
+// Positions whose "players" are team units — a tenure band is meaningless for
+// them, so they pass every band. THE SAME SET, THE SAME RULE as slotAllows'
+// tenure-window exemption (engine/classic.ts): before v0.258.0 the two
+// disagreed — the engine let a D/ST fill a rookies-only spot while this filter
+// hid every D/ST from the ROOKIES chip, so the wire could never show you the
+// units a rookies-only league's own spots would accept.
+const TEAM_UNIT_POS = new Set(['K', 'DEF', 'HC', 'P']);
+
 /** Does this player's accrued experience fall in the band? A rookie is exp 0 —
- *  the seasons ACCRUED, not the season they're in. */
-export function tenureMatches(band: TenureBand, exp: number | null | undefined): boolean {
+ *  the seasons ACCRUED, not the season they're in. Pass `pos` where you have
+ *  it: a team unit (K/DST/HC/P) matches every band, exactly as slotAllows
+ *  exempts them from a spot's tenure window. */
+export function tenureMatches(band: TenureBand, exp: number | null | undefined, pos?: string | null): boolean {
   if (band === 'any') return true;
+  if (pos && TEAM_UNIT_POS.has(pos.toUpperCase())) return true;
   if (exp == null || !Number.isFinite(exp)) return false;   // unknown proves nothing
   if (band === 'rookie') return exp === 0;
   if (band === 'y1_3') return exp >= 1 && exp <= 3;

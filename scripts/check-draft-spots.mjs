@@ -281,6 +281,16 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('an UNKNOWN tenure matches no band but ANY',
     ['rookie', 'y1_3', 'y4_7', 'y8'].every((b) => !tenureMatches(b, null) && !tenureMatches(b, undefined)));
   ok('a nonsense value is unknown, not a rookie', !tenureMatches('rookie', NaN));
+  // TEAM UNITS pass every band (v0.258.0) — the same exemption slotAllows
+  // gives a spot's tenure window, so the wire can show you the units a
+  // rookies-only league's own spots would accept. Case-insensitive, and only
+  // for genuine team units: a skill player's pos changes nothing.
+  ok('a D/ST matches every band, tenure unknowable',
+    ['rookie', 'y1_3', 'y4_7', 'y8'].every((b) => tenureMatches(b, null, 'DEF') && tenureMatches(b, null, 'def')));
+  ok('so do K, HC and P', tenureMatches('rookie', null, 'K') && tenureMatches('y8', null, 'HC') && tenureMatches('y1_3', null, 'P'));
+  ok('a skill player with unknown tenure still proves nothing', !tenureMatches('rookie', null, 'RB'));
+  ok('…and a known one still lands in his own band only',
+    tenureMatches('rookie', 0, 'RB') && !tenureMatches('y1_3', 0, 'RB'));
 }
 
 // ── The BEST-BALL fill, testable for the first time ────────────────────────

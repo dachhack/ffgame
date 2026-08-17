@@ -1324,7 +1324,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule,
       // the same one a 0172 rookies-only spot follows.
-      && tenureMatches(tenure, expMap[p.slug] ?? null)
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return starApply(base, starMode, favs, (p) => p.slug);
   }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
