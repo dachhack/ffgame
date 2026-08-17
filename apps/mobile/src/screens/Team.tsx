@@ -114,7 +114,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       && (pos === 'ALL' || p.pos === pos)
       && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule.
-      && tenureMatches(tenure, expMap[p.slug] ?? null)
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return starApply(base, starMode, favs, (p) => p.slug);
   }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
