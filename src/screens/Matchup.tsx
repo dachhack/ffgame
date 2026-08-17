@@ -1311,6 +1311,17 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const livePreseasonChip = preseason ? (
     <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
   ) : null;
+  // WHICH GAME (v0.256.0, HANDOFF #4). This screen is only ever the DRIP
+  // branch — a classic league returned to ClassicBoard above, and that board
+  // names itself in its own header — so the chip is a statement, not a
+  // switch: the mode is said where the game is PLAYED, not only in the
+  // commissioner's settings. Live leagues only; the demo has no mode to read.
+  const liveModeChip = (liveCtx && !demo) ? (
+    <span className="mono" title="This league plays DRIP — kickoff windows, live play-by-play, power-ups. Change it in ⚑ COMMISH → MODE."
+      style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 7px', color: 'var(--dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+      ◈ DRIP
+    </span>
+  ) : null;
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
       <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
@@ -1357,7 +1368,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{livePreseasonChip}{liveTestChip}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{livePreseasonChip}{liveTestChip}</div>
                 {liveScore}
               </div>
             </div>
