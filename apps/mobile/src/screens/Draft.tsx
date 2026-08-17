@@ -286,7 +286,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
             {auction
               ? `${st.rounds} roster spots · $${st.budget} budget per team · nomination rotates the draft order. Queue players now — empty seats auto-nominate.`
-              : `${st.rounds} rounds · ${st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.`}
+              : `${st.rounds} rounds${(st.keeper_slots ?? 0) > 0 ? ` (+${st.keeper_slots} keepers already on rosters)` : ''} · ${st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.`}
           </Mono>
           {/* 0177: the countdown is EVERY member's, not the commissioner's —
               knowing when to show up is the whole point of a schedule. Counted

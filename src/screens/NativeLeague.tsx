@@ -28,6 +28,7 @@ import {
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
+  keeperState, setKeepers, type KeeperState,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
@@ -830,7 +831,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
             {auction
               ? <>{st.rounds} roster spots · ${st.budget} budget per team · nomination rotates the draft order. Queue players now — empty seats auto-nominate.</>
-              : <>{st.rounds} rounds · {st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.</>}
+              : <>{st.rounds} rounds{(st.keeper_slots ?? 0) > 0 ? <> (+{st.keeper_slots} keepers already on rosters)</> : null} · {st.pick_seconds}s per pick · snake order (randomized at start). Queue players now — your queue drafts for you if the clock runs out.</>}
           </div>
           {/* 0177: the countdown belongs to EVERY member, not the commissioner
               — the whole point of a schedule is that the league knows when to
@@ -1246,6 +1247,102 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 /** Where a league-home tile wants the team screen to land (0182). */
 export type TeamFocus = 'trades' | 'waivers' | 'options';
 
+// ── Keepers (0182): declare who you carry into next season ──────────────────
+// Renders nothing unless the commissioner set a keeper count. Undeclared spots
+// auto-fill with the team's best-ranked players at rollover, so this card is a
+// choice, never homework.
+function KeepersCard({ leagueId, myRoster, mine }: {
+  leagueId: string; myRoster: number; mine: (LeaguePoolPlayer & { spot: string })[];
+}) {
+  const [st, setSt] = useState<KeeperState | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async () => {
+    const s = await keeperState(leagueId);
+    if (s.error || !s.ok) return;
+    setSt(s);
+    const minerow = s.teams.find((t) => t.roster_id === myRoster);
+    setSel(new Set(minerow?.declared ?? []));
+    setDirty(false);
+  };
+  useEffect(() => { load().catch(() => {}); /* eslint-disable-next-line */ }, [leagueId, myRoster]);
+  if (!st || st.keeper_count === 0) return null;
+
+  const rolled = !!st.rolled_league_id;
+  const carried = st.teams.find((t) => t.roster_id === myRoster)?.keep ?? [];
+  const toggle = (slug: string) => {
+    if (rolled || busy) return;
+    setSel((cur) => {
+      const next = new Set(cur);
+      if (next.has(slug)) next.delete(slug);
+      else if (next.size < st.keeper_count) next.add(slug);
+      else return cur;                     // full — tap one off first
+      return next;
+    });
+    setDirty(true); setNote(null);
+  };
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setKeepers(leagueId, myRoster, [...sel]);
+      setNote(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work'));
+      if (r.ok) await load();
+    } catch (x) { setNote(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
+      <div style={hdr}>★ KEEPERS{st.next_season ? ` FOR ${st.next_season}` : ''} ({rolled ? carried.length : sel.size}/{st.keeper_count})</div>
+      {rolled ? (
+        <>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 6 }}>
+            The season rolled over — these carried into {st.next_season}:
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {carried.map((k) => (
+              <span key={k.slug} className="mono" style={{ fontSize: 10.5, border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 8px', color: 'var(--text)' }}>
+                {k.declared ? '★ ' : ''}{mine.find((p) => p.slug === k.slug)?.full_name ?? k.slug}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 8 }}>
+            Pick up to {st.keeper_count} to carry into next season. Spots you leave open auto-fill with your best-ranked players when the commissioner rolls the league over.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {mine.map((p) => {
+              const on = sel.has(p.slug);
+              return (
+                <button key={p.slug} onClick={() => toggle(p.slug)} disabled={busy}
+                  className="mono" style={{
+                    fontSize: 10.5, cursor: 'pointer', borderRadius: 5, padding: '4px 9px',
+                    color: on ? 'var(--on-accent)' : 'var(--dim)',
+                    background: on ? 'var(--you)' : 'var(--bg)',
+                    border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
+                  }}>
+                  {on ? '★ ' : ''}{p.full_name}
+                </button>
+              );
+            })}
+          </div>
+          {dirty && (
+            <button onClick={save} disabled={busy} className="mono" style={{ ...btn, marginTop: 10 }}>
+              {busy ? '…' : `SAVE KEEPERS (${sel.size}/${st.keeper_count})`}
+            </button>
+          )}
+          {note && <div className="mono" style={{ fontSize: 10.5, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{note}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
 }) {
@@ -1507,6 +1604,9 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week — a week already underway keeps its lineup pool.
         </div>
       </div>
+
+      {/* keepers (0182) — only when the commissioner set a keeper count */}
+      {myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
 
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (

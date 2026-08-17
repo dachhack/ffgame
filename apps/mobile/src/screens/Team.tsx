@@ -16,6 +16,7 @@ import {
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
+  keeperState, setKeepers, type KeeperState,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
@@ -38,6 +39,100 @@ function fmtEtMin(m: number): string {
   const h24 = Math.floor(m / 60), mm = m % 60;
   const h12 = ((h24 + 11) % 12) + 1;
   return `${h12}${mm ? `:${String(mm).padStart(2, '0')}` : ''}${h24 < 12 ? 'am' : 'pm'}`;
+}
+
+// ── Keepers (0182): declare who you carry into next season ──────────────────
+// Mirror of the web KeepersCard. Renders nothing unless the commissioner set
+// a keeper count; undeclared spots auto-fill by rank at rollover.
+function KeepersCard({ leagueId, myRoster, mine }: {
+  leagueId: string; myRoster: number; mine: (LeaguePoolPlayer & { spot: string })[];
+}) {
+  const t = useTheme();
+  const [st, setSt] = useState<KeeperState | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async () => {
+    const s = await keeperState(leagueId);
+    if (s.error || !s.ok) return;
+    setSt(s);
+    setSel(new Set(s.teams.find((x) => x.roster_id === myRoster)?.declared ?? []));
+    setDirty(false);
+  };
+  useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId, myRoster]);
+  if (!st || st.keeper_count === 0) return null;
+
+  const rolled = !!st.rolled_league_id;
+  const carried = st.teams.find((x) => x.roster_id === myRoster)?.keep ?? [];
+  const nameOf = (slug: string) => mine.find((p) => p.slug === slug)?.full_name ?? slug;
+  const toggle = (slug: string) => {
+    if (rolled || busy) return;
+    tap();
+    setSel((cur) => {
+      const next = new Set(cur);
+      if (next.has(slug)) next.delete(slug);
+      else if (next.size < st.keeper_count) next.add(slug);
+      else return cur;
+      return next;
+    });
+    setDirty(true); setNote(null);
+  };
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setKeepers(leagueId, myRoster, [...sel]);
+      if (r.ok) { commit(); setNote('✓ saved'); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ borderLeftWidth: 3, borderLeftColor: t.you }}>
+      <Mono size={9} tone="faint" track={0.12}>
+        ★ KEEPERS{st.next_season ? ` FOR ${st.next_season}` : ''} ({rolled ? carried.length : sel.size}/{st.keeper_count})
+      </Mono>
+      {rolled ? (
+        <>
+          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: 15 }}>
+            The season rolled over — these carried into {st.next_season}:
+          </Mono>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {carried.map((k) => (
+              <View key={k.slug} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <Mono size={9.5} tone="dim" style={{ marginTop: 6, lineHeight: 15 }}>
+            Pick up to {st.keeper_count} to carry into next season. Spots you leave open auto-fill with your best-ranked players when the commissioner rolls the league over.
+          </Mono>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {mine.map((p) => {
+              const on = sel.has(p.slug);
+              return (
+                <Pressable key={p.slug} disabled={busy} onPress={() => toggle(p.slug)}
+                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.6 : 1 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: on ? t.onAccent : t.dim }}>{on ? '★ ' : ''}{p.full_name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {dirty && (
+            <View style={{ marginTop: 10 }}>
+              <PrimaryButton label={busy ? '…' : `SAVE KEEPERS (${sel.size}/${st.keeper_count})`} onPress={() => void save()} disabled={busy} />
+            </View>
+          )}
+          {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 6 }}>{note}</Mono>}
+        </>
+      )}
+    </Card>
+  );
 }
 
 function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: number }) {
@@ -311,6 +406,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week.
         </Mono>
       </Card>
+
+      {/* keepers (0182) — only when the commissioner set a keeper count */}
+      {myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
 
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
