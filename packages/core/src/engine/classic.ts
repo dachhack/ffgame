@@ -641,36 +641,61 @@ export interface ClassicResult {
  *  greedy is optimal because every flex's eligibility is a superset of the
  *  dedicated slots it follows. Ties break toward roster order (stable). */
 export function bestballFill(manual: ClassicPick[], bestball: string[], roster: Player[], week: number, sc?: number | Partial<ClassicScoring>, slots: ClassicSlotDef[] = CLASSIC_SLOTS): ClassicPick[] {
+  // RET spots (0171) rank candidates by their RETURN production, since that's
+  // all the spot will bank. Memoised per player, because a roster's worth of
+  // classicPoints calls is the expensive part of this.
+  const score = new Map<string, number>();
+  const retScore = new Map<string, number>();
+  return bestballFillBy(manual, bestball, roster, slots, (p, d) => {
+    const m = isRetSlot(d.pos) ? retScore : score;
+    if (!m.has(p.id)) m.set(p.id, classicPoints(p, week, sc, isRetSlot(d.pos) ? 'RET' : undefined));
+    return m.get(p.id) ?? 0;
+  });
+}
+
+/** The best-ball fill with the RANKING left to the caller — the same algorithm
+ *  `bestballFill` runs, differing only in what "best" means.
+ *
+ *  It exists because a best-ball spot is EMPTY until somebody plays, so before
+ *  kickoff the board showed those spots blank and left them out of the
+ *  projected total — understating a best-ball team by however many spots it
+ *  auto-fills. Pre-kickoff the boards rank by PROJECTION instead, which
+ *  previews the lineup best ball will actually field.
+ *
+ *  Everything that decides WHO IS ELIGIBLE stays here, in one place, so the
+ *  preview and the real fill can never disagree about anything except the
+ *  number they sort on:
+ *    • a player started MANUALLY elsewhere is out — the manual set is what
+ *      reserves players (the founder's rule, verbatim since 0159);
+ *    • a no_start flag (0144) binds the auto-fill too — the DB trigger only
+ *      guards manual writes, so the exclusion has to live here;
+ *    • one player fills at most one spot (`used`);
+ *    • spots fill MOST-SPECIFIC FIRST, and a FILTERED spot (0172) before an
+ *      unfiltered one of the same width — its candidate set is a subset, so it
+ *      must claim its player first or a plain RB slot takes the only rookie a
+ *      rookies-only RB slot could have used.
+ *  Ties break toward roster order (stable). */
+export function bestballFillBy(
+  manual: ClassicPick[],
+  bestball: string[],
+  roster: Player[],
+  slots: ClassicSlotDef[],
+  valueOf: (p: Player, d: ClassicSlotDef) => number,
+): ClassicPick[] {
   const bb = new Set(bestball);
   if (!bb.size) return [];
   const started = new Set(manual.filter((p) => !bb.has(p.slot)).map((p) => p.player.id));
-  // A no_start flag (0144) binds the auto-fill too: the DB trigger only guards
-  // manual writes, so the exclusion has to live here — same reasoning as the
-  // drip auto-lineup's noStart set.
   const cands = roster.filter((p) => !started.has(p.id) && !flagRulesFor(p.id).noStart);
-  const score = new Map(cands.map((p) => [p.id, classicPoints(p, week, sc)]));
-  // RET spots (0171) rank candidates by their RETURN production, since that's
-  // all the spot will bank.
-  const retScore = new Map<string, number>();
-  // Filtered spots (0172) go before unfiltered spots of the same width: their
-  // candidate set is a subset, so they must claim their player first (else a
-  // plain RB slot could take the only rookie from a rookies-only RB slot).
   const order = [...slots].sort((a, b) => a.pos.length - b.pos.length || (a.flt ? 0 : 1) - (b.flt ? 0 : 1));
   const used = new Set<string>();
   const fills: ClassicPick[] = [];
   for (const d of order) {
     if (!bb.has(d.slot)) continue;
-    const ret = isRetSlot(d.pos);
-    const scoreOf = (id: string, pl: Player): number => {
-      if (!ret) return score.get(id) ?? 0;
-      if (!retScore.has(id)) retScore.set(id, classicPoints(pl, week, sc, 'RET'));
-      return retScore.get(id) ?? 0;
-    };
     let best: Player | null = null;
     for (const c of cands) {
       // slotAllows (0172): position eligibility + the spot's own player filter.
       if (used.has(c.id) || !slotAllows(d, c)) continue;
-      if (!best || scoreOf(c.id, c) > scoreOf(best.id, best)) best = c;
+      if (!best || valueOf(c, d) > valueOf(best, d)) best = c;
     }
     if (best) { used.add(best.id); fills.push({ slot: d.slot, player: best }); }
   }
