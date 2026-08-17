@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -101,6 +101,19 @@ ok('the 1pm window is not', !isPrimetime('2026-09-13T17:00:00Z'));              
 ok('the 4:25 window is not', !isPrimetime('2026-09-13T20:25:00Z'));                                                     // 4:25pm ET
 ok('a London 9:30am kickoff is not primetime', !isPrimetime('2026-10-04T13:30:00Z'));                                   // 9:30am ET
 ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undefined) && !isPrimetime('not a date'));
+
+// ── A BYE has to be PROVEN (v0.245.0) ──────────────────────────────────────
+// The bug this fixes: a rookie the baked slug map doesn't know resolves with an
+// EMPTY team, an empty team is in nobody's slate, and the board printed
+// "BYE · No game this week" for a man playing his season opener.
+{
+  const wk1 = [{ home: 'CIN', away: 'TB', kickoff: '2026-09-13T17:00:00Z' }];
+  ok('a known team missing from a loaded slate IS a bye', isBye('KC', wk1));
+  ok('a team that is playing is not', !isBye('CIN', wk1) && !isBye('TB', wk1));
+  ok('an UNKNOWN team is never a bye — no team, no claim',
+    !isBye('', wk1) && !isBye(null, wk1) && !isBye(undefined, wk1));
+  ok('an UNLOADED slate never makes anyone a bye', !isBye('KC', []) && !isBye('KC', null));
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

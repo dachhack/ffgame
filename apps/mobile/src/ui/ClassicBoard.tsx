@@ -8,11 +8,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -116,7 +116,9 @@ function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right'
   //
   // The game line lives on this cell now rather than in a boxed sub-card below,
   // which is most of what made the rows tall.
-  const line = e.opponent === 'BYE' ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim();
+  // A blank game line reads as a rendering fault, so an unplaceable player
+  // says so rather than showing nothing (and rather than claiming a bye).
+  const line = e.opponent === 'BYE' ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
       <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
@@ -239,6 +241,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         }).catch(() => {});
         const [pl, pk] = await Promise.all([myPool(leagueId, m.week, rosterId), myPicks(m.id, userId)]);
         setPool(pl);
+        // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie
+        // the baked slug map has never heard of otherwise resolves to WR with
+        // an EMPTY team — which reads as a bye on the board and scores as a WR
+        // in classicPoints. The pool row knows his real position and team.
+        setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
         const map: Record<string, string | null> = {};
         const seal: Record<string, boolean> = {};
         for (const p of pk) {
@@ -282,7 +289,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     let stop = false;
     // Best ball fills from the opponent's FULL roster, so fetch it once.
     const oppRoster = matchup.home_roster_id === rosterId ? matchup.away_roster_id : matchup.home_roster_id;
-    if (bestball.length) myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) setOppPool(p); }).catch(() => {});
+    if (bestball.length) myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows] = await Promise.all([getRevealedPicks(matchup.id), weekLivePlays(matchup.week)]);
@@ -398,7 +405,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         proj: PROJ_2026.get(slug) ?? 0,
         state: g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
-        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : 'BYE',
+        // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
+        // slate. Without both this says nothing — a player the bake doesn't
+        // know used to read "BYE" on the day he played his opener.
+        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(meta.team, slate) ? 'BYE' : null),
         injury: injuryFor(matchup?.week ?? 1, slug),
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
@@ -426,6 +436,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, []),
     });
   }, [matchup, rosterId, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
+
+  /** The next kickoff that will freeze one of MY spots — the honest
+   *  replacement for a league-wide lock time that no longer exists. */
+  const nextLockLabel = useMemo(() => {
+    const ks = slotDefs
+      .map((d) => effective.mine[d.slot])
+      .filter(Boolean)
+      .map((slug) => gameFor(slugMeta(slug!).team, slate)?.kickoff)
+      .map((k) => (k ? Date.parse(k) : NaN))
+      .filter((ms) => Number.isFinite(ms) && ms > nowTs);
+    if (!ks.length) return 'nothing left to lock';
+    return fmtLock(new Date(Math.min(...ks)).toISOString());
+  }, [slotDefs, effective, slate, nowTs]);
 
   /** Has this player's game started? The one question that decides everything
    *  editable on this screen now. A player with no game (bye) never starts. */
@@ -494,8 +517,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
             <View style={{ alignItems: 'center' }}>
-              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : 'LOCKS'}</Mono>
-              {!locked && <Mono size={8} tone="faint" style={{ marginTop: 2 }}>{fmtLock(matchup?.lock_at ?? null)}</Mono>}
+              {/* NO OVERALL LOCK IN CLASSIC (founder). Since 0178 each spot
+                  locks at its own player's kickoff, so one "LOCKS Wed 8:20 PM"
+                  was untrue — that was matchup.lock_at, the drip lead, which
+                  now only decides when the matchup flips live. */}
+              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : 'NEXT LOCK'}</Mono>
+              {!locked && <Mono size={8} tone="faint" style={{ marginTop: 2 }}>{nextLockLabel}</Mono>}
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
