@@ -15,9 +15,10 @@ import {
   addFreeAgent, cancelWaiverClaim, dropPlayer,
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  myFavorites, loadTeamOverrides, playerFlags,
+  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
+import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -58,6 +59,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // Waiver-wire filters beyond position (founder): tenure band and NFL team.
+  const [tenure, setTenure] = useState<TenureBand>('any');
+  const [nflTeam, setNflTeam] = useState('ALL');
+  const [expMap, setExpMap] = useState<Record<string, number>>({});
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
   const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
@@ -86,6 +91,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     myFavorites().then(setFavs).catch(() => {});
     void loadTeamOverrides();
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
+    // years_exp by slug — the tenure filter's data. A failed read leaves the
+    // map empty, so every band except ANY comes back empty rather than wrong.
+    leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,9 +112,16 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !rostered.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
+      && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
+      // Unknown tenure matches no band but ANY — the pool's no-guess rule.
+      && tenureMatches(tenure, expMap[p.slug] ?? null)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, rostered, q, pos, starMode, favs]);
+  }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
+  /** The teams actually IN this pool, so the filter never offers an empty one. */
+  const poolTeams = useMemo(
+    () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
+    [pool]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {
     if (!p.waived_until) return null;
@@ -336,6 +351,23 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
           <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
         </View>
+        {/* Tenure BANDS rather than a number box — nobody searches for
+            "exactly 6 accrued seasons" — with ROOKIES as the first band so it
+            and the tenure filter can never disagree about who is one. */}
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          {TENURE_BANDS.map((b) => (
+            <Chip key={b.id} label={b.short} on={tenure === b.id} onPress={() => { tap(); setTenure(b.id); }} />
+          ))}
+        </View>
+        {/* The team strip scrolls: 32 codes wrapped would fill a phone screen
+            before a single player showed. */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: 6 }}
+          contentContainerStyle={{ gap: 6, paddingRight: 12 }}>
+          <Chip label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
+          {poolTeams.map((tm) => (
+            <Chip key={tm} label={tm} on={nflTeam === tm} onPress={() => { tap(); setNflTeam(nflTeam === tm ? 'ALL' : tm); }} />
+          ))}
+        </ScrollView>
         {free.slice(0, 60).map((p) => {
           const left = waivedFor(p);
           // over-limit rosters are locked out; the FA window gates instant adds only

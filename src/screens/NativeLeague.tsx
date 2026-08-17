@@ -31,6 +31,7 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
+import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 
@@ -1231,6 +1232,10 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // Waiver-wire filters beyond position (founder): tenure band and NFL team.
+  const [tenure, setTenure] = useState<TenureBand>('any');
+  const [nflTeam, setNflTeam] = useState('ALL');
+  const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
   const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
@@ -1268,11 +1273,16 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     } catch (x) { setErr(friendlyError(x)); }
   };
   useEffect(() => {
+    let alive = true;
     refresh();
     myFavorites().then(setFavs).catch(() => {});
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
+    // years_exp by slug — the tenure filter's data. A failed read leaves the
+    // map empty, which makes every tenure band except ANY come back empty
+    // rather than wrong; the filter says so via its own count.
+    leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     const id = setInterval(refresh, 15000);
-    return () => clearInterval(id);
+    return () => { alive = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
@@ -1289,9 +1299,18 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !rostered.has(p.slug)
       && (pos === 'ALL' || p.pos === pos)
+      && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
+      // Unknown tenure matches no band but ANY — the pool's no-guess rule,
+      // the same one a 0172 rookies-only spot follows.
+      && tenureMatches(tenure, expMap[p.slug] ?? null)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, rostered, q, pos, starMode, favs]);
+  }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
+  /** The teams actually IN this pool, so the picker never offers an empty
+   *  filter — a league whose pool is one conference should not list 32. */
+  const poolTeams = useMemo(
+    () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
+    [pool]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {
     if (!p.waived_until) return null;
@@ -1505,6 +1524,25 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
           <StarChips mode={starMode} setMode={setStarMode} />
+        </div>
+        {/* Tenure + NFL team (founder). Tenure is BANDS rather than a number
+            box: nobody searches for "exactly 6 accrued seasons", they want
+            rookies or veterans, and ROOKIES is the first band rather than a
+            separate toggle so two controls can never disagree about who is
+            one. The team list comes from the POOL, not a hardcoded 32. */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {TENURE_BANDS.map((b) => (
+            <Chip key={b.id} on={tenure === b.id} onClick={() => setTenure(b.id)}>{b.short}</Chip>
+          ))}
+          <select value={nflTeam} onChange={(e) => setNflTeam(e.target.value)} className="mono"
+            style={{ fontSize: 10, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 8px' }}>
+            <option value="ALL">ALL NFL TEAMS</option>
+            {poolTeams.map((tm) => <option key={tm} value={tm}>{tm}</option>)}
+          </select>
+          {(tenure !== 'any' || nflTeam !== 'ALL') && (
+            <button onClick={() => { setTenure('any'); setNflTeam('ALL'); }} className="mono"
+              style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)' }}>✕ CLEAR</button>
+          )}
         </div>
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
           {free.slice(0, 100).map((p) => {
