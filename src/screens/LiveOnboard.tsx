@@ -21,6 +21,7 @@ import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
+import { LeagueBoard } from './LeagueBoard';
 import { LeagueHubPage } from './LeagueHubPage';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
@@ -54,7 +55,7 @@ function GoogleG() {
 /** Per-league badge counts from league_signals (0154). */
 interface LeagueSignalCounts { polls: number; waivers: number; commish: { waiting: number; review: number } | null; }
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -128,6 +129,7 @@ export function LiveOnboard() {
     : view === 'team' ? 940
     : view === 'results' ? 760
     : view === 'create' ? 620
+    : view === 'board' ? 640
     : view === 'home' ? 960
     : 440;
   const wide = pageMax > 700;
@@ -639,7 +641,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onBoard={() => setView('board')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -663,6 +665,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       <RedeemForm userId={session.user.id} onJoined={() => { setView('home'); refresh(); }} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
     </>
+  );
+  // The public LEAGUE BOARD (v0.255.0) — the app has had it since v0.226.0;
+  // this is the web face of the same RPCs. Joining refreshes the home list so
+  // the claimed league is there when they go back.
+  if (view === 'board') return (
+    <LeagueBoard onJoined={() => refresh()} onBack={() => setView('home')} />
   );
   if (view === 'dfsjoin') return <DfsJoinForm initialCode={dfsCode ?? undefined} onJoined={() => { setDfsCode(null); setView('home'); refresh(); }} onBack={() => { setDfsCode(null); setView('home'); }} />;
   if (view === 'solopass') return <SoloPassForm initialCode={soloPassCode ?? undefined} onRedeemed={() => { setSoloPassCode(null); myFeatures().then(setFeatures).catch(() => {}); setView('home'); }} onBack={() => { setSoloPassCode(null); setView('home'); }} />;
@@ -711,7 +719,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onBoard={() => setView('board')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -1351,7 +1359,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onBoard, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onBoard?: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   // Everyone sees the platform-league paths; everything below the divider only
   // renders because THIS account holds a feature flag (or is admin) — the chip
@@ -1371,6 +1379,12 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
         </button>
+        {onBoard && (
+          <button onClick={onBoard} style={choice}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Find me a league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code, no league? Browse open leagues on the board and claim a seat.</div>
+          </button>
+        )}
         <button onClick={onCommish} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
