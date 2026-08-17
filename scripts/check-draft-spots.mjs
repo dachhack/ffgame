@@ -17,6 +17,7 @@
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy,
+  optimalLineup, autoSlotPlan,
 } from '../packages/core/src/engine/classic';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 
@@ -24,6 +25,21 @@ let fails = 0;
 const ok = (name, cond, got) => {
   if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
   else console.log(`ok   ${name}`);
+};
+
+/** A tiny reproducible PRNG for the brute-force blocks below — a probe that
+ *  fails only sometimes is worse than no probe.
+ *
+ *  Deliberately NOT the obvious LCG. `seed = (seed * 1103515245 + 12345) % 2^31`
+ *  then `seed % n` looks fine and is useless: an LCG's LOW-ORDER bits cycle with
+ *  period n, so `rnd(4)` walks the same four values forever and every draw from
+ *  it is correlated with every other. Written that way, the generators below
+ *  produced ONE shape four hundred times and their brute-force checks proved
+ *  nothing at all. xorshift32 mixes the low bits, and each block now asserts
+ *  that its cases actually vary. */
+const prng = (seed) => (n) => {
+  seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; seed |= 0;
+  return (seed >>> 0) % n;
 };
 
 /** Spots from a builder spec, exactly as a league stores them (S1..Sn). */
@@ -130,11 +146,8 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
 
 // ── The property, brute-forced: nothing fills more spots ────────────────────
 // Every case above is an argument; this is a proof over a few hundred shapes.
-// A tiny LCG keeps it reproducible — a probe that fails only sometimes is
-// worse than no probe.
 {
-  let seed = 20260816;
-  const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  const rnd = prng(20260816);
   const POS = ['QB', 'RB', 'WR', 'TE', 'K'];
   const SETS = [['QB'], ['RB'], ['WR'], ['TE'], ['K'], ['RB', 'WR', 'TE'], ['QB', 'RB', 'WR', 'TE'], ['WR', 'TE']];
   /** Maximum spots fillable, by exhaustive search over spot→player choices. */
@@ -153,6 +166,7 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
     return best;
   };
   let worst = null, cases = 0;
+  const shapes = new Set();
   for (let c = 0; c < 400; c++) {
     const spec = Array.from({ length: 1 + rnd(6) }, () => {
       const s = { pos: SETS[rnd(SETS.length)] };
@@ -167,6 +181,7 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
       ({ id: `p${i}`, pos: POS[rnd(POS.length)], team: rnd(2) ? 'KC' : 'BUF', exp: rnd(3) === 0 ? 0 : 1 + rnd(8) }));
     const a = assignSpots(slots, players);
     cases++;
+    shapes.add(JSON.stringify([spec, players]));
     // Legality + accounting hold on every shape, not just the handwritten ones.
     const idsSeen = [...a.spots.flatMap((x) => (x.player ? [x.player.id] : [])), ...benched(a)];
     if (!a.spots.every((x) => !x.player || slotAllows(x.def, x.player))
@@ -178,6 +193,7 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
     if (filled(a) !== max) { worst = { why: `filled ${filled(a)}, best possible ${max}`, spec, players }; break; }
   }
   ok(`no arrangement fills more spots (${cases} random shapes, brute-forced)`, worst === null, worst);
+  ok('…and the shapes are actually different from each other', shapes.size > 350, shapes.size);
 }
 
 // ── The labels a manager reads on the lineup setter ─────────────────────────
@@ -301,6 +317,141 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   }
   ok('no best-ball spots means no fills', bestballFillBy([], [], [R('star', 'RB')], s, by).length === 0);
   ok('an ineligible roster fills nothing', bestballFillBy([], bb, [R('star', 'QB')], s, by).length === 0);
+}
+
+// ── The OPTIMAL lineup (v0.247.0) ──────────────────────────────────────────
+// `assignSpots` asks who is LEGAL where. `optimalLineup` asks which of the
+// legal arrangements SCORES MOST, and the two have different answers. The
+// assertions that earn their keep here are the ones that separate "a lineup"
+// from "the best lineup": the case the most-specific-first fill loses, and a
+// brute-force cross-check that no arrangement of these players beats the one
+// returned — checked by enumeration, not by argument.
+const V = (id, pos, val, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', exp: 3, stats: {}, val, ...extra });
+const byVal = (p) => p.val ?? 0;
+const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) : 0), 0);
+
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['RB', 'WR', 'TE'] });
+  const a = optimalLineup(s, [V('low', 'RB', 4), V('star', 'RB', 20), V('mid', 'WR', 12)], byVal);
+  ok('the best player starts', seated(a).S1 === 'star', seated(a));
+  ok('the flex takes the best of the rest', seated(a).S2 === 'mid', seated(a));
+  ok('the leftover benches, in roster order', JSON.stringify(benched(a)) === JSON.stringify(['low']), benched(a));
+  ok('nobody starts twice', new Set(a.spots.filter((r) => r.player).map((r) => r.player.id)).size === filled(a));
+}
+
+// THE CASE THAT MADE THIS FUNCTION EXIST. Spots [RB, FLEX(rookies only)] with
+// a rookie RB projected 20 and a veteran RB projected 18. bestballFillBy walks
+// spots most-specific-first — RB (one position) before the rookies-only flex
+// (three) — so RB takes the rookie and the flex is left holding a veteran it
+// cannot legally seat. Its own comment argues that greedy is optimal "because
+// every flex's eligibility is a superset of the dedicated slots it follows",
+// which stopped being true the day 0172 gave a spot its own player filter.
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['RB', 'WR', 'TE'], max_exp: 0 });
+  const roster = [V('rook', 'RB', 20, { exp: 0 }), V('vet', 'RB', 18, { exp: 8 })];
+  const a = optimalLineup(s, roster, byVal);
+  ok('the rookies-only flex gets the rookie, the plain spot takes the veteran',
+    seated(a).S1 === 'vet' && seated(a).S2 === 'rook', seated(a));
+  ok('…which is 38 points, not 20', totalOf(a) === 38, totalOf(a));
+  const greedy = bestballFillBy([], ['S1', 'S2'], roster, s, byVal);
+  ok('…and strictly beats the most-specific-first fill this replaces',
+    greedy.reduce((t, f) => t + byVal(f.player), 0) < totalOf(a),
+    greedy.map((f) => `${f.slot}=${f.player.id}`));
+}
+
+// No arrangement beats it — enumerated, on instances small enough to enumerate.
+{
+  const rnd = prng(20260817);
+  const POS = ['QB', 'RB', 'WR', 'TE'];
+  const brute = (slots, players) => {
+    let best = 0;
+    const walk = (si, used, sum) => {
+      if (si === slots.length) { best = Math.max(best, sum); return; }
+      walk(si + 1, used, sum);                       // a spot may legally sit empty
+      for (let pi = 0; pi < players.length; pi++) {
+        if (used.has(pi) || !slotAllows(slots[si], players[pi])) continue;
+        used.add(pi); walk(si + 1, used, sum + byVal(players[pi])); used.delete(pi);
+      }
+    };
+    walk(0, new Set(), 0);
+    return best;
+  };
+  let worst = null;
+  let blindLost = 0;   // cases the value-BLIND assignment gets wrong — see below
+  for (let t = 0; t < 400; t++) {
+    const spec = Array.from({ length: 1 + rnd(4) }, () => {
+      const d = { pos: [...new Set(Array.from({ length: 1 + rnd(3) }, () => POS[rnd(4)]))] };
+      if (rnd(3) === 0) d.max_exp = 0;               // a rookies-only spot, the filter that breaks nesting
+      if (rnd(4) === 0) d.teams = ['KC'];
+      return d;
+    });
+    const s = spots(...spec);
+    // MORE PLAYERS THAN SPOTS, always. A bench is what makes the question
+    // interesting: when everyone starts, every arrangement scores the same and
+    // the instance tests nothing.
+    const players = Array.from({ length: s.length + 1 + rnd(4) }, (_, i) =>
+      V(`p${i}`, POS[rnd(4)], rnd(30), { exp: rnd(3) === 0 ? 0 : 5, team: rnd(4) === 0 ? 'BUF' : 'KC' }));
+    const got = totalOf(optimalLineup(s, players, byVal));
+    const best = brute(s, players);
+    if (got !== best && !worst) worst = { spec, players: players.map((p) => `${p.id}:${p.pos}:${p.val}`), got, best };
+    if (totalOf(assignSpots(s, players)) !== best) blindLost++;
+  }
+  ok('no arrangement of these players scores more (400 random cases, brute-forced)', !worst, worst);
+  // The check above is only worth running if it can FAIL. `assignSpots` fills
+  // the same spots by the same eligibility rules and differs in exactly one
+  // way — it doesn't know what anyone is worth — so the cases it loses are the
+  // cases this generator is actually testing. If this ever reads 0, the random
+  // instances have gone toothless and the assertion above is decoration.
+  ok('…and the value-blind assignment loses many of them, so the check has teeth',
+    blindLost > 50, blindLost);
+}
+
+{
+  const s = spots({ pos: ['RB'] }, { pos: ['RB'] });
+  // Everything projected the same — the answer still has to be ONE answer.
+  const flat = [V('a', 'RB', 0), V('b', 'RB', 0), V('c', 'RB', 0)];
+  ok('equal values break toward roster order', seated(optimalLineup(s, flat, byVal)).S1 === 'a');
+  ok('…and are stable across calls',
+    JSON.stringify(seated(optimalLineup(s, flat, byVal))) === JSON.stringify(seated(optimalLineup(s, flat, byVal))));
+  // Zero is a real projection (a K, a rookie the model has never priced). A spot
+  // it can legally fill must not sit empty just because the number is 0.
+  ok('a spot never sits empty over a zero projection', filled(optimalLineup(s, flat, byVal)) === 2);
+  ok('an empty roster fills nothing, and throws nothing', filled(optimalLineup(s, [], byVal)) === 0);
+  ok('no spots at all benches everyone', optimalLineup([], flat, byVal).bench.length === 3);
+}
+
+// ── AUTO-SLOT: what to WRITE, and what to leave alone ──────────────────────
+// The one distinction the whole feature rests on: a spot with no stored row has
+// never been decided, a spot holding a NULL is a manager who emptied it on
+// purpose. Getting this backwards means the worker silently re-starts a player
+// somebody benched, every tick, forever.
+{
+  const s = spots({ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['RB', 'WR', 'TE'] });
+  const roster = [V('qb', 'QB', 22), V('rb1', 'RB', 18), V('rb2', 'RB', 9), V('wr', 'WR', 14)];
+  const plan = (stored, bb = []) => Object.fromEntries(
+    autoSlotPlan(s, bb, stored, roster, byVal).map((r) => [r.slot, r.player]));
+
+  ok('an untouched lineup fills optimally', JSON.stringify(plan({})) === JSON.stringify({ S1: 'qb', S2: 'rb1', S3: 'wr' }), plan({}));
+  ok('a spot that already holds a pick is left alone', plan({ S2: 'rb2' }).S2 === undefined, plan({ S2: 'rb2' }));
+  ok('…and its player is not started again somewhere else',
+    Object.values(plan({ S2: 'rb2' })).every((p) => p !== 'rb2'), plan({ S2: 'rb2' }));
+  // THE ONE. A cleared spot is a decision, and re-filling it un-does it.
+  ok('a spot the manager EMPTIED is never re-filled', plan({ S3: null }).S3 === undefined, plan({ S3: null }));
+  ok('…while its untouched neighbours still fill', Object.keys(plan({ S3: null })).length === 2, plan({ S3: null }));
+  ok('best-ball spots are never written — they fill themselves',
+    plan({}, ['S3']).S3 === undefined && Object.keys(plan({}, ['S3'])).length === 2, plan({}, ['S3']));
+  // A best-ball spot's stored row is ignored by the resolver (0159), so the
+  // player in it is NOT reserved against the manual spots.
+  ok('a player parked in a best-ball spot is still available to a real one',
+    plan({ S3: 'rb1' }, ['S3']).S2 === 'rb1', plan({ S3: 'rb1' }, ['S3']));
+  ok('a fully set lineup writes nothing', autoSlotPlan(s, [], { S1: 'qb', S2: 'rb1', S3: 'wr' }, roster, byVal).length === 0);
+  ok('an empty roster writes nothing', autoSlotPlan(s, [], {}, [], byVal).length === 0);
+  ok('a roster with nobody eligible writes nothing',
+    autoSlotPlan(spots({ pos: ['K'] }), [], {}, roster, byVal).length === 0);
+  // Partial manual + auto is the common case: one spot set by hand on Tuesday,
+  // the rest still open. The fill has to be optimal OVER WHAT IS LEFT.
+  ok('the fill is optimal over the spots that are still open',
+    JSON.stringify(plan({ S3: 'rb1' })) === JSON.stringify({ S1: 'qb', S2: 'rb2' }), plan({ S3: 'rb1' }));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

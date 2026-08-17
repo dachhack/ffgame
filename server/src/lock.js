@@ -9,7 +9,10 @@
 // integrity window.
 import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
+import { PROJ_2026 } from '../../packages/core/src/data/proj2026.ts';
+import { autoSlotPlan, leagueSlotDefs, leagueBestball, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { autoLineup } from './engine.js';
+import { modeOfSettings } from './resolve.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
@@ -235,6 +238,135 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
   const { data } = await db().from('sealed_pick')
     .update({ locked: true, revealed_at: iso }).in('id', dueIds).eq('locked', false).select('id');
   return (data ?? []).length;
+}
+
+/** AUTO-SLOT (v0.247.0): give every classic team the best projected lineup its
+ *  roster can field, for this week, before anyone touches it.
+ *
+ *  Until now a classic team started each week EMPTY. A manager who never opened
+ *  the app scored an honest zero, which is honest and also nothing like normal
+ *  fantasy: there, your lineup is already set and you adjust it. So the worker
+ *  sets it — `optimalLineup` over the roster, ranked by projection.
+ *
+ *  It writes ONLY spots with no stored row, and that is the whole safety
+ *  argument. A row holding NULL is a manager who emptied that spot on purpose;
+ *  refilling it would silently un-do a decision, every tick, forever. `insert`
+ *  with ignoreDuplicates makes the database enforce the same thing under a race
+ *  — a manager saving in the same second keeps their write, because ours turns
+ *  into ON CONFLICT DO NOTHING rather than an overwrite.
+ *
+ *  Only 'scheduled' matchups, and only the tick's own week: a schedule is
+ *  generated weeks ahead, and slotting week 12 today would fill it with players
+ *  who may be dropped by then and then never revisit it (the rows would exist).
+ *  Rows land UNLOCKED — this is a starting point, not a seal. The per-player
+ *  kickoff seal (sealDueClassicPicks) freezes them exactly as it does a
+ *  hand-set lineup.
+ *
+ *  Seats with no app_user_id are skipped: sealed_pick hangs off a user, so
+ *  there is nowhere to put the row. Those score the honest zero they always did.
+ *
+ *  Returns the number of spots slotted. */
+export async function autoSlotClassicLineups(week) {
+  const { data: ms } = await db().from('matchup')
+    .select('id,league_id,home_roster_id,away_roster_id').eq('week', week).eq('status', 'scheduled');
+  if (!ms?.length) return 0;
+  const { data: lgs } = await db().from('league')
+    .select('id,settings_json,lineup_policy').in('id', [...new Set(ms.map((m) => m.league_id))]);
+  // Through modeOfSettings, never raw: settings_json calls the builder spec
+  // `roster_slots`, and leagueSlotDefs reads `slots` — hand it the raw row and
+  // every builder league quietly gets the default nine spots instead.
+  const modeOf = new Map((lgs ?? []).map((l) => [l.id, modeOfSettings(l.settings_json)]));
+  // 'empty' is a commissioner saying OUT LOUD that a missed lineup should score
+  // zero. Auto-slot is a default, not a policy override, so that league opts
+  // out. Everything else ('best_lineup', 'ai', unset) gets slotted.
+  const optedOut = new Set((lgs ?? []).filter((l) => l.lineup_policy === 'empty').map((l) => l.id));
+  const byLeague = new Map();
+  for (const m of ms) {
+    if (modeOf.get(m.league_id)?.mode !== 'classic' || optedOut.has(m.league_id)) continue;
+    if (!byLeague.has(m.league_id)) byLeague.set(m.league_id, []);
+    byLeague.get(m.league_id).push(m);
+  }
+  if (!byLeague.size) return 0;
+
+  let slotted = 0;
+  for (const [leagueId, matchups] of byLeague) {
+    const mode = modeOf.get(leagueId);
+    const slots = leagueSlotDefs(mode);
+    const bestball = leagueBestball(mode);
+    if (slots.every((d) => bestball.includes(d.slot))) continue;   // all best ball: nothing to set
+
+    // The league's own pool carries position, team and tenure — everything
+    // slotAllows needs. A Sleeper-imported classic league has no pool of its
+    // own, so it has no auto-slot either (and no draft that built one).
+    const { data: pool } = await db().from('league_pool')
+      .select('slug,pos,team,exp').eq('league_id', leagueId).range(0, 1999);
+    if (!pool?.length) continue;
+    const meta = new Map(pool.map((p) => [p.slug, p]));
+
+    const rosterIds = [...new Set(matchups.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
+    const { data: ros } = await db().from('native_roster')
+      .select('roster_id,slug').eq('league_id', leagueId).eq('spot', 'active')   // taxi/IR never start (0164)
+      .in('roster_id', rosterIds);
+    if (!ros?.length) continue;   // undrafted — nothing to slot yet, and no rows written, so the next tick retries
+
+    // no_start (0144) binds the auto-fill: the sealed_pick trigger exempts the
+    // server, so the exclusion has to happen here. autoSlotPlan checks the
+    // engine's own flag cache too, which this worker does not install per
+    // league — so this filter is the one that actually bites.
+    const { data: flagRows } = await db().from('player_flag').select('slug,rules').eq('league_id', leagueId);
+    const noStart = new Set((flagRows ?? []).filter((f) => f.rules?.no_start === true).map((f) => f.slug));
+    const rosterOf = new Map();
+    for (const r of ros) {
+      const p = meta.get(r.slug);
+      if (!p || noStart.has(r.slug)) continue;
+      if (!rosterOf.has(r.roster_id)) rosterOf.set(r.roster_id, []);
+      rosterOf.get(r.roster_id).push({ id: r.slug, pos: p.pos, team: p.team, exp: p.exp ?? null });
+    }
+
+    const { data: mems } = await db().from('league_membership')
+      .select('sleeper_roster_id,app_user_id').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+    const userOf = new Map((mems ?? []).filter((x) => x.app_user_id).map((x) => [x.sleeper_roster_id, x.app_user_id]));
+    if (!userOf.size) continue;
+
+    const { data: rows } = await db().from('sealed_pick')
+      .select('matchup_id,app_user_id,roster_slot,player_slug')
+      .in('matchup_id', matchups.map((m) => m.id)).eq('game_window', CLASSIC_WIN);
+    // (matchup, user) → { slot: slug|null } for the spots that HAVE a row.
+    const storedBy = new Map();
+    for (const r of rows ?? []) {
+      const k = `${r.matchup_id}#${r.app_user_id}`;
+      if (!storedBy.has(k)) storedBy.set(k, {});
+      storedBy.get(k)[r.roster_slot] = r.player_slug;
+    }
+
+    const payload = [];
+    for (const m of matchups) {
+      // Deduped: a self-matchup (a bye week's placeholder) would otherwise plan
+      // the same seat twice and put two rows for one spot in a single insert.
+      for (const rosterId of new Set([m.home_roster_id, m.away_roster_id])) {
+        const uid = userOf.get(rosterId);
+        const roster = rosterOf.get(rosterId);
+        if (!uid || !roster?.length) continue;
+        const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
+        for (const p of autoSlotPlan(slots, bestball, stored, roster, (x) => PROJ_2026.get(x.id) ?? 0)) {
+          payload.push({
+            matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
+            roster_slot: p.slot, player_slug: p.player, metric_id: null, locked: false,
+          });
+        }
+      }
+    }
+    if (!payload.length) continue;
+    // ignoreDuplicates → ON CONFLICT DO NOTHING. Not an upsert: a row that
+    // appeared since the read above is a manager's, and it wins. The returned
+    // rows are the ones actually inserted, so the count never overstates.
+    const { data: ins, error } = await db().from('sealed_pick')
+      .upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot', ignoreDuplicates: true })
+      .select('id');
+    if (error) throw error;
+    slotted += (ins ?? []).length;
+  }
+  return slotted;
 }
 
 /** Lock any scheduled matchups whose lock_at has passed: flip status → 'live' and

@@ -737,7 +737,15 @@ export interface SpotPlayer { id: string; pos: string; team?: string | null; exp
 export interface SpotRow { def: ClassicSlotDef; player: SpotPlayer | null }
 export interface SpotAssignment { spots: SpotRow[]; bench: SpotPlayer[] }
 
-export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): SpotAssignment {
+/** Kuhn's maximum bipartite matching over (spots × players), returning
+ *  spot index → player index (-1 = nobody). Players are seated IN THE ORDER
+ *  GIVEN, and the algorithm never un-seats anyone it has already seated — it
+ *  only moves them along an augmenting path. That property is what makes the
+ *  caller's ordering meaningful, and both callers exploit it: `assignSpots`
+ *  feeds draft order so an earlier pick can't be benched for a later one, and
+ *  `optimalLineup` feeds descending value so a better player can't be benched
+ *  for a worse one. */
+function matchSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): number[] {
   // Eligible spot indices per player, in the league's spot order.
   const legal = players.map((p) => slots.flatMap((d, i) => (slotAllows(d, p) ? [i] : [])));
   const heldBy: number[] = new Array(slots.length).fill(-1);   // spot index → player index
@@ -756,11 +764,104 @@ export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): Spo
     return false;
   };
   for (let pi = 0; pi < players.length; pi++) { seen.fill(false); seat(pi); }
+  return heldBy;
+}
+
+export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): SpotAssignment {
+  const heldBy = matchSpots(slots, players);
   const started = new Set(heldBy.filter((pi) => pi >= 0));
   return {
     spots: slots.map((d, si) => ({ def: d, player: heldBy[si] >= 0 ? players[heldBy[si]] : null })),
     bench: players.filter((_, pi) => !started.has(pi)),   // draft order, unchanged
   };
+}
+
+// ── The BEST lineup these players can field (v0.247.0) ──────────────────────
+// `assignSpots` answers "who is LEGAL where" — the draft-room question, asked
+// before anyone has points. Setting a lineup asks the harder one: of all the
+// legal arrangements, WHICH SCORES MOST. Those are different problems, and the
+// obvious answer to the second is wrong.
+//
+// The obvious answer is `bestballFillBy`'s: walk the spots most-specific-first
+// and give each its best remaining player. Its own comment explains why that is
+// optimal — "every flex's eligibility is a superset of the dedicated slots it
+// follows" — and that WAS true when it was written. Since 0172 it isn't: a spot
+// carries its own player filter, so a narrow spot's candidates are no longer a
+// subset of a wide one's. Spots [RB, FLEX(rookies only)] with a rookie RB
+// projected 20 and a veteran RB projected 18: RB is the more specific spot, goes
+// first, takes the rookie — and the rookies-only flex is left with a veteran it
+// cannot legally seat. 20 points, when 38 was available.
+//
+// So this is a MAXIMUM-WEIGHT assignment, and it has a clean exact answer that
+// costs one sort on top of the matching we already do. The sets of players that
+// can be started SIMULTANEOUSLY are the independent sets of a transversal
+// matroid, and greedy is optimal on a matroid: walk players best-first and keep
+// each one whose addition leaves the set still startable. `matchSpots` is
+// exactly that test — it seats a player iff an augmenting path exists, and never
+// un-seats anyone — so feeding it players in descending value order IS the
+// greedy, and the result is provably the highest-scoring legal lineup. Because
+// every value is non-negative it is also a MAXIMUM-SIZE one: no spot sits empty
+// that some arrangement could have filled.
+//
+// `valueOf` is the caller's, exactly as in `bestballFillBy` — projections
+// before kickoff, real points after — so this never has an opinion about what
+// "best" means, only about how to arrange it.
+export function optimalLineup(
+  slots: ClassicSlotDef[],
+  players: SpotPlayer[],
+  valueOf: (p: SpotPlayer) => number,
+): SpotAssignment {
+  // Value once per player: `matchSpots` is called on the sorted list, and a
+  // comparator that re-derives a projection per comparison is the expensive
+  // half of this on a full roster.
+  const val = players.map((p) => valueOf(p) || 0);
+  // Ties break toward the input order (stable), so two players a league values
+  // identically always land the same way round.
+  const order = players.map((_, i) => i).sort((a, b) => val[b] - val[a] || a - b);
+  const byValue = order.map((i) => players[i]);
+  const heldBy = matchSpots(slots, byValue);
+  const started = new Set(heldBy.filter((pi) => pi >= 0).map((pi) => order[pi]));
+  return {
+    spots: slots.map((d, si) => ({ def: d, player: heldBy[si] >= 0 ? byValue[heldBy[si]] : null })),
+    bench: players.filter((_, i) => !started.has(i)),   // input order, unchanged
+  };
+}
+
+// ── AUTO-SLOT: the lineup a team starts the week with (v0.247.0) ────────────
+// A classic team used to begin every week EMPTY, and a manager who never opened
+// the app scored an honest zero. Normal fantasy doesn't work that way: your
+// lineup is already set — optimally, from what you own — and you adjust it.
+//
+// The whole design rests on one distinction: a spot with NO STORED ROW has
+// never been decided, while a spot holding a NULL is a manager who deliberately
+// emptied it. Only the first kind gets filled. That is what makes auto-slot
+// safe to re-run every worker tick and safe to run on both the worker and the
+// board: it can add a decision, never overwrite one.
+//
+//   • spots that already have a row are left exactly as they are — including
+//     the ones a manager cleared;
+//   • players standing in those spots are RESERVED, so the fill can't start
+//     someone twice;
+//   • best-ball spots are skipped entirely — they fill themselves at scoring
+//     time and a stored row there is ignored anyway (0159);
+//   • a no_start flag (0144) binds this the same way it binds the best-ball
+//     fill, because the DB trigger only guards a manager's own writes.
+export function autoSlotPlan(
+  slots: ClassicSlotDef[],
+  bestball: string[],
+  stored: Record<string, string | null | undefined>,
+  roster: SpotPlayer[],
+  valueOf: (p: SpotPlayer) => number,
+): { slot: string; player: string }[] {
+  const bb = new Set(bestball);
+  const open = slots.filter((d) => !bb.has(d.slot) && !Object.prototype.hasOwnProperty.call(stored, d.slot));
+  if (!open.length) return [];
+  const taken = new Set(Object.entries(stored)
+    .filter(([slot, slug]) => slug && !bb.has(slot)).map(([, slug]) => slug as string));
+  const cands = roster.filter((p) => !taken.has(p.id) && !flagRulesFor(p.id).noStart);
+  if (!cands.length) return [];
+  return optimalLineup(open, cands, valueOf).spots
+    .flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player.id }] : []));
 }
 
 // ── Moving a player between spots (the picker's other half) ────────────────

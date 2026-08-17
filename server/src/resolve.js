@@ -150,8 +150,14 @@ async function leagueScoringOf(leagueId, ctx) {
 
 /** The league's game mode (0157): 'drip' (default) | 'classic', plus the
  *  classic PPR knob and the best-ball slot set (0159). Classic resolves
- *  through resolveClassicMatchup below. */
-const modeOfSettings = (s) => ({
+ *  through resolveClassicMatchup below.
+ *
+ *  EXPORTED because settings_json's key names are not the engine's: the builder
+ *  spec is stored as `roster_slots` and read as `slots`. Handing raw
+ *  settings_json to leagueSlotDefs doesn't fail — it silently returns the
+ *  DEFAULT nine spots, so a builder league gets a lineup written against slots
+ *  it does not have. One mapper, and every caller goes through it. */
+export const modeOfSettings = (s) => ({
   mode: s?.game_mode === 'classic' ? 'classic' : 'drip',
   ppr: Number.isFinite(Number(s?.ppr)) ? Number(s.ppr) : 1,
   bestball: Array.isArray(s?.bestball) ? s.bestball.map(String) : [],
