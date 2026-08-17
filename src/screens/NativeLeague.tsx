@@ -126,6 +126,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
   // season behind it, so it drafts the drip shape without asking.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // DYNASTY (0184): an identity on top of either game, not a third game.
+  const [dynasty, setDynasty] = useState(false);
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -189,9 +191,9 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // The busy note NAMES the game, so the moment of creation says what is
       // being created — the last chance to notice a wrong tap before it
       // freezes at the draft.
-      setNote(`Creating your ${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+      setNote(`Creating your ${dynasty ? '🏰 DYNASTY ' : ''}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
-        mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame);
+        mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame, dynasty);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -253,6 +255,20 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
                   : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
             </div>
+            {/* DYNASTY (0184): an identity, not a mode — checking it presets
+                keepers (roster − 3) and a 3-round rookie draft and deals the
+                first tradeable picks. Everything stays editable in the 🔁
+                NEXT SEASON panel, so this is one question, not four. */}
+            <div style={{ height: 14 }} />
+            <label className="mono" style={{ ...label, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', letterSpacing: 'normal', fontSize: 12, color: 'var(--text)' }}>
+              <input type="checkbox" checked={dynasty} onChange={(e) => setDynasty(e.target.checked)} />
+              <span>🏰 <b>DYNASTY</b> — rosters carry over season to season</span>
+            </label>
+            {dynasty && (
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+                Each team keeps {Math.max(1, rounds - 3)} of its {rounds} players into next season and drafts rookies in a 3-round rookie draft — with every future pick a tradeable asset from day one. Adjustable any time in 🔁 NEXT SEASON.
+              </div>
+            )}
             <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
             <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}
@@ -311,7 +327,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? '🤖 START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
-            : game === 'classic' ? 'CREATE 🏈 NORMAL LEAGUE →' : 'CREATE ◈ DRIP LEAGUE →'}
+            : `CREATE ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>

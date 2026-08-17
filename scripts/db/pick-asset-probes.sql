@@ -218,6 +218,29 @@ begin
       and (select count(*) from native_roster where league_id = nl and roster_id = 2) = 4
       and (select count(*) from native_roster where league_id = nl and roster_id = 3) = 3,
     'pk11a rosters follow pick ownership');
+
+  -- ── dynasty at creation (0184) ────────────────────────────────────────────
+  -- pk12: the create-time toggle presets the settings, stamps the identity,
+  -- and deals the futures on the spot; the badge predicate reads all of it.
+  r := create_native_league('Dyn Check', '2026', 4, 12, 60, 'snake', 200, 15, 1, null, null, null, 'drip', true);
+  perform assert_ok(r, 'pk12 dynasty create');
+  perform assert_true((r ->> 'dynasty')::boolean, 'pk12a response says dynasty');
+  perform assert_true((select (settings_json ->> 'keeper_count')::int = 9
+      and (settings_json ->> 'rookie_rounds')::int = 3
+      and (settings_json ->> 'dynasty')::boolean
+      from league where id = (r ->> 'league_id')::uuid), 'pk12b presets: keep 9, 3 rookie rounds');
+  perform assert_true((select count(*) from pick_asset
+      where league_id = (r ->> 'league_id')::uuid and season = '2027') = 12,
+    'pk12c futures dealt at creation (3 rounds × 4 seats)');
+  perform assert_true(league_is_dynasty((r ->> 'league_id')::uuid), 'pk12d badge predicate: stamped league');
+  perform assert_true(league_is_dynasty(lid), 'pk12e badge predicate: settings-only league (pre-0184)');
+  r := create_native_league('Plain Check', '2026', 4, 12, 60);
+  perform assert_ok(r, 'pk12f plain create still works');
+  perform assert_true(not (r ->> 'dynasty')::boolean
+      and not league_is_dynasty((r ->> 'league_id')::uuid), 'pk12g plain league is not dynasty');
+  perform assert_true((select count(*) from jsonb_array_elements(my_teams()) t
+      where t ->> 'league_id' = (select id::text from league where name = 'Dyn Check')
+        and (t -> 'league' ->> 'dynasty')::boolean) = 1, 'pk12h my_teams carries the badge');
 end $$;
 
 select 'ALL PICK-ASSET PROBES PASSED' as result;

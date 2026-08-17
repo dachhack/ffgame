@@ -571,7 +571,14 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>🔁 NEXT SEASON</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint" track={0.12}>🔁 NEXT SEASON</Mono>
+        {!!st.dynasty && (
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: t.you }}>🏰 DYNASTY LEAGUE</Text>
+          </View>
+        )}
+      </View>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5, lineHeight: 14 }}>{note}</Mono>}
 
       <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>KEEPERS</Mono>

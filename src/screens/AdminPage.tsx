@@ -3026,6 +3026,12 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
 
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {st.dynasty && (
+        <div>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 8px' }}>🏰 DYNASTY LEAGUE</span>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginLeft: 8 }}>rosters carry over — the settings below are what make it so</span>
+        </div>
+      )}
       <div>
         <div style={subhead}>KEEPERS</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

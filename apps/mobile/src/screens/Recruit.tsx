@@ -72,6 +72,8 @@ export function Recruit({ onBack, onJoined }: {
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // DYNASTY (0184): an identity on top of either game, not a third game.
+  const [dynasty, setDynasty] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
@@ -189,7 +191,7 @@ export function Recruit({ onBack, onJoined }: {
     if (!nm || busy || !game) return;
     // The busy note NAMES the game — the last chance to notice a wrong tap
     // before it freezes at the draft.
-    setBusy(true); setErr(null); setMakeNote(`Creating your ${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       // Same defaults the web derives from the game type (v0.221.0): drip
@@ -197,7 +199,7 @@ export function Recruit({ onBack, onJoined }: {
       // shape is the starting-lineup spec.
       const rounds = game === 'classic' ? 15 : 12;
       const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
-      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game);
+      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game, dynasty);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
@@ -208,7 +210,7 @@ export function Recruit({ onBack, onJoined }: {
       commit();
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
-      setJoined(`${nm}, a ${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
+      setJoined(`${nm}, a ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
       setMakeOpen(false); setNameDraft('');
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); setMakeNote(''); onJoined(); await load(); }
@@ -287,6 +289,20 @@ export function Recruit({ onBack, onJoined }: {
                       ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
                       : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
                 </Mono>
+                {/* DYNASTY (0184): presets keepers + a 3-round rookie draft +
+                    tradeable picks; everything stays editable in 🔁 NEXT SEASON. */}
+                <Pressable onPress={() => { tap(); setDynasty((v) => !v); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 }}>
+                  <View style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, borderColor: dynasty ? t.you : t.bd, backgroundColor: dynasty ? t.you : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                    {dynasty && <Text style={{ fontSize: 9, color: t.onAccent, fontWeight: '700' }}>✓</Text>}
+                  </View>
+                  <Mono size={9.5} style={{ flex: 1 }}>🏰 DYNASTY — rosters carry over season to season</Mono>
+                </Pressable>
+                {dynasty && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 12 }}>
+                    Each team keeps most of its roster into next season and drafts rookies in a 3-round rookie draft — every future pick a tradeable asset from day one. Adjustable any time in 🔁 NEXT SEASON.
+                  </Mono>
+                )}
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
                 onChangeText={(v) => { setNameDraft(v); setErr(null); }}

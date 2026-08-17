@@ -1,6 +1,15 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.261.0`_
+_Last updated: 2026-08-17 · Build `v0.262.0`_
+
+> v0.262.0 (migration 0184) added DYNASTY AT CREATION + THE BADGE after the
+> sections below were written: `create_native_league(p_dynasty)` presets
+> keeper_count = roster − 3 and rookie_rounds = 3, stamps
+> `settings_json.dynasty`, and deals the first pick assets at creation;
+> `league_is_dynasty()` (stamp OR either live setting) is the one badge
+> predicate, carried by `my_teams` + `keeper_state`; 🏰 chips on both hosts'
+> league cards, create forms and dynasty panels. Dynasty remains a SETTINGS
+> identity — the toggle is sugar, the 🔁 NEXT SEASON panel stays the truth.
 
 ## NEXT SESSION — read this first
 

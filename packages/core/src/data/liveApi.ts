@@ -567,7 +567,7 @@ export interface Enrollment {
   pick_user_id?: string;
   /** You steer this team but the seat isn't yours. */
   comanager?: boolean;
-  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null } | null;
+  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean } | null;
 }
 
 /** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
@@ -1391,7 +1391,7 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
-export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; }
+export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; game_mode?: 'drip' | 'classic'; dynasty?: boolean; }
 /** Per-position roster limits (0071). null = uncapped. Absent blob = legacy
  *  defaults (QB 3, TE 3, K 1, D/ST 1, RB/WR uncapped). Enforced server-side
  *  for humans AND honored by the AI. */
@@ -1405,12 +1405,16 @@ export const createNativeLeague = (
   /** Which game the league plays (0175). 'classic' also self-flags the league
    *  as classic-capable, so its commissioner can switch modes pre-draft. */
   gameMode: 'drip' | 'classic' = 'drip',
+  /** Dynasty at creation (0184): presets keeper_count (roster − 3) and 3
+   *  rookie rounds, stamps the league, and deals the first futures. Sugar
+   *  over the 🔁 NEXT SEASON settings — everything stays editable. */
+  dynasty = false,
 ) =>
   rpc<NativeCreateResult>('create_native_league', {
     p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
-    p_game_mode: gameMode,
+    p_game_mode: gameMode, p_dynasty: dynasty,
   });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
@@ -1735,6 +1739,9 @@ export interface KeeperTeam {
 }
 export interface KeeperState {
   ok?: boolean; error?: string;
+  /** The league's dynasty identity (0184): stamped at creation or implied by
+   *  a live keeper_count / rookie_rounds setting. */
+  dynasty?: boolean;
   keeper_count: number; roster_size: number; draft_status: string;
   season: string; next_season: string | null;
   game_mode: 'drip' | 'classic';
