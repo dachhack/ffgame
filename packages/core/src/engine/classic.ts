@@ -738,6 +738,40 @@ export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): Spo
   };
 }
 
+// ── Moving a player between spots (the picker's other half) ────────────────
+// The picker used to offer only BENCH players, which made the obvious move —
+// "put my TE in the flex" — a two-step dance: empty the TE spot, then fill the
+// flex. Offering a player who is already starting somewhere raises a question
+// the UI must answer the same way on both hosts, so the answer lives here.
+//
+// SWAP IF YOU CAN, MOVE IF YOU MUST. If the player I'm bringing in currently
+// holds another spot, that spot needs filling, and the natural filler is
+// whoever I'm displacing — but only if he is LEGAL there. A running back
+// displaced from a flex cannot be dropped into a TE spot, and doing it anyway
+// would write a lineup the resolver won't field. So:
+//   • target spot's occupant is eligible for the vacated spot → SWAP them;
+//   • otherwise → MOVE, and the vacated spot is left EMPTY rather than filled
+//     with someone who cannot legally stand there.
+// Either way the vacated spot is explicitly written, because "he moved out of
+// S3" is a change to S3 that has to reach the server.
+export interface SpotMove { slot: string; player: string | null }
+
+export function planSpotMove(
+  slots: ClassicSlotDef[],
+  lineup: Record<string, string | null | undefined>,
+  target: string,
+  incoming: string,
+  eligible: (slot: string, slug: string) => boolean,
+): SpotMove[] {
+  const from = slots.find((d) => d.slot !== target && lineup[d.slot] === incoming)?.slot ?? null;
+  const displaced = lineup[target] ?? null;
+  if (!from) return [{ slot: target, player: incoming }];
+  return [
+    { slot: target, player: incoming },
+    { slot: from, player: displaced && eligible(from, displaced) ? displaced : null },
+  ];
+}
+
 /** One side of a classic matchup. `bestball` + `roster` drive the auto-fill;
  *  without them the side is fully manual (the 0157 behavior, unchanged). */
 export interface ClassicSide { picks: ClassicPick[]; roster?: Player[]; bestball?: string[] }
