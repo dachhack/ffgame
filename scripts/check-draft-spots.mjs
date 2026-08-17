@@ -16,7 +16,7 @@
 // than it BEHAVES is the bug the 0174 label was one edit away from causing.
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
-  classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy,
+  classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy, isRetSlot,
   optimalLineup, autoSlotPlan, classicLineup,
 } from '../packages/core/src/engine/classic';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
@@ -320,6 +320,126 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('an ineligible roster fills nothing', bestballFillBy([], bb, [R('star', 'QB')], s, by).length === 0);
 }
 
+// ── The best-ball fill is EXACT (v0.250.0) ─────────────────────────────────
+// bestballFillBy cannot ride optimalLineup's matroid greedy, because a RET
+// spot (0171) values a player by his RETURN production while a flex values him
+// in full — the value depends on WHERE HE STANDS. So it runs a general
+// assignment (assignByValue), and the objective it must honor is best ball's
+// own promise, lexicographically: every spot that CAN fill does, and among
+// full fills the total is maximal. Brute-forced here under exactly that order,
+// with per-slot values and negative values in the mix — and with the retired
+// greedy re-implemented inline so its losses prove the cases have teeth.
+{
+  const R = (id, pos, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', exp: 3, stats: {}, ...extra });
+
+  // THE RET INTERACTION, the case that forced per-slot values. A is a star
+  // from scrimmage (20) and the better returner (8); B returns nearly as well
+  // (6) but barely plays otherwise (6). Spot-at-a-time greedy hands the RET
+  // spot its best returner — A — and banks 8 + 6 = 14. The exact fill sees the
+  // OTHER arrangement: B returns for 6 so A's 20 can count in the flex, 26.
+  {
+    const full = { a: 20, b: 6 };
+    const ret = { a: 8, b: 6 };
+    const val = (p, d) => (isRetSlot(d.pos) ? ret[p.id] : full[p.id]);
+    const s = spots({ pos: ['RET'], bb: true }, { pos: ['RB', 'WR', 'TE'], bb: true });
+    const f = bestballFillBy([], ['S1', 'S2'], [R('a', 'RB'), R('b', 'WR')], s, val);
+    const got = Object.fromEntries(f.map((x) => [x.slot, x.player.id]));
+    ok('the star plays from scrimmage while the lesser man returns',
+      got.S1 === 'b' && got.S2 === 'a', got);
+    ok('…which is 26, not the greedy’s 14',
+      f.reduce((t, x) => t + val(x.player, s.find((d) => d.slot === x.slot)), 0) === 26);
+  }
+
+  // A best-ball spot FILLS even at a loss — its promise is to field somebody,
+  // and the old fill seated a negative-scoring player the same way.
+  {
+    const s = spots({ pos: ['QB'], bb: true });
+    const f = bestballFillBy([], ['S1'], [R('turnover-machine', 'QB')], s, () => -3);
+    ok('a lone negative-scoring player still fills the spot', f.length === 1 && f[0].player.id === 'turnover-machine');
+  }
+
+  // No arrangement does better — enumerated under the lexicographic objective.
+  {
+    const rnd = prng(20260818);
+    const POS = ['QB', 'RB', 'WR', 'TE'];
+    const brute = (slots, players, val) => {
+      let bestSize = -1, bestTotal = -Infinity;
+      const walk = (si, used, size, total) => {
+        if (si === slots.length) {
+          if (size > bestSize || (size === bestSize && total > bestTotal)) { bestSize = size; bestTotal = total; }
+          return;
+        }
+        walk(si + 1, used, size, total);
+        for (let pi = 0; pi < players.length; pi++) {
+          if (used.has(pi) || !slotAllows(slots[si], players[pi])) continue;
+          used.add(pi); walk(si + 1, used, size + 1, total + val(players[pi], slots[si])); used.delete(pi);
+        }
+      };
+      walk(0, new Set(), 0, 0);
+      return { size: bestSize, total: bestTotal };
+    };
+    // The fill this replaced, verbatim: most-specific-first, each spot takes
+    // its best remaining player. Kept ONLY to prove the generator produces
+    // cases where it loses — a brute-force check nothing can fail is decoration.
+    const oldGreedy = (slots, players, val) => {
+      const order = [...slots].sort((a, b) => a.pos.length - b.pos.length || (a.flt ? 0 : 1) - (b.flt ? 0 : 1));
+      const used = new Set();
+      let size = 0, total = 0;
+      for (const d of order) {
+        let best = null;
+        for (const c of players) {
+          if (used.has(c.id) || !slotAllows(d, c)) continue;
+          if (!best || val(c, d) > val(best, d)) best = c;
+        }
+        if (best) { used.add(best.id); size++; total += val(best, d); }
+      }
+      return { size, total };
+    };
+    let worst = null, greedyLost = 0;
+    const shapes = new Set();
+    for (let t = 0; t < 400; t++) {
+      const spec = Array.from({ length: 1 + rnd(4) }, () => {
+        const roll = rnd(5);
+        const d = roll === 0
+          ? { pos: ['RET'], bb: true }   // the per-slot value class
+          : { pos: [...new Set(Array.from({ length: 1 + rnd(3) }, () => POS[rnd(4)]))], bb: true };
+        if (roll === 1) d.max_exp = 0;   // the filter class that retired the greedy
+        return d;
+      });
+      const s = spots(...spec);
+      const players = Array.from({ length: s.length + 1 + rnd(4) }, (_, i) =>
+        R(`p${i}`, POS[rnd(4)], { exp: rnd(3) === 0 ? 0 : 5 }));
+      // Values per player per CLASS — full and return — negatives included.
+      const full = Object.fromEntries(players.map((p) => [p.id, rnd(36) - 4]));
+      const ret = Object.fromEntries(players.map((p) => [p.id, rnd(12) - 2]));
+      const val = (p, d) => (isRetSlot(d.pos) ? ret[p.id] : full[p.id]);
+      shapes.add(JSON.stringify([spec, players.map((p) => `${p.id}${p.pos}${p.exp}`), full, ret]));
+
+      const bbNames = s.map((d) => d.slot);
+      const f = bestballFillBy([], bbNames, players, s, val);
+      const got = {
+        size: f.length,
+        total: f.reduce((sum, x) => sum + val(x.player, s.find((d) => d.slot === x.slot)), 0),
+      };
+      const best = brute(s, players, val);
+      if ((got.size !== best.size || Math.abs(got.total - best.total) > 1e-6) && !worst) {
+        worst = { spec, players: players.map((p) => `${p.id}:${p.pos}:e${p.exp}`), full, ret, got, best };
+      }
+      const g = oldGreedy(s, players, val);
+      if (g.size < best.size || best.total - g.total > 1e-6) greedyLost++;
+      // Determinism on the first instance: the fill repolls every few seconds.
+      if (t === 0) {
+        const again = bestballFillBy([], bbNames, players, s, val);
+        ok('the exact fill is stable across calls',
+          JSON.stringify(f.map((x) => [x.slot, x.player.id])) === JSON.stringify(again.map((x) => [x.slot, x.player.id])));
+      }
+    }
+    ok('every spot that can fill does, and no arrangement scores more (400 cases, brute-forced)', !worst, worst);
+    ok('…across genuinely different cases', shapes.size > 350, shapes.size);
+    ok('…and the retired greedy loses dozens of them, so the check has teeth', greedyLost > 25, greedyLost);
+  }
+}
+
 // ── The OPTIMAL lineup (v0.247.0) ──────────────────────────────────────────
 // `assignSpots` asks who is LEGAL where. `optimalLineup` asks which of the
 // legal arrangements SCORES MOST, and the two have different answers. The
@@ -354,10 +474,13 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   ok('the rookies-only flex gets the rookie, the plain spot takes the veteran',
     seated(a).S1 === 'vet' && seated(a).S2 === 'rook', seated(a));
   ok('…which is 38 points, not 20', totalOf(a) === 38, totalOf(a));
-  const greedy = bestballFillBy([], ['S1', 'S2'], roster, s, byVal);
-  ok('…and strictly beats the most-specific-first fill this replaces',
-    greedy.reduce((t, f) => t + byVal(f.player), 0) < totalOf(a),
-    greedy.map((f) => `${f.slot}=${f.player.id}`));
+  // v0.247.0 asserted the best-ball fill STRICTLY LOSES this case — proof the
+  // greedy left points on the table. v0.250.0 made that fill exact too, so the
+  // assertion flips: on uniform values the two must now agree.
+  const bbFill = bestballFillBy([], ['S1', 'S2'], roster, s, byVal);
+  ok('…and the best-ball fill now finds the same 38 (v0.250.0)',
+    bbFill.reduce((t, f) => t + byVal(f.player), 0) === totalOf(a),
+    bbFill.map((f) => `${f.slot}=${f.player.id}`));
 }
 
 // No arrangement beats it — enumerated, on instances small enough to enumerate.
