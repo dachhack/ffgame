@@ -100,6 +100,33 @@ export function NavSelect<T extends string>({ groups, active, onSelect }: {
  *  on screen at once and makes "where do I set scoring" answerable without
  *  hunting. Pairs with TabBar, which stays the narrow-screen presentation of
  *  the same list. */
+/** The phone-width league map (v0.259.0). The old answer at <900px was ONE
+ *  native <select> holding all ~17 destinations — every move was open →
+ *  scan seventeen rows → pick, with no visible map of what exists. This is
+ *  the map: every destination on screen at once, grouped, one tap in. The
+ *  panel then renders alone with a "⊞ all settings" way back. */
+export function NavHub<T extends string>({ groups, onSelect }: {
+  groups: NavGroup<T>[]; onSelect: (id: T) => void;
+}) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      {groups.map((g) => (
+        <div key={g.title} style={{ marginBottom: 10 }}>
+          <div style={{ ...subhead, marginBottom: 5 }}>{g.title}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+            {g.items.map((t) => (
+              <button key={t.id} onClick={() => onSelect(t.id)} className="mono"
+                style={{ fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textAlign: 'left', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '11px 10px', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SideNav<T extends string>({ groups, active, onSelect }: {
   groups: NavGroup<T>[]; active: T; onSelect: (id: T) => void;
 }) {

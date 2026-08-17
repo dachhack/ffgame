@@ -35,7 +35,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavSelect, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -877,6 +877,11 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
+  // HUB-FIRST on phones (v0.259.0): with no explicit landing tab, a narrow
+  // screen opens on the MAP of destinations rather than inside one of them.
+  // An explicit defaultTab (post-create → the draft room) still lands direct.
+  const [showHub, setShowHub] = useState<boolean>(() =>
+    !defaultTab && typeof window !== 'undefined' && !window.matchMedia('(min-width: 900px)').matches);
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   const wide = useWide();
   // roster_id → team name, from members (drives readable matchup labels).
@@ -1097,7 +1102,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       title: 'RUN THE SEASON',
       items: [
         ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
-        { id: 'members', label: 'MEMBERS' },
+        { id: 'members', label: '👥 SEATS' },   // the app has always called them SEATS; one name now
         { id: 'coin', label: '◈ DRIP COIN' },
         { id: 'ready', label: 'PICKS' },
         { id: 'matchups', label: 'MATCHUPS' },
@@ -1174,10 +1179,24 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {/* Desktop gets the grouped rail; narrow screens keep the scrolling strip.
           Both drive the same `tab` state, so a destination behaves identically
           either way. */}
-      {!wide && <NavSelect groups={navGroups} active={tab} onSelect={showTab} />}
-      <div style={wide ? { display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' } : undefined}>
+      {/* Narrow: the HUB is the nav (v0.259.0) — the whole map, one tap in,
+          "⊞ all settings" back out. The 17-option select it replaces survives
+          nowhere; the hub IS the select, laid flat. */}
+      {!wide && showHub && <NavHub groups={navGroups} onSelect={(id) => { showTab(id); setShowHub(false); }} />}
+      {!wide && !showHub && (
+        <button onClick={() => setShowHub(true)} className="mono"
+          style={{ marginTop: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>
+          ⊞ ALL SETTINGS · {navGroups.flatMap((g) => g.items).find((i) => i.id === tab)?.label ?? tab}
+        </button>
+      )}
+      <div style={wide ? { display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' } : (showHub ? { display: 'none' } : undefined)}>
         {wide && <SideNav groups={navGroups} active={tab} onSelect={showTab} />}
-        <div style={wide ? { flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 } : undefined}>
+        {/* The narrow panel is OVERFLOW-SAFE (v0.259.0): these panels were
+            designed at desktop width, and a wide grid pinched into 375px used
+            to push the whole card off the screen edge — the founder's
+            "settings card nearly flowing over" report. Wide content now
+            scrolls inside its own box; the page never scrolls sideways. */}
+        <div style={wide ? { flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 } : { overflowX: 'auto', minWidth: 0 }}>
 
       {/* Caller-injected panels (CommishDash's settings / activity / power-ups). */}
       {panels?.[tab] !== undefined && panels[tab]}
