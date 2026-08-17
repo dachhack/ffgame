@@ -88,19 +88,40 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
   );
 }
 
+/** The round portrait, with the team code as its fallback — a missing headshot
+ *  costs the picture, never the row. Module level: it is used by BoardCell, the
+ *  setter and the picker, and defining it inside the screen made React treat it
+ *  as a new component type on every render. */
+function Face({ slug, size = 26 }: { slug: string; size?: number }) {
+  const t = useTheme();
+  const uri = headshot(slug);
+  return uri
+    ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg }} />
+    : (
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <Mono size={7} tone="faint">{slugMeta(slug).team || '?'}</Mono>
+      </View>
+    );
+}
+
 /** A player on one side of a row, mirrored so both read outward from the pill. */
 function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
   const t = useTheme();
   const right = align === 'right';
   if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
   return (
-    <View style={{ flex: 1, minWidth: 0 }}>
+    // The face on the OUTER edge, so both sides read outward from the pill the
+    // same way the names and scores do.
+    <View style={{ flex: 1, minWidth: 0, flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 7 }}>
+      <Face slug={e.slug} size={28} />
+      <View style={{ flex: 1, minWidth: 0 }}>
       <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
       <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
         <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
+      </View>
     </View>
   );
 }
@@ -447,13 +468,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   // Totals now come from the board (same arithmetic, plus projections and
   // empty-spot handling); the fallback grid below computes its own inline.
-
-  const Face = ({ slug, size = 26 }: { slug: string; size?: number }) => {
-    const uri = headshot(slug);
-    return uri
-      ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg }} />
-      : <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}><Mono size={7} tone="faint">{slugMeta(slug).team || '?'}</Mono></View>;
-  };
 
   const slotDef = pickerSlot ? slotDefs.find((d) => d.slot === pickerSlot) : null;
 
