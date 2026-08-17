@@ -1,14 +1,13 @@
-// One NFL game's live field + full play log, as its own page (v0.270.0,
-// founder: "clicking on a game line would open the field with a play log on a
-// new window"). Reached at #/field/<week>/<team> — self-contained by design so
-// classic boards can window.open it: week + team locate the game feed, no
-// league state involved, and a refresh in that window just reloads the game.
+// One NFL game's live field + full play log (v0.270.0; a CARD since v0.271.0
+// — founder: "not a new tab on the web, just a card"). Self-contained: week +
+// team locate the game feed, no league state involved, so the classic board
+// can drop it into a modal card and it runs itself.
 //
 // Feed resolution mirrors the boards': the worker's live game_feed rows are
 // installed as the week's EXCLUSIVE overlay (a live week must never fall
 // through to baked 2025 drives — a plausible, wrong field); only when the
 // server has no rows at all does the baked JSON load, which is what serves the
-// 2025 demo weeks. Polls on a 45s cadence — the page's whole job is "what is
+// 2025 demo weeks. Polls on a 45s cadence — this card's whole job is "what is
 // happening in this game right now".
 import { useEffect, useMemo, useState } from 'react';
 import { FieldView } from '../app/FieldView';
@@ -25,7 +24,7 @@ const fmtQClock = (c: number): string => {
   return `Q${q} ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
 };
 
-export function FieldGame({ week, team }: { week: number; team: string }) {
+export function FieldGame({ week, team, onClose }: { week: number; team: string; onClose?: () => void }) {
   // Bumped whenever a load lands — the feed lives in a module cache React
   // cannot see, so this is what ties the page to fresh plays.
   const [feedsAt, setFeedsAt] = useState(0);
@@ -57,12 +56,20 @@ export function FieldGame({ week, team }: { week: number; team: string }) {
   };
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 12px 40px' }}>
+    // Hosted in a card (onClose set) the wrapper owns width and padding;
+    // standalone it centers itself like a page.
+    <div style={onClose ? undefined : { maxWidth: 640, margin: '0 auto', padding: '14px 12px 40px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
         <span className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
           {feed ? <>{logo(feed.away)} {feed.away} @ {feed.home} {logo(feed.home)}</> : `${team} · GAME FIELD`}
         </span>
-        <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{wkLabel} · LIVE</span>
+        <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', letterSpacing: '0.1em', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {wkLabel} · LIVE
+          {onClose && (
+            <button onClick={onClose} aria-label="close" className="mono"
+              style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 14, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
+          )}
+        </span>
       </div>
 
       {!ready && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', padding: '30px 0', textAlign: 'center' }}>Loading the game feed…</div>}

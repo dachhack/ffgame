@@ -29,6 +29,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill } from '../app/ui';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
+import { FieldGame } from './FieldGame';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
  *
@@ -49,7 +50,7 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
     padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
     flexDirection: right ? 'row-reverse' : 'row',
     // A game line with a feed is a DOOR (v0.270.0): it opens that game's live
-    // field + play log in its own window.
+    // field + play log as a card over the board.
     ...(onOpen ? { cursor: 'pointer' } : {}),
   };
   if (!e) return <div style={{ ...box, opacity: 0.5 }}><span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>—</span></div>;
@@ -57,7 +58,7 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
   const pre = e.state === 'pre';
   const roof = e.roof && e.roof !== 'open' ? e.roof : null;
   return (
-    <div style={box} onClick={onOpen} title={onOpen ? "open this game's live field + play log in a new window" : undefined}>
+    <div style={box} onClick={onOpen} title={onOpen ? "open this game's live field + play log" : undefined}>
       <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
         <div className="mono" style={{ fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {bye ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed')}
@@ -66,7 +67,7 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
         </div>
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>
           {bye ? 'No game this week' : e.state === 'done' ? 'Final' : e.state === 'live' ? 'In progress' : 'Yet to play'}
-          {onOpen && <span style={{ color: 'var(--you)', marginLeft: 5 }}>▦ field ↗</span>}
+          {onOpen && <span style={{ color: 'var(--you)', marginLeft: 5 }}>▦ field</span>}
         </div>
       </div>
       {/* NO "proj" LABEL (founder, v0.241.0): the number alone. Before kickoff
@@ -247,6 +248,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // setLiveGameFeed writes a module cache React cannot see, and the row count
   // here is what ties the fields to a re-render when the feeds land.
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  // One game's field + play log, as a CARD over the board (v0.271.0 — the
+  // founder walked back v0.270.0's new tab: "just a card"). Team abbr locates
+  // the game.
+  const [fieldGame, setFieldGame] = useState<string | null>(null);
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
 
   useEffect(() => {
@@ -340,10 +345,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     const t = window.setInterval(() => setNowTs(Date.now()), 30_000);
     return () => window.clearInterval(t);
   }, []);
-  // Escape closes the picker — a dialog you can only dismiss with a mouse is a
-  // dialog a keyboard user is stuck in.
+  // Escape closes the picker and the game-field card — a dialog you can only
+  // dismiss with a mouse is a dialog a keyboard user is stuck in.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickerSlot(null); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPickerSlot(null); setFieldGame(null); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -572,14 +577,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     }
     return list;
   }, [matchup, board, gameFeeds]);
-  /** A game line's opener — that game's live field + play log in a NEW WINDOW
-   *  (#/field/<week>/<team> is self-contained, so the tab stands alone).
-   *  Offered only when the game has a published feed, so the door never opens
-   *  onto nothing. */
+  /** A game line's opener — that game's live field + play log as a card over
+   *  the board (the same dismissal grammar as the picker: backdrop, ✕,
+   *  Escape). Offered only when the game has a published feed, so the door
+   *  never opens onto nothing. */
   const fieldOpener = (e: BoardEntry | null): (() => void) | undefined => {
     if (!e?.team || !matchup || !gameFeeds.length || !gameFeedFor(matchup.week, e.team)) return undefined;
-    const url = `${window.location.pathname}#/field/${matchup.week}/${encodeURIComponent(e.team)}`;
-    return () => { window.open(url, '_blank', 'noopener'); };
+    const team = e.team;
+    return () => setFieldGame(team);
   };
 
   /** The next kickoff that will freeze one of MY spots — the honest
@@ -1015,6 +1020,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           along for free. */}
       {fieldsOpen && matchup && (
         <FieldBoard week={matchup.week} entries={fieldEntries} onClose={() => setFieldsOpen(false)} />
+      )}
+
+      {/* ── ONE GAME'S FIELD + PLAY LOG, as a card over the board ──────────
+          The picker's pattern exactly: backdrop, ✕, Escape. FieldGame is
+          self-contained (loads and polls its own feed), so the card just
+          hosts it. */}
+      {fieldGame && matchup && (
+        <div onClick={() => setFieldGame(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ ...card, width: '100%', maxWidth: 560, maxHeight: '86vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
+            <FieldGame week={matchup.week} team={fieldGame} onClose={() => setFieldGame(null)} />
+          </div>
+        </div>
       )}
 
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.6 }}>
