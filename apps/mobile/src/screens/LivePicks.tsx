@@ -816,13 +816,25 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         </View>
       </View>
 
-      {/* Two doors to the same sheet. No open/closed state on them: the sheet
+      {/* Three doors, three sheets. No open/closed state on them: a sheet
           covers the board, so a highlight underneath it could never be seen.
-          Each label carries its own side's colour, which is the only thing that
-          needs distinguishing here. */}
+          Each roster label carries its own side's colour — the only thing
+          that needs distinguishing; ▦ FIELDS (back on the board by founder's
+          call — the league-menu tile stays as the second way in) opens the
+          all-fields sheet. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        {/* ▦ FIELDS lives on the league menu now (founder's call) — the
-            board keeps just the two roster doors here. */}
+        <Pressable
+          onPress={() => { tap(); setFieldsOpen(true); }}
+          android_ripple={{ color: alpha(t.you, 16) }}
+          style={({ pressed }) => ({
+            flex: 0.6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10,
+            overflow: 'hidden',
+            backgroundColor: t.surface, opacity: pressed ? 0.8 : 1,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+          })}
+        >
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.dim }}>▦ FIELDS</Text>
+        </Pressable>
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable
             key={side}

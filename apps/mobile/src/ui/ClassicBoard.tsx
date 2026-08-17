@@ -16,17 +16,19 @@ import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, friendlyError, playerFlags, leaguePoolExp,
-  type LiveMatchup, type PoolPlayer, type TeamInfo,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp,
+  type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 import { Overlay } from './Overlay';
+import { FieldView } from './FieldView';
 
 /** One team in the scoreboard: crest, name, record + seed, and the headline
  *  number.
@@ -104,8 +106,10 @@ function Face({ slug, size = 26 }: { slug: string; size?: number }) {
     );
 }
 
-/** A player on one side of a row, mirrored so both read outward from the pill. */
-function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
+/** A player on one side of a row, mirrored so both read outward from the pill.
+ *  `onGame` makes the game line its own tap target — into the live field +
+ *  play log for that NFL game — without stealing the row's picker tap. */
+function BoardCell({ e, align, onGame }: { e: BoardEntry | null; align: 'left' | 'right'; onGame?: () => void }) {
   const t = useTheme();
   const right = align === 'right';
   if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
@@ -127,9 +131,17 @@ function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right'
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
-      <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
-        {`${line}${roofMark(e)}`}
-      </Text>
+      {onGame ? (
+        <Pressable hitSlop={6} onPress={() => { tap(); onGame(); }} style={{ alignSelf: right ? 'flex-end' : 'flex-start' }}>
+          <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: t.you, textAlign: right ? 'right' : 'left' }}>
+            {right ? `▸ ${line}${roofMark(e)}` : `${line}${roofMark(e)} ▸`}
+          </Text>
+        </Pressable>
+      ) : (
+        <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
+          {`${line}${roofMark(e)}`}
+        </Text>
+      )}
     </View>
   );
 }
@@ -169,6 +181,13 @@ const fmtKick = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
+/** "Q2 8:41" from game-elapsed seconds — the play log's clock column (the same
+ *  arithmetic FieldView uses for its score strip). */
+const fmtQClock = (c: number): string => {
+  if (c >= 3600) { const rem = 600 - ((c - 3600) % 600); return `OT ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`; }
+  const q = Math.floor(c / 900) + 1; const rem = 900 - (c % 900);
+  return `Q${q} ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
+};
 
 export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; leagueId: string; rosterId: number }) {
   const t = useTheme();
@@ -206,6 +225,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
+  // ▦ FIELDS (v0.270.0): the all-fields sheet, and one game's field + play log
+  // (opened from a tapped game line). gameFeeds is state — not just the module
+  // cache — because setLiveGameFeed writes a map React cannot see; the row
+  // count here is what ties the fields to a re-render when the feeds land.
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldGame, setFieldGame] = useState<string | null>(null); // team abbr locating the game
+  const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
   // MATCHUP BOARD inputs (v0.229.0) — same three optional reads the web board
   // takes. Each degrades to a quieter row, never to a blank board.
   const [slate, setSlate] = useState<{ home: string; away: string; kickoff?: string | null }[]>([]);
@@ -309,7 +335,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
-        const [rev, rows] = await Promise.all([getRevealedPicks(matchup.id), weekLivePlays(matchup.week)]);
+        const [rev, rows, gf] = await Promise.all([
+          getRevealedPicks(matchup.id), weekLivePlays(matchup.week),
+          weekGameFeeds(matchup.week).catch(() => [] as GameFeedRow[]),
+        ]);
         if (stop) return;
         const opp: Record<string, string> = {};
         for (const p of rev) {
@@ -318,6 +347,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         }
         setTheirs(opp);
         setLivePlays(matchup.week, liveRowsToPbp(rows));
+        // Install the week's per-game feeds so gameFeedFor() resolves — same
+        // exclusivity rule as the drip board: a live week must never fall
+        // through to baked 2025 drives, which would draw a plausible, wrong
+        // field. Empty rows install an empty overlay, deliberately.
+        setLiveGameFeed(matchup.week, feedRowsToWeek(gf));
+        setGameFeeds(gf);
         setPlaysAt(Date.now());
       } catch { /* transient — next tick retries */ }
     };
@@ -490,6 +525,32 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     });
   }, [matchup, rosterId, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
+  // ── ▦ FIELDS (v0.270.0) ──────────────────────────────────────────────────
+  /** Every NFL game with a STARTER on either side, deduped by game — the
+   *  all-fields sheet's list. gameFeeds (state) is the re-render tie. */
+  const fieldGames = useMemo(() => {
+    if (!matchup || !board || !gameFeeds.length) return [] as { key: string; away: string; home: string; team: string }[];
+    const seen = new Set<string>();
+    const out: { key: string; away: string; home: string; team: string }[] = [];
+    const add = (e: BoardEntry | null) => {
+      if (!e?.team) return;
+      const f = gameFeedFor(matchup.week, e.team);
+      if (!f || seen.has(f.key)) return;
+      seen.add(f.key);
+      out.push({ key: f.key, away: f.away, home: f.home, team: e.team });
+    };
+    for (const row of board.starters) { add(row.home); add(row.away); }
+    return out;
+  }, [matchup, board, gameFeeds]);
+  /** A game line's tap handler — only when that game has a published feed, so
+   *  the line never opens onto an empty sheet. */
+  const gameOpener = (e: BoardEntry | null): (() => void) | undefined => {
+    if (!e?.team || !matchup || !gameFeeds.length || !gameFeedFor(matchup.week, e.team)) return undefined;
+    const team = e.team;
+    return () => setFieldGame(team);
+  };
+  const fieldFeed = fieldGame && matchup ? gameFeedFor(matchup.week, fieldGame) : null;
+
   /** The next kickoff that will freeze one of MY spots — the honest
    *  replacement for a league-wide lock time that no longer exists. */
   const nextLockLabel = useMemo(() => {
@@ -600,9 +661,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   return (
     <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
-      <Mono size={9} tone="faint" track={0.1} style={{ textAlign: 'center' }}>
-        CLASSIC · WEEK {matchup?.week} · {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? 'HALF PPR' : 'NON-PPR'}
-      </Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+        <Mono size={9} tone="faint" track={0.1}>
+          CLASSIC · WEEK {matchup?.week} · {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? 'HALF PPR' : 'NON-PPR'}
+        </Mono>
+        {/* ▦ FIELDS (founder) — the same all-fields idea the drip board has,
+            fed by classic's starters. Only offered once feeds exist: a chip
+            into an empty sheet would read as broken. */}
+        {fieldGames.length > 0 && <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />}
+      </View>
 
       {/* ── SCOREBOARD (v0.229.0) ─────────────────────────────────────────
           The web board's header, in RN. Pre-lock the projection half stays
@@ -669,7 +736,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 <Pressable key={row.slot}
                   onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                  {row.home ? <BoardCell e={row.home} align="left" />
+                  {row.home ? <BoardCell e={row.home} align="left" onGame={gameOpener(row.home)} />
                     : <View style={{ flex: 1 }}>
                         <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
                         {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
@@ -684,7 +751,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                     {scoreOf(row.away)}
                   </Mono>
-                  <BoardCell e={row.away} align="right" />
+                  <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)} />
                 </Pressable>
               );
             })}
@@ -710,7 +777,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   const a = board[k].away[i] ?? null;
                   return (
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                      {h ? <BoardCell e={h} align="left" /> : <View style={{ flex: 1 }} />}
+                      {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)} /> : <View style={{ flex: 1 }} />}
                       <Mono size={11} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>
                         {h ? scoreOf(h) : ''}
                       </Mono>
@@ -718,7 +785,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       <Mono size={11} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                         {a ? scoreOf(a) : ''}
                       </Mono>
-                      {a ? <BoardCell e={a} align="right" /> : <View style={{ flex: 1 }} />}
+                      {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)} /> : <View style={{ flex: 1 }} />}
                     </View>
                   );
                 })}
@@ -850,6 +917,66 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             </ScrollView>
           );
         })()}
+      </Overlay>
+
+      {/* ── ▦ ALL FIELDS, in a sheet (v0.270.0) ────────────────────────────
+          Every NFL game with a starter on either side, one live drive chart
+          each — the drip board's all-fields sheet, fed by classic's lineup.
+          Tapping a field goes deeper: it closes this sheet and opens that
+          game's field + full play log (stacked Modals are flaky on Android,
+          so the sheets take turns instead). */}
+      <Overlay
+        visible={fieldsOpen}
+        title="All fields"
+        subtitle="EVERY GAME WITH A STARTER · LIVE DRIVES"
+        onClose={() => setFieldsOpen(false)}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 30 }}>
+          {fieldGames.length === 0 && (
+            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No live games with starters yet.</Mono>
+          )}
+          {fieldGames.map((g) => (
+            <Pressable key={g.key} onPress={() => { tap(); setFieldsOpen(false); setFieldGame(g.team); }} style={{ gap: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                <Mono size={9.5} weight="700" track={0.08}>{g.away} @ {g.home}</Mono>
+                <Mono size={8} tone="faint">play log ▸</Mono>
+              </View>
+              <FieldView week={matchup?.week ?? 0} team={g.team} clock={Number.MAX_SAFE_INTEGER} />
+            </Pressable>
+          ))}
+        </ScrollView>
+      </Overlay>
+
+      {/* ── One game's field + PLAY LOG (v0.270.0, founder) ────────────────
+          Opened from a tapped game line (or a field above): the live drive
+          chart on top, then every play of the game newest first — quarter
+          clock, description, and the score after each scoring play. */}
+      <Overlay
+        visible={!!fieldGame}
+        title={fieldFeed ? `${fieldFeed.away} @ ${fieldFeed.home}` : 'Game field'}
+        subtitle="LIVE FIELD · FULL PLAY LOG"
+        onClose={() => setFieldGame(null)}>
+        {!!fieldGame && !!matchup && (
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 30 }}>
+            <FieldView week={matchup.week} team={fieldGame} clock={Number.MAX_SAFE_INTEGER} />
+            {!fieldFeed?.plays.length && (
+              <Mono size={10} tone="faint" style={{ marginTop: 12, textAlign: 'center' }}>No plays yet — the log fills in live.</Mono>
+            )}
+            {!!fieldFeed && [...fieldFeed.plays].reverse().map((p, i) => (
+              <View key={p.pid ?? `${p.c}-${i}`} style={{ flexDirection: 'row', gap: 8, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                <View style={{ width: 58 }}>
+                  <Mono size={8.5} tone="faint">{fmtQClock(p.c)}</Mono>
+                  <Mono size={8} tone="faint" style={{ marginTop: 1 }}>{p.tm}</Mono>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 11, lineHeight: 15, color: p.sc ? t.warn : p.to ? t.opp : t.text }}>{p.txt}</Text>
+                  {!!p.sc && (
+                    <Mono size={8.5} tone="warn" style={{ marginTop: 1 }}>{`${fieldFeed.away} ${p.as} — ${p.hs} ${fieldFeed.home}`}</Mono>
+                  )}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
       </Overlay>
 
       {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
