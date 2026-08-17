@@ -431,6 +431,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // business. So classic asks its own question, and only when a side looks
     // unmanaged, which is at most one extra read per classic matchup.
     const storedBy = new Set();
+    let ruledOut;
     if (homePicks == null || awayPicks == null) {
       const uids = [homeMem?.app_user_id, awayMem?.app_user_id].filter(Boolean);
       if (uids.length) {
@@ -439,6 +440,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
           .eq('matchup_id', matchup.id).eq('game_window', CLASSIC_WIN).in('app_user_id', uids);
         for (const r of anyRows ?? []) storedBy.add(r.app_user_id);
       }
+      // An unmanaged seat's computed lineup should bench a player ruled OUT —
+      // the one correction no manager exists to make (v0.252.0). injury_status
+      // is the worker's own ESPN poll; O/IR only, same bar as the auto-slot.
+      const { data: injRows } = await db().from('injury_status')
+        .select('player_slug').in('status', ['O', 'IR']);
+      ruledOut = new Set((injRows ?? []).map((r) => r.player_slug));
     }
     const hasRows = (picks, rosterId) => picks != null
       || storedBy.has(byRoster.get(rosterId)?.app_user_id);
@@ -471,6 +478,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       hasLineup: hasRows(picks, rosterId),
       roster: rosters.get(rosterId) ?? [],
       bestball,
+      ruledOut,
     });
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,

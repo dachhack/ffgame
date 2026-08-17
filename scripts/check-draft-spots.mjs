@@ -17,7 +17,7 @@
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy, isRetSlot,
-  optimalLineup, autoSlotPlan, classicLineup,
+  optimalLineup, autoSlotPlan, classicLineup, slateAwareProj,
 } from '../packages/core/src/engine/classic';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
@@ -634,6 +634,53 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     ok('the fallback leaves best-ball spots to best ball', got.S1 === 'josh-allen', got);
     ok('…and never starts one player in two spots',
       new Set(Object.values(got)).size === Object.values(got).length, got);
+  }
+}
+
+// ── What a player is WORTH to an auto-fill (v0.252.0) ──────────────────────
+// PROJ_2026 is a season constant — it knows neither byes nor Friday's injury
+// report, so every fill that ranked by it raw would seat a 20-point projection
+// who is guaranteed to score zero. slateAwareProj zeroes him — but only on
+// EVIDENCE, under the same no-guess rule as isBye and slotAllows. The cases
+// that earn their keep are the claims it must NOT make.
+{
+  const wk1 = [{ home: 'BUF', away: 'IND' }, { home: 'LA', away: 'SF' }, { home: 'WAS', away: 'DAL' }];
+  const v = slateAwareProj(1, wk1);
+  ok('a playing player keeps his projection', v({ id: 'josh-allen', team: 'BUF' }) === 23.5);
+  ok('a KNOWN team absent from a LOADED slate is a bye — worth zero',
+    v({ id: 'jonathan-taylor', team: 'KC' }) === 0);
+  // The relocation-code trap: the pool says LAR/WSH where the slate says
+  // LA/WAS. Un-normalized, every Rams player would read as a phantom bye.
+  ok('LAR finds the slate\u2019s LA — no phantom bye', v({ id: 'puka-nacua', team: 'LAR' }) === 21.4);
+  ok('WSH finds the slate\u2019s WAS the same way', v({ id: 'jayden-daniels', team: 'WSH' }) === 18.1);
+  ok('an UNKNOWN team is never a bye — no team, no claim',
+    v({ id: 'josh-allen', team: '' }) === 23.5 && v({ id: 'josh-allen', team: null }) === 23.5);
+  ok('an EMPTY slate zeroes nobody', slateAwareProj(1, [])({ id: 'josh-allen', team: 'KC' }) === 23.5);
+
+  // RULED OUT is the caller's own predicate — deliberately never injuryFor by
+  // default, because that helper's baked-2025 fallback is exactly the server's
+  // resting state and would bench 2026 players for last year's injuries.
+  const out = slateAwareProj(1, wk1, (slug) => slug === 'josh-allen');
+  ok('a ruled-out player is worth zero', out({ id: 'josh-allen', team: 'BUF' }) === 0);
+  ok('…and his healthy teammate is untouched', out({ id: 'jayden-daniels', team: 'WAS' }) === 18.1);
+  ok('no predicate means no injury claim', v({ id: 'josh-allen', team: 'BUF' }) === 23.5);
+
+  // No explicit slate → the module slate (runtime override, else baked 2025 —
+  // correct for exactly the 2025 replay path that uses it). Week 99 has no
+  // slate at all, so nothing can be proven and nobody is zeroed.
+  ok('a week with NO slate loaded zeroes nobody',
+    slateAwareProj(99)({ id: 'josh-allen', team: 'XX' }) === 23.5);
+
+  // The integration that motivated all of this: the fill benches a bigger
+  // projection on bye for a smaller one who actually plays.
+  {
+    const s = spots({ pos: ['RB'] });
+    const plan = autoSlotPlan(s, [], {}, [
+      { id: 'jonathan-taylor', pos: 'RB', team: 'KC', exp: 5 },   // 20.0, but on bye
+      { id: 'omarion-hampton', pos: 'RB', team: 'BUF', exp: 0 },  // 15.1, playing
+    ], v);
+    ok('the fill benches a 20-point bye for a 15-point player who plays',
+      plan.length === 1 && plan[0].player === 'omarion-hampton', plan);
   }
 }
 

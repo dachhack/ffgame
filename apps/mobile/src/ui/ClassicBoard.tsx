@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
@@ -348,6 +348,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
+  // What a player is WORTH to the auto-fills (v0.252.0): the projection,
+  // zeroed for a proven bye (this board's own slate) or a player ruled OUT
+  // (the live injury feed; O/IR only — Q and D still play too often to
+  // auto-bench). No slate or no feed means no claim, which is exactly the old
+  // behavior — this can only ever bench someone on EVIDENCE.
+  const fillValue = useMemo(
+    () => slateAwareProj(matchup?.week ?? 1, slate, (slug) => {
+      const st = injuryFor(matchup?.week ?? 1, slug);
+      return st === 'O' || st === 'IR';
+    }),
+    [matchup, slate],
+  );
+
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.
   const effective = useMemo(() => {
@@ -370,7 +383,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       // stored NOTHING: a seat with rows is managed, and everything it stored
       // stands, empty spots included.
       if (!Object.keys(manual).length && ros.length) {
-        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, (pl) => PROJ_2026.get(pl.id) ?? 0)) {
+        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, fillValue)) {
           out[r.slot] = r.player;
           manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
         }
@@ -386,7 +399,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // never disagree about who is ALLOWED, just about who is best.
         const fills = locked
           ? bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)
-          : bestballFillBy(manualPicks, bestball, ros, slotDefs, (pl) => PROJ_2026.get(pl.id) ?? 0);
+          : bestballFillBy(manualPicks, bestball, ros, slotDefs, fillValue);
         for (const f of fills) out[f.slot] = f.player.id;
       }
       return out;
@@ -395,7 +408,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       mine: build(mine, pool.map((p) => p.slug)),
       theirs: build(theirs, oppPool.map((p) => p.slug)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(
@@ -548,11 +561,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const autoSlotted = useRef(false);
   useEffect(() => {
     if (autoSlotted.current || state !== 'ready' || locked || !matchup) return;
-    if (!setupReady || !stashReady || !pool.length || !slotDefs.length) return;
+    // The slate gates the WRITE path too (v0.252.0): rows written bye-blind
+    // would stand — a spot with a row is never revisited. The worker fills
+    // within a tick if the client never gets a slate.
+    if (!setupReady || !stashReady || !pool.length || !slotDefs.length || !slate.length) return;
     const roster = pool
       .filter((p) => !stashed.has(p.slug))                       // taxi/IR: the DB would refuse the row
       .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }));
-    const plan = autoSlotPlan(slotDefs, bestball, mine, roster, (p) => PROJ_2026.get(p.id) ?? 0);
+    const plan = autoSlotPlan(slotDefs, bestball, mine, roster, fillValue);
     autoSlotted.current = true;
     if (!plan.length) return;
     // Deliberately NOT applyMove: this is not something the manager did, so it
@@ -570,7 +586,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         return next;
       });
     }).catch(() => {});
-  }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap]);
+  }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
 
   if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
