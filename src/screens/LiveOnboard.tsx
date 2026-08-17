@@ -1118,8 +1118,9 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
             {e.comanager && <span className="mono" title="you steer this team with its owner — one lineup, more thumbs" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⇄ CO-MANAGER</span>}
             {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
             {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
-            {/* dynasty (0184) — rosters carry over; keepers + rookie drafts + tradeable picks */}
-            {e.league?.dynasty && <span className="mono" title="Dynasty league — rosters carry into next season: keepers, a rookie draft, and tradeable future picks" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '2px 6px' }}>🏰 DYNASTY</span>}
+            {/* continuity (0184/0185) — what carries over: keepers, or the full dynasty kit */}
+            {e.league?.dynasty && <span className="mono" title="Dynasty league — rosters carry into next season: keepers, rookie drafts, and tradeable future picks" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '2px 6px' }}>🏰 DYNASTY</span>}
+            {e.league?.continuity === 'keeper' && <span className="mono" title="Keeper league — each team carries its declared keepers into next season" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '2px 6px' }}>★ KEEPER</span>}
             {/* Keyed to the week THIS CARD is showing, not to league.preseason_at:
                 a practice league rolls into WK 1 while the stamp is still set, and
                 badging a real matchup "practice" would be a lie about a game that

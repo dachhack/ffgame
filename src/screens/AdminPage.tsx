@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
@@ -14,8 +14,9 @@ import {
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
-  keeperState, setKeeperCount, rolloverLeague, type KeeperState,
-  setRookieRounds, pickAssets, type PickAssetRow,
+  keeperState, rolloverLeague, type KeeperState,
+  pickAssets, type PickAssetRow,
+  setLeagueContinuity, type LeagueContinuity,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -1301,6 +1302,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             </div>
           </div>
           )}
+          {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into
+              next season. Lives here per the founder ("put it in mode and
+              season"); the 🔁 NEXT SEASON panel shows the consequences. */}
+          {l.provider === 'native' && <ContinuityEditor leagueId={l.league_id} />}
           {/* Practice is a commissioner tool, not an admin errand — it's how a
               league's players get to rehearse the live loop before Week 1. */}
           <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />
@@ -2959,25 +2964,108 @@ function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; v
 // ── PLAYOFFS tab (native leagues, 0073): settings → standings/seeds →
 // bracket → champion. advance_playoffs is idempotent, so every load calls it
 // first — finished rounds roll forward without anyone pressing a button.
+// ── Continuity (0185): REDRAFT / KEEPER / DYNASTY, in MODE & SEASON ──────────
+// One selection; the number it needs appears beside it. Keeper takes a keeper
+// count; dynasty takes rookie-draft rounds (keepers implied: everyone else)
+// and deals every team's picks for the NEXT THREE SEASONS as tradeable assets.
+function ContinuityEditor({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<KeeperState | null>(null);
+  const [mode, setMode] = useState<LeagueContinuity>('redraft');
+  const [n, setN] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = async () => {
+    const s = await keeperState(leagueId);
+    if (s.error || !s.ok) { setMsg(s.error ?? 'could not load'); return; }
+    setSt(s);
+    const m = s.continuity ?? 'redraft';
+    setMode(m);
+    setN(m === 'keeper' ? String(s.keeper_count) : m === 'dynasty' ? String(s.rookie_rounds ?? 3) : '');
+  };
+  useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
+  if (!st) return null;
+
+  const rolled = !!st.rolled_league_id;
+  const pick = (m: LeagueContinuity) => {
+    if (busy || rolled) return;
+    setMode(m); setMsg(null);
+    setN(m === 'keeper' ? String(st.keeper_count || Math.min(4, st.roster_size - 1))
+       : m === 'dynasty' ? String(st.rookie_rounds || 3) : '');
+  };
+  const save = async () => {
+    if (busy || rolled) return;
+    const num = parseInt(n, 10);
+    if (mode !== 'redraft' && Number.isNaN(num)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await setLeagueContinuity(leagueId, mode, mode === 'redraft' ? null : num);
+      setMsg(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work'));
+      await load();
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const chipBtn = (m: LeagueContinuity, lbl: string) => (
+    <button onClick={() => pick(m)} disabled={busy || rolled} className="mono"
+      style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: rolled ? 'default' : 'pointer',
+        color: mode === m ? 'var(--on-accent)' : 'var(--dim)', background: mode === m ? 'var(--you)' : 'var(--bg)',
+        border: `1px solid ${mode === m ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 11px',
+        opacity: rolled ? 0.6 : 1 }}>{lbl}</button>
+  );
+
+  return (
+    <div>
+      <div style={subhead}>NEXT SEASON · CONTINUITY</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {chipBtn('redraft', 'REDRAFT')}
+        {chipBtn('keeper', '★ KEEPER')}
+        {chipBtn('dynasty', '🏰 DYNASTY')}
+        {mode === 'keeper' && <>
+          <input value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
+            disabled={busy || rolled} style={{ ...inp, width: 48, textAlign: 'center' }} />
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>keepers of {st.roster_size}</span>
+        </>}
+        {mode === 'dynasty' && <>
+          <input value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
+            disabled={busy || rolled} style={{ ...inp, width: 48, textAlign: 'center' }} />
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>rookie rounds / season</span>
+        </>}
+        <button onClick={save} disabled={busy || rolled} className="mono" style={{ ...btn, fontSize: 11.5 }}>save</button>
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        {rolled
+          ? 'This season already rolled over — continuity is set on the new league.'
+          : mode === 'redraft'
+            ? 'Every season starts fresh — a full draft, nothing carries over.'
+            : mode === 'keeper'
+              ? 'Each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen; undeclared seats keep their best-ranked.'
+              : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
 // ── Dynasty (0182): keepers + the rollover into next season ──────────────────
 // The rollover names the game it carries (v0.251.0 rule) — the confirm and the
 // success line both say DRIP or NORMAL out loud.
 function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: string | null }) {
   const [st, setSt] = useState<KeeperState | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
-  const [count, setCount] = useState('');
   const [rookieOnly, setRookieOnly] = useState(false);
   const [picks, setPicks] = useState<PickAssetRow[]>([]);
   const [futureSeason, setFutureSeason] = useState<string | null>(null);
-  const [rr, setRr] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const seeded = useRef(false);
   const load = async () => {
     const s = await keeperState(leagueId);
     if (s.error || !s.ok) { setMsg(s.error ?? 'could not load'); return; }
-    setSt(s); setCount(String(s.keeper_count));
+    setSt(s);
+    // a dynasty league's rollover IS the rookie draft — default the toggle on,
+    // once, leaving the commissioner's own flips alone afterward
+    if (!seeded.current) { seeded.current = true; setRookieOnly(s.continuity === 'dynasty'); }
     const a = await pickAssets(leagueId).catch(() => null);
-    if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); setRr(String(a.rookie_rounds)); }
+    if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); }
   };
   useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
   useEffect(() => {
@@ -2990,25 +3078,12 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
   const modeName = st.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP';
   const rolled = !!st.rolled_league_id;
   const drafted = st.draft_status === 'complete';
+  // the Super Bowl gate (0185): the rollover appears when the season is over
+  const canRoll = !!st.season_over || !!st.admin;
   const playerName = (s: string) => names[s] ?? s;
-  const saveCount = async () => {
-    const n = parseInt(count, 10);
-    if (busy || Number.isNaN(n)) return;
-    setBusy(true); setMsg(null);
-    try { const r = await setKeeperCount(leagueId, n); setMsg(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work')); await load(); }
-    catch (e) { setMsg(errMsg(e, 'failed')); }
-    finally { setBusy(false); }
-  };
-  const saveRookieRounds = async () => {
-    const n = parseInt(rr, 10);
-    if (busy || Number.isNaN(n)) return;
-    setBusy(true); setMsg(null);
-    try { const r = await setRookieRounds(leagueId, n); setMsg(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work')); await load(); }
-    catch (e) { setMsg(errMsg(e, 'failed')); }
-    finally { setBusy(false); }
-  };
   const teamNameOf = (rid: number) => st.teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
-  const futurePicks = picks.filter((p) => p.season === futureSeason);
+  const futurePicks = futureSeason == null ? [] : picks.filter((p) => p.season >= futureSeason);
+  const contName = st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
   const roll = async () => {
     if (busy || !st.next_season) return;
     const keeps = st.keeper_count > 0 ? `every team keeps its ${st.keeper_count} (declared first, best-ranked fill the rest), and the draft runs ${st.roster_size - st.keeper_count} rounds` : 'every roster redrafts in full';
@@ -3026,25 +3101,21 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
 
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {st.dynasty && (
-        <div>
-          <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 8px' }}>🏰 DYNASTY LEAGUE</span>
-          <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginLeft: 8 }}>rosters carry over — the settings below are what make it so</span>
-        </div>
-      )}
       <div>
-        <div style={subhead}>KEEPERS</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="mono" style={{ ...mono, fontSize: 12 }}>each team keeps</span>
-          <input value={count} onChange={(e) => setCount(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
-            disabled={busy || rolled} style={{ ...inp, width: 52, textAlign: 'center' }} />
-          <span className="mono" style={{ ...mono, fontSize: 12 }}>of {st.roster_size} into {st.next_season ?? 'next season'}</span>
-          <button onClick={saveCount} disabled={busy || rolled} className="mono" style={{ ...btn, fontSize: 11.5 }}>save</button>
-        </div>
-        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: st.continuity === 'redraft' ? 'var(--dim)' : 'var(--you)', border: `1px solid ${st.continuity === 'redraft' ? 'var(--bd)' : 'var(--you)'}`, borderRadius: 4, padding: '3px 8px' }}>{contName}{st.continuity !== 'redraft' ? ' LEAGUE' : ''}</span>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginLeft: 8 }}>
+          {st.continuity === 'redraft'
+            ? 'nothing carries over — switch under 🎮 MODE & SEASON'
+            : st.continuity === 'keeper'
+              ? `each team keeps ${st.keeper_count} of ${st.roster_size} — change under 🎮 MODE & SEASON`
+              : `${st.rookie_rounds ?? 0}-round rookie drafts · each team keeps ${st.keeper_count} of ${st.roster_size} — change under 🎮 MODE & SEASON`}
+        </span>
+      </div>
+      {st.keeper_count > 0 && (
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5 }}>
           Managers declare their keepers on their TEAM screen once the season’s draft is done. A seat that declares nothing keeps its best-ranked players automatically.
         </div>
-      </div>
+      )}
 
       {st.keeper_count > 0 && (
         <div>
@@ -3066,20 +3137,13 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
         </div>
       )}
 
-      <div>
-        <div style={subhead}>ROOKIE DRAFT PICKS{futureSeason ? ` · ${futureSeason}` : ''}</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="mono" style={{ ...mono, fontSize: 12 }}>next season’s rookie draft runs</span>
-          <input value={rr} onChange={(e) => setRr(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
-            disabled={busy} style={{ ...inp, width: 52, textAlign: 'center' }} />
-          <span className="mono" style={{ ...mono, fontSize: 12 }}>rounds</span>
-          <button onClick={saveRookieRounds} disabled={busy} className="mono" style={{ ...btn, fontSize: 11.5 }}>save</button>
-        </div>
-        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-          Setting rounds deals every team its picks — one per round — as TRADEABLE assets: they move in ordinary trades all season, and the rollover carries ownership into the draft. Shrinking refuses to delete a round holding a traded pick.
-        </div>
-        {futurePicks.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+      {futurePicks.length > 0 && (
+        <div>
+          <div style={subhead}>ROOKIE DRAFT PICKS · WHO OWNS WHAT</div>
+          <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+            Every team’s picks for the next three seasons, dealt as TRADEABLE assets — they move in ordinary trades, and the rollover carries ownership into each season’s rookie draft.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {st.teams.map((t) => {
               const owned = futurePicks.filter((p) => p.owner === t.roster_id);
               return (
@@ -3088,17 +3152,17 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
                   {owned.length === 0
                     ? <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--opp)' }}>traded every pick away</span>
                     : owned.map((p) => (
-                      <span key={`${p.round}:${p.orig}`} className="mono" style={{ ...chip, fontSize: 11 }}
+                      <span key={`${p.season}:${p.round}:${p.orig}`} className="mono" style={{ ...chip, fontSize: 11 }}
                         title={p.orig !== p.owner ? `acquired — originally ${teamNameOf(p.orig)}’s slot` : 'own pick'}>
-                        R{p.round}{p.orig !== p.owner ? ` ⇄ ${teamNameOf(p.orig)}` : ''}
+                        ’{p.season.slice(2)} R{p.round}{p.orig !== p.owner ? ` ⇄ ${teamNameOf(p.orig)}` : ''}
                       </span>
                     ))}
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div>
         <div style={subhead}>ROLL INTO {st.next_season ?? 'NEXT SEASON'}</div>
@@ -3110,12 +3174,22 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
           <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>
             The rollover opens once this season’s draft is complete.
           </div>
+        ) : !canRoll ? (
+          // the Super Bowl gate (0185): the option APPEARS when the season ends
+          <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5 }}>
+            🏈 The rollover opens after the Super Bowl{st.next_season ? ` (Feb 15, ${st.next_season})` : ''}. Keeper declarations and pick trades run all season — the roll into {st.next_season ?? 'next season'} appears here when the season is over.
+          </div>
         ) : (
           <>
             <label className="mono" style={{ ...mono, fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}>
               <input type="checkbox" checked={rookieOnly} onChange={(e) => setRookieOnly(e.target.checked)} disabled={busy} />
               rookie draft — next season’s pool is pinned to first-year players (reseed the pool from the draft room before starting it)
             </label>
+            {st.admin && !st.season_over && (
+              <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)', marginBottom: 6 }}>
+                ⚠ admin bypass — the season isn’t over yet; commissioners see this button after the Super Bowl
+              </div>
+            )}
             <button onClick={roll} disabled={busy} className="mono"
               style={{ ...btn, fontSize: 12, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', borderColor: 'var(--you)' }}>
               {busy ? '…' : `🔁 ROLL INTO ${st.next_season ?? '—'} · ${modeName}`}

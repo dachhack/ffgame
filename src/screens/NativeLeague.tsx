@@ -29,7 +29,7 @@ import {
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   keeperState, setKeepers, type KeeperState,
-  pickAssets, type PickAssetRow,
+  pickAssets, type PickAssetRow, type LeagueContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
@@ -126,8 +126,13 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
   // season behind it, so it drafts the drip shape without asking.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
-  // DYNASTY (0184): an identity on top of either game, not a third game.
-  const [dynasty, setDynasty] = useState(false);
+  // CONTINUITY (0185): what carries into next season — an axis on top of
+  // either game, not a third game. Keeper takes a keeper count; dynasty takes
+  // rookie-draft rounds (keepers implied: everyone else) and deals three
+  // seasons of tradeable picks at creation.
+  const [continuity, setContinuity] = useState<LeagueContinuity>('redraft');
+  const [keepN, setKeepN] = useState(4);      // keeper: how many each team keeps
+  const [rookieN, setRookieN] = useState(3);  // dynasty: rookie-draft rounds
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -191,9 +196,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // The busy note NAMES the game, so the moment of creation says what is
       // being created — the last chance to notice a wrong tap before it
       // freezes at the draft.
-      setNote(`Creating your ${dynasty ? '🏰 DYNASTY ' : ''}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+      setNote(`Creating your ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
-        mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame, dynasty);
+        mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame,
+        continuity, continuity === 'keeper' ? keepN : continuity === 'dynasty' ? rookieN : null);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -255,20 +261,37 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
                   : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
             </div>
-            {/* DYNASTY (0184): an identity, not a mode — checking it presets
-                keepers (roster − 3) and a 3-round rookie draft and deals the
-                first tradeable picks. Everything stays editable in the 🔁
-                NEXT SEASON panel, so this is one question, not four. */}
+            {/* CONTINUITY (0185): redraft / keeper / dynasty. One selection;
+                the number it needs appears with it. Editable any time in
+                🎮 MODE & SEASON. */}
             <div style={{ height: 14 }} />
-            <label className="mono" style={{ ...label, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', letterSpacing: 'normal', fontSize: 12, color: 'var(--text)' }}>
-              <input type="checkbox" checked={dynasty} onChange={(e) => setDynasty(e.target.checked)} />
-              <span>🏰 <b>DYNASTY</b> — rosters carry over season to season</span>
-            </label>
-            {dynasty && (
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
-                Each team keeps {Math.max(1, rounds - 3)} of its {rounds} players into next season and drafts rookies in a 3-round rookie draft — with every future pick a tradeable asset from day one. Adjustable any time in 🔁 NEXT SEASON.
+            <div className="mono" style={label}>NEXT SEASON</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              <Chip on={continuity === 'redraft'} onClick={() => setContinuity('redraft')}>REDRAFT</Chip>
+              <Chip on={continuity === 'keeper'} onClick={() => setContinuity('keeper')}>★ KEEPER</Chip>
+              <Chip on={continuity === 'dynasty'} onClick={() => setContinuity('dynasty')}>🏰 DYNASTY</Chip>
+            </div>
+            {continuity === 'keeper' && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>each team keeps</span>
+                {num(keepN, setKeepN, 1, rounds - 1, 1)}
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>of {rounds} into next season</span>
               </div>
             )}
+            {continuity === 'dynasty' && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>rookie draft runs</span>
+                {num(rookieN, setRookieN, 1, Math.min(5, rounds - 1), 1)}
+                <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>rounds each season</span>
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+              {continuity === 'redraft'
+                ? 'Every season starts fresh — full draft, nothing carries over.'
+                : continuity === 'keeper'
+                  ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
+                  : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
+            </div>
             <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
             <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}
@@ -327,7 +350,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? '🤖 START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
-            : `CREATE ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
+            : `CREATE ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
@@ -1820,9 +1843,10 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     pickAssets(leagueId).then((a) => {
-      // only the future season's picks are tradeable; a rolled league's
-      // pending-draft assets show in the draft room, not here
-      if (a.ok) setAssets(a.picks.filter((p) => p.season === a.future_season));
+      // every FUTURE season's picks are tradeable (dynasty holds a 3-year
+      // horizon, 0185); a rolled league's pending-draft assets belong to the
+      // draft room, not here
+      if (a.ok && a.future_season != null) setAssets(a.picks.filter((p) => p.season >= a.future_season!));
     }),
   ]).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -1831,8 +1855,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
-  const samePick = (a: { round: number; orig: number }, b: { round: number; orig: number }) =>
-    a.round === b.round && a.orig === b.orig;
+  const samePick = (a: PickAssetRow, b: PickAssetRow) =>
+    a.season === b.season && a.round === b.round && a.orig === b.orig;
   const togglePick = (list: PickAssetRow[], set: (v: PickAssetRow[]) => void, p: PickAssetRow) =>
     set(list.some((x) => samePick(x, p)) ? list.filter((x) => !samePick(x, p)) : [...list, p]);
   /** "2027 R1" — plus whose original slot it is when it was acquired. */
@@ -1879,8 +1903,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     setBusy(true); setErr(null);
     try {
       const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
-        givePicks.map((p) => ({ round: p.round, orig: p.orig })),
-        getPicks.map((p) => ({ round: p.round, orig: p.orig })));
+        givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
+        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })));
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
       await load();
@@ -1909,7 +1933,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
         {owned.map((a) => {
           const on = sel.some((x) => samePick(x, a));
           return (
-            <button key={`${a.round}:${a.orig}`} onClick={() => togglePick(sel, set, a)} className="mono"
+            <button key={`${a.season}:${a.round}:${a.orig}`} onClick={() => togglePick(sel, set, a)} className="mono"
               style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
               <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400 }}>
                 {on ? '☑' : '☐'} {pickLabel(a, a.owner)}
