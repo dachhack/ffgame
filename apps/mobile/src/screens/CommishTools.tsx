@@ -1409,9 +1409,23 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   };
   // A fresh responder object each render is fine: the grip VIEW is stable
   // (key = sp.k) and RN re-binds its handler props, which read the refs above.
+  //
+  // THE FOUR EXTRA FLAGS ARE THE FIX for "it just ends up down one spot no
+  // matter what" (founder, on-device): inside a ScrollView, Android intercepts
+  // any moving vertical touch — the drag survived exactly long enough for the
+  // first fast movement to cross one row, then the sheet's scroll stole the
+  // responder and the gesture silently died. So the grip must (a) claim the
+  // touch in the CAPTURE phase, before the scroller sees it, (b) REFUSE
+  // termination requests for the touch's whole life, and (c) block the native
+  // scroll component from taking over on Android. The scrollEnabled freeze
+  // (onDragActive) stays as the second line of defence.
   const gripPan = (i: number, k: number) => PanResponder.create({
     onStartShouldSetPanResponder: () => !busy,
+    onStartShouldSetPanResponderCapture: () => !busy,
     onMoveShouldSetPanResponder: () => !busy,
+    onMoveShouldSetPanResponderCapture: () => !busy,
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
     onPanResponderGrant: () => liftRow(i, k),
     onPanResponderMove: (_e, g) => moveRow(g.dy),
     onPanResponderRelease: dropRow,
