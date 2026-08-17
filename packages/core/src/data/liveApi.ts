@@ -1476,18 +1476,25 @@ export const commishMovePlayer = (leagueId: string, slug: string, toRoster: numb
 export const commishRemovePlayer = (leagueId: string, slug: string, waive = true) =>
   rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive });
 
+/** A tradeable draft pick (0183): season + round + the seat whose slot it is. */
+export interface TradePick { season: string; round: number; orig: number; }
 export interface TradeRow {
   id: string; from_roster: number; to_roster: number; give: string[]; get: string[];
+  give_picks?: TradePick[]; get_picks?: TradePick[];
   status: 'pending' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'vetoed';
   note: string | null; created_at: string; resolved_at: string | null;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
-export const proposeTrade = (leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string) =>
+export const proposeTrade = (
+  leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string,
+  givePicks?: { round: number; orig: number }[], getPicks?: { round: number; orig: number }[],
+) =>
   tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
     p_give: give, p_get: get, p_note: note ?? null,
-  }), Ev.tradeProposed, { players: give.length + get.length });
+    p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
+  }), Ev.tradeProposed, { players: give.length + get.length, picks: (givePicks?.length ?? 0) + (getPicks?.length ?? 0) });
 export const respondTrade = (tradeId: string, accept: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept }),
     Ev.tradeResponded, { action: accept ? 'accept' : 'reject' });
@@ -1739,6 +1746,24 @@ export interface KeeperState {
 export const keeperState = (leagueId: string) =>
   rpc<KeeperState>('keeper_state', { p_league_id: leagueId });
 
+/** Commissioner (0183): how many rounds next season's rookie draft runs.
+ *  Provisions one tradeable pick asset per seat per round; 0 clears. Growing
+ *  adds rounds, shrinking refuses to delete rounds holding a traded pick. */
+export const setRookieRounds = (leagueId: string, rounds: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; rookie_rounds?: number; season?: string; created?: number; removed?: number }>(
+    'set_rookie_rounds', { p_league_id: leagueId, p_rounds: rounds }), 'set_rookie_rounds');
+
+export interface PickAssetRow { season: string; round: number; orig: number; owner: number; }
+export interface PickAssets {
+  ok?: boolean; error?: string;
+  rookie_rounds: number;
+  /** The season whose picks are tradeable right now (league season + 1). */
+  future_season: string | null;
+  picks: PickAssetRow[];
+}
+export const pickAssets = (leagueId: string) =>
+  rpc<PickAssets>('pick_assets', { p_league_id: leagueId });
+
 /** Commissioner, post-season: clone the league into season+1 — same settings
  *  and seats, keepers carried onto the new rosters, a fresh pending draft
  *  (rounds − keepers picks) and a generated schedule. Wallets start fresh.
@@ -1750,7 +1775,7 @@ export const rolloverLeague = (leagueId: string, weeks = 14, rookieOnly = false)
     ok: boolean; error?: string; league_id?: string; season?: string;
     game_mode?: 'drip' | 'classic'; keeper_slots?: number; kept?: number;
     draft_rounds?: number; roster_size?: number; rookie_only?: boolean;
-    invite_code?: string;
+    picks_carried?: number; invite_code?: string;
   }>('rollover_league', { p_league_id: leagueId, p_weeks: weeks, p_rookie_only: rookieOnly }), 'rollover_league');
 
 export const startDraft = (leagueId: string, order?: number[]) =>

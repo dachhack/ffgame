@@ -1,32 +1,70 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.260.0`_
+_Last updated: 2026-08-17 · Build `v0.261.0`_
 
 ## NEXT SESSION — read this first
 
-Dynasty phases 1+2 SHIPPED in v0.260.0 (rollover + keepers + the rookie
-draft; see the section below). What remains of the dynasty arc, and the
-standing list:
+The ENTIRE dynasty arc shipped this session: v0.260.0 (rollover + keepers +
+the rookie draft, migration 0182) and v0.261.0 (tradeable pick assets,
+migration 0183 — the founder's "dynasty needs rookie draft rounds and
+assigned rookie draft picks per team. These are tradeable picks."). The two
+sections below carry the design decisions. What's next:
 
-1. **Live-fire the rollover** on a real league before relying on it: set a
-   keeper count, declare on one seat, roll, open the new league on both
-   hosts, run the keeper-shortened draft. The probe suite covers the SQL end
-   to end but no production league has rolled yet.
-2. **PICK ASSETS (dynasty phase 3)** — tradeable future picks. A real new
-   table + trade integration. The one dynasty piece deliberately NOT
-   started; design it against `keeper_pick`/`rollover_league` as they now
-   exist.
-3. **Verify the seat agents in production** (carried from v0.259.0) — run
+1. **Live-fire the dynasty loop** on a real league before relying on it:
+   set a keeper count + rookie rounds, declare keepers on one seat, trade a
+   pick, roll, open the new league on both hosts, and run the draft —
+   confirming the traded slot lands on the acquirer's clock. The probe
+   suites cover the SQL end to end but no production league has rolled yet.
+2. **Verify the seat agents in production** (carried from v0.259.0) — run
    `scripts/db/classic-autoslot-diag.sql` via Actions → Run a database
    query: unclaimed seats should read `has_agent = t` with `wk_rows` filled.
-4. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** (PROJ_AS_OF is
+3. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** (PROJ_AS_OF is
    2026-07-28). The auto-slot, the seat agents, the previews — and now the
    keeper top-N default via pool rank at the NEXT reseed — all rank by it.
-5. **The live web drip surface never installs pool `slugMeta` overrides**
+4. **The live web drip surface never installs pool `slugMeta` overrides**
    (carried): audit `Matchup.tsx`/`cardTable` consumers; install
    `setSlugMetaOverrides(pool)` where the live league's pool is loaded.
-6. **Audit server-side `injuryFor` callers** (carried): with no live install
+5. **Audit server-side `injuryFor` callers** (carried): with no live install
    and no season set it serves the BAKED 2025 report.
+6. Dynasty polish when it earns a session: multi-year futures (assets one
+   season out only today), draft-day pick trades (propose_trade still gates
+   on draft complete), and resizing a ROLLED league's pending rookie draft
+   (set_rookie_rounds only provisions season+1 futures).
+
+---
+
+## Where this session left off, part 2 (v0.261.0, 2026-08-17)
+
+**Dynasty phase 3 (migration 0183): pick assets.** `pick_asset` is
+(league, SEASON, round, original seat) → owner. The SEASON tag is the design:
+on league L (season S) the S+1 rows are the tradeable futures; rollover
+copies them to the new league, where the tag equals the league's OWN season —
+which is exactly the rule `_start_draft_now` uses to find "the assets for
+THIS draft" — then re-provisions S+2 futures from the carried
+`rookie_rounds`, so dynasty continuity needs nobody to re-enable anything.
+
+- **`set_rookie_rounds` (commish, 0–10)** deals one asset per seat per round
+  (owner = original). Grow adds; shrink refuses if a removed round holds a
+  traded pick — a settings change cannot delete someone's acquired property.
+- **Trades**: `trade_proposal.give_picks/get_picks`; `propose_trade` (old
+  6-arg signature DROPPED — the overload trap 0175 documented) validates
+  ownership both ways; `execute_trade` RE-validates and flips owners — two
+  pending deals offering the same pick: the first to execute kills the
+  second at its own execute, which stays pending with "picks moved". Picks
+  occupy no roster spot, so `trade_cap_error` still refuses lopsided PLAYER
+  counts unchanged (a probe fixture tripped exactly this and was corrected,
+  not worked around).
+- **The draft honors ownership** via `draft.pick_owners`, built at START
+  (when the base order is fixed): LINEAR rounds in base order — a pick asset
+  is "round R, seat X's slot", which snaking would relabel every other
+  round — with `draft_on_clock` returning `pick_owners[overall-1]`.
+  Completion keys on the asset count, NOT (rounds − keepers) × teams. A team
+  holding extra picks drafts past its cap into the existing over-limit
+  lockout (0179) — deliberate, that's how real dynasty works. NO assets ⇒
+  byte-identical snake behavior (dynasty suite re-passes untouched).
+- UI: ⛏ DRAFT PICKS checklists in both hosts' trade composers, pick lines
+  in trade rows, ROOKIE DRAFT PICKS (rounds + per-team ownership map) in
+  both dynasty panels. `pick-asset-probes.sql` is the 35th suite.
 
 ---
 
