@@ -12,7 +12,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
-import { buildMatchupBoard, gameFor, entryState, type BoardEntry } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry } from '@drip/core/engine/matchupBoard';
+import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -26,6 +27,48 @@ import {
   nativeRosters,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill } from '../app/ui';
+
+/** The sub-card under a name: WHERE and WHEN the game is, and the number.
+ *
+ *  Sleeper's board puts three things on this line — kickoff, venue conditions
+ *  and the score. We show two of them. The third is WEATHER, which we have no
+ *  feed for, so the markers here are only the two facts we actually hold: a
+ *  roof (data/stadiums.ts) and a night kickoff (isPrimetime). A made-up sun
+ *  icon would be worse than none.
+ *
+ *  The NUMBER changes meaning with the clock and says which it is, because a
+ *  bare figure beside "Yet to play" is ambiguous exactly when the manager is
+ *  deciding something: before kickoff it reads `proj 15.3` in the quiet colour;
+ *  once the ball is live it's points, in full. */
+function GameCard({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
+  const right = align === 'right';
+  const box: React.CSSProperties = {
+    background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8,
+    padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+    flexDirection: right ? 'row-reverse' : 'row',
+  };
+  if (!e) return <div style={{ ...box, opacity: 0.5 }}><span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>—</span></div>;
+  const bye = e.opponent === 'BYE';
+  const pre = e.state === 'pre';
+  const roof = e.roof && e.roof !== 'open' ? e.roof : null;
+  return (
+    <div style={box}>
+      <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
+        <div className="mono" style={{ fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {bye ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}
+          {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
+          {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>
+          {bye ? 'No game this week' : e.state === 'done' ? 'Final' : e.state === 'live' ? 'In progress' : 'Yet to play'}
+        </div>
+      </div>
+      <span className="mono" style={{ fontSize: pre ? 11 : 13, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
+        {pre ? `proj ${e.proj.toFixed(1)}` : e.live.toFixed(2)}
+      </span>
+    </div>
+  );
+}
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 const mkPlayer = (slug: string) => {
@@ -59,11 +102,18 @@ const fmtLock = (iso: string | null) => {
 
 /** One team's identity in the scoreboard: crest, name, record + seed, live
  *  score with the projected final beneath it. */
-function TeamHead({ side, align, accent, scoreless = false }: {
+function TeamHead({ side, align, accent, mode }: {
   side: import('@drip/core/engine/matchupBoard').BoardSide;
-  align: 'left' | 'right'; accent: string; scoreless?: boolean;
+  align: 'left' | 'right'; accent: string;
+  /** 'live' — the game is on, show points. 'proj' — nothing has kicked off, so
+   *  the projected total IS the headline number. 'hidden' — the opponent's
+   *  lineup is sealed until kickoff (RLS, not shyness), so there is no number
+   *  to show and pretending otherwise would read as "they have nobody". */
+  mode: 'live' | 'proj' | 'hidden';
 }) {
   const rec = side.record;
+  const big = mode === 'hidden' ? '—' : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
+  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : `proj ${side.projected.toFixed(1)}`;
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
@@ -77,10 +127,8 @@ function TeamHead({ side, align, accent, scoreless = false }: {
           {rec.wins}-{rec.losses}{rec.ties ? `-${rec.ties}` : ''}{rec.rank ? ` (#${rec.rank})` : ''}
         </div>
       )}
-      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, color: 'var(--text)' }}>{scoreless ? '—' : side.live.toFixed(2)}</div>
-      {!scoreless && (
-        <div className="mono" style={{ fontSize: 9.5, color: accent }}>proj {side.projected.toFixed(1)}</div>
-      )}
+      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, color: mode === 'hidden' ? 'var(--faint)' : 'var(--text)' }}>{big}</div>
+      <div className="mono" style={{ fontSize: 9.5, color: mode === 'hidden' ? 'var(--faint)' : accent }}>{sub}</div>
     </div>
   );
 }
@@ -129,9 +177,6 @@ function BoardCell({ e, align }: { e: import('@drip/core/engine/matchupBoard').B
         <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
-      </div>
-      <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: e.opponent === 'BYE' ? 'var(--warn, #c66)' : 'var(--faint)' }}>
-        {e.opponent === 'BYE' ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}
       </div>
     </div>
   );
@@ -357,6 +402,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : 'BYE',
         injury: injuryFor(matchup?.week ?? 1, slug),
+        // Where the game is played, and whether it's a night game — both facts,
+        // both read off the slate the board already has. NOT weather (0237).
+        roof: g && m.team ? roofFor(venueTeam(m.team, g)) : null,
+        primetime: isPrimetime(g?.kickoff),
       };
     };
   }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer]);
@@ -438,12 +487,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       {board && (
         <div style={card}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
-            <TeamHead side={board.home} align="left" accent="var(--you)" />
+            <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap' }}>
               {locked ? 'LIVE' : 'LOCKS'}
               {!locked && <div style={{ fontSize: 9, marginTop: 3 }}>{fmtLock(matchup?.lock_at ?? null)}</div>}
             </div>
-            <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" scoreless={!locked} />
+            <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'hidden'} />
           </div>
           {locked && (
             <>
@@ -468,23 +517,67 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         </div>
       )}
 
-      {/* ── STARTERS, head to head (v0.228.0) ──────────────────────────────
-          Only once locked. Pre-lock this screen is a LINEUP SETTER and the
-          old editable grid below is the right tool — a read-only head-to-head
-          would take away the one thing you came here to do. */}
-      {locked && board && (
+      {/* ── STARTERS, head to head ─────────────────────────────────────────
+          Since v0.237.0 this renders BEFORE the lock too, on the founder's
+          Sleeper reference: a manager wants to see the week — kickoffs,
+          projections, who's on a bye — while they still have time to do
+          something about it, not only once it's too late.
+
+          Two things the pre-lock board must be honest about, and is:
+          • YOUR rows stay SETTABLE. Sleeper can be read-only here because it
+            sets lineups on another screen; this screen is the only one we have,
+            so every row of yours is still a button into the picker.
+          • THEIR rows are SEALED, not empty. sealed_pick's RLS hands out an
+            opponent's picks only once locked ("THE security boundary", 0001) —
+            so the away column says so rather than rendering blanks that read
+            as "they haven't set a lineup". */}
+      {board && (
         <>
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-            <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', padding: '10px 14px 6px' }}>STARTERS</div>
-            {board.starters.map((row) => (
-              <div key={row.slot} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 92px 44px 1fr', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--bd)' }}>
-                <BoardCell e={row.home} align="left" />
-                <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--text)' }}>{row.home ? row.home.live.toFixed(2) : '—'}</span>
-                <span style={{ position: 'relative', display: 'inline-flex', justifyContent: 'center' }}><SlotPill pos={row.pos} label={row.label} /></span>
-                <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text)' }}>{row.away ? row.away.live.toFixed(2) : '—'}</span>
-                <BoardCell e={row.away} align="right" />
-              </div>
-            ))}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, padding: '10px 14px 6px' }}>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>STARTERS</span>
+              {/* Said ONCE. Per row it was a column of the word "sealed", which
+                  reads as a broken opponent rather than a rule. */}
+              {!locked && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{names.opp}'s lineup is sealed until kickoff</span>}
+            </div>
+            {board.starters.map((row) => {
+              const auto = bb.has(row.slot);
+              const settable = !locked && !auto;
+              return (
+                <div key={row.slot} style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--bd)' }}>
+                  {/* tier 1 — who, either side of the spot pill. Pre-lock there
+                      is no opponent column to mirror (their picks are sealed),
+                      so the row spans the width instead of leaving half the
+                      screen blank beside a one-sided lineup. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: locked ? '1fr auto 1fr' : '1fr auto', alignItems: 'center', gap: 10 }}>
+                    {settable ? (
+                      <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)}
+                        title={row.home ? 'change this spot' : 'set this spot'}
+                        style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit', minWidth: 0 }}>
+                        {row.home ? <BoardCell e={row.home} align="left" /> : <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {row.label}</span>}
+                      </button>
+                    ) : row.home ? <BoardCell e={row.home} align="left" />
+                      : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto && !locked ? '🎯 BEST BALL — fills itself' : 'Empty'}</span>}
+                    <SlotPill pos={row.pos} label={row.label} />
+                    {locked ? <BoardCell e={row.away} align="right" /> : <div />}
+                  </div>
+                  {/* tier 2 — where and when, and the number */}
+                  {(row.home || (locked && row.away)) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: locked ? '1fr 1fr' : '1fr', gap: 8, marginTop: 7 }}>
+                      {row.home ? <GameCard e={row.home} align="left" /> : <div />}
+                      {locked ? (row.away ? <GameCard e={row.away} align="right" /> : <div />) : null}
+                    </div>
+                  )}
+                  {!row.home && !locked && !auto && (() => {
+                    const d = slotDefs.find((x) => x.slot === row.slot);
+                    const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+                    return accepts
+                      ? <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5 }}>takes {accepts}</div>
+                      : null;
+                  })()}
+                </div>
+              );
+            })}
           </div>
           {/* BENCH and the stashes — mine only. The opponent's bench isn't
               readable (nor should it be); showing an empty column beside mine
@@ -496,9 +589,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
                 </div>
                 {board[k].home.map((e) => (
-                  <div key={e.slug} style={{ display: 'grid', gridTemplateColumns: '1fr 60px', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: '1px solid var(--bd)' }}>
-                    <BoardCell e={e} align="left" />
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, textAlign: 'right', color: 'var(--dim)' }}>{e.live.toFixed(2)}</span>
+                  <div key={e.slug} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 10 }}>
+                      <BoardCell e={e} align="left" />
+                      <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
+                        {k === 'bench' ? 'BN' : 'IR'}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 7 }}><GameCard e={e} align="left" /></div>
                   </div>
                 ))}
               </div>
@@ -507,9 +605,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         </>
       )}
 
-      {/* Lineup: one row per classic slot — the SETTER (pre-lock), and the
-          fallback whenever the board can't assemble. */}
-      {!(locked && board) && (
+      {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
+          sides of the lock since v0.237.0, but if it can't assemble (no
+          matchup, no roster) this is still a working lineup editor rather
+          than a blank screen. */}
+      {!board && (
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         {slotDefs.map((d, i) => {
           const auto = bb.has(d.slot);
@@ -575,7 +675,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         </div>
       )}
 
-      {/* Bench */}
+      {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
+          game lines, so this would otherwise be the same players twice. */}
+      {!board && (
       <div style={card}>
         <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 8 }}>BENCH</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -588,6 +690,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           {!bench.length && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>everyone's starting</span>}
         </div>
       </div>
+      )}
 
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.6 }}>
         CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.

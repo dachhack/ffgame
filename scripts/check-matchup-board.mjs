@@ -8,7 +8,8 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam } from '../packages/core/src/engine/matchupBoard';
+import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 let fails = 0;
 const ok = (name, cond, got) => {
   if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
@@ -69,6 +70,37 @@ ok('before kickoff is pre', entryState('2026-09-13T17:00:00Z', 'TB', T - 1000) =
 ok('after kickoff is live', entryState('2026-09-13T17:00:00Z', 'TB', T + 1000) === 'live');
 ok('a FINAL team is done even mid-window', entryState('2026-09-13T17:00:00Z', 'TB', T + 1000, new Set(['TB'])) === 'done');
 ok('no kickoff (bye) is pre, never live', entryState(null, 'KC', T + 1e9) === 'pre');
+
+// ── The game line's two markers (v0.237.0) ─────────────────────────────────
+// Both are FACTS — a roof from a table, a kickoff hour from the clock. The
+// third thing Sleeper's board shows there is WEATHER, which we have no feed
+// for and therefore never draw.
+ok('every NFL team has a roof on file', Object.keys(STADIUM_ROOF).length === 32, Object.keys(STADIUM_ROOF).length);
+ok('a dome is roofed', isRoofed('MIN') && roofFor('MIN') === 'dome');
+ok('a retractable roof counts as roofed', isRoofed('DAL') && roofFor('DAL') === 'retractable');
+ok('an open stadium is not roofed', !isRoofed('GB') && roofFor('GB') === 'open');
+ok('Miami is OPEN — the canopy covers the seats, not the field', roofFor('MIA') === 'open');
+ok('an unknown team says nothing rather than guessing', roofFor('XXX') === null && !isRoofed('XXX') && !isRoofed(null));
+ok('lower case is the same team', roofFor('min') === 'dome');
+// The one that would have shipped broken: the slate calls the Rams LA, so a
+// table keyed on the broadcast code would answer null for both SoFi tenants.
+ok('the Rams answer under the slate code AND the broadcast one',
+  roofFor('LA') === 'canopy' && roofFor('LAR') === 'canopy', [roofFor('LA'), roofFor('LAR')]);
+ok('the other relocation codes normalize too',
+  roofFor('WSH') === roofFor('WAS') && roofFor('JAC') === roofFor('JAX') && roofFor('OAK') === 'dome',
+  [roofFor('WSH'), roofFor('JAC'), roofFor('OAK')]);
+// The venue is the HOME team's building, whichever side the player is on.
+ok('an away player takes the opponent’s roof', venueTeam('BUF', { opponent: 'DET', home: false }) === 'DET');
+ok('a home player takes their own', venueTeam('BUF', { opponent: 'DET', home: true }) === 'BUF');
+ok('a road game in a dome is roofed', isRoofed(venueTeam('GB', { opponent: 'MIN', home: false })));
+
+// Primetime is evaluated in ET, not in the reader's zone — the whole point.
+ok('Sunday night is primetime', isPrimetime('2026-09-14T00:20:00Z'), new Date('2026-09-14T00:20:00Z').toISOString());  // 8:20pm ET Sun
+ok('Monday night is primetime', isPrimetime('2026-09-15T00:15:00Z'));                                                   // 8:15pm ET
+ok('the 1pm window is not', !isPrimetime('2026-09-13T17:00:00Z'));                                                      // 1:00pm ET
+ok('the 4:25 window is not', !isPrimetime('2026-09-13T20:25:00Z'));                                                     // 4:25pm ET
+ok('a London 9:30am kickoff is not primetime', !isPrimetime('2026-10-04T13:30:00Z'));                                   // 9:30am ET
+ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undefined) && !isPrimetime('not a date'));
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
