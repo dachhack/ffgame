@@ -15,7 +15,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
-export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish, onGo, onShop, onBack }: {
+export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish, onGo, onShop, onFields, onBack }: {
   leagueId: string;
   name: string;
   teamName?: string | null;
@@ -25,6 +25,9 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   onGo: (room: LeagueRoom) => void;
   /** Opens the board with the power-up shop already up. */
   onShop: () => void;
+  /** Opens the board with the all-fields sheet already up — the ▦ FIELDS chip's
+   *  old job, moved off the tab strip and onto the menu (founder's call). */
+  onFields: () => void;
   onBack: () => void;
 }) {
   const t = useTheme();
@@ -113,6 +116,7 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
           ? { badge: [unread.n > 0 ? `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` : '', sig.polls > 0 ? `📊 ${sig.polls}` : ''].filter(Boolean).join(' · ') }
           : undefined)}
       {rosterId != null && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
+      {rosterId != null && tile('▦', 'Fields', 'every game with a slotted player, live — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'fields' }); onFields(); })}
       {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); },
         sig.waivers > 0 ? { badge: `✚ ${sig.waivers}` } : undefined)}
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}

@@ -105,7 +105,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   onBack: () => void;
   /** League-home SHOP tile (0182): each bump opens the power-up shop. */
   openShopSignal?: number;
-  /** Tab-strip ▦ FIELDS (0182.3): each bump opens the all-fields sheet. */
+  /** League-menu Fields tile: each bump opens the all-fields sheet. */
   openFieldsSignal?: number;
 }) {
   const t = useTheme();
@@ -821,7 +821,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           Each label carries its own side's colour, which is the only thing that
           needs distinguishing here. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        {/* ▦ FIELDS moved to the tab strip (0182.3, founder's call) — the
+        {/* ▦ FIELDS lives on the league menu now (founder's call) — the
             board keeps just the two roster doors here. */}
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable

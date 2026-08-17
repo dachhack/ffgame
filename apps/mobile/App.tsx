@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth, signOut, leagueTouch } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -93,6 +93,21 @@ export function App() {
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
   const [fieldsSignal, setFieldsSignal] = useState(0);
+  // Whether the open league's draft is done — the ⛏ DRAFT chip leaves the strip
+  // once the draft completes (the room stays reachable from the league menu).
+  // Defaults false so the chip shows until the answer lands: a live draft with
+  // no way in would be worse than a finished one briefly showing.
+  const [draftDone, setDraftDone] = useState(false);
+
+  useEffect(() => {
+    setDraftDone(false);
+    if (!open?.native) return;
+    let dead = false;
+    nativeTeamState(open.leagueId)
+      .then((r) => { if (!dead && r.draft_status === 'complete') setDraftDone(true); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [open?.leagueId, open?.native]);
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
@@ -212,7 +227,7 @@ export function App() {
             {([
               ['home', '🏠 LEAGUE', true],                             // the hub (0182)
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
-              ['draft', '⛏ DRAFT', open.native],                       // draft rooms are native-only
+              ['draft', '⛏ DRAFT', open.native && !draftDone],         // native-only; leaves once drafted
               ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
               ['chat', '💬 CHAT', true],                               // any member, any league kind
               ['commishtools', '⚑ COMMISH', !!open.commish],
@@ -229,15 +244,6 @@ export function App() {
                 {id === 'chat' && <ChatChipDot leagueId={open.leagueId} active={view === 'chat'} />}
               </Pressable>
             ))}
-            {/* ▦ FIELDS — an action chip, not a view: opens the all-fields
-                sheet on the board (0182.3, founder's call). Seat required —
-                the sheet is built from the board's feeds. */}
-            {open.rosterId != null && (
-              <Pressable onPress={() => { setFieldsSignal((n) => n + 1); setView('picks'); }}
-                style={{ borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, borderColor: theme.bd, backgroundColor: theme.surface }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: theme.dim }}>▦ FIELDS</Text>
-              </Pressable>
-            )}
           </View>
         )}
 
@@ -289,6 +295,7 @@ export function App() {
               rosterId={open.rosterId} native={open.native} commish={!!open.commish}
               onGo={(room) => setView(room)}
               onShop={() => { setShopSignal((n) => n + 1); setView('picks'); }}
+              onFields={() => { setFieldsSignal((n) => n + 1); setView('picks'); }}
               onBack={() => setOpen(null)} />
           </View>
         ) : open && open.rosterId != null ? (
