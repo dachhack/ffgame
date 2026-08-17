@@ -1476,6 +1476,25 @@ export const setTransactionRules = (
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
     });
+/** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
+ *  Adds, drops, waiver wins (with the bid), trades (with the seat each player
+ *  came from) and commissioner moves — written by a trigger on native_roster,
+ *  so it covers every path. Draft night is deliberately absent: the draft room
+ *  is already its own record. Any member may read it. */
+export interface RegisterRow {
+  id: number; at: string;
+  kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish';
+  slug: string;
+  roster_id: number; team: string | null;
+  /** Trades only: the seat the player came from. */
+  from_roster: number | null; from_team: string | null;
+  /** Waiver wins in a FAAB league. */
+  bid: number | null;
+}
+export const leagueRegister = (leagueId: string, limit = 100) =>
+  rpc<{ ok: boolean; error?: string; rows?: RegisterRow[] }>('league_register',
+    { p_league_id: leagueId, p_limit: limit });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>

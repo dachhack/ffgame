@@ -26,7 +26,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
-import { Playoffs, Standings } from '../ui/LeagueExtras';
+
 import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
@@ -151,7 +151,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'standings'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades'>('roster');
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -370,10 +370,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ['roster', '🧢 ROSTER'],
           ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
           ['trades', '⇄ TRADES'],
-          // "LEAGUE" collided with the 🏠 LEAGUE tab on the nav strip above and
-          // named the wrong thing besides: the panel is the standings + the
-          // playoff bracket (founder).
-          ['standings', '🏆 STANDINGS'],
         ] as const).map(([id, label]) => (
           <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
         ))}
@@ -521,11 +517,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       </Card>
       </>)}
 
-      {/* standings + the bracket — every member's read */}
-      {tab === 'standings' && (<>
-      <Standings leagueId={leagueId} myRoster={myRoster} />
-      <Playoffs leagueId={leagueId} />
-      </>)}
+      {/* The standings + bracket moved to the league menu (v0.274.0): the
+          table is the LEAGUE's, not this team's. */}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
       {tab === 'trades' && (

@@ -13,6 +13,8 @@ import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
+import { Standings, Playoffs } from '../ui/LeagueExtras';
+import { ScoringView, RosterRulesView, RegisterView } from '../ui/LeagueInfo';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -40,6 +42,9 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   // 🔔 Alerts (v0.272.0 — off the MY TEAM tabs, founder's call): push prefs
   // in a sheet. Device-level settings, so any member gets the tile.
   const [alertsOpen, setAlertsOpen] = useState(false);
+  // The league's own reference sheets (v0.274.0, founder's menu list). One
+  // piece of state: only ever one sheet is up, and `null` is the menu itself.
+  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register'>(null);
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
@@ -130,17 +135,50 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
       {rosterId != null && tile('▦', 'Fields', 'every game with a slotted player, live — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'fields' }); onFields(); })}
       {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); },
         sig.waivers > 0 ? { badge: `✚ ${sig.waivers}` } : undefined)}
+      {/* ── THE LEAGUE ITSELF (v0.274.0, founder's list) ────────────────────
+          Above this line is YOUR week — your board, your team, the chat. Below
+          it is the league: who's in it, what it did, and the rules it runs on.
+          The heading is what stops the menu reading as one undifferentiated
+          pile of nine tiles. */}
+      <Mono size={8.5} tone="faint" weight="700" track={0.14} style={{ marginTop: 8, marginBottom: 2 }}>THE LEAGUE</Mono>
+
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
       {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
+      {native && tile('🏆', 'Standings', 'the table · playoff bracket', () => { track(Ev.hubTileOpened, { tile: 'standings' }); setSheet('standings'); })}
+      {native && tile('📜', 'League register', 'every add, drop, claim and trade', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
+      {tile('⊞', 'Scoring settings', 'how this league turns plays into points', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
+      {native && tile('🧢', 'Roster settings', 'lineup spots · limits · waivers · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
+      {tile('🔔', 'Alerts', 'push notifications — what pings your phone', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
       {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
         { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}
-      {tile('🔔', 'Alerts', 'push notifications — what pings your phone', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
 
       {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)} />}
 
       {/* 🔔 push prefs, in a sheet — lived on the MY TEAM tabs (v0.268.0),
           moved here because alerts are league-wide plumbing, not roster
           management. */}
+      {/* Standings moved off MY TEAM's tabs (v0.274.0): the table is the
+          league's, not the team's. Playoffs ride along — the bracket answers
+          the same question one round later. */}
+      <Overlay visible={sheet === 'standings'} title="🏆 Standings" subtitle="THE TABLE · PLAYOFF BRACKET" onClose={() => setSheet(null)}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 12 }}>
+          <Standings leagueId={leagueId} myRoster={rosterId} />
+          <Playoffs leagueId={leagueId} />
+        </ScrollView>
+      </Overlay>
+
+      <Overlay visible={sheet === 'register'} title="📜 League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" onClose={() => setSheet(null)}>
+        <RegisterView leagueId={leagueId} />
+      </Overlay>
+
+      <Overlay visible={sheet === 'scoring'} title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" onClose={() => setSheet(null)}>
+        <ScoringView leagueId={leagueId} />
+      </Overlay>
+
+      <Overlay visible={sheet === 'roster'} title="🧢 Roster settings" subtitle="LINEUP SPOTS · LIMITS · WAIVERS · TRADES" onClose={() => setSheet(null)}>
+        <RosterRulesView leagueId={leagueId} />
+      </Overlay>
+
       <Overlay visible={alertsOpen} title="🔔 Alerts" subtitle="WHAT PINGS YOUR PHONE" onClose={() => setAlertsOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
           <PushPrefs />

@@ -22,6 +22,7 @@ import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { ChatPanel } from '../app/chat';
+import { ScoringPanel, RosterRulesPanel, RegisterPanel } from './LeagueInfo';
 
 // ── one-shot board intent ───────────────────────────────────────────────────
 // The shop lives on the board (it needs liveCtx + wallet). The hub's SHOP tile
@@ -106,6 +107,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
   const [chatOpen, setChatOpen] = useState(false);
   const [rostersOpen, setRostersOpen] = useState(false);
+  // The league's reference panels (v0.274.0, founder's menu list). One piece
+  // of state — only ever one is open, and they expand in place like the
+  // rosters tile above rather than stealing the page.
+  const [info, setInfo] = useState<null | 'scoring' | 'roster' | 'register'>(null);
+  const toggleInfo = (k: 'scoring' | 'roster' | 'register') => setInfo((cur) => (cur === k ? null : k));
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
   // founder). Defaults false — drip is the common case, and a tile popping in
@@ -218,8 +224,18 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             {rostersOpen && <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />}
             <Tile icon="⚙" title="Team options" sub="rename your team · crest · league invite" onClick={guard(() => onTeam('options'))} />
             <Tile icon="⛏" title="Draft room" sub="the league's draft — live during draft night, the record after" onClick={guard(onDraft)} />
+            {/* The league's own reference sheets (v0.274.0) — what it did, and
+                the rules it runs on. Read-only for everyone; the commissioner
+                edits the same facts behind ⚑ Manage league. */}
+            <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />
+            {info === 'register' && <RegisterPanel leagueId={e.league_id} />}
+            <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />
+            {info === 'roster' && <RosterRulesPanel leagueId={e.league_id} />}
           </>
         )}
+
+        <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
+        {info === 'scoring' && <ScoringPanel leagueId={e.league_id} />}
 
         {commish && (
           <Tile icon="⚑" title="Manage league" sub="members · commish kit · scoring · rules" onClick={onManage} accent
