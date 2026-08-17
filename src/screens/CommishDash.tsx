@@ -533,7 +533,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts.
+              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
