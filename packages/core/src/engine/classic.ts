@@ -637,10 +637,11 @@ export interface ClassicResult {
  *  roster players NOT manually started — the founder's rule verbatim. Any
  *  stored pick in a best-ball slot is ignored (the slot fills itself), and a
  *  best-ball slot never blocks a manual pick: the manual set is what reserves
- *  players. Slots fill MOST-SPECIFIC FIRST (fewest eligible positions), so
- *  dedicated spots take their best before any flex chases the leftovers —
- *  greedy is optimal because every flex's eligibility is a superset of the
- *  dedicated slots it follows. Ties break toward roster order (stable). */
+ *  players. Since v0.250.0 the fill is EXACT (assignByValue via
+ *  bestballFillBy) rather than most-specific-first greedy — see the docblock
+ *  there for the 0172 counterexample that retired the greedy. RET spots (0171)
+ *  still rank candidates by RETURN production, which is exactly why the fill
+ *  needs per-pair values. */
 export function bestballFill(manual: ClassicPick[], bestball: string[], roster: Player[], week: number, sc?: number | Partial<ClassicScoring>, slots: ClassicSlotDef[] = CLASSIC_SLOTS): ClassicPick[] {
   // RET spots (0171) rank candidates by their RETURN production, since that's
   // all the spot will bank. Memoised per player, because a roster's worth of
@@ -670,12 +671,26 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
  *      reserves players (the founder's rule, verbatim since 0159);
  *    • a no_start flag (0144) binds the auto-fill too — the DB trigger only
  *      guards manual writes, so the exclusion has to live here;
- *    • one player fills at most one spot (`used`);
- *    • spots fill MOST-SPECIFIC FIRST, and a FILTERED spot (0172) before an
- *      unfiltered one of the same width — its candidate set is a subset, so it
- *      must claim its player first or a plain RB slot takes the only rookie a
- *      rookies-only RB slot could have used.
- *  Ties break toward roster order (stable). */
+ *    • one player fills at most one spot.
+ *
+ *  HOW THE FILL DECIDES (v0.250.0) — exact, not greedy. From 0159 to v0.249.0
+ *  this walked spots most-specific-first, each taking its best remaining
+ *  player, on the argument that "every flex's eligibility is a superset of the
+ *  dedicated slots it follows". That was true when written and stopped being
+ *  true the day 0172 let a spot carry its own player filter: spots
+ *  [RB, FLEX(rookies only)] with a rookie RB worth 20 and a veteran RB worth
+ *  18 — RB is more specific, went first, took the rookie, and the rookies-only
+ *  flex was left holding a veteran it cannot legally seat. 20 points where 38
+ *  was available, in the RESOLVER, every week.
+ *
+ *  Nor can this ride `optimalLineup`: that greedy needs each player to be
+ *  worth ONE number, and a RET spot (0171) values him by return production
+ *  while a flex values him in full. Per-pair values are a general assignment
+ *  problem, so the fill runs `assignByValue` — every spot that CAN fill does,
+ *  and among full fills the total is maximal. Equal-total arrangements are
+ *  then canonicalized toward the old shape (the more specific spot keeps the
+ *  bigger name), so the exact fill never LOOKS different from the greedy one
+ *  except where the greedy was leaving points on the table. */
 export function bestballFillBy(
   manual: ClassicPick[],
   bestball: string[],
@@ -687,19 +702,41 @@ export function bestballFillBy(
   if (!bb.size) return [];
   const started = new Set(manual.filter((p) => !bb.has(p.slot)).map((p) => p.player.id));
   const cands = roster.filter((p) => !started.has(p.id) && !flagRulesFor(p.id).noStart);
-  const order = [...slots].sort((a, b) => a.pos.length - b.pos.length || (a.flt ? 0 : 1) - (b.flt ? 0 : 1));
-  const used = new Set<string>();
-  const fills: ClassicPick[] = [];
-  for (const d of order) {
-    if (!bb.has(d.slot)) continue;
-    let best: Player | null = null;
-    for (const c of cands) {
-      // slotAllows (0172): position eligibility + the spot's own player filter.
-      if (used.has(c.id) || !slotAllows(d, c)) continue;
-      if (!best || valueOf(c, d) > valueOf(best, d)) best = c;
+  // Most-specific-first is no longer what decides who wins a player — but it
+  // is still the ORDER the fills return in and the direction ties settle, so
+  // the panel reads the same as it always has.
+  const order = [...slots]
+    .filter((d) => bb.has(d.slot))
+    .sort((a, b) => a.pos.length - b.pos.length || (a.flt ? 0 : 1) - (b.flt ? 0 : 1));
+  if (!order.length || !cands.length) return [];
+  // The value matrix — evaluated once per pair; valueOf may be classicPoints.
+  const w = order.map((d) => cands.map((c) => {
+    if (!slotAllows(d, c)) return -Infinity;
+    const v = valueOf(c, d);
+    return Number.isFinite(v) ? v : 0;
+  }));
+  const heldBy = assignByValue(order.length, cands.length, w);
+  // Canonicalize ties: when two spots could swap occupants at the SAME total,
+  // give the more specific (earlier) spot the more valuable player — the
+  // arrangement the greedy always produced, so a dedicated RB spot shows the
+  // star and the flex shows the leftover rather than the other way round.
+  for (let pass = 0; pass < order.length; pass++) {
+    let swapped = false;
+    for (let i = 0; i < order.length; i++) {
+      for (let j = i + 1; j < order.length; j++) {
+        const pi = heldBy[i], pj = heldBy[j];
+        if (pi < 0 || pj < 0) continue;
+        const cross = w[i][pj] + w[j][pi];
+        if (!Number.isFinite(cross)) continue;
+        if (Math.abs(cross - (w[i][pi] + w[j][pj])) < 1e-9 && w[i][pj] > w[i][pi] + 1e-9) {
+          heldBy[i] = pj; heldBy[j] = pi; swapped = true;
+        }
+      }
     }
-    if (best) { used.add(best.id); fills.push({ slot: d.slot, player: best }); }
+    if (!swapped) break;
   }
+  const fills: ClassicPick[] = [];
+  order.forEach((d, i) => { if (heldBy[i] >= 0) fills.push({ slot: d.slot, player: cands[heldBy[i]] }); });
   return fills;
 }
 
@@ -768,6 +805,79 @@ function matchSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): number[] {
   return heldBy;
 }
 
+/** Maximum-cardinality, maximum-value assignment with a PER-PAIR value —
+ *  `w[si][pi]`, `-Infinity` = ineligible. Returns spot index → player index
+ *  (-1 = unfilled).
+ *
+ *  This exists because `optimalLineup`'s matroid greedy needs each player to
+ *  be worth the SAME number in every spot, and best ball breaks that: a RET
+ *  spot (0171) values a player by his RETURN production while a flex values
+ *  him in full, so "how good is he" has no single answer — it depends where
+ *  he stands. That is a general assignment problem, and the method is
+ *  SUCCESSIVE MOST-PROFITABLE AUGMENTING PATHS: grow the matching one spot at
+ *  a time, always along the alternating path that adds the most value. The
+ *  classic flow argument gives the invariant that pays for the loop: after k
+ *  augmentations the matching is the most valuable one OF SIZE k, so the
+ *  final matching is the most valuable one of MAXIMUM size. That lexicographic
+ *  order — fill every spot you can, THEN maximize value — is best ball's own
+ *  promise (0159): a flagged spot fills itself; it never stands empty to
+ *  protect a total. (It also seats a negative-scoring player in an otherwise
+ *  empty spot, exactly as the old fill did.)
+ *
+ *  Bellman–Ford rather than Dijkstra-with-potentials: unseating a player is a
+ *  negative edge, the boards are at most ~20×~30, and the dumb-but-correct
+ *  version is microseconds here. The epsilon on each relaxation stops float
+ *  noise from re-improving a path forever; the round cap bounds it absolutely
+ *  (a simple alternating path claims at most one new player per round). */
+function assignByValue(nSlots: number, nPlayers: number, w: number[][]): number[] {
+  const heldBy: number[] = new Array(nSlots).fill(-1);   // spot → player
+  const seatOf: number[] = new Array(nPlayers).fill(-1); // player → spot
+  for (;;) {
+    // gain[pi]: the best profit of an alternating path that ends by seating
+    // player pi at spot via[pi]. Paths START at a free spot…
+    const gain: number[] = new Array(nPlayers).fill(-Infinity);
+    const via: number[] = new Array(nPlayers).fill(-1);
+    for (let si = 0; si < nSlots; si++) {
+      if (heldBy[si] !== -1) continue;
+      for (let pi = 0; pi < nPlayers; pi++) {
+        if (w[si][pi] > gain[pi]) { gain[pi] = w[si][pi]; via[pi] = si; }
+      }
+    }
+    // …and continue through SEATED players: claiming a seated player frees his
+    // spot, which then claims somebody else — losing his value there, gaining
+    // the newcomer's.
+    for (let round = 0; round < nPlayers; round++) {
+      let moved = false;
+      for (let pi = 0; pi < nPlayers; pi++) {
+        const si = seatOf[pi];
+        if (si === -1 || gain[pi] === -Infinity) continue;
+        const base = gain[pi] - w[si][pi];
+        for (let pk = 0; pk < nPlayers; pk++) {
+          const g = base + w[si][pk];
+          if (g > gain[pk] + 1e-9) { gain[pk] = g; via[pk] = si; moved = true; }
+        }
+      }
+      if (!moved) break;
+    }
+    // The path ends on a FREE player — the augmentation that grows the
+    // matching. No reachable free player = no augmenting path = done.
+    let end = -1;
+    for (let pi = 0; pi < nPlayers; pi++) {
+      if (seatOf[pi] === -1 && gain[pi] > -Infinity && (end === -1 || gain[pi] > gain[end])) end = pi;
+    }
+    if (end === -1) return heldBy;
+    // Walk the path backwards, reseating as we go: each spot on it takes the
+    // player the path gave it, displacing its old occupant one step down.
+    for (let q = end, guard = 0; guard <= nPlayers; guard++) {
+      const s = via[q];
+      const old = heldBy[s];
+      heldBy[s] = q; seatOf[q] = s;
+      if (old === -1) break;
+      q = old;
+    }
+  }
+}
+
 export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): SpotAssignment {
   const heldBy = matchSpots(slots, players);
   const started = new Set(heldBy.filter((pi) => pi >= 0));
@@ -783,15 +893,18 @@ export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): Spo
 // legal arrangements, WHICH SCORES MOST. Those are different problems, and the
 // obvious answer to the second is wrong.
 //
-// The obvious answer is `bestballFillBy`'s: walk the spots most-specific-first
-// and give each its best remaining player. Its own comment explains why that is
-// optimal — "every flex's eligibility is a superset of the dedicated slots it
-// follows" — and that WAS true when it was written. Since 0172 it isn't: a spot
-// carries its own player filter, so a narrow spot's candidates are no longer a
-// subset of a wide one's. Spots [RB, FLEX(rookies only)] with a rookie RB
-// projected 20 and a veteran RB projected 18: RB is the more specific spot, goes
-// first, takes the rookie — and the rookies-only flex is left with a veteran it
-// cannot legally seat. 20 points, when 38 was available.
+// The obvious answer was `bestballFillBy`'s until v0.250.0: walk the spots
+// most-specific-first and give each its best remaining player. Its comment
+// explained why that is optimal — "every flex's eligibility is a superset of
+// the dedicated slots it follows" — and that WAS true when it was written.
+// Since 0172 it isn't: a spot carries its own player filter, so a narrow
+// spot's candidates are no longer a subset of a wide one's. Spots
+// [RB, FLEX(rookies only)] with a rookie RB projected 20 and a veteran RB
+// projected 18: RB is the more specific spot, goes first, takes the rookie —
+// and the rookies-only flex is left with a veteran it cannot legally seat.
+// 20 points, when 38 was available. (bestballFillBy now runs an exact
+// assignment too — assignByValue — because RET spots give it PER-SLOT values
+// this matroid greedy cannot carry.)
 //
 // So this is a MAXIMUM-WEIGHT assignment, and it has a clean exact answer that
 // costs one sort on top of the matching we already do. The sets of players that
