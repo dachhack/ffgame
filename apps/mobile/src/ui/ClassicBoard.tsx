@@ -40,7 +40,7 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
   const rec = side.record;
   const right = align === 'right';
   const big = mode === 'hidden' ? '—' : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
-  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : `proj ${side.projected.toFixed(1)}`;
+  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
@@ -76,14 +76,14 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
   const posLine = pos.length > 1 ? pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join('/') : null;
   const first = t.pos[pos[0] as keyof typeof t.pos];
   return (
-    <View style={{ width: 84, alignItems: 'center', gap: 2 }}>
-      <View style={{ flexDirection: 'row', width: 48, height: 5, borderRadius: 3, overflow: 'hidden', borderWidth: 1, borderColor: t.bd }}>
+    <View style={{ width: 66, alignItems: 'center', gap: 2 }}>
+      <View style={{ flexDirection: 'row', width: 40, height: 4, borderRadius: 3, overflow: 'hidden', borderWidth: 1, borderColor: t.bd }}>
         {pos.slice(0, 6).map((p) => (
           <View key={p} style={{ flex: 1, backgroundColor: t.pos[p as keyof typeof t.pos]?.bg ?? t.bg }} />
         ))}
       </View>
-      <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: first?.fg ?? t.text, textAlign: 'center' }}>{label}</Text>
-      {!!posLine && <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, textAlign: 'center' }}>{posLine}</Text>}
+      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: first?.fg ?? t.text, textAlign: 'center' }}>{label}</Text>
+      {!!posLine && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, color: t.faint, textAlign: 'center' }}>{posLine}</Text>}
     </View>
   );
 }
@@ -109,61 +109,41 @@ function BoardCell({ e, align }: { e: BoardEntry | null; align: 'left' | 'right'
   const t = useTheme();
   const right = align === 'right';
   if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
+  // NO PORTRAIT HERE, deliberately (founder, v0.241.0): a phone's board is a
+  // dense mirrored list, and a face per side costs height for identity the name
+  // already carries. The PICKER keeps its faces — that sheet exists to pick a
+  // player out of a list, and it has the room. The web board keeps them too.
+  //
+  // The game line lives on this cell now rather than in a boxed sub-card below,
+  // which is most of what made the rows tall.
+  const line = e.opponent === 'BYE' ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim();
   return (
-    // The face on the OUTER edge, so both sides read outward from the pill the
-    // same way the names and scores do.
-    <View style={{ flex: 1, minWidth: 0, flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 7 }}>
-      <Face slug={e.slug} size={28} />
-      <View style={{ flex: 1, minWidth: 0 }}>
+    <View style={{ flex: 1, minWidth: 0 }}>
       <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
       <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
         <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
-      </View>
+      <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
+        {`${line}${roofMark(e)}`}
+      </Text>
     </View>
   );
 }
 
-/** The sub-card under a name: WHERE and WHEN the game is, and the number.
- *
- *  Sleeper's board puts three things here — kickoff, venue conditions and the
- *  score. We show two. The third is WEATHER, which we have no feed for, so the
- *  markers are only the two facts we hold: a roof (data/stadiums.ts) and a
- *  night kickoff (isPrimetime). A made-up sun icon would be worse than none.
- *
- *  The NUMBER says which it is, because a bare figure beside "Yet to play" is
- *  ambiguous exactly when a manager is deciding something: before kickoff it
- *  reads `proj 15.3` quietly, once live it's points, in full. */
-function GameCard({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' }) {
-  const t = useTheme();
-  const right = align === 'right';
-  const box = {
-    backgroundColor: t.bg, borderWidth: 1, borderColor: t.bd, borderRadius: 8,
-    paddingHorizontal: 9, paddingVertical: 6, flex: 1, minWidth: 0,
-    flexDirection: (right ? 'row-reverse' : 'row') as 'row' | 'row-reverse',
-    alignItems: 'center' as const, gap: 8,
-  };
-  if (!e) return <View style={[box, { opacity: 0.5 }]}><Mono size={10} tone="faint">—</Mono></View>;
-  const bye = e.opponent === 'BYE';
-  const pre = e.state === 'pre';
-  const roof = e.roof && e.roof !== 'open' ? e.roof : null;
-  return (
-    <View style={box}>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Mono size={9.5} tone={bye ? 'warn' : 'dim'} numberOfLines={1} style={{ textAlign: right ? 'right' : 'left' }}>
-          {`${bye ? 'BYE' : `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim()}${roof ? '  \u{1F3DF}' : ''}${e.primetime ? '  \u263E' : ''}`}
-        </Mono>
-        <Mono size={8.5} tone="faint" numberOfLines={1} style={{ textAlign: right ? 'right' : 'left' }}>
-          {bye ? 'No game this week' : e.state === 'done' ? 'Final' : e.state === 'live' ? 'In progress' : 'Yet to play'}
-        </Mono>
-      </View>
-      <Mono size={pre ? 10 : 12} tone={pre ? 'faint' : 'text'} weight="700">
-        {pre ? `proj ${e.proj.toFixed(1)}` : e.live.toFixed(2)}
-      </Mono>
-    </View>
-  );
+/** The game-line markers, as text so they cost no layout: 🏟 roofed, ☾ night. */
+function roofMark(e: BoardEntry): string {
+  const roofed = e.roof && e.roof !== 'open';
+  return `${roofed ? '  \u{1F3DF}' : ''}${e.primetime ? '  \u263E' : ''}`;
+}
+
+/** The figure on a row: points once the ball is live, the projection before it.
+ *  No "proj" label — the founder wanted the number alone — so the difference is
+ *  carried by colour (quiet before kickoff) rather than by a word. */
+function scoreOf(e: BoardEntry | null): string {
+  if (!e) return '—';
+  return e.state === 'pre' ? e.proj.toFixed(1) : e.live.toFixed(2);
 }
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
@@ -535,25 +515,23 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               const d = slotDefs.find((x) => x.slot === row.slot);
               const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
               return (
-                <View key={row.slot} style={{ paddingTop: 8, paddingBottom: 9, borderTopWidth: 1, borderTopColor: t.bd }}>
-                  <Pressable
-                    onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {row.home ? <BoardCell e={row.home} align="left" />
-                      : <View style={{ flex: 1 }}>
-                          <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto && !locked ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
-                          {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
-                        </View>}
-                    <SlotPill pos={row.pos} label={row.label} />
-                    <BoardCell e={row.away} align="right" />
-                  </Pressable>
-                  {(row.home || row.away) && (
-                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-                      {row.home ? <GameCard e={row.home} align="left" /> : <View style={{ flex: 1 }} />}
-                      {row.away ? <GameCard e={row.away} align="right" /> : <View style={{ flex: 1 }} />}
-                    </View>
-                  )}
-                </View>
+                <Pressable key={row.slot}
+                  onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
+                  {row.home ? <BoardCell e={row.home} align="left" />
+                    : <View style={{ flex: 1 }}>
+                        <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto && !locked ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
+                        {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
+                      </View>}
+                  <Mono size={11} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 38, textAlign: 'right' }}>
+                    {scoreOf(row.home)}
+                  </Mono>
+                  <SlotPill pos={row.pos} label={row.label} />
+                  <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
+                    {scoreOf(row.away)}
+                  </Mono>
+                  <BoardCell e={row.away} align="right" />
+                </Pressable>
               );
             })}
           </Card>
@@ -564,12 +542,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   {k === 'bench' ? 'BENCH' : 'TAXI / IR'}
                 </Mono>
                 {board[k].home.map((e) => (
-                  <View key={e.slug} style={{ paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <BoardCell e={e} align="left" />
-                      <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
-                    </View>
-                    <View style={{ flexDirection: 'row', marginTop: 6 }}><GameCard e={e} align="left" /></View>
+                  <View key={e.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
+                    <BoardCell e={e} align="left" />
+                    <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
+                    <Mono size={11} weight="700" tone={e.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>{scoreOf(e)}</Mono>
                   </View>
                 ))}
               </Card>
