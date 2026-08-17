@@ -23,6 +23,7 @@ const SleeperLeague = lazy(() => import('./screens/SleeperLeague').then((m) => (
 const LiveOnboard = lazy(() => import('./screens/LiveOnboard').then((m) => ({ default: m.LiveOnboard })));
 const ProviderConnect = lazy(() => import('./screens/ProviderConnect').then((m) => ({ default: m.ProviderConnect })));
 const YahooConnect = lazy(() => import('./screens/YahooConnect').then((m) => ({ default: m.YahooConnect })));
+const FieldGame = lazy(() => import('./screens/FieldGame').then((m) => ({ default: m.FieldGame })));
 
 export function App() {
   const { theme, cardSkin, route, youTeamId, navigate, liveCtx } = useStore();
@@ -112,7 +113,7 @@ export function App() {
 
   // Is the request-a-code FAB on screen? It owns the bottom-left corner, so the
   // install banner has to sit above it (see the comment on the FAB below).
-  const fab = !['live', 'splash', 'demo', 'matchup', 'final'].includes(route.name) && !liveCtx && !loggedIn;
+  const fab = !['live', 'splash', 'demo', 'matchup', 'final', 'field'].includes(route.name) && !liveCtx && !loggedIn;
 
   return (
     <div
@@ -143,6 +144,7 @@ export function App() {
         {route.name === 'league' && <LeagueOverview />}
         {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
         {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
+        {route.name === 'field' && <FieldGame key={`fg${route.week}-${route.team}`} week={route.week} team={route.team} />}
       </Suspense>
       {/* Persistent "out" across the discovery funnel — request a pilot code for
           your league. Hidden inside the live pilot (already in), on splash / the
@@ -153,7 +155,7 @@ export function App() {
       {/* "Add to home screen" — everywhere except the board and the final, where a
           bottom banner would sit on top of the live playout. Self-gating: renders
           nothing unless the browser can install and the visitor is warmed up. */}
-      {!['matchup', 'final'].includes(route.name) && <InstallPrompt raised={fab} />}
+      {!['matchup', 'final', 'field'].includes(route.name) && <InstallPrompt raised={fab} />}
       {/* Player card modal — any surface opens it via openPlayerCard() */}
       <PlayerCardHost />
     </div>
