@@ -201,7 +201,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
-  const [lockedRow, setLockedRow] = useState(false); // server sealed any 'wk' row
+  // Which of MY spots the server has sealed (0178: one player at a time, at
+  // his own kickoff — so this is per slot, not one flag for the week).
+  const [sealedSlots, setSealedSlots] = useState<Record<string, boolean>>({});
   const [theirs, setTheirs] = useState<Record<string, string>>({});
   const [names, setNames] = useState<{ me: string; opp: string }>({ me: 'YOU', opp: 'OPPONENT' });
   const [playsAt, setPlaysAt] = useState(0); // bump → recompute points
@@ -264,14 +266,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId)]);
         setPool(pl);
         const map: Record<string, string | null> = {};
-        let sealed = false;
+        const seal: Record<string, boolean> = {};
         for (const p of pk) {
           if (p.game_window !== CLASSIC_WIN) continue;
           map[p.roster_slot] = p.player_slug;
-          if (p.locked) sealed = true;
+          seal[p.roster_slot] = !!p.locked;
         }
         setMine(map);
-        setLockedRow(sealed);
+        setSealedSlots(seal);
         setState('ready');
       } catch (e) {
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
@@ -279,16 +281,33 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     })();
   }, [userId, leagueId, rosterId]);
 
-  const locked = lockedRow || (matchup?.lock_at != null && Date.parse(matchup.lock_at) <= nowTs);
+  // THE WEEK IS UNDERWAY — the only thing this flag still decides is
+  // PRESENTATION (live scores rather than projections, the win bar, the
+  // best-ball fill). It is no longer permission to edit: since 0178 a classic
+  // lineup locks one player at a time, at his own kickoff, so editability is a
+  // per-row question answered by `canEdit` below.
+  //
+  // Read off the SLATE's first kickoff rather than matchup.lock_at, because
+  // lock_at is deliberately an hour early (the drip lead) and "nothing locks
+  // before kick off" now includes not calling the week live before it is.
+  const firstKick = useMemo(() => {
+    const ks = slate.map((g) => (g.kickoff ? Date.parse(g.kickoff) : NaN)).filter(Number.isFinite);
+    return ks.length ? Math.min(...ks) : null;
+  }, [slate]);
+  const locked = Object.values(sealedSlots).some(Boolean)
+    || (matchup?.status != null && matchup.status !== 'scheduled')
+    || (firstKick != null && firstKick <= nowTs);
   useEffect(() => {
     const t = window.setInterval(() => setNowTs(Date.now()), 30_000);
     return () => window.clearInterval(t);
   }, []);
 
-  // Post-lock: opponent's revealed lineup + roster (best ball fills from it)
-  // + the week's live plays, minute cadence.
+  // The opponent's lineup + roster (best ball fills from it) + the week's live
+  // plays, on a minute cadence. Since 0178 a classic league's lineups are OPEN
+  // — sealed_pick's policy hands them over whether or not they're locked — so
+  // this runs from the moment the screen opens rather than waiting for lock.
   useEffect(() => {
-    if (!locked || !matchup || !ros) return;
+    if (!matchup || !ros) return;
     let stop = false;
     const oppRoster = matchup.home_roster_id === ros.rosterId ? matchup.away_roster_id : matchup.home_roster_id;
     if (bestball.length) myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) setOppPool(p); }).catch(() => {});
@@ -309,7 +328,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     void load();
     const t = window.setInterval(() => { void load(); }, 60_000);
     return () => { stop = true; window.clearInterval(t); };
-  }, [locked, matchup, userId, ros, bestball.length]);
+  }, [matchup, userId, ros, bestball.length]);
 
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
   // The league's configured lineup (0161) — slot names, types, eligibility.
@@ -429,6 +448,19 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     });
   }, [matchup, ros, slotDefs, effective, names, avatars, records, bench, stashed, entryFor, locked]);
 
+  /** Has this player's game started? The one question that decides everything
+   *  editable on this screen now. A player with no game (bye) never starts. */
+  const kickedOff = (slug: string | null | undefined): boolean => {
+    if (!slug) return false;
+    const e = entryFor(slug);
+    return !!e && e.state !== 'pre';
+  };
+  /** May I still change this spot? Sealed by the server, or holding a player
+   *  whose game has begun, means no — everything else is fair game, including
+   *  mid-week once other players have played. */
+  const canEdit = (slot: string): boolean =>
+    !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+
   const assign = async (slot: string, slug: string | null) => {
     if (!matchup) return;
     const next = { ...mine, [slot]: slug };
@@ -492,7 +524,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               {locked ? 'LIVE' : 'LOCKS'}
               {!locked && <div style={{ fontSize: 9, marginTop: 3 }}>{fmtLock(matchup?.lock_at ?? null)}</div>}
             </div>
-            <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'hidden'} />
+            <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
           {locked && (
             <>
@@ -536,20 +568,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, padding: '10px 14px 6px' }}>
               <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>STARTERS</span>
-              {/* Said ONCE. Per row it was a column of the word "sealed", which
-                  reads as a broken opponent rather than a rule. */}
-              {!locked && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{names.opp}'s lineup is sealed until kickoff</span>}
+              {/* 0178: both lineups are open all week, and each spot locks at
+                  its own player's kickoff. Said once, here, because it is the
+                  rule of the screen rather than a property of any one row. */}
+              {!locked && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>open lineups · each spot locks at its own kickoff</span>}
             </div>
             {board.starters.map((row) => {
               const auto = bb.has(row.slot);
-              const settable = !locked && !auto;
+              const settable = canEdit(row.slot);
               return (
                 <div key={row.slot} style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--bd)' }}>
                   {/* tier 1 — who, either side of the spot pill. Pre-lock there
                       is no opponent column to mirror (their picks are sealed),
                       so the row spans the width instead of leaving half the
                       screen blank beside a one-sided lineup. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: locked ? '1fr auto 1fr' : '1fr auto', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
                     {settable ? (
                       <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)}
                         title={row.home ? 'change this spot' : 'set this spot'}
@@ -559,16 +592,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                     ) : row.home ? <BoardCell e={row.home} align="left" />
                       : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto && !locked ? '🎯 BEST BALL — fills itself' : 'Empty'}</span>}
                     <SlotPill pos={row.pos} label={row.label} />
-                    {locked ? <BoardCell e={row.away} align="right" /> : <div />}
+                    <BoardCell e={row.away} align="right" />
                   </div>
                   {/* tier 2 — where and when, and the number */}
-                  {(row.home || (locked && row.away)) && (
-                    <div style={{ display: 'grid', gridTemplateColumns: locked ? '1fr 1fr' : '1fr', gap: 8, marginTop: 7 }}>
+                  {(row.home || row.away) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 7 }}>
                       {row.home ? <GameCard e={row.home} align="left" /> : <div />}
-                      {locked ? (row.away ? <GameCard e={row.away} align="right" /> : <div />) : null}
+                      {row.away ? <GameCard e={row.away} align="right" /> : <div />}
                     </div>
                   )}
-                  {!row.home && !locked && !auto && (() => {
+                  {!row.home && settable && (() => {
                     const d = slotDefs.find((x) => x.slot === row.slot);
                     const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
                     return accepts
@@ -628,7 +661,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               </div>
               {auto && !locked ? (
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>BEST BALL — fills itself with your top scorer</span>
-              ) : locked || auto ? <PlayerCell slug={my} /> : (
+              ) : !canEdit(d.slot) ? <PlayerCell slug={my} /> : (
                 <button onClick={() => setPickerSlot(pickerSlot === d.slot ? null : d.slot)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>
                   {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET</span>}
@@ -645,7 +678,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
       {saveNote && <div className="mono" style={{ fontSize: 9.5, color: saveNote === 'saved' ? 'var(--faint)' : 'var(--warn, #c66)' }}>{saveNote === 'saved' ? (saving ? 'saving…' : '✓ lineup saved') : saveNote}</div>}
 
       {/* Picker: eligible, unused roster players for the open slot */}
-      {!locked && pickerSlot && (
+      {pickerSlot && canEdit(pickerSlot) && (
         <div style={card}>
           {(() => {
             const d = slotDefs.find((x) => x.slot === pickerSlot);
@@ -663,7 +696,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               ✕ CLEAR SLOT
             </button>
           )}
-          {bench.filter((p) => slotAllows(slotDefs.find((d) => d.slot === pickerSlot)!, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })).map((p) => (
+          {bench
+            .filter((p) => slotAllows(slotDefs.find((d) => d.slot === pickerSlot)!, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+            // A player whose game has kicked off can't be started — the DB
+            // refuses it (0178), so the picker must not offer him.
+            .filter((p) => !kickedOff(p.slug))
+            .map((p) => (
             <button key={p.slug} onClick={() => { void assign(pickerSlot, p.slug); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 2, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
               <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
@@ -694,7 +732,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
 
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.6 }}>
         CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.
-        The whole lineup locks at the week's first kickoff. No windows, no power-ups, no bonuses.
+        LINEUPS ARE OPEN: everyone in the league can see them, and each spot locks when THAT player's game kicks off —
+        so a Thursday game never freezes your Sunday picks. No windows, no power-ups, no bonuses.
         {bb.size > 0 && (bb.size >= slotDefs.length
           ? ' FULL BEST BALL: every slot takes your highest scorer automatically — nothing to set.'
           : ' 🎯 slots are BEST BALL: they automatically take your highest-scoring player who isn\'t already started.')}
