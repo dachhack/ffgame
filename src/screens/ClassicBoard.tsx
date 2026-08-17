@@ -63,8 +63,11 @@ function GameCard({ e, align }: { e: BoardEntry | null; align: 'left' | 'right' 
           {bye ? 'No game this week' : e.state === 'done' ? 'Final' : e.state === 'live' ? 'In progress' : 'Yet to play'}
         </div>
       </div>
-      <span className="mono" style={{ fontSize: pre ? 11 : 13, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
-        {pre ? `proj ${e.proj.toFixed(1)}` : e.live.toFixed(2)}
+      {/* NO "proj" LABEL (founder, v0.241.0): the number alone. Before kickoff
+          it is the projection and after it is points — carried by the quiet
+          colour and by the status line beneath, not by a word taking up room. */}
+      <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
+        {pre ? e.proj.toFixed(1) : e.live.toFixed(2)}
       </span>
     </div>
   );
@@ -113,7 +116,7 @@ function TeamHead({ side, align, accent, mode }: {
 }) {
   const rec = side.record;
   const big = mode === 'hidden' ? '—' : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
-  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : `proj ${side.projected.toFixed(1)}`;
+  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
