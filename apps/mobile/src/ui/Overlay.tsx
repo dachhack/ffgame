@@ -26,7 +26,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../theme.native';
+import { useTheme, fs } from '../theme.native';
 
 /** SHEET BODY SIZING — why there is no number here any more.
  *
@@ -141,13 +141,13 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
               {titleLeft}
               <View style={{ flex: 1, minWidth: 0 }}>
                 {typeof title === 'string'
-                  ? <Text style={{ fontSize: 20, fontWeight: '700', color: t.text }}>{title}</Text>
+                  ? <Text style={{ fontSize: fs(20), fontWeight: '700', color: t.text }}>{title}</Text>
                   : title}
                 {/* System font, not mono: this is a sentence about the sheet, and
                     mono on prose is the dashboard look we are getting away from.
                     Mono stays where it belongs — on the data inside. */}
                 {typeof subtitle === 'string'
-                  ? <Text numberOfLines={2} style={{ fontSize: 12, color: t.dim, marginTop: 3, lineHeight: 16 }}>{subtitle}</Text>
+                  ? <Text numberOfLines={2} style={{ fontSize: fs(12), color: t.dim, marginTop: 3, lineHeight: fs(16) }}>{subtitle}</Text>
                   : subtitle}
               </View>
               <Pressable onPress={onClose} hitSlop={12} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
