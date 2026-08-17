@@ -16,7 +16,7 @@
 // than it BEHAVES is the bug the 0174 label was one edit away from causing.
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
-  classicSlotsFromSpec, classicSlots, planSpotMove,
+  classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy,
 } from '../packages/core/src/engine/classic';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 
@@ -264,6 +264,43 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('an UNKNOWN tenure matches no band but ANY',
     ['rookie', 'y1_3', 'y4_7', 'y8'].every((b) => !tenureMatches(b, null) && !tenureMatches(b, undefined)));
   ok('a nonsense value is unknown, not a rookie', !tenureMatches('rookie', NaN));
+}
+
+// ── The BEST-BALL fill, testable for the first time ────────────────────────
+// bestballFill ranks by classicPoints, which needs baked play data, so this
+// algorithm has never had probes. bestballFillBy takes the ranking as an
+// argument — so the SHAPE of the fill (who is eligible, who is excluded, what
+// order spots claim players in) can finally be asserted with plain numbers.
+{
+  const R = (id, pos, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', stats: {}, ...extra });
+  const proj = { star: 20, mid: 12, low: 4, rook: 9, vet: 15 };
+  const by = (p) => proj[p.id] ?? 0;
+  const s = spots({ pos: ['RB'], bb: true }, { pos: ['RB', 'WR', 'TE'], bb: true });
+  const bb = ['S1', 'S2'];
+
+  ok('the highest-ranked eligible player takes the spot',
+    bestballFillBy([], bb, [R('low', 'RB'), R('star', 'RB')], s, by)[0].player.id === 'star');
+  // The founder's rule, verbatim since 0159: a manual start reserves a player.
+  ok('a player started MANUALLY elsewhere is not auto-filled',
+    bestballFillBy([{ slot: 'S9', player: R('star', 'RB') }], bb, [R('low', 'RB'), R('star', 'RB')], s, by)[0].player.id === 'low');
+  // One player, one spot.
+  {
+    const f = bestballFillBy([], bb, [R('star', 'RB'), R('mid', 'WR')], s, by);
+    ok('one player cannot fill two spots', new Set(f.map((x) => x.player.id)).size === f.length, f.map((x) => x.player.id));
+    ok('the dedicated spot claims first, the flex takes what is left',
+      f.find((x) => x.slot === 'S1')?.player.id === 'star' && f.find((x) => x.slot === 'S2')?.player.id === 'mid');
+  }
+  // A FILTERED spot claims before a plain spot of the same width, or the plain
+  // one takes the only player the filtered one could have used.
+  {
+    const t = spots({ pos: ['RB'], bb: true }, { pos: ['RB'], max_exp: 0, bb: true });
+    const f = bestballFillBy([], ['S1', 'S2'], [R('vet', 'RB', { exp: 8 }), R('rook', 'RB', { exp: 0 })], t, by);
+    ok('a rookies-only best-ball spot still gets its rookie',
+      f.find((x) => x.slot === 'S2')?.player.id === 'rook' && f.find((x) => x.slot === 'S1')?.player.id === 'vet',
+      f.map((x) => `${x.slot}=${x.player.id}`));
+  }
+  ok('no best-ball spots means no fills', bestballFillBy([], [], [R('star', 'RB')], s, by).length === 0);
+  ok('an ineligible roster fills nothing', bestballFillBy([], bb, [R('star', 'QB')], s, by).length === 0);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

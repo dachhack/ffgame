@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
@@ -336,10 +336,21 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         out[d.slot] = manual[d.slot] ?? null;
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
-      if (locked && matchup && bb.size) {
+      if (matchup && bb.size) {
         // exp rides along (0172) so tenure-filtered spots fill honestly.
         const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
-        for (const f of bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
+        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
+        // itself with whoever scores most, so before anyone has scored it used
+        // to render empty and count ZERO toward the projected total —
+        // understating a best-ball team by however many spots it auto-fills.
+        // Same algorithm either way (bestballFillBy owns eligibility, the
+        // manual-start exclusion, one-player-one-spot and the fill order); only
+        // the number it sorts on changes, so the preview and the real fill can
+        // never disagree about who is ALLOWED, just about who is best.
+        const fills = locked
+          ? bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)
+          : bestballFillBy(manualPicks, bestball, ros, slotDefs, (pl) => PROJ_2026.get(pl.id) ?? 0);
+        for (const f of fills) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -537,13 +548,16 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
                   {row.home ? <BoardCell e={row.home} align="left" />
                     : <View style={{ flex: 1 }}>
-                        <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto && !locked ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
+                        <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
                         {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
                       </View>}
                   <Mono size={11} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 38, textAlign: 'right' }}>
                     {scoreOf(row.home)}
                   </Mono>
-                  <SlotPill pos={row.pos} label={row.label} />
+                  <View style={{ alignItems: 'center' }}>
+                    <SlotPill pos={row.pos} label={row.label} />
+                    {auto && <Mono size={7} tone="you">🎯 AUTO</Mono>}
+                  </View>
                   <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                     {scoreOf(row.away)}
                   </Mono>

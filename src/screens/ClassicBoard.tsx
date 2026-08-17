@@ -10,7 +10,7 @@
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -383,10 +383,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         out[d.slot] = manual[d.slot] ?? null;
         if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
       }
-      if (locked && matchup && bb.size) {
+      if (matchup && bb.size) {
         // exp rides along (0172) so tenure-filtered spots fill honestly.
         const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
-        for (const f of bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)) out[f.slot] = f.player.id;
+        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
+        // itself with whoever scores most, so before anyone has scored it used
+        // to render empty and count ZERO toward the projected total —
+        // understating a best-ball team by however many spots it auto-fills.
+        // Same algorithm either way (bestballFillBy owns eligibility, the
+        // manual-start exclusion, one-player-one-spot and the fill order); only
+        // the number it sorts on changes, so the preview and the real fill can
+        // never disagree about who is ALLOWED, just about who is best.
+        const fills = locked
+          ? bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)
+          : bestballFillBy(manualPicks, bestball, ros, slotDefs, (pl) => PROJ_2026.get(pl.id) ?? 0);
+        for (const f of fills) out[f.slot] = f.player.id;
       }
       return out;
     };
@@ -626,8 +637,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                         {row.home ? <BoardCell e={row.home} align="left" /> : <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {row.label}</span>}
                       </button>
                     ) : row.home ? <BoardCell e={row.home} align="left" />
-                      : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto && !locked ? '🎯 BEST BALL — fills itself' : 'Empty'}</span>}
-                    <SlotPill pos={row.pos} label={row.label} />
+                      : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <SlotPill pos={row.pos} label={row.label} />
+                      {auto && <span className="mono" title="best ball — fills itself with your best eligible player" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
+                    </div>
                     <BoardCell e={row.away} align="right" />
                   </div>
                   {/* tier 2 — where and when, and the number */}
