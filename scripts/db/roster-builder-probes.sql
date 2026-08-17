@@ -158,12 +158,39 @@ begin
   -- restore the sb10b spec so the freeze test below means what it says
   perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb), 'sf6 re-set for freeze');
 
-  -- freeze once the draft leaves pending
+  -- ── The freeze, and its one exit: THE SHRINK HATCH (0181) ─────────────────
+  -- The spec still locks once the draft leaves pending — with exactly one
+  -- exception: a STRICT PREFIX of the stored spec (remove spots from the END,
+  -- change nothing that survives). The stuck state it exists for: more
+  -- starting spots than draft rounds, discovered too late.
   reset role;
   update draft set status = 'live' where league_id = lid;
   set local role authenticated;
   perform probe_as('b');
-  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]}]'::jsonb), 'locks once the draft', 'sb11 frozen mid-draft');
+  -- stored at this point: [{QB}, {RB, bb}] — the sf6 re-set above.
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
+    'can only shrink', 'sb11 the same spec is not a shrink');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true},{"pos":["WR"]}]'::jsonb),
+    'can only shrink', 'sb11a growing is refused');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["WR"]}]'::jsonb),
+    'exactly as drafted', 'sb11b a prefix-length EDIT is refused');
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"bb":true}]'::jsonb),
+    'exactly as drafted', 'sb11c flipping best ball on a surviving spot is an edit');
+  perform assert_err(set_league_classic_slots(lid, null),
+    'locks once the draft', 'sb11d clearing the spec post-draft is refused');
+  -- THE LEGAL SHRINK: drop the tail spot. Cosmetic differences must not fail
+  -- it — lowercase pos and an implicit bb are the CLEANED form of the same spot.
+  r := set_league_classic_slots(lid, '[{"pos":["qb"]}]'::jsonb);
+  perform assert_ok(r, 'sb12 a strict prefix shrinks the frozen spec');
+  perform assert_true(jsonb_array_length(r -> 'slots') = 1
+    and r -> 'slots' -> 0 -> 'pos' = '["QB"]'::jsonb, 'sb12a the survivor is exactly as drafted');
+  perform assert_true((select settings_json -> 'roster_slots' from league where id = lid) = r -> 'slots',
+    'sb12b the shrink is stored');
+  perform assert_true((select status from draft where league_id = lid) = 'live',
+    'sb12c the draft itself is untouched');
+  -- and the hatch never reopens the door it closed
+  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
+    'can only shrink', 'sb13 growing back is still refused');
 
 end $$;
 
