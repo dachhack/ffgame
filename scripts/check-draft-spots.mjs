@@ -18,6 +18,7 @@ import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
   classicSlotsFromSpec, classicSlots, planSpotMove,
 } from '../packages/core/src/engine/classic';
+import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -249,6 +250,20 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   // picker that only wrote the target would leave the same player in two spots.
   ok('the vacated spot is always part of the plan',
     planSpotMove(s, { S1: 'rb1', S2: null, S3: null }, 'S3', 'rb1', legal).length === 2);
+}
+
+// ── Tenure bands (the waiver wire's filter, and 0172's neighbour) ──────────
+{
+  ok('every band has a label and a short form', TENURE_BANDS.every((b) => b.id && b.label && b.short));
+  ok('ANY takes everyone, unknowns included', TENURE_BANDS.every(() => true)
+    && tenureMatches('any', 0) && tenureMatches('any', 12) && tenureMatches('any', null));
+  ok('a rookie is exp 0 — seasons ACCRUED', tenureMatches('rookie', 0) && !tenureMatches('rookie', 1));
+  ok('the bands tile without gaps or overlap', [0, 1, 2, 3, 4, 5, 6, 7, 8, 15]
+    .every((e) => ['rookie', 'y1_3', 'y4_7', 'y8'].filter((b) => tenureMatches(b, e)).length === 1));
+  // The rule that matters: same no-guess answer slotAllows gives.
+  ok('an UNKNOWN tenure matches no band but ANY',
+    ['rookie', 'y1_3', 'y4_7', 'y8'].every((b) => !tenureMatches(b, null) && !tenureMatches(b, undefined)));
+  ok('a nonsense value is unknown, not a rookie', !tenureMatches('rookie', NaN));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
