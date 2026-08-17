@@ -53,16 +53,21 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'mode', label: '🎮 MODE' },
     { id: 'lineup', label: '🧩 ROSTER' },
     { id: 'scoring', label: '⚖ SCORING' },
+    // the old ⚑ SETTINGS overlay, folded into the map (v0.264.0) — each slice
+    // is its own destination, mirroring the web console's sections
+    { id: 'waivers', label: '⇄ WAIVERS & TRADES', nativeOnly: true },
   ] },
   { title: 'RUN THE SEASON', items: [
     { id: 'seats', label: '👥 SEATS' },
     { id: 'players', label: '🧑 PLAYERS', nativeOnly: true },
+    { id: 'playoffs', label: '🏆 PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: '🔁 NEXT SEASON', nativeOnly: true },
   ] },
   { title: 'ENGAGE', items: [
     { id: 'kit', label: '⚑ KIT' },
     { id: 'activity', label: '👁 ACTIVITY' },
     { id: 'buffs', label: '◈ POWER-UPS' },
+    { id: 'board', label: '📣 LEAGUE BOARD', nativeOnly: true },
   ] },
   // Two wallets, two destinations — deliberately NOT one "money" screen. Drip
   // coin buys power-ups; FAAB buys players. They never trade against each
@@ -91,9 +96,10 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   const t = useTheme();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Which destination is showing (v0.219.0) — see NAV_GROUPS.
-  const [section, setSection] = useState<string>('seats');
+  // Which destination is open (v0.264.0): null = the map alone. Tapping a
+  // chip pops the section up FROM BELOW as a bottom sheet — the app's own
+  // idiom (Overlay) over the web console's tap-into-a-lone-panel pattern.
+  const [section, setSection] = useState<string | null>(null);
   // Remount lever for the child cards after a settings save — rules changes
   // (roster caps, coin budget) alter what CommishPlayers/CommishTeams show.
   const [epoch, setEpoch] = useState(0);
@@ -161,14 +167,11 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
                 : myRoster != null ? 'You also manage a team — that stays in MY TEAM.' : 'You run this league without a team in it.'}
             </Mono>
           </View>
+          {/* ⚑ SETTINGS is gone (v0.264.0) — its slices live in the map below
+              as ⇄ WAIVERS & TRADES, 🏆 PLAYOFFS and 📣 LEAGUE BOARD. */}
           <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
             <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
           </Pressable>
-          {native && (
-            <Pressable onPress={() => { tap(); setSettingsOpen(true); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn }}>⚑ SETTINGS</Text>
-            </Pressable>
-          )}
         </View>
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
       </Card>
@@ -199,32 +202,50 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
         ))}
       </Card>
 
-      {section === 'kit' && <CommishToolsCard leagueId={leagueId} />}
-      {section === 'seats' && (
-        <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
-          onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
+      {/* ── The section, as a BOTTOM SHEET (v0.264.0) ──
+          The map is the screen; a destination pops up from below and slides
+          away, so the whole map is always one dismiss from view — the same
+          content the web console shows as a lone panel with a back chip,
+          presented the way this app presents everything else (Overlay). The
+          three ex-⚑ SETTINGS slices keep their own sheet (CommishSettings
+          carries their shared loads and save paths). */}
+      {section != null && !['waivers', 'playoffs', 'board'].includes(section) && (
+        <Overlay visible
+          title={NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === section)?.label ?? section}
+          onClose={() => setSection(null)}>
+          <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+            {section === 'kit' && <CommishToolsCard leagueId={leagueId} />}
+            {section === 'seats' && (
+              <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}
+                onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
+            )}
+            {section === 'activity' && <CommishSeen leagueId={leagueId} />}
+            {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
+            {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" />}
+            {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
+            {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
+            {section === 'coin' && (
+              <>
+                <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
+                {/* Per-team balances (v0.220.0). The league-wide levers above move
+                    everyone; this answers "who has what" and "give THIS team some"
+                    side by side — the same table the web grew in v0.213.2. */}
+                <CoinByTeam key={`coin-${epoch}`} leagueId={leagueId} />
+              </>
+            )}
+            {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
+            {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
+            {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
+          </ScrollView>
+        </Overlay>
       )}
-      {section === 'activity' && <CommishSeen leagueId={leagueId} />}
-      {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
-      {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" />}
-      {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
-      {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
-      {section === 'coin' && (
-        <>
-          <CommishCoin leagueId={leagueId} onChanged={() => { setEpoch((n) => n + 1); void refresh(); }} />
-          {/* Per-team balances (v0.220.0). The league-wide levers above move
-              everyone; this answers "who has what" and "give THIS team some"
-              side by side — the same table the web grew in v0.213.2. */}
-          <CoinByTeam key={`coin-${epoch}`} leagueId={leagueId} />
-        </>
-      )}
-      {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
-      {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
-      {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
 
       {native && (
-        <CommishSettings visible={settingsOpen} leagueId={leagueId}
-          onClose={() => setSettingsOpen(false)}
+        <CommishSettings
+          visible={section === 'waivers' || section === 'playoffs' || section === 'board'}
+          view={section === 'playoffs' ? 'playoffs' : section === 'board' ? 'board' : 'waivers'}
+          leagueId={leagueId}
+          onClose={() => setSection(null)}
           onSaved={() => { setEpoch((n) => n + 1); void refresh(); }} />
       )}
     </ScrollView>
