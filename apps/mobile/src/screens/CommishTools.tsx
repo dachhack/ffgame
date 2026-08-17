@@ -43,7 +43,14 @@ import { CommishToolsCard } from '../ui/CommishKit';
 // commissioner who learns one host already knows the other. `nativeOnly`
 // hides what a Sleeper-backed league manages on its own platform.
 const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean }[] }[] = [
-  { title: 'SET UP', items: [{ id: 'mode', label: '🎮 MODE & SCORING' }] },
+  // MODE & SCORING was ONE mega-scroll (mode toggle + roster builder + the
+  // ~36-knob catalog stacked); the scoring knobs lived two screens below the
+  // fold. Split three ways (v0.259.0) to match the web rail exactly.
+  { title: 'SET UP', items: [
+    { id: 'mode', label: '🎮 MODE' },
+    { id: 'lineup', label: '🧩 ROSTER' },
+    { id: 'scoring', label: '⚖ SCORING' },
+  ] },
   { title: 'RUN THE SEASON', items: [
     { id: 'seats', label: '👥 SEATS' },
     { id: 'players', label: '🧑 PLAYERS', nativeOnly: true },
@@ -194,7 +201,9 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
           onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
       )}
       {section === 'activity' && <CommishSeen leagueId={leagueId} />}
-      {section === 'mode' && <GameModeCard leagueId={leagueId} />}
+      {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
+      {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" />}
+      {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
       {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
       {section === 'coin' && (
         <>
@@ -963,7 +972,11 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
   );
 }
 
-function GameModeCard({ leagueId }: { leagueId: string }) {
+/** One component, three destinations (v0.259.0) — the same shape as the web's
+ *  LeagueSettings `view` prop: the state (mode gates everything; the builder
+ *  and the scoring drafts load together) stays shared, and `view` only decides
+ *  which block renders. */
+function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'mode' | 'lineup' | 'scoring' }) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
@@ -1086,6 +1099,7 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
   );
   return (
     <Card>
+      {view === 'mode' && (<>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Mono size={9.5} weight="700" track={0.12} tone="faint">🎮 GAME MODE</Mono>
@@ -1127,15 +1141,26 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           )}
         </View>
       )}
-      {/* The RECEPTIONS pills moved into the scoring presets below (web
-          parity) — receptions are a scoring decision. */}
+      {/* The RECEPTIONS pills moved into the scoring presets (web parity) —
+          receptions are a scoring decision. */}
       {mode === 'classic' && (
         <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
-          Receptions and every other value live under ⚖ SCORING — start from a preset, then tune.
+          The lineup lives under 🧩 ROSTER; receptions and every other value under ⚖ SCORING.
         </Mono>
       )}
-      {mode === 'classic' && spots && (
-        <View style={{ marginTop: 10 }}>
+      </>)}
+      {view === 'lineup' && mode !== 'classic' && mode !== null && (
+        <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+          A DRIP league has no lineup builder — everyone fields 8 weekly starters, any position. Roster size and position caps live on the web console's ROSTER tab.
+        </Mono>
+      )}
+      {view === 'scoring' && mode !== 'classic' && mode !== null && (
+        <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+          DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under 🎮 MODE for the full scoring editor.
+        </Mono>
+      )}
+      {view === 'lineup' && mode === 'classic' && spots && (
+        <View>
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
               starting spot — its own eligible positions + best-ball flag. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1255,8 +1280,8 @@ function GameModeCard({ leagueId }: { leagueId: string }) {
           </View>
         </View>
       )}
-      {mode === 'classic' && (
-        <View style={{ marginTop: 10 }}>
+      {view === 'scoring' && mode === 'classic' && (
+        <View>
           <Mono size={8.5} tone="faint" weight="700">⚖ SCORING  every value is yours to set</Mono>
           {/* START FROM: the recognised systems, so a standard league isn't 155
               decisions. Carries receptions, which is why the PPR pills left
