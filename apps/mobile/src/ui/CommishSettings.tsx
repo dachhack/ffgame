@@ -58,10 +58,14 @@ interface Rules {
   holdDays: number; faStart: number | null; faEnd: number | null;
 }
 
-export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
+export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'waivers' }: {
   visible: boolean; leagueId: string; onClose: () => void;
   /** Rules or visibility changed — the team screen should re-read. */
   onSaved: () => void;
+  /** Which slice this sheet shows (v0.264.0): the old monolithic ⚑ SETTINGS
+   *  overlay folded into the commish chip map — each destination opens as its
+   *  own bottom sheet, mirroring the web console's sections. */
+  view?: 'waivers' | 'playoffs' | 'board';
 }) {
   const t = useTheme();
   const [init, setInit] = useState<Rules | null>(null);
@@ -190,17 +194,55 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
     || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
     || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
 
+  const heads = {
+    waivers: { title: '⇄ Waivers & trades', sub: 'Waiver system, free agency, trade review, roster rules.' },
+    playoffs: { title: '🏆 Playoffs', sub: 'Bracket size, start week, seeding.' },
+    board: { title: '📣 League board', sub: 'Public listing + the pitch recruits see.' },
+  } as const;
+
   return (
-    <Overlay visible={visible} title="⚑ League settings" subtitle="Commissioner — waivers, rosters, coin, visibility." onClose={onClose}>
-      <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false}>
-      {!init && !msg && <Mono size={10} tone="faint">Loading the rules…</Mono>}
+    <Overlay visible={visible} title={heads[view].title} subtitle={heads[view].sub} onClose={onClose}>
+      <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      {view === 'waivers' && !init && !msg && <Mono size={10} tone="faint">Loading the rules…</Mono>}
       {!!msg && (
         <Notice tone={msg.startsWith('✓') ? 'you' : 'opp'}>
           <Mono size={10} tone={msg.startsWith('✓') ? 'you' : 'opp'}>{msg}</Mono>
         </Notice>
       )}
 
-      {init && (
+      {view === 'playoffs' && (
+        <View style={{ marginTop: 2 }}>
+          <PlayoffControls leagueId={leagueId} onChanged={onSaved} />
+        </View>
+      )}
+
+      {view === 'board' && (listed === null ? (
+        <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>
+      ) : (
+        <>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <Chip label="🔒 PRIVATE — INVITE ONLY" on={!listed} onPress={() => void setVisibility(false)} />
+            <Chip label="🔎 PUBLIC ON THE BOARD" on={listed} onPress={() => void setVisibility(true)} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+            {listed
+              ? 'Anyone browsing the league board can take an open seat. It comes off the board the moment you go private or the seats fill.'
+              : 'Only people you hand the invite code to can join — share it from the RECRUIT button.'}
+          </Mono>
+          {listed && (
+            <View style={{ marginTop: 8 }}>
+              <TextInput value={blurbDraft} maxLength={280} multiline placeholder="The pitch shown on the board…" placeholderTextColor={t.faint}
+                onChangeText={setBlurbDraft}
+                style={{ minHeight: 56, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
+              <View style={{ alignItems: 'flex-end', marginTop: 4 }}>
+                <LinkButton label="update pitch" tone="you" onPress={() => void saveBlurb()} />
+              </View>
+            </View>
+          )}
+        </>
+      ))}
+
+      {view === 'waivers' && init && (
         <>
           {sec('WAIVER SYSTEM')}
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
@@ -334,37 +376,9 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved }: {
           </View>
 
           {/* DRIP COIN moved to its own card on the ⚑ COMMISH screen — the
-              allowance and the bulk levers live next to the balances they move. */}
-
-          {sec('🏆 PLAYOFFS')}
-          <PlayoffControls leagueId={leagueId} onChanged={onSaved} />
-
-          {sec('LEAGUE VISIBILITY')}
-          {listed === null ? (
-            <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>Loading…</Mono>
-          ) : (
-            <>
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                <Chip label="🔒 PRIVATE — INVITE ONLY" on={!listed} onPress={() => void setVisibility(false)} />
-                <Chip label="🔎 PUBLIC ON THE BOARD" on={listed} onPress={() => void setVisibility(true)} />
-              </View>
-              <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
-                {listed
-                  ? 'Anyone browsing the league board can take an open seat. It comes off the board the moment you go private or the seats fill.'
-                  : 'Only people you hand the invite code to can join — share it from the RECRUIT button.'}
-              </Mono>
-              {listed && (
-                <View style={{ marginTop: 8 }}>
-                  <TextInput value={blurbDraft} maxLength={280} multiline placeholder="The pitch shown on the board…" placeholderTextColor={t.faint}
-                    onChangeText={setBlurbDraft}
-                    style={{ minHeight: 56, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg }} />
-                  <View style={{ alignItems: 'flex-end', marginTop: 4 }}>
-                    <LinkButton label="update pitch" tone="you" onPress={() => void saveBlurb()} />
-                  </View>
-                </View>
-              )}
-            </>
-          )}
+              allowance and the bulk levers live next to the balances they move.
+              PLAYOFFS and LEAGUE VISIBILITY (v0.264.0) are their own sheets
+              now — the 🏆 PLAYOFFS and 📣 LEAGUE BOARD chips on the map. */}
         </>
       )}
       </ScrollView>
