@@ -17,7 +17,7 @@ import {
   tradeSignals, setTradeSignal, pickAssets,
   type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow,
 } from '@drip/core/data/liveApi';
-import { useTheme, alpha, MONO } from '../theme.native';
+import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
@@ -135,7 +135,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       : [x.status.toUpperCase(), t.faint];
     return (
       <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: color, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.5, color }}>{label}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.5, color }}>{label}</Text>
       </View>
     );
   };
@@ -152,13 +152,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         return (
           <Pressable key={r.slug} onPress={() => toggle(sel, set, r.slug)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
               {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
             </Text>
             <Mono size={8} tone="faint">{p?.pos}</Mono>
             {wantable && myRoster != null && (
               <Pressable hitSlop={6} onPress={() => toggleSignal(r.slug, 'want', !myWants.has(r.slug))}>
-                <Text style={{ fontSize: 12, opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</Text>
+                <Text style={{ fontSize: fs(12), opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</Text>
               </Pressable>
             )}
           </Pressable>
@@ -182,7 +182,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           return (
             <Pressable key={`${a.season}:${a.round}:${a.orig}`} onPress={() => togglePick(sel, set, a)}
               style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
-              <Text style={{ fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
+              <Text style={{ fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
                 {on ? '☑' : '☐'} {pickAssetLabel(a, a.owner)}
               </Text>
             </Pressable>
@@ -201,14 +201,14 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       </View>
       {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 5 }}>{err}</Mono>}
       {shown.length === 0 && (
-        <Mono size={10} tone="faint" style={{ marginTop: 6, lineHeight: 15 }}>
+        <Mono size={10} tone="faint" style={{ marginTop: 6, lineHeight: fs(15) }}>
           No trades yet{myRoster != null ? ' — send the first offer.' : '.'}
         </Mono>
       )}
       {shown.map((x) => (
         <View key={x.id} style={{ paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            <Text style={{ flex: 1, fontSize: 11.5, color: t.text, lineHeight: 17 }}>
+            <Text style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(17) }}>
               <Text style={{ fontWeight: '700', color: x.from_roster === myRoster ? t.you : t.text }}>{teamName(x.from_roster)}</Text>
               {' '}sends {tradeLine(x, 'give')}{'\n'}
               <Text style={{ fontWeight: '700', color: x.to_roster === myRoster ? t.you : t.text }}>{teamName(x.to_roster)}</Text>
@@ -260,7 +260,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             return (
               <Pressable key={r.slug} disabled={busy} onPress={() => toggleSignal(r.slug, 'block', !on)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.warn, 14) : 'transparent' }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: on ? t.warn : t.text, fontWeight: on ? '700' : '400' }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.warn : t.text, fontWeight: on ? '700' : '400' }}>
                   {on ? '🔁' : '☐'} {p?.full_name ?? r.slug}
                 </Text>
                 <Mono size={8} tone="faint">{p?.pos}{on ? ' · ON THE BLOCK' : ''}</Mono>
@@ -270,7 +270,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         </ScrollView>
       )}
       {blocks.length === 0 && !blockEdit && (
-        <Mono size={10} tone="faint" style={{ marginTop: 6, lineHeight: 15 }}>
+        <Mono size={10} tone="faint" style={{ marginTop: 6, lineHeight: fs(15) }}>
           Nobody is shopping anyone yet. Put a player on the block and the whole league sees it here.
         </Mono>
       )}
@@ -281,7 +281,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         return (
           <View key={`blk-${s.roster_id}-${s.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
+              <Text numberOfLines={1} style={{ fontSize: fs(12), fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
               <Mono size={8.5} tone="faint">{p?.pos} · {mineRow ? 'your player' : teamName(s.roster_id)}</Mono>
             </View>
             {n > 0 && <Mono size={9} tone="you" weight="700">👀 {n}</Mono>}
@@ -305,7 +305,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>👀 TRADE INTEREST</Mono>
           {interestInMine.map((w) => (
             <View key={`in-${w.roster_id}-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-              <Text numberOfLines={2} style={{ flex: 1, fontSize: 11.5, color: t.text, lineHeight: 16 }}>
+              <Text numberOfLines={2} style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(16) }}>
                 <Text style={{ fontWeight: '700', color: t.you }}>{teamName(w.roster_id)}</Text> is interested in your <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text>
               </Text>
               {myRoster != null && <Chip label="⇄ TALK" onPress={() => openPreset(w.roster_id, [w.slug], [])} />}
@@ -313,8 +313,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           ))}
           {wants.filter((w) => w.roster_id === myRoster).map((w) => (
             <View key={`my-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: t.text }}>
-                You 👀 <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text> <Text style={{ color: t.dim, fontSize: 10 }}>({teamName(w.holder_roster)})</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
+                You 👀 <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text> <Text style={{ color: t.dim, fontSize: fs(10) }}>({teamName(w.holder_roster)})</Text>
               </Text>
               <Chip label="✕" disabled={busy} onPress={() => toggleSignal(w.slug, 'want', false)} />
               <Chip label="⇄ OFFER" onPress={() => openPreset(w.holder_roster, [], [w.slug])} />
@@ -350,7 +350,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         )}
         <TextInput value={note} maxLength={140} placeholder="Add a note (optional)…" placeholderTextColor={t.faint}
           onChangeText={setNote}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
         {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '⇄ SEND THE OFFER'}

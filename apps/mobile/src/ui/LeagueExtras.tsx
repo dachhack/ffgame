@@ -8,7 +8,7 @@ import {
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow,
 } from '@drip/core/data/liveApi';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PosPill, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
@@ -58,7 +58,7 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
         return (
           <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
             <Mono size={9} tone="faint" style={{ width: 18 }}>{i + 1}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
               {r.team ?? `Roster ${r.roster_id}`}
             </Text>
             <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
@@ -140,7 +140,7 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
             onPress={() => { tap(); void run(() => advancePlayoffs(leagueId), 'advanced'); }} />
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         Seeding comes from the standings (wins, then points-for). The bracket itself shows on the MY TEAM screen for everyone.
       </Mono>
     </View>
@@ -185,7 +185,7 @@ export function Playoffs({ leagueId }: { leagueId: string }) {
           {st.matchups.filter((m) => m.round === round).map((m) => (
             <View key={m.id} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 11.5, color: t.text }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
                   {seedOf(m.home)}{teamOf(m.home)} vs {seedOf(m.away)}{teamOf(m.away)}
                 </Text>
                 {m.home_final != null && m.away_final != null
@@ -281,7 +281,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
       <TextInput value={q} onChangeText={setQ}
         placeholder={view === 'all' ? 'Search the whole pool (free agents too)…' : 'Search this list…'}
         placeholderTextColor={t.faint}
-        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12.5, color: t.text, backgroundColor: t.bg, marginTop: 8, marginBottom: 4 }} />
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 8, marginBottom: 4 }} />
       {rows.length === 0 && (
         <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>
           {needle ? 'No player matches that search here.'
@@ -296,7 +296,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
           <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
             <PosPill pos={p.pos} size={8} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: 12, color: t.text }}>{p.full_name}</Text>
+              <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>{p.full_name}</Text>
               <Mono size={8} tone={rid != null ? 'dim' : 'faint'}>
                 {rid != null ? teams.get(rid) ?? `Roster ${rid}` : 'free agent'}
               </Mono>
@@ -311,7 +311,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
           </View>
         );
       })}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         ⇄ move puts a player on any roster (clears waiver holds; position limits bypassed, roster size still enforced). ⏳ waives with the 24h claim hold; ✂ cuts straight to free agency.
       </Mono>
 
@@ -323,7 +323,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
               if (p) void run(() => commishMovePlayer(leagueId, p.slug, rid), `${p.full_name} → ${name}`);
             }}
             style={{ paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-            <Text style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: '700', color: t.you }}>{name}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(12.5), fontWeight: '700', color: t.you }}>{name}</Text>
           </Pressable>
         ))}
       </Overlay>

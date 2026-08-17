@@ -100,17 +100,30 @@ import { Platform } from 'react-native';
 
 export const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })!;
 
-/** Global type scale (v0.265.0). The app's sizes were ported 1:1 from the
- *  web's CSS pixels, and what reads fine at arm's length on a laptop is
- *  squinty on a phone — the founder's call: "the font could use a bump up."
- *  Every size that flows through the prims (Mono, Display, Chip,
- *  PrimaryButton, LinkButton, PosPill, Overlay chrome) multiplies by this ONE
- *  knob, quarter-point rounded so line heights stay crisp. Raw <Text> sites on
- *  the game surfaces (the board, the field, score digits) are deliberately NOT
- *  scaled — those layouts are tuned to the pixel; bump them individually or
- *  not at all. */
-export const TYPE_SCALE = 1.15;
-export const fs = (n: number) => Math.round(n * TYPE_SCALE * 4) / 4;
+/** Global type scale (v0.265.0, recurved v0.266.0). The app's sizes were
+ *  ported 1:1 from the web's CSS pixels, and what reads at arm's length on a
+ *  laptop is squinty at phone distance.
+ *
+ *  v0.265.0 tried a MULTIPLIER (×1.15) and the founder's screenshot showed
+ *  why that's the wrong shape: it preserves the problem. Small text is the
+ *  complaint, and 8.5 × 1.15 ≈ 9.8 is still small — while the already-fine
+ *  titles grew the most in absolute points. What's wanted is COMPRESSION:
+ *  pull the small end up hard toward a readable floor and leave the large
+ *  end alone. Sizes below the pivot close 40% of their distance to it;
+ *  sizes at or above it don't move. Monotonic (hierarchy survives) and
+ *  continuous at the pivot:
+ *
+ *    8 → 10.75 · 8.5 → 11 · 9 → 11.5 · 10 → 12 · 11 → 12.5 · 12 → 13.25
+ *    13 → 13.75 · 14 → 14.5 · 15+ → unchanged
+ *
+ *  Applied inside the prims (Mono, Display, Chip, PrimaryButton, LinkButton,
+ *  PosPill, Overlay chrome) AND across the management surfaces' raw <Text>
+ *  (commish tools, settings sheets, team management) — the game surfaces
+ *  (the board, the field, score digits) stay pixel-tuned and unscaled. */
+export const TYPE_PIVOT = 15;
+export const TYPE_SLOPE = 0.6;   // fraction of the gap to the pivot that remains
+export const fs = (n: number) =>
+  n >= TYPE_PIVOT ? n : Math.round((TYPE_PIVOT - (TYPE_PIVOT - n) * TYPE_SLOPE) * 4) / 4;
 
 export const type = {
   mono: { fontFamily: MONO },
