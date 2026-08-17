@@ -149,6 +149,10 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
 
 export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
   const t = useTheme();
+  // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
+  // founder's call, same shape as the commish map. Identity and the
+  // over-limit warning stay above the tabs; modals are tab-agnostic.
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'league' | 'alerts'>('roster');
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -357,8 +361,23 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       </View>
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
-      {/* notification mutes live with the rest of your options (founder's call) */}
-      <Card><PushPrefs /></Card>
+
+      {/* ── The TABS (v0.268.0, founder: "My Team needs to have tabs as well.
+          Default to roster but all the other areas need to be tabbed.") —
+          the screen was one long scroll of everything; now one area shows at
+          a time, ROSTER first. Identity and the over-limit warning stay
+          global: who you are and what's broken outrank any tab. */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+        {([
+          ['roster', '🧢 ROSTER'],
+          ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', '⇄ TRADES'],
+          ['league', '🏆 LEAGUE'],
+          ['alerts', '🔔 ALERTS'],
+        ] as const).map(([id, label]) => (
+          <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
+        ))}
+      </View>
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
@@ -370,7 +389,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         </Card>
       )}
 
+      {tab === 'alerts' && <Card><PushPrefs /></Card>}
+
       {/* my roster */}
+      {tab === 'roster' && (<>
       <Card>
         <Mono size={9} tone="faint" track={0.12}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</Mono>
         {team.pos_caps && mine.length > 0 && (
@@ -409,7 +431,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
 
       {/* keepers (0182) — only when the commissioner set a keeper count */}
       {myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
+      </>)}
 
+      {tab === 'waivers' && (<>
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
         <Card>
@@ -497,17 +521,23 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         })}
         {free.length > 60 && <Mono size={9.5} tone="faint" style={{ paddingTop: 8 }}>…{free.length - 60} more — narrow the search.</Mono>}
       </Card>
+      </>)}
 
       {/* standings + the bracket — every member's read */}
+      {tab === 'league' && (<>
       <Standings leagueId={leagueId} myRoster={myRoster} />
       <Playoffs leagueId={leagueId} />
+      </>)}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
+      {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
         isCommish={!!team.is_commish} onChanged={() => void refresh()} />
+      )}
 
       {/* waiver order */}
+      {tab === 'waivers' && (
       <Card>
         <Mono size={9} tone="faint" track={0.12}>WAIVER ORDER</Mono>
         {[...team.waiver_order].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99)).map((w, i) => (
@@ -526,6 +556,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           {team.waiver_clear_min != null && ` Waivers clear daily at ${fmtEtMin(team.waiver_clear_min)} ET (${team.waiver_hold_days ?? 1}-day hold).`}
         </Mono>
       </Card>
+      )}
 
       {/* FAAB claim → collect the blind bid */}
       <Overlay visible={!!claimFor} title={claimFor ? `Claim ${claimFor.p.full_name}` : ''} onClose={() => setClaimFor(null)}>
