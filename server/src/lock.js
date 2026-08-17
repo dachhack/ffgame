@@ -8,6 +8,7 @@
 // into an already-kicked-off window, so the sweep's tick cadence is never an
 // integrity window.
 import { db } from './supabase.js';
+import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoLineup } from './engine.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
@@ -150,12 +151,90 @@ export async function backfillLockAt(week, kickoffMs) {
 function dueWindows(winKicks, now) {
   if (!winKicks) return null;
   const t = now.getTime();
-  const due = new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
-  // Classic leagues (0157) store their one weekly lineup under the pseudo-window
-  // 'wk'. Its lock moment is the week's FIRST kickoff — i.e. the instant any
-  // real window is due. Harmless for drip leagues: no 'wk' rows exist there.
-  if (due.size) due.add('wk');
-  return due;
+  return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
+  // NOTE: 'wk' is deliberately NOT added here any more (0178). A classic
+  // league's weekly lineup used to seal wholesale the instant ANY window came
+  // due — so a Thursday night game froze your Sunday backs, which is not how
+  // normal fantasy behaves. Classic rows now seal one player at a time, in
+  // sealDueClassicPicks below.
+}
+
+/** Team → this week's kickoff (ms), from the slate the caller already built. */
+export function teamKickoffs(slate) {
+  const out = {};
+  for (const g of slate ?? []) {
+    const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
+    if (!Number.isFinite(ms)) continue;
+    for (const team of [g.home, g.away]) {
+      if (!team) continue;
+      const k = String(team).toUpperCase();
+      out[k] = Math.min(out[k] ?? Infinity, ms);
+    }
+  }
+  return out;
+}
+
+/** LATE SWAP for classic leagues (0178): seal each 'wk' pick at ITS OWN
+ *  player's kickoff, not at the week's first.
+ *
+ *  A player's team comes from the league's own pool first — the same source
+ *  the DB trigger (classic_player_kickoff) reads, so the two layers can never
+ *  disagree about who is locked — then from the baked bio, which covers
+ *  Sleeper-imported leagues that have no pool of their own.
+ *
+ *  A player we CANNOT place is sealed at the week's first kickoff, which is
+ *  exactly what every classic pick did before this function existed. Unknown
+ *  must fall back to the stricter rule: leaving it editable would let an
+ *  unresolvable slug be swapped all week.
+ *
+ *  Returns the number of picks sealed. */
+export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
+  if (!teamKicks || !Object.keys(teamKicks).length) return 0;
+  const t = now.getTime();
+  const firstKick = Math.min(...Object.values(teamKicks));
+  // Classic matchups of this week that are live or final and still hold
+  // unsealed weekly picks.
+  const { data: ms } = await db().from('matchup')
+    .select('id,league_id,status').eq('week', week).in('status', ['scheduled', 'live', 'final']);
+  if (!ms?.length) return 0;
+  const leagueIds = [...new Set(ms.map((m) => m.league_id))];
+  const { data: lgs } = await db().from('league').select('id,settings_json').in('id', leagueIds);
+  const classicLeagues = new Set((lgs ?? [])
+    .filter((l) => (l.settings_json?.game_mode ?? 'drip') === 'classic').map((l) => l.id));
+  if (!classicLeagues.size) return 0;
+  const mine = ms.filter((m) => classicLeagues.has(m.league_id));
+  const { data: picks } = await db().from('sealed_pick')
+    .select('id,matchup_id,player_slug')
+    .in('matchup_id', mine.map((m) => m.id)).eq('game_window', 'wk').eq('locked', false);
+  if (!picks?.length) return 0;
+
+  const leagueOf = new Map(mine.map((m) => [m.id, m.league_id]));
+  const { data: pool } = await db().from('league_pool')
+    .select('league_id,slug,team').in('league_id', [...classicLeagues]);
+  const poolTeam = new Map((pool ?? []).map((r) => [`${r.league_id}:${r.slug}`, r.team]));
+  const teamOf = (leagueId, slug) => {
+    const fromPool = poolTeam.get(`${leagueId}:${slug}`);
+    if (fromPool) return String(fromPool).toUpperCase();
+    const baked = PLAYER_BIO[slug]?.team;
+    return baked ? String(baked).toUpperCase() : null;
+  };
+
+  const dueIds = [];
+  for (const p of picks) {
+    // An EMPTY spot has nobody to be late for; it seals with the week so a
+    // manager can still fill it right up to their next kickoff.
+    const team = p.player_slug ? teamOf(leagueOf.get(p.matchup_id), p.player_slug) : null;
+    // No team resolved (unknown slug) or no game this week (BYE) → the old
+    // week-wide rule. A bye player can't be swapped in after the week starts
+    // any more than he could before.
+    const kick = team != null && Number.isFinite(teamKicks[team]) ? teamKicks[team] : firstKick;
+    if (kick <= t) dueIds.push(p.id);
+  }
+  if (!dueIds.length) return 0;
+  const iso = now.toISOString();
+  const { data } = await db().from('sealed_pick')
+    .update({ locked: true, revealed_at: iso }).in('id', dueIds).eq('locked', false).select('id');
+  return (data ?? []).length;
 }
 
 /** Lock any scheduled matchups whose lock_at has passed: flip status → 'live' and

@@ -15,7 +15,7 @@ import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
-import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups } from './lock.js';
+import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
@@ -189,6 +189,12 @@ async function tickContext(ctx, season) {
   if (locked) log(`[${ctx.tag}] locked`, locked, 'matchups');
   const sealed = await lockDueWindows(week, wk);
   if (sealed) log(`[${ctx.tag}] sealed`, sealed, 'window picks');
+  // CLASSIC late swap (0178): weekly picks seal one player at a time, at their
+  // own team's kickoff — so a Thursday game no longer freezes Sunday's lineup.
+  try {
+    const swapped = await sealDueClassicPicks(week, teamKickoffs(slate));
+    if (swapped) log(`[${ctx.tag}] sealed`, swapped, 'classic picks (per player)');
+  } catch (e) { log(`[${ctx.tag}] classic seal`, e.message); }
 
   // Poll live games → plays, keyed at the board week. Reuses the scoreboard above.
   const toPoll = gamesToPollFrom(games);
