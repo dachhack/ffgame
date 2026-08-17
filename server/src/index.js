@@ -15,7 +15,7 @@ import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
-import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs } from './lock.js';
+import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues } from './sync.js';
 import { sweepNative } from './native.js';
@@ -184,6 +184,16 @@ async function tickContext(ctx, season) {
     if (Number.isFinite(ms)) winKicks[g.win] = Math.min(winKicks[g.win] ?? Infinity, ms);
   }
   const wk = Object.keys(winKicks).length ? winKicks : null;
+
+  // AUTO-SLOT (v0.247.0): a classic team starts the week with the best
+  // projected lineup its roster can field, which the manager then adjusts.
+  // BEFORE lockDueMatchups, so a week that comes due on this same tick seals a
+  // real lineup rather than a blank card. Idempotent — it only writes spots
+  // that have no row, so a set lineup costs one read and nothing else.
+  try {
+    const auto = await autoSlotClassicLineups(week);
+    if (auto) log(`[${ctx.tag}] auto-slotted`, auto, 'classic spots');
+  } catch (e) { log(`[${ctx.tag}] auto-slot`, e.message); }
 
   const locked = await lockDueMatchups(new Date(), wk, week);
   if (locked) log(`[${ctx.tag}] locked`, locked, 'matchups');

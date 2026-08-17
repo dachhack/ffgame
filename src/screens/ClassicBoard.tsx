@@ -8,9 +8,9 @@
 // (matchup.lock_at) the lineup seals and the board turns into the live view:
 // your starters vs theirs, each scoring classicPoints off the same live play
 // stream the drip boards run on, refreshed every 60s.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Pos } from '@drip/core/types';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -209,6 +209,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const [stashed, setStashed] = useState<Set<string>>(new Set());
   // Tenure by slug (0172) — loaded only when a spot actually filters on it.
   const [expMap, setExpMap] = useState<Record<string, number>>({});
+  // AUTO-SLOT PRE-CONDITIONS (v0.247.0). The fill below writes to the server,
+  // so it must not run on half-loaded inputs: the spot list decides what is
+  // legal, tenure decides who clears a filtered spot, and a stash the DB would
+  // refuse takes the whole batch down. Each flag is set only on the SUCCESS
+  // path of its own load — a failed read leaves the fill to the worker rather
+  // than guessing from an empty default.
+  const [setupReady, setSetupReady] = useState(false);
+  const [stashReady, setStashReady] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
@@ -242,14 +250,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         setMatchup(m);
         nativeRosters(r.leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
+          setStashReady(true);
         }).catch(() => {});
-        leagueGameMode(r.leagueId).then((gm) => {
+        leagueGameMode(r.leagueId).then(async (gm) => {
           if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr));
           if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
+          // Awaited rather than fired-and-forgotten so the auto-slot below can't
+          // run against an empty tenure map and leave every filtered spot blank.
           if (gm.ok && (gm.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
-            leaguePoolExp(r.leagueId).then(setExpMap).catch(() => {});
+            try { setExpMap(await leaguePoolExp(r.leagueId)); } catch { return; }
           }
+          if (gm.ok) setSetupReady(true);
         }).catch(() => {});
         // Flag rules (0144) bite classic scoring (bonus_mult / bonus_pts) and
         // the best-ball fill (no_start) — same cache the drip screens keep.
@@ -541,6 +553,46 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         const p = pool.find((x) => x.slug === cand);
         return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
       }));
+
+  // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
+  // The worker sets every classic team's lineup each week (autoSlotClassic-
+  // Lineups), which is what makes an OPPONENT's board worth looking at. This
+  // does the same thing for the manager who is standing right here, so opening
+  // the screen shows a lineup rather than nine dashes and a wait for the next
+  // tick. Same function, same projections, same roster — the two can only
+  // agree.
+  //
+  // `mine` is exactly the map autoSlotPlan wants: a key exists iff that spot
+  // has a stored row. So a spot the manager EMPTIED holds null, is a key, and
+  // is never re-filled — the distinction the whole feature rests on. Runs at
+  // most once per mount (a second pass would have nothing to write anyway,
+  // which is the real guard; the ref just avoids the round trip).
+  const autoSlotted = useRef(false);
+  useEffect(() => {
+    if (autoSlotted.current || state !== 'ready' || locked || !matchup) return;
+    if (!setupReady || !stashReady || !pool.length || !slotDefs.length) return;
+    const roster = pool
+      .filter((p) => !stashed.has(p.slug))                       // taxi/IR: the DB would refuse the row
+      .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }));
+    const plan = autoSlotPlan(slotDefs, bestball, mine, roster, (p) => PROJ_2026.get(p.id) ?? 0);
+    autoSlotted.current = true;
+    if (!plan.length) return;
+    // Deliberately NOT applyMove: this is not something the manager did, so it
+    // gets no "saved" flash, and — unlike a manual pick — the board is updated
+    // only AFTER the write lands. An optimistic lineup that failed to save
+    // would read as set while the server still had nine empty spots, which is
+    // the one thing this screen must never do. A failed write is simply left to
+    // the worker, which sets the same lineup on its next tick.
+    savePicks(matchup.id, userId, plan.map((r) => ({
+      game_window: CLASSIC_WIN, roster_slot: r.slot, player_slug: r.player, metric_id: null,
+    }))).then(() => {
+      setMine((prev) => {
+        const next = { ...prev };
+        for (const r of plan) if (next[r.slot] === undefined) next[r.slot] = r.player;
+        return next;
+      });
+    }).catch(() => {});
+  }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap]);
 
   if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
   if (state === 'none') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>No matchup this week.</div>;
