@@ -109,3 +109,4 @@ $RUN -f scripts/db/faab-grant-probes.sql | grep -E "PROBE FAIL|ALL FAAB-GRANT PR
 $RUN -f scripts/db/draft-setup-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-SETUP PROBES" || { echo "DRAFT-SETUP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/draft-schedule-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-SCHEDULE PROBES" || { echo "DRAFT-SCHEDULE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/classic-open-lineups-probes.sql | grep -E "PROBE FAIL|ALL CLASSIC-OPEN-LINEUP PROBES" || { echo "CLASSIC-OPEN-LINEUP PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/seat-agent-probes.sql | grep -E "PROBE FAIL|ALL SEAT-AGENT PROBES" || { echo "SEAT-AGENT PROBES FAILED"; exit 1; }

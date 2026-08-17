@@ -200,13 +200,14 @@ async function lineupPolicy(leagueId, ctx) {
 export async function prefetchTick(live, week) {
   const leagueIds = [...new Set(live.map((m) => m.league_id))];
   const matchupIds = live.map((m) => m.id);
-  const [mem, lg, lu, ap, pk, fl] = await Promise.all([
+  const [mem, lg, lu, ap, pk, fl, ag] = await Promise.all([
     db().from('league_membership').select('league_id,sleeper_roster_id,app_user_id,enrolled,controller').in('league_id', leagueIds),
     db().from('league').select('id,lineup_policy,settings_json').in('id', leagueIds),
     db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
     db().from('applied_state').select('matchup_id,app_user_id,payload_json').in('matchup_id', matchupIds),
     db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
     db().from('player_flag').select('league_id,slug,label,rules').in('league_id', leagueIds),
+    db().from('seat_agent').select('league_id,roster_id,agent_user_id').in('league_id', leagueIds),
   ]);
   const members = new Map();   // leagueId -> Map(roster -> member)
   for (const m of mem.data ?? []) {
@@ -233,7 +234,9 @@ export async function prefetchTick(live, week) {
     if (!allPicks.has(p.matchup_id)) allPicks.set(p.matchup_id, []);
     allPicks.get(p.matchup_id).push(p);
   }
-  return { members, policy, scoring, mode, flags, lineups, applied, allPicks };
+  const agents = new Map();    // `${leagueId}:${roster}` -> agent uid (0180: unclaimed classic seats)
+  for (const r of ag.data ?? []) agents.set(`${r.league_id}:${r.roster_id}`, r.agent_user_id);
+  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -301,8 +304,21 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // what scores. Ambiguous orphans are dropped on both sides of that contract.
   const homeMem = byRoster.get(matchup.home_roster_id);
   const awayMem = byRoster.get(matchup.away_roster_id);
+  // SEAT AGENTS (0180): an unclaimed classic seat's rows are authored by its
+  // agent, so the agent's uid IS the seat's identity here. Passing it
+  // explicitly matters most when BOTH seats are agent-held — two foreign
+  // authors would be ambiguous orphans otherwise, and both lineups would
+  // silently field nothing.
+  const agentUid = async (rosterId) => {
+    if (ctx) return ctx.agents?.get(`${matchup.league_id}:${rosterId}`) ?? null;
+    const { data } = await db().from('seat_agent').select('agent_user_id')
+      .eq('league_id', matchup.league_id).eq('roster_id', rosterId).maybeSingle();
+    return data?.agent_user_id ?? null;
+  };
+  const homeSeatUid = homeMem?.app_user_id ?? await agentUid(matchup.home_roster_id);
+  const awaySeatUid = awayMem?.app_user_id ?? await agentUid(matchup.away_roster_id);
   const seatRows = (matchup.status !== 'scheduled' && !override)
-    ? assignSealedRows(await matchupSealedRows(matchup, ctx), homeMem?.app_user_id ?? null, awayMem?.app_user_id ?? null)
+    ? assignSealedRows(await matchupSealedRows(matchup, ctx), homeSeatUid, awaySeatUid)
     : { home: [], away: [] };
   const sideLineup = async (rosterId) => {
     const mem = byRoster.get(rosterId);

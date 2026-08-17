@@ -12,6 +12,7 @@ import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
+import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
@@ -335,45 +336,94 @@ export async function autoSlotClassicLineups(week, slate = null) {
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id,app_user_id').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
     const userOf = new Map((mems ?? []).filter((x) => x.app_user_id).map((x) => [x.sleeper_roster_id, x.app_user_id]));
-    if (!userOf.size) continue;
+    // SEAT AGENTS (0180): an unclaimed seat writes as its agent. The mapping
+    // exists only for classic leagues, and the claim trigger retires it the
+    // moment a human takes the seat.
+    const agents = await seatAgentsFor([leagueId]);
+    const agentOf = (rid) => agents.get(`${leagueId}:${rid}`) ?? null;
+    if (!userOf.size && !agents.size) continue;
 
     const { data: rows } = await db().from('sealed_pick')
-      .select('matchup_id,app_user_id,roster_slot,player_slug')
+      .select('matchup_id,app_user_id,roster_slot,player_slug,locked')
       .in('matchup_id', matchups.map((m) => m.id)).eq('game_window', CLASSIC_WIN);
-    // (matchup, user) → { slot: slug|null } for the spots that HAVE a row.
+    // (matchup, user) → { slot: slug|null } for the spots that HAVE a row,
+    // and the locked subset separately — the agent path treats them apart.
     const storedBy = new Map();
+    const lockedBy = new Map();
     for (const r of rows ?? []) {
       const k = `${r.matchup_id}#${r.app_user_id}`;
       if (!storedBy.has(k)) storedBy.set(k, {});
       storedBy.get(k)[r.roster_slot] = r.player_slug;
+      if (r.locked) {
+        if (!lockedBy.has(k)) lockedBy.set(k, {});
+        lockedBy.get(k)[r.roster_slot] = r.player_slug;
+      }
     }
 
-    const payload = [];
+    const humanPayload = [];
+    const agentPayload = [];
     for (const m of matchups) {
       // Deduped: a self-matchup (a bye week's placeholder) would otherwise plan
       // the same seat twice and put two rows for one spot in a single insert.
       for (const rosterId of new Set([m.home_roster_id, m.away_roster_id])) {
         const uid = userOf.get(rosterId);
         const roster = rosterOf.get(rosterId);
-        if (!uid || !roster?.length) continue;
-        const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
-        for (const p of autoSlotPlan(slots, bestball, stored, roster, valueOf)) {
-          payload.push({
-            matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
+        if (!roster?.length) continue;
+        if (uid) {
+          // A MANAGED seat: fill only the spots with no row at all. A row is a
+          // decision — including a NULL a manager wrote on purpose.
+          const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
+          for (const p of autoSlotPlan(slots, bestball, stored, roster, valueOf)) {
+            humanPayload.push({
+              matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
+              roster_slot: p.slot, player_slug: p.player, metric_id: null, locked: false,
+            });
+          }
+          continue;
+        }
+        const agent = agentOf(rosterId);
+        if (!agent) continue;
+        // An AGENT seat is a DILIGENT manager, not a Tuesday snapshot: its
+        // unlocked rows are the worker's own prior writes, never a decision,
+        // so they are re-planned at the current values every tick — a player
+        // ruled Out on Friday drops from Sunday's spots exactly as a careful
+        // human would drop him. Only LOCKED rows stand (his game started; the
+        // seal is the seal), and their players stay reserved.
+        const k = `${m.id}#${agent}`;
+        const lockedMap = lockedBy.get(k) ?? {};
+        const current = storedBy.get(k) ?? {};
+        for (const p of autoSlotPlan(slots, bestball, lockedMap, roster, valueOf)) {
+          if (current[p.slot] === p.player) continue;   // already right — no churn
+          agentPayload.push({
+            matchup_id: m.id, app_user_id: agent, game_window: CLASSIC_WIN,
             roster_slot: p.slot, player_slug: p.player, metric_id: null, locked: false,
           });
         }
       }
     }
-    if (!payload.length) continue;
-    // ignoreDuplicates → ON CONFLICT DO NOTHING. Not an upsert: a row that
-    // appeared since the read above is a manager's, and it wins. The returned
-    // rows are the ones actually inserted, so the count never overstates.
-    const { data: ins, error } = await db().from('sealed_pick')
-      .upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot', ignoreDuplicates: true })
-      .select('id');
-    if (error) throw error;
-    slotted += (ins ?? []).length;
+    // Humans: ignoreDuplicates → ON CONFLICT DO NOTHING. Not an upsert: a row
+    // that appeared since the read above is a manager's, and it wins. The
+    // returned rows are the ones actually inserted, so the count is honest.
+    if (humanPayload.length) {
+      const { data: ins, error } = await db().from('sealed_pick')
+        .upsert(humanPayload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot', ignoreDuplicates: true })
+        .select('id');
+      if (error) throw error;
+      slotted += (ins ?? []).length;
+    }
+    // Agents: a real upsert — the worker owns these rows and is replacing its
+    // own earlier answer. enforce_window_lock passes the server unconditionally
+    // and the sweep re-locks nothing that isn't due, so a locked row can only
+    // be missing from this payload, never clobbered by it. (A claim landing
+    // inside this tick's window can strand a few just-written agent rows on a
+    // now-managed seat; seat attribution's orphan adoption renders them until
+    // the next claim-free tick, and the mapping's deletion stops the writes.)
+    if (agentPayload.length) {
+      const { error } = await db().from('sealed_pick')
+        .upsert(agentPayload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
+      if (error) throw error;
+      slotted += agentPayload.length;
+    }
   }
   return slotted;
 }
