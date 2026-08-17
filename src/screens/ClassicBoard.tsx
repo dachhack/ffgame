@@ -168,15 +168,23 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
 /** A player on one side of a row: name, position line, game line, score.
  *  Mirrored for the away side so both read outward from the centre pill. */
 function BoardCell({ e, align }: { e: import('@drip/core/engine/matchupBoard').BoardEntry | null; align: 'left' | 'right' }) {
+  const right = align === 'right';
   if (!e) return <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', textAlign: align }}>Empty</div>;
   const dim = e.state === 'done';
   return (
-    <div style={{ textAlign: align, minWidth: 0 }}>
+    <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      {/* The face goes on the OUTER edge so both sides read outward from the
+          centre pill, the same way the names and scores do. PlayerImg already
+          degrades headshot → team logo → position pill, so a missing portrait
+          costs the picture and never the row. */}
+      <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={32} />
+      <div style={{ textAlign: align, minWidth: 0, flex: 1 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: dim ? 'var(--dim)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
       <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: 'var(--faint)' }}>
         <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
+      </div>
       </div>
     </div>
   );
