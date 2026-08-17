@@ -50,7 +50,7 @@ on conflict (id) do nothing;
 do $$
 declare
   r jsonb; lid uuid; nl uuid; code text; pool jsonb; i int; s text;
-  b_worst text[]; c_worst text; c_best text; lid2 uuid; nl2 uuid;
+  b_worst text[]; c_worst text; c_best text; c_mid text; lid2 uuid; nl2 uuid;
 begin
   insert into app_user (id, email) values
     ('00000000-0000-0000-0000-00000000000d', 'd@test.dev'),
@@ -61,7 +61,7 @@ begin
 
   -- ── fixture: 4 teams × 7 rounds, d commish on seat 1, e on seat 2 ─────────
   perform probe_as('d');
-  r := create_native_league('Dynasty League', '2026', 4, 7, 60);
+  r := create_native_league('Dynasty League', '2024', 4, 7, 60);
   perform assert_ok(r, 'dy0 create');
   lid := (r ->> 'league_id')::uuid;
   code := r ->> 'invite_code';
@@ -119,10 +119,18 @@ begin
   select nr.slug into c_best from native_roster nr join league_pool lp
     on lp.league_id = nr.league_id and lp.slug = nr.slug
     where nr.league_id = lid and nr.roster_id = 2 order by lp.rank asc limit 1;
+  -- a third DISTINCT roster-2 player for the over-the-cap probe. A literal
+  -- ('p01') flaked here: the draft order is random, so roster 2 sometimes
+  -- OWNS p01 as its best pick — the list collapsed to 2 distinct slugs and
+  -- sailed under the cap. Pick the middle player instead, guaranteed to be
+  -- neither the best nor the worst on a 7-man roster.
+  select nr.slug into c_mid from native_roster nr join league_pool lp
+    on lp.league_id = nr.league_id and lp.slug = nr.slug
+    where nr.league_id = lid and nr.roster_id = 2 order by lp.rank asc offset 3 limit 1;
 
   perform probe_as('e');
   perform assert_err(set_keepers(lid, 1, to_jsonb(b_worst)), 'forbidden', 'dy4 not your roster');
-  perform assert_err(set_keepers(lid, 2, jsonb_build_array(c_worst, c_best, 'p01')), 'at most 2', 'dy4a over the cap');
+  perform assert_err(set_keepers(lid, 2, jsonb_build_array(c_worst, c_best, c_mid)), 'at most 2', 'dy4a over the cap');
   perform assert_err(set_keepers(lid, 2, '["p99"]'::jsonb), 'not on this roster', 'dy4b foreign slug');
   perform assert_true((select count(*) from keeper_pick where league_id = lid and roster_id = 2) = 0,
     'dy4c refused calls stored nothing');
@@ -132,7 +140,7 @@ begin
 
   -- keeper_state preview: declared first, top-up by rank
   r := keeper_state(lid);
-  perform assert_true((r ->> 'keeper_count')::int = 2 and (r ->> 'next_season') = '2027',
+  perform assert_true((r ->> 'keeper_count')::int = 2 and (r ->> 'next_season') = '2025',
     'dy5 state basics');
   perform assert_true(
     (select count(*) from jsonb_array_elements(r -> 'teams') t
@@ -153,13 +161,13 @@ begin
   r := rollover_league(lid);
   perform assert_ok(r, 'dy6a rollover');
   nl := (r ->> 'league_id')::uuid;
-  perform assert_true(r ->> 'season' = '2027', 'dy6b season+1');
+  perform assert_true(r ->> 'season' = '2025', 'dy6b season+1');
   perform assert_true(r ->> 'game_mode' = 'classic', 'dy6c the response NAMES the mode');
   perform assert_true((r ->> 'kept')::int = 8 and (r ->> 'keeper_slots')::int = 2
     and (r ->> 'draft_rounds')::int = 5 and (r ->> 'roster_size')::int = 7, 'dy6d keeper arithmetic');
 
   -- the new row: same identity, next season, settings carried
-  perform assert_true((select count(*) from league where id = nl and season = '2027'
+  perform assert_true((select count(*) from league where id = nl and season = '2025'
       and sleeper_league_id = (select sleeper_league_id from league where id = lid)
       and provider = 'native'
       and settings_json ->> 'game_mode' = 'classic'
@@ -237,7 +245,7 @@ begin
 
   -- ── rookie-only rollover (dynasty phase 2) ────────────────────────────────
   perform probe_as('d');
-  r := create_native_league('Rookie Pipe', '2026', 2, 5, 60);
+  r := create_native_league('Rookie Pipe', '2024', 2, 5, 60);
   perform assert_ok(r, 'dy14 create');
   lid2 := (r ->> 'league_id')::uuid;
   pool := '[]'::jsonb;

@@ -50,9 +50,10 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     pickAssets(leagueId).then((a) => {
-      // only the future season's picks are tradeable; a rolled league's
-      // pending-draft assets belong to the draft room
-      if (a.ok) setAssets(a.picks.filter((p) => p.season === a.future_season));
+      // every FUTURE season's picks are tradeable (dynasty holds a 3-year
+      // horizon, 0185); a rolled league's pending-draft assets belong to the
+      // draft room
+      if (a.ok && a.future_season != null) setAssets(a.picks.filter((p) => p.season >= a.future_season!));
     }),
   ]).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -63,8 +64,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     tap();
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
   };
-  const samePick = (a: { round: number; orig: number }, b: { round: number; orig: number }) =>
-    a.round === b.round && a.orig === b.orig;
+  const samePick = (a: PickAssetRow, b: PickAssetRow) =>
+    a.season === b.season && a.round === b.round && a.orig === b.orig;
   const togglePick = (list: PickAssetRow[], set: (v: PickAssetRow[]) => void, p: PickAssetRow) => {
     tap();
     set(list.some((x) => samePick(x, p)) ? list.filter((x) => !samePick(x, p)) : [...list, p]);
@@ -115,8 +116,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     setBusy(true); setErr(null);
     try {
       const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
-        givePicks.map((p) => ({ round: p.round, orig: p.orig })),
-        getPicks.map((p) => ({ round: p.round, orig: p.orig })));
+        givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
+        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })));
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       commit();
       setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
@@ -179,7 +180,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         {owned.map((a) => {
           const on = sel.some((x) => samePick(x, a));
           return (
-            <Pressable key={`${a.round}:${a.orig}`} onPress={() => togglePick(sel, set, a)}
+            <Pressable key={`${a.season}:${a.round}:${a.orig}`} onPress={() => togglePick(sel, set, a)}
               style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
               <Text style={{ fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
                 {on ? '☑' : '☐'} {pickAssetLabel(a, a.owner)}

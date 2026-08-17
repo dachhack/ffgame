@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
-  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool,
+  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { rosterLabel } from '@drip/core/engine/classic';
@@ -72,8 +72,11 @@ export function Recruit({ onBack, onJoined }: {
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
-  // DYNASTY (0184): an identity on top of either game, not a third game.
-  const [dynasty, setDynasty] = useState(false);
+  // CONTINUITY (0185): what carries into next season — redraft / keeper /
+  // dynasty, an axis on top of either game.
+  const [continuity, setContinuity] = useState<LeagueContinuity>('redraft');
+  const [keepN, setKeepN] = useState(4);      // keeper: how many each team keeps
+  const [rookieN, setRookieN] = useState(3);  // dynasty: rookie-draft rounds
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
@@ -191,7 +194,7 @@ export function Recruit({ onBack, onJoined }: {
     if (!nm || busy || !game) return;
     // The busy note NAMES the game — the last chance to notice a wrong tap
     // before it freezes at the draft.
-    setBusy(true); setErr(null); setMakeNote(`Creating your ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       // Same defaults the web derives from the game type (v0.221.0): drip
@@ -199,7 +202,8 @@ export function Recruit({ onBack, onJoined }: {
       // shape is the starting-lineup spec.
       const rounds = game === 'classic' ? 15 : 12;
       const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
-      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game, dynasty);
+      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
+        continuity, continuity === 'keeper' ? keepN : continuity === 'dynasty' ? rookieN : null);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
@@ -210,7 +214,7 @@ export function Recruit({ onBack, onJoined }: {
       commit();
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
-      setJoined(`${nm}, a ${dynasty ? '🏰 DYNASTY ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
+      setJoined(`${nm}, a ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
       setMakeOpen(false); setNameDraft('');
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); setMakeNote(''); onJoined(); await load(); }
@@ -289,20 +293,37 @@ export function Recruit({ onBack, onJoined }: {
                       ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
                       : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
                 </Mono>
-                {/* DYNASTY (0184): presets keepers + a 3-round rookie draft +
-                    tradeable picks; everything stays editable in 🔁 NEXT SEASON. */}
-                <Pressable onPress={() => { tap(); setDynasty((v) => !v); }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 }}>
-                  <View style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, borderColor: dynasty ? t.you : t.bd, backgroundColor: dynasty ? t.you : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                    {dynasty && <Text style={{ fontSize: 9, color: t.onAccent, fontWeight: '700' }}>✓</Text>}
+                {/* CONTINUITY (0185): redraft / keeper / dynasty. One
+                    selection; the number it needs appears with it. Editable
+                    any time in 🎮 MODE. */}
+                <Mono size={8.5} tone="faint" track={0.1} style={{ marginTop: 10 }}>NEXT SEASON</Mono>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); setContinuity('redraft'); }} />
+                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); setContinuity('keeper'); }} />
+                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); setContinuity('dynasty'); }} />
+                </View>
+                {continuity !== 'redraft' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'each team keeps' : 'rookie draft runs'}</Mono>
+                    <Pressable hitSlop={6} onPress={() => { tap(); (continuity === 'keeper' ? setKeepN : setRookieN)((v) => Math.max(1, v - 1)); }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                    </Pressable>
+                    <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 24, textAlign: 'center' }}>
+                      {continuity === 'keeper' ? keepN : rookieN}
+                    </Text>
+                    <Pressable hitSlop={6} onPress={() => { tap(); continuity === 'keeper' ? setKeepN((v) => Math.min(11, v + 1)) : setRookieN((v) => Math.min(5, v + 1)); }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                    </Pressable>
+                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>
                   </View>
-                  <Mono size={9.5} style={{ flex: 1 }}>🏰 DYNASTY — rosters carry over season to season</Mono>
-                </Pressable>
-                {dynasty && (
-                  <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 12 }}>
-                    Each team keeps most of its roster into next season and drafts rookies in a 3-round rookie draft — every future pick a tradeable asset from day one. Adjustable any time in 🔁 NEXT SEASON.
-                  </Mono>
                 )}
+                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+                  {continuity === 'redraft'
+                    ? 'Every season starts fresh — full draft, nothing carries over.'
+                    : continuity === 'keeper'
+                      ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
+                      : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
+                </Mono>
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
                 onChangeText={(v) => { setNameDraft(v); setErr(null); }}

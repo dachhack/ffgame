@@ -567,7 +567,7 @@ export interface Enrollment {
   pick_user_id?: string;
   /** You steer this team but the seat isn't yours. */
   comanager?: boolean;
-  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean } | null;
+  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean; continuity?: LeagueContinuity } | null;
 }
 
 /** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
@@ -1391,7 +1391,9 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
   rpc<{ ok: boolean; code?: string; error?: string }>('admin_regen_code', { p_league_id: leagueId, p_which: which });
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
-export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; game_mode?: 'drip' | 'classic'; dynasty?: boolean; }
+/** The league-continuity axis (0185): what carries into next season. */
+export type LeagueContinuity = 'redraft' | 'keeper' | 'dynasty';
+export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; game_mode?: 'drip' | 'classic'; dynasty?: boolean; continuity?: LeagueContinuity; }
 /** Per-position roster limits (0071). null = uncapped. Absent blob = legacy
  *  defaults (QB 3, TE 3, K 1, D/ST 1, RB/WR uncapped). Enforced server-side
  *  for humans AND honored by the AI. */
@@ -1405,16 +1407,18 @@ export const createNativeLeague = (
   /** Which game the league plays (0175). 'classic' also self-flags the league
    *  as classic-capable, so its commissioner can switch modes pre-draft. */
   gameMode: 'drip' | 'classic' = 'drip',
-  /** Dynasty at creation (0184): presets keeper_count (roster − 3) and 3
-   *  rookie rounds, stamps the league, and deals the first futures. Sugar
-   *  over the 🔁 NEXT SEASON settings — everything stays editable. */
-  dynasty = false,
+  /** Continuity at creation (0185): 'keeper' keeps continuityN players per
+   *  team; 'dynasty' runs a continuityN-round rookie draft (keepers implied:
+   *  roster − rounds) and deals THREE seasons of tradeable pick assets.
+   *  Editable later in 🎮 MODE & SEASON (set_league_continuity). */
+  continuity: LeagueContinuity = 'redraft',
+  continuityN: number | null = null,
 ) =>
   rpc<NativeCreateResult>('create_native_league', {
     p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
-    p_game_mode: gameMode, p_dynasty: dynasty,
+    p_game_mode: gameMode, p_continuity: continuity, p_continuity_n: continuityN,
   });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
@@ -1492,7 +1496,8 @@ export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
 export const proposeTrade = (
   leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string,
-  givePicks?: { round: number; orig: number }[], getPicks?: { round: number; orig: number }[],
+  /** season omitted = next season; multi-year futures name theirs (0185). */
+  givePicks?: { season?: string; round: number; orig: number }[], getPicks?: { season?: string; round: number; orig: number }[],
 ) =>
   tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
@@ -1742,6 +1747,14 @@ export interface KeeperState {
   /** The league's dynasty identity (0184): stamped at creation or implied by
    *  a live keeper_count / rookie_rounds setting. */
   dynasty?: boolean;
+  /** The continuity axis (0185): redraft / keeper / dynasty. */
+  continuity?: LeagueContinuity;
+  rookie_rounds?: number;
+  /** The Super Bowl gate (0185): the rollover is an option that appears when
+   *  the season is over (Feb 15 after the season year). */
+  season_over?: boolean;
+  /** The caller is a super admin — may roll before the gate, for testing. */
+  admin?: boolean;
   keeper_count: number; roster_size: number; draft_status: string;
   season: string; next_season: string | null;
   game_mode: 'drip' | 'classic';
@@ -1752,6 +1765,13 @@ export interface KeeperState {
 }
 export const keeperState = (leagueId: string) =>
   rpc<KeeperState>('keeper_state', { p_league_id: leagueId });
+
+/** Commissioner (0185): the continuity selector — redraft clears everything,
+ *  keeper takes the keeper count, dynasty takes the rookie-round count and
+ *  deals three seasons of tradeable pick assets. Lives in 🎮 MODE & SEASON. */
+export const setLeagueContinuity = (leagueId: string, mode: LeagueContinuity, n?: number | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; continuity?: LeagueContinuity; keeper_count?: number; rookie_rounds?: number; seasons?: string[] }>(
+    'set_league_continuity', { p_league_id: leagueId, p_mode: mode, p_n: n ?? null }), 'set_league_continuity');
 
 /** Commissioner (0183): how many rounds next season's rookie draft runs.
  *  Provisions one tradeable pick asset per seat per round; 0 clears. Growing

@@ -180,8 +180,9 @@ export function Leagues({ userId, onOpen, onBoard }: {
                   {!!e.comanager && <Mono size={8.5} tone="warn" track={0.08}>CO-MGR</Mono>}
                   {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
                   {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
-                  {/* dynasty (0184) — rosters carry over: keepers, rookie drafts, tradeable picks */}
+                  {/* continuity (0184/0185) — what carries over: keepers, or the full dynasty kit */}
                   {!!lg?.dynasty && <Mono size={8.5} tone="you" track={0.08}>🏰 DYNASTY</Mono>}
+                  {lg?.continuity === 'keeper' && <Mono size={8.5} tone="you" track={0.08}>★ KEEPER</Mono>}
                   {!lg?.is_mock && <CardUnreadPill leagueId={e.league_id} />}
                   {!lg?.is_mock && (
                     <CardSignalPills league_id={e.league_id} sleeper_roster_id={e.sleeper_roster_id}

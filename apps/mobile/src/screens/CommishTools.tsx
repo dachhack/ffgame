@@ -11,7 +11,7 @@
 // CommishPlayers (ui/LeagueExtras) and CommishSettings (ui/CommishSettings).
 // The server is the real gate on all of it — every RPC here checks the caller
 // is the league's commissioner or an admin; the tab merely hides the door.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishBulkCoin,
@@ -24,8 +24,9 @@ import {
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
-  keeperState, setKeeperCount, rolloverLeague, leaguePool, type KeeperState,
-  setRookieRounds, pickAssets, type PickAssetRow,
+  keeperState, rolloverLeague, leaguePool, type KeeperState,
+  pickAssets, type PickAssetRow,
+  setLeagueContinuity, type LeagueContinuity,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
@@ -489,20 +490,22 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [st, setSt] = useState<KeeperState | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
-  const [count, setCount] = useState('');
   const [rookieOnly, setRookieOnly] = useState(false);
   const [picks, setPicks] = useState<PickAssetRow[]>([]);
   const [futureSeason, setFutureSeason] = useState<string | null>(null);
-  const [rr, setRr] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const seeded = useRef(false);
 
   const load = async () => {
     const s = await keeperState(leagueId);
     if (s.error || !s.ok) { setNote(friendlyError(s.error ?? 'could not load')); return; }
-    setSt(s); setCount(String(s.keeper_count));
+    setSt(s);
+    // a dynasty league's rollover IS the rookie draft — default the toggle on,
+    // once, leaving the commissioner's own flips alone afterward
+    if (!seeded.current) { seeded.current = true; setRookieOnly(s.continuity === 'dynasty'); }
     const a = await pickAssets(leagueId).catch(() => null);
-    if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); setRr(String(a.rookie_rounds)); }
+    if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); }
   };
   useEffect(() => {
     void load().catch((e) => setNote(friendlyError(e)));
@@ -516,31 +519,11 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   const modeName = st.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP';
   const rolled = !!st.rolled_league_id;
   const drafted = st.draft_status === 'complete';
+  // the Super Bowl gate (0185): the rollover appears when the season is over
+  const canRoll = !!st.season_over || !!st.admin;
+  const contName = st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
   const nameOf = (s: string) => names[s] ?? s;
-
-  const saveCount = async () => {
-    const n = parseInt(count, 10);
-    if (busy || Number.isNaN(n)) return;
-    setBusy(true); setNote(null);
-    try {
-      const r = await setKeeperCount(leagueId, n);
-      if (r.ok) { commit(); setNote('✓ saved'); await load(); }
-      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
-    } catch (e) { warn(); setNote(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
-
-  const saveRookieRounds = async () => {
-    const n = parseInt(rr, 10);
-    if (busy || Number.isNaN(n)) return;
-    setBusy(true); setNote(null);
-    try {
-      const r = await setRookieRounds(leagueId, n);
-      if (r.ok) { commit(); setNote('✓ saved'); await load(); }
-      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
-    } catch (e) { warn(); setNote(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
+  const futurePicks = futureSeason == null ? [] : picks.filter((p) => p.season >= futureSeason);
 
   const doRoll = async () => {
     setBusy(true); setNote(null);
@@ -573,28 +556,18 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Mono size={9} tone="faint" track={0.12}>🔁 NEXT SEASON</Mono>
-        {!!st.dynasty && (
-          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: t.you }}>🏰 DYNASTY LEAGUE</Text>
-          </View>
-        )}
+        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: st.continuity === 'redraft' ? t.bd : t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: st.continuity === 'redraft' ? t.dim : t.you }}>{contName}{st.continuity !== 'redraft' ? ' LEAGUE' : ''}</Text>
+        </View>
       </View>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5, lineHeight: 14 }}>{note}</Mono>}
 
-      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>KEEPERS</Mono>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-        <Mono size={10}>each team keeps</Mono>
-        <TextInput value={count} onChangeText={(v) => setCount(v.replace(/\D/g, ''))} keyboardType="number-pad"
-          editable={!busy && !rolled}
-          style={{ fontFamily: MONO, fontSize: 12, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, minWidth: 46, textAlign: 'center' }} />
-        <Mono size={10}>of {st.roster_size} into {st.next_season ?? 'next season'}</Mono>
-        <Pressable disabled={busy || rolled} onPress={() => { tap(); void saveCount(); }}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, opacity: busy || rolled ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>SAVE</Text>
-        </Pressable>
-      </View>
-      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
-        Managers declare keepers on their TEAM screen once the draft is done. A seat that declares nothing keeps its best-ranked players automatically.
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+        {st.continuity === 'redraft'
+          ? 'Nothing carries over — switch to keeper or dynasty under 🎮 MODE.'
+          : st.continuity === 'keeper'
+            ? `Each team keeps ${st.keeper_count} of ${st.roster_size} into ${st.next_season ?? 'next season'} — change it under 🎮 MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`
+            : `${st.rookie_rounds ?? 0}-round rookie drafts; each team keeps ${st.keeper_count} of ${st.roster_size} — change it under 🎮 MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`}
       </Mono>
 
       {st.keeper_count > 0 && (
@@ -617,25 +590,14 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
         </>
       )}
 
-      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>ROOKIE DRAFT PICKS{futureSeason ? ` · ${futureSeason}` : ''}</Mono>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-        <Mono size={10}>next season’s rookie draft runs</Mono>
-        <TextInput value={rr} onChangeText={(v) => setRr(v.replace(/\D/g, ''))} keyboardType="number-pad"
-          editable={!busy}
-          style={{ fontFamily: MONO, fontSize: 12, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, minWidth: 46, textAlign: 'center' }} />
-        <Mono size={10}>rounds</Mono>
-        <Pressable disabled={busy} onPress={() => { tap(); void saveRookieRounds(); }}
-          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, opacity: busy ? 0.5 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>SAVE</Text>
-        </Pressable>
-      </View>
-      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
-        Setting rounds deals every team its picks — one per round — as TRADEABLE assets: they move in ordinary trades all season, and the rollover carries ownership into the draft. Shrinking refuses to delete a round holding a traded pick.
-      </Mono>
-      {picks.some((p) => p.season === futureSeason) && (
+      {futurePicks.length > 0 && (
         <>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 12 }}>ROOKIE DRAFT PICKS · WHO OWNS WHAT</Mono>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: 13 }}>
+            Every team’s picks for the next three seasons — tradeable assets that move in ordinary trades; the rollover carries ownership into each season’s rookie draft.
+          </Mono>
           {st.teams.map((tm) => {
-            const owned = picks.filter((p) => p.season === futureSeason && p.owner === tm.roster_id);
+            const owned = futurePicks.filter((p) => p.owner === tm.roster_id);
             return (
               <View key={`pk-${tm.roster_id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 6 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.text, minWidth: 90 }} numberOfLines={1}>
@@ -644,9 +606,9 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
                 {owned.length === 0
                   ? <Mono size={9} tone="opp">traded every pick away</Mono>
                   : owned.map((p) => (
-                    <View key={`${p.round}:${p.orig}`} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
+                    <View key={`${p.season}:${p.round}:${p.orig}`} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
                       <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim }}>
-                        R{p.round}{p.orig !== p.owner ? ` ⇄ ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
+                        ’{p.season.slice(2)} R{p.round}{p.orig !== p.owner ? ` ⇄ ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
                       </Text>
                     </View>
                   ))}
@@ -663,6 +625,11 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
         </Mono>
       ) : !drafted ? (
         <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>The rollover opens once this season’s draft is complete.</Mono>
+      ) : !canRoll ? (
+        // the Super Bowl gate (0185): the option APPEARS when the season ends
+        <Mono size={9.5} tone="faint" style={{ marginTop: 6, lineHeight: 14 }}>
+          🏈 The rollover opens after the Super Bowl{st.next_season ? ` (Feb 15, ${st.next_season})` : ''}. Keeper declarations and pick trades run all season — the roll into {st.next_season ?? 'next season'} appears here when the season is over.
+        </Mono>
       ) : (
         <>
           <Pressable onPress={() => { tap(); setRookieOnly((v) => !v); }} disabled={busy}
@@ -674,6 +641,11 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
               rookie draft — next season’s pool is pinned to first-year players (reseed the pool from the draft room before starting it)
             </Mono>
           </Pressable>
+          {!!st.admin && !st.season_over && (
+            <Mono size={9} tone="warn" style={{ marginTop: 8, lineHeight: 13 }}>
+              ⚠ admin bypass — the season isn’t over yet; commissioners see this button after the Super Bowl
+            </Mono>
+          )}
           <View style={{ marginTop: 10 }}>
             <PrimaryButton label={busy ? '…' : `🔁 ROLL INTO ${st.next_season ?? '—'} · ${modeName}`} onPress={roll} disabled={busy} />
           </View>
@@ -1184,6 +1156,81 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
  *  LeagueSettings `view` prop: the state (mode gates everything; the builder
  *  and the scoring drafts load together) stays shared, and `view` only decides
  *  which block renders. */
+// ── Continuity (0185): REDRAFT / KEEPER / DYNASTY, in 🎮 MODE ────────────────
+// Mirror of the web ContinuityEditor. One selection; the number it needs
+// appears beside it; dynasty deals three seasons of tradeable picks on save.
+function ContinuityRow({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<KeeperState | null>(null);
+  const [cmode, setCmode] = useState<LeagueContinuity>('redraft');
+  const [n, setN] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async () => {
+    const s = await keeperState(leagueId);
+    if (s.error || !s.ok) return;
+    setSt(s);
+    const m = s.continuity ?? 'redraft';
+    setCmode(m);
+    setN(m === 'keeper' ? String(s.keeper_count) : m === 'dynasty' ? String(s.rookie_rounds ?? 3) : '');
+  };
+  useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  if (!st) return null;
+
+  const rolled = !!st.rolled_league_id;
+  const pick = (m: LeagueContinuity) => {
+    if (busy || rolled) return;
+    tap(); setCmode(m); setNote(null);
+    setN(m === 'keeper' ? String(st.keeper_count || Math.min(4, st.roster_size - 1))
+       : m === 'dynasty' ? String(st.rookie_rounds || 3) : '');
+  };
+  const save = async () => {
+    if (busy || rolled) return;
+    const num = parseInt(n, 10);
+    if (cmode !== 'redraft' && Number.isNaN(num)) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueContinuity(leagueId, cmode, cmode === 'redraft' ? null : num);
+      if (r.ok) { commit(); setNote('✓ saved'); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+      <Mono size={8.5} tone="faint" weight="700" track={0.12}>NEXT SEASON · CONTINUITY</Mono>
+      <View style={{ flexDirection: 'row', gap: 5, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Chip on={cmode === 'redraft'} label="REDRAFT" disabled={busy || rolled} onPress={() => pick('redraft')} />
+        <Chip on={cmode === 'keeper'} label="★ KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
+        <Chip on={cmode === 'dynasty'} label="🏰 DYNASTY" disabled={busy || rolled} onPress={() => pick('dynasty')} />
+        {cmode !== 'redraft' && (
+          <TextInput value={n} onChangeText={(v) => setN(v.replace(/\D/g, ''))} keyboardType="number-pad"
+            editable={!busy && !rolled}
+            style={{ fontFamily: MONO, fontSize: 12, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, minWidth: 42, textAlign: 'center' }} />
+        )}
+        {cmode !== 'redraft' && (
+          <Mono size={9} tone="faint">{cmode === 'keeper' ? `keepers of ${st.roster_size}` : 'rookie rounds'}</Mono>
+        )}
+        <Pressable disabled={busy || rolled} onPress={() => { tap(); void save(); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 6, opacity: busy || rolled ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>SAVE</Text>
+        </Pressable>
+      </View>
+      <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+        {rolled
+          ? 'This season already rolled over — continuity is set on the new league.'
+          : cmode === 'redraft'
+            ? 'Every season starts fresh — a full draft, nothing carries over.'
+            : cmode === 'keeper'
+              ? 'Each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen.'
+              : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
+      </Mono>
+      {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
+    </View>
+  );
+}
+
 function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'mode' | 'lineup' | 'scoring' }) {
   const t = useTheme();
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
@@ -1349,6 +1396,10 @@ function GameModeCard({ leagueId, view = 'mode' }: { leagueId: string; view?: 'm
           )}
         </View>
       )}
+      {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into
+          next season. Lives here per the founder ("put it in mode and
+          season"); 🔁 NEXT SEASON shows the consequences. */}
+      <ContinuityRow leagueId={leagueId} />
       {/* The RECEPTIONS pills moved into the scoring presets (web parity) —
           receptions are a scoring decision. */}
       {mode === 'classic' && (

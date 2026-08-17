@@ -1,15 +1,33 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.262.0`_
+_Last updated: 2026-08-17 · Build `v0.263.0`_
 
-> v0.262.0 (migration 0184) added DYNASTY AT CREATION + THE BADGE after the
-> sections below were written: `create_native_league(p_dynasty)` presets
-> keeper_count = roster − 3 and rookie_rounds = 3, stamps
-> `settings_json.dynasty`, and deals the first pick assets at creation;
-> `league_is_dynasty()` (stamp OR either live setting) is the one badge
-> predicate, carried by `my_teams` + `keeper_state`; 🏰 chips on both hosts'
-> league cards, create forms and dynasty panels. Dynasty remains a SETTINGS
-> identity — the toggle is sugar, the 🔁 NEXT SEASON panel stays the truth.
+> Two later versions extend the sections below:
+>
+> **v0.262.0 (0184)**: dynasty at creation + the 🏰 badge —
+> `league_is_dynasty()` is the one badge predicate, carried by `my_teams` +
+> `keeper_state`.
+>
+> **v0.263.0 (0185) — read this one before touching dynasty**: the
+> CONTINUITY AXIS. REDRAFT / ★ KEEPER / 🏰 DYNASTY is ONE selection
+> (`set_league_continuity`, `settings_json.continuity`, derived for older
+> leagues by `league_continuity()`), living in 🎮 MODE & SEASON and on both
+> create forms (`create_native_league(p_continuity, p_continuity_n)` — the
+> 0184 p_dynasty signature is GONE). Dynasty deals pick assets for the NEXT
+> THREE SEASONS (rollover carries every future season's assets, trades
+> intact, and re-provisions to keep the horizon at three); trades take a
+> per-element pick season (`_clean_trade_picks` v2; omitted = next season).
+> Keeper/redraft switches delete untraded futures and refuse while any is
+> traded. And the SUPER BOWL GATE: `_season_over` (Feb 15 of season+1)
+> gates `rollover_league` — commissioners see "opens after the Super Bowl"
+> until then, ADMINS BYPASS for testing, `keeper_state` carries
+> season_over/admin/continuity/rookie_rounds. The 🔁 NEXT SEASON panels are
+> now read-only summaries + declarations + the pick map + the gated roll.
+> Probe fixtures that roll over live in PAST seasons (2024) because of the
+> gate — keep doing that. Also: the dynasty-suite flake was dy4a's literal
+> 'p01' colliding with roster 2's random draft — fixed with a
+> guaranteed-distinct slug; if a suite flakes ~1-in-4, suspect a fixture
+> literal colliding with the random draft order first.
 
 ## NEXT SESSION — read this first
 

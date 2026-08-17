@@ -58,7 +58,7 @@ begin
 
   -- ── fixture: 3 teams × 5 rounds; f commish (seat 1), 9 on seat 2 ──────────
   perform probe_as('f');
-  r := create_native_league('Pick Trader', '2026', 3, 5, 60);
+  r := create_native_league('Pick Trader', '2024', 3, 5, 60);
   perform assert_ok(r, 'pk0 create');
   lid := (r ->> 'league_id')::uuid;
   code := r ->> 'invite_code';
@@ -79,7 +79,7 @@ begin
   perform probe_as('f');
   perform assert_err(set_rookie_rounds(lid, 11), '0–10', 'pk1a range');
   perform assert_ok(set_rookie_rounds(lid, 2), 'pk1b two rounds');
-  perform assert_true((select count(*) from pick_asset where league_id = lid and season = '2027') = 6,
+  perform assert_true((select count(*) from pick_asset where league_id = lid and season = '2025') = 6,
     'pk1c 2 rounds × 3 seats');
   perform assert_true(not exists (select 1 from pick_asset where league_id = lid
       and owner_roster <> original_roster), 'pk1d all picks start with their originals');
@@ -88,7 +88,7 @@ begin
   perform assert_ok(set_rookie_rounds(lid, 2), 'pk1g shrink while untraded');
   perform assert_true((select count(*) from pick_asset where league_id = lid) = 6, 'pk1h back to 6');
 
-  -- ── the season's draft runs (no assets for 2026 ⇒ plain snake) ────────────
+  -- ── the season's draft runs (no assets for 2024 ⇒ plain snake) ────────────
   perform assert_ok(start_draft(lid), 'pk2 start');
   perform assert_true((select pick_owners from draft where league_id = lid) is null,
     'pk2a no owner list without own-season assets');
@@ -120,13 +120,13 @@ begin
   -- pk4: a player-plus-pick deal executes and flips ownership (both sides
   -- move one player, so the roster caps stay satisfied)
   r := propose_trade(lid, 1, 2, jsonb_build_array(f_slug), jsonb_build_array(g_slug),
-      'him plus my 2027 1st for him', '[{"round": 1, "orig": 1}]'::jsonb, null);
+      'him plus my 2025 1st for him', '[{"round": 1, "orig": 1}]'::jsonb, null);
   perform assert_ok(r, 'pk4 propose player+pick for player');
   t1 := (r ->> 'trade_id')::uuid;
   perform probe_as('9');
   perform assert_ok(respond_trade(t1, true), 'pk4a accepted + executed');
   perform assert_true((select owner_roster from pick_asset where league_id = lid
-      and season = '2027' and round = 1 and original_roster = 1) = 2, 'pk4b pick now team 2''s');
+      and season = '2025' and round = 1 and original_roster = 1) = 2, 'pk4b pick now team 2''s');
   perform assert_true((select roster_id from native_roster where league_id = lid and slug = g_slug) = 1,
     'pk4c player went the other way');
 
@@ -147,9 +147,9 @@ begin
     'pk5d deal B stays pending');
   -- after deal A: R1-orig1 back with 1, R2-orig1 with 2
   perform assert_true((select owner_roster from pick_asset where league_id = lid
-      and season = '2027' and round = 1 and original_roster = 1) = 1, 'pk5e R1 home again');
+      and season = '2025' and round = 1 and original_roster = 1) = 1, 'pk5e R1 home again');
   perform assert_true((select owner_roster from pick_asset where league_id = lid
-      and season = '2027' and round = 2 and original_roster = 1) = 2, 'pk5f R2-orig1 to team 2');
+      and season = '2025' and round = 2 and original_roster = 1) = 2, 'pk5f R2-orig1 to team 2');
 
   -- pk6: shrink refuses to delete a traded round
   perform assert_err(set_rookie_rounds(lid, 1), 'trades already moved', 'pk6 shrink guard');
@@ -166,11 +166,11 @@ begin
   perform assert_true((r ->> 'picks_carried')::int = 6, 'pk8b six assets carried');
   perform assert_true((r ->> 'draft_rounds')::int = 2, 'pk8c draft is the 2 asset rounds');
   perform assert_true((select owner_roster from pick_asset where league_id = nl
-      and season = '2027' and round = 2 and original_roster = 1) = 2, 'pk8d trade survives the carry');
-  perform assert_true((select count(*) from pick_asset where league_id = nl and season = '2028') = 6,
-    'pk8e 2028 futures provisioned');
+      and season = '2025' and round = 2 and original_roster = 1) = 2, 'pk8d trade survives the carry');
+  perform assert_true((select count(*) from pick_asset where league_id = nl and season = '2026') = 6,
+    'pk8e 2026 futures provisioned');
   perform assert_true(not exists (select 1 from pick_asset where league_id = nl
-      and season = '2028' and owner_roster <> original_roster), 'pk8f futures start with originals');
+      and season = '2026' and owner_roster <> original_roster), 'pk8f futures start with originals');
 
   -- ── the new draft honors ownership on the clock ───────────────────────────
   perform assert_ok(start_draft(nl, '[1, 2, 3]'::jsonb), 'pk9 start with a preset order');
@@ -219,28 +219,94 @@ begin
       and (select count(*) from native_roster where league_id = nl and roster_id = 3) = 3,
     'pk11a rosters follow pick ownership');
 
-  -- ── dynasty at creation (0184) ────────────────────────────────────────────
-  -- pk12: the create-time toggle presets the settings, stamps the identity,
-  -- and deals the futures on the spot; the badge predicate reads all of it.
-  r := create_native_league('Dyn Check', '2026', 4, 12, 60, 'snake', 200, 15, 1, null, null, null, 'drip', true);
+  -- ── continuity at creation (0184/0185) ────────────────────────────────────
+  -- pk12: selecting DYNASTY at creation presets the settings, stamps the
+  -- identity, and deals THREE seasons of futures; the badge reads all of it.
+  r := create_native_league('Dyn Check', '2026', 4, 12, 60, 'snake', 200, 15, 1, null, null, null, 'drip', 'dynasty', 3);
   perform assert_ok(r, 'pk12 dynasty create');
-  perform assert_true((r ->> 'dynasty')::boolean, 'pk12a response says dynasty');
+  perform assert_true((r ->> 'dynasty')::boolean and r ->> 'continuity' = 'dynasty', 'pk12a response names it');
   perform assert_true((select (settings_json ->> 'keeper_count')::int = 9
       and (settings_json ->> 'rookie_rounds')::int = 3
-      and (settings_json ->> 'dynasty')::boolean
+      and settings_json ->> 'continuity' = 'dynasty'
       from league where id = (r ->> 'league_id')::uuid), 'pk12b presets: keep 9, 3 rookie rounds');
   perform assert_true((select count(*) from pick_asset
       where league_id = (r ->> 'league_id')::uuid and season = '2027') = 12,
-    'pk12c futures dealt at creation (3 rounds × 4 seats)');
-  perform assert_true(league_is_dynasty((r ->> 'league_id')::uuid), 'pk12d badge predicate: stamped league');
-  perform assert_true(league_is_dynasty(lid), 'pk12e badge predicate: settings-only league (pre-0184)');
+    'pk12c next season dealt (3 rounds × 4 seats)');
+  perform assert_true((select count(*) from pick_asset
+      where league_id = (r ->> 'league_id')::uuid) = 36,
+    'pk12c2 THREE seasons of futures (2027–2029)');
+  perform assert_true(league_is_dynasty((r ->> 'league_id')::uuid), 'pk12d badge predicate: selected league');
+  perform assert_true(league_is_dynasty(lid), 'pk12e badge predicate: settings-only league (pre-0185)');
   r := create_native_league('Plain Check', '2026', 4, 12, 60);
   perform assert_ok(r, 'pk12f plain create still works');
   perform assert_true(not (r ->> 'dynasty')::boolean
-      and not league_is_dynasty((r ->> 'league_id')::uuid), 'pk12g plain league is not dynasty');
+      and not league_is_dynasty((r ->> 'league_id')::uuid), 'pk12g plain league is redraft');
   perform assert_true((select count(*) from jsonb_array_elements(my_teams()) t
       where t ->> 'league_id' = (select id::text from league where name = 'Dyn Check')
-        and (t -> 'league' ->> 'dynasty')::boolean) = 1, 'pk12h my_teams carries the badge');
+        and (t -> 'league' ->> 'dynasty')::boolean
+        and t -> 'league' ->> 'continuity' = 'dynasty') = 1, 'pk12h my_teams carries the badge');
+  -- keeper at creation: the count is the pick
+  r := create_native_league('Keeper Check', '2026', 4, 12, 60, 'snake', 200, 15, 1, null, null, null, 'drip', 'keeper', 4);
+  perform assert_ok(r, 'pk12i keeper create');
+  perform assert_true((select settings_json ->> 'continuity' = 'keeper'
+      and (settings_json ->> 'keeper_count')::int = 4
+      and settings_json ->> 'rookie_rounds' is null
+      from league where id = (r ->> 'league_id')::uuid), 'pk12j keeper presets');
+  perform assert_err(create_native_league('Bad Keeper', '2026', 4, 12, 60, 'snake', 200, 15, 1, null, null, null, 'drip', 'keeper'),
+    'keepers must be 1', 'pk12k keeper needs a count');
+
+  -- ── the Super Bowl gate (0185) ────────────────────────────────────────────
+  -- pk13: a current-season league cannot roll — the option appears when the
+  -- season is over (Feb 15 after the season year); past-season fixtures above
+  -- rolled freely.
+  perform assert_err(rollover_league((select id from league where name = 'Dyn Check')),
+    'after the Super Bowl', 'pk13 current season gated');
+
+  -- ── the MODE & SEASON selector (0185) ─────────────────────────────────────
+  -- pk14: redraft/keeper/dynasty transitions on one league, with the same
+  -- provisioning and cleanup the create path uses.
+  perform probe_as('9');
+  perform assert_err(set_league_continuity((select id from league where name = 'Dyn Check'), 'keeper', 4),
+    'commissioner only', 'pk14 member refused');
+  perform probe_as('f');
+  perform assert_err(set_league_continuity((select id from league where name = 'Dyn Check'), 'bestball', 2),
+    'redraft, keeper or dynasty', 'pk14a unknown mode');
+  r := set_league_continuity((select id from league where name = 'Dyn Check'), 'keeper', 4);
+  perform assert_ok(r, 'pk14b dynasty → keeper');
+  perform assert_true((select count(*) from pick_asset
+      where league_id = (select id from league where name = 'Dyn Check')) = 0,
+    'pk14c untraded futures cleared on the way out');
+  perform assert_true(league_continuity((select id from league where name = 'Dyn Check')) = 'keeper'
+      and not league_is_dynasty((select id from league where name = 'Dyn Check')), 'pk14d keeper, not dynasty');
+  perform assert_ok(set_league_continuity((select id from league where name = 'Dyn Check'), 'redraft'), 'pk14e → redraft');
+  perform assert_true((select settings_json ->> 'keeper_count' is null
+      and settings_json ->> 'continuity' is null
+      from league where id = (select id from league where name = 'Dyn Check')), 'pk14f cleared');
+  r := set_league_continuity((select id from league where name = 'Dyn Check'), 'dynasty', 2);
+  perform assert_ok(r, 'pk14g → dynasty, 2 rounds');
+  perform assert_true((select count(*) from pick_asset
+      where league_id = (select id from league where name = 'Dyn Check')) = 24,
+    'pk14h 2 rounds × 4 seats × 3 seasons');
+  perform assert_true((select (settings_json ->> 'keeper_count')::int = 10
+      from league where id = (select id from league where name = 'Dyn Check')), 'pk14i keepers implied (12 − 2)');
+
+  -- ── multi-year trades (0185) ──────────────────────────────────────────────
+  -- pk15: on the rolled league (season 2025), a 2027 pick — two years out —
+  -- trades with an explicit season; the current season's own picks refuse.
+  perform assert_true((select count(*) from pick_asset where league_id = nl and season = '2027') = 6,
+    'pk15 horizon reaches 2027');
+  r := propose_trade(nl, 1, 2, '[]'::jsonb, '[]'::jsonb, 'my 2027 1st, gratis',
+      '[{"season": "2027", "round": 1, "orig": 1}]'::jsonb, null);
+  perform assert_ok(r, 'pk15a two-years-out pick proposes');
+  t1 := (r ->> 'trade_id')::uuid;
+  perform probe_as('9');
+  perform assert_ok(respond_trade(t1, true), 'pk15b executes');
+  perform assert_true((select owner_roster from pick_asset where league_id = nl
+      and season = '2027' and round = 1 and original_roster = 1) = 2, 'pk15c 2027 pick moved');
+  perform probe_as('f');
+  perform assert_err(propose_trade(nl, 1, 2, '[]'::jsonb, '[]'::jsonb, null,
+      '[{"season": "2025", "round": 1, "orig": 1}]'::jsonb, null),
+    'only future picks', 'pk15d the pending draft''s own picks don''t trade');
 end $$;
 
 select 'ALL PICK-ASSET PROBES PASSED' as result;
