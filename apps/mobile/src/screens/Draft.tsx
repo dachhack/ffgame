@@ -17,6 +17,7 @@ import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
+  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
@@ -86,10 +87,20 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [nightOpen, setNightOpen] = useState(false);
+  const [ctrlOpen, setCtrlOpen] = useState(false);
+  /** Commissioner assign mode: the PLAYERS list drafts FOR the seat on the
+   *  clock instead of for me. Deliberately a mode and not a second button on
+   *  every row — the row's button must never be ambiguous about whose pick it
+   *  is making. */
+  const [assign, setAssign] = useState(false);
+  const [autos, setAutos] = useState<Record<number, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0);
   const ticking = useRef(false);
 
+  /** Who is on autodraft, by seat — draft_state carries only my own flag and
+   *  the commissioner's per-team switch needs everyone's. */
+  const loadAutos = () => { leagueAutodrafts(leagueId).then(setAutos).catch(() => {}); };
   const refresh = async () => {
     try {
       const s = await draftState(leagueId);
@@ -104,6 +115,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     // v0.232.0 lesson — an unguarded effect, not a rendering bug).
     let alive = true;
     void refresh();
+    loadAutos();
     leaguePool(leagueId).then(setPool).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
     void loadTeamOverrides();
@@ -137,8 +149,13 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const deadlineMs = allDeadlines.length ? Math.min(...allDeadlines) : null;
   const overdueMs = deadlineMs != null ? (now + skew.current) - deadlineMs : null;
   useEffect(() => {
-    if (st?.status !== 'live' || st.paused || ticking.current) return;
-    if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto) {
+    if (st?.status !== 'live' || ticking.current) return;
+    // A PAUSED room still advances its AUTODRAFT seats (0191) — the client
+    // drives that too, or a phone-only league's pause would freeze the seats
+    // that asked not to be waited for until the worker's next sweep.
+    const pausedAuto = !!st.paused && st.on_clock != null && !!autos[st.on_clock];
+    if (st.paused && !pausedAuto) return;
+    if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto || pausedAuto) {
       ticking.current = true;
       // A failing tick must be VISIBLE — swallowing it freezes the room at 0:00
       // with nothing to go on. The 3s poll clears the banner on recovery.
@@ -149,7 +166,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, st?.status, st?.on_clock, st?.lots?.length]);
+  }, [now, st?.status, st?.on_clock, st?.lots?.length, st?.paused, autos]);
 
   const byRoster = useMemo(() => {
     const m: Record<number, { team: string | null; avatar: string | null }> = {};
@@ -164,6 +181,8 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const auction = st?.mode === 'auction';
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
   const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
+  /** Assign mode is only meaningful with a snake seat actually on the clock. */
+  const assigning = assign && isCommish && !auction && st?.status === 'live' && st.on_clock != null;
 
   // Position limits: grey out players my roster can't legally take (the server
   // enforces too — this just saves the round trip). Auction counts lots I hold.
@@ -200,6 +219,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
       const r = await fn();
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'That didn’t work.')); } else commit();
       await refresh();
+      loadAutos();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -220,6 +240,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   };
 
   const act = (slug: string) => {
+    // Assign mode makes the pick FOR the seat on the clock (0067's force pick
+    // has always taken a slug — until now nothing called it with one).
+    if (assigning) { void run(() => commishForcePick(leagueId, slug)); return; }
     if (!myTurn) return;  // auction: on_clock is null while the room is at lot capacity
     void run(() => (auction ? nominate(leagueId, slug, 1) : makeDraftPick(leagueId, slug)));
   };
@@ -429,12 +452,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               {!auction && ghost('⏭ FORCE PICK', () => void run(() => commishForcePick(leagueId)))}
               {!auction && ghost('↩ UNDO', () => void run(() => commishUndoPick(leagueId)), t.opp)}
               {ghost(st.night ? `🌙 ${fmtNight(st.night)}` : '🌙 QUIET HRS', () => { setNightOpen((v) => !v); })}
+              {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
           )}
           {isCommish && nightOpen && (
             <NightEditor current={st.night ?? null} busy={busy}
               onSet={(s, e) => { setNightOpen(false); void run(() => setDraftNight(leagueId, s, e)); }}
               onClear={() => { setNightOpen(false); void run(() => setDraftNight(leagueId)); }} />
+          )}
+          {isCommish && ctrlOpen && (
+            <CommishControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
+              assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }}
+              onRun={(fn) => void run(fn)} />
           )}
         </Card>
       )}
@@ -446,9 +475,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             Rosters are live and weekly lineup pools are built. Waivers and free agency are open — manage your team from the MY TEAM tab.
           </Mono>
           {isCommish && st.mode === 'snake' && (
-            <View style={{ marginTop: 10 }}>
+            <View style={{ marginTop: 10, gap: 8 }}>
               {ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
+              {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
+          )}
+          {isCommish && ctrlOpen && (
+            <CommishControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
+              assign={false} onAssign={() => {}} onRun={(fn) => void run(fn)} />
           )}
         </Card>
       )}
@@ -477,17 +511,24 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
           </View>
+          {assigning && (
+            <Notice tone="warn">
+              <Mono size={9.5} tone="warn" style={{ lineHeight: 15 }}>
+                {`⚑ ASSIGNING FOR ${teamName(st.on_clock) ?? `Team ${st.on_clock}`} — the next player you tap becomes their pick. Tap ⚑ CONTROLS to stop.`}
+              </Mono>
+            </Notice>
+          )}
           {avail.slice(0, 60).map((p) => {
             const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
             const inQ = queue.includes(p.slug);
             const capped = atCap(p.pos);
-            const can = myTurn && !busy && !capped;
+            const can = assigning ? !busy : (myTurn && !busy && !capped);
             return (
               <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
                 <Pressable disabled={!can} onPress={() => { tap(); act(p.slug); }}
-                  style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 7, width: 56, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
+                  style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 7, width: 56, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
                   <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
-                    {capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                    {assigning ? 'ASSIGN' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                   </Text>
                 </Pressable>
                 <Face slug={p.slug} pos={p.pos} />
@@ -659,6 +700,13 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           {queue.length === 0 && (
             <Mono size={10} tone="faint" style={{ lineHeight: 16 }}>
               Empty — tap ☆ on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.
+            </Mono>
+          )}
+          {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
+              waited for keeps picking through one. */}
+          {!!st.my_autodraft && (
+            <Mono size={9} tone="you" style={{ lineHeight: 14, paddingTop: 6 }}>
+              🤖 Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
             </Mono>
           )}
           {queue.map((slug, i) => {
@@ -1004,6 +1052,109 @@ function NightEditor({ current, busy, onSet, onClear }: {
       <Mono size={8} tone="faint" style={{ width: '100%', lineHeight: 12 }}>
         Clocks only burn awake time — no deadline can expire inside the pause. Acting early is always allowed.
       </Mono>
+    </View>
+  );
+}
+
+
+// ── the commissioner's mid-draft controls (0191) ─────────────────────────────
+/** Everything a commissioner needs once the room is RUNNING and something has
+ *  gone wrong: assign a pick by hand, reseat a team, put a seat on autodraft,
+ *  or throw the whole draft away and start over.
+ *
+ *  Pause/force/undo stay in the header row — they're the ones you reach for
+ *  mid-sentence. These are the ones you reach for after the room has stopped to
+ *  look at you, so they're a drawer rather than five more chips in a row that
+ *  already wraps.
+ *
+ *  MOVING A TEAM SLIDES, it doesn't swap: ▲ on the 4th seat makes it 3rd and
+ *  pushes the old 3rd down to 4th, which is what "put him at the end" means and
+ *  what a swap would get wrong for every seat in between. */
+function CommishControls({ leagueId, st, busy, teamName, autos, assign, onAssign, onRun }: {
+  leagueId: string; st: DraftState; busy: boolean;
+  teamName: (rid: number | null | undefined) => string | null;
+  autos: Record<number, boolean>;
+  assign: boolean; onAssign: (on: boolean) => void;
+  onRun: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const t = useTheme();
+  const [confirm, setConfirm] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const order = st.order ?? [];
+  const snake = st.mode === 'snake';
+  const live = st.status === 'live';
+  const canMove = snake && st.status !== 'complete' && order.length > 1;
+
+  return (
+    <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 10 }}>
+      {snake && live && (
+        <View style={{ gap: 6 }}>
+          <Mono size={8.5} tone="faint" track={0.12}>ASSIGN A PLAYER</Mono>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <Chip label={assign ? '⚑ ASSIGNING — TAP TO STOP' : '⚑ PICK FOR THE SEAT ON THE CLOCK'} on={assign}
+              onPress={() => { tap(); onAssign(!assign); }} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+            Turns the PLAYERS list into the on-clock team's board — the next player you tap becomes their pick.
+          </Mono>
+        </View>
+      )}
+
+      {canMove && (
+        <View style={{ gap: 4 }}>
+          <Mono size={8.5} tone="faint" track={0.12}>DRAFT ORDER · AUTODRAFT</Mono>
+          {order.map((rid, i) => (
+            <View key={rid} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Mono size={9} tone="faint" style={{ width: 18 }}>{i + 1}</Mono>
+              <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.text }}>{teamName(rid) ?? `Team ${rid}`}</Text>
+              <Chip label={autos[rid] ? '🤖 AUTO' : '🤖 OFF'} on={!!autos[rid]}
+                onPress={() => { tap(); onRun(() => setAutodraft(leagueId, rid, !autos[rid])); }} />
+              <Pressable hitSlop={6} disabled={busy || i === 0} onPress={() => { tap(); onRun(() => commishMoveDraftSlot(leagueId, rid, i)); }}>
+                <Text style={{ color: i === 0 ? t.faint : t.dim, fontSize: 15 }}>↑</Text>
+              </Pressable>
+              <Pressable hitSlop={6} disabled={busy || i === order.length - 1} onPress={() => { tap(); onRun(() => commishMoveDraftSlot(leagueId, rid, i + 2)); }}>
+                <Text style={{ color: i === order.length - 1 ? t.faint : t.dim, fontSize: 15 }}>↓</Text>
+              </Pressable>
+            </View>
+          ))}
+          <Mono size={8.5} tone="faint" style={{ lineHeight: 13, paddingTop: 4 }}>
+            {live
+              ? 'Picks already made keep their seats; everything from the clock forward follows the new order. Autodraft keeps picking even while the draft is paused.'
+              : 'Autodraft keeps picking even while the draft is paused — a pause is time for people, not robots.'}
+          </Mono>
+        </View>
+      )}
+
+      {st.status !== 'pending' && (
+        <View style={{ gap: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+          <Mono size={8.5} tone="faint" track={0.12}>START OVER</Mono>
+          {!resetOpen ? (
+            <Pressable disabled={busy} onPress={() => { tap(); setResetOpen(true); }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, alignSelf: 'flex-start', opacity: busy ? 0.5 : 1 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>🗑 TRASH THE DRAFT</Text>
+            </Pressable>
+          ) : (
+            <View style={{ gap: 6 }}>
+              <Mono size={9.5} tone="opp" style={{ lineHeight: 14 }}>
+                {`Every pick in this room goes (${(st.picks ?? []).length} so far) and the draft goes back to pending. Keepers, traded picks and everyone's queue survive. Type RESET to confirm.`}
+              </Mono>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput value={confirm} onChangeText={setConfirm} placeholder="RESET" placeholderTextColor={t.faint}
+                  autoCapitalize="characters" autoCorrect={false}
+                  style={{ flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontFamily: MONO, fontSize: 12, color: t.text, backgroundColor: t.bg }} />
+                <Pressable disabled={busy || confirm.trim().toLowerCase() !== 'reset'}
+                  onPress={() => { tap(); onRun(() => commishResetDraft(leagueId, confirm)); setConfirm(''); setResetOpen(false); }}
+                  style={{ backgroundColor: t.opp, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy || confirm.trim().toLowerCase() !== 'reset' ? 0.4 : 1 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>START OVER</Text>
+                </Pressable>
+                <Pressable hitSlop={6} onPress={() => { tap(); setResetOpen(false); setConfirm(''); }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim }}>CANCEL</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }

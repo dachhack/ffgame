@@ -25,6 +25,7 @@ import {
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
   setDraftQueue, myDraftQueue, setAutodraft,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
+  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts,
   myPushTokens, setPushPrefs, type PushTokenRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
@@ -721,6 +722,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [, setFlagVer] = useState(0);
   const [busy, setBusy] = useState(false);
   const [nightOpen, setNightOpen] = useState(false);
+  const [ctrlOpen, setCtrlOpen] = useState(false);
+  /** Commissioner assign mode: the PLAYERS list drafts FOR the seat on the
+   *  clock instead of for me. A mode rather than a second button on every row —
+   *  the row's button must never be ambiguous about whose pick it makes. */
+  const [assign, setAssign] = useState(false);
+  const [autos, setAutos] = useState<Record<number, boolean>>({});
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0); // serverNow − clientNow, for an honest countdown
@@ -731,6 +738,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     onClockCellRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [st?.current_overall]);
 
+  /** Who is on autodraft, by seat — draft_state carries only my own flag and
+   *  the commissioner's per-team switch needs everyone's. */
+  const loadAutos = () => { leagueAutodrafts(leagueId).then(setAutos).catch(() => {}); };
   const refresh = async () => {
     try {
       const s = await draftState(leagueId);
@@ -745,6 +755,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     // v0.232.0 lesson — an unguarded effect, not a rendering bug).
     let alive = true;
     refresh();
+    loadAutos();
     leaguePool(leagueId).then(setPool).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
@@ -778,8 +789,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const deadlineMs = allDeadlines.length ? Math.min(...allDeadlines) : null;
   const overdueMs = deadlineMs != null ? (now + skew.current) - deadlineMs : null;
   useEffect(() => {
-    if (st?.status !== 'live' || st.paused || ticking.current) return;
-    if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto) {
+    if (st?.status !== 'live' || ticking.current) return;
+    // A PAUSED room still advances its AUTODRAFT seats (0191) — the client
+    // drives that too, or a phone-only league's pause would freeze the seats
+    // that asked not to be waited for until the worker's next sweep.
+    const pausedAuto = !!st.paused && st.on_clock != null && !!autos[st.on_clock];
+    if (st.paused && !pausedAuto) return;
+    if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto || pausedAuto) {
       ticking.current = true;
       // A failing tick must be VISIBLE: swallowing it leaves the room frozen at
       // 0:00 with nothing to go on. The 3s poll clears the banner on recovery.
@@ -790,7 +806,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, st?.status, st?.on_clock, st?.lots?.length]);
+  }, [now, st?.status, st?.on_clock, st?.lots?.length, st?.paused, autos]);
 
   const byRoster = useMemo(() => {
     const m: Record<number, { team: string | null; avatar: string | null }> = {};
@@ -805,6 +821,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const auction = st?.mode === 'auction';
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
   const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
+  /** Assign mode is only meaningful with a snake seat actually on the clock. */
+  const assigning = assign && isCommish && !auction && st?.status === 'live' && st.on_clock != null;
 
   // Position limits: grey out players my roster can't legally take (the server
   // enforces too — this just saves the round trip). Auction counts lots I hold.
@@ -837,7 +855,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
     setBusy(true); setErr(null);
-    try { const r = await fn(); if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); await refresh(); }
+    try { const r = await fn(); if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); await refresh(); loadAutos(); }
     catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -856,6 +874,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   };
 
   const act = (slug: string) => {
+    // Assign mode makes the pick FOR the seat on the clock (0067's force pick
+    // has always taken a slug — until now nothing called it with one).
+    if (assigning) { run(() => commishForcePick(leagueId, slug)); return; }
     if (!myTurn) return;   // auction: on_clock is null while the room is at lot capacity
     if (auction) run(() => nominate(leagueId, slug, 1));
     else run(() => makeDraftPick(leagueId, slug));
@@ -1081,12 +1102,19 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               <button onClick={() => setNightOpen((v) => !v)} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>
                 {st.night ? `🌙 ${fmtNightWin(st.night)}` : '🌙 QUIET HRS'}
               </button>
+              <button onClick={() => setCtrlOpen((v) => !v)} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>
+                ⚑ CONTROLS {ctrlOpen ? '▴' : '▾'}
+              </button>
             </div>
           )}
           {isCommish && nightOpen && (
             <NightEditorWeb current={st.night ?? null} busy={busy}
               onSet={(s, e) => { setNightOpen(false); run(() => setDraftNight(leagueId, s, e)); }}
               onClear={() => { setNightOpen(false); run(() => setDraftNight(leagueId)); }} />
+          )}
+          {isCommish && ctrlOpen && (
+            <CommishDraftControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
+              assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }} onRun={run} />
           )}
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
@@ -1107,6 +1135,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               : null}
           {isCommish && st.mode === 'snake' && (
             <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
+          )}
+          {isCommish && !st.is_mock && (
+            <button onClick={() => setCtrlOpen((v) => !v)} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>⚑ COMMISH CONTROLS {ctrlOpen ? '▴' : '▾'}</button>
+          )}
+          {isCommish && ctrlOpen && (
+            <CommishDraftControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
+              assign={false} onAssign={() => {}} onRun={run} />
           )}
         </div>
       )}
@@ -1197,6 +1232,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             })}
             <StarChips mode={starMode} setMode={setStarMode} />
           </div>
+          {assigning && (
+            <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 7, padding: '7px 9px', marginBottom: 8 }}>
+              ⚑ ASSIGNING FOR {teamName(st.on_clock) ?? `Team ${st.on_clock}`} — the next player you pick becomes their pick. Tap ⚑ CONTROLS to stop.
+            </div>
+          )}
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
             <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
           </div>
@@ -1206,10 +1246,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
-                  <button onClick={() => act(p.slug)} disabled={!myTurn || busy || atCap(p.pos)} className="mono"
-                    title={atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
-                    style={{ ...btn, padding: '7px 8px', fontSize: 9, width: 54, flexShrink: 0, opacity: myTurn && !busy && !atCap(p.pos) ? 1 : 0.35 }}>
-                    {atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                  <button onClick={() => act(p.slug)} disabled={assigning ? busy : (!myTurn || busy || atCap(p.pos))} className="mono"
+                    title={assigning ? `assign to ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}` : atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                    style={{ ...btn, padding: '7px 8px', fontSize: 9, width: 54, flexShrink: 0,
+                      background: assigning ? 'var(--warn)' : btn.background,
+                      opacity: (assigning ? !busy : myTurn && !busy && !atCap(p.pos)) ? 1 : 0.35 }}>
+                    {assigning ? 'ASSIGN' : atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                   </button>
                   <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
                     <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
@@ -1314,6 +1356,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             )}
           </div>
           {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap ☆ on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
+          {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
+              waited for keeps picking through one. */}
+          {!!st.my_autodraft && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', lineHeight: 1.5, paddingTop: 6 }}>
+              🤖 Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
+            </div>
+          )}
           {queue.map((slug, i) => {
             const p = poolBySlug.get(slug);
             const gone = taken.has(slug);
@@ -2542,6 +2591,102 @@ export function NotifPrefsCard() {
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         Lit = on. Mutes apply per kind, per device — they follow your account, so flipping them here reaches your phone.
       </div>
+    </div>
+  );
+}
+
+// ── the commissioner's mid-draft controls (0191) ─────────────────────────────
+/** Everything a commissioner needs once the room is RUNNING and something has
+ *  gone wrong: assign a pick by hand, reseat a team, put a seat on autodraft,
+ *  or throw the whole draft away and start over.
+ *
+ *  Pause/force/undo stay in the header row — they're the ones you reach for
+ *  mid-sentence. These are the ones you reach for after the room has stopped to
+ *  look at you, so they're a drawer rather than five more buttons in a row that
+ *  already wraps.
+ *
+ *  MOVING A TEAM SLIDES, it doesn't swap: ↑ on the 4th seat makes it 3rd and
+ *  pushes the old 3rd down to 4th, which is what "put him at the end" means and
+ *  what a swap would get wrong for every seat in between. */
+function CommishDraftControls({ leagueId, st, busy, teamName, autos, assign, onAssign, onRun }: {
+  leagueId: string; st: DraftState; busy: boolean;
+  teamName: (rid: number | null | undefined) => string | null;
+  autos: Record<number, boolean>;
+  assign: boolean; onAssign: (on: boolean) => void;
+  onRun: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const [confirm, setConfirm] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const order = st.order ?? [];
+  const snake = st.mode === 'snake';
+  const live = st.status === 'live';
+  const canMove = snake && st.status !== 'complete' && order.length > 1;
+  const armed = confirm.trim().toLowerCase() === 'reset';
+
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', marginTop: 10, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {snake && live && (
+        <div>
+          <div style={hdr}>ASSIGN A PLAYER</div>
+          <Chip on={assign} onClick={() => onAssign(!assign)}>
+            {assign ? '⚑ ASSIGNING — CLICK TO STOP' : '⚑ PICK FOR THE SEAT ON THE CLOCK'}
+          </Chip>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginTop: 6 }}>
+            Turns the PLAYERS list into the on-clock team's board — the next player you pick becomes their pick.
+          </div>
+        </div>
+      )}
+
+      {canMove && (
+        <div>
+          <div style={hdr}>DRAFT ORDER · AUTODRAFT</div>
+          {order.map((rid, i) => (
+            <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i === 0 ? 'none' : '1px solid var(--bd)' }}>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 20 }}>{i + 1}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {teamName(rid) ?? `Team ${rid}`}
+              </span>
+              <Chip on={!!autos[rid]} onClick={() => onRun(() => setAutodraft(leagueId, rid, !autos[rid]))}>
+                🤖 {autos[rid] ? 'AUTO' : 'OFF'}
+              </Chip>
+              <button onClick={() => onRun(() => commishMoveDraftSlot(leagueId, rid, i))} disabled={busy || i === 0}
+                title="move up one spot" className="mono" style={{ ...linkBtn, padding: '0 3px', opacity: i === 0 ? 0.3 : 1 }}>↑</button>
+              <button onClick={() => onRun(() => commishMoveDraftSlot(leagueId, rid, i + 2))} disabled={busy || i === order.length - 1}
+                title="move down one spot" className="mono" style={{ ...linkBtn, padding: '0 3px', opacity: i === order.length - 1 ? 0.3 : 1 }}>↓</button>
+            </div>
+          ))}
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginTop: 6 }}>
+            {live
+              ? 'Picks already made keep their seats; everything from the clock forward follows the new order. Autodraft keeps picking even while the draft is paused.'
+              : 'Autodraft keeps picking even while the draft is paused — a pause is time for people, not robots.'}
+          </div>
+        </div>
+      )}
+
+      {st.status !== 'pending' && (
+        <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+          <div style={hdr}>START OVER</div>
+          {!resetOpen ? (
+            <button onClick={() => setResetOpen(true)} disabled={busy} className="mono"
+              style={{ ...ghostBtn, padding: '7px 10px', fontSize: 9.5, color: 'var(--opp)', borderColor: 'var(--opp)' }}>🗑 TRASH THE DRAFT</button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.5 }}>
+                Every pick in this room goes ({(st.picks ?? []).length} so far) and the draft goes back to pending.
+                Keepers, traded picks and everyone's queue survive. Type RESET to confirm.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="RESET" className="mono"
+                  style={{ flex: '1 1 140px', minWidth: 0, fontSize: 12, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--text)' }} />
+                <button onClick={() => { onRun(() => commishResetDraft(leagueId, confirm)); setConfirm(''); setResetOpen(false); }}
+                  disabled={busy || !armed} className="mono"
+                  style={{ ...btn, padding: '8px 12px', fontSize: 9.5, background: 'var(--opp)', opacity: busy || !armed ? 0.4 : 1 }}>START OVER</button>
+                <button onClick={() => { setResetOpen(false); setConfirm(''); }} className="mono" style={linkBtn}>CANCEL</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
