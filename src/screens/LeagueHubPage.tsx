@@ -13,7 +13,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
-import { Img } from '../app/ui';
+import { Img, Sheet } from '../app/ui';
 import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
@@ -45,12 +45,6 @@ function Band({ title, wide, children }: { title?: string; wide: boolean; childr
       </div>
     </section>
   );
-}
-
-/** An opened panel, in the grid, spanning every column — so it lands directly
- *  under the tile that opened it on a phone and under that ROW on desktop. */
-function Panel({ children }: { children: React.ReactNode }) {
-  return <div style={{ gridColumn: '1 / -1' }}>{children}</div>;
 }
 
 // ── one-shot board intent ───────────────────────────────────────────────────
@@ -291,23 +285,18 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4, marginTop: 8 }}>{buildErr}</div>}
 
-      {/* THE PANEL OPENS WHERE YOU OPENED IT (v0.296.2). It used to render in
-          one stack BELOW the whole menu, so on a phone tapping SCORING near the
-          top put its table nine tiles further down, off-screen — you pressed a
-          thing here and something happened over there. The app has no such gap:
-          a tile throws a sheet over the page you are already looking at. Here
-          the panel is a full-width row of the grid immediately after its own
-          tile, which is the same promise on a layout that can afford to keep
-          the menu visible. `gridColumn: 1 / -1` is what makes it span both
-          desktop columns instead of squeezing a scoring table into half of
-          one. */}
+      {/* SELECTIONS ARRIVE AS POPUPS (v0.296.3, founder: "stick with the pop
+          up for all the items where we have that in the app"). These panels
+          used to EXPAND — first below the whole menu, then under their own tile
+          — and both readings put the menu in motion under your finger and left
+          the web answering a tap differently than the app does. Every one of
+          these is an Overlay on the app, so every one of them is a Sheet here:
+          over the page, one dismiss from gone, the menu untouched behind it. */}
       <Band title="THE LEAGUE" wide={wide}>
         {native && (
           <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
             onClick={() => setRostersOpen((v) => !v)} />
         )}
-        {rostersOpen && native && <Panel><TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} /></Panel>}
-
         {native && <Tile icon="⛏" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
 
         {/* The app's wording, plus the half the app's sheet cannot hold: the
@@ -319,24 +308,14 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             rules it runs on. Read-only for everyone; the commissioner edits the
             same facts behind ⚑ Manage league. */}
         {native && <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />}
-        {info === 'register' && <Panel><RegisterPanel leagueId={e.league_id} /></Panel>}
-
         <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
-        {info === 'scoring' && <Panel><ScoringPanel leagueId={e.league_id} /></Panel>}
-
         {native && <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />}
-        {info === 'roster' && <Panel><RosterRulesPanel leagueId={e.league_id} /></Panel>}
-
         <Tile icon="🔔" title="Alerts" sub="push notifications — what pings this browser" onClick={() => toggleInfo('alerts')} />
-        {info === 'alerts' && <Panel><NotifPrefsCard /></Panel>}
-
         {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
             half is every member's; the board half inside it is commish-gated
             and simply isn't drawn for anyone else. */}
         <Tile icon="📣" title="Recruit" sub={commish ? 'send an invite link · post to the board' : 'send an invite link to a friend'}
           onClick={() => toggleInfo('recruit')} />
-        {info === 'recruit' && <Panel><RecruitPanel leagueId={e.league_id} commish={commish} /></Panel>}
-
         {commish && (
           <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent
             badge={sig.commish && sig.commish.waiting + sig.commish.review > 0
@@ -344,6 +323,39 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
               : undefined} />
         )}
       </Band>
+
+      {/* The sheets — one at a time, the app's rule, with the app's titles and
+          subtitles so the same room is announced the same way on both. */}
+      {rostersOpen && native && (
+        <Sheet title="👥 Teams & rosters" subtitle="TAP A TEAM TO SEE WHO THEY'RE HOLDING" max={620} onClose={() => setRostersOpen(false)}>
+          <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />
+        </Sheet>
+      )}
+      {info === 'register' && (
+        <Sheet title="📜 League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" max={760} onClose={() => setInfo(null)}>
+          <RegisterPanel leagueId={e.league_id} bare />
+        </Sheet>
+      )}
+      {info === 'scoring' && (
+        <Sheet title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" max={760} onClose={() => setInfo(null)}>
+          <ScoringPanel leagueId={e.league_id} bare />
+        </Sheet>
+      )}
+      {info === 'roster' && (
+        <Sheet title="🧢 Roster settings" subtitle="LINEUP SPOTS · LIMITS · WAIVERS · TRADES" max={760} onClose={() => setInfo(null)}>
+          <RosterRulesPanel leagueId={e.league_id} bare />
+        </Sheet>
+      )}
+      {info === 'alerts' && (
+        <Sheet title="🔔 Alerts" subtitle="WHAT PINGS THIS BROWSER" onClose={() => setInfo(null)}>
+          <NotifPrefsCard bare />
+        </Sheet>
+      )}
+      {info === 'recruit' && (
+        <Sheet title="📣 Recruit" subtitle={commish ? 'SEND A LINK · POST TO THE BOARD' : 'SEND A LINK TO A FRIEND'} onClose={() => setInfo(null)}>
+          <RecruitPanel leagueId={e.league_id} commish={commish} bare />
+        </Sheet>
+      )}
 
       {/* ── THE WAY OUT (0188) ──────────────────────────────────────────────
           Quiet, last, and below the bands — a door you should be able to find
@@ -408,8 +420,10 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
   }, [leagueId, myRoster]);
   if (err) return <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the rosters.</div>;
   if (groups == null) return <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading rosters…</div>;
+  // No card of its own: this only ever renders inside a Sheet now (v0.296.3),
+  // which is the card.
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '4px 14px' }}>
+    <div>
       {groups.map((g) => (
         <div key={g.rid} style={{ borderBottom: '1px solid var(--bd)' }}>
           <button onClick={() => setOpenRid(openRid === g.rid ? null : g.rid)}

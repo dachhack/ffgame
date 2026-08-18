@@ -76,6 +76,69 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
   );
 }
 
+/** A TITLED POPUP — the web's copy of the app's Overlay (bottom sheet).
+ *
+ *  Founder: "stick with the pop up for all the items where we have that in the
+ *  app." The app answers every menu selection the same way: the thing you
+ *  picked arrives over the page you picked it from, and dismissing puts you
+ *  back exactly where you were. The web had been answering the same selections
+ *  by EXPANDING a panel somewhere in the page — which reads as a different
+ *  interaction (the menu moves, the page grows, and on a phone the panel can
+ *  land below the fold), and left two idioms in one product.
+ *
+ *  A centred card rather than a bottom sheet: the sheet is the phone gesture
+ *  language (a thumb at the bottom edge, a drag to throw it away) and the web
+ *  has neither a thumb nor that expectation. What matters is what the founder
+ *  asked for — over the page, one dismiss from gone, the menu untouched behind
+ *  it — and this is that with the desktop's manners.
+ *
+ *  BODY SCROLLS, CHROME DOESN'T: the card is a flex column with a viewport cap,
+ *  the header sizes to its content, and the body is the one child allowed to
+ *  shrink — the same rule the app's sheet settles on. Wide content (a scoring
+ *  table, a register) scrolls sideways INSIDE the body, so the page behind
+ *  never scrolls sideways. */
+export function Sheet({ title, subtitle, onClose, max = 620, children }: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  /** Card width cap. Reference tables want more room than a settings form. */
+  max?: number;
+  children: ReactNode;
+}) {
+  // Escape closes it — the keyboard's ✕, and the thing every dialog on the web
+  // is expected to do.
+  useEffect(() => {
+    const on = (ev: KeyboardEvent) => { if (ev.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [onClose]);
+  return (
+    <ModalBackdrop onClick={onClose} zIndex={80} padTop={26}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
+        style={{
+          background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10,
+          width: '100%', maxWidth: max, maxHeight: '86vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
+        }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '13px 15px 11px', borderBottom: '1px solid var(--bd)', flexShrink: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>{title}</div>
+            {!!subtitle && (
+              <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginTop: 3 }}>{subtitle}</div>
+            )}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="mono"
+            style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, lineHeight: 1, cursor: 'pointer', padding: 2, flexShrink: 0 }}>✕</button>
+        </div>
+        {/* minHeight: 0 is what lets a flex child actually shrink — without it
+            the body grows to its content and the cap clips the bottom off. */}
+        <div style={{ minHeight: 0, overflowY: 'auto', overflowX: 'auto', padding: '12px 15px 18px' }}>{children}</div>
+      </div>
+    </ModalBackdrop>
+  );
+}
+
 const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 /** Info-only weekly injury / IR badge for a player slug, or nothing. */

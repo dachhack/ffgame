@@ -63,7 +63,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
                 admin console free of commissioner-only surfaces and avoids an
                 import cycle — LeagueRow lives in AdminPage, which this file
                 imports. */}
-            <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'}
+            <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'} openSection={!!defaultTab}
               collapsible={shown.length > 1} defaultOpen={i === 0}
               panels={{
                 mode: <LeagueSettings leagueId={l.league_id} view="mode" />,
