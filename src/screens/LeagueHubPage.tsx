@@ -22,7 +22,7 @@ import {
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
-import { PRESEASON_BASE, weekLabel } from '@drip/core/data/nflSlate';
+import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
 import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel } from './LeagueInfo';
 
@@ -30,10 +30,13 @@ import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel } from './L
  *  this is that heading (v0.287.0). Without it the hub reads as one
  *  undifferentiated pile: your week and the league's own reference sheets look
  *  alike when they are stacked in one column with no seam. */
-function Band({ title, wide, children }: { title: string; wide: boolean; children: React.ReactNode }) {
+function Band({ title, wide, children }: { title?: string; wide: boolean; children: React.ReactNode }) {
   return (
     <section style={{ marginTop: 14 }}>
-      <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 6 }}>{title}</div>
+      {/* TITLELESS above THE LEAGUE (v0.296.2): the app's menu has one heading,
+          not two — the shop simply sits at the top, and a "YOUR WEEK" band over
+          a single tile was a label longer than the thing it labelled. */}
+      {!!title && <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 6 }}>{title}</div>}
       {/* TWO COLUMNS ON DESKTOP, one on a phone. The tiles are a fixed-height
           row of icon + title + sub, so they tile cleanly; below 900px a second
           column would squeeze the subtitles into two lines each. */}
@@ -42,6 +45,12 @@ function Band({ title, wide, children }: { title: string; wide: boolean; childre
       </div>
     </section>
   );
+}
+
+/** An opened panel, in the grid, spanning every column — so it lands directly
+ *  under the tile that opened it on a phone and under that ROW on desktop. */
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div style={{ gridColumn: '1 / -1' }}>{children}</div>;
 }
 
 // ── one-shot board intent ───────────────────────────────────────────────────
@@ -115,8 +124,11 @@ function Tile({ icon: _icon, title, sub, badge, onClick, disabled, accent }: {
   );
 }
 
-export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, onResults, onTeam, onDraft, onManage }: {
+export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, onResults, onDraft, onManage }: {
   e: Enrollment;
+  /** This week's matchup, when the schedule has one. All that is read from it
+   *  now is WHETHER it exists — the shop opens on a board, and a league with no
+   *  matchup yet has none to open. */
   card?: { matchup: LiveMatchup; teams: Record<number, TeamInfo> };
   commish: boolean;
   userId: string;
@@ -124,16 +136,17 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   viewAsLabel: string | null;
   onBack: () => void;
   onResults: () => void;
-  onTeam: (focus?: 'trades' | 'waivers' | 'options') => void;
   onDraft: () => void;
   onManage: () => void;
 }) {
   const { play, building, err: buildErr } = useHeroBoard(e, userId);
   const native = e.league?.provider === 'native';
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
-  // `polls_unvoted` moved to the strip's 💬 dot with the chat tile (v0.288.0);
-  // what is left here is what the hub's own tiles badge.
-  const [sig, setSig] = useState<{ waivers: number; commish: { waiting: number; review: number } | null }>({ waivers: 0, commish: null });
+  // `polls_unvoted` moved to the strip's 💬 dot with the chat tile (v0.288.0),
+  // and the waiver count left with the MY TEAM tiles (v0.296.2) — a badge for a
+  // room this menu no longer opens is a badge you cannot act on. The
+  // commissioner's queue is what is left to badge.
+  const [sig, setSig] = useState<{ commish: { waiting: number; review: number } | null }>({ commish: null });
   const [rostersOpen, setRostersOpen] = useState(false);
   // The league's reference panels (v0.274.0, founder's menu list). One piece
   // of state — only ever one is open, and they expand in place like the
@@ -182,7 +195,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
     leagueSignals(e.league_id)
-      .then((r) => { if (r.ok) setSig({ waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
+      .then((r) => { if (r.ok) setSig({ commish: r.commish ?? null }); })
       .catch(() => {});
     // Season's over and someone won it? The hub wears the banner (0199).
     playoffState(e.league_id)
@@ -200,15 +213,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // getting on every screen size.
   const wide = useWide(900);
 
-  const m = card?.matchup;
-  const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
-  const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
-  const opp = m && oppRoster != null ? card?.teams[oppRoster] : null;
-  const pending = !m;
-  const live = m?.status === 'live';
-  const matchupSub = m
-    ? `${weekLabel(m.week)} · ${e.team_name} vs ${opp?.team_name ?? `Roster ${oppRoster}`}${live ? ' · LIVE' : ''}`
-    : 'schedule pending — no opponent yet';
+  // The schedule hasn't dealt this seat a game yet — the shop has no board to
+  // open on, so its tile greys out. The rest of what was derived from the
+  // matchup went with the THIS WEEK line (v0.296.2).
+  const pending = !card?.matchup;
 
   return (
     <div style={{ maxWidth: wide ? 1080 : 560, margin: '0 auto' }}>
@@ -249,81 +257,85 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         </div>
       )}
 
-      {/* ── THE MENU, IN THE APP'S TWO BANDS (v0.287.0) ───────────────────
+      {/* ── THE MENU IS THE APP'S MENU (v0.287.0, matched item-for-item in
+          v0.296.2) ─────────────────────────────────────────────────────────
           Founder: "I like the league and commish menu layout on the app —
-          mirror that in the mobile web and create a big version for desktop."
+          mirror that in the mobile web and create a big version for desktop",
+          then: "using the app as the standard, let's match the mobile web
+          league page menu and selection locations to the app."
 
-          The app splits at THE LEAGUE: above it is YOUR WEEK (your board, your
-          team, the chat), below it the league itself — who is in it, what it
-          did, the rules it runs on. This hub had the same tiles in the same
-          idiom but in one unbroken column, so the seam the app reads by was
-          missing.
+          So the app is the standard and this is its menu: the shop, unlabelled
+          and alone, then THE LEAGUE and the league's own rooms and reference
+          sheets in the app's order. What used to differ was everything ABOVE
+          the heading — a THIS WEEK line, a YOUR WEEK band, and tiles for
+          trades / waivers / team options — all of it either a chip on the strip
+          above this page or a section of the page that chip opens.
 
-          WHAT STAYS DIFFERENT, deliberately: the app drops MATCHUP / MY TEAM /
-          CHAT from its menu because they are chips on the strip above it. The
-          web has no strip — this hub IS the navigation — so they stay tiles
-          here. Same layout, different amount of work for it to do.
-
-          An OPEN PANEL breaks out of the grid to full width below its band: a
-          register or a scoring table crammed into one half-width grid cell
-          would be a worse read than the tile it came from. */}
-      {/* WHO YOU PLAY THIS WEEK — the one thing the matchup TILE carried that
-          the strip's ▦ MATCHUP chip cannot: the week, the opponent, and whether
-          it is live. The tile itself is gone (v0.288.0, the founder's v0.275.0
-          rule now that the web has a strip: a menu that repeats the strip is a
-          menu you read twice), so the line it was a subtitle to stays on its
-          own — and still opens the board, since a live matchup should be one
-          click from the hub however the chips are arranged. */}
-      {!pending && (
-        <button onClick={guard(() => void play())} disabled={building} className="mono"
-          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', marginTop: 12,
-            background: live ? 'color-mix(in srgb, var(--you) 10%, var(--surface))' : 'var(--surface)',
-            border: `1px solid ${live ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 8, padding: '9px 13px',
-            fontSize: 10.5, color: 'var(--text)', cursor: building ? 'default' : 'pointer', opacity: building ? 0.6 : 1 }}>
-          <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 8.5, color: live ? 'var(--you)' : 'var(--faint)', flex: 'none' }}>
-            {building ? 'LOADING…' : live ? '● LIVE' : 'THIS WEEK'}
-          </span>
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{matchupSub}</span>
-          <span style={{ color: 'var(--faint)', flex: 'none' }}>→</span>
-        </button>
-      )}
-
-      <Band title="YOUR WEEK" wide={wide}>
-        {!classic && (
-          <Tile icon="◈" title="Power-up shop" sub="spend drip coin on this week's edge — opens on your board"
+          The one deliberate divergence left is 🏆 STANDINGS, which on the web
+          opens the full results page: the app's sheet holds a table and a
+          bracket, and the web's page holds those plus every pairing of every
+          week. Same place in the menu, more behind it. */}
+      {/* THE SHOP, ALONE AND UNLABELLED — the app's arrangement exactly
+          (v0.296.2). Trades, waivers and team options used to sit beside it
+          under a YOUR WEEK heading; every one of them is a SECTION OF THE TEAM
+          PAGE, which is a chip on the strip above this menu, so the tiles were
+          scroll shortcuts wearing the clothes of destinations. The app dropped
+          them for that reason ("a menu that repeats the strip is a menu you
+          have to read twice") and keeps only the shop, which has no chip
+          anywhere and spends coin that is yours rather than the league's. */}
+      {!classic && (
+        <Band wide={wide}>
+          <Tile icon="◈" title="Power-up shop" sub="spend drip coin — opens on your board"
             onClick={guard(() => void play('shop'))} disabled={building || pending} />
-        )}
-
-        {native && (
-          <>
-            <Tile icon="⇄" title="Trades" sub="propose, review, and the league's trade block" onClick={guard(() => onTeam('trades'))} />
-            <Tile icon="✚" title="Waivers & free agents" sub="claims, the wire, and who's unclaimed" onClick={guard(() => onTeam('waivers'))}
-              badge={sig.waivers > 0 ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>✚ {sig.waivers} resolved</span> : undefined} />
-            <Tile icon="⚙" title="Team options" sub="rename your team · crest · league invite" onClick={guard(() => onTeam('options'))} />
-          </>
-        )}
-      </Band>
+        </Band>
+      )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4, marginTop: 8 }}>{buildErr}</div>}
 
+      {/* THE PANEL OPENS WHERE YOU OPENED IT (v0.296.2). It used to render in
+          one stack BELOW the whole menu, so on a phone tapping SCORING near the
+          top put its table nine tiles further down, off-screen — you pressed a
+          thing here and something happened over there. The app has no such gap:
+          a tile throws a sheet over the page you are already looking at. Here
+          the panel is a full-width row of the grid immediately after its own
+          tile, which is the same promise on a layout that can afford to keep
+          the menu visible. `gridColumn: 1 / -1` is what makes it span both
+          desktop columns instead of squeezing a scoring table into half of
+          one. */}
       <Band title="THE LEAGUE" wide={wide}>
         {native && (
           <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
             onClick={() => setRostersOpen((v) => !v)} />
         )}
+        {rostersOpen && native && <Panel><TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} /></Panel>}
+
         {native && <Tile icon="⛏" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
-        <Tile icon="🏆" title="Standings & all matchups" sub="the table · every pairing, every week" onClick={onResults} />
+
+        {/* The app's wording, plus the half the app's sheet cannot hold: the
+            web opens the full results page, which is the table AND every
+            pairing of every week. */}
+        <Tile icon="🏆" title="Standings" sub="the table · playoff bracket · every pairing, every week" onClick={onResults} />
+
         {/* The league's own reference sheets (v0.274.0) — what it did, and the
             rules it runs on. Read-only for everyone; the commissioner edits the
             same facts behind ⚑ Manage league. */}
         {native && <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />}
+        {info === 'register' && <Panel><RegisterPanel leagueId={e.league_id} /></Panel>}
+
         <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
+        {info === 'scoring' && <Panel><ScoringPanel leagueId={e.league_id} /></Panel>}
+
         {native && <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />}
+        {info === 'roster' && <Panel><RosterRulesPanel leagueId={e.league_id} /></Panel>}
+
         <Tile icon="🔔" title="Alerts" sub="push notifications — what pings this browser" onClick={() => toggleInfo('alerts')} />
+        {info === 'alerts' && <Panel><NotifPrefsCard /></Panel>}
+
         {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
             half is every member's; the board half inside it is commish-gated
             and simply isn't drawn for anyone else. */}
         <Tile icon="📣" title="Recruit" sub={commish ? 'send an invite link · post to the board' : 'send an invite link to a friend'}
           onClick={() => toggleInfo('recruit')} />
+        {info === 'recruit' && <Panel><RecruitPanel leagueId={e.league_id} commish={commish} /></Panel>}
 
         {commish && (
           <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent
@@ -332,17 +344,6 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
               : undefined} />
         )}
       </Band>
-
-      {/* The panels, full width under the bands — one at a time, same as the
-          app's one-sheet-at-a-time rule. */}
-      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {rostersOpen && native && <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />}
-        {info === 'register' && <RegisterPanel leagueId={e.league_id} />}
-        {info === 'scoring' && <ScoringPanel leagueId={e.league_id} />}
-        {info === 'roster' && <RosterRulesPanel leagueId={e.league_id} />}
-        {info === 'alerts' && <NotifPrefsCard />}
-        {info === 'recruit' && <RecruitPanel leagueId={e.league_id} commish={commish} />}
-      </div>
 
       {/* ── THE WAY OUT (0188) ──────────────────────────────────────────────
           Quiet, last, and below the bands — a door you should be able to find
