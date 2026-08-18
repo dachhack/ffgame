@@ -410,6 +410,9 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
   const [fTeam, setFTeam] = useState<string>('ALL');
   const [fTen, setFTen] = useState<string>('ALL');
   const filtersOn = fPos !== 'ALL' || fTeam !== 'ALL' || fTen !== 'ALL';
+  // What the last scoped rule saved from here reads as — it lands in ⚖ SCORING
+  // rather than the flag list, so without this the press has no receipt.
+  const [ruleNote, setRuleNote] = useState<string | null>(null);
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (needle.length < 2 && !(bulk && filtersOn)) return [];
@@ -438,6 +441,68 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
+  /** The filter as the rule will read it — scopedRuleLabel's own order, so
+   *  the button's promise and the saved rule cannot drift apart. */
+  const scopeWords = (): string => {
+    const parts = [
+      fPos !== 'ALL' ? fPos : null,
+      fTeam !== 'ALL' ? fTeam : null,
+      fTen === 'rookie' ? 'rookies' : fTen === 'y2_3' ? '2nd–3rd yr' : fTen === 'vet4' ? 'vets 4+' : null,
+    ].filter(Boolean);
+    const who = parts.length ? parts.join(' / ') : 'everyone';
+    const mult = rulesDraft.bonus_mult ?? 1;
+    const pts = rulesDraft.bonus_pts ?? 0;
+    const vals = [mult !== 1 ? `×${mult}` : null, pts !== 0 ? `${pts > 0 ? '+' : ''}${pts}` : null].filter(Boolean).join(' ');
+    return vals ? `${who}: ${vals}` : `${who} — set a × or ± above`;
+  };
+
+  /** THE SAME FILTERS, AS A RULE INSTEAD OF A LIST (v0.278.0, founder: "can we
+   *  allow scoped bonuses for player flags?").
+   *
+   *  Flagging is per-player: it names sixty slugs and stops there — a rookie
+   *  signed in week 6 isn't in the list and nobody goes back. A SCOPED bonus
+   *  (0145) is the same intent said as a rule, so it covers whoever matches,
+   *  whenever. The filters here already ARE a scope; this hands them over
+   *  rather than making the commissioner rebuild them in the scoring editor.
+   *
+   *  Only the numeric halves travel — a scoped rule has no can't-trade /
+   *  can't-start, and the sheet says so rather than dropping them silently. */
+  const saveScopedRule = async () => {
+    if (busy) return;
+    const mult = rulesDraft.bonus_mult ?? 1;
+    const pts = rulesDraft.bonus_pts ?? 0;
+    if (mult === 1 && pts === 0) { setErr('Set a × multiplier or ± points first — a scoped rule is a bonus, not a label.'); return; }
+    if (!filtersOn) { setErr('Pick a position, team or tenure — that filter is the rule’s scope.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const cur = await leagueScoringGet(leagueId);
+      if (!cur?.ok) { setErr('Could not read the league’s scoring.'); return; }
+      const now = parseScoring(cur);
+      if (now.scoped.length >= 12) { setErr('At most 12 scoped rules — remove one in ⚖ SCORING first.'); return; }
+      const rule = {
+        ...(fPos !== 'ALL' ? { pos: [fPos] } : {}),
+        ...(fTeam !== 'ALL' ? { team: [fTeam] } : {}),
+        ...(fTen !== 'ALL' ? { tenure: fTen } : {}),
+        ...(mult !== 1 ? { bonus_mult: mult } : {}),
+        ...(pts !== 0 ? { bonus_pts: pts } : {}),
+      };
+      const wire = now.scoped.map((r) => ({
+        ...(r.pos?.length ? { pos: r.pos } : {}),
+        ...(r.team?.length ? { team: r.team } : {}),
+        ...(r.tenure ? { tenure: r.tenure } : {}),
+        ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
+        ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
+        ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
+      }));
+      const res = await leagueScoringSet(leagueId, now.tdBonus, now.ydMult, now.toPenalty, [...wire, rule]);
+      if (!res.ok) { setErr(friendlyError(res.error ?? 'Could not save the rule.')); return; }
+      setRuleNote(`⚖ ${scopedRuleLabel(parseScoring({ scoped: [rule] }).scoped[0])} — saved. It pays everyone who matches, now and later.`);
+      setFPos('ALL'); setFTeam('ALL'); setFTen('ALL');
+      onChanged();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
   const saveBulk = async () => {
     if (busy || !selected.size) return;
     // Empty label + rules set → the rules name the flag (autoLabel). Only a
@@ -599,6 +664,26 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
                     ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
                   </div>
             )}
+            {/* ⚖ THE SAME BONUS AS A RULE (v0.278.0). Offered only with a
+                filter up, because the filter IS the scope — and it says what
+                it will read as before you press it, since the rule lands in
+                ⚖ SCORING rather than in the flag list above. */}
+            {filtersOn && (
+              <button onClick={() => void saveScopedRule()} disabled={busy} className="mono"
+                title="save this bonus as a scoped scoring rule instead of flagging players one by one"
+                style={{ ...ghostBtn, display: 'block', width: '100%', textAlign: 'left', color: 'var(--warn)', borderColor: 'var(--warn)', marginTop: 8, padding: '9px 12px', opacity: busy ? 0.5 : 1 }}>
+                <span style={{ fontWeight: 700 }}>⚖ MAKE IT A SCOPED RULE INSTEAD</span>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+                  {scopeWords()} — pays everyone who matches, now and later. No player list to keep up to date.
+                </span>
+              </button>
+            )}
+            {filtersOn && (rulesDraft.no_trade || rulesDraft.no_add || rulesDraft.no_start || rulesDraft.no_powerups || rulesDraft.immune) && (
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.4 }}>
+                a scoped rule carries the × and ± only — the restrictions above stay per-player flags
+              </div>
+            )}
+            {ruleNote && <div className="mono" style={{ fontSize: 11.5, color: 'var(--warn)', marginTop: 6, lineHeight: 1.4 }}>{ruleNote}</div>}
           </div>
         )}
         <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={onClose} className="mono" style={linkBtn}>done</button></div>
