@@ -1180,9 +1180,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
       {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
-      {/* Desktop gets the grouped rail; narrow screens keep the scrolling strip.
-          Both drive the same `tab` state, so a destination behaves identically
-          either way. */}
+      {/* Desktop gets the grouped RAIL, narrow screens the grouped HUB — both
+          driving the same `tab` state, so a destination behaves identically
+          either way. (This said "narrow screens keep the scrolling strip" long
+          after v0.259.0 replaced that strip with the hub below; the strip is
+          what the app's own commissioner map was written NOT to copy, and it
+          isn't here any more either.) */}
       {/* Narrow: the HUB is the nav (v0.259.0) — the whole map, one tap in,
           "⊞ all settings" back out. The 17-option select it replaces survives
           nowhere; the hub IS the select, laid flat. */}

@@ -14,6 +14,8 @@ import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img } from '../app/ui';
+import { useWide } from './adminUi';
+import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
   type Enrollment, type LiveMatchup, type TeamInfo,
@@ -24,6 +26,24 @@ import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { ChatPanel } from '../app/chat';
 import { setCardLeague } from '../app/playerCard';
 import { ScoringPanel, RosterRulesPanel, RegisterPanel } from './LeagueInfo';
+
+/** A titled band of tiles — the app's league menu splits at "THE LEAGUE" and
+ *  this is that heading (v0.287.0). Without it the hub reads as one
+ *  undifferentiated pile: your week and the league's own reference sheets look
+ *  alike when they are stacked in one column with no seam. */
+function Band({ title, wide, children }: { title: string; wide: boolean; children: React.ReactNode }) {
+  return (
+    <section style={{ marginTop: 14 }}>
+      <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 6 }}>{title}</div>
+      {/* TWO COLUMNS ON DESKTOP, one on a phone. The tiles are a fixed-height
+          row of icon + title + sub, so they tile cleanly; below 900px a second
+          column would squeeze the subtitles into two lines each. */}
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: wide ? 'repeat(2, minmax(0, 1fr))' : '1fr' }}>
+        {children}
+      </div>
+    </section>
+  );
+}
 
 // ── one-shot board intent ───────────────────────────────────────────────────
 // The shop lives on the board (it needs liveCtx + wallet). The hub's SHOP tile
@@ -111,8 +131,13 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // The league's reference panels (v0.274.0, founder's menu list). One piece
   // of state — only ever one is open, and they expand in place like the
   // rosters tile above rather than stealing the page.
-  const [info, setInfo] = useState<null | 'scoring' | 'roster' | 'register'>(null);
-  const toggleInfo = (k: 'scoring' | 'roster' | 'register') => setInfo((cur) => (cur === k ? null : k));
+  // One panel at a time, `null` being the menu itself — the app's rule, and the
+  // reason a second click on the open tile closes it. 'alerts' joined in
+  // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
+  // hosts the same NotifPrefsCard the team screen does rather than a fork.
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts';
+  const [info, setInfo] = useState<null | InfoPanel>(null);
+  const toggleInfo = (k: InfoPanel) => setInfo((cur) => (cur === k ? null : k));
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
   // founder). Defaults false — drip is the common case, and a tile popping in
@@ -149,6 +174,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
     fn();
   };
 
+  // Desktop gets the BIG version of the same menu (v0.287.0): two columns of
+  // tiles in a 1080px page, rather than the 440px phone column the hub was
+  // getting on every screen size.
+  const wide = useWide(900);
+
   const m = card?.matchup;
   const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
   const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
@@ -160,7 +190,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
     : 'schedule pending — no opponent yet';
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+    <div style={{ maxWidth: wide ? 1080 : 560, margin: '0 auto' }}>
       {/* champion banner — the season is decided; the hub says so first */}
       {champion && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'color-mix(in srgb, #D8B24A 14%, var(--surface))', border: '1px solid #D8B24A', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
@@ -195,12 +225,29 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+      {/* ── THE MENU, IN THE APP'S TWO BANDS (v0.287.0) ───────────────────
+          Founder: "I like the league and commish menu layout on the app —
+          mirror that in the mobile web and create a big version for desktop."
+
+          The app splits at THE LEAGUE: above it is YOUR WEEK (your board, your
+          team, the chat), below it the league itself — who is in it, what it
+          did, the rules it runs on. This hub had the same tiles in the same
+          idiom but in one unbroken column, so the seam the app reads by was
+          missing.
+
+          WHAT STAYS DIFFERENT, deliberately: the app drops MATCHUP / MY TEAM /
+          CHAT from its menu because they are chips on the strip above it. The
+          web has no strip — this hub IS the navigation — so they stay tiles
+          here. Same layout, different amount of work for it to do.
+
+          An OPEN PANEL breaks out of the grid to full width below its band: a
+          register or a scoring table crammed into one half-width grid cell
+          would be a worse read than the tile it came from. */}
+      <Band title="YOUR WEEK" wide={wide}>
         <Tile accent icon={<GameIcon name={BRAND_MARK} emoji="▶" size="1.2em" />}
           title={building ? 'Loading your board…' : live ? 'Go to your matchup' : 'My matchup'}
           sub={matchupSub}
           onClick={guard(() => void play())} disabled={building || pending} />
-        {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4 }}>{buildErr}</div>}
 
         <Tile icon="💬" title="Chat"
           badge={(unread.n > 0 || sig.polls > 0)
@@ -212,8 +259,6 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           sub="league channel · direct messages"
           onClick={guard(() => { setChatOpen(true); setUnread({ n: 0, mention: false }); })} />
 
-        <Tile icon="▦" title="All matchups & standings" sub="every pairing, every week, the table" onClick={onResults} />
-
         {!classic && (
           <Tile icon="◈" title="Power-up shop" sub="spend drip coin on this week's edge — opens on your board"
             onClick={guard(() => void play('shop'))} disabled={building || pending} />
@@ -224,30 +269,43 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             <Tile icon="⇄" title="Trades" sub="propose, review, and the league's trade block" onClick={guard(() => onTeam('trades'))} />
             <Tile icon="✚" title="Waivers & free agents" sub="claims, the wire, and who's unclaimed" onClick={guard(() => onTeam('waivers'))}
               badge={sig.waivers > 0 ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>✚ {sig.waivers} resolved</span> : undefined} />
-            <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
-              onClick={() => setRostersOpen((v) => !v)} />
-            {rostersOpen && <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />}
             <Tile icon="⚙" title="Team options" sub="rename your team · crest · league invite" onClick={guard(() => onTeam('options'))} />
-            <Tile icon="⛏" title="Draft room" sub="the league's draft — live during draft night, the record after" onClick={guard(onDraft)} />
-            {/* The league's own reference sheets (v0.274.0) — what it did, and
-                the rules it runs on. Read-only for everyone; the commissioner
-                edits the same facts behind ⚑ Manage league. */}
-            <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />
-            {info === 'register' && <RegisterPanel leagueId={e.league_id} />}
-            <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />
-            {info === 'roster' && <RosterRulesPanel leagueId={e.league_id} />}
           </>
         )}
+      </Band>
+      {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4, marginTop: 8 }}>{buildErr}</div>}
 
+      <Band title="THE LEAGUE" wide={wide}>
+        {native && (
+          <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
+            onClick={() => setRostersOpen((v) => !v)} />
+        )}
+        {native && <Tile icon="⛏" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
+        <Tile icon="🏆" title="Standings & all matchups" sub="the table · every pairing, every week" onClick={onResults} />
+        {/* The league's own reference sheets (v0.274.0) — what it did, and the
+            rules it runs on. Read-only for everyone; the commissioner edits the
+            same facts behind ⚑ Manage league. */}
+        {native && <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />}
         <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
-        {info === 'scoring' && <ScoringPanel leagueId={e.league_id} />}
+        {native && <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />}
+        <Tile icon="🔔" title="Alerts" sub="push notifications — what pings this browser" onClick={() => toggleInfo('alerts')} />
 
         {commish && (
-          <Tile icon="⚑" title="Manage league" sub="members · commish kit · scoring · rules" onClick={onManage} accent
+          <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent
             badge={sig.commish && sig.commish.waiting + sig.commish.review > 0
               ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--warn)', borderRadius: 999, padding: '2px 7px' }}>{sig.commish.waiting + sig.commish.review} waiting</span>
               : undefined} />
         )}
+      </Band>
+
+      {/* The panels, full width under the bands — one at a time, same as the
+          app's one-sheet-at-a-time rule. */}
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {rostersOpen && native && <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />}
+        {info === 'register' && <RegisterPanel leagueId={e.league_id} />}
+        {info === 'scoring' && <ScoringPanel leagueId={e.league_id} />}
+        {info === 'roster' && <RosterRulesPanel leagueId={e.league_id} />}
+        {info === 'alerts' && <NotifPrefsCard />}
       </div>
 
       {chatOpen && <ChatPanel leagueId={e.league_id} onClose={() => setChatOpen(false)} />}
