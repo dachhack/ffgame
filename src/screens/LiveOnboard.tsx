@@ -706,7 +706,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <>
       {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
           admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onBoard={() => setView('board')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -795,7 +795,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onBoard={() => setView('board')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -860,6 +860,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       offers={offers}
       signals={signals}
       onAdd={guard(() => setView('add'))}
+      onFind={guard(() => setView('board'))}
       onDeleted={refresh}
       isCommish={isCommish}
     />
@@ -884,11 +885,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onManage, onDraft, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
-  onDraft: (leagueId: string, rosterId: number) => void; onAdd: () => void;
+  onDraft: (leagueId: string, rosterId: number) => void; onAdd: () => void; onFind: () => void;
   onDeleted: () => void; isCommish: boolean;
   /** Open the league's HOME page (0182) — the card's primary action. */
   onOpen: (e: Enrollment) => void;
@@ -963,8 +964,18 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
           a second league. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {isCommish && <>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</>}
-        <button onClick={onAdd} className="mono" style={{
+        {/* 🔎 FIND A LEAGUE is its own chip (v0.293.1, founder) rather than a
+            card inside the add flow. The two are different questions — "I have
+            a code / I'm making one" versus "I have neither, show me leagues
+            that need managers" — and burying the second inside the first meant
+            the people with no way in had the furthest to walk. */}
+        <button onClick={onFind} className="mono" style={{
           marginLeft: 'auto', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+          color: 'var(--you)', background: 'transparent',
+          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
+        }}>🔎 FIND A LEAGUE</button>
+        <button onClick={onAdd} className="mono" style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
         }}>＋ ADD A LEAGUE</button>
@@ -1443,7 +1454,11 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
   );
 }
 
-function RoleChooser({ onPlayer, onBoard, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onBoard?: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+// `onBoard` left in v0.293.1 — the league board is its own 🔎 FIND A LEAGUE
+// chip beside ＋ ADD A LEAGUE now, rather than a card three-deep inside the
+// add flow. This chooser is for people who already know how they are getting
+// in: with a code, as a commissioner, or by making one.
+function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   // Everyone sees the platform-league paths; everything below the divider only
   // renders because THIS account holds a feature flag (or is admin) — the chip
@@ -1463,12 +1478,6 @@ function RoleChooser({ onPlayer, onBoard, onCreate, onCommish, onRequest, onSolo
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
         </button>
-        {onBoard && (
-          <button onClick={onBoard} style={choice}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Find me a league →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code, no league? Browse open leagues on the board and claim a seat.</div>
-          </button>
-        )}
         <button onClick={onCommish} style={choice}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>

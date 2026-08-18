@@ -68,7 +68,14 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       .catch(() => {});
   }, [leagueId]);
 
-  const tile = (icon: string, title: string, sub: string, onPress: () => void, opts?: { accent?: boolean; badge?: string }) => (
+  /** NO ICONS (v0.293.1, founder: "get rid of icons on the league home"). Nine
+   *  emoji in a vertical stack were nine different art styles — a scroll, a cap,
+   *  a bell, a megaphone — doing the job the TITLE was already doing, in a
+   *  column narrow enough that they read as noise before they read as meaning.
+   *  The `icon` argument is kept and ignored rather than threaded out of nine
+   *  call sites: it costs nothing, and it is where an icon would go back if the
+   *  answer is "a consistent SET", not "none". */
+  const tile = (_icon: string, title: string, sub: string, onPress: () => void, opts?: { accent?: boolean; badge?: string }) => (
     <Pressable key={title} onPress={() => { tap(); onPress(); }} android_ripple={{ color: alpha(t.you, 16) }}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -76,7 +83,6 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         ...(opts?.accent ? { borderLeftWidth: 3, borderLeftColor: t.you } : {}),
         borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, opacity: pressed ? 0.85 : 1,
       })}>
-      <Text style={{ fontSize: 18, width: 26, textAlign: 'center' }}>{icon}</Text>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{title}</Text>
