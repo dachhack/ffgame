@@ -18,9 +18,8 @@ import { ScoringView, RosterRulesView, RegisterView } from '../ui/LeagueInfo';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
-export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish, onGo, onShop, onBack }: {
+export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo, onShop, onBack }: {
   leagueId: string;
-  name: string;
   teamName?: string | null;
   rosterId: number | null;
   native: boolean;
@@ -97,10 +96,13 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
           <Mono size={9} tone="faint" style={{ marginTop: 2 }}>LEAGUE CHAMPIONS — the season is in the books</Mono>
         </View>
       )}
+      {/* NO SECOND TITLE (founder): the app header one row up became the
+          league's name at header size in v0.279.3, and printing it again here
+          just pushed the menu down. What is left is the line the header
+          doesn't carry — which seat you are — and the way out. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={{ fontSize: 19, fontWeight: '700', color: t.text }}>{name}</Text>
-          {!!teamName && <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
+          {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
         </View>
         <Pressable hitSlop={8} onPress={() => { tap(); onBack(); }}>
           <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>← leagues</Text>

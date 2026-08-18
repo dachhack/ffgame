@@ -12,7 +12,7 @@
 // The server is the real gate on all of it — every RPC here checks the caller
 // is the league's commissioner or an admin; the tab merely hides the door.
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
@@ -27,6 +27,7 @@ import {
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity,
+  setLeagueName, setLeagueAvatar, myEnrollments,
 } from '@drip/core/data/liveApi';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
@@ -50,6 +51,9 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   // ~36-knob catalog stacked); the scoring knobs lived two screens below the
   // fold. Split three ways (v0.259.0) to match the web rail exactly.
   { title: 'SET UP', items: [
+    // 0187: the league's own identity — the name had NO setter at all before
+    // this, so a typo at creation was permanent for every member.
+    { id: 'identity', label: '🏷 NAME & CREST' },
     { id: 'mode', label: '🎮 MODE' },
     { id: 'lineup', label: '🧩 ROSTER' },
     { id: 'scoring', label: '⚖ SCORING' },
@@ -77,6 +81,105 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
   ] },
 ];
+
+/** ── 🏷 NAME & CREST (0187) ──────────────────────────────────────────────
+ *
+ *  The league's own identity, and the only place it can be changed. The crest
+ *  had a setter already (set_league_avatar); the NAME had none — whatever
+ *  create_native_league was handed stood forever, typo and all.
+ *
+ *  It reads the current values from my_teams rather than taking props: this
+ *  sheet can be opened from a commissioner who has no seat, and my_teams
+ *  answers for every league the caller is in either way. */
+function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    myEnrollments('')
+      .then((rows) => {
+        const e = rows.find((r) => r.league_id === leagueId);
+        if (!e?.league) return;
+        setName(e.league.name ?? '');
+        setSaved(e.league.name ?? '');
+        setAvatar(e.league.avatar_url ?? null);
+      })
+      .catch(() => {});
+  }, [leagueId]);
+
+  const saveName = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueName(leagueId, name);
+      if (!r.ok) { warn(); setNote(friendlyError(r.error ?? 'that didn’t save')); return; }
+      commit();
+      // Render what the SERVER kept — it trims and collapses whitespace, so
+      // the field would otherwise keep showing the version nobody stored.
+      setName(r.name ?? name); setSaved(r.name ?? name);
+      setNote('✓ saved — the new name shows everywhere the league appears');
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveAvatar = async (url: string | null) => {
+    setPickOpen(false);
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueAvatar(leagueId, url);
+      if (!r.ok) { warn(); setNote(friendlyError(r.error ?? 'that didn’t save')); return; }
+      commit(); setAvatar(r.avatar ?? null); setNote('✓ crest saved');
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const dirty = name.trim() !== saved;
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>LEAGUE NAME</Mono>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+        <TextInput value={name} onChangeText={(v) => { setName(v); setNote(null); }}
+          maxLength={60} placeholder="league name" placeholderTextColor={t.faint}
+          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
+        <Pressable disabled={busy || !dirty || name.trim().length < 2} onPress={() => { tap(); void saveName(); }}
+          style={{ backgroundColor: t.you, borderRadius: 7, paddingHorizontal: 14, justifyContent: 'center', opacity: busy || !dirty || name.trim().length < 2 ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.onAccent }}>SAVE</Text>
+        </Pressable>
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
+        2–60 characters. Everyone in the league sees it — on their leagues list, the header, and every invite.
+      </Mono>
+
+      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>LEAGUE CREST</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+        {avatar
+          ? <Image source={{ uri: avatar }} style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: t.bg }} />
+          : <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: fs(16), fontWeight: '700', color: t.faint }}>{(saved || 'L').slice(0, 1).toUpperCase()}</Text>
+            </View>}
+        <Pressable disabled={busy} onPress={() => { tap(); setPickOpen(true); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8, opacity: busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.text }}>🖼 PICK A CREST</Text>
+        </Pressable>
+        {!!avatar && (
+          <Pressable disabled={busy} hitSlop={6} onPress={() => { tap(); void saveAvatar(null); }}>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.opp }}>✕ clear</Text>
+          </Pressable>
+        )}
+      </View>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 8 }}>{note}</Mono>}
+
+      <AvatarGrid visible={pickOpen} title="League crest" current={avatar}
+        onClose={() => setPickOpen(false)} onPick={(url) => { void saveAvatar(url); }} />
+    </Card>
+  );
+}
 
 export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
   leagueId: string;
@@ -217,6 +320,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
           title={NAV_GROUPS.flatMap((g) => g.items).find((it) => it.id === section)?.label ?? section}
           onClose={() => { setSection(null); setSheetScroll(true); }}>
           <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled scrollEnabled={sheetScroll}>
+            {section === 'identity' && <LeagueIdentityCard leagueId={leagueId} />}
             {section === 'kit' && <CommishToolsCard leagueId={leagueId} />}
             {section === 'seats' && (
               <CommishTeams key={`teams-${epoch}`} leagueId={leagueId} myRoster={myRoster}

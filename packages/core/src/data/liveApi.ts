@@ -2032,6 +2032,13 @@ export const nativeTeamState = (leagueId: string) => rpc<NativeTeamState>('nativ
 /** Pick your own team's avatar (manager, commish or admin); null clears it. */
 export const setTeamAvatar = (leagueId: string, rosterId: number, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_team_avatar', { p_league_id: leagueId, p_roster_id: rosterId, p_url: url });
+/** Rename the league (commissioner/admin, 0187). Trimmed and inner-whitespace
+ *  collapsed server-side; 2–60 characters. Answers with the STORED name, so a
+ *  caller renders what the server kept rather than what it sent. */
+export const setLeagueName = (leagueId: string, name: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; name?: string }>('set_league_name',
+    { p_league_id: leagueId, p_name: name }),
+    Ev.commishAction, { tool: 'league_name' });
 /** Pick the league's crest (commissioner/admin); null clears it. */
 export const setLeagueAvatar = (leagueId: string, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_league_avatar', { p_league_id: leagueId, p_url: url });

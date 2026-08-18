@@ -113,3 +113,4 @@ $RUN -f scripts/db/seat-agent-probes.sql | grep -E "PROBE FAIL|ALL SEAT-AGENT PR
 $RUN -f scripts/db/dynasty-probes.sql | grep -E "PROBE FAIL|ALL DYNASTY PROBES" || { echo "DYNASTY PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/pick-asset-probes.sql | grep -E "PROBE FAIL|ALL PICK-ASSET PROBES" || { echo "PICK-ASSET PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/register-probes.sql | grep -E "PROBE FAIL|ALL REGISTER PROBES" || { echo "REGISTER PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/league-name-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-NAME PROBES" || { echo "LEAGUE-NAME PROBES FAILED"; exit 1; }
