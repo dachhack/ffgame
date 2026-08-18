@@ -28,6 +28,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
+import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -177,14 +178,15 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSpot, onDrop }: {
       {p ? (
         <>
           <Face slug={p.slug} pos={p.pos} />
-          <View style={{ flex: 1, minWidth: 0 }}>
+          <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
+            onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
             <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
               <Mono size={8.5} tone="faint">{p.team}</Mono>
               <FlagChip slug={p.slug} size={7.5} />
             </View>
-          </View>
+          </Pressable>
           <Pressable disabled={busy} onPress={() => onSpot(p)}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>
@@ -626,7 +628,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
               <Mono size={8.5} tone="faint" style={{ width: 28 }}>#{p.rank}</Mono>
               <Face slug={p.slug} pos={p.pos} />
-              <View style={{ flex: 1, minWidth: 0 }}>
+              {/* The wire's names open cards too (founder: everywhere a name
+                  is, a card is one tap away) — deciding whether to ADD him is
+                  exactly when you want to read about him. */}
+              <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
+                onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
                 <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>
                   {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
                 </Text>
@@ -636,7 +642,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
                   <FlagChip slug={p.slug} size={7.5} />
                   {left != null && <Mono size={8.5} tone="warn">⏳ {fmtLeft(left)}</Mono>}
                 </View>
-              </View>
+              </Pressable>
               <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
                 style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>

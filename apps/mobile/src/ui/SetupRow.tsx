@@ -16,6 +16,7 @@ import type { Metric, Pick, Player } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { CardFace, CardBack, CardEmpty, loadCardSize } from './cards';
+import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
@@ -92,6 +93,12 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
             <>
               <Text onPress={() => setMetricOpen(true)} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#8A6A28' }}>↻ METRIC</Text>
               <Text onPress={onOpenPicker} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#A2422F' }}>⇄ PLAYER</Text>
+              {/* ⓘ the card (founder: a name should always reach one). The
+                  face's own press is the swap/metric gesture the board was
+                  built around, so this is ADDED beside it rather than
+                  replacing a motion players already know. */}
+              <Text onPress={() => openPlayerCard({ slug: player.id, name: player.name, pos: player.pos, team: player.team })}
+                style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#3C6E57' }}>ⓘ CARD</Text>
             </>
           )}
         />

@@ -30,6 +30,7 @@ import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 import { Overlay } from './Overlay';
 import { FieldView } from './FieldView';
+import { openPlayerCard } from './PlayerCardSheet';
 
 /** One team in the scoreboard: crest, name, record + seed, and the headline
  *  number.
@@ -110,7 +111,13 @@ function Face({ slug, size = 26 }: { slug: string; size?: number }) {
 /** A player on one side of a row, mirrored so both read outward from the pill.
  *  `onGame` makes the game line its own tap target — into the live field +
  *  play log for that NFL game — without stealing the row's picker tap. */
-function BoardCell({ e, align, onGame }: { e: BoardEntry | null; align: 'left' | 'right'; onGame?: () => void }) {
+function BoardCell({ e, align, onGame, onName }: {
+  e: BoardEntry | null; align: 'left' | 'right'; onGame?: () => void;
+  /** The NAME opens the player card (v0.283.0, founder). It is its own target
+   *  so the row can stop being one big button: reading about a player and
+   *  changing the spot he sits in are different intentions. */
+  onName?: () => void;
+}) {
   const t = useTheme();
   const right = align === 'right';
   if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
@@ -126,7 +133,13 @@ function BoardCell({ e, align, onGame }: { e: BoardEntry | null; align: 'left' |
   const line = e.opponent === 'BYE' ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
-      <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
+      {onName ? (
+        <Pressable hitSlop={6} onPress={() => { tap(); onName(); }} style={{ alignSelf: right ? 'flex-end' : 'flex-start' }}>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
+        </Pressable>
+      ) : (
+        <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: e.state === 'done' ? t.dim : t.text, textAlign: right ? 'right' : 'left' }}>{e.name}</Text>
+      )}
       <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
         <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
         {e.team ? ` · ${e.team}` : ''}
@@ -741,14 +754,29 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               const d = slotDefs.find((x) => x.slot === row.slot);
               const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
               return (
-                <Pressable key={row.slot}
-                  onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }}
+                <View key={row.slot}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                  {row.home ? <BoardCell e={row.home} align="left" onGame={gameOpener(row.home)} />
-                    : <View style={{ flex: 1 }}>
-                        <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
-                        {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
-                      </View>}
+                  {row.home ? (
+                    <>
+                      <BoardCell e={row.home} align="left" onGame={gameOpener(row.home)}
+                        onName={() => openPlayerCard({ slug: row.home!.slug, name: row.home!.name, pos: row.home!.pos, team: row.home!.team ?? '', week: matchup?.week, userId })} />
+                      {/* ⇄ THE SWAP, as its own small chip (founder). The row
+                          used to be one button that opened the picker, which
+                          left no way to simply READ about the player standing
+                          in it. */}
+                      {settable && (
+                        <Pressable hitSlop={8} onPress={() => { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); }}
+                          style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }}>
+                          <Mono size={9} tone="you" weight="700">⇄</Mono>
+                        </Pressable>
+                      )}
+                    </>
+                  ) : (
+                    <Pressable onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }} style={{ flex: 1 }}>
+                      <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
+                      {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
+                    </Pressable>
+                  )}
                   <Mono size={11} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 38, textAlign: 'right' }}>
                     {scoreOf(row.home)}
                   </Mono>
@@ -759,8 +787,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                     {scoreOf(row.away)}
                   </Mono>
-                  <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)} />
-                </Pressable>
+                  <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)}
+                    onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />
+                </View>
               );
             })}
           </Card>
@@ -785,7 +814,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   const a = board[k].away[i] ?? null;
                   return (
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
-                      {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)} /> : <View style={{ flex: 1 }} />}
+                      {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)}
+                             onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
                       <Mono size={11} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>
                         {h ? scoreOf(h) : ''}
                       </Mono>
@@ -793,7 +823,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       <Mono size={11} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                         {a ? scoreOf(a) : ''}
                       </Mono>
-                      {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)} /> : <View style={{ flex: 1 }} />}
+                      {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)}
+                             onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
                     </View>
                   );
                 })}

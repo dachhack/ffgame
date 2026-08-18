@@ -20,6 +20,7 @@ import {
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
+import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 
 export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview, isCommish, onChanged }: {
@@ -155,6 +156,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
               {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
             </Text>
+            {/* ⓘ rather than the name itself: the whole row is the CHECKBOX
+                here, and stealing the name from it would make picking players
+                for a trade harder to hit. */}
+            <Pressable hitSlop={8} onPress={() => openPlayerCard({ slug: r.slug, name: p?.full_name ?? r.slug, pos: p?.pos ?? '', team: p?.team ?? '' })}>
+              <Mono size={9} tone="dim" weight="700">ⓘ</Mono>
+            </Pressable>
             <Mono size={8} tone="faint">{p?.pos}</Mono>
             {wantable && myRoster != null && (
               <Pressable hitSlop={6} onPress={() => toggleSignal(r.slug, 'want', !myWants.has(r.slug))}>

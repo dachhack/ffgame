@@ -29,6 +29,7 @@ import {
   nativeRosters,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill } from '../app/ui';
+import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
 
@@ -178,7 +179,13 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
 
 /** A player on one side of a row: name, position line, game line, score.
  *  Mirrored for the away side so both read outward from the centre pill. */
-function BoardCell({ e, align }: { e: import('@drip/core/engine/matchupBoard').BoardEntry | null; align: 'left' | 'right' }) {
+function BoardCell({ e, align, onName }: {
+  e: import('@drip/core/engine/matchupBoard').BoardEntry | null; align: 'left' | 'right';
+  /** The NAME opens the player card (v0.283.0, founder) — reading about a
+   *  player and changing his spot are different intentions, so the row stops
+   *  being one big button. */
+  onName?: () => void;
+}) {
   const right = align === 'right';
   if (!e) return <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', textAlign: align }}>Empty</div>;
   const dim = e.state === 'done';
@@ -190,7 +197,9 @@ function BoardCell({ e, align }: { e: import('@drip/core/engine/matchupBoard').B
           costs the picture and never the row. */}
       <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={32} />
       <div style={{ textAlign: align, minWidth: 0, flex: 1 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: dim ? 'var(--dim)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
+      <div onClick={onName ? (ev) => { ev.stopPropagation(); onName(); } : undefined}
+        title={onName ? 'open the player card' : undefined}
+        style={{ fontSize: 14, fontWeight: 700, color: dim ? 'var(--dim)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onName ? 'pointer' : undefined }}>{e.name}</div>
       <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: 'var(--faint)' }}>
         <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
         {e.team ? ` · ${e.team}` : ''}
@@ -821,19 +830,30 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                       so the row spans the width instead of leaving half the
                       screen blank beside a one-sided lineup. */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
-                    {settable ? (
-                      <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)}
-                        title={row.home ? 'change this spot' : 'set this spot'}
+                    {row.home ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <BoardCell e={row.home} align="left"
+                          onName={() => openPlayerCard({ slug: row.home!.slug, name: row.home!.name, pos: row.home!.pos, team: row.home!.team ?? '', week: matchup?.week, userId })} />
+                        {/* ⇄ THE SWAP, its own small control (founder). The row
+                            used to be one button into the picker, which left no
+                            way to simply READ about the player in it. */}
+                        {settable && (
+                          <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)} title="change this spot" className="mono"
+                            style={{ flex: 'none', fontSize: 10, fontWeight: 700, color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px', cursor: 'pointer' }}>⇄</button>
+                        )}
+                      </div>
+                    ) : settable ? (
+                      <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)} title="set this spot"
                         style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit', minWidth: 0 }}>
-                        {row.home ? <BoardCell e={row.home} align="left" /> : <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {row.label}</span>}
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {row.label}</span>
                       </button>
-                    ) : row.home ? <BoardCell e={row.home} align="left" />
-                      : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
+                    ) : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <SlotPill pos={row.pos} label={row.label} />
                       {auto && <span className="mono" title="best ball — fills itself with your best eligible player" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
                     </div>
-                    <BoardCell e={row.away} align="right" />
+                    <BoardCell e={row.away} align="right"
+                      onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />
                   </div>
                   {/* tier 2 — where and when, and the number */}
                   {(row.home || row.away) && (
@@ -873,11 +893,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   return (
                     <div key={i} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
-                        {h ? <BoardCell e={h} align="left" /> : <span />}
+                        {h ? <BoardCell e={h} align="left" onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
                           {k === 'bench' ? 'BN' : 'IR'}
                         </span>
-                        {a ? <BoardCell e={a} align="right" /> : <span />}
+                        {a ? <BoardCell e={a} align="right" onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 7 }}>
                         {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} /> : <span />}

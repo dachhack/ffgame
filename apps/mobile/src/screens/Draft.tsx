@@ -32,6 +32,7 @@ import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
+import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
@@ -490,7 +491,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   </Text>
                 </Pressable>
                 <Face slug={p.slug} pos={p.pos} />
-                <View style={{ flex: 1, minWidth: 0 }}>
+                {/* Draft night is the moment a card is worth most — the name
+                    opens it, the DRAFT button stays the button (founder). */}
+                <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
+                  onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
                   <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
                     {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
                   </Text>
@@ -499,7 +503,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     <Mono size={8.5} tone="faint">{p.team} · #{p.rank}</Mono>
                     <FlagChip slug={p.slug} size={7.5} />
                   </View>
-                </View>
+                </Pressable>
                 <View style={{ alignItems: 'flex-end', width: 52 }}>
                   <Mono size={9}>{adp != null ? `ADP ${adp.toFixed(0)}` : '—'}</Mono>
                   <Mono size={9} tone="faint">{proj != null ? `${proj.toFixed(1)}p` : ''}</Mono>
@@ -597,7 +601,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   <Mono size={9} tone="faint" style={{ width: spotDefs ? 72 : 30 }} numberOfLines={1}>{tag}</Mono>
                   <Face slug={slug} pos={pl?.pos ?? '?'} size={22} />
                   <PosPill pos={pl?.pos ?? '?'} size={8} />
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>{pl?.full_name ?? slug}</Text>
+                  <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
+                    onPress={() => { tap(); openPlayerCard({ slug, name: pl?.full_name ?? slug, pos: pl?.pos ?? '', team: pl?.team ?? '' }); }}>
+                    <Text numberOfLines={1} style={{ fontSize: 12, color: t.text }}>{pl?.full_name ?? slug}</Text>
+                  </Pressable>
                   {/* Where he came from — kept on the spot rows, since the left
                       column now says WHERE HE PLAYS rather than which round. */}
                   <Mono size={9} tone="faint">{pl?.team}{withCost && pk ? ` · ${cost(pk)}` : ''}{pk?.auto ? ' 🤖' : ''}</Mono>
