@@ -34,7 +34,13 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
 
   return (
     <div className="mgmt">
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← all leagues</button>
+      {/* NO TOP BACK LINK (v0.296.4, founder: "we don't need this extra all
+          leagues link below the leagues and matchup chip"). Two other ways out
+          already sit above it — the shell header's ← my leagues, which is on
+          every view but home, and the league strip's 🏠 LEAGUE chip — so this
+          was a third door in the same square inch of screen. The one at the
+          FOOT of the page stays: after scrolling a console this long, the way
+          out is genuinely far away. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div className="grotesk" style={{ fontSize: 19.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
