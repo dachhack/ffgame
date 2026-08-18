@@ -4,16 +4,19 @@
 // COMMISH, and these exist so a manager can look up "how does this league
 // score a 40-yard TD" or "who dropped him" without being handed the editors.
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
+  leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
+import { inviteLink, inviteMessage } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { useTheme, MONO, fs } from '../theme.native';
+import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
 
 /** Minutes-since-midnight-ET → "3:30am" (CommishSettings' own formatter — the
@@ -346,6 +349,136 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
           </View>
         );
       })}
+    </ScrollView>
+  );
+}
+
+// ── 📣 RECRUIT ──────────────────────────────────────────────────────────────
+// Two ways to fill a seat, and they are NOT the same permission (founder:
+// "allow post to board for commish and portable/send-able link for commish and
+// players"):
+//
+//   THE LINK is any member's. `league_invite` has always been callable by any
+//   enrolled member — recruiting a friend was never meant to need the
+//   commissioner — and the whole point of a league is that everyone in it knows
+//   someone who would play. It is a URL now rather than four characters to
+//   dictate: `?code=` is a complete join path already (see data/invite.ts).
+//
+//   THE BOARD is the commissioner's. It offers a seat to STRANGERS, which is a
+//   decision about who the league is, not a favour to a friend — `post_league_listing`
+//   is commish-gated in SQL (0123) and this only shows the half you may use.
+export function RecruitView({ leagueId, commish }: { leagueId: string; commish: boolean }) {
+  const t = useTheme();
+  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  // The listing (commissioner only). `listed` undefined = still asking.
+  const [listing, setListing] = useState<{ listed: boolean; blurb: string; seatsOpen: number } | null>(null);
+  const [blurb, setBlurb] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let dead = false;
+    leagueInvite(leagueId)
+      .then((r) => {
+        if (dead) return;
+        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open });
+        else setErr(friendlyError(r.error ?? 'could not fetch the invite code'));
+      })
+      .catch((x) => { if (!dead) setErr(friendlyError(x)); });
+    if (commish) {
+      leagueListingState(leagueId)
+        .then((r) => {
+          if (dead || !r.ok) return;
+          setListing({ listed: !!r.listed, blurb: r.blurb ?? '', seatsOpen: r.seats_open ?? 0 });
+          setBlurb(r.blurb ?? '');
+        })
+        .catch(() => {});
+    }
+    return () => { dead = true; };
+  }, [leagueId, commish]);
+
+  const link = inv ? inviteLink(inv.code) : '';
+  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats }) : '';
+
+  const send = async () => {
+    if (!message) return;
+    tap();
+    try { await Share.share({ message }); } catch (x) { warn(); setErr(friendlyError(x)); }
+  };
+
+  const runListing = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fn();
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'that didn\u2019t work')); return; }
+      commit();
+      const st = await leagueListingState(leagueId).catch(() => null);
+      if (st?.ok) { setListing({ listed: !!st.listed, blurb: st.blurb ?? '', seatsOpen: st.seats_open ?? 0 }); setBlurb(st.blurb ?? ''); }
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
+      {err && <Mono size={9.5} tone="opp" style={{ marginBottom: 8, lineHeight: 14 }}>{err}</Mono>}
+
+      <Head>SEND A LINK</Head>
+      <Mono size={9.5} tone="dim" style={{ lineHeight: 14, marginBottom: 8 }}>
+        Anyone in the league can invite. The link joins them straight into this league — no code to type, and it
+        survives signing up on the way in.
+      </Mono>
+      {!inv && !err && <Loading />}
+      {!!inv && (<>
+        {/* The link is SELECTABLE rather than sitting behind a copy button:
+            copying is one of the things the OS share sheet already offers, and
+            a clipboard here would mean pulling in a native module for a button
+            the platform ships. Long-press to select, or ⇪ SEND for the sheet. */}
+        <View style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, paddingHorizontal: 10, paddingVertical: 9 }}>
+          <Text selectable numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, lineHeight: 14 }}>{link}</Text>
+        </View>
+        <Pressable onPress={send} style={{ borderWidth: 1, borderColor: t.you, borderRadius: 6, paddingVertical: 11, alignItems: 'center', marginTop: 8 }}>
+          <Mono size={10} weight="700" tone="you">\u21ea SEND THE INVITE</Mono>
+        </Pressable>
+        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
+          Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
+        </Mono>
+      </>)}
+
+      {commish && (<>
+        <Head>POST TO THE BOARD</Head>
+        <Mono size={9.5} tone="dim" style={{ lineHeight: 14, marginBottom: 8 }}>
+          Lists the league publicly so managers you don\u2019t know can claim an open seat. Commissioner only \u2014 a link
+          invites a friend, the board invites strangers.
+        </Mono>
+        {listing === null ? <Loading /> : (<>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Mono size={9} weight="700" tone={listing.listed ? 'you' : 'faint'} track={0.1}>
+              {listing.listed ? '\u25c9 LISTED' : '\u25cb NOT LISTED'}
+            </Mono>
+            <Mono size={8.5} tone="faint">
+              {listing.seatsOpen > 0 ? `${listing.seatsOpen} seat${listing.seatsOpen === 1 ? '' : 's'} open` : 'no open seats \u2014 nobody can claim one'}
+            </Mono>
+          </View>
+          <TextInput
+            value={blurb} onChangeText={setBlurb} multiline
+            placeholder="A line about your league \u2014 what makes it worth joining?"
+            placeholderTextColor={t.faint}
+            style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, color: t.text, fontFamily: MONO, fontSize: fs(10), padding: 10, minHeight: 66, textAlignVertical: 'top' }} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Pressable disabled={busy} onPress={() => { tap(); void runListing(() => postLeagueListing(leagueId, blurb.trim() || null)); }}
+              style={{ flex: 1, borderWidth: 1, borderColor: t.you, borderRadius: 6, paddingVertical: 10, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
+              <Mono size={10} weight="700" tone="you">{listing.listed ? '\u2713 UPDATE LISTING' : '\u2191 POST TO BOARD'}</Mono>
+            </Pressable>
+            {listing.listed && (
+              <Pressable disabled={busy} onPress={() => { tap(); void runListing(() => closeLeagueListing(leagueId)); }}
+                style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
+                <Mono size={10} weight="700" tone="opp">REMOVE</Mono>
+              </Pressable>
+            )}
+          </View>
+        </>)}
+      </>)}
     </ScrollView>
   );
 }

@@ -20,6 +20,7 @@ import {
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
+import { inviteMessage } from '@drip/core/data/invite';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots } from '@drip/core/engine/classic';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
@@ -418,9 +419,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     try {
       const r = await leagueInvite(leagueId);
       if (!r.ok || !r.invite_code) { warn(); setErr(friendlyError(r.error ?? 'could not fetch the invite code')); return; }
+      // One message from every surface (v0.291.0) — and a LINK rather than four
+      // characters to dictate. `?code=` was already a complete join path; these
+      // buttons just weren't building the URL.
       await Share.share({
-        message: `Join my league "${r.name}" on Drip Fantasy — real-time fantasy football. ` +
-          `Invite code: ${r.invite_code}${r.seats_open ? ` (${r.seats_open} seat${r.seats_open === 1 ? '' : 's'} open)` : ''}. dripfantasy.com`,
+        message: inviteMessage({ league: r.name, code: r.invite_code, seatsOpen: r.seats_open }),
       });
     } catch { /* user dismissed the sheet — not an error */ }
   };
