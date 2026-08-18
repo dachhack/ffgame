@@ -2,7 +2,7 @@ import type { Player, Pos, PbpEvent, SlotResolution, EffectType, BuffFx } from '
 import { metricById } from '../data/metrics';
 import { leagueScoring, scopedAdjustFor } from './leagueScoring';
 import { flagRulesFor } from '../data/commish';
-import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlayKind } from '../data/realPbp';
+import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlay, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -253,6 +253,16 @@ export interface SlotInput {
 export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
   const ps = realPbpFor(week, playerId);
   if (!ps) return null;
+  return rawPlaysFrom(ps);
+}
+
+/** The same RealPlay → RawPlay mapping, over rows you already hold (v0.284.0).
+ *
+ *  `realRawPlays` reads the module cache the live board owns; a player card
+ *  building a season's game log fetches its own rows and must not install them
+ *  over the board's week. One mapping either way — a log that decoded a play
+ *  differently than the board would be a subtler bug than a wrong number. */
+export function rawPlaysFrom(ps: RealPlay[]): RawPlay[] {
   return ps
     .map((p) => ({
       clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
@@ -419,6 +429,13 @@ export interface StatLine {
 }
 export function statlineAt(player: Player, week: number, clock: number, metricId?: string): StatLine {
   const { plays } = playsForPlayer(player, week, metricId);
+  return statlineFrom(plays, clock);
+}
+
+/** The week's counting line from plays you already hold (v0.284.0) — the game
+ *  log's half of the same split as `rawPlaysFrom`: the numbers a card prints
+ *  come from the same accumulation the board's do. */
+export function statlineFrom(plays: RawPlay[], clock: number): StatLine {
   const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0 };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
