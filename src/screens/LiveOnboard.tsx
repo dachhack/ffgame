@@ -12,11 +12,10 @@ import {
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   leagueTouch, leagueSignals,
 } from '@drip/core/data/liveApi';
-import { buildDripTestLeague } from '@drip/core/data/dripTest';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
-import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel, clearRuntimeSlate } from '@drip/core/data/nflSlate';
+import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
@@ -961,11 +960,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onResults={() => onResults(e.league_id)} onManage={() => onManage(e.league_id)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -1044,7 +1043,7 @@ function CommishOnlyCard({ l, onManage, onResults }: { l: AdminLeague; onManage:
       </div>
 
       {/* info strip (mirrors LeagueCard's matchup strip) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9, padding: '7px 10px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>ROSTERS</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{l.enrolled}/{l.rosters} joined</span>
         <span className="mono" style={{ fontSize: 9, color: full ? 'var(--you)' : 'var(--faint)', flexShrink: 0 }}>{full ? 'all in' : `${l.rosters - l.enrolled} open`}</span>
@@ -1095,16 +1094,19 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onOpen, unread, alarm, offers = 0, sig }: {
+// `onResults` / `onManage` left with the ▦ scores and ⚑ manage league links
+// (v0.292.0). The parent still owns both — the hub's tiles are how you reach
+// them now — so the handlers stay there; the CARD just no longer takes them.
+function LeagueCard({ e, card, commish, userId, onPodBuild, onDraft, onTeam, onOpen, unread, alarm, offers = 0, sig }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onPodBuild: () => void; onResults: () => void; onManage: () => void; onDraft: () => void; onTeam: () => void;
+  onPodBuild: () => void; onDraft: () => void; onTeam: () => void;
   onOpen: () => void;
   unread?: { n: number; mention: boolean };
   alarm?: LineupAlarm;
   offers?: number;
   sig?: LeagueSignalCounts;
 }) {
-  const { loadSimLeague, navigate, setDemoWeek } = useStore();
+  const { loadSimLeague, navigate } = useStore();
   const [building, setBuilding] = useState(false);
   const [buildNote, setBuildNote] = useState('');
   const [buildErr, setBuildErr] = useState<string | null>(null);
@@ -1136,36 +1138,10 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
       setBuilding(false);
     }
   };
-  // The 2025 demo: play the FULL board on last year's play-by-play, built from
-  // YOUR league — your real roster + your league's teams as the opponent (its real
-  // Week-1 matchup when there is one). Enters the client-only SIM board (ctx null →
-  // the playable LOCK-IN / per-window replay, not the real-time live board), so you
-  // can run each window on 2025 data. Falls back to the canned demo league if your
-  // Week-1 roster isn't synced yet.
-  const playFullBoard = async () => {
-    if (building) return;
-    setBuilding(true); setBuildErr(null); setBuildNote('Loading your board…');
-    try {
-      const week = 1; // baked 2025 play-by-play exists for weeks 1–14; Week 1 is always synced
-      const picked = await (async () => {
-        try {
-          const live = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
-          const roster = live.built.league.teams.find((t) => t.id === live.youTeamId)?.roster ?? [];
-          if (roster.length) { live.built.league.season = 2025; return live; } // it's a 2025 replay — label + injuries follow
-        } catch { /* fall through to the canned demo */ }
-        return buildDripTestLeague(e.sleeper_roster_id, setBuildNote);
-      })();
-      // Drop any live-league slate override so it replays clean baked 2025 windows,
-      // and enter the SIM board (ctx null → client-only playback, not the live board).
-      clearRuntimeSlate();
-      loadSimLeague(picked.built, picked.youTeamId, null);
-      setDemoWeek(week);
-      navigate({ name: 'matchup', week, phase: 'setup' });
-    } catch {
-      setBuildErr('Couldn’t load the board — check your connection and try again.');
-      setBuilding(false);
-    }
-  };
+  // The 2025 demo board left with the "▷ demo (2025)" link (v0.292.0). It was
+  // built for someone deciding whether to play; a manager who already has a
+  // league open in front of them is past that, and the demo landing still
+  // carries it for everyone who isn't.
   const m = card?.matchup;
   const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
   const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
@@ -1182,15 +1158,30 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
   // Preseason PRACTICE (migration 0110): board weeks above PRESEASON_BASE. Drives
   // the badge and turns the meaningless "WK 102" into the board's own "PRE 2".
   const practice = !!m && isPreseasonWeek(m.week);
+  // Everything the dot stands for, in the order a manager would want it read.
+  // Kept as WORDS rather than a count: the tooltip is the only place the detail
+  // survives now, and "3" would be the least useful thing it could say.
+  const waiting: string[] = [];
+  if (unread && unread.n > 0) waiting.push(unread.mention ? 'chat — you were mentioned' : `${unread.n} unread message${unread.n === 1 ? '' : 's'}`);
+  if (offers > 0) waiting.push(`${offers} trade offer${offers === 1 ? '' : 's'}`);
+  if ((sig?.polls ?? 0) > 0) waiting.push(`${sig!.polls} poll${sig!.polls === 1 ? '' : 's'} to vote in`);
+  if ((sig?.waivers ?? 0) > 0) waiting.push('waivers resolved');
+  if (sig?.commish) waiting.push(`${sig.commish.waiting + sig.commish.review} for the commissioner`);
+
   const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : pending ? 'var(--faint)' : 'var(--warn)';
   const statusLabel = live ? '● LIVE' : final ? 'FINAL' : pending ? 'SCHEDULE PENDING' : 'PICKS OPEN';
   return (
-    <div style={{ ...card2 }}>
+    // COMPACT (v0.292.0, founder). The card's spacing was tuned when it carried
+    // six signal chips and five quick-links under a hero button; with those gone
+    // the padding was the only thing still making it tall. Nothing here changes
+    // what the card SAYS — the crest, the seat, the matchup and the door are all
+    // still full size.
+    <div style={{ ...card2, padding: 12 }}>
       {/* identity row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
         {e.avatar_url
-          ? <img src={e.avatar_url} alt="" width={38} height={38} style={{ borderRadius: 8, flexShrink: 0 }} />
-          : <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', flexShrink: 0 }} />}
+          ? <img src={e.avatar_url} alt="" width={32} height={32} style={{ borderRadius: 7, flexShrink: 0 }} />
+          : <div style={{ width: 32, height: 32, borderRadius: 7, background: 'var(--bg)', border: '1px solid var(--bd)', flexShrink: 0 }} />}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
@@ -1206,47 +1197,35 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
                 badging a real matchup "practice" would be a lie about a game that
                 counts. In August the two agree; at the rollover only this is right. */}
             {practice && <span className="mono" title="Preseason practice — a real preseason game on live play-by-play. Nothing carries over: no standings, no seeding, no coin, no power-up inventory." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 4, padding: '2px 6px' }}>🏈 PRACTICE</span>}
-            {/* unread chat (0183) — @ + warn tone when someone said your name */}
-            {unread && unread.n > 0 && (
-              <span className="mono" title={unread.mention ? 'unread chat — you were mentioned' : 'unread chat'}
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: unread.mention ? 'var(--on-accent)' : 'var(--you)', background: unread.mention ? 'var(--warn)' : 'color-mix(in srgb, var(--you) 14%, transparent)', border: `1px solid ${unread.mention ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 999, padding: '2px 7px' }}>
-                💬 {unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}
-              </span>
+            {/* ONE RED DOT (v0.292.0, founder: "just have a red dot if there are
+                unseen events/messages"). This row used to carry a chip PER
+                signal — unread chat, trade offers, unvoted polls, waivers in,
+                and the commissioner's "⚑ 2 FOR YOU" — which on a card that also
+                badges COMMISSIONER, PRACTICE and PICKS OPEN meant six things
+                competing to be read, and answered a question nobody asked: the
+                count. What a leagues LIST has to say is "something is waiting in
+                here", and the dot says exactly that. The breakdown is a
+                tooltip, and the league itself is one click away.
+
+                THE ALARM BELOW IS NOT FOLDED IN, deliberately: a window locking
+                on an empty lineup is not an unseen message, it is a countdown
+                that costs points if it runs out, and it is the one thing on
+                this card that a silent dot would make worse. */}
+            {waiting.length > 0 && (
+              <span title={`Waiting for you: ${waiting.join(' · ')}`}
+                aria-label={`Waiting for you: ${waiting.join(', ')}`}
+                style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--opp)', flexShrink: 0, display: 'inline-block' }} />
             )}
-            {/* the week-saver (0184): a window locks soon and slots sit empty */}
+            {/* the week-saver (0184): a window locks soon and slots sit empty.
+                The one signal that keeps its own chip — see the note above. */}
             {alarm && (
               <span className="mono" title="pick a player for every slot before the window locks — empty slots score nothing until auto-fill"
                 style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--opp)', border: '1px solid var(--opp)', borderRadius: 999, padding: '2px 7px' }}>
                 ⚠ {alarmLabel(alarm)}
               </span>
             )}
-            {offers > 0 && (
-              <span className="mono" title="trade offers waiting on your answer"
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 999, padding: '2px 7px' }}>
-                ⇄ {offers} OFFER{offers === 1 ? '' : 'S'}
-              </span>
-            )}
-            {/* the polish trio (0154): unvoted polls · waiver results · commish inbox */}
-            {(sig?.polls ?? 0) > 0 && (
-              <span className="mono" title="league polls you haven't voted in"
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>
-                📊 {sig!.polls} POLL{sig!.polls === 1 ? '' : 'S'}
-              </span>
-            )}
-            {(sig?.waivers ?? 0) > 0 && (
-              <span className="mono" title="waiver claims resolved since you last opened this league"
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>
-                ✚ WAIVERS IN
-              </span>
-            )}
-            {sig?.commish && (
-              <span className="mono" title="waiting room joiners + trades awaiting your ruling"
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)', border: '1px solid var(--warn)', borderRadius: 999, padding: '2px 7px' }}>
-                ⚑ {sig.commish.waiting + sig.commish.review} FOR YOU
-              </span>
-            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
             {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</span>
           </div>
@@ -1275,16 +1254,16 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
       {/* actions — the primary door now opens the LEAGUE HOME (0182); the
           board is one tile inside, and one quick-link below for the straight
           shot. The 2025 full-board sim stays as the "see it play" demo. */}
-      <button onClick={onOpen} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+      <button onClick={onOpen} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 9, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
         <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> OPEN LEAGUE →
       </button>
       {pending && (
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>
-          No opponent yet — {e.league?.provider === 'native' ? 'the schedule is generated once the league drafts' : `${e.league?.provider === 'espn' ? 'ESPN' : 'Sleeper'} publishes pairings once the league drafts`}. Try ▷ demo (2025) meanwhile.
+          No opponent yet — {e.league?.provider === 'native' ? 'the schedule is generated once the league drafts' : `${e.league?.provider === 'espn' ? 'ESPN' : 'Sleeper'} publishes pairings once the league drafts`}.
         </div>
       )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 7, flexWrap: 'wrap' }}>
         {/* the quick link straight to the board — the founder's "from my
             leagues, a quick link to matchup on the league chip" */}
         {!pending && (
@@ -1292,11 +1271,14 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onResults, onManage,
             {building ? (buildNote || 'loading…') : live ? '● matchup' : '▶ matchup'}
           </button>
         )}
+        {/* THREE DOORS, NOT SIX (v0.292.0, founder: "no scores, no demo, no
+            manage league"). Every one of them is inside OPEN LEAGUE — scores is
+            the hub's ALL MATCHUPS tile, manage league is its ⚑ tile — so the
+            row was offering shortcuts to a menu one click above them. The 2025
+            demo went with them: it belongs to someone deciding whether to play,
+            not to someone who already has a league open in front of them. */}
         {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
         {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
-        <button onClick={onResults} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>▦ scores</button>
-        <button onClick={playFullBoard} disabled={building} className="mono" title="try the full board on last year's data" style={{ ...linkBtn, color: 'var(--dim)', opacity: building ? 0.6 : 1 }}>{building ? (buildNote || 'loading…') : '▷ demo (2025)'}</button>
-        {commish && <button onClick={onManage} className="mono" style={{ ...linkBtn, color: 'var(--text)' }}>⚑ manage league</button>}
       </div>
     </div>
   );
