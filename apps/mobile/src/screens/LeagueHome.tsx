@@ -14,7 +14,7 @@ import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
 import { Standings, Playoffs } from '../ui/LeagueExtras';
-import { ScoringView, RosterRulesView, RegisterView } from '../ui/LeagueInfo';
+import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -39,7 +39,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   const [alertsOpen, setAlertsOpen] = useState(false);
   // The league's own reference sheets (v0.274.0, founder's menu list). One
   // piece of state: only ever one sheet is up, and `null` is the menu itself.
-  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register'>(null);
+  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit'>(null);
   // Only the commissioner's queue is still read here — the chat dot rides on
   // the nav strip, and the waiver badge left with the MY TEAM tile.
   const [sig, setSig] = useState<{ commish: { waiting: number; review: number } | null }>({ commish: null });
@@ -143,6 +143,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       {tile('⊞', 'Scoring settings', 'how this league turns plays into points', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
       {native && tile('🧢', 'Roster settings', 'lineup spots · limits · waivers · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
       {tile('🔔', 'Alerts', 'push notifications — what pings your phone', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
+      {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
+          half is every member's; the board half inside it is commish-gated and
+          simply isn't drawn for anyone else. */}
+      {tile('📣', 'Recruit', commish ? 'send an invite link · post to the board' : 'send an invite link to a friend',
+        () => { track(Ev.hubTileOpened, { tile: 'recruit' }); setSheet('recruit'); })}
       {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
         { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}
 
@@ -167,6 +172,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
 
       <Overlay visible={sheet === 'scoring'} title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" onClose={() => setSheet(null)}>
         <ScoringView leagueId={leagueId} />
+      </Overlay>
+
+      <Overlay visible={sheet === 'recruit'} title="📣 Recruit"
+        subtitle={commish ? 'SEND A LINK · POST TO THE BOARD' : 'SEND A LINK TO A FRIEND'} onClose={() => setSheet(null)}>
+        <RecruitView leagueId={leagueId} commish={commish} />
       </Overlay>
 
       <Overlay visible={sheet === 'roster'} title="🧢 Roster settings" subtitle="LINEUP SPOTS · LIMITS · WAIVERS · TRADES" onClose={() => setSheet(null)}>

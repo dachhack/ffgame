@@ -6,8 +6,10 @@
 import { useEffect, useState } from 'react';
 import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
+  leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
+import { inviteLink, inviteMessage } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { shortName } from '@drip/core/data/players';
@@ -321,6 +323,132 @@ export function RegisterPanel({ leagueId }: { leagueId: string }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── 📣 RECRUIT ──────────────────────────────────────────────────────────────
+// The app's RecruitView (ui/LeagueInfo.tsx) in the web's idiom; the reasoning
+// for the split permission lives there. In short: the LINK is any member's
+// (`league_invite` has always been member-callable, and recruiting a friend was
+// never meant to need the commissioner), the BOARD is the commissioner's
+// (`post_league_listing` is commish-gated in SQL — it offers a seat to
+// strangers, which is a decision about who the league is).
+export function RecruitPanel({ leagueId, commish }: { leagueId: string; commish: boolean }) {
+  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [listing, setListing] = useState<{ listed: boolean; blurb: string; seatsOpen: number } | null>(null);
+  const [blurb, setBlurb] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let dead = false;
+    leagueInvite(leagueId)
+      .then((r) => {
+        if (dead) return;
+        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open });
+        else setErr(friendlyError(r.error ?? 'could not fetch the invite code'));
+      })
+      .catch((x) => { if (!dead) setErr(friendlyError(x)); });
+    if (commish) {
+      leagueListingState(leagueId)
+        .then((r) => {
+          if (dead || !r.ok) return;
+          setListing({ listed: !!r.listed, blurb: r.blurb ?? '', seatsOpen: r.seats_open ?? 0 });
+          setBlurb(r.blurb ?? '');
+        })
+        .catch(() => {});
+    }
+    return () => { dead = true; };
+  }, [leagueId, commish]);
+
+  const link = inv ? inviteLink(inv.code) : '';
+  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats }) : '';
+
+  const copy = async () => {
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1600); }
+    catch { setErr('Couldn\u2019t reach the clipboard — select the link and copy it by hand.'); }
+  };
+  // The OS share sheet where the browser has one (every phone); desktop
+  // browsers mostly don't, and there COPY is the whole job anyway.
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const send = async () => {
+    if (!message) return;
+    try { await navigator.share({ text: message }); } catch { /* dismissed — not an error */ }
+  };
+
+  const runListing = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fn();
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'that didn\u2019t work')); return; }
+      const st = await leagueListingState(leagueId).catch(() => null);
+      if (st?.ok) { setListing({ listed: !!st.listed, blurb: st.blurb ?? '', seatsOpen: st.seats_open ?? 0 }); setBlurb(st.blurb ?? ''); }
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  const btn: React.CSSProperties = {
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', borderRadius: 6,
+    padding: '10px 14px', cursor: 'pointer', background: 'var(--surface)', border: '1px solid var(--bd)', color: 'var(--dim)',
+  };
+  return (
+    <div style={panel}>
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', lineHeight: 1.5, marginBottom: 8 }}>{err}</div>}
+
+      <Head>SEND A LINK</Head>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 8 }}>
+        Anyone in the league can invite. The link joins them straight into this league — no code to type, and it
+        survives signing up on the way in.
+      </div>
+      {!inv && !err && <Loading />}
+      {!!inv && (<>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 10px', wordBreak: 'break-all', lineHeight: 1.5 }}>{link}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <button onClick={copy} className="mono" style={{ ...btn, borderColor: copied ? 'var(--you)' : 'var(--bd)', color: copied ? 'var(--you)' : 'var(--dim)' }}>
+            {copied ? '\u2713 COPIED' : '\u29c9 COPY LINK'}
+          </button>
+          {canShare && <button onClick={send} className="mono" style={{ ...btn, borderColor: 'var(--you)', color: 'var(--you)' }}>\u21ea SEND THE INVITE</button>}
+        </div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8 }}>
+          Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
+        </div>
+      </>)}
+
+      {commish && (<>
+        <Head>POST TO THE BOARD</Head>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 8 }}>
+          Lists the league publicly so managers you don\u2019t know can claim an open seat. Commissioner only — a link
+          invites a friend, the board invites strangers.
+        </div>
+        {listing === null ? <Loading /> : (<>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: listing.listed ? 'var(--you)' : 'var(--faint)' }}>
+              {listing.listed ? '\u25c9 LISTED' : '\u25cb NOT LISTED'}
+            </span>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>
+              {listing.seatsOpen > 0 ? `${listing.seatsOpen} seat${listing.seatsOpen === 1 ? '' : 's'} open` : 'no open seats — nobody can claim one'}
+            </span>
+          </div>
+          <textarea value={blurb} onChange={(e) => setBlurb(e.target.value)} rows={3}
+            placeholder="A line about your league — what makes it worth joining?"
+            className="mono"
+            style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--text)', fontSize: 10, padding: 10, lineHeight: 1.5 }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <button disabled={busy} onClick={() => void runListing(() => postLeagueListing(leagueId, blurb.trim() || null))}
+              className="mono" style={{ ...btn, borderColor: 'var(--you)', color: 'var(--you)', opacity: busy ? 0.5 : 1 }}>
+              {listing.listed ? '\u2713 UPDATE LISTING' : '\u2191 POST TO BOARD'}
+            </button>
+            {listing.listed && (
+              <button disabled={busy} onClick={() => void runListing(() => closeLeagueListing(leagueId))}
+                className="mono" style={{ ...btn, color: 'var(--opp)', opacity: busy ? 0.5 : 1 }}>REMOVE</button>
+            )}
+          </div>
+        </>)}
+      </>)}
     </div>
   );
 }

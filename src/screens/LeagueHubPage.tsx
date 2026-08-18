@@ -23,7 +23,7 @@ import {
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, weekLabel } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
-import { ScoringPanel, RosterRulesPanel, RegisterPanel } from './LeagueInfo';
+import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel } from './LeagueInfo';
 
 /** A titled band of tiles — the app's league menu splits at "THE LEAGUE" and
  *  this is that heading (v0.287.0). Without it the hub reads as one
@@ -136,7 +136,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // reason a second click on the open tile closes it. 'alerts' joined in
   // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
-  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts';
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit';
   const [info, setInfo] = useState<null | InfoPanel>(null);
   const toggleInfo = (k: InfoPanel) => setInfo((cur) => (cur === k ? null : k));
   const [champion, setChampion] = useState<string | null>(null);
@@ -296,6 +296,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
         {native && <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />}
         <Tile icon="🔔" title="Alerts" sub="push notifications — what pings this browser" onClick={() => toggleInfo('alerts')} />
+        {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
+            half is every member's; the board half inside it is commish-gated
+            and simply isn't drawn for anyone else. */}
+        <Tile icon="📣" title="Recruit" sub={commish ? 'send an invite link · post to the board' : 'send an invite link to a friend'}
+          onClick={() => toggleInfo('recruit')} />
 
         {commish && (
           <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent
@@ -313,6 +318,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {info === 'scoring' && <ScoringPanel leagueId={e.league_id} />}
         {info === 'roster' && <RosterRulesPanel leagueId={e.league_id} />}
         {info === 'alerts' && <NotifPrefsCard />}
+        {info === 'recruit' && <RecruitPanel leagueId={e.league_id} commish={commish} />}
       </div>
 
     </div>
