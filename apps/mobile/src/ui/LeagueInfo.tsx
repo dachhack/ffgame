@@ -4,12 +4,12 @@
 // COMMISH, and these exist so a manager can look up "how does this league
 // score a 40-yard TD" or "who dropped him" without being handed the editors.
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import {
-  leagueGameMode, rosterRules, leagueRegister,
-  type GameModeInfo, type RegisterRow,
+  leagueGameMode, rosterRules, leagueRegister, playerFlags,
+  type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
-import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames } from '@drip/core/engine/classic';
+import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -29,6 +29,22 @@ const prettySlug = (slug: string): string => {
   return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 
+/** A flag's rules (0144) in plain English — what the commissioner actually
+ *  did to this player, in the order it matters: scoring first, then what he
+ *  may not do. Empty when a flag is only a label. */
+export function flagRuleWords(r?: FlagRulesRaw | null): string[] {
+  if (!r) return [];
+  const out: string[] = [];
+  if (r.bonus_mult != null && r.bonus_mult !== 1) out.push(`×${r.bonus_mult} points`);
+  if (r.bonus_pts != null && r.bonus_pts !== 0) out.push(`${r.bonus_pts > 0 ? '+' : ''}${r.bonus_pts} pts a week`);
+  if (r.no_start) out.push("can't be started");
+  if (r.no_add) out.push("can't be added");
+  if (r.no_trade) out.push("can't be traded");
+  if (r.no_powerups) out.push('no power-ups on him');
+  if (r.immune) out.push('immune to power-ups');
+  return out;
+}
+
 /** One label → value line. The shared row of all three sheets. */
 function Row({ k, v, tone }: { k: string; v: string; tone?: 'you' | 'dim' }) {
   const t = useTheme();
@@ -47,7 +63,14 @@ const Loading = () => <Mono size={10} tone="faint" style={{ paddingVertical: 20,
 // ── ⊞ SCORING ───────────────────────────────────────────────────────────────
 export function ScoringView({ leagueId }: { leagueId: string }) {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
-  useEffect(() => { leagueGameMode(leagueId).then(setGm).catch(() => setGm({ ok: false })); }, [leagueId]);
+  // The commissioner's per-player rules (0144) score too — a ×2 on a player is
+  // as much "how this league scores" as the pass-TD value, and it lived
+  // nowhere a member could read it.
+  const [flags, setFlags] = useState<PlayerFlagRow[]>([]);
+  useEffect(() => {
+    leagueGameMode(leagueId).then(setGm).catch(() => setGm({ ok: false }));
+    playerFlags(leagueId).then((f) => { if (Array.isArray(f)) setFlags(f); }).catch(() => {});
+  }, [leagueId]);
   if (!gm) return <Loading />;
   if (!gm.ok) return <Mono size={10} tone="opp" style={{ padding: 14 }}>Couldn't load the scoring.</Mono>;
 
@@ -87,7 +110,66 @@ export function ScoringView({ leagueId }: { leagueId: string }) {
           </Mono>
         </>
       )}
+      <CommishRules flags={flags} />
     </ScrollView>
+  );
+}
+
+/** ⚑ The commissioner's own rules — flagged players and what each flag does.
+ *  Rendered under BOTH modes: a drip league has no stat table, but it can
+ *  absolutely have a ×2 on somebody. Silent when nothing is flagged. */
+function CommishRules({ flags }: { flags: PlayerFlagRow[] }) {
+  const t = useTheme();
+  const live = flags.filter((f) => flagRuleWords(f.rules).length > 0);
+  if (!live.length) return null;
+  return (
+    <View>
+      <Head>⚑ COMMISSIONER RULES</Head>
+      {live.map((f) => (
+        <View key={f.slug} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <Text style={{ flex: 1, fontSize: fs(11.5), fontWeight: '700', color: t.text }}>{prettySlug(f.slug)}</Text>
+            {!!f.label && (
+              <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.you }}>{f.label.toUpperCase()}</Text>
+            )}
+          </View>
+          <Mono size={9.5} tone="dim" style={{ marginTop: 2, lineHeight: fs(14) }}>{flagRuleWords(f.rules).join(' · ')}</Mono>
+        </View>
+      ))}
+      <Mono size={9} tone="faint" style={{ marginTop: 8, lineHeight: fs(14) }}>
+        Set by the commissioner. These apply on top of the scoring above.
+      </Mono>
+    </View>
+  );
+}
+
+/** One starting spot. Two things the plain Row can't say: 🎯 that the spot
+ *  fills ITSELF (best ball, 0159), and ⓘ that it only accepts certain players
+ *  (a 0172 filter — team list or tenure window). The filter's terms are a tap
+ *  away rather than always on screen: most spots have none, and a wall of
+ *  "SF/SEA · 0–2 YRS" on the ones that do would drown the lineup shape. */
+function SlotRow({ name, pos, bb, filter }: { name: string; pos: string[]; bb: boolean; filter: string }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingVertical: 5 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>{name}</Text>
+        {bb && <Text style={{ fontSize: fs(9), color: t.you }}>🎯</Text>}
+        {!!filter && (
+          <Pressable hitSlop={8} onPress={() => setOpen((v) => !v)}>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.you }}>ⓘ</Text>
+          </Pressable>
+        )}
+        <View style={{ flex: 1 }} />
+        <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.text, textAlign: 'right' }}>
+          {pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join(' / ')}
+        </Text>
+      </View>
+      {open && !!filter && (
+        <Mono size={9} tone="you" style={{ marginTop: 3, lineHeight: fs(14) }}>{`only ${filter}`}</Mono>
+      )}
+    </View>
   );
 }
 
@@ -103,6 +185,7 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
 
   const defs = leagueSlotDefs({ roster: gm.roster ?? {}, slots: gm.slots ?? null });
   const names = slotDisplayNames(defs);
+  const bb = new Set(leagueBestball(gm));
   const caps = Object.entries(rr.pos_caps ?? {}).filter(([, v]) => v != null);
   const mode = rr.waiver_mode ?? 'rolling';
   return (
@@ -116,8 +199,14 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
 
       <Head>STARTING LINEUP</Head>
       {defs.map((d, i) => (
-        <Row key={d.slot} k={names[i]} v={d.pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join(' / ')} />
+        <SlotRow key={d.slot} name={names[i]} pos={d.pos} bb={bb.has(d.slot)} filter={slotFilterLabel(d.flt)} />
       ))}
+      {(bb.size > 0 || defs.some((d) => d.flt)) && (
+        <Mono size={9} tone="faint" style={{ marginTop: 6, lineHeight: fs(14) }}>
+          {bb.size > 0 ? '🎯 fills itself with your best eligible scorer. ' : ''}
+          {defs.some((d) => d.flt) ? 'ⓘ marks a spot that only takes certain players — tap it.' : ''}
+        </Mono>
+      )}
 
       {caps.length > 0 && (<>
         <Head>POSITION LIMITS</Head>

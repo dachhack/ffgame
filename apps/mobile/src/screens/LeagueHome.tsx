@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -18,7 +18,7 @@ import { ScoringView, RosterRulesView, RegisterView } from '../ui/LeagueInfo';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
-export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish, onGo, onShop, onFields, onBack }: {
+export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish, onGo, onShop, onBack }: {
   leagueId: string;
   name: string;
   teamName?: string | null;
@@ -28,16 +28,12 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   onGo: (room: LeagueRoom) => void;
   /** Opens the board with the power-up shop already up. */
   onShop: () => void;
-  /** Opens the board with the all-fields sheet already up — the ▦ FIELDS chip's
-   *  old job, moved off the tab strip and onto the menu (founder's call). */
-  onFields: () => void;
   onBack: () => void;
 }) {
   const t = useTheme();
   // The note lives HERE now (0182.1 — off the board, founder's call), so the
   // commissioner's empty-state prompt shows too, not just a standing note.
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
-  const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
   const [teamsOpen, setTeamsOpen] = useState(false);
   // 🔔 Alerts (v0.272.0 — off the MY TEAM tabs, founder's call): push prefs
   // in a sheet. Device-level settings, so any member gets the tile.
@@ -45,7 +41,9 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
   // The league's own reference sheets (v0.274.0, founder's menu list). One
   // piece of state: only ever one sheet is up, and `null` is the menu itself.
   const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register'>(null);
-  const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
+  // Only the commissioner's queue is still read here — the chat dot rides on
+  // the nav strip, and the waiver badge left with the MY TEAM tile.
+  const [sig, setSig] = useState<{ commish: { waiting: number; review: number } | null }>({ commish: null });
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
   // founder). Defaults false — the tile shows until the answer lands, since
@@ -58,11 +56,8 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
     leagueNote(leagueId)
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
-    chatUnread(leagueId)
-      .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
-      .catch(() => {});
     leagueSignals(leagueId)
-      .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
+      .then((r) => { if (r.ok) setSig({ commish: r.commish ?? null }); })
       .catch(() => {});
     // Season's end (0162): once a champion is crowned, the hub says so.
     playoffState(leagueId)
@@ -126,15 +121,12 @@ export function LeagueHome({ leagueId, name, teamName, rosterId, native, commish
         </View>
       )}
 
-      {rosterId != null && tile('▦', 'My matchup', 'your board — set the lineup, watch it live', () => { track(Ev.hubTileOpened, { tile: 'matchup' }); onGo('picks'); }, { accent: true })}
-      {tile('💬', 'Chat', 'league channel · direct messages', () => { track(Ev.hubTileOpened, { tile: 'chat' }); onGo('chat'); },
-        unread.n > 0 || sig.polls > 0
-          ? { badge: [unread.n > 0 ? `${unread.mention ? '@ ' : ''}${unread.n > 99 ? '99+' : unread.n}` : '', sig.polls > 0 ? `📊 ${sig.polls}` : ''].filter(Boolean).join(' · ') }
-          : undefined)}
+      {/* MATCHUP / MY TEAM / CHAT / FIELDS are NOT here (v0.275.0, founder):
+          the first three are one tap away on the nav strip above this screen,
+          and ▦ FIELDS is a chip on the matchup board itself. A menu that
+          repeats the strip is a menu you have to read twice. The shop stays —
+          it has no chip anywhere, and drip coin is yours, not the league's. */}
       {rosterId != null && !classic && tile('◈', 'Power-up shop', 'spend drip coin — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'shop' }); onShop(); })}
-      {rosterId != null && tile('▦', 'Fields', 'every game with a slotted player, live — opens on your board', () => { track(Ev.hubTileOpened, { tile: 'fields' }); onFields(); })}
-      {native && rosterId != null && tile('⇄', 'My team', 'waivers · trades · standings · team options', () => { track(Ev.hubTileOpened, { tile: 'team' }); onGo('team'); },
-        sig.waivers > 0 ? { badge: `✚ ${sig.waivers}` } : undefined)}
       {/* ── THE LEAGUE ITSELF (v0.274.0, founder's list) ────────────────────
           Above this line is YOUR week — your board, your team, the chat. Below
           it is the league: who's in it, what it did, and the rules it runs on.
