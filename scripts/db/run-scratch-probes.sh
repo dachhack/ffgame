@@ -115,3 +115,4 @@ $RUN -f scripts/db/pick-asset-probes.sql | grep -E "PROBE FAIL|ALL PICK-ASSET PR
 $RUN -f scripts/db/register-probes.sql | grep -E "PROBE FAIL|ALL REGISTER PROBES" || { echo "REGISTER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-name-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-NAME PROBES" || { echo "LEAGUE-NAME PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/leave-delete-probes.sql | grep -E "PROBE FAIL|ALL LEAVE-DELETE PROBES" || { echo "LEAVE-DELETE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/lottery-probes.sql | grep -E "PROBE FAIL|ALL LOTTERY PROBES" || { echo "LOTTERY PROBES FAILED"; exit 1; }

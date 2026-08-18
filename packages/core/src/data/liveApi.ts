@@ -1944,6 +1944,29 @@ export const setDraftStart = (leagueId: string, at: string | null = null) =>
  *  null shuffles now — visibly, which is the point of drawing it early. The
  *  order is rechecked against the current seats at start, so a team added
  *  afterwards can't be dropped by a stale list. */
+/** THE LOTTERY (0189) — weighted shares, and a draw that is recorded.
+ *
+ *  Shares are WEIGHTS, not percentages: "worst team 250, champion 5" is how a
+ *  commissioner thinks, and percentages that must total 100 have to be
+ *  rebalanced every time one changes. Odds are their ratio. A share of 0 means
+ *  "in the league, not in the lottery" — those seats fill the remaining slots
+ *  behind everyone drawn. Pending-only; the order locks at the first pick. */
+export const setLotteryShares = (leagueId: string, shares: Record<number, number> | null) =>
+  rpc<{ ok: boolean; error?: string; shares?: Record<string, number> | null }>(
+    'set_lottery_shares', { p_league_id: leagueId, p_shares: shares });
+export interface LotteryPick { roster_id: number; share: number; odds: number }
+/** Draw the order. Without replacement, weight-proportional at every step —
+ *  the NBA-style lottery people mean when they say the word. */
+export const runDraftLottery = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; order?: number[]; result?: LotteryPick[] }>(
+    'run_draft_lottery', { p_league_id: leagueId });
+/** What was set and what was drawn — readable by ANY member, which is the whole
+ *  point: a lottery nobody can inspect afterwards is indistinguishable from a
+ *  commissioner typing an order. */
+export const draftLottery = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; shares?: Record<string, number> | null; result?: LotteryPick[] | null; order?: number[] | null; locked?: boolean }>(
+    'draft_lottery', { p_league_id: leagueId });
+
 export const setDraftOrder = (leagueId: string, order: number[] | null = null) =>
   tracked(rpc<{ ok: boolean; error?: string; order?: number[] }>(
     'set_draft_order', { p_league_id: leagueId, p_order: order }),

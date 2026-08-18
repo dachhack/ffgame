@@ -17,7 +17,7 @@ import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
-  setDraftSetup, setDraftOrder, setDraftStart,
+  setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
@@ -724,6 +724,9 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
   const [bellHrs, setBellHrs] = useState(st.lot_seconds >= 3600);
   const [lots, setLots] = useState(String(st.max_lots));
   const [ord, setOrd] = useState<number[] | null>(st.order);
+  /** Lottery weights per seat (0189). Absent = 1, i.e. a flat draw. */
+  const [shares, setShares] = useState<Record<number, number>>({});
+  const [drawn, setDrawn] = useState<LotteryPick[] | null>(null);
   const [days, setDays] = useState(0);        // 0 = today, 1 = tomorrow, …
   const [mins, setMins] = useState(20 * 60);  // local minutes past midnight
 
@@ -892,6 +895,73 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
                 <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>SAVE ORDER</Text>
               </Pressable>
             </View>
+          </View>
+
+          {/* ── THE LOTTERY (0189) ────────────────────────────────────────────
+              🎲 RANDOMIZE above is a FLAT shuffle — every seat equal. A dynasty
+              league usually wants the opposite: last year's bottom team holding
+              more balls than the team that nearly won. Shares are WEIGHTS, not
+              percentages ("worst 250, champion 5"), because percentages have to
+              be rebalanced every time one changes.
+
+              The DRAW IS RECORDED and shown below, which is the point — a
+              weighted lottery nobody can inspect afterwards is indistinguishable
+              from a commissioner typing an order, and "the worst team won it
+              again" is a sentence that costs leagues members. */}
+          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+            <Mono size={8.5} tone="faint" track={0.1}>LOTTERY</Mono>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 13 }}>
+              Give each team a weight and draw the order from it. Leave them all equal for a flat draw; a weight of 0
+              means they take a slot behind everyone drawn.
+            </Mono>
+            <View style={{ marginTop: 7, gap: 2 }}>
+              {rows.map((rid) => (
+                <View key={`share-${rid}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.bg, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 5 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text }}>{teamName(rid) ?? `Team ${rid}`}</Text>
+                  {(() => {
+                    const w = shares[rid] ?? 1;
+                    const tot = rows.reduce((n, r2) => n + (shares[r2] ?? 1), 0);
+                    return <Mono size={8.5} tone="faint">{tot > 0 ? `${((w / tot) * 100).toFixed(1)}%` : '—'}</Mono>;
+                  })()}
+                  <TextInput value={String(shares[rid] ?? 1)} keyboardType="number-pad"
+                    onChangeText={(v) => setShares((cur) => ({ ...cur, [rid]: Math.max(0, Math.min(1000000, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0)) }))}
+                    style={{ width: 62, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, color: t.text, fontFamily: MONO, fontSize: 11, paddingHorizontal: 7, paddingVertical: 4, textAlign: 'right' }} />
+                </View>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <Pressable disabled={busy} onPress={() => { tap(); onDone(() => setLotteryShares(leagueId, shares)); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.dim }}>SAVE SHARES</Text>
+              </Pressable>
+              <Pressable disabled={busy} onPress={() => {
+                tap();
+                onDone(async () => {
+                  const r = await setLotteryShares(leagueId, shares);
+                  if (!r.ok) return r;
+                  const d = await runDraftLottery(leagueId);
+                  if (d.ok && d.order) { setOrd(d.order); setDrawn(d.result ?? null); }
+                  return d;
+                });
+              }} style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>🎰 RUN THE LOTTERY</Text>
+              </Pressable>
+            </View>
+            {!!drawn?.length && (
+              <View style={{ marginTop: 9, gap: 2 }}>
+                <Mono size={8.5} tone="faint" track={0.1}>THE DRAW</Mono>
+                {drawn.map((d, i) => (
+                  <View key={`drawn-${d.roster_id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: i === 0 ? t.you : t.faint, width: 20 }}>{i + 1}.</Text>
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>{teamName(d.roster_id) ?? `Team ${d.roster_id}`}</Text>
+                    <Mono size={8.5} tone="faint">{d.share} · {(d.odds * 100).toFixed(1)}%</Mono>
+                  </View>
+                ))}
+                <Mono size={8} tone="faint" style={{ marginTop: 4, lineHeight: 11 }}>
+                  The odds shown are the ones each team held on its own draw, not its opening odds.
+                </Mono>
+              </View>
+            )}
           </View>
         </View>
       )}
