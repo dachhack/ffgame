@@ -13,7 +13,9 @@
 // reads on (one week, every player). A card reads the other axis (one player,
 // every week), and getting a season out of the week files means fetching and
 // parsing all fourteen. scripts/pbp/genSeasonLog.mjs re-pivots them once at
-// build time into a single 1.5 MB file (~200 KB inside the APK's zip).
+// build time into a single 1.5 MB file — ~200 KB over HTTP on the web, and
+// 1.2 MB of APK on native, where Metro inlines it into the Hermes bundle
+// rather than storing it as a compressed asset (see that script's header).
 //
 // HOSTS: the web fetches it as a static asset. Native has no assetUrl — Metro
 // bundles JSON through `require` instead — so the app installs its own loader
