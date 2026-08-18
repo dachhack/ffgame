@@ -60,8 +60,11 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
  *  The LABEL is the system font, not mono. Mono earns its place on data — a
  *  score, a clock, a count that should line up with the one under it — and on a
  *  control it just reads as a web dashboard. Same for the two buttons below. */
-export function Chip({ label, on, disabled, dim, onPress }: {
+export function Chip({ label, on, disabled, dim, onPress, a11y }: {
   label: ReactNode; on?: boolean; disabled?: boolean; dim?: boolean; onPress?: () => void;
+  /** Spoken name, for a chip whose label is an icon alone — the fill carries
+   *  the state to the eye, and `selected` carries it to the screen reader. */
+  a11y?: string;
 }) {
   const t = useTheme();
   return (
@@ -71,6 +74,9 @@ export function Chip({ label, on, disabled, dim, onPress }: {
       // growing them would reflow the layout, but a 10pt tap target fails
       // Apple's 44pt guidance outright.
       hitSlop={8}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={a11y}
+      accessibilityState={a11y ? { selected: !!on, disabled: !!disabled } : undefined}
       // Ripple is the Android idiom and it is bounded by the pill because
       // `borderRadius` + overflow:hidden clip it; `pressed` covers iOS, which
       // has no ripple and expects the surface to dim instead.

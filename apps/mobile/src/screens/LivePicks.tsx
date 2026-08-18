@@ -883,20 +883,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       {/* Header — mirrors the web's title block: who is playing, how much of
           the lineup is set, and the week you are looking at. */}
       <Card style={{ marginBottom: 10 }}>
-        {isPreseasonWeek(matchup!.week) && (
-          <View style={{ alignSelf: 'flex-start', marginBottom: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
-            <Mono size={9} tone="you" weight="700" track={0.08}>🏈 PRESEASON</Mono>
-          </View>
-        )}
-
+        {/* No 🏈 PRESEASON chip (founder): the week stepper two rows up
+            already reads PRE 3, and a second banner for the same fact was
+            what pushed this box onto three lines. */}
         {/* One row: the controls, and how far along you are. The rules used to
             be spelled out here in two paragraphs, which is a fine thing to read
             once and a permanent tax on every visit after that; the board below
             already says LOCKED / SETUP, N eligible and N/M SET on each window,
             which is the same information where it applies. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {/* ONE LINE, and it may not wrap (founder). What bought the room: the
+            auto-pilot chip lost its words. It is a toggle — the fill IS the
+            state, the same way every other `on` chip in the app reads — and
+            the line under this row still spells out what being on means. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'nowrap' }}>
           <Chip
-            label={aiBusy ? '…' : `🤖 auto-pilot ${controller === 'ai' ? 'on' : 'off'}`}
+            label={aiBusy ? '…' : '🤖'}
+            a11y={`Auto-pilot ${controller === 'ai' ? 'on' : 'off'}`}
             on={controller === 'ai'}
             disabled={aiBusy}
             onPress={toggleAi}
@@ -905,14 +907,14 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               the roster doors. Unlike SHOP it stays under auto-pilot — watching
               the games is not a thing the robot does for you. */}
           <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
-          <View style={{ flex: 1 }} />
-          <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
+          <View style={{ flex: 1, minWidth: 4 }} />
+          <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08} numberOfLines={1}>{filled}/{slots.length} SET</Mono>
           {controller !== 'ai' && (
             <>
-              <Mono size={10} tone="you" weight="700">◆ {Math.round(coins)}</Mono>
+              <Mono size={10} tone="you" weight="700" numberOfLines={1}>◆ {Math.round(coins)}</Mono>
               <Pressable
                 onPress={() => setShopOpen(true)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6 }}
               >
                 <Text style={{ fontSize: 12 }}>🛒</Text>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: t.text }}>SHOP</Text>
