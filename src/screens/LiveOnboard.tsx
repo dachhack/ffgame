@@ -831,7 +831,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         viewAsLabel={viewAs?.label ?? null}
         onBack={() => { setHomeFor(null); setView('home'); }}
         onResults={() => { setTarget({ leagueId: e.league_id, rosterId: 0 }); setView('results'); }}
-        onTeam={(focus) => { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setTeamFocus(focus); setView('team'); }}
         onDraft={() => { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setView('draft'); }}
         onManage={() => { setManageId(e.league_id); setManageTab(undefined); setView('commishdash'); }} />
       </>
