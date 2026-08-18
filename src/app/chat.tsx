@@ -130,7 +130,12 @@ const fmtWhen = (at: string): string => {
 
 /** The board's chat door: a toolbar button carrying the unread count, opening
  *  the panel. Self-contained by leagueId — polls its own badge. */
-export function ChatButton({ leagueId, style }: { leagueId: string; style?: React.CSSProperties }) {
+/** `compact` (v0.290.0, founder: "make the chat just the icon") — the speech
+ *  bubble alone, with unread as a DOT rather than a count. The word bought
+ *  nothing the bubble does not already say, and on a phone the board's tool row
+ *  is the widest thing on the screen. Same trade the app's chip made in
+ *  v0.279.3; the count still reaches you inside the panel. */
+export function ChatButton({ leagueId, style, compact = false }: { leagueId: string; style?: React.CSSProperties; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [mentioned, setMentioned] = useState(false);
@@ -148,9 +153,20 @@ export function ChatButton({ leagueId, style }: { leagueId: string; style?: Reac
   }, [leagueId, open]);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="mono" style={style}
+      <button onClick={() => setOpen(true)} className="mono"
+        style={compact ? { position: 'relative', ...style } : style}
+        aria-label={compact ? 'Chat' : undefined}
         title={mentioned ? 'someone mentioned you' : 'league chat + direct messages'}>
-        💬 CHAT{mentioned ? ' @' : ''}{unread > 0 ? ` · ${unread > 99 ? '99+' : unread}` : ''}
+        {compact ? (
+          <>
+            <span style={{ fontSize: '1.35em', lineHeight: 1 }}>💬</span>
+            {unread > 0 && (
+              <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 999, background: mentioned ? 'var(--opp)' : 'var(--you)' }} />
+            )}
+          </>
+        ) : (
+          <>💬 CHAT{mentioned ? ' @' : ''}{unread > 0 ? ` · ${unread > 99 ? '99+' : unread}` : ''}</>
+        )}
       </button>
       {open && <ChatPanel leagueId={leagueId} onClose={() => { setOpen(false); setUnread(0); setMentioned(false); }} />}
     </>
