@@ -20,6 +20,27 @@ export const NFL_SLATE: Record<number, NflGame[]> = {
   12: [{ away: "BUF", home: "HOU", aScore: 19, hScore: 23, win: "tnf" }, { away: "NYJ", home: "BAL", aScore: 10, hScore: 23, win: "early" }, { away: "PIT", home: "CHI", aScore: 28, hScore: 31, win: "early" }, { away: "NE", home: "CIN", aScore: 26, hScore: 20, win: "early" }, { away: "NYG", home: "DET", aScore: 27, hScore: 34, win: "early" }, { away: "MIN", home: "GB", aScore: 6, hScore: 23, win: "early" }, { away: "IND", home: "KC", aScore: 20, hScore: 23, win: "early" }, { away: "SEA", home: "TEN", aScore: 30, hScore: 24, win: "early" }, { away: "JAX", home: "ARI", aScore: 27, hScore: 24, win: "late" }, { away: "CLE", home: "LV", aScore: 24, hScore: 10, win: "late" }, { away: "PHI", home: "DAL", aScore: 21, hScore: 24, win: "late" }, { away: "ATL", home: "NO", aScore: 24, hScore: 10, win: "late" }, { away: "TB", home: "LA", aScore: 7, hScore: 34, win: "snf" }, { away: "CAR", home: "SF", aScore: 9, hScore: 20, win: "mnf" }],
   13: [{ away: "GB", home: "DET", aScore: 31, hScore: 24, win: "tnf" }, { away: "KC", home: "DAL", aScore: 28, hScore: 31, win: "tnf" }, { away: "CIN", home: "BAL", aScore: 32, hScore: 14, win: "tnf" }, { away: "CHI", home: "PHI", aScore: 24, hScore: 15, win: "tnf" }, { away: "LA", home: "CAR", aScore: 28, hScore: 31, win: "early" }, { away: "SF", home: "CLE", aScore: 26, hScore: 8, win: "early" }, { away: "HOU", home: "IND", aScore: 20, hScore: 16, win: "early" }, { away: "NO", home: "MIA", aScore: 17, hScore: 21, win: "early" }, { away: "ATL", home: "NYJ", aScore: 24, hScore: 27, win: "early" }, { away: "ARI", home: "TB", aScore: 17, hScore: 20, win: "early" }, { away: "JAX", home: "TEN", aScore: 25, hScore: 3, win: "early" }, { away: "MIN", home: "SEA", aScore: 0, hScore: 26, win: "late" }, { away: "LV", home: "LAC", aScore: 14, hScore: 31, win: "late" }, { away: "BUF", home: "PIT", aScore: 26, hScore: 7, win: "late" }, { away: "DEN", home: "WAS", aScore: 27, hScore: 26, win: "snf" }, { away: "NYG", home: "NE", aScore: 15, hScore: 33, win: "mnf" }],
   14: [{ away: "DAL", home: "DET", aScore: 30, hScore: 44, win: "tnf" }, { away: "SEA", home: "ATL", aScore: 37, hScore: 9, win: "early" }, { away: "PIT", home: "BAL", aScore: 27, hScore: 22, win: "early" }, { away: "CIN", home: "BUF", aScore: 34, hScore: 39, win: "early" }, { away: "TEN", home: "CLE", aScore: 31, hScore: 29, win: "early" }, { away: "IND", home: "JAX", aScore: 19, hScore: 36, win: "early" }, { away: "WAS", home: "MIN", aScore: 0, hScore: 31, win: "early" }, { away: "MIA", home: "NYJ", aScore: 34, hScore: 10, win: "early" }, { away: "NO", home: "TB", aScore: 24, hScore: 20, win: "early" }, { away: "DEN", home: "LV", aScore: 24, hScore: 17, win: "late" }, { away: "LA", home: "ARI", aScore: 45, hScore: 17, win: "late" }, { away: "CHI", home: "GB", aScore: 21, hScore: 28, win: "late" }, { away: "HOU", home: "KC", aScore: 20, hScore: 10, win: "snf" }, { away: "PHI", home: "LAC", aScore: 19, hScore: 22, win: "mnf" }],
+
+  // ── WEEKS 15–22 (v0.286.0) ────────────────────────────────────────────────
+  // The rest of 2025: weeks 15–18, then the postseason as nflverse numbers it
+  // (19 wild card · 20 divisional · 21 conference · 22 Super Bowl). The FANTASY
+  // regular season is still 14 weeks — these are here because the bake now runs
+  // this far, and a league's playoffs default to weeks 15–17.
+  //
+  // Their `win` ids are read straight off each game's real kickoff (Saturday
+  // slates get "sat"), which weeks 1–14 above do NOT do: those were cut before
+  // the derivation existed and round Friday and 9:30am-London games into tnf
+  // and early. They are left alone deliberately — drip windows key off this,
+  // and re-cutting a week a live league has already played would move its
+  // lineup slots underneath it.
+  15: [{ away: "ATL", home: "TB", aScore: 29, hScore: 28, win: "tnf" }, { away: "WAS", home: "NYG", aScore: 29, hScore: 21, win: "early" }, { away: "NYJ", home: "JAX", aScore: 20, hScore: 48, win: "early" }, { away: "LAC", home: "KC", aScore: 16, hScore: 13, win: "early" }, { away: "ARI", home: "HOU", aScore: 20, hScore: 40, win: "early" }, { away: "BAL", home: "CIN", aScore: 24, hScore: 0, win: "early" }, { away: "LV", home: "PHI", aScore: 0, hScore: 31, win: "early" }, { away: "BUF", home: "NE", aScore: 35, hScore: 31, win: "early" }, { away: "CLE", home: "CHI", aScore: 3, hScore: 31, win: "early" }, { away: "DET", home: "LA", aScore: 34, hScore: 41, win: "late" }, { away: "GB", home: "DEN", aScore: 26, hScore: 34, win: "late" }, { away: "IND", home: "SEA", aScore: 16, hScore: 18, win: "late" }, { away: "CAR", home: "NO", aScore: 17, hScore: 20, win: "late" }, { away: "TEN", home: "SF", aScore: 24, hScore: 37, win: "late" }, { away: "MIN", home: "DAL", aScore: 34, hScore: 26, win: "snf" }, { away: "MIA", home: "PIT", aScore: 15, hScore: 28, win: "mnf" }],
+  16: [{ away: "LA", home: "SEA", aScore: 37, hScore: 38, win: "tnf" }, { away: "PHI", home: "WAS", aScore: 29, hScore: 18, win: "sat" }, { away: "GB", home: "CHI", aScore: 16, hScore: 22, win: "sat" }, { away: "NYJ", home: "NO", aScore: 6, hScore: 29, win: "early" }, { away: "BUF", home: "CLE", aScore: 23, hScore: 20, win: "early" }, { away: "KC", home: "TEN", aScore: 9, hScore: 26, win: "early" }, { away: "CIN", home: "MIA", aScore: 45, hScore: 21, win: "early" }, { away: "MIN", home: "NYG", aScore: 16, hScore: 13, win: "early" }, { away: "LAC", home: "DAL", aScore: 34, hScore: 17, win: "early" }, { away: "TB", home: "CAR", aScore: 20, hScore: 23, win: "early" }, { away: "JAX", home: "DEN", aScore: 34, hScore: 20, win: "late" }, { away: "ATL", home: "ARI", aScore: 26, hScore: 19, win: "late" }, { away: "LV", home: "HOU", aScore: 21, hScore: 23, win: "late" }, { away: "PIT", home: "DET", aScore: 29, hScore: 24, win: "late" }, { away: "NE", home: "BAL", aScore: 28, hScore: 24, win: "snf" }, { away: "SF", home: "IND", aScore: 48, hScore: 27, win: "mnf" }],
+  17: [{ away: "DAL", home: "WAS", aScore: 30, hScore: 23, win: "tnf" }, { away: "DET", home: "MIN", aScore: 10, hScore: 23, win: "tnf" }, { away: "DEN", home: "KC", aScore: 20, hScore: 13, win: "tnf" }, { away: "HOU", home: "LAC", aScore: 20, hScore: 16, win: "sat" }, { away: "BAL", home: "GB", aScore: 41, hScore: 24, win: "sat" }, { away: "ARI", home: "CIN", aScore: 14, hScore: 37, win: "early" }, { away: "SEA", home: "CAR", aScore: 27, hScore: 10, win: "early" }, { away: "NE", home: "NYJ", aScore: 42, hScore: 10, win: "early" }, { away: "TB", home: "MIA", aScore: 17, hScore: 20, win: "early" }, { away: "JAX", home: "IND", aScore: 23, hScore: 17, win: "early" }, { away: "NO", home: "TEN", aScore: 34, hScore: 26, win: "early" }, { away: "PIT", home: "CLE", aScore: 6, hScore: 13, win: "early" }, { away: "NYG", home: "LV", aScore: 34, hScore: 10, win: "late" }, { away: "PHI", home: "BUF", aScore: 13, hScore: 12, win: "late" }, { away: "CHI", home: "SF", aScore: 38, hScore: 42, win: "snf" }, { away: "LA", home: "ATL", aScore: 24, hScore: 27, win: "mnf" }],
+  18: [{ away: "CAR", home: "TB", aScore: 14, hScore: 16, win: "sat" }, { away: "SEA", home: "SF", aScore: 13, hScore: 3, win: "sat" }, { away: "TEN", home: "JAX", aScore: 7, hScore: 41, win: "early" }, { away: "IND", home: "HOU", aScore: 30, hScore: 38, win: "early" }, { away: "CLE", home: "CIN", aScore: 20, hScore: 18, win: "early" }, { away: "DAL", home: "NYG", aScore: 17, hScore: 34, win: "early" }, { away: "NO", home: "ATL", aScore: 17, hScore: 19, win: "early" }, { away: "GB", home: "MIN", aScore: 3, hScore: 16, win: "early" }, { away: "DET", home: "CHI", aScore: 19, hScore: 16, win: "late" }, { away: "ARI", home: "LA", aScore: 20, hScore: 37, win: "late" }, { away: "WAS", home: "PHI", aScore: 24, hScore: 17, win: "late" }, { away: "KC", home: "LV", aScore: 12, hScore: 14, win: "late" }, { away: "NYJ", home: "BUF", aScore: 8, hScore: 35, win: "late" }, { away: "MIA", home: "NE", aScore: 10, hScore: 38, win: "late" }, { away: "LAC", home: "DEN", aScore: 3, hScore: 19, win: "late" }, { away: "BAL", home: "PIT", aScore: 24, hScore: 26, win: "snf" }],
+  19: [{ away: "LA", home: "CAR", aScore: 34, hScore: 31, win: "sat" }, { away: "GB", home: "CHI", aScore: 27, hScore: 31, win: "sat" }, { away: "BUF", home: "JAX", aScore: 27, hScore: 24, win: "early" }, { away: "SF", home: "PHI", aScore: 23, hScore: 19, win: "late" }, { away: "LAC", home: "NE", aScore: 3, hScore: 16, win: "snf" }, { away: "HOU", home: "PIT", aScore: 30, hScore: 6, win: "mnf" }],
+  20: [{ away: "BUF", home: "DEN", aScore: 30, hScore: 33, win: "sat" }, { away: "SF", home: "SEA", aScore: 6, hScore: 41, win: "sat" }, { away: "HOU", home: "NE", aScore: 16, hScore: 28, win: "late" }, { away: "LA", home: "CHI", aScore: 20, hScore: 17, win: "snf" }],
+  21: [{ away: "NE", home: "DEN", aScore: 10, hScore: 7, win: "late" }, { away: "LA", home: "SEA", aScore: 27, hScore: 31, win: "snf" }],
+  22: [{ away: "SEA", home: "NE", aScore: 29, hScore: 13, win: "snf" }],
 };
 
 // ── Live slate override ───────────────────────────────────────────────────────
@@ -324,11 +345,26 @@ export const PRESEASON_BASE = 100;
 export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
 /** The 1-based preseason week number for an offset board week (101 → 1). */
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
+/** The POSTSEASON weeks, as nflverse numbers them and the bake carries them
+ *  (v0.286.0). They are real weeks of real football with real play-by-play —
+ *  they are simply not weeks any fantasy league plays, so nothing schedules
+ *  them; they show up where a player's SEASON is listed. */
+export const POSTSEASON_LABEL: Record<number, string> = { 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'SB' };
+export const isPostseasonWeek = (week: number): boolean => week >= 19 && week <= 22;
+
 /** A board week as a PLAYER should read it: "PRE 2" for the preseason offset
- *  weeks, "WK 5" otherwise. Raw board weeks leak the +100 namespace — "WK 102"
- *  means nothing to anyone outside this file. */
+ *  weeks, "WC"/"DIV"/"CONF"/"SB" for the postseason, "WK 5" otherwise. Raw
+ *  board weeks leak the +100 namespace — "WK 102" means nothing to anyone
+ *  outside this file, and neither does "WK 22". */
 export const weekLabel = (week: number): string =>
-  (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}` : `WK ${week}`);
+  (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
+    : POSTSEASON_LABEL[week] ? POSTSEASON_LABEL[week]
+    : `WK ${week}`);
+
+/** The same, stripped for a narrow column: "P2" / "WC" / "5". */
+export const weekTick = (week: number): string =>
+  (isPreseasonWeek(week) ? `P${preseasonWeekNum(week)}`
+    : POSTSEASON_LABEL[week] ?? String(week));
 
 /** How many preseason weeks a preseason league carries. FOUR for 2026: ESPN's
  *  preseason is the Hall of Fame game (week 1) plus each team's three outings

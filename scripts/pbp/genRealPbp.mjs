@@ -15,7 +15,12 @@ import { join } from 'node:path';
 
 const here = new URL('.', import.meta.url);
 const RAW_DIR = process.argv[2] || join(new URL(here).pathname, 'raw');
-const WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
+// 1–18 regular season + 19–22 postseason (wild card, divisional, conference,
+// Super Bowl), as nflverse numbers them. The FANTASY regular season is still 14
+// weeks (REG_SEASON_WEEKS) — this is how much real football is BAKED, which is
+// a different question: a league's playoffs default to weeks 15–17, and before
+// this they fell through to the engine's simulation for want of data.
+const WEEKS = Array.from({ length: 22 }, (_, i) => i + 1);
 
 // slug -> { gsis, pos, name, sleeper? }  ==>  gsis -> { slug, pos }, plus
 // slug -> pos and slug -> sleeper id for the generated runtime maps.

@@ -22,7 +22,7 @@ import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, 
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
-import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, kickoffLabel, weekTick } from '@drip/core/data/nflSlate';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { Ev, track } from '@drip/core/analytics';
@@ -298,7 +298,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             )}
             {log?.map((r) => (
               <div key={r.week} style={{ display: 'flex', alignItems: 'flex-start', padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
-                <span className="mono" style={{ width: 30, fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{r.week > 100 ? `P${r.week - 100}` : r.week}</span>
+                <span className="mono" style={{ width: 30, fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{weekTick(r.week)}</span>
                 <span className="mono" style={{ width: 56, fontSize: 9.5, color: 'var(--dim)' }}>{r.opponent ?? '—'}</span>
                 <span className="mono" style={{ flex: 1, fontSize: 9.5, lineHeight: 1.4, color: r.blank ? 'var(--faint)' : 'var(--text)' }}>
                   {r.blank ? 'did not play' : r.line}

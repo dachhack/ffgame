@@ -36,8 +36,18 @@ const logRows = (slug) => Object.fromEntries(
 // The bug this whole version fixes: a card that showed one week because its
 // source held one week. If the re-pivot ever loses weeks, it fails here first.
 ok('the season log is version 1', season.v === 1, season.v);
-ok('the season log carries all fourteen weeks',
-  season.weeks.length === 14 && season.weeks[0] === 1 && season.weeks[13] === 14, season.weeks);
+ok('the season log carries the whole 2025 season, 1–18 plus the postseason',
+  season.weeks.join(',') === Array.from({ length: 22 }, (_, i) => i + 1).join(','), season.weeks);
+// THE ONE THAT MATTERS BEYOND THE CARD (v0.286.0): a league's playoffs default
+// to weeks 15–17 (migration 0073) and the bake used to stop at 14, so a
+// championship fell through to the engine's simulation for want of data.
+ok('the fantasy playoff weeks have real plays',
+  [15, 16, 17].every((w) => Object.values(season.pbp).filter((byWeek) => byWeek[String(w)]?.length).length > 200),
+  [15, 16, 17].map((w) => Object.values(season.pbp).filter((b) => b[String(w)]?.length).length));
+ok('the postseason is there too, and thins out round by round', (() => {
+  const n = (w) => Object.values(season.pbp).filter((b) => b[String(w)]?.length).length;
+  return n(19) > n(20) && n(20) > n(21) && n(21) > n(22) && n(22) > 0;
+})(), [19, 20, 21, 22].map((w) => Object.values(season.pbp).filter((b) => b[String(w)]?.length).length));
 ok('every week file has a matching week in the bake',
   season.weeks.every((w) => Object.values(season.pbp).some((byWeek) => byWeek[String(w)]?.length)), season.weeks);
 ok('the bake holds hundreds of players, not a handful', Object.keys(season.pbp).length > 300, Object.keys(season.pbp).length);
@@ -57,7 +67,7 @@ for (const w of season.weeks) installRealWeek(w, rd(`w${w}.json`));
 
 for (const [slug, pos, team] of CASES) {
   const log = buildGameLog({ id: slug, name: slug, pos, team }, logRows(slug), SCORING);
-  ok(`${slug}: the log runs the whole season, not one week`, log.length >= 10, log.length);
+  ok(`${slug}: the log runs the whole season, not one week`, log.length >= 16, log.length);
   const off = log.filter((r) => !near(r.points, classicPoints(mk(slug, pos, team), r.week, SCORING)));
   ok(`${slug}: every week agrees with the board to the decimal`, off.length === 0,
     off.map((r) => ({ week: r.week, log: r.points, board: classicPoints(mk(slug, pos, team), r.week, SCORING) })));
