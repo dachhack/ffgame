@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Pos } from '@drip/core/types';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -23,7 +24,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/ga
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters,
 } from '@drip/core/data/liveApi';
@@ -283,6 +284,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         // the best-ball fill (no_start) — same cache the drip screens keep.
         playerFlags(r.leagueId).then((f) => {
           if (Array.isArray(f)) { setLeagueFlags(r.leagueId, f); setFlagsVer((v) => v + 1); }
+        }).catch(() => {});
+        // SCOPED rules (0145) reach classic as of v0.277.0 — classicPoints
+        // reads them, so the board has to install the league's before it
+        // scores anything, or it would draw numbers the worker doesn't.
+        // flagsVer is the same recompute signal; scoring and flags are both
+        // module caches React cannot see.
+        leagueScoringGet(r.leagueId).then((sc) => {
+          if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
         matchupTeams(r.leagueId, [r.rosterId, oppRoster]).then((t: Record<number, TeamInfo>) => {

@@ -125,31 +125,30 @@ export function ScoringView({ leagueId }: { leagueId: string }) {
 
 /** The commissioner's LAYERING knobs (0143) and SCOPED BONUSES (0145).
  *
- *  Drip-engine only, and the sheet says so rather than implying otherwise: a
- *  classic league scores through classicPoints, which never consults these. A
- *  classic league that still has rules stored (set before the mode flip) gets
- *  told they're dormant — silence there would read as "no bonuses exist",
- *  which is the wrong half of the truth. */
+ *  The SCOPED rules apply in BOTH modes as of v0.277.0 — classicPoints reads
+ *  the same scopedAdjustFor sim.ts does, so one rule means one thing wherever
+ *  it is scored. The three league-wide KNOBS stay drip-only (they layer on the
+ *  drip engine's own growth curves, which classic has no equivalent of), and a
+ *  classic league that has them set is told so rather than left to assume. */
 function Adjustments({ adj, classic }: { adj: LeagueScoring | null; classic: boolean }) {
   const t = useTheme();
   if (!adj || scoringIsDefault(adj)) return null;
-  if (classic) {
-    return (
-      <View>
-        <Head>LEAGUE ADJUSTMENTS</Head>
-        <Mono size={9.5} tone="faint" style={{ lineHeight: fs(15) }}>
-          This league has drip-engine adjustments stored, but they do not apply in 🏈 NORMAL mode —
-          the scoring above is the whole of it.
-        </Mono>
-      </View>
-    );
-  }
+  const knobs = adj.tdBonus !== 0 || adj.ydMult !== 1 || adj.toPenalty !== 0;
   return (
     <View>
-      <Head>LEAGUE ADJUSTMENTS</Head>
-      {adj.tdBonus !== 0 && <Row k="EVERY TOUCHDOWN" v={`${adj.tdBonus > 0 ? '+' : ''}${adj.tdBonus} pts`} tone="you" />}
-      {adj.ydMult !== 1 && <Row k="ALL YARDAGE SCORING" v={`×${adj.ydMult}`} tone="you" />}
-      {adj.toPenalty !== 0 && <Row k="TURNOVER COMMITTED" v={`−${adj.toPenalty} pts`} tone="you" />}
+      {knobs && (<>
+        <Head>LEAGUE ADJUSTMENTS</Head>
+        {classic ? (
+          <Mono size={9.5} tone="faint" style={{ lineHeight: fs(15) }}>
+            This league has drip-engine adjustments stored (touchdown, yardage, turnover). They do not
+            apply in 🏈 NORMAL mode — the scoring above is the whole of it. The scoped bonuses below DO.
+          </Mono>
+        ) : (<>
+          {adj.tdBonus !== 0 && <Row k="EVERY TOUCHDOWN" v={`${adj.tdBonus > 0 ? '+' : ''}${adj.tdBonus} pts`} tone="you" />}
+          {adj.ydMult !== 1 && <Row k="ALL YARDAGE SCORING" v={`×${adj.ydMult}`} tone="you" />}
+          {adj.toPenalty !== 0 && <Row k="TURNOVER COMMITTED" v={`−${adj.toPenalty} pts`} tone="you" />}
+        </>)}
+      </>)}
       {adj.scoped.length > 0 && (
         <>
           <Head>SCOPED BONUSES</Head>
@@ -168,7 +167,7 @@ function Adjustments({ adj, classic }: { adj: LeagueScoring | null; classic: boo
           })}
           <Mono size={9} tone="faint" style={{ marginTop: 6, lineHeight: fs(14) }}>
             A player matches a rule only when he fits EVERY part of its scope. Rules stack — multipliers
-            multiply, point bonuses add.
+            multiply, point bonuses add. These pay in both game modes.
           </Mono>
         </>
       )}

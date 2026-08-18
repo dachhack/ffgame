@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -20,7 +21,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/ga
 import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters,
 } from '@drip/core/data/liveApi';
@@ -263,6 +264,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // the best-ball fill (no_start) — same cache the drip screens keep.
         playerFlags(leagueId).then((f) => {
           if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagsVer((v) => v + 1); }
+        }).catch(() => {});
+        // SCOPED rules (0145) reach classic as of v0.277.0 — classicPoints
+        // reads them, so the board installs the league's before it scores
+        // anything, or it draws numbers the worker doesn't. flagsVer is the
+        // shared recompute signal: both are module caches React can't see.
+        leagueScoringGet(leagueId).then((sc) => {
+          if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === rosterId ? m.away_roster_id : m.home_roster_id;
         liveSlate(m.week, '2026').then(setSlate).catch(() => {});
