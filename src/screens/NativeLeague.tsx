@@ -1399,6 +1399,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 // ─────────────────────────────────────────────────────────────────────────────
 /** Where a league-home tile wants the team screen to land (0182). */
 export type TeamFocus = 'trades' | 'waivers' | 'options';
+/** MY TEAM's tabs (v0.296.5) — the app's three, plus KEEPERS where the league
+ *  keeps anyone. ROSTER first, always: it is what the screen is for. */
+type TeamTab = 'roster' | 'waivers' | 'trades' | 'keepers';
 
 // ── Keepers (0182): declare who you carry into next season ──────────────────
 // Renders nothing unless the commissioner set a keeper count. Undeclared spots
@@ -1599,18 +1602,25 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   // null = not editing; '' = editing from empty (0187 league rename).
   const [leagueDraft, setLeagueDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
-  // League-home deep links (0182): scroll the asked-for section into view once
-  // the screen has data. One shot — the user scrolls freely afterwards.
-  const optionsRef = useRef<HTMLDivElement>(null);
-  const waiversRef = useRef<HTMLDivElement>(null);
-  const tradesRef = useRef<HTMLDivElement>(null);
-  const focused = useRef(false);
-  useEffect(() => {
-    if (!focus || focused.current || team == null) return;
-    focused.current = true;
-    const el = focus === 'trades' ? tradesRef.current : focus === 'waivers' ? waiversRef.current : optionsRef.current;
-    requestAnimationFrame(() => el?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [focus, team]);
+  // ── THE TABS (v0.296.5, founder: "let's make roster, waivers, trades tabs
+  //    like in the app") ────────────────────────────────────────────────────
+  // This screen was one long scroll of everything, two columns wide on a
+  // desktop and a mile deep on a phone. The app has been tabbed since v0.268.0
+  // on the founder's same instruction ("default to roster but all the other
+  // areas need to be tabbed"), and this is the web catching up — with KEEPERS
+  // as a FOURTH tab rather than a card inside ROSTER, and only where the league
+  // keeps anyone.
+  //
+  // `focus` (0182's league-home deep link) now picks the TAB instead of
+  // scrolling to a section: a tab is a destination, which is what the link
+  // always meant. Nothing passes a value since v0.296.2 took the hub's
+  // trades/waivers tiles out, but the prop is what makes the link still work if
+  // one comes back.
+  const [tab, setTab] = useState<TeamTab>(focus === 'trades' ? 'trades' : focus === 'waivers' ? 'waivers' : 'roster');
+  // Keepers are a KEEPER-LEAGUE feature: no count, no tab. The card hides
+  // itself the same way, but a tab that opens onto nothing is worse than a tab
+  // that isn't there.
+  const [keeperCount, setKeeperCount] = useState(0);
 
   const refresh = async () => {
     try {
@@ -1633,6 +1643,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (alive && g.ok) setGm(g); }).catch(() => {});
+    keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(k.keeper_count ?? 0); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the click rather than on the next poll.
@@ -1837,10 +1848,12 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
-      <div ref={optionsRef}>{identityCard}</div>
-      {/* notification mutes live with the rest of your options (founder's call) —
-          prefs are server-side per device, so the web can flip the phone's. */}
-      <NotifPrefsCard />
+      {/* NO NOTIFICATION SETTINGS HERE (v0.296.5, founder: "the notification
+          settings can get removed because they are already in the league home
+          tab"). 🔔 Alerts is a tile on the league menu on both hosts — the app
+          has never carried a second copy on MY TEAM, and two editors for one
+          set of per-device prefs is one too many. */}
+      {identityCard}
       <div style={card}>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Rosters arrive at the draft</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete. Set your team name and avatar now — they show on the draft board.</div>
@@ -1859,10 +1872,12 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
 
-      <div ref={optionsRef}>{identityCard}</div>
-      {/* notification mutes live with the rest of your options (founder's call) —
-          prefs are server-side per device, so the web can flip the phone's. */}
-      <NotifPrefsCard />
+      {/* NO NOTIFICATION SETTINGS HERE (v0.296.5, founder: "the notification
+          settings can get removed because they are already in the league home
+          tab"). 🔔 Alerts is a tile on the league menu on both hosts — the app
+          has never carried a second copy on MY TEAM, and two editors for one
+          set of per-device prefs is one too many. */}
+      {identityCard}
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
@@ -1874,10 +1889,22 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
       )}
 
-      {/* desktop: my team on the left, the market on the right; phones stack */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
-      <div style={{ flex: '1 1 380px', minWidth: 320 }}>
+      {/* ONE AREA AT A TIME. Identity and the over-limit warning stay above the
+          tabs, exactly as on the app: who you are and what's broken outrank any
+          tab you happen to be standing in. */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {([
+          ['roster', '🧢 ROSTER'],
+          ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', '⇄ TRADES'],
+          ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
+        ] as const).map(([id, label]) => (
+          <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
+        ))}
+      </div>
+
       {/* my roster */}
+      {tab === 'roster' && (
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
         {/* position usage vs the league's limits (∞ = uncapped) */}
@@ -1941,9 +1968,15 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
       </div>
 
-      {/* keepers (0182) — only when the commissioner set a keeper count */}
-      {myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
+      )}
 
+      {/* KEEPERS (0182) — its own tab now (founder), and only in a league that
+          keeps anyone. It was a card under the roster, which is where you look
+          for it in the two weeks a year it matters and where it is noise for
+          the other fifty. */}
+      {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
+
+      {tab === 'waivers' && (<>
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
         <div style={{ ...card, marginBottom: 12 }}>
@@ -1968,9 +2001,10 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
       )}
 
-      </div>{/* /my-team column */}
-
-      <div ref={waiversRef} style={{ flex: '1 1 380px', minWidth: 320 }}>
+      {/* the wire and the order, side by side on a desktop and stacked on a
+          phone — both answer "who can I get, and when do I get to". */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 380px', minWidth: 300 }}>
       {/* free agents / waiver wire */}
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={hdr}>
@@ -2033,7 +2067,10 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
       </div>
 
+      </div>
+
       {/* waiver order */}
+      <div style={{ flex: '1 1 260px', minWidth: 240 }}>
       <div style={card}>
         <div style={hdr}>WAIVER ORDER</div>
         {[...team.waiver_order].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99)).map((w, i) => (
@@ -2056,11 +2093,14 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
       </div>
 
-      <div ref={tradesRef} />
-      <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
-        rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review} onChanged={refresh} />
-      </div>{/* /market column */}
-      </div>{/* /two-column row */}
+      </div>
+      </div>{/* /wire + order row */}
+      </>)}
+
+      {tab === 'trades' && (
+        <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
+          rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review} onChanged={refresh} />
+      )}
 
       {pickers}
 
