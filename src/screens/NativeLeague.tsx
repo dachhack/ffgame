@@ -21,7 +21,7 @@ import {
   leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
-  setTeamName, setTeamAvatar, setLeagueAvatar,
+  setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
   setDraftQueue, myDraftQueue, setAutodraft,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   myPushTokens, setPushPrefs, type PushTokenRow,
@@ -1405,7 +1405,9 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null);
   const [bidDraft, setBidDraft] = useState('');
   const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
-  const [nameDraft, setNameDraft] = useState<string | null>(null);             // non-null ⇒ renaming
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  // null = not editing; '' = editing from empty (0187 league rename).
+  const [leagueDraft, setLeagueDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
   // League-home deep links (0182): scroll the asked-for section into view once
   // the screen has data. One shot — the user scrolls freely afterwards.
@@ -1548,6 +1550,36 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           </button>
         )}
       </div>
+      {/* THE LEAGUE'S OWN NAME (0187, founder). The crest has been settable
+          from this card for ages; the name had no setter anywhere, so a typo
+          at creation was permanent for every member. Commissioner only — the
+          RPC re-checks that, this just decides who is offered the pencil. */}
+      {team.is_commish && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+          {leagueDraft === null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>LEAGUE ⚑</span>
+              <button onClick={() => setLeagueDraft('')} className="mono" style={linkBtn}>✎ rename the league</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input value={leagueDraft} autoFocus maxLength={60} placeholder="league name"
+                onChange={(e) => setLeagueDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && leagueDraft.trim().length >= 2) { run(() => setLeagueName(leagueId, leagueDraft)); setLeagueDraft(null); }
+                  if (e.key === 'Escape') setLeagueDraft(null);
+                }}
+                style={{ ...input, padding: '7px 10px', fontSize: 13, flex: 1, minWidth: 160 }} />
+              <button onClick={() => { if (leagueDraft.trim().length >= 2) run(() => setLeagueName(leagueId, leagueDraft)); setLeagueDraft(null); }}
+                disabled={busy || leagueDraft.trim().length < 2} className="mono" style={{ ...btn, padding: '7px 12px', fontSize: 10 }}>SAVE</button>
+              <button onClick={() => setLeagueDraft(null)} className="mono" style={linkBtn}>cancel</button>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexBasis: '100%' }}>
+                2–60 characters — everyone in the league sees it.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 

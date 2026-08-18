@@ -317,7 +317,7 @@ export function App() {
           </View>
         ) : view === 'home' && open ? (
           <View style={{ flex: 1 }}>
-            <LeagueHome leagueId={open.leagueId} name={open.name} teamName={undefined}
+            <LeagueHome leagueId={open.leagueId} teamName={undefined}
               rosterId={open.rosterId} native={open.native} commish={!!open.commish}
               onGo={(room) => setView(room)}
               onShop={() => { setShopSignal((n) => n + 1); setView('picks'); }}
