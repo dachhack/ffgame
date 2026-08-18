@@ -499,6 +499,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,
     // the same isolation rule the drip branches follow.
+    //
+    // The SCOPED rules ride along as of v0.277.0: classicPoints reads
+    // scopedAdjustFor now, so this install is no longer optional — without it
+    // the module-global would still hold the PREVIOUS matchup's league and
+    // this one would be scored under someone else's bonuses.
+    setLeagueScoring(scoringKnobs);
     setLeagueFlags(matchup.league_id, flagRows);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),

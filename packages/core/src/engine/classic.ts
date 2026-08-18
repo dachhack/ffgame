@@ -23,6 +23,7 @@
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor } from '../data/commish';
+import { scopedAdjustFor } from './leagueScoring';
 import { PROJ_2026 } from '../data/proj2026';
 import { normTeam } from '../data/slugMeta';
 import { hasSlate, nflGameForTeam } from '../data/nflSlate';
@@ -589,8 +590,13 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
   const { plays } = playsForPlayer(player, week);
   let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
   let punts = 0, puntYds = 0;
+  // Touchdowns he actually scored — only for a scoped rule's per-TD bonus
+  // (0145). Counted from the same plays the points came from, so the two can
+  // never disagree about what a touchdown was.
+  let tds = 0;
   for (const p of plays) {
     raw += classicScorePlay(p, pos, s);
+    if (p.td || p.kind === 'dst_td') tds++;
     if (p.kind === 'pass') passYds += p.yards;
     if (p.kind === 'rush') { rushYds += p.yards; carries++; }
     if (p.catch && p.kind !== 'tp_rec') recYds += p.yards;
@@ -623,8 +629,16 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
     raw += avg >= 44 ? s.pta44 : avg >= 42 ? s.pta42 : avg >= 40 ? s.pta40 : avg >= 38 ? s.pta38
          : avg >= 36 ? s.pta36 : avg >= 34 ? s.pta34 : s.pta33;
   }
+  // Two layers on top of the stat table, in the order a commissioner would
+  // read them: the player's own flag (0144), then any SCOPED rules he matches
+  // (0145 — "rookies ×1.5", "every Cowboy +2"). Scoped rules reach 🏈 NORMAL
+  // leagues as of v0.277.0; before that they were drip-only, and a classic
+  // league's rules simply sat dormant. Multipliers multiply, points add, and
+  // a per-TD bonus pays on every touchdown he scored — the same arithmetic
+  // sim.ts applies on the drip side, so one rule means one thing in both modes.
   const fr = flagRulesFor(player.id);
-  return round1(raw * (fr.bonusMult ?? 1) + (fr.bonusPts ?? 0));
+  const sa = scopedAdjustFor(player);
+  return round1(raw * (fr.bonusMult ?? 1) * sa.mult + (fr.bonusPts ?? 0) + sa.pts + tds * sa.td);
 }
 
 export interface ClassicPick { slot: string; player: Player }
