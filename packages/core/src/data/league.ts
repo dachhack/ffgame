@@ -257,7 +257,17 @@ let activeWeeks = 14;
 /** The active league (the baked demo, or a loaded Sleeper sim). */
 export function getActiveLeague(): League { return activeLeague; }
 
-/** The maximum supported regular-season week (the baked NFL slate covers 1–14). */
+/** The FANTASY regular season: fourteen weeks, which is how every league here
+ *  is scheduled (native_generate_schedule's default) and what the drip season
+ *  is built around.
+ *
+ *  This is NOT "how much real football is baked" any more — since v0.286.0 the
+ *  bake runs 1–22 (the full 2025 regular season plus the postseason), so a
+ *  league's PLAYOFFS (weeks 15–17 by default, migration 0073) now play on real
+ *  play-by-play instead of falling through to the simulation. The two numbers
+ *  were the same thing when the bake stopped at 14; they are different
+ *  questions, and this one is the season's SHAPE. Changing it re-shapes every
+ *  new league's schedule — REAL_WEEKS is what to read for "do we have data". */
 export const REG_SEASON_WEEKS = 14;
 
 /** A fully-built league + its player registry, ready to make active. */

@@ -19,7 +19,7 @@ import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, 
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
-import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, kickoffLabel, weekTick } from '@drip/core/data/nflSlate';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
@@ -315,7 +315,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             )}
             {log?.map((r) => (
               <View key={r.week} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                <Mono size={9.5} weight="700" style={{ width: 30 }}>{r.week > 100 ? `P${r.week - 100}` : r.week}</Mono>
+                <Mono size={9.5} weight="700" style={{ width: 30 }}>{weekTick(r.week)}</Mono>
                 <Mono size={9} tone="dim" style={{ width: 54 }}>{r.opponent ?? '—'}</Mono>
                 <Text style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: r.blank ? t.faint : t.text }}>
                   {r.blank ? 'did not play' : r.line}
