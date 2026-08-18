@@ -64,8 +64,9 @@ interface OpenLeague {
   /** Native leagues get the DRAFT / MY TEAM tabs — draft rooms and waivers are
    *  meaningless for a league whose rosters live on Sleeper/ESPN. */
   native: boolean;
-  /** This account commissions the league → the ⚑ COMMISH tab renders. Display
-   *  only; every RPC behind that tab re-checks commissionership server-side. */
+  /** This account commissions the league → the league menu offers its ⚑
+   *  Commissioner tile. Display only; every RPC behind those tools re-checks
+   *  commissionership server-side. */
   commish?: boolean;
 }
 
@@ -220,7 +221,9 @@ export function App() {
             only earn management tabs when you commission them (rosters/waivers
             stay on Sleeper) — but CHAT (0147) is for every member of any
             league, so an open league always has a strip now: a play-only
-            platform league shows ▦ MATCHUP + 💬 CHAT. */}
+            platform league shows ▦ MATCHUP + 💬 CHAT.
+            The strip still RENDERS over the commish tools (that view is in the
+            list below) — you just reach them from the league menu now. */}
         {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
             {([
@@ -229,7 +232,10 @@ export function App() {
               ['draft', '⛏ DRAFT', open.native && !draftDone],         // native-only; leaves once drafted
               ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
               ['chat', '💬 CHAT', true],                               // any member, any league kind
-              ['commishtools', '⚑ COMMISH', !!open.commish],
+              // NO ⚑ COMMISH here (founder): the league menu carries the
+              // Commissioner tile, and the strip is for rooms every open
+              // league has. The commishtools VIEW stays reachable — a seatless
+              // commissioner still lands on it when they open the league.
             ] as const)
               .filter(([, , show]) => show)
               .map(([id, label]) => (
