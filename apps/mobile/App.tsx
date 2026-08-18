@@ -226,6 +226,14 @@ export function App() {
             long league name will not fit a phone's width, and wrapping the
             chips under the title is the graceful half of that; the title
             itself shrinks to one line rather than pushing them off.
+            THE CHIPS GET THEIR OWN ROW (v0.287.0, founder: "pin the top chips
+            to the row under the league name"). They used to SHARE the title's
+            row and wrap when they ran out of width, which meant the split
+            landed wherever the league's name happened to end — "Super Cool
+            League of Players" left 🏠 LEAGUE stranded up top with MATCHUP /
+            MY TEAM / 💬 beneath it, and a shorter name put three up and one
+            down. Two rows, always: the name is a header and the chips are the
+            navigation under it, and neither moves when the name changes.
             Signed out of a league there is nothing to title, so the email
             keeps its quiet line.
 
@@ -242,10 +250,12 @@ export function App() {
           </Text>
         )}
         {open && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
-            <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, flexShrink: 1, marginRight: 2 }}>
-              {open.name}
-            </Text>
+          <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, paddingHorizontal: 14, paddingTop: 8 }}>
+            {open.name}
+          </Text>
+        )}
+        {open && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 7 }}>
             {(view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && ([
               ['home', '🏠 LEAGUE', true],                             // the hub (0182)
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup

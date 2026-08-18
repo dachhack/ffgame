@@ -2393,7 +2393,11 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
   { key: 'draft', label: '⛏ draft alerts' },
 ];
 
-function NotifPrefsCard() {
+/** Push/alert preferences, per device (exported since v0.287.0 so the league
+ *  hub's 🔔 Alerts tile can host the same card the team screen does — the app
+ *  puts alerts on the league menu, and the web mirroring that layout should not
+ *  fork a second copy of the editor). */
+export function NotifPrefsCard() {
   const [tokens, setTokens] = useState<PushTokenRow[] | null>(null);
   const [web, setWeb] = useState<WebPushState>('unsupported');
   const reload = () => myPushTokens().then(setTokens).catch(() => setTokens([]));

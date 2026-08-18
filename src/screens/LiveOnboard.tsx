@@ -126,6 +126,11 @@ export function LiveOnboard() {
   const pageMax =
     view === 'admin' || view === 'commishdash' ? 1080
     : view === 'draft' ? 1160
+    // The league hub (v0.287.0). It was never listed here, so it fell through
+    // to 440 — a phone-width column of tiles on a 27" monitor, which is why the
+    // desktop hub read as a mobile page someone forgot to finish. The hub lays
+    // itself out in two columns above 900px; this is the room to do it in.
+    : view === 'leaguehome' ? 1080
     : view === 'team' ? 940
     : view === 'results' ? 760
     : view === 'create' ? 620
