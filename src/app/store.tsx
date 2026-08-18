@@ -48,7 +48,14 @@ export type Phase = 'setup' | 'live' | 'final';
 
 export type Route =
   | { name: 'splash' }
-  | { name: 'live'; view?: 'admin' } // authenticated live-H2H pilot (separate from the demo); `view:'admin'` deep-links straight to the super-admin panel
+  // Authenticated live-H2H pilot (separate from the demo). `view` deep-links to a
+  // room INSIDE LiveOnboard: 'admin' to the super-admin panel, and since
+  // v0.288.1 'leaguehome' to one league's hub — which needs `leagueId` too,
+  // because LiveOnboard is UNMOUNTED while the matchup board is up (the board is
+  // its own top-level route) and comes back with no memory of which league you
+  // were in. Neither is written to the hash by routeToHash: they are in-memory
+  // intents for an in-app navigation, so a reload lands on the leagues list.
+  | { name: 'live'; view?: 'admin' | 'leaguehome'; leagueId?: string }
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }

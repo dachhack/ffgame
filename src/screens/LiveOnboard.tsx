@@ -83,6 +83,7 @@ export function LiveOnboard() {
     if (route.name === 'live' && route.view === 'admin') setView('admin');
   }, [route]);
 
+
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
     getSession().then((s) => { setSession(s); setReady(true); });
@@ -514,6 +515,37 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // screen should scroll when a hub tile deep-links into it.
   const [homeFor, setHomeFor] = useState<Enrollment | null>(null);
   const [teamFocus, setTeamFocus] = useState<TeamFocus | undefined>(undefined);
+  // ── COMING BACK FROM THE MATCHUP BOARD (v0.288.1) ────────────────────────
+  // The board is its own top-level route, so App.tsx unmounts LiveOnboard while
+  // it is up and THIS COMPONENT'S STATE IS GONE — `homeFor`, `target`, `view`,
+  // all of it. Returning to `#/live` therefore remounted at view 'home' (the
+  // leagues list) no matter where you had been, which is why ClassicBoard's
+  // "← LEAGUE" could not land on the league page: there was nothing left to
+  // land on. (It was wired to the `leagues` route besides — a different screen
+  // again — so it missed twice.)
+  //
+  // The route carries the league id now, and the enrollment is looked back up
+  // once it loads. ONE SHOT per intent, via the ref: `refresh` re-runs on a
+  // timer and hands back a fresh array, and without the guard every refresh
+  // would yank you back to the hub from wherever you had navigated since.
+  const restored = useRef<string | null>(null);
+  useEffect(() => {
+    if (route.name !== 'live' || route.view !== 'leaguehome' || !route.leagueId) return;
+    if (restored.current === route.leagueId) return;
+    if (enrollments === null) return;     // still loading — run again when they land
+    // One shot either way, FOUND OR NOT: a league you have since left (or a
+    // stale intent) must stop the gate below pending, or the screen would sit on
+    // "Loading your leagues…" forever waiting for an enrollment that isn't
+    // coming. Not found simply leaves you on the leagues list.
+    restored.current = route.leagueId;
+    const e = enrollments.find((x) => x.league_id === route.leagueId);
+    if (e) { setHomeFor(e); setView('leaguehome'); }
+  }, [route, enrollments]);
+  /** True while we owe the route a hub and haven't produced one yet — held on
+   *  the loading gate so the leagues list doesn't flash up for one frame on the
+   *  way back from the board. */
+  const restorePending = route.name === 'live' && route.view === 'leaguehome'
+    && !!route.leagueId && restored.current !== route.leagueId;
 
   // ── THE LEAGUE STRIP (v0.288.0) ──────────────────────────────────────────
   // Founder: "same top row as on the app." `homeFor` is already this screen's
@@ -737,7 +769,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       <button onClick={refresh} className="mono" style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>↻ retry</button>
     </div>
   );
-  if (enrollments === null || !commishLoaded) return <Muted text="Loading your leagues…" />;
+  if (enrollments === null || !commishLoaded || restorePending) return <Muted text="Loading your leagues…" />;
 
   // A signed-in commissioner with no player roster of their own LANDS on league
   // management instead of the "how are you joining?" chooser — but it's a

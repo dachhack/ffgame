@@ -1104,7 +1104,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading your matchup…</div>;
   }
   if (!demo && liveCtx && classicMode) {
-    return <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId} onBack={() => navigate({ name: 'leagues' })} />;
+    // "← LEAGUE" means the league's HUB (v0.288.1). It used to navigate to the
+    // `leagues` route — the Sleeper/demo-era list, a different screen entirely —
+    // so a button labelled LEAGUE landed on neither the league nor your leagues.
+    // The hub lives inside LiveOnboard, which App.tsx unmounts while this board
+    // is up, so the league id rides along and LiveOnboard looks the enrollment
+    // back up on the way in.
+    return <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
+      onBack={() => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId })} />;
   }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
@@ -1301,6 +1308,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
+  // ← LEAGUE, beside it (v0.288.1). The classic board has had this door and the
+  // drip board never did, so "my leagues" was the only way off it — two clicks
+  // and a list to get back to the league you were already in. It only exists for
+  // a REAL league: the demo and plain-sim boards have no hub behind them.
+  const liveLeagueChip = liveCtx?.leagueId ? (
+    <button onClick={() => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId })} className="mono"
+      title="Back to the league" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← league</button>
+  ) : null;
   // Super-admin live-test badge — makes it obvious the board is on a compressed
   // test clock, not the real slate.
   const liveTestChip = testAnchor != null ? (
@@ -1359,6 +1374,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+                  {liveLeagueChip}
                   {liveLeaguesChip}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1378,6 +1394,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <>
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+              {liveLeagueChip}
               {liveLeaguesChip}
               {liveWeekSel}
               {livePreseasonChip}
@@ -1396,6 +1413,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <Brand onClick={() => navigate({ name: 'league' })} />
+                {loggedIn && liveLeagueChip}
                 {loggedIn && liveLeaguesChip}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
