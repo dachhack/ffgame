@@ -5,9 +5,10 @@
 // and who moved whom, without being handed the editors.
 import { useEffect, useState } from 'react';
 import {
-  leagueGameMode, rosterRules, leagueRegister, playerFlags,
+  leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
+import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { shortName } from '@drip/core/data/players';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -62,9 +63,14 @@ export function ScoringPanel({ leagueId }: { leagueId: string }) {
   // The commissioner's per-player rules (0144) score too — a ×2 on a player is
   // as much "how this league scores" as the pass-TD value.
   const [flags, setFlags] = useState<PlayerFlagRow[]>([]);
+  // The commissioner's LAYERING knobs and scoped bonuses (0143/0145) — the
+  // drip engine's real scoring settings, until now readable only from the
+  // commish kit.
+  const [adj, setAdj] = useState<LeagueScoring | null>(null);
   useEffect(() => {
     leagueGameMode(leagueId).then(setGm).catch(() => setGm({ ok: false }));
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) setFlags(f); }).catch(() => {});
+    leagueScoringGet(leagueId).then((r) => { if (r?.ok) setAdj(parseScoring(r)); }).catch(() => {});
   }, [leagueId]);
   if (!gm) return <div style={panel}><Loading /></div>;
   if (!gm.ok) return <div style={panel}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the scoring.</span></div>;
@@ -75,9 +81,11 @@ export function ScoringPanel({ leagueId }: { leagueId: string }) {
     <div style={panel}>
       <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} accent />
       {!classic ? (
+        // Not a dead end: the layering knobs below ARE this league's scoring.
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.7, marginTop: 12 }}>
           ◈ DRIP leagues score through the drip engine — live windows, drips and nukes, and whatever power-ups
-          get played. There are no per-stat point values to set here; the rulebook has the full model.
+          get played. The engine's own numbers are fixed (the rulebook has them); what this league layers on
+          top is below.
         </div>
       ) : (
         <>
@@ -100,7 +108,57 @@ export function ScoringPanel({ leagueId }: { leagueId: string }) {
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12 }}>Anything not listed scores 0 in this league.</div>
         </>
       )}
+      <Adjustments adj={adj} classic={classic} />
       <CommishRules flags={flags} />
+    </div>
+  );
+}
+
+/** The commissioner's LAYERING knobs (0143) and SCOPED BONUSES (0145).
+ *
+ *  Drip-engine only, and the panel says so: a classic league scores through
+ *  classicPoints, which never consults these. A classic league that still has
+ *  rules stored (set before the mode flip) gets told they're dormant —
+ *  silence would read as "no bonuses exist", the wrong half of the truth. */
+function Adjustments({ adj, classic }: { adj: LeagueScoring | null; classic: boolean }) {
+  if (!adj || scoringIsDefault(adj)) return null;
+  if (classic) {
+    return (
+      <div>
+        <Head>LEAGUE ADJUSTMENTS</Head>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.6 }}>
+          This league has drip-engine adjustments stored, but they do not apply in 🏈 NORMAL mode —
+          the scoring above is the whole of it.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <Head>LEAGUE ADJUSTMENTS</Head>
+      {adj.tdBonus !== 0 && <Row k="EVERY TOUCHDOWN" v={`${adj.tdBonus > 0 ? '+' : ''}${adj.tdBonus} pts`} accent />}
+      {adj.ydMult !== 1 && <Row k="ALL YARDAGE SCORING" v={`×${adj.ydMult}`} accent />}
+      {adj.toPenalty !== 0 && <Row k="TURNOVER COMMITTED" v={`−${adj.toPenalty} pts`} accent />}
+      {adj.scoped.length > 0 && (
+        <>
+          <Head>SCOPED BONUSES</Head>
+          {adj.scoped.map((r, i) => {
+            // The editor's own label, split: WHO it catches on the left, what
+            // it DOES on the right — a list of these is scanned by scope first.
+            const [who, does] = scopedRuleLabel(r).split(': ');
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+                <span className="mono" style={{ flex: 1, fontSize: 10, color: 'var(--text)' }}>{who}</span>
+                <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>{does}</span>
+              </div>
+            );
+          })}
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.6 }}>
+            A player matches a rule only when he fits EVERY part of its scope. Rules stack — multipliers
+            multiply, point bonuses add.
+          </div>
+        </>
+      )}
     </div>
   );
 }

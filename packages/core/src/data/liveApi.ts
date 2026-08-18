@@ -1654,7 +1654,12 @@ export const setPushPrefs = (token: string, prefs: Record<string, boolean>) =>
 export const myPushTokens = () => rpc<PushTokenRow[]>('my_push_tokens');
 
 // ── League scoring adjustments (0143): the commissioner's layering knobs ─────
-export interface LeagueScoringRow { td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean; }
+export interface LeagueScoringRow {
+  td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean;
+  /** The 0145 scoped rules, as stored. Raw — feed the whole response to
+   *  engine/leagueScoring's parseScoring rather than reading these by hand. */
+  scoped?: unknown[];
+}
 export const leagueScoringGet = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string } & Partial<LeagueScoringRow>>('league_scoring', { p_league_id: leagueId });
 export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: number, toPenalty: number, scoped: unknown[] = []) =>
