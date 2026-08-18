@@ -15,7 +15,7 @@ import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
-import { CardFace, CardBack, CardEmpty, loadCardSize } from './cards';
+import { CardFace, CardBack, CardEmpty, loadCardSize, cs } from './cards';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
@@ -89,18 +89,21 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
           idx={idx}
           onPress={lockPlayer ? undefined : () => (pick?.metricId ? setMetricOpen(true) : onOpenPicker())}
           onRemove={lockPlayer ? undefined : onClearSlot}
-          footer={lockPlayer ? undefined : (
+          // The scale comes from the card, and every label uses it: at Small
+          // these were drawn at a fixed 9pt inside a 122pt card and the row ran
+          // off both edges (v0.296.1).
+          footer={lockPlayer ? undefined : ((sc) => (
             <>
-              <Text onPress={() => setMetricOpen(true)} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#8A6A28' }}>↻ METRIC</Text>
-              <Text onPress={onOpenPicker} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#A2422F' }}>⇄ PLAYER</Text>
+              <Text onPress={() => setMetricOpen(true)} style={{ fontFamily: MONO, fontSize: cs(9, sc), fontWeight: '700', color: '#8A6A28' }}>↻ METRIC</Text>
+              <Text onPress={onOpenPicker} style={{ fontFamily: MONO, fontSize: cs(9, sc), fontWeight: '700', color: '#A2422F' }}>⇄ PLAYER</Text>
               {/* ⓘ the card (founder: a name should always reach one). The
                   face's own press is the swap/metric gesture the board was
                   built around, so this is ADDED beside it rather than
                   replacing a motion players already know. */}
               <Text onPress={() => openPlayerCard({ slug: player.id, name: player.name, pos: player.pos, team: player.team })}
-                style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: '#3C6E57' }}>ⓘ CARD</Text>
+                style={{ fontFamily: MONO, fontSize: cs(9, sc), fontWeight: '700', color: '#3C6E57' }}>ⓘ CARD</Text>
             </>
-          )}
+          ))}
         />
       ) : (
         <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />

@@ -71,8 +71,10 @@ export function loadCardSize(): CardSize {
 export function saveCardSize(s: CardSize): void { storeSet(CARD_SIZE_KEY, s); }
 
 /** Scale a fixed pt size by the chosen card's factor. k = 1 is a no-op, so
- *  the same expression serves the full-size card. */
-const cs = (n: number, k: number) => Math.round(n * k * 10) / 10;
+ *  the same expression serves the full-size card. Exported because a FOOTER is
+ *  drawn by its caller and has to scale by the same rule as everything the card
+ *  draws itself — the footer's scale arrives as the render prop's argument. */
+export const cs = (n: number, k: number) => Math.round(n * k * 10) / 10;
 
 const sizeSpec = (size?: CardSize) => CARD_SIZES.find((o) => o.id === (size ?? loadCardSize())) ?? CARD_SIZES[0];
 
@@ -211,7 +213,12 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   nuked?: boolean;
   onPress?: () => void;
   onRemove?: () => void;
-  footer?: ReactNode;
+  /** Drawn under the metric chip. A RENDER PROP, not a node: the card is the
+   *  only thing that knows its own scale, and a footer laid out at full size
+   *  inside a Small card overflowed the stock on both edges (v0.296.1). Size
+   *  every label with the `scale` handed in — `cs(9, scale)`, same as the card
+   *  does for its own text. */
+  footer?: (scale: number) => ReactNode;
 }) {
   const photo = headshot(slug);
   const logo = teamLogo(team);
@@ -255,6 +262,10 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
         borderWidth: StyleSheet.hairlineWidth, borderColor: STOCK_EDGE,
         borderTopWidth: 3, borderTopColor: accent,
         borderRadius: 8, padding: cs(8, sc), alignItems: 'center', justifyContent: 'space-between',
+        // Nothing the card draws may leave the stock. Belt and braces behind the
+        // footer's own wrap: an overflowing row used to escape sideways and
+        // paint over the sealed card beside it.
+        overflow: 'hidden',
       }}
     >
       {!!onRemove && (
@@ -292,7 +303,14 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
       {bank != null ? (
         <Animated.Text style={[{ fontFamily: MONO, fontSize: cs(15, sc), fontWeight: '800', color: INK }, tick]}>{bank}</Animated.Text>
       ) : footer ? (
-        <View style={{ flexDirection: 'row', gap: 12 }}>{footer}</View>
+        // Stretched and WRAPPING: three labels fit one row on a Large card and
+        // fold to two on a Small one, instead of running off both edges. The
+        // gap scales too, or the labels shrink and the spaces between them
+        // don't.
+        <View style={{
+          alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap',
+          justifyContent: 'center', columnGap: cs(10, sc), rowGap: 2,
+        }}>{footer(sc)}</View>
       ) : <View style={{ height: 2 }} />}
     </ImageBackground>
     {/* Overlays sit outside the card face so they aren't clipped by its radius
