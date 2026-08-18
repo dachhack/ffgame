@@ -8,9 +8,9 @@
 //
 // WHY NOT THE ENGINE'S PLAY CACHE: `classicPoints` reads plays from a module
 // map the live board owns — one week at a time. A season's log would have to
-// install eighteen weeks over the board's, and the board would then score the
-// wrong week. The rows come from `playerSeasonPlays` instead and never touch
-// that cache.
+// install fourteen weeks over the board's, and the board would then score the
+// wrong week. The plays come from `playerSeasonLog` instead — the baked season
+// that ships with the app — and never touch that cache.
 //
 // DRIP LEAGUES get the statline and no points column. Drip scoring is
 // per-window, per-metric, with power-ups applied on top — there is no
@@ -18,10 +18,9 @@
 // classic rules his league doesn't use would be a lie with a decimal point.
 import type { Player, Pos } from '../types';
 import { classicPointsFrom, type ClassicScoring } from '../engine/classic';
-import { liveRowsToPbp } from './realPbp';
 import { nflGameForTeam } from './nflSlate';
 import { statlineFrom, rawPlaysFrom, fmtStat, type RawPlay } from '../engine/sim';
-import type { LivePlayRow } from './liveApi';
+import type { RealPlay } from './realPbp';
 
 export interface GameLogWeek {
   week: number;
@@ -35,21 +34,20 @@ export interface GameLogWeek {
   blank: boolean;
 }
 
-/** Build the log. `rows` is playerSeasonPlays' output; `scoring` null = drip. */
+/** Build the log. `weeksPlays` is playerSeasonLog's output (week → his plays);
+ *  `scoring` null = drip. */
 export function buildGameLog(
   player: { id: string; name: string; pos: string; team?: string | null },
-  rows: Record<number, LivePlayRow[]>,
+  weeksPlays: Record<number, RealPlay[]>,
   scoring: Partial<ClassicScoring> | null,
 ): GameLogWeek[] {
-  const weeks = Object.keys(rows).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  const weeks = Object.keys(weeksPlays).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   const out: GameLogWeek[] = [];
   for (const week of weeks) {
-    // liveRowsToPbp keys by slug and does the row → RawPlay conversion the
-    // board uses; taking his own array back out keeps one converter.
-    // liveRowsToPbp is the board's own row → RealPlay converter; rawPlaysFrom
-    // is the board's own RealPlay → engine mapping. Two shared steps rather
-    // than a third decoding of the same rows.
-    const plays: RawPlay[] = rawPlaysFrom(liveRowsToPbp(rows[week])[player.id] ?? []);
+    // rawPlaysFrom is the board's OWN RealPlay → engine mapping, and the bake
+    // is in RealPlay shape already, so the log decodes the plays through the
+    // same step the board does rather than a second reading of them.
+    const plays: RawPlay[] = rawPlaysFrom(weeksPlays[week] ?? []);
     const p: Player = { id: player.id, name: player.name, full: player.name, pos: player.pos as Pos, team: player.team ?? '', stats: ZERO() };
     const g = nflGameForTeam(week, player.team);
     out.push({

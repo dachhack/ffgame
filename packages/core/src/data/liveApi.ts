@@ -838,31 +838,6 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
 /** All worker-ingested plays for a week (live_play is readable by any authed user).
  *  Drives the live full-board resolution off real plays. */
 export interface LivePlayRow { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null; tt?: string | null; hf?: number | null; p6?: number | null; }
-/** ONE PLAYER'S WHOLE SEASON of ingested plays, grouped by week (0186-era
- *  card work, v0.284.0) — what a game log is scored from.
- *
- *  The card cannot use `weekLivePlays`: that pulls every player's plays for one
- *  week (thousands of rows) and the log wants eighteen weeks of ONE player. The
- *  table is keyed the other way round for exactly this — (week, player_slug) —
- *  so a season for a single slug is a few hundred rows, and paging is kept only
- *  because a busy season can still cross PostgREST's 1000-row default. */
-export async function playerSeasonPlays(slug: string): Promise<Record<number, LivePlayRow[]>> {
-  const PAGE = 1000;
-  const byWeek: Record<number, LivePlayRow[]> = {};
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await (await client()).from('live_play')
-      .select('week, player_slug, c, t, pid, k, y, td, ca, tg, to, fd, cp, ic, sk, rk, tt, hf, p6')
-      .eq('player_slug', slug)
-      .order('id', { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const rows = (data ?? []) as (LivePlayRow & { week: number })[];
-    for (const r of rows) (byWeek[r.week] ||= []).push(r);
-    if (rows.length < PAGE) break;
-  }
-  return byWeek;
-}
-
 export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
   // Page through the full result set. PostgREST caps an un-ranged select at its
   // max-rows default (1000), so a busy NFL Sunday (several thousand plays) would

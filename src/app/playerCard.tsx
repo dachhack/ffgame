@@ -18,7 +18,9 @@ import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, playerSeasonPlays, type RegisterRow } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
+import { playerSeasonLog } from '@drip/core/data/seasonLog';
+import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -69,16 +71,21 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   const [tab, setTab] = useState<'summary' | 'log' | 'history'>('summary');
   const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = unknown, null = free agent
   const [moves, setMoves] = useState<RegisterRow[] | null>(null);
+  // THE DROP (v0.285.0) lives here now, off the roster list. `myRoster` is set
+  // only when HE is on MY roster in THIS league — the one case where dropping
+  // him is a thing this account may do.
+  const [myRoster, setMyRoster] = useState<number | null>(null);
   useEffect(() => {
-    if (!leagueId) { setOwner(undefined); setMoves(null); return; }
+    if (!leagueId) { setOwner(undefined); setMoves(null); setMyRoster(null); return; }
     let dead = false;
-    nativeRosters(leagueId)
-      .then(async (rows) => {
-        const mine = rows.find((r) => r.slug === slug);
+    Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
+      .then(async ([rows, team]) => {
+        const held = rows.find((r) => r.slug === slug);
         if (dead) return;
-        if (!mine) { setOwner(null); return; }
-        const teams = await matchupTeams(leagueId, [mine.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
-        if (!dead) setOwner(teams[mine.roster_id]?.team_name ?? `Roster ${mine.roster_id}`);
+        setMyRoster(held && team?.my_roster_id === held.roster_id ? held.roster_id : null);
+        if (!held) { setOwner(null); return; }
+        const teams = await matchupTeams(leagueId, [held.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
+        if (!dead) setOwner(teams[held.roster_id]?.team_name ?? `Roster ${held.roster_id}`);
       })
       .catch(() => { if (!dead) setOwner(undefined); });
     leagueRegister(leagueId, 200)
@@ -91,9 +98,10 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // surface happened to know.
   const showTeam = displayTeam(slug, team);
   const bio = PLAYER_BIO[slug];
-  // THE GAME LOG (v0.284.0) — fetched ONLY when its tab is opened: it is the
-  // one panel costing a query per player, and most cards are opened to read a
-  // name and close again.
+  // THE GAME LOG (v0.284.0) — built ONLY when its tab is opened. The season
+  // bake is 1.5 MB; fetching and parsing it for a card nobody opened the log on
+  // would be work for nothing, and most cards are opened to read a name and
+  // close again.
   const [log, setLog] = useState<GameLogWeek[] | null>(null);
   const [logErr, setLogErr] = useState(false);
   useEffect(() => {
@@ -105,8 +113,8 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         // no classic table, so buildGameLog prints statlines alone.
         const gm = leagueId ? await leagueGameMode(leagueId).catch(() => null) : null;
         const scoring = gm?.ok && gm.mode === 'classic' ? { ...(gm.scoring ?? {}), ppr: gm.ppr ?? 1 } : null;
-        const rows = await playerSeasonPlays(slug);
-        if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, rows, scoring));
+        const weeks = await playerSeasonLog(slug);
+        if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, weeks, scoring));
       } catch { if (!dead) setLogErr(true); }
     })();
     return () => { dead = true; };
@@ -147,6 +155,26 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
     const next = !starred;
     setStarred(next); // optimistic; a failure just re-reads next open
     setFavorite(userId, slug, next).catch(() => setStarred(!next));
+  };
+
+  // ── DROPPING HIM (v0.285.0) ──────────────────────────────────────────────
+  // Two clicks, always: a drop is the one thing on this card that cannot be
+  // undone by clicking it again, and the card opens from board rows and roster
+  // lines where a cursor lands by accident.
+  const [dropArmed, setDropArmed] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [dropErr, setDropErr] = useState<string | null>(null);
+  const doDrop = async () => {
+    if (!leagueId || myRoster == null || dropping) return;
+    if (!dropArmed) { setDropArmed(true); return; }
+    setDropping(true); setDropErr(null);
+    try {
+      const r = await dropPlayer(leagueId, myRoster, slug);
+      if (!r.ok) { setDropErr(friendlyError(r.error ?? 'That didn’t work.')); setDropArmed(false); return; }
+      notifyRosterChanged(leagueId);
+      onClose();
+    } catch (x) { setDropErr(friendlyError(x)); setDropArmed(false); }
+    finally { setDropping(false); }
   };
 
   const row = (label: string, value: string) => (
@@ -225,6 +253,25 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             {flag && row('COMMISH', `\u2691 ${flag}`)}
             {weekLine && row('THIS WK', weekLine)}
             {seasonLine && row('2025', seasonLine)}
+
+            {/* THE DROP — here rather than on the roster line, so it is one
+                deliberate trip into a player rather than a red button sitting
+                next to every name you might have meant to click. Only ever
+                offered for a player on YOUR roster in THIS league. */}
+            {myRoster != null && (
+              <div style={{ borderTop: '1px solid var(--bd)', marginTop: 4, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {dropErr && <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', lineHeight: 1.5 }}>{dropErr}</span>}
+                <button onClick={doDrop} disabled={dropping} className="mono"
+                  style={{ background: dropArmed ? 'var(--sh)' : 'transparent', border: `1px solid ${dropArmed ? 'var(--opp)' : 'var(--bd)'}`,
+                    borderRadius: 6, padding: '9px 12px', fontSize: 10, fontWeight: 700, color: 'var(--opp)',
+                    cursor: dropping ? 'default' : 'pointer', opacity: dropping ? 0.5 : 1 }}>
+                  {dropping ? 'DROPPING…' : dropArmed ? '✕ CLICK AGAIN TO CONFIRM' : `✕ DROP ${name.toUpperCase()}`}
+                </button>
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+                  He sits on waivers for 24h — anyone in the league can claim him, and claims beat first-come.
+                </span>
+              </div>
+            )}
           </div>
         )}
 

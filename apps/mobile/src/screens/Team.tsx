@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  addFreeAgent, cancelWaiverClaim, dropPlayer,
+  addFreeAgent, cancelWaiverClaim,
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
@@ -34,6 +34,7 @@ import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
 
@@ -149,14 +150,26 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
   );
 }
 
-/** ONE ROSTER LINE — a spot badge, who is in it, and what you can do to him.
+/** ONE ROSTER LINE — a spot badge, and who is in it.
  *
  *  The badge is the section's own language: a starting spot prints its NAME
  *  (QB, RB1, the commissioner's "NFC Flex"), tinted by the first position it
  *  accepts; bench/IR/taxi print BN/IR/TX. An EMPTY row is not a hole in the
  *  render — it is the answer to "how many more can I stash", which is why the
- *  IR and taxi sections draw their unused places too. */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSpot, onDrop }: {
+ *  IR and taxi sections draw their unused places too.
+ *
+ *  NO ACTION CHIPS (v0.285.0, founder). The line used to carry →TAXI and DROP
+ *  next to every name, which put an irreversible red button one thumb-width
+ *  from the name you meant to tap, and made "→TAXI" a cycle you had to press
+ *  twice to reach IR. Both left:
+ *
+ *    • DESIGNATIONS are now the SLOTS' job — `onSlot` on an IR or taxi row.
+ *      An empty one invites a player in; a filled one sends him back. That is
+ *      what those sections are: places, with someone in them or not.
+ *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
+ *      player, two taps to confirm, and the same button wherever you found him.
+ */
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -164,17 +177,29 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSpot, onDrop }: {
   p: (LeaguePoolPlayer & { spot: string }) | null;
   busy: boolean;
   t: ReturnType<typeof useTheme>;
-  onSpot: (p: LeaguePoolPlayer & { spot: string }) => void;
-  onDrop: (p: LeaguePoolPlayer & { spot: string }) => void;
+  /** IR/taxi only: fill this place, or empty it. Absent on starters + bench. */
+  onSlot?: () => void;
+  /** What an empty one is offering — "TAXI SQUAD", "INJURED RESERVE". */
+  slotVerb?: string;
 }) {
   const posC = badgePos ? t.pos[badgePos as keyof typeof t.pos] : undefined;
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
   const bg = tone ? 'transparent' : posC?.bg ?? 'transparent';
+  const badgeBox = (
+    <View style={{ minWidth: 40, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: fg, backgroundColor: bg, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4 }}>
+      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: fg }}>
+        {badge}{p && onSlot ? ' ↩' : ''}
+      </Text>
+    </View>
+  );
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
-      <View style={{ minWidth: 40, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: fg, backgroundColor: bg, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4 }}>
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: fg }}>{badge}</Text>
-      </View>
+      {/* On a FILLED taxi/IR place the badge is the way out — tap TX ↩ and he
+          is back on the active roster. Nothing else on the line moves him, so
+          the badge is unambiguous rather than one control among three. */}
+      {p && onSlot
+        ? <Pressable disabled={busy} onPress={onSlot} hitSlop={6} style={{ opacity: busy ? 0.5 : 1 }}>{badgeBox}</Pressable>
+        : badgeBox}
       {p ? (
         <>
           <Face slug={p.slug} pos={p.pos} />
@@ -187,17 +212,11 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSpot, onDrop }: {
               <FlagChip slug={p.slug} size={7.5} />
             </View>
           </Pressable>
-          <Pressable disabled={busy} onPress={() => onSpot(p)}
-            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
-            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>
-              {p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}
-            </Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={() => onDrop(p)}
-            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.5 : 1 }}>
-            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp }}>DROP</Text>
-          </Pressable>
         </>
+      ) : onSlot ? (
+        <Pressable disabled={busy} onPress={onSlot} hitSlop={4} style={{ flex: 1, opacity: busy ? 0.5 : 1 }}>
+          <Mono size={10.5} tone="dim">＋ move someone to the {slotVerb ?? 'squad'}</Mono>
+        </Pressable>
       ) : (
         <Text style={{ flex: 1, fontFamily: MONO, fontSize: fs(11), color: t.faint }}>Empty</Text>
       )}
@@ -226,6 +245,8 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
+  // Which empty place is asking to be filled — 'taxi' or 'ir' (v0.285.0).
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | null>(null);
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -255,8 +276,12 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) setGm(g); }).catch(() => {});
+    // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
+    // screen — the card is a module-level overlay. It rings the bus instead,
+    // so the roster updates on the tap rather than on the next poll.
+    const off = onRosterChanged((id2) => { if (id2 === leagueId) void refresh(); });
     const id = setInterval(refresh, 15000);
-    return () => clearInterval(id);
+    return () => { off(); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
@@ -269,16 +294,14 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const cap = team?.roster_cap ?? null;
   const full = cap != null && mine.length >= cap;
 
-  /** TAXI/IR designations (0164): cycle active → taxi → ir → active; the
-   *  server enforces the caps and the IR injury gate and says why not. */
-  const spotAction = (p: LeaguePoolPlayer & { spot: string }) => {
+  /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
+   *  button on every line (v0.285.0). Tapping an empty taxi place opens the
+   *  picker below; tapping a filled one's badge sends him back to active. The
+   *  server still enforces the caps and the IR injury gate and says why not. */
+  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir') => {
     tap();
-    const next = p.spot === 'active' ? 'taxi' : p.spot === 'taxi' ? 'ir' : 'active';
-    void run(() => setRosterSpot(leagueId, p.slug, next as 'active' | 'taxi' | 'ir'));
-  };
-  const dropAction = (p: LeaguePoolPlayer & { spot: string }) => {
-    tap();
-    if (myRoster != null) void run(() => dropPlayer(leagueId, myRoster, p.slug));
+    setFillFor(null);
+    void run(() => setRosterSpot(leagueId, slug, spot));
   };
 
   // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.281.0, founder) ───────────────
@@ -339,7 +362,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     setBusy(true); setErr(null);
     try {
       const r = await fn();
-      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'That didn’t work.')); } else commit();
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'That didn’t work.')); } else { commit(); notifyRosterChanged(leagueId); }
       await refresh();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -511,8 +534,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <Mono size={8} tone="faint" style={{ flex: 1 }} numberOfLines={1}>how your roster fits — set the lineup on ▦ MATCHUP</Mono>
           </View>
           {bySpot.starters.map((row, i) => (
-            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player}
-              busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} />
           ))}
         </>)}
 
@@ -520,7 +542,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         {bySpot.bench.length > 0 && (<>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>BENCH ({bySpot.bench.length})</Mono>
           {bySpot.bench.map((p) => (
-            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} />
           ))}
         </>)}
 
@@ -533,10 +555,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </Mono>
           {bySpot.ir.map((p) => (
-            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} onSlot={() => moveToSpot(p.slug, 'active')} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
-            <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t}
+              slotVerb="injured reserve" onSlot={() => { tap(); setFillFor('ir'); }} />
           ))}
         </>)}
 
@@ -546,15 +569,17 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </Mono>
           {bySpot.taxi.map((p) => (
-            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} onSlot={() => moveToSpot(p.slug, 'active')} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
-            <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t} onSpot={spotAction} onDrop={dropAction} />
+            <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
+              slotVerb="taxi squad" onSlot={() => { tap(); setFillFor('taxi'); }} />
           ))}
         </>)}
 
         <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(14) }}>
-          Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week.
+          Tap a name to open his card — that's where you drop him. Dropped players sit on waivers for 24h (claims beat
+          first-come). Roster changes apply from the next unlocked week.
         </Mono>
       </Card>
 
@@ -721,6 +746,34 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
                 <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp }}>DROP</Text>
               </Pressable>
             </View>
+          ))}
+        </ScrollView>
+      </Overlay>
+
+      {/* AN EMPTY TAXI / IR PLACE, ASKING WHO GOES IN IT (v0.285.0) ────────
+          The picker offers the ACTIVE roster only. A player already on IR or
+          the taxi squad isn't a candidate for the other — send him back to
+          active first (tap his badge), which keeps every move one legal step
+          the server can answer for rather than a silent two-step. */}
+      <Overlay visible={!!fillFor}
+        title={fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
+        subtitle={fillFor === 'ir'
+          ? 'IR holds players the league\u2019s rules say are hurt enough \u2014 the server checks, and says so if he isn\u2019t.'
+          : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}
+        onClose={() => setFillFor(null)}>
+        <ScrollView style={{ maxHeight: 380 }}>
+          {mine.filter((p) => p.spot === 'active').length === 0 && (
+            <Mono size={10} tone="faint" style={{ paddingVertical: 10 }}>Nobody on your active roster to move.</Mono>
+          )}
+          {mine.filter((p) => p.spot === 'active').map((p) => (
+            <Pressable key={p.slug} disabled={busy} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : 'taxi')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy ? 0.5 : 1 }}>
+              <Face slug={p.slug} pos={p.pos} />
+              <PosPill pos={p.pos} size={8} />
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
+              <Mono size={8.5} tone="faint">{p.team}</Mono>
+              <Mono size={9} weight="700" tone="you">{fillFor === 'ir' ? '\u2192IR' : '\u2192TX'}</Mono>
+            </Pressable>
           ))}
         </ScrollView>
       </Overlay>

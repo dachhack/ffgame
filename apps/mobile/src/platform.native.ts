@@ -12,6 +12,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createMMKV } from 'react-native-mmkv';
 import { setPlatform } from '@drip/core/platform';
+import { setSeasonLogLoader, type SeasonLogFile } from '@drip/core/data/seasonLog';
 
 // MMKV, not AsyncStorage, and this is load-bearing rather than a preference:
 // the core storage contract is SYNCHRONOUS because ~51 call sites read during
@@ -56,10 +57,12 @@ setPlatform({
   },
   isDev: __DEV__,
 
-  // There is no origin to resolve against: the baked JSON that the web fetches
+  // There is no origin to resolve against: the per-week JSON the web fetches
   // from /pbp and /gamefeed is not shipped in the app bundle. The native app
   // only ever plays live matchups, which read their plays from the database, so
   // nothing should reach this. Loud rather than silently fetching a bad URL.
+  // (The SEASON log is the one baked file the app does carry — it comes through
+  // Metro's `require` below, not through a URL.)
   assetUrl: (p) => {
     throw new Error(
       `assetUrl(${p}) has no native implementation — baked play-by-play is web-only. ` +
@@ -103,3 +106,12 @@ setPlatform({
   // to be on cold start and can mis-fire.
   detectSessionInUrl: false,
 });
+
+// THE BAKED SEASON (v0.285.0) — the player card's game log, shipped in the app.
+//
+// The web fetches public/pbp/season.json over HTTP; native has no URL to fetch
+// it from, so Metro bundles the same file and hands it over as a module. The
+// `require` sits INSIDE the loader deliberately: Metro evaluates a module the
+// first time it is required, so a session where nobody opens a game log never
+// pays for the 1.5 MB parse.
+setSeasonLogLoader(() => require('../assets/pbp/season.json') as SeasonLogFile);
