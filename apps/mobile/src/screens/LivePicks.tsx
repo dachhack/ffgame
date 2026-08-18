@@ -26,7 +26,7 @@ import {
   myUnlocks, armUnlock, disarmUnlock, myComboQty,
   myWallet, ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
-  getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays,
+  getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
@@ -154,6 +154,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   useEffect(() => { if (openShopSignal) setShopOpen(true); }, [openShopSignal]);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
+  // Every week this league actually scheduled, in play order (v0.279.0). The
+  // stepper used to count 1..REG_SEASON_WEEKS, which cannot reach a preseason
+  // week — those are numbered from PRESEASON_BASE — so a league playing PRE
+  // 1–4 had four boards nobody could open.
+  const [weeks, setWeeks] = useState<number[]>([]);
   const [winKickIso, setWinKickIso] = useState<Record<string, string>>({});
   // The VALUE is deliberately discarded — only the re-render matters. `injuryFor`
   // is a synchronous module-cache read (it has to be; the engine calls it too),
@@ -226,6 +231,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // overlay so the log resolves the same players the worker does.
         if (native) leaguePool(r.leagueId).then((lp) => setSlugMetaOverrides(lp)).catch(() => {});
         leagueLiveBuffs(r.leagueId).then((lb) => { if (lb.ok) setLiveBuffsOn(lb.on !== false); }).catch(() => {});
+        // The league's own week list — what the ‹ › stepper walks, so a
+        // preseason board is reachable at all (v0.279.0).
+        leagueWeeks(r.leagueId).then((w) => { if (w.length) setWeeks(w); }).catch(() => {});
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
         const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
         if (!m) { setMatchup(null); setState('none'); return; }
@@ -711,11 +719,28 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   };
 
   const curWeek = matchup?.week ?? weekSel ?? 1;
+  // Step through the league's OWN weeks when we know them; the 1..N count is
+  // the fallback for a league whose weeks haven't loaded (or failed to).
+  const stepWeek = (dir: -1 | 1) => {
+    if (weeks.length) {
+      const i = weeks.indexOf(curWeek);
+      const next = i < 0 ? weeks[0] : weeks[i + dir];
+      if (next != null) setWeekSel(next);
+      return;
+    }
+    const n = curWeek + dir;
+    if (n >= 1 && n <= REG_SEASON_WEEKS) setWeekSel(n);
+  };
+  const canStep = (dir: -1 | 1): boolean => {
+    if (weeks.length) { const i = weeks.indexOf(curWeek); return i >= 0 && weeks[i + dir] != null; }
+    const n = curWeek + dir;
+    return n >= 1 && n <= REG_SEASON_WEEKS;
+  };
   const WeekNav = () => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      <LinkButton label="‹" onPress={() => curWeek > 1 && setWeekSel(Math.max(1, curWeek - 1))} />
+      <LinkButton label="‹" onPress={() => canStep(-1) && stepWeek(-1)} />
       <Mono size={10} weight="700" track={0.06}>{weekLabel(curWeek)}</Mono>
-      <LinkButton label="›" onPress={() => curWeek < REG_SEASON_WEEKS && setWeekSel(Math.min(REG_SEASON_WEEKS, curWeek + 1))} />
+      <LinkButton label="›" onPress={() => canStep(1) && stepWeek(1)} />
       {/* WHICH GAME (v0.256.0, HANDOFF #4) — the web chip, ported: the mode is
           stated where the game is played. Classic renders its own board with
           its own header, so in practice this reads ◈ DRIP — but it follows the
@@ -820,18 +845,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           call — the league-menu tile stays as the second way in) opens the
           all-fields sheet. */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        <Pressable
-          onPress={() => { tap(); setFieldsOpen(true); }}
-          android_ripple={{ color: alpha(t.you, 16) }}
-          style={({ pressed }) => ({
-            flex: 0.6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10,
-            overflow: 'hidden',
-            backgroundColor: t.surface, opacity: pressed ? 0.8 : 1,
-            borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-          })}
-        >
-          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.dim }}>▦ FIELDS</Text>
-        </Pressable>
+        {/* ▦ FIELDS moved up to the auto-pilot / SHOP row (founder) — it is a
+            control, not a roster door, and these two are a matched pair. */}
         {([['you', 'YOUR ROSTER', t.you, pool.length], ['their', 'OPPONENT ROSTER', t.opp, oppPool.length]] as const).map(([side, label, accent, n]) => (
           <Pressable
             key={side}
@@ -886,6 +901,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
             disabled={aiBusy}
             onPress={toggleAi}
           />
+          {/* ▦ FIELDS lives here now (founder): with the controls, not down in
+              the roster doors. Unlike SHOP it stays under auto-pilot — watching
+              the games is not a thing the robot does for you. */}
+          <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
           <View style={{ flex: 1 }} />
           <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08}>{filled}/{slots.length} SET</Mono>
           {controller !== 'ai' && (

@@ -661,6 +661,23 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
  *  whole matchup timeline. Preseason (offset) weeks sort ahead of the regular
  *  season by real kickoff, so a preseason league opens on its next preseason game
  *  and rolls into Week 1 once preseason is done. Falls back to the first week. */
+/** Every week this league actually has matchups for, in PLAY ORDER —
+ *  preseason (0110's 101+) first, then the regular season and playoffs.
+ *
+ *  The week steppers used to count 1..REG_SEASON_WEEKS, which cannot reach a
+ *  preseason week at all: those are numbered from PRESEASON_BASE, so a league
+ *  playing PRE 1–4 had four boards its own manager could not open (founder,
+ *  on Turf Warriors). Reading the matchup table is the same source
+ *  defaultOpenWeek trusts, and it answers for whatever the league scheduled
+ *  rather than for what the calendar usually looks like. */
+export async function leagueWeeks(leagueId: string): Promise<number[]> {
+  const { data } = await (await client()).from('matchup').select('week').eq('league_id', leagueId);
+  const weeks = [...new Set(((data ?? []) as { week: number }[]).map((r) => r.week))];
+  // Preseason sorts BEFORE week 1 — it is played first, however it is numbered.
+  const key = (w: number) => (w > 100 ? w - 200 : w);
+  return weeks.sort((a, b) => key(a) - key(b));
+}
+
 export async function defaultOpenWeek(leagueId: string, season: string, preseasonEnabled: boolean): Promise<number> {
   const [msRes, slRes] = await Promise.all([
     (await client()).from('matchup').select('week').eq('league_id', leagueId),
