@@ -2003,6 +2003,37 @@ export const commishForcePick = (leagueId: string, slug?: string) =>
   rpc<{ ok: boolean; error?: string }>('commish_force_pick', { p_league_id: leagueId, p_slug: slug ?? null });
 export const commishUndoPick = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; undone_overall?: number; slug?: string }>('commish_undo_pick', { p_league_id: leagueId });
+/** THE REST OF THE COMMISSIONER'S DRAFT CONTROLS (0191).
+ *
+ *  Start the draft over. Typed confirmation — every pick in the room goes, and
+ *  a second tap is not proportional to that. KEEPERS SURVIVE (they were never
+ *  drafted), and so do traded pick assets and every manager's queue. */
+export const commishResetDraft = (leagueId: string, confirm: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; picks_cleared?: number; keepers_kept?: number }>(
+    'commish_reset_draft', { p_league_id: leagueId, p_confirm: confirm }),
+    Ev.commishAction, { tool: 'draft_reset' });
+
+/** Move ONE team to 1-based position `to`, sliding the others along — the
+ *  answer to "he joined late, put him at the end". Unlike setDraftOrder this
+ *  works MID-DRAFT: picks already made keep their seats and everything from
+ *  the clock forward follows the new order. */
+export const commishMoveDraftSlot = (leagueId: string, rosterId: number, to: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; order?: number[]; from?: number; to?: number }>(
+    'commish_move_draft_slot', { p_league_id: leagueId, p_roster: rosterId, p_to: to }),
+    Ev.commishAction, { tool: 'draft_move_slot' });
+
+/** Who is on autodraft, by seat. draft_state carries only the caller's own
+ *  flag; the commissioner's per-team switch needs everyone's, and membership
+ *  is member-readable. */
+export async function leagueAutodrafts(leagueId: string): Promise<Record<number, boolean>> {
+  const { data } = await (await client()).from('league_membership')
+    .select('sleeper_roster_id, autodraft').eq('league_id', leagueId);
+  const out: Record<number, boolean> = {};
+  for (const m of (data ?? []) as { sleeper_roster_id: number; autodraft: boolean | null }[]) {
+    out[m.sleeper_roster_id] = !!m.autodraft;
+  }
+  return out;
+}
 /** Auction: open a lot (the nominating seat, or the commissioner on its behalf). */
 export const nominate = (leagueId: string, slug: string, bid = 1) =>
   rpc<{ ok: boolean; error?: string; lot?: string; bid?: number }>('nominate', { p_league_id: leagueId, p_slug: slug, p_bid: bid });

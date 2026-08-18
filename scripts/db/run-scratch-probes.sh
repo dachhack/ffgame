@@ -117,3 +117,4 @@ $RUN -f scripts/db/league-name-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-NAME 
 $RUN -f scripts/db/leave-delete-probes.sql | grep -E "PROBE FAIL|ALL LEAVE-DELETE PROBES" || { echo "LEAVE-DELETE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/lottery-probes.sql | grep -E "PROBE FAIL|ALL LOTTERY PROBES" || { echo "LOTTERY PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/draft-trading-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-TRADING PROBES" || { echo "DRAFT-TRADING PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/draft-controls-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-CONTROLS PROBES" || { echo "DRAFT-CONTROLS PROBES FAILED"; exit 1; }
