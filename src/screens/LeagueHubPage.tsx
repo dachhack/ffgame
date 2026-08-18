@@ -91,14 +91,19 @@ const tileTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: '
 const tileSub: React.CSSProperties = { fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginTop: 2 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 
-function Tile({ icon, title, sub, badge, onClick, disabled, accent }: {
+/** NO ICONS (v0.293.1, founder: "get rid of icons on the league home"). A stack
+ *  of emoji — a scroll, a cap, a bell, a megaphone — were as many art styles as
+ *  there were tiles, doing the job the TITLE was already doing. `icon` is kept
+ *  and ignored rather than threaded out of every call site: it costs nothing,
+ *  and it is where an icon would go back if the answer turns out to be "a
+ *  consistent SET", not "none". Matches the app's league menu. */
+function Tile({ icon: _icon, title, sub, badge, onClick, disabled, accent }: {
   icon: React.ReactNode; title: string; sub: string; badge?: React.ReactNode;
   onClick: () => void; disabled?: boolean; accent?: boolean;
 }) {
   return (
     <button onClick={() => { track(Ev.hubTileOpened, { tile: title.toLowerCase() }); onClick(); }} disabled={disabled}
       style={{ ...tile, ...(accent ? { borderLeft: '3px solid var(--you)' } : {}), opacity: disabled ? 0.55 : 1, cursor: disabled ? 'default' : 'pointer' }}>
-      <span style={{ fontSize: 19, flexShrink: 0, width: 26, textAlign: 'center' }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span className="grotesk" style={{ ...tileTitle, display: 'flex', alignItems: 'center', gap: 8 }}>
           {title} {badge}

@@ -628,6 +628,8 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   // 'all' = every rostered player · 'fa' = the waiver wire · else a roster id.
   const [view, setView] = useState<string>('all');
   const [dest, setDest] = useState<Record<string, string>>({});   // slug → target roster id
+  /** The move/waive/cut awaiting a yes (v0.293.1). One at a time; null = none. */
+  const [ask, setAsk] = useState<null | { slug: string; name: string; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string }>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = async () => {
@@ -761,11 +763,17 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                     <option key={t.roster_id} value={t.roster_id}>{t.team ?? `Team ${t.roster_id}`}</option>
                   ))}
                 </select>
-                <button onClick={() => to && run(() => commishMovePlayer(leagueId, p.slug, parseInt(to, 10)))}
+                {/* ASK FIRST (v0.293.1, founder: "we need a confirm popup when
+                    commish moving/dropping players"). All three of these edit
+                    SOMEBODY ELSE'S roster without their say — the one class of
+                    action in the console where the person who feels it isn't the
+                    person clicking — and they sat one stray click from a select
+                    box you have to use to reach them. */}
+                <button onClick={() => to && setAsk({ slug: p.slug, name: p.full_name, act: 'move', toRoster: parseInt(to, 10), toName: teamName(parseInt(to, 10)), from: rid != null ? teamName(rid) : 'free agency' })}
                   disabled={busy || !to} className="mono" style={{ ...btn(true), opacity: to ? 1 : 0.4 }}>→ move</button>
                 {rid != null && <>
-                  <button onClick={() => run(() => commishRemovePlayer(leagueId, p.slug, true))} disabled={busy} className="mono" style={btn(false)} title="off the roster, 24h waiver hold">⏳ waive</button>
-                  <button onClick={() => run(() => commishRemovePlayer(leagueId, p.slug, false))} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }} title="off the roster, instant free agent">✕ cut</button>
+                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'waive', from: teamName(rid) })} disabled={busy} className="mono" style={btn(false)} title="off the roster, 24h waiver hold">⏳ waive</button>
+                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'cut', from: teamName(rid) })} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }} title="off the roster, instant free agent">✕ cut</button>
                 </>}
               </div>
             );
@@ -783,6 +791,46 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
           Moves clear waiver holds and bypass position limits (roster size still applies). WAIVE starts a 24h claim window; CUT frees the player immediately.
         </div>
       </div>
+
+      {/* The confirm. It names the PLAYER, the team losing him and the team
+          getting him, because "are you sure?" over a list of forty names is not
+          a question anyone can answer. */}
+      {ask && (
+        <div onClick={() => setAsk(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(ev) => ev.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {ask.act === 'move' ? 'Move this player?' : ask.act === 'waive' ? 'Waive this player?' : 'Cut this player?'}
+            </div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, lineHeight: 1.6 }}>
+              {ask.act === 'move' ? <>
+                <b style={{ color: 'var(--text)' }}>{ask.name}</b> moves from <b style={{ color: 'var(--text)' }}>{ask.from}</b> to{' '}
+                <b style={{ color: 'var(--you)' }}>{ask.toName}</b>. Waiver holds clear and position limits are bypassed.
+              </> : ask.act === 'waive' ? <>
+                <b style={{ color: 'var(--text)' }}>{ask.name}</b> comes off <b style={{ color: 'var(--text)' }}>{ask.from}</b> and sits on
+                waivers for 24 hours — anyone in the league can claim him.
+              </> : <>
+                <b style={{ color: 'var(--text)' }}>{ask.name}</b> comes off <b style={{ color: 'var(--text)' }}>{ask.from}</b> and becomes a
+                free agent <b style={{ color: 'var(--opp)' }}>immediately</b> — first come, first served.
+              </>}
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+              This is another manager's roster. They are not asked.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={() => setAsk(null)} className="mono" style={{ ...btn(false), flex: 1, padding: '9px 0' }}>cancel</button>
+              <button disabled={busy} className="mono"
+                style={{ ...btn(ask.act === 'move'), flex: 1, padding: '9px 0', ...(ask.act === 'cut' ? { color: 'var(--opp)' } : {}) }}
+                onClick={() => {
+                  const a = ask; setAsk(null);
+                  if (a.act === 'move' && a.toRoster != null) run(() => commishMovePlayer(leagueId, a.slug, a.toRoster!));
+                  else if (a.act !== 'move') run(() => commishRemovePlayer(leagueId, a.slug, a.act === 'waive'));
+                }}>
+                {ask.act === 'move' ? '→ move him' : ask.act === 'waive' ? '⏳ waive him' : '✕ cut him'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

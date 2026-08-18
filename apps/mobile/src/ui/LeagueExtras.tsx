@@ -213,6 +213,8 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<LeaguePoolPlayer | null>(null);
+  /** The move/waive/cut awaiting a yes (v0.293.1). One at a time; null = none. */
+  const [ask, setAsk] = useState<null | { p: LeaguePoolPlayer; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string }>(null);
   /** 'all' = everyone rostered · 'fa' = the waiver wire · a roster id = one team. */
   const [view, setView] = useState<'all' | 'fa' | number>('all');
 
@@ -301,11 +303,15 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
                 {rid != null ? teams.get(rid) ?? `Roster ${rid}` : 'free agent'}
               </Mono>
             </View>
+            {/* ASK FIRST (v0.293.1, founder). ⏳ and ✂ used to fire on the tap —
+                two unlabelled glyphs, side by side, taking a player off SOMEBODY
+                ELSE'S roster with no way back. The move picker already asked
+                "to whom", which is not the same as asking "are you sure". */}
             <Chip label="⇄ MOVE" onPress={() => { tap(); setMoveFor(p); }} />
             {rid != null && (
               <>
-                <Chip label="⏳" onPress={() => { tap(); void run(() => commishRemovePlayer(leagueId, p.slug, true), `${p.full_name} → waivers (24h)`); }} />
-                <Chip label="✂" onPress={() => { tap(); void run(() => commishRemovePlayer(leagueId, p.slug, false), `${p.full_name} → free agent`); }} />
+                <Chip label="⏳" onPress={() => { tap(); setAsk({ p, act: 'waive', from: teams.get(rid) ?? `Roster ${rid}` }); }} />
+                <Chip label="✂" onPress={() => { tap(); setAsk({ p, act: 'cut', from: teams.get(rid) ?? `Roster ${rid}` }); }} />
               </>
             )}
           </View>
@@ -320,12 +326,55 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
           <Pressable key={rid} disabled={busy}
             onPress={() => {
               const p = moveFor; setMoveFor(null);
-              if (p) void run(() => commishMovePlayer(leagueId, p.slug, rid), `${p.full_name} → ${name}`);
+              if (p) setAsk({ p, act: 'move', toRoster: rid, toName: name, from: bySlug.get(p.slug) != null ? (teams.get(bySlug.get(p.slug)!) ?? 'their team') : 'free agency' });
             }}
             style={{ paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(12.5), fontWeight: '700', color: t.you }}>{name}</Text>
           </Pressable>
         ))}
+      </Overlay>
+
+      {/* It names the PLAYER, the team losing him and the team getting him —
+          "are you sure?" over a list of forty names is not a question anyone
+          can answer. */}
+      <Overlay visible={!!ask}
+        title={ask?.act === 'move' ? 'Move this player?' : ask?.act === 'waive' ? 'Waive this player?' : 'Cut this player?'}
+        onClose={() => setAsk(null)}>
+        <View style={{ padding: 14, gap: 10 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.dim, lineHeight: fs(17) }}>
+            {ask?.act === 'move' ? <>
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.p.full_name}</Text> moves from{' '}
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.from}</Text> to{' '}
+              <Text style={{ color: t.you, fontWeight: '700' }}>{ask?.toName}</Text>. Waiver holds clear and position limits are bypassed.
+            </> : ask?.act === 'waive' ? <>
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.p.full_name}</Text> comes off{' '}
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.from}</Text> and sits on waivers for 24 hours — anyone in the league can claim him.
+            </> : <>
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.p.full_name}</Text> comes off{' '}
+              <Text style={{ color: t.text, fontWeight: '700' }}>{ask?.from}</Text> and becomes a free agent{' '}
+              <Text style={{ color: t.opp, fontWeight: '700' }}>immediately</Text> — first come, first served.
+            </>}
+          </Text>
+          <Mono size={9} tone="faint" style={{ lineHeight: fs(13) }}>This is another manager's roster. They are not asked.</Mono>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            <Pressable onPress={() => { tap(); setAsk(null); }}
+              style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingVertical: 11, alignItems: 'center' }}>
+              <Mono size={10} weight="700" tone="dim">CANCEL</Mono>
+            </Pressable>
+            <Pressable disabled={busy}
+              onPress={() => {
+                const a = ask; setAsk(null);
+                if (!a) return;
+                if (a.act === 'move' && a.toRoster != null) void run(() => commishMovePlayer(leagueId, a.p.slug, a.toRoster!), `${a.p.full_name} → ${a.toName}`);
+                else if (a.act !== 'move') void run(() => commishRemovePlayer(leagueId, a.p.slug, a.act === 'waive'), `${a.p.full_name} → ${a.act === 'waive' ? 'waivers (24h)' : 'free agent'}`);
+              }}
+              style={{ flex: 1, borderWidth: 1, borderColor: ask?.act === 'cut' ? t.opp : t.you, borderRadius: 6, paddingVertical: 11, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
+              <Mono size={10} weight="700" tone={ask?.act === 'cut' ? 'opp' : 'you'}>
+                {ask?.act === 'move' ? '⇄ MOVE HIM' : ask?.act === 'waive' ? '⏳ WAIVE HIM' : '✂ CUT HIM'}
+              </Mono>
+            </Pressable>
+          </View>
+        </View>
       </Overlay>
     </Card>
   );
