@@ -28,7 +28,7 @@ import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmi
 import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
 import { forceResolve } from '@drip/core/data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
-import { Avatar } from '../app/ui';
+import { Avatar, Sheet } from '../app/ui';
 import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { CommishToolsPanel } from '../app/commishKit';
@@ -929,8 +929,13 @@ function ClassicAccessRow({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = '', collapsible = false, defaultOpen = true, panels }: {
+export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = '', openSection = false, collapsible = false, defaultOpen = true, panels }: {
   l: AdminLeague; reload: () => void; admin?: boolean; defaultTab?: '' | LeagueTab;
+  /** Narrow screens land on the MAP unless the caller meant a destination —
+   *  post-create goes straight to the draft room, and only then does the
+   *  section open on arrival. `defaultTab` alone doesn't mean that: it also
+   *  carries the desktop's landing tab, which a phone shows as the map. */
+  openSection?: boolean;
   /** Extra destinations rendered by the CALLER (v0.212.0). CommishDash injects
    *  its settings/activity/power-up panels here; the admin console passes
    *  nothing and simply doesn't show those entries. Injection keeps the
@@ -953,11 +958,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [wallets, setWallets] = useState<Record<number, number>>({});
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
-  // HUB-FIRST on phones (v0.259.0): with no explicit landing tab, a narrow
-  // screen opens on the MAP of destinations rather than inside one of them.
-  // An explicit defaultTab (post-create → the draft room) still lands direct.
-  const [showHub, setShowHub] = useState<boolean>(() =>
-    !defaultTab && typeof window !== 'undefined' && !window.matchMedia('(min-width: 900px)').matches);
+  // HUB-FIRST on phones (v0.259.0), and the hub NEVER LEAVES (v0.296.3): a
+  // narrow screen shows the whole map of destinations and pops the one you
+  // picked up over it, so the map is always one dismiss away. It used to be a
+  // swap — map OR destination, with a "⊞ ALL SETTINGS" button to get back —
+  // which is the one thing the app's commissioner map was written not to do.
+  // An explicit defaultTab (post-create → the draft room) still lands direct,
+  // with the section already open.
+  const [sectionOpen, setSectionOpen] = useState<boolean>(() => openSection);
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   const wide = useWide();
   // roster_id → team name, from members (drives readable matchup labels).
@@ -1269,24 +1277,15 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           after v0.259.0 replaced that strip with the hub below; the strip is
           what the app's own commissioner map was written NOT to copy, and it
           isn't here any more either.) */}
-      {/* Narrow: the HUB is the nav (v0.259.0) — the whole map, one tap in,
-          "⊞ all settings" back out. The 17-option select it replaces survives
-          nowhere; the hub IS the select, laid flat. */}
-      {!wide && showHub && <NavHub groups={navGroups} onSelect={(id) => { showTab(id); setShowHub(false); }} />}
-      {!wide && !showHub && (
-        <button onClick={() => setShowHub(true)} className="mono"
-          style={{ marginTop: 10, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', cursor: 'pointer' }}>
-          ⊞ ALL SETTINGS · {navGroups.flatMap((g) => g.items).find((i) => i.id === tab)?.label ?? tab}
-        </button>
-      )}
-      <div style={wide ? { display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' } : (showHub ? { display: 'none' } : undefined)}>
-        {wide && <SideNav groups={navGroups} active={tab} onSelect={showTab} />}
-        {/* The narrow panel is OVERFLOW-SAFE (v0.259.0): these panels were
-            designed at desktop width, and a wide grid pinched into 375px used
-            to push the whole card off the screen edge — the founder's
-            "settings card nearly flowing over" report. Wide content now
-            scrolls inside its own box; the page never scrolls sideways. */}
-        <div style={wide ? { flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 } : { overflowX: 'auto', minWidth: 0 }}>
+      {/* Narrow: the HUB is the nav (v0.259.0) and it STAYS (v0.296.3) — the
+          map is the screen, a destination arrives over it. */}
+      {!wide && <NavHub groups={navGroups} onSelect={(id) => { showTab(id); setSectionOpen(true); }} />}
+      <PanelFrame
+        wide={wide} open={sectionOpen} onClose={() => setSectionOpen(false)}
+        title={navGroups.flatMap((g) => g.items).find((i) => i.id === tab)?.label ?? tab}
+        subtitle={l.name}
+        nav={wide ? <SideNav groups={navGroups} active={tab} onSelect={showTab} /> : null}
+      >
 
       {/* Caller-injected panels (CommishDash's settings / activity / power-ups). */}
       {panels?.[tab] !== undefined && panels[tab]}
@@ -1636,11 +1635,38 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
 
-        </div>
-      </div>
+      </PanelFrame>
       </>}
     </div>
   );
+}
+
+/** The destination's FRAME. Desktop keeps the rail beside a bordered panel;
+ *  a phone gets the app's answer — the map stays put and the destination
+ *  arrives as a popup over it (v0.296.3, founder: "stick with the pop up for
+ *  all the items where we have that in the app").
+ *
+ *  Narrow and closed renders NOTHING, so a destination's loaders don't run
+ *  until you actually open it. */
+function PanelFrame({ wide, open, title, subtitle, onClose, nav, children }: {
+  wide: boolean; open: boolean; title: string; subtitle?: string;
+  onClose: () => void; nav: React.ReactNode; children: React.ReactNode;
+}) {
+  if (wide) {
+    return (
+      <div style={{ display: 'flex', gap: 18, marginTop: 12, alignItems: 'flex-start' }}>
+        {nav}
+        {/* OVERFLOW-SAFE (v0.259.0): these panels were designed at desktop
+            width, and a wide grid pinched into a phone used to push the whole
+            card off the screen edge. Wide content scrolls inside its own box;
+            the page never scrolls sideways. The Sheet's body does the same job
+            on the narrow path. */}
+        <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid var(--bd)', paddingLeft: 18 }}>{children}</div>
+      </div>
+    );
+  }
+  if (!open) return null;
+  return <Sheet title={title} subtitle={subtitle} max={760} onClose={onClose}>{children}</Sheet>;
 }
 
 function Overrides({ overrides, reload }: { overrides: AdminOverride[]; reload: () => void }) {

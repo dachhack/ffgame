@@ -2527,7 +2527,7 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
  *  hub's 🔔 Alerts tile can host the same card the team screen does — the app
  *  puts alerts on the league menu, and the web mirroring that layout should not
  *  fork a second copy of the editor). */
-export function NotifPrefsCard() {
+export function NotifPrefsCard({ bare }: { bare?: boolean } = {}) {
   const [tokens, setTokens] = useState<PushTokenRow[] | null>(null);
   const [web, setWeb] = useState<WebPushState>('unsupported');
   const reload = () => myPushTokens().then(setTokens).catch(() => setTokens([]));
@@ -2545,8 +2545,10 @@ export function NotifPrefsCard() {
     void reload();
   };
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
-      <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS</div>
+    // BARE inside a Sheet (v0.296.3) — a card in a card is two frames around
+    // one picture, and the sheet's own title already says NOTIFICATIONS.
+    <div style={bare ? {} : { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
+      {!bare && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS</div>}
       {web !== 'unsupported' && (
         <div style={{ marginBottom: 8 }}>
           {web === 'denied' ? (

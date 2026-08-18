@@ -19,6 +19,10 @@ const panel: React.CSSProperties = {
   background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8,
   padding: '10px 14px 14px', marginTop: -4,
 };
+/** BARE drops the panel's own card (v0.296.3). These render inside a Sheet
+ *  now, and a bordered box inside a bordered card is two frames around one
+ *  picture — the app's sheets hold the content itself, not a card of it. */
+const box = (bare?: boolean): React.CSSProperties => (bare ? {} : panel);
 /** Minutes-since-midnight-ET → "3:30am". */
 const fmtEt = (m: number): string => {
   const h24 = Math.floor(m / 60), mm = m % 60;
@@ -60,7 +64,7 @@ const Head = ({ children }: { children: string }) => (
 );
 const Loading = () => <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', padding: '14px 0' }}>Loading…</div>;
 
-export function ScoringPanel({ leagueId }: { leagueId: string }) {
+export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   // The commissioner's per-player rules (0144) score too — a ×2 on a player is
   // as much "how this league scores" as the pass-TD value.
@@ -74,13 +78,13 @@ export function ScoringPanel({ leagueId }: { leagueId: string }) {
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) setFlags(f); }).catch(() => {});
     leagueScoringGet(leagueId).then((r) => { if (r?.ok) setAdj(parseScoring(r)); }).catch(() => {});
   }, [leagueId]);
-  if (!gm) return <div style={panel}><Loading /></div>;
-  if (!gm.ok) return <div style={panel}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the scoring.</span></div>;
+  if (!gm) return <div style={box(bare)}><Loading /></div>;
+  if (!gm.ok) return <div style={box(bare)}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the scoring.</span></div>;
 
   const classic = gm.mode === 'classic';
   const sc = normalizeClassicScoring({ ...(gm.scoring ?? {}), ...(gm.ppr != null ? { ppr: gm.ppr } : {}) });
   return (
-    <div style={panel}>
+    <div style={box(bare)}>
       <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} accent />
       {!classic ? (
         // Not a dead end: the layering knobs below ARE this league's scoring.
@@ -216,14 +220,14 @@ function SlotRow({ name, pos, bb, filter }: { name: string; pos: string[]; bb: b
   );
 }
 
-export function RosterRulesPanel({ leagueId }: { leagueId: string }) {
+export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const [rr, setRr] = useState<Awaited<ReturnType<typeof rosterRules>> | null>(null);
   useEffect(() => {
     leagueGameMode(leagueId).then(setGm).catch(() => setGm({ ok: false }));
     rosterRules(leagueId).then(setRr).catch(() => setRr({ ok: false }));
   }, [leagueId]);
-  if (!gm || !rr) return <div style={panel}><Loading /></div>;
+  if (!gm || !rr) return <div style={box(bare)}><Loading /></div>;
 
   const defs = leagueSlotDefs({ roster: gm.roster ?? {}, slots: gm.slots ?? null });
   const names = slotDisplayNames(defs);
@@ -231,7 +235,7 @@ export function RosterRulesPanel({ leagueId }: { leagueId: string }) {
   const caps = Object.entries(rr.pos_caps ?? {}).filter(([, v]) => v != null);
   const mode = rr.waiver_mode ?? 'rolling';
   return (
-    <div style={panel}>
+    <div style={box(bare)}>
       <Head>ROSTER</Head>
       <Row k="ROSTER SIZE" v={`${rr.rounds ?? gm.rounds ?? '—'} players`} accent />
       <Row k="STARTING SPOTS" v={`${defs.length}`} />
@@ -284,7 +288,7 @@ const when = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
-export function RegisterPanel({ leagueId }: { leagueId: string }) {
+export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
   const [rows, setRows] = useState<RegisterRow[] | null>(null);
   const [err, setErr] = useState(false);
   useEffect(() => {
@@ -292,11 +296,11 @@ export function RegisterPanel({ leagueId }: { leagueId: string }) {
       .then((r) => { if (r.ok && r.rows) setRows(r.rows); else setErr(true); })
       .catch(() => setErr(true));
   }, [leagueId]);
-  if (err) return <div style={panel}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the register.</span></div>;
-  if (!rows) return <div style={panel}><Loading /></div>;
+  if (err) return <div style={box(bare)}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the register.</span></div>;
+  if (!rows) return <div style={box(bare)}><Loading /></div>;
   if (!rows.length) {
     return (
-      <div style={panel}>
+      <div style={box(bare)}>
         <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.7 }}>
           Nothing yet. Every add, drop, waiver claim and trade lands here once the draft is done —
           draft night has its own record in the draft room.
@@ -305,7 +309,7 @@ export function RegisterPanel({ leagueId }: { leagueId: string }) {
     );
   }
   return (
-    <div style={{ ...panel, maxHeight: 460, overflowY: 'auto' }}>
+    <div style={bare ? {} : { ...panel, maxHeight: 460, overflowY: 'auto' }}>
       {rows.map((r) => {
         const k = KIND[r.kind] ?? KIND.add;
         const team = r.team ?? `Roster ${r.roster_id}`;
@@ -334,7 +338,7 @@ export function RegisterPanel({ leagueId }: { leagueId: string }) {
 // never meant to need the commissioner), the BOARD is the commissioner's
 // (`post_league_listing` is commish-gated in SQL — it offers a seat to
 // strangers, which is a decision about who the league is).
-export function RecruitPanel({ leagueId, commish }: { leagueId: string; commish: boolean }) {
+export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; commish: boolean; bare?: boolean }) {
   const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -396,7 +400,7 @@ export function RecruitPanel({ leagueId, commish }: { leagueId: string; commish:
     padding: '10px 14px', cursor: 'pointer', background: 'var(--surface)', border: '1px solid var(--bd)', color: 'var(--dim)',
   };
   return (
-    <div style={panel}>
+    <div style={box(bare)}>
       {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', lineHeight: 1.5, marginBottom: 8 }}>{err}</div>}
 
       <Head>SEND A LINK</Head>
