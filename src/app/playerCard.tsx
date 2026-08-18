@@ -18,7 +18,9 @@ import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, type RegisterRow } from '@drip/core/data/liveApi';
+import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
+import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { Ev, track } from '@drip/core/analytics';
 
@@ -28,10 +30,26 @@ export interface PlayerCardReq {
   week?: number;
   /** Signed-in account — lights the ★ (omitted → star hidden, e.g. demo). */
   userId?: string;
+  /** The league the card was opened FROM, when there is one — it buys the two
+   *  panels a bare NFL card cannot have: who owns him here, and what this
+   *  league has done with him (0186's register). */
+  leagueId?: string;
 }
 
 let listener: ((p: PlayerCardReq) => void) | null = null;
-export const openPlayerCard = (p: PlayerCardReq): void => { track(Ev.playerCardOpened, { pos: p.pos }); listener?.(p); };
+
+/** WHICH LEAGUE IS ON SCREEN (v0.282.0). Installed by the surface that knows —
+ *  the same bus reasoning as the card itself: threading a `leagueId` prop
+ *  through every roster row, picker and board cell to reach a module-level
+ *  modal would be prop-drilling for one consumer. Cleared when the league
+ *  closes, so a card opened elsewhere never claims the last league's owner. */
+let cardLeague: string | null = null;
+export const setCardLeague = (id: string | null): void => { cardLeague = id; };
+
+export const openPlayerCard = (p: PlayerCardReq): void => {
+  track(Ev.playerCardOpened, { pos: p.pos });
+  listener?.({ ...p, leagueId: p.leagueId ?? cardLeague ?? undefined });
+};
 
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 
@@ -43,7 +61,30 @@ export function PlayerCardHost() {
 }
 
 function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
-  const { slug, name, pos, team, week, userId } = req;
+  const { slug, name, pos, team, week, userId, leagueId } = req;
+  // SUMMARY | HISTORY. No GAME LOG or TEAM tab, deliberately: a per-week NFL
+  // stat table and a depth chart are data this app does not hold, and an empty
+  // tab is worse than no tab.
+  const [tab, setTab] = useState<'summary' | 'history'>('summary');
+  const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = unknown, null = free agent
+  const [moves, setMoves] = useState<RegisterRow[] | null>(null);
+  useEffect(() => {
+    if (!leagueId) { setOwner(undefined); setMoves(null); return; }
+    let dead = false;
+    nativeRosters(leagueId)
+      .then(async (rows) => {
+        const mine = rows.find((r) => r.slug === slug);
+        if (dead) return;
+        if (!mine) { setOwner(null); return; }
+        const teams = await matchupTeams(leagueId, [mine.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
+        if (!dead) setOwner(teams[mine.roster_id]?.team_name ?? `Roster ${mine.roster_id}`);
+      })
+      .catch(() => { if (!dead) setOwner(undefined); });
+    leagueRegister(leagueId, 200)
+      .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [leagueId, slug]);
   // The card is where a stale team is most visible — prefer the live layer
   // (fresh directory bake + worker overrides, 0142) over whatever the opening
   // surface happened to know.
@@ -115,14 +156,89 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             <button onClick={toggleStar} title={starred ? 'Unstar' : 'Star for personal reference'} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: starred ? '#E8B23A' : 'var(--faint)', lineHeight: 1 }}>{starred ? '★' : '☆'}</button>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
-          {(tenure || bio?.college || bio?.age != null) && row('CAREER', [tenure, bio?.college, bio?.age != null ? `age ${bio.age}` : null].filter(Boolean).join(' · '))}
-          {inj && row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)}
-          {!inj && injTag && row('INJURY', INJURY_LABEL[injTag] ?? injTag)}
-          {flag && row('COMMISH', `\u2691 ${flag}`)}
-          {weekLine && row('THIS WK', weekLine)}
-          {seasonLine && row('2025', seasonLine)}
+        {/* THE FACT STRIP (v0.282.0) — the numbers a card is opened for, read
+            at a glance. Height and weight are NOT here: the bake carries age,
+            tenure, college and jersey, and inventing two more would be worse
+            than four honest columns. */}
+        <div style={{ display: 'flex', borderTop: '1px solid var(--bd)', borderBottom: '1px solid var(--bd)', padding: '9px 0' }}>
+          {([
+            ['AGE', bio?.age != null ? String(bio.age) : '—'],
+            ['EXP', bio?.exp != null ? (bio.exp === 0 ? 'ROOK' : `${bio.exp} yr`) : '—'],
+            ['NO.', bio?.num != null ? `#${bio.num}` : '—'],
+            ['PROJ', PROJ_2026.get(slug) != null ? (PROJ_2026.get(slug) as number).toFixed(1) : '—'],
+          ] as const).map(([k, v]) => (
+            <div key={k} style={{ flex: 1, textAlign: 'center' }}>
+              <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>{k}</div>
+              <div className="grotesk" style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginTop: 2 }}>{v}</div>
+            </div>
+          ))}
         </div>
+
+        {!!leagueId && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {([['summary', 'SUMMARY'], ['history', `HISTORY${moves?.length ? ` (${moves.length})` : ''}`]] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setTab(id)} className="mono"
+                style={{ fontSize: 9.5, fontWeight: 700, cursor: 'pointer', borderRadius: 5, padding: '5px 10px',
+                  color: tab === id ? 'var(--you)' : 'var(--dim)', background: tab === id ? 'var(--bg)' : 'transparent',
+                  border: `1px solid ${tab === id ? 'var(--you)' : 'var(--bd)'}` }}>{label}</button>
+            ))}
+          </div>
+        )}
+
+        {(!leagueId || tab === 'summary') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {(() => {
+              if (week == null || !showTeam) return null;
+              const g = nflGameForTeam(week, showTeam);
+              if (!g) return row('NEXT UP', 'bye — no game this week');
+              const home = g.home === showTeam;
+              const when = g.kickoff ? kickoffLabel(g.kickoff) : '';
+              return row('NEXT UP', `${home ? 'vs' : '@'} ${home ? g.away : g.home}${when ? ` · ${when}` : ''}`);
+            })()}
+            {owner !== undefined && row('ROSTERED', owner ? `⇄ ${owner}` : 'free agent — nobody holds him')}
+            {(tenure || bio?.college) && row('CAREER', [tenure, bio?.college].filter(Boolean).join(' · '))}
+            {inj && row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)}
+            {!inj && injTag && row('INJURY', INJURY_LABEL[injTag] ?? injTag)}
+            {flag && row('COMMISH', `\u2691 ${flag}`)}
+            {weekLine && row('THIS WK', weekLine)}
+            {seasonLine && row('2025', seasonLine)}
+          </div>
+        )}
+
+        {/* HISTORY — this LEAGUE's transaction record for him (0186). Sleeper's
+            is the whole platform's; ours is the league's, which is the half a
+            manager actually argues about. */}
+        {!!leagueId && tab === 'history' && (
+          <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 300, overflowY: 'auto' }}>
+            {moves === null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</span>}
+            {moves?.length === 0 && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
+                No moves yet. Adds, drops, claims and trades appear here from the moment the draft ends —
+                draft night itself is in the draft room.
+              </span>
+            )}
+            {moves?.map((m) => (
+              <div key={m.id} style={{ display: 'flex', gap: 9, padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
+                <span style={{ width: 16, textAlign: 'center', color: m.kind === 'drop' ? 'var(--opp)' : 'var(--you)' }}>
+                  {m.kind === 'drop' ? '✕' : m.kind === 'trade' ? '⇄' : m.kind === 'waiver' ? '⚑' : '✚'}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text)' }}>
+                    <b>{m.team ?? `Roster ${m.roster_id}`}</b>
+                    {m.kind === 'drop' ? ' dropped him'
+                      : m.kind === 'trade' ? ` traded for him${m.from_team ? ` from ${m.from_team}` : ''}`
+                      : m.kind === 'waiver' ? ` claimed him off waivers${m.bid ? ` for ${m.bid}` : ''}`
+                      : m.kind === 'commish' ? ' — moved by the commissioner'
+                      : ' signed him'}
+                  </div>
+                  <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 1 }}>
+                    {(() => { const d = new Date(m.at); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); })()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </ModalBackdrop>
   );
