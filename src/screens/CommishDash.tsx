@@ -3,7 +3,7 @@ import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeag
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
-import { leagueScoringGet } from '@drip/core/data/liveApi';
+import { leagueScoringGet, commishDeleteLeague, friendlyError } from '@drip/core/data/liveApi';
 import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 
 // The builder's position chips (0163) — base positions only; combos are made by
@@ -71,6 +71,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
                 activity: <LastSeenPanel leagueId={l.league_id} />,
                 buffs: <LiveBuffsPanel leagueId={l.league_id} />,
+                delete: <DeleteLeaguePanel leagueId={l.league_id} name={l.name} seats={l.rosters} onDeleted={load} />,
               }} />
           </div>
         ))}
@@ -705,6 +706,56 @@ export function LiveBuffsPanel({ leagueId }: { leagueId: string }) {
       <button onClick={() => void flip()} disabled={on === null || busy} className="mono"
         style={{ fontSize: 12.5, fontWeight: 700, borderRadius: RADIUS, padding: '7px 16px', cursor: 'pointer', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: on === null || busy ? 0.5 : 1, flexShrink: 0 }}>
         {on === null ? '…' : on ? 'ON' : 'OFF'}
+      </button>
+    </div>
+  );
+}
+
+/** ── ✕ DELETE LEAGUE (0188) ──────────────────────────────────────────────
+ *
+ *  The commissioner's own way out. `admin_delete_league` has existed since 0044
+ *  with the comment "commissioners cannot nuke a league"; 0188 is the deliberate
+ *  loosening of that, and it pays for it with a TYPED CONFIRMATION rather than a
+ *  second click. A two-click confirm is right for a drop — one player, one seat,
+ *  recoverable by re-adding him. This ends a league for everybody in it, and the
+ *  cascade takes the matchups, rosters, wallets and register with it. Typing the
+ *  name is the only friction proportional to that.
+ *
+ *  The rule itself is server-side (case and inner whitespace forgiving); this
+ *  panel only declines to send an obviously-empty one, so there is one place
+ *  where "is this confirmed" is decided. */
+function DeleteLeaguePanel({ leagueId, name, seats, onDeleted }: {
+  leagueId: string; name: string; seats: number; onDeleted: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    if (busy || !typed.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await commishDeleteLeague(leagueId, typed);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'that didn’t work')); return; }
+      onDeleted();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ border: '1px solid var(--opp)', borderRadius: 8, padding: 14, marginTop: 10 }}>
+      <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--opp)' }}>THIS CANNOT BE UNDONE</div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.6, marginTop: 8 }}>
+        Deleting “{name}” removes it for everyone in it — {seats} seat{seats === 1 ? '' : 's'} — along with every roster,
+        matchup, lineup, wallet and transaction it holds. There is no restore.
+      </div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 10 }}>Type the league name to confirm: {name}</div>
+      <input value={typed} onChange={(ev) => setTyped(ev.target.value)} placeholder={name} className="mono"
+        style={{ width: '100%', boxSizing: 'border-box', marginTop: 6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--text)', fontSize: 11, padding: '9px 10px', outline: 'none' }} />
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 8, lineHeight: 1.5 }}>{err}</div>}
+      <button onClick={go} disabled={busy || !typed.trim()} className="mono"
+        style={{ width: '100%', marginTop: 10, background: 'none', border: '1px solid var(--opp)', borderRadius: 6, padding: '10px 0',
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)',
+          cursor: busy || !typed.trim() ? 'default' : 'pointer', opacity: busy || !typed.trim() ? 0.4 : 1 }}>
+        {busy ? 'DELETING…' : '✕ DELETE THIS LEAGUE FOREVER'}
       </button>
     </div>
   );

@@ -27,7 +27,7 @@ import {
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity,
-  setLeagueName, setLeagueAvatar, myEnrollments,
+  setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
@@ -80,6 +80,13 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'MONEY', items: [
     { id: 'coin', label: '◈ DRIP COIN' },
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
+  ] },
+  // Its own group, at the bottom, with nothing else in it (0188). Deleting a
+  // league is the only commissioner action that cannot be undone by another
+  // commissioner action, so it does not share a heading with anything you
+  // might have been aiming for.
+  { title: 'DANGER', items: [
+    { id: 'delete', label: '✕ DELETE LEAGUE' },
   ] },
 ];
 
@@ -346,6 +353,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
             {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
             {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
+            {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
           </ScrollView>
         </Overlay>
       )}
@@ -1899,5 +1907,72 @@ function LiveBuffsCard({ leagueId }: { leagueId: string }) {
         </Pressable>
       </View>
     </Card>
+  );
+}
+
+/** ── ✕ DELETE LEAGUE (0188) ──────────────────────────────────────────────
+ *
+ *  The commissioner's own way out. `admin_delete_league` has existed since 0044
+ *  with the comment "commissioners cannot nuke a league"; 0188 is the deliberate
+ *  loosening of that, and it pays for it with a TYPED CONFIRMATION rather than a
+ *  second tap. A two-tap confirm is right for a drop — one player, one seat,
+ *  recoverable by re-adding him. This ends a league for everybody in it, and the
+ *  cascade takes the matchups, the rosters, the wallets and the register with
+ *  it. Typing the name is the only friction proportional to that.
+ *
+ *  The check is server-side (case and inner whitespace forgiving); this screen
+ *  only refuses to send an obviously-empty one, so the RULE lives in one place. */
+function DeleteLeagueCard({ leagueId, onDeleted }: { leagueId: string; onDeleted: () => void }) {
+  const t = useTheme();
+  const [name, setName] = useState<string | null>(null);
+  const [seats, setSeats] = useState<number | null>(null);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    // commishOverview is already this screen's source for league facts, and it
+    // is the only one that carries the NAME and the seat count together.
+    commishOverview()
+      .then((ls) => {
+        const l = (ls ?? []).find((x) => x.league_id === leagueId);
+        if (!dead && l) { setName(l.name); setSeats(l.rosters); }
+      })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [leagueId]);
+
+  const go = async () => {
+    if (busy || !typed.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await commishDeleteLeague(leagueId, typed);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'that didn\u2019t work')); return; }
+      commit();
+      onDeleted();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <View style={{ gap: 10 }}>
+      <Mono size={10} tone="opp" weight="700" track={0.1}>THIS CANNOT BE UNDONE</Mono>
+      <Mono size={9.5} tone="dim" style={{ lineHeight: 15 }}>
+        Deleting {name ? `"${name}"` : 'this league'} removes it for everyone in it{seats ? ` — ${seats} seat${seats === 1 ? '' : 's'}` : ''}, along with
+        every roster, matchup, lineup, wallet and transaction it holds. There is no restore.
+      </Mono>
+      <Mono size={9} tone="faint" style={{ lineHeight: 13 }}>
+        Type the league name to confirm{name ? `: ${name}` : ''}
+      </Mono>
+      <TextInput value={typed} onChangeText={setTyped} autoCapitalize="none" autoCorrect={false}
+        placeholder={name ?? 'league name'} placeholderTextColor={t.faint}
+        style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, color: t.text, fontFamily: MONO, fontSize: fs(11), paddingHorizontal: 10, paddingVertical: 9 }} />
+      {err && <Mono size={9.5} tone="opp" style={{ lineHeight: 14 }}>{err}</Mono>}
+      <Pressable disabled={busy || !typed.trim()} onPress={go}
+        style={{ borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingVertical: 11, alignItems: 'center', opacity: busy || !typed.trim() ? 0.4 : 1 }}>
+        <Mono size={10} weight="700" tone="opp">{busy ? 'DELETING…' : '✕ DELETE THIS LEAGUE FOREVER'}</Mono>
+      </Pressable>
+    </View>
   );
 }

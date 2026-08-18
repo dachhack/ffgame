@@ -1057,6 +1057,20 @@ export async function sendInvite(input: { to: string; code: string; link: string
 }
 export const adminLeagueMembers = (leagueId: string) => rpc<AdminMember[]>('admin_league_members', { p_league_id: leagueId });
 /** Super-admin: permanently delete a league and all its data (cascades). */
+/** LEAVING (0188) — give up your seat, or drop a co-manager role. One RPC for
+ *  both, because a member should not have to know which kind they are; the
+ *  answer comes back as `as: 'manager' | 'comanager'`. The seat keeps its team
+ *  name and roster for whoever takes it next. A commissioner cannot leave. */
+export const leaveLeague = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; as?: 'manager' | 'comanager'; roster_id?: number }>(
+    'leave_league', { p_league_id: leagueId });
+/** DELETING (0188) — the commissioner's own way out, and irreversible: every
+ *  child table cascades off league(id). `confirm` must be the league's name
+ *  (case and inner whitespace forgiving); anything else refuses. */
+export const commishDeleteLeague = (leagueId: string, confirm: string) =>
+  rpc<{ ok: boolean; error?: string; name?: string; removed_members?: number }>(
+    'commish_delete_league', { p_league_id: leagueId, p_confirm: confirm });
+
 export const adminDeleteLeague = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; name?: string }>('admin_delete_league', { p_league_id: leagueId });
 /** Commissioner/admin enrolls THEMSELVES on a roster — claim a team to play.
