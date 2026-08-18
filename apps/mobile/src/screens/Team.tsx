@@ -254,7 +254,12 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers'>('roster');
+  // KEEPERS is a fourth tab (v0.296.5, founder) instead of a card under the
+  // roster, and only in a league that keeps anyone: no count, no tab. The card
+  // hides itself the same way, but a tab that opens onto nothing is worse than
+  // a tab that isn't there.
+  const [keeperCount, setKeeperCount] = useState(0);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -301,6 +306,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) setGm(g); }).catch(() => {});
+    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(k.keeper_count ?? 0); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the tap rather than on the next poll.
@@ -523,6 +529,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ['roster', '🧢 ROSTER'],
           ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
           ['trades', '⇄ TRADES'],
+          ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
         ] as const).map(([id, label]) => (
           <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
         ))}
@@ -610,9 +617,12 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         </Mono>
       </Card>
 
-      {/* keepers (0182) — only when the commissioner set a keeper count */}
-      {myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
       </>)}
+
+      {/* KEEPERS (0182) — its own tab (v0.296.5, founder). It was a card under
+          the roster, which is where you look for it in the two weeks a year it
+          matters and where it is noise for the other fifty. */}
+      {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
 
       {tab === 'waivers' && (<>
       {/* pending + recent claims */}
