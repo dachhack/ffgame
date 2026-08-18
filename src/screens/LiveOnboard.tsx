@@ -951,8 +951,24 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Your {total === 1 ? 'league' : 'leagues'}</div>
         <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.08em' }}>{total} LEAGUE{total === 1 ? '' : 'S'}</span>
       </div>
-      {/* Commish/all filter — only when you run at least one league. */}
-      {isCommish && <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</div>}
+      {/* THE CONTROL ROW (v0.292.3, founder: "put the find a league at the top by
+          the all/commish chips"). ＋ ADD A LEAGUE was a centred link at the FOOT
+          of the grid, which on a six-league page meant scrolling past everything
+          you already have to reach the one control that adds another — and on a
+          page with ONE league it sat marooned under a single card.
+
+          The row renders even for a non-commissioner, who has no ALL/COMMISH
+          chips: the filter is what's conditional here, not the row, or the
+          button would disappear for exactly the people most likely to be adding
+          a second league. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+        {isCommish && <>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</>}
+        <button onClick={onAdd} className="mono" style={{
+          marginLeft: 'auto', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+          color: 'var(--you)', background: 'transparent',
+          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
+        }}>＋ ADD A LEAGUE</button>
+      </div>
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
@@ -965,9 +981,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
           : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 18 }}>
-        <button onClick={onAdd} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>＋ add a league</button>
-      </div>
+
     </>
   );
 }
