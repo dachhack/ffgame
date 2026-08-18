@@ -6,9 +6,9 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
-import { tap } from '../ui/feedback';
+import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
@@ -40,6 +40,10 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   // The league's own reference sheets (v0.274.0, founder's menu list). One
   // piece of state: only ever one sheet is up, and `null` is the menu itself.
   const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit'>(null);
+  // Leaving (0188) — armed on the first tap, done on the second.
+  const [leaveArmed, setLeaveArmed] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveErr, setLeaveErr] = useState<string | null>(null);
   // Only the commissioner's queue is still read here — the chat dot rides on
   // the nav strip, and the waiver badge left with the MY TEAM tile.
   const [sig, setSig] = useState<{ commish: { waiting: number; review: number } | null }>({ commish: null });
@@ -87,6 +91,20 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       <Text style={{ fontFamily: MONO, fontSize: 12, color: t.faint }}>→</Text>
     </Pressable>
   );
+
+  const doLeave = async () => {
+    if (leaving) return;
+    if (!leaveArmed) { tap(); setLeaveArmed(true); return; }
+    setLeaving(true); setLeaveErr(null);
+    try {
+      const r = await leaveLeague(leagueId);
+      if (!r.ok) { warn(); setLeaveErr(friendlyError(r.error ?? 'that didn\u2019t work')); setLeaveArmed(false); return; }
+      // Straight out to the leagues list — the screen behind this one is a
+      // league this account is no longer in.
+      onBack();
+    } catch (x) { warn(); setLeaveErr(friendlyError(x)); setLeaveArmed(false); }
+    finally { setLeaving(false); }
+  };
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
@@ -150,6 +168,32 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         () => { track(Ev.hubTileOpened, { tile: 'recruit' }); setSheet('recruit'); })}
       {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
         { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}
+
+      {/* ── THE WAY OUT (0188) ────────────────────────────────────────────
+          Quiet, last, and below the tiles — a door you should be able to find
+          without being offered it. Two taps, because leaving is not undoable
+          by you: the seat opens and the next manager inherits your team.
+
+          The COMMISSIONER doesn't get it. `leave_league` refuses them (they
+          would orphan the league — every commish RPC is
+          `commissioner_id = auth.uid()`), so offering the button and then
+          explaining the refusal would be worse than not offering it. Their way
+          out is ⚑ COMMISSIONER → delete the league. */}
+      {!commish && (
+        <View style={{ marginTop: 22, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+          {leaveErr && <Mono size={9.5} tone="opp" style={{ marginBottom: 8, lineHeight: 14 }}>{leaveErr}</Mono>}
+          <Pressable disabled={leaving} onPress={doLeave} style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 14, opacity: leaving ? 0.5 : 1 }}>
+            <Mono size={9.5} weight="700" tone={leaveArmed ? 'opp' : 'faint'}>
+              {leaving ? 'LEAVING…' : leaveArmed ? '✕ TAP AGAIN TO LEAVE THIS LEAGUE' : 'leave this league'}
+            </Mono>
+          </Pressable>
+          {leaveArmed && !leaving && (
+            <Mono size={8.5} tone="faint" style={{ textAlign: 'center', marginTop: 2, lineHeight: 12 }}>
+              Your seat opens for someone else. Your team name and roster stay with it.
+            </Mono>
+          )}
+        </View>
+      )}
 
       {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)} />}
 

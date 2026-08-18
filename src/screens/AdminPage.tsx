@@ -281,7 +281,7 @@ export type LeagueTab =
   | 'overview' | 'waivers' | 'admin'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
-  | 'activity' | 'buffs';
+  | 'activity' | 'buffs' | 'delete';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -1133,6 +1133,16 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         ...(admin ? [{ id: 'admin', label: '⚙ ADMIN MODES' } as TabDef<LeagueTab>] : []),
       ],
     },
+    // Its own group, last, with nothing else in it (0188) — and only where the
+    // caller injected the panel, which is CommishDash. The admin console
+    // injects nothing here on purpose: an admin already has
+    // admin_delete_league (0044) on the leagues table, and a second door to
+    // the same irreversible act on a screen full of other leagues' rows is
+    // exactly where a misclick becomes somebody's season.
+    ...(has('delete') ? [{
+      title: 'DANGER',
+      items: [{ id: 'delete', label: '✕ DELETE LEAGUE' } as TabDef<LeagueTab>],
+    }] : []),
   ];
 
   return (

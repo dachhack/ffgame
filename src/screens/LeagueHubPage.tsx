@@ -18,6 +18,7 @@ import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
+  leaveLeague, friendlyError,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -138,6 +139,23 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
   type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit';
   const [info, setInfo] = useState<null | InfoPanel>(null);
+  // Leaving (0188) — armed on the first click, done on the second.
+  const [leaveArmed, setLeaveArmed] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveErr, setLeaveErr] = useState<string | null>(null);
+  const doLeave = async () => {
+    if (leaving) return;
+    if (!leaveArmed) { setLeaveArmed(true); return; }
+    setLeaving(true); setLeaveErr(null);
+    try {
+      const r = await leaveLeague(e.league_id);
+      if (!r.ok) { setLeaveErr(friendlyError(r.error ?? 'that didn’t work')); setLeaveArmed(false); return; }
+      // Out to the leagues list — the page behind this one is a league this
+      // account is no longer in.
+      onBack();
+    } catch (x) { setLeaveErr(friendlyError(x)); setLeaveArmed(false); }
+    finally { setLeaving(false); }
+  };
   const toggleInfo = (k: InfoPanel) => setInfo((cur) => (cur === k ? null : k));
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
@@ -320,6 +338,32 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {info === 'alerts' && <NotifPrefsCard />}
         {info === 'recruit' && <RecruitPanel leagueId={e.league_id} commish={commish} />}
       </div>
+
+      {/* ── THE WAY OUT (0188) ──────────────────────────────────────────────
+          Quiet, last, and below the bands — a door you should be able to find
+          without being offered it. Two clicks, because leaving is not undoable
+          by you: the seat opens and the next manager inherits your team.
+
+          The COMMISSIONER doesn't get it. `leave_league` refuses them — they
+          would orphan the league, since every commish RPC is
+          `commissioner_id = auth.uid()` — so offering the button and then
+          explaining the refusal would be worse than not offering it. Their way
+          out is ⚑ Manage league → DANGER. */}
+      {!commish && (
+        <div style={{ marginTop: 26, paddingTop: 14, borderTop: '1px solid var(--bd)', textAlign: 'center' }}>
+          {leaveErr && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', lineHeight: 1.5, marginBottom: 8 }}>{leaveErr}</div>}
+          <button onClick={doLeave} disabled={leaving} className="mono"
+            style={{ background: 'none', border: 'none', padding: '8px 14px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em',
+              color: leaveArmed ? 'var(--opp)' : 'var(--faint)', cursor: leaving ? 'default' : 'pointer' }}>
+            {leaving ? 'LEAVING…' : leaveArmed ? '✕ CLICK AGAIN TO LEAVE THIS LEAGUE' : 'leave this league'}
+          </button>
+          {leaveArmed && !leaving && (
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 2, lineHeight: 1.5 }}>
+              Your seat opens for someone else. Your team name and roster stay with it.
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );
