@@ -850,7 +850,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onResults={(leagueId) => { setHomeFor(null); setTarget({ leagueId, rosterId: 0 }); setView('results'); }}
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
-      onTeam={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('team'); })()}
       onOpen={(e) => {
         // Presence (0151) — skipped under browse-as: the admin looking is
         // not the member opening.
@@ -886,11 +885,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onTeam, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onResults, onManage, onDraft, onAdd, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onResults: (leagueId: string) => void; onManage: (leagueId: string) => void;
-  onDraft: (leagueId: string, rosterId: number) => void; onTeam: (leagueId: string, rosterId: number) => void; onAdd: () => void;
+  onDraft: (leagueId: string, rosterId: number) => void; onAdd: () => void;
   onDeleted: () => void; isCommish: boolean;
   /** Open the league's HOME page (0182) — the card's primary action. */
   onOpen: (e: Enrollment) => void;
@@ -960,11 +959,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onResults={() => onResults(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onTeam={() => onTeam(e.league_id, e.sleeper_roster_id)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
@@ -1094,12 +1093,13 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
   );
 }
 
-// `onResults` / `onManage` left with the ▦ scores and ⚑ manage league links
-// (v0.292.0). The parent still owns both — the hub's tiles are how you reach
-// them now — so the handlers stay there; the CARD just no longer takes them.
-function LeagueCard({ e, card, commish, userId, onPodBuild, onDraft, onTeam, onOpen, unread, alarm, offers = 0, sig }: {
+// The card takes no `onResults` / `onManage` / `onDraft` / `onTeam` any more —
+// those four links left in v0.292.0 and v0.292.1. The parent still owns every
+// one of the handlers, because the league HUB is where they are reached now;
+// the card simply stopped being a second menu in front of it.
+function LeagueCard({ e, card, commish, userId, onPodBuild, onOpen, unread, alarm, offers = 0, sig }: {
   e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
-  onPodBuild: () => void; onDraft: () => void; onTeam: () => void;
+  onPodBuild: () => void;
   onOpen: () => void;
   unread?: { n: number; mention: boolean };
   alarm?: LineupAlarm;
@@ -1251,10 +1251,30 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onDraft, onTeam, onO
         <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>{live ? '⛏ LATE-SWAP YOUR SQUAD →' : '⛏ BUILD YOUR SQUAD · $50K CAP →'}</button>
       )}
 
-      {/* actions — the primary door now opens the LEAGUE HOME (0182); the
-          board is one tile inside, and one quick-link below for the straight
-          shot. The 2025 full-board sim stays as the "see it play" demo. */}
-      <button onClick={onOpen} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 9, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
+      {/* TWO CHIPS, STACKED (v0.292.1, founder: "get rid of team and draft quick
+          link as well and make the matchup be a chip on top of the go to league
+          chip"). The card is down to the only two places anyone actually goes
+          from a leagues list: the game, and the league.
+        
+          The quick-link ROW is gone with them. It had been the last trace of a
+          card that once offered six doors, and a single centred word floating
+          under a full-width button read as leftover rather than as a choice —
+          two stacked chips read as two choices, which is what they are.
+        
+          ▶ MATCHUP sits ON TOP and is the lighter of the two: it is the shortcut,
+          and ◈ OPEN LEAGUE is the way in that always works. It is absent while
+          the schedule is pending, since there is no board to open yet — the note
+          below says so rather than leaving a dead chip. */}
+      {!pending && (
+        <button onClick={playHeroBoard} disabled={building} className="mono"
+          style={{ width: '100%', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+            color: live ? '#FF4F62' : 'var(--you)', background: 'var(--bg)',
+            border: `1px solid ${live ? '#FF4F62' : 'color-mix(in srgb, var(--you) 45%, var(--bd))'}`,
+            borderRadius: 6, padding: '9px 0', cursor: building ? 'default' : 'pointer', marginTop: 9, opacity: building ? 0.6 : 1 }}>
+          {building ? (buildNote || 'loading…') : live ? '● MATCHUP — LIVE' : '▶ MATCHUP'}
+        </button>
+      )}
+      <button onClick={onOpen} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 7, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
         <GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> OPEN LEAGUE →
       </button>
       {pending && (
@@ -1263,23 +1283,6 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onDraft, onTeam, onO
         </div>
       )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 7, flexWrap: 'wrap' }}>
-        {/* the quick link straight to the board — the founder's "from my
-            leagues, a quick link to matchup on the league chip" */}
-        {!pending && (
-          <button onClick={playHeroBoard} disabled={building} className="mono" style={{ ...linkBtn, color: live ? '#FF4F62' : 'var(--you)', opacity: building ? 0.6 : 1 }}>
-            {building ? (buildNote || 'loading…') : live ? '● matchup' : '▶ matchup'}
-          </button>
-        )}
-        {/* THREE DOORS, NOT SIX (v0.292.0, founder: "no scores, no demo, no
-            manage league"). Every one of them is inside OPEN LEAGUE — scores is
-            the hub's ALL MATCHUPS tile, manage league is its ⚑ tile — so the
-            row was offering shortcuts to a menu one click above them. The 2025
-            demo went with them: it belongs to someone deciding whether to play,
-            not to someone who already has a league open in front of them. */}
-        {e.league?.provider === 'native' && <button onClick={onDraft} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⛏ draft</button>}
-        {e.league?.provider === 'native' && <button onClick={onTeam} className="mono" style={{ ...linkBtn, color: 'var(--you)' }}>⇄ team</button>}
-      </div>
     </div>
   );
 }
