@@ -13,13 +13,20 @@
 // two fields no scorer touches (`t` wall-clock, `pid` nflverse play id) and
 // minus zero-valued flags, which is where the size goes:
 //
-//   14 week files      3.4 MB     (week-major, every field)
+//   14 week files      3.3 MB     (week-major, every field)
 //   season.json        1.5 MB     (player-major, scoring fields only)
-//   …inside the APK   ~200 KB     (the APK is a zip; JSON deflates ~7:1)
+//   APK growth         1.2 MB     (measured: 18.8 MB → 20.1 MB, build 28800)
 //
-// Compression is the container's job, deliberately: a gzip in the asset would
-// need a decompressor in the bundle to undo what the APK and every HTTP server
-// already do for free.
+// That last number is NOT the 200 KB the file gzips to, and the difference is
+// worth knowing before anyone tries to shrink it: Metro does not ship this as
+// a zip-compressed asset — it inlines the JSON into index.android.bundle,
+// which Hermes then compiles to bytecode. So the APK pays for bytecode, not
+// for deflated JSON. Getting the 200 KB would mean expo-asset + a runtime file
+// read, which is a dependency and an async hop to save a megabyte we have.
+// The web, fetching it over HTTP, does get the ~200 KB for free.
+//
+// Explicit gzip is still the wrong call either way: it would need a
+// decompressor in the bundle to undo what every HTTP server already does.
 //
 // Usage: node scripts/pbp/genSeasonLog.mjs
 //   Reads public/pbp/w*.json (genRealPbp.mjs's output) and writes
