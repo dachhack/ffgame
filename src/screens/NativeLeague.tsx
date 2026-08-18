@@ -8,7 +8,7 @@
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip } from '../app/ui';
-import { setCardLeague } from '../app/playerCard';
+import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -19,7 +19,7 @@ import {
   createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  leaguePool, nativeRosters, nativeTeamState, dropPlayer, addFreeAgent, setRosterSpot,
+  leaguePool, nativeRosters, nativeTeamState, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
@@ -36,6 +36,7 @@ import {
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -1384,6 +1385,66 @@ function KeepersCard({ leagueId, myRoster, mine }: {
   );
 }
 
+/** ONE ROSTER LINE — a spot badge, and who is in it (v0.285.0, web).
+ *
+ *  Sibling of the app's RosterRow (apps/mobile/src/screens/Team.tsx); the two
+ *  say the same thing in each host's idiom, and the comment there carries the
+ *  reasoning for what ISN'T here any more:
+ *
+ *    • no →TAXI cycle button — DESIGNATIONS are the SLOTS' job now. An empty
+ *      IR/taxi place invites a player in; a filled one's badge sends him back.
+ *    • no DROP button — dropping is the PLAYER CARD's job, two clicks deep,
+ *      and the same button wherever you found him.
+ */
+function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
+  badge: string;
+  badgePos?: string;
+  /** A CSS colour for the badge on IR/taxi lines; starters take their position's. */
+  tone?: string;
+  p: (LeaguePoolPlayer & { spot: string }) | null;
+  busy: boolean;
+  /** IR/taxi only: fill this place, or empty it. Absent on starters + bench. */
+  onSlot?: () => void;
+  slotVerb?: string;
+}) {
+  const fg = tone ?? (badgePos ? `var(--pos-${badgePos}-fg, var(--dim))` : 'var(--dim)');
+  const bg = tone || !badgePos ? 'transparent' : `var(--pos-${badgePos}-bg, transparent)`;
+  const badgeBox = (
+    <span className="mono" style={{ display: 'inline-block', minWidth: 42, textAlign: 'center', border: `1px solid ${fg}`,
+      background: bg, borderRadius: 5, padding: '3px 6px', fontSize: 8.5, fontWeight: 700, color: fg, whiteSpace: 'nowrap' }}>
+      {badge}{p && onSlot ? ' ↩' : ''}
+    </span>
+  );
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
+      {/* On a FILLED taxi/IR place the badge is the way out — click TX ↩ and he
+          is back on the active roster. Nothing else on the line moves him. */}
+      {p && onSlot
+        ? <button onClick={onSlot} disabled={busy} title="back to the active roster"
+            style={{ background: 'none', border: 0, padding: 0, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>{badgeBox}</button>
+        : badgeBox}
+      {p ? (
+        <>
+          <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
+          <button onClick={() => openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team })}
+            style={{ background: 'none', border: 0, padding: 0, flex: 1, minWidth: 0, textAlign: 'left', cursor: 'pointer' }}>
+            <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+          </button>
+          <FlagChip slug={p.slug} />
+        </>
+      ) : onSlot ? (
+        <button onClick={onSlot} disabled={busy} className="mono"
+          style={{ background: 'none', border: 0, padding: 0, flex: 1, textAlign: 'left', fontSize: 10.5, color: 'var(--dim)', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+          ＋ move someone to the {slotVerb ?? 'squad'}
+        </button>
+      ) : (
+        <span className="mono" style={{ flex: 1, fontSize: 10.5, color: 'var(--faint)' }}>Empty</span>
+      )}
+    </div>
+  );
+}
+
 export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
 }) {
@@ -1409,6 +1470,11 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   // FAAB: a waiver claim needs a blind bid — collected in a small modal.
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null);
   const [bidDraft, setBidDraft] = useState('');
+  // The league's LINEUP SHAPE — what the roster lays itself out against: the
+  // starting spots, and how many bench/IR/taxi places exist (v0.285.0, matching
+  // the app's roster since v0.281.0).
+  const [gm, setGm] = useState<GameModeInfo | null>(null);
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | null>(null);          // an empty IR/taxi place, asking who
   const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   // null = not editing; '' = editing from empty (0187 league rename).
@@ -1447,8 +1513,13 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     // map empty, which makes every tenure band except ANY come back empty
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) setGm(g); }).catch(() => {});
+    // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
+    // screen — the card is a module-level overlay. It rings the bus instead,
+    // so the roster updates on the click rather than on the next poll.
+    const off = onRosterChanged((id2) => { if (id2 === leagueId) void refresh(); });
     const id = setInterval(refresh, 15000);
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; off(); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
@@ -1460,6 +1531,41 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
   const cap = team?.roster_cap ?? null;
   const full = cap != null && mine.length >= cap;
+
+  // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.285.0) ────────────────────────
+  // Was one flat list of everybody with a spot tag; now it is the shape the
+  // league actually plays — a row per STARTING SPOT, then the bench, then IR,
+  // then the taxi squad. The app has read this way since v0.281.0; this is the
+  // web catching up, off the same `assignSpots` maximum matching, so both
+  // hosts answer "who is legal where" with one implementation.
+  //
+  // It is NOT a submitted lineup: drip sets one per WINDOW on the board and
+  // classic sets one per week, so the header says what this is rather than
+  // letting the layout imply it.
+  const slotDefs = useMemo(
+    () => leagueSlotDefs({ roster: gm?.roster ?? {}, slots: gm?.slots ?? null }),
+    [gm]);
+  const slotNames = useMemo(() => slotDisplayNames(slotDefs), [slotDefs]);
+  const bySpot = useMemo(() => {
+    const active = mine.filter((p) => p.spot === 'active');
+    const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));
+    const find = (id?: string | null) => (id ? active.find((p) => p.slug === id) ?? null : null);
+    const started = new Set(seat.spots.map((r) => r.player?.id).filter(Boolean) as string[]);
+    return {
+      starters: seat.spots.map((r, i) => ({ label: slotNames[i] ?? r.def.slot, pos: r.def.pos, player: find(r.player?.id) })),
+      bench: active.filter((p) => !started.has(p.slug)),
+      ir: mine.filter((p) => p.spot === 'ir'),
+      taxi: mine.filter((p) => p.spot === 'taxi'),
+    };
+  }, [mine, slotDefs, slotNames, expMap]);
+
+  /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
+   *  button on every line. The server still enforces the caps and the IR
+   *  injury gate and says why not. */
+  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir') => {
+    setFillFor(null);
+    run(() => setRosterSpot(leagueId, slug, spot));
+  };
 
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -1491,7 +1597,11 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
     setBusy(true); setErr(null);
-    try { const r = await fn(); if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); await refresh(); }
+    try {
+      const r = await fn();
+      if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); else notifyRosterChanged(leagueId);
+      await refresh();
+    }
     catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -1659,26 +1769,56 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           </div>
         )}
         {mine.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
-        {mine.map((p) => (
-          <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-            <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
-            <PosPill pos={p.pos as Pos} />
-            <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
-            <FlagChip slug={p.slug} />
-            {p.spot !== 'active' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--opp)' }}>{p.spot.toUpperCase()}</span>}
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
-            {/* TAXI/IR designations (0164): cycle active → taxi → ir → active;
-                the server enforces caps + the IR injury gate and says why not. */}
-            <button onClick={() => run(() => setRosterSpot(leagueId, p.slug,
-                (p.spot === 'active' ? 'taxi' : p.spot === 'taxi' ? 'ir' : 'active')))} disabled={busy}
-              className="mono" style={{ ...ghostBtn, padding: '5px 8px', fontSize: 9.5, color: 'var(--dim)' }}>
-              {p.spot === 'active' ? '→TAXI' : p.spot === 'taxi' ? '→IR' : '→ACT'}</button>
-            <button onClick={() => myRoster != null && run(() => dropPlayer(leagueId, myRoster, p.slug))} disabled={busy}
-              className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
+
+        {/* STARTERS — one row per starting spot the league plays, filled by
+            assignSpots. Labelled as the FIT, not the lineup. */}
+        {mine.length > 0 && slotDefs.length > 0 && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>
+            STARTING SPOTS <span style={{ letterSpacing: 0 }}>— how your roster fits; set the lineup on the board</span>
           </div>
-        ))}
+          {bySpot.starters.map((r, i) => (
+            <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} />
+          ))}
+        </>)}
+
+        {/* BENCH */}
+        {bySpot.bench.length > 0 && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>BENCH ({bySpot.bench.length})</div>
+          {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} />)}
+        </>)}
+
+        {/* INJURED RESERVE — the empty places are drawn too, up to the
+            league's limit: "you have two more" is what a manager wants here,
+            and an absent row cannot say it. */}
+        {(bySpot.ir.length > 0 || !!gm?.shape?.ir) && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
+            INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
+          </div>
+          {bySpot.ir.map((p) => (
+            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} onSlot={() => moveToSpot(p.slug, 'active')} />
+          ))}
+          {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
+            <RosterLine key={`ir-empty-${i}`} badge="IR" tone="var(--warn)" p={null} busy={busy}
+              slotVerb="injured reserve" onSlot={() => setFillFor('ir')} />
+          ))}
+        </>)}
+
+        {/* TAXI SQUAD */}
+        {(bySpot.taxi.length > 0 || !!gm?.shape?.taxi) && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
+            TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
+          </div>
+          {bySpot.taxi.map((p) => (
+            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} onSlot={() => moveToSpot(p.slug, 'active')} />
+          ))}
+          {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
+            <RosterLine key={`tx-empty-${i}`} badge="TX" tone="var(--you)" p={null} busy={busy}
+              slotVerb="taxi squad" onSlot={() => setFillFor('taxi')} />
+          ))}
+        </>)}
+
         <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
-          Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week — a week already underway keeps its lineup pool.
+          Click a name to open his card — that's where you drop him. Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week — a week already underway keeps its lineup pool.
         </div>
       </div>
 
@@ -1830,6 +1970,40 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       )}
 
       {/* roster full → choose a drop for the pending add */}
+      {/* AN EMPTY TAXI / IR PLACE, ASKING WHO GOES IN IT (v0.285.0) — the
+          picker offers the ACTIVE roster only. A player already on IR or the
+          taxi squad isn't a candidate for the other: send him back to active
+          first (click his badge), which keeps every move one legal step the
+          server can answer for rather than a silent two-step. */}
+      {fillFor && (
+        <div onClick={() => setFillFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+              {fillFor === 'ir'
+                ? 'IR holds players the league’s rules say are hurt enough — the server checks, and says so if he isn’t.'
+                : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
+            </div>
+            {mine.filter((p) => p.spot === 'active').length === 0 && (
+              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Nobody on your active roster to move.</div>
+            )}
+            {mine.filter((p) => p.spot === 'active').map((p) => (
+              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
+                <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
+                <PosPill pos={p.pos as Pos} />
+                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{p.team}</span>
+                <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy} className="mono"
+                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--you)' }}>{fillFor === 'ir' ? '→IR' : '→TX'}</button>
+              </div>
+            ))}
+            <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={() => setFillFor(null)} className="mono" style={linkBtn}>cancel</button></div>
+          </div>
+        </div>
+      )}
+
       {pendingAdd && (
         <div onClick={() => setPendingAdd(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>

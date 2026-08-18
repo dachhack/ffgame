@@ -15,7 +15,9 @@ import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, playerSeasonPlays, type RegisterRow } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
+import { playerSeasonLog } from '@drip/core/data/seasonLog';
+import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -75,16 +77,21 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // Who holds him in THIS league, and what the league has done with him.
   const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = loading, null = free agent
   const [moves, setMoves] = useState<RegisterRow[] | null>(null);
+  // THE DROP (v0.285.0) lives here now, off the roster list. `myRoster` is set
+  // only when HE is on MY roster in THIS league — the one case where dropping
+  // him is a thing this account may do.
+  const [myRoster, setMyRoster] = useState<number | null>(null);
   useEffect(() => {
-    if (!leagueId) { setOwner(undefined); setMoves(null); return; }
+    if (!leagueId) { setOwner(undefined); setMoves(null); setMyRoster(null); return; }
     let dead = false;
-    nativeRosters(leagueId)
-      .then(async (rows) => {
-        const mine = rows.find((r) => r.slug === slug);
+    Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
+      .then(async ([rows, team]) => {
+        const held = rows.find((r) => r.slug === slug);
         if (dead) return;
-        if (!mine) { setOwner(null); return; }
-        const teams = await matchupTeams(leagueId, [mine.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
-        if (!dead) setOwner(teams[mine.roster_id]?.team_name ?? `Roster ${mine.roster_id}`);
+        setMyRoster(held && team?.my_roster_id === held.roster_id ? held.roster_id : null);
+        if (!held) { setOwner(null); return; }
+        const teams = await matchupTeams(leagueId, [held.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
+        if (!dead) setOwner(teams[held.roster_id]?.team_name ?? `Roster ${held.roster_id}`);
       })
       .catch(() => { if (!dead) setOwner(undefined); });
     leagueRegister(leagueId, 200)
@@ -96,9 +103,9 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // whatever the opening surface happened to know — see the web card.
   const showTeam = displayTeam(slug, team);
   const bio = PLAYER_BIO[slug];
-  // THE GAME LOG (v0.284.0) — fetched ONLY when the tab is opened. It is the
-  // one panel that costs a query per player, and most cards are opened to read
-  // a name and close again.
+  // THE GAME LOG (v0.284.0) — built ONLY when the tab is opened. The season
+  // bake is 1.5 MB; parsing it for a card nobody opened the log on would be
+  // work for nothing, and most cards are opened to read a name and close again.
   const [log, setLog] = useState<GameLogWeek[] | null>(null);
   const [logErr, setLogErr] = useState(false);
   useEffect(() => {
@@ -107,12 +114,14 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
     (async () => {
       try {
         // The league's own scoring decides the points column; a drip league
-        // has no classic table, so buildGameLog prints statlines alone.
+        // has no classic table, so buildGameLog prints statlines alone. The
+        // plays are the BAKED season (v0.285.0) — bundled with the app, so
+        // this is a parse and not a round trip.
         const gm = leagueId ? await leagueGameMode(leagueId).catch(() => null) : null;
         const scoring = gm?.ok && gm.mode === 'classic' ? { ...(gm.scoring ?? {}), ppr: gm.ppr ?? 1 } : null;
-        const rows = await playerSeasonPlays(slug);
+        const weeks = await playerSeasonLog(slug);
         if (dead) return;
-        setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, rows, scoring));
+        setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, weeks, scoring));
       } catch { if (!dead) setLogErr(true); }
     })();
     return () => { dead = true; };
@@ -151,6 +160,26 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
     const next = !starred;
     setStarred(next);
     setFavorite(userId, slug, next).catch(() => setStarred(!next));
+  };
+
+  // ── DROPPING HIM (v0.285.0) ──────────────────────────────────────────────
+  // Two taps, always: a drop is the one thing on this card that cannot be
+  // undone by tapping it again, and the card is opened from board rows and
+  // roster lines where a thumb lands by accident.
+  const [dropArmed, setDropArmed] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [dropErr, setDropErr] = useState<string | null>(null);
+  const doDrop = async () => {
+    if (!leagueId || myRoster == null || dropping) return;
+    if (!dropArmed) { setDropArmed(true); return; }
+    setDropping(true); setDropErr(null);
+    try {
+      const r = await dropPlayer(leagueId, myRoster, slug);
+      if (!r.ok) { setDropErr(friendlyError(r.error ?? 'That didn’t work.')); setDropArmed(false); return; }
+      notifyRosterChanged(leagueId);
+      onClose();
+    } catch (x) { setDropErr(friendlyError(x)); setDropArmed(false); }
+    finally { setDropping(false); }
   };
 
   const photo = headshot(slug);
@@ -240,6 +269,26 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             {flagFor(slug) ? row('COMMISH', `\u2691 ${flagFor(slug)}`) : null}
             {weekLine ? row('THIS WK', weekLine) : null}
             {seasonLine ? row('2025', seasonLine) : null}
+
+            {/* THE DROP — here rather than on the roster line, so it is one
+                deliberate trip into a player rather than a red button sitting
+                next to every name you might have meant to tap. Only ever
+                offered for a player on YOUR roster in THIS league. */}
+            {myRoster != null && (
+              <View style={{ borderTopWidth: 1, borderTopColor: t.bd, marginTop: 6, paddingTop: 10, gap: 6 }}>
+                {dropErr && <Mono size={9.5} tone="opp" style={{ lineHeight: 14 }}>{dropErr}</Mono>}
+                <Pressable disabled={dropping} onPress={doDrop}
+                  style={{ borderWidth: 1, borderRadius: 6, paddingVertical: 9, alignItems: 'center',
+                    borderColor: dropArmed ? t.opp : t.bd, backgroundColor: dropArmed ? t.sh : 'transparent', opacity: dropping ? 0.5 : 1 }}>
+                  <Mono size={10} weight="700" tone="opp">
+                    {dropping ? 'DROPPING…' : dropArmed ? '✕ TAP AGAIN TO CONFIRM' : `✕ DROP ${name.toUpperCase()}`}
+                  </Mono>
+                </Pressable>
+                <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+                  He sits on waivers for 24h — anyone in the league can claim him, and claims beat first-come.
+                </Mono>
+              </View>
+            )}
           </View>
         )}
 
