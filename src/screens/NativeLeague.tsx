@@ -20,7 +20,7 @@ import {
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, addFreeAgent, setRosterSpot,
-  setDraftSetup, setDraftOrder, setDraftStart,
+  setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
   setDraftQueue, myDraftQueue, setAutodraft,
@@ -463,6 +463,9 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
   // The order is DRAFTED here and only committed on save, so a mis-tap while
   // reordering isn't immediately visible to the whole league.
   const [ord, setOrd] = useState<number[] | null>(st.order);
+  /** Lottery weights per seat (0189). Absent = 1, i.e. a flat draw. */
+  const [shares, setShares] = useState<Record<number, number>>({});
+  const [drawn, setDrawn] = useState<LotteryPick[] | null>(null);
   // datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time — the ISO the server
   // stores is UTC, so it has to be shifted back through the local offset or
   // the field would show the commissioner someone else's clock.
@@ -619,6 +622,65 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
             }, '✓ order drawn')} disabled={busy} className="mono" style={{ ...ghostBtn, opacity: busy ? 0.6 : 1 }}>🎲 RANDOMIZE</button>
             <button onClick={() => void run(() => setDraftOrder(leagueId, rows), '✓ order saved')}
               disabled={busy} className="mono" style={{ ...btn, opacity: busy ? 0.6 : 1 }}>SAVE ORDER</button>
+          </div>
+
+          {/* ── THE LOTTERY (0189) ────────────────────────────────────────────
+              🎲 RANDOMIZE above is a FLAT shuffle — every seat equal. A dynasty
+              league usually wants the opposite: last year's bottom team holding
+              more balls than the team that nearly won. Shares are WEIGHTS, not
+              percentages ("worst 250, champion 5"), because percentages have to
+              be rebalanced every time one changes.
+
+              The DRAW IS RECORDED and shown below — a weighted lottery nobody
+              can inspect afterwards is indistinguishable from a commissioner
+              typing an order. */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 14, paddingTop: 12 }}>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>LOTTERY</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.6 }}>
+              Give each team a weight and draw the order from it. Leave them equal for a flat draw; a weight of 0 means
+              they take a slot behind everyone drawn.
+            </div>
+            <div style={{ marginTop: 8 }}>
+              {rows.map((rid) => {
+                const w = shares[rid] ?? 1;
+                const tot = rows.reduce((n, r2) => n + (shares[r2] ?? 1), 0);
+                return (
+                  <div key={`share-${rid}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(rid) ?? `Team ${rid}`}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 52, textAlign: 'right' }}>{tot > 0 ? `${((w / tot) * 100).toFixed(1)}%` : '—'}</span>
+                    <input value={String(w)} inputMode="numeric" className="mono"
+                      onChange={(ev) => setShares((cur) => ({ ...cur, [rid]: Math.max(0, Math.min(1000000, parseInt(ev.target.value.replace(/[^0-9]/g, ''), 10) || 0)) }))}
+                      style={{ width: 72, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--text)', fontSize: 11, padding: '4px 7px', textAlign: 'right', outline: 'none' }} />
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <button onClick={() => void run(() => setLotteryShares(leagueId, shares), '✓ shares saved')}
+                disabled={busy} className="mono" style={{ ...ghostBtn, opacity: busy ? 0.6 : 1 }}>SAVE SHARES</button>
+              <button onClick={() => void run(async () => {
+                const r = await setLotteryShares(leagueId, shares);
+                if (!r.ok) return r;
+                const d = await runDraftLottery(leagueId);
+                if (d.ok && d.order) { setOrd(d.order); setDrawn(d.result ?? null); }
+                return d;
+              }, '✓ lottery drawn')} disabled={busy} className="mono" style={{ ...btn, opacity: busy ? 0.6 : 1 }}>🎰 RUN THE LOTTERY</button>
+            </div>
+            {!!drawn?.length && (
+              <div style={{ marginTop: 12 }}>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>THE DRAW</div>
+                {drawn.map((d, i) => (
+                  <div key={`drawn-${d.roster_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: i === 0 ? 'var(--you)' : 'var(--faint)', width: 22 }}>{i + 1}.</span>
+                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text)' }}>{teamName(d.roster_id) ?? `Team ${d.roster_id}`}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{d.share} · {(d.odds * 100).toFixed(1)}%</span>
+                  </div>
+                ))}
+                <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+                  The odds shown are the ones each team held on its own draw, not its opening odds.
+                </div>
+              </div>
+            )}
           </div>
           {msg && <div className="mono" style={{ fontSize: 12, marginTop: 8, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
         </div>
