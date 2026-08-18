@@ -22,7 +22,8 @@ import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
 import { LeagueBoard } from './LeagueBoard';
-import { LeagueHubPage } from './LeagueHubPage';
+import { LeagueHubPage, useHeroBoard } from './LeagueHubPage';
+import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
 import { markBootSessionChecked } from './DemoBoard';
@@ -513,6 +514,29 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // screen should scroll when a hub tile deep-links into it.
   const [homeFor, setHomeFor] = useState<Enrollment | null>(null);
   const [teamFocus, setTeamFocus] = useState<TeamFocus | undefined>(undefined);
+
+  // ── THE LEAGUE STRIP (v0.288.0) ──────────────────────────────────────────
+  // Founder: "same top row as on the app." `homeFor` is already this screen's
+  // notion of an open league — every league room's back action reads it — so it
+  // is what the strip is drawn for. Built here, above the view returns, and
+  // wrapped around each league room below; `useHeroBoard` is called
+  // unconditionally (it takes a nullable enrollment for exactly this) so the
+  // ▦ MATCHUP chip can build the board from any room, not just the hub.
+  const stripBoard = useHeroBoard(homeFor, session?.user.id ?? '');
+  const stripFor = (here: StripRoom | null) => (homeFor ? (
+    <LeagueStrip
+      leagueId={homeFor.league_id}
+      name={homeFor.league?.name ?? 'League'}
+      rosterId={homeFor.sleeper_roster_id ?? null}
+      native={homeFor.league?.provider === 'native'}
+      here={here}
+      onGo={(room) => {
+        if (room === 'home') { setTeamFocus(undefined); setView('leaguehome'); return; }
+        if (room === 'matchup') { void stripBoard.play(); return; }
+        setTarget({ leagueId: homeFor.league_id, rosterId: homeFor.sleeper_roster_id });
+        if (room === 'team') { setTeamFocus(undefined); setView('team'); } else setView('draft');
+      }} />
+  ) : null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
   // A commissioner with no seat LANDS on the dashboard; this flips once they ask
@@ -639,7 +663,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   };
 
   if (view === 'commish') return <CommishVerify initialCode={commishCode ?? undefined} onBack={() => { setView('home'); refresh(); }} />;
-  if (view === 'commishdash') return <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView(homeFor ? 'leaguehome' : 'home'); }} />;
+  if (view === 'commishdash') return (
+    <>
+      {stripFor(null)}
+      <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView(homeFor ? 'leaguehome' : 'home'); }} />
+    </>
+  );
   // Add another league from My Leagues: fork by role (join with an invite code, or
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
@@ -659,11 +688,17 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onBack={() => setView('home')} />
   );
   if (view === 'draft' && target) return (
-    <DraftRoom leagueId={target.leagueId} onBack={() => { setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onTeam={() => setView('team')} />
+    <>
+      {stripFor('draft')}
+      <DraftRoom leagueId={target.leagueId} onBack={() => { setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onTeam={() => setView('team')} />
+    </>
   );
   if (view === 'team' && target) return (
-    <TeamManage leagueId={target.leagueId} focus={teamFocus}
-      onBack={() => { setTeamFocus(undefined); setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onDraft={() => setView('draft')} />
+    <>
+      {stripFor('team')}
+      <TeamManage leagueId={target.leagueId} focus={teamFocus}
+        onBack={() => { setTeamFocus(undefined); setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onDraft={() => setView('draft')} />
+    </>
   );
   if (view === 'join') return (
     <>
@@ -684,7 +719,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
       onBack={() => { setView('home'); refresh(); }} />
   );
-  if (view === 'results' && target) return <LeagueResults leagueId={target.leagueId} onBack={() => setView(homeFor ? 'leaguehome' : 'home')} />;
+  if (view === 'results' && target) return (
+    <>
+      {stripFor(null)}
+      <LeagueResults leagueId={target.leagueId} onBack={() => setView(homeFor ? 'leaguehome' : 'home')} />
+    </>
+  );
   // Leaving also clears `view` from the route. Without that the URL still says
   // admin while the screen says leagues, and the effect above would bounce you
   // back into the console on the next route change.
@@ -753,6 +793,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'leaguehome' && homeFor) {
     const e = homeFor;
     return (
+      <>
+      {stripFor('home')}
       <LeagueHubPage e={e} card={cards[enrollKey(e)]} commish={commishIds.has(e.league_id)}
         userId={viewAs?.userId ?? session.user.id}
         viewAsLabel={viewAs?.label ?? null}
@@ -761,6 +803,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         onTeam={(focus) => { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setTeamFocus(focus); setView('team'); }}
         onDraft={() => { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setView('draft'); }}
         onManage={() => { setManageId(e.league_id); setManageTab(undefined); setView('commishdash'); }} />
+      </>
     );
   }
 

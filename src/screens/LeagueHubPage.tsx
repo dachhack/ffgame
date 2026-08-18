@@ -17,13 +17,11 @@ import { Img } from '../app/ui';
 import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, chatUnread, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, weekLabel } from '@drip/core/data/nflSlate';
-import { GameIcon, BRAND_MARK } from '../app/gameIcons';
-import { ChatPanel } from '../app/chat';
 import { setCardLeague } from '../app/playerCard';
 import { ScoringPanel, RosterRulesPanel, RegisterPanel } from './LeagueInfo';
 
@@ -56,12 +54,15 @@ export const consumeShopOnBoard = (): boolean => { const v = pendingShop; pendin
 /** Build this enrollment's live board and enter it — the exact prelude
  *  LeagueCard's SET YOUR LINEUP runs (kept in sync by hand; the card keeps
  *  its own copy so the hub can't regress it). */
-export function useHeroBoard(e: Enrollment, userId: string) {
+export function useHeroBoard(e: Enrollment | null, userId: string) {
   const { loadSimLeague, navigate } = useStore();
   const [building, setBuilding] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const play = async (intent?: 'shop') => {
-    if (building) return;
+    // NULLABLE `e` since v0.288.0: LiveOnboard calls this unconditionally at the
+    // top of its body so the league strip's ▦ MATCHUP chip can build the board
+    // from any room, and a hook cannot be called only when a league is open.
+    if (!e || building) return;
     setBuilding(true); setErr(null);
     try {
       const preseasonOn = !!e.league?.preseason_at;
@@ -124,9 +125,9 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   const { play, building, err: buildErr } = useHeroBoard(e, userId);
   const native = e.league?.provider === 'native';
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
-  const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
-  const [sig, setSig] = useState<{ polls: number; waivers: number; commish: { waiting: number; review: number } | null }>({ polls: 0, waivers: 0, commish: null });
-  const [chatOpen, setChatOpen] = useState(false);
+  // `polls_unvoted` moved to the strip's 💬 dot with the chat tile (v0.288.0);
+  // what is left here is what the hub's own tiles badge.
+  const [sig, setSig] = useState<{ waivers: number; commish: { waiting: number; review: number } | null }>({ waivers: 0, commish: null });
   const [rostersOpen, setRostersOpen] = useState(false);
   // The league's reference panels (v0.274.0, founder's menu list). One piece
   // of state — only ever one is open, and they expand in place like the
@@ -157,11 +158,8 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
     leagueNote(e.league_id)
       .then((r) => { if (r.ok && (r.text || r.can_edit)) setNote({ text: r.text ?? '', canEdit: !!r.can_edit }); })
       .catch(() => {});
-    chatUnread(e.league_id)
-      .then((r) => { if (r.ok) setUnread({ n: (r.league ?? 0) + (r.dm ?? 0), mention: (r.mention ?? 0) > 0 }); })
-      .catch(() => {});
     leagueSignals(e.league_id)
-      .then((r) => { if (r.ok) setSig({ polls: r.polls_unvoted ?? 0, waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
+      .then((r) => { if (r.ok) setSig({ waivers: r.waiver_results ?? 0, commish: r.commish ?? null }); })
       .catch(() => {});
     // Season's over and someone won it? The hub wears the banner (0199).
     playoffState(e.league_id)
@@ -205,9 +203,12 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
         <Img src={e.league?.avatar_url} size={44} radius={9} alt={e.league?.name ?? ''}
           fallback={<div className="grotesk" style={{ width: 44, height: 44, borderRadius: 9, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 17, fontWeight: 700, color: 'var(--you)' }}>{(e.league?.name ?? 'L').slice(0, 1).toUpperCase()}</div>} />
+        {/* NO SECOND TITLE (v0.288.0) — the league strip one row up is the
+            name now, at the same size, and printing it again here just pushed
+            the menu down. The app made this exact trim in v0.280.0. What is
+            left is the line the strip does NOT carry: which seat you are. */}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2 }}>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
             {e.league?.season ?? ''} · you are <b style={{ color: 'var(--text)' }}>{e.team_name}</b>{commish ? ' · ⚑ commissioner' : ''}
           </div>
         </div>
@@ -243,22 +244,28 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           An OPEN PANEL breaks out of the grid to full width below its band: a
           register or a scoring table crammed into one half-width grid cell
           would be a worse read than the tile it came from. */}
+      {/* WHO YOU PLAY THIS WEEK — the one thing the matchup TILE carried that
+          the strip's ▦ MATCHUP chip cannot: the week, the opponent, and whether
+          it is live. The tile itself is gone (v0.288.0, the founder's v0.275.0
+          rule now that the web has a strip: a menu that repeats the strip is a
+          menu you read twice), so the line it was a subtitle to stays on its
+          own — and still opens the board, since a live matchup should be one
+          click from the hub however the chips are arranged. */}
+      {!pending && (
+        <button onClick={guard(() => void play())} disabled={building} className="mono"
+          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', marginTop: 12,
+            background: live ? 'color-mix(in srgb, var(--you) 10%, var(--surface))' : 'var(--surface)',
+            border: `1px solid ${live ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 8, padding: '9px 13px',
+            fontSize: 10.5, color: 'var(--text)', cursor: building ? 'default' : 'pointer', opacity: building ? 0.6 : 1 }}>
+          <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 8.5, color: live ? 'var(--you)' : 'var(--faint)', flex: 'none' }}>
+            {building ? 'LOADING…' : live ? '● LIVE' : 'THIS WEEK'}
+          </span>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{matchupSub}</span>
+          <span style={{ color: 'var(--faint)', flex: 'none' }}>→</span>
+        </button>
+      )}
+
       <Band title="YOUR WEEK" wide={wide}>
-        <Tile accent icon={<GameIcon name={BRAND_MARK} emoji="▶" size="1.2em" />}
-          title={building ? 'Loading your board…' : live ? 'Go to your matchup' : 'My matchup'}
-          sub={matchupSub}
-          onClick={guard(() => void play())} disabled={building || pending} />
-
-        <Tile icon="💬" title="Chat"
-          badge={(unread.n > 0 || sig.polls > 0)
-            ? <>
-                {unread.n > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 999, padding: '2px 7px' }}>{unread.mention ? '@ ' : ''}{unread.n > 99 ? '99+' : unread.n}</span>}
-                {sig.polls > 0 && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 999, padding: '2px 7px' }}>📊 {sig.polls}</span>}
-              </>
-            : undefined}
-          sub="league channel · direct messages"
-          onClick={guard(() => { setChatOpen(true); setUnread({ n: 0, mention: false }); })} />
-
         {!classic && (
           <Tile icon="◈" title="Power-up shop" sub="spend drip coin on this week's edge — opens on your board"
             onClick={guard(() => void play('shop'))} disabled={building || pending} />
@@ -308,7 +315,6 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {info === 'alerts' && <NotifPrefsCard />}
       </div>
 
-      {chatOpen && <ChatPanel leagueId={e.league_id} onClose={() => setChatOpen(false)} />}
     </div>
   );
 }
