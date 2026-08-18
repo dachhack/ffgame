@@ -212,26 +212,41 @@ export function App() {
           </Pressable>
         </View>
 
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: open ? theme.dim : theme.faint, paddingHorizontal: 14, paddingTop: 8 }}>
-          {open ? open.name : session.user.email}
-        </Text>
+        {/* THE LEAGUE'S OWN HEADER (founder): the name reads as a title and
+            the room chips share its row, instead of a 9.5pt line of dim mono
+            with a separate strip under it. The row WRAPS — four chips and a
+            long league name will not fit a phone's width, and wrapping the
+            chips under the title is the graceful half of that; the title
+            itself shrinks to one line rather than pushing them off.
+            Signed out of a league there is nothing to title, so the email
+            keeps its quiet line.
 
-        {/* Native leagues carry their whole season in-app — matchup, draft
-            room, waivers — so they get the full tab strip. Platform leagues
-            only earn management tabs when you commission them (rosters/waivers
-            stay on Sleeper) — but CHAT (0147) is for every member of any
-            league, so an open league always has a strip now: a play-only
-            platform league shows ▦ MATCHUP + 💬 CHAT.
-            The strip still RENDERS over the commish tools (that view is in the
-            list below) — you just reach them from the league menu now. */}
-        {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
-            {([
+            Native leagues carry their whole season in-app — matchup, draft
+            room, waivers — so they get the full set. Platform leagues only
+            earn management tabs when you commission them (rosters/waivers stay
+            on Sleeper) — but CHAT (0147) is for every member of any league, so
+            an open league always has chips: a play-only platform league shows
+            ▦ MATCHUP + 💬. The strip still renders over the commish tools —
+            you just reach them from the league menu now. */}
+        {!open && (
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: theme.faint, paddingHorizontal: 14, paddingTop: 8 }}>
+            {session.user.email}
+          </Text>
+        )}
+        {open && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 8 }}>
+            <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, flexShrink: 1, marginRight: 2 }}>
+              {open.name}
+            </Text>
+            {(view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && ([
               ['home', '🏠 LEAGUE', true],                             // the hub (0182)
               ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
               ['draft', '⛏ DRAFT', open.native && !draftDone],         // native-only; leaves once drafted
               ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
-              ['chat', '💬 CHAT', true],                               // any member, any league kind
+              // CHAT is the ICON ALONE (founder), and bigger for it: the word
+              // bought nothing a speech bubble doesn't already say, and the
+              // room it frees is what lets the title share this row.
+              ['chat', '💬', true],
               // NO ⚑ COMMISH here (founder): the league menu carries the
               // Commissioner tile, and the strip is for rooms every open
               // league has. The commishtools VIEW stays reachable — a seatless
@@ -240,12 +255,18 @@ export function App() {
               .filter(([, , show]) => show)
               .map(([id, label]) => (
               <Pressable key={id} onPress={() => setView(id)}
+                accessibilityRole="button"
+                accessibilityLabel={id === 'chat' ? 'Chat' : undefined}
+                accessibilityState={{ selected: view === id }}
                 style={{
-                  borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+                  borderWidth: StyleSheet.hairlineWidth, borderRadius: 6,
+                  paddingHorizontal: id === 'chat' ? 9 : 10, paddingVertical: id === 'chat' ? 4 : 6,
                   borderColor: view === id ? theme.you : theme.bd,
                   backgroundColor: view === id ? alpha(theme.you, 12) : theme.surface,
                 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
+                <Text style={id === 'chat'
+                  ? { fontSize: 15, lineHeight: 19 }
+                  : { fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
                 {id === 'chat' && <ChatChipDot leagueId={open.leagueId} active={view === 'chat'} />}
               </Pressable>
             ))}
