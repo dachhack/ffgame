@@ -1321,11 +1321,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveTestChip = testAnchor != null ? (
     <span className="mono" title="Live-test mode: this league's windows run on a compressed schedule (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🧪 TEST</span>
   ) : null;
-  // Preseason badge — makes it obvious this board is a real 2026 preseason matchup,
-  // not a regular-season week.
-  const livePreseasonChip = preseason ? (
-    <span className="mono" title="Preseason: this league is playing a real 2026 NFL preseason matchup (super-admin toggle)." style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏈 PRESEASON</span>
-  ) : null;
   // WHICH GAME (v0.256.0, HANDOFF #4). This screen is only ever the DRIP
   // branch — a classic league returned to ClassicBoard above, and that board
   // names itself in its own header — so the chip is a statement, not a
@@ -1337,10 +1332,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       ◈ DRIP
     </span>
   ) : null;
+  // THE WEEK, AND WHETHER IT IS PRESEASON (v0.290.0, founder: "get rid of the
+  // preseason chip and just highlight the PRE in the week selector"). A separate
+  // 🏈 PRESEASON badge said what `weekLabel` was already saying two chips to the
+  // left — "PRE 3" — while taking enough width to collide with the score. So the
+  // FACT moves onto the label that carries it: accented when the shown week is a
+  // preseason one, plain otherwise. The tooltip keeps the sentence the badge had,
+  // since the colour alone cannot explain what preseason means here.
+  const showingWeek = switchingWeek ?? week;
+  const preWeek = isPreseasonWeek(showingWeek);
   const liveWeekSel = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
       <button onClick={() => goToWeek(prevWeek)} disabled={prevWeek == null || switchingWeek != null} title="previous week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: prevWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: prevWeek == null ? 0.35 : 1 }}>‹</button>
-      <span className="mono" title="Week — page through the season" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', minWidth: 36, textAlign: 'center' }}>{switchingWeek != null ? `${weekLabel(switchingWeek)}…` : weekLabel(week)}</span>
+      <span className="mono"
+        title={preWeek
+          ? 'Preseason — this league is playing a real 2026 NFL preseason matchup. Page through the season with ‹ ›.'
+          : 'Week — page through the season'}
+        style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', minWidth: 36, textAlign: 'center',
+          color: preWeek ? 'var(--you)' : 'var(--text)',
+          ...(preWeek ? { background: 'color-mix(in srgb, var(--you) 14%, var(--surface))', border: '1px solid var(--you)', borderRadius: 4, padding: '3px 6px' } : {}) }}>{switchingWeek != null ? `${weekLabel(switchingWeek)}…` : weekLabel(week)}</span>
       <button onClick={() => goToWeek(nextWeek)} disabled={nextWeek == null || switchingWeek != null} title="next week" className="mono" style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '4px 7px', cursor: nextWeek == null || switchingWeek != null ? 'default' : 'pointer', opacity: nextWeek == null ? 0.35 : 1 }}>›</button>
     </div>
   );
@@ -1378,13 +1388,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   {liveLeaguesChip}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  {liveCoin}
                   {liveWeekResult}
                   <SiteSettings />
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{livePreseasonChip}{liveTestChip}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{liveTestChip}</div>
                 {liveScore}
               </div>
             </div>
@@ -1397,12 +1406,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               {liveLeagueChip}
               {liveLeaguesChip}
               {liveWeekSel}
-              {livePreseasonChip}
               {liveTestChip}
             </div>
             {liveScore}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-              {liveCoin}
               {liveWeekResult}
               <SiteSettings />
             </div>
@@ -1560,6 +1567,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                     <button onClick={() => setPuView('apply')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
                       ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
                     </button>
+                    {/* THE COIN, BESIDE THE SHOP (v0.290.0, founder). It used to
+                        sit up in the header, which on a phone put a balance in
+                        the same crowded row as the brand, both back-doors and
+                        the gear — and put it nowhere near the only thing it is
+                        for. Spending money next to what you spend it on. */}
+                    {liveCoin}
                     <button onClick={() => setShopOpen(true)} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
                       <Emoji e="🛒" size="1.3em" /> SHOP
                     </button>
@@ -1575,8 +1588,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                     )}
                     {/* chat (0147): league channel + DMs, right beside the other board tools */}
                     {liveCtx && (
-                      <ChatButton leagueId={liveCtx.leagueId}
-                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }} />
+                      <ChatButton leagueId={liveCtx.leagueId} compact
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }} />
                     )}
                   </div>
                 </div>

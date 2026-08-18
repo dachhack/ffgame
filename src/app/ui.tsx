@@ -442,15 +442,22 @@ export function VersionTag({ style }: { style?: CSSProperties }) {
 
 // `hideDataSource` drops the "· data Stathead" attribution (the hero/live board
 // isn't a 2025-data replay, so the demo attribution would mislead there).
+/** OVERFLOW HIDDEN, not just minWidth: 0 (v0.290.0). The wordmark and the
+ *  version line are both `nowrap` inside a column a flex row is free to
+ *  squeeze, and nothing here clipped — so on a narrow phone the shrinking did
+ *  nothing and "DRIP FANTASY" simply PAINTED OVER whatever chip sat beside it
+ *  (the founder's screenshot: "DRIP FANTA" with a button on top of it).
+ *  Clipping makes a squeeze visible and harmless instead of invisible and
+ *  wrong. */
 export function Brand({ onClick, hideDataSource = false }: { onClick?: () => void; hideDataSource?: boolean }) {
   return (
     <div
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden', cursor: onClick ? 'pointer' : 'default' }}
     >
       <GameIcon name={BRAND_MARK} emoji={<div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />} size={18} style={{ verticalAlign: 'middle' }} />
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
-        <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', lineHeight: 1.1 }}>
+        <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           DRIP FANTASY
         </div>
         <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--faint)', marginTop: 2, whiteSpace: 'nowrap' }}>
