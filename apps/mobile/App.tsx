@@ -92,7 +92,6 @@ export function App() {
   const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
-  const [fieldsSignal, setFieldsSignal] = useState(0);
   // Whether the open league's draft is done — the ⛏ DRAFT chip leaves the strip
   // once the draft completes (the room stays reachable from the league menu).
   // Defaults false so the chip shows until the answer lands: a live draft with
@@ -295,7 +294,6 @@ export function App() {
               rosterId={open.rosterId} native={open.native} commish={!!open.commish}
               onGo={(room) => setView(room)}
               onShop={() => { setShopSignal((n) => n + 1); setView('picks'); }}
-              onFields={() => { setFieldsSignal((n) => n + 1); setView('picks'); }}
               onBack={() => setOpen(null)} />
           </View>
         ) : open && open.rosterId != null ? (
@@ -311,7 +309,6 @@ export function App() {
               native={open.native}
               onBack={() => setView('home')}
               openShopSignal={shopSignal}
-              openFieldsSignal={fieldsSignal}
             />
           </View>
         ) : (
