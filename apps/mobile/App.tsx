@@ -18,7 +18,7 @@ import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha } from './src/theme.native';
 import { SettingsModal } from './src/ui/SettingsModal';
-import { PlayerCardHost } from './src/ui/PlayerCardSheet';
+import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin } from '@drip/core/data/liveApi';
@@ -98,6 +98,14 @@ export function App() {
   // Defaults false so the chip shows until the answer lands: a live draft with
   // no way in would be worse than a finished one briefly showing.
   const [draftDone, setDraftDone] = useState(false);
+
+  // The player card's league context (v0.282.0) — set here because `open` IS
+  // "which league is on screen", and cleared with it so a card opened from the
+  // leagues list never claims the last league's owner. Native only: the owner
+  // and register panels are native-league facts.
+  useEffect(() => {
+    setCardLeague(open?.native ? open.leagueId : null);
+  }, [open?.leagueId, open?.native]);
 
   useEffect(() => {
     setDraftDone(false);

@@ -240,7 +240,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
             {openRid === g.rid && (
               <View style={{ paddingBottom: 10, gap: 2 }}>
                 {g.players.map((p) => (
-                  <Pressable key={p.slug} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team }); }}
+                  <Pressable key={p.slug} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, leagueId }); }}
                     style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 3 }}>
                     <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim, width: 30 }}>{p.pos === 'DEF' ? 'DST' : p.pos}</Text>
                     <Text style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.name}</Text>

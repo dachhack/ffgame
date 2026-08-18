@@ -8,6 +8,7 @@
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip } from '../app/ui';
+import { setCardLeague } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -1386,6 +1387,10 @@ function KeepersCard({ leagueId, myRoster, mine }: {
 export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
 }) {
+  // Player cards opened from this screen's roster and wire lists get the
+  // league's own panels — who holds him, and the league's moves on him
+  // (v0.282.0). Cleared on the way out so the context never outlives the page.
+  useEffect(() => { setCardLeague(leagueId); return () => setCardLeague(null); }, [leagueId]);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);

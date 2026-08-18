@@ -15,7 +15,9 @@ import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, type RegisterRow } from '@drip/core/data/liveApi';
+import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
+import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Ev, track } from '@drip/core/analytics';
@@ -25,10 +27,32 @@ import { InjuryBadge } from './rosterGroup';
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
   week?: number; userId?: string;
+  /** The league this card was opened FROM, when there is one. It buys the two
+   *  panels a bare NFL card can't have: who owns him here, and what this
+   *  league has done with him (0186's register). Optional — the demo board and
+   *  the free-agent picker open cards with no league behind them. */
+  leagueId?: string;
 }
 
 let listener: ((p: PlayerCardReq) => void) | null = null;
-export const openPlayerCard = (p: PlayerCardReq): void => { track(Ev.playerCardOpened, { pos: p.pos }); listener?.(p); };
+
+/** WHICH LEAGUE IS ON SCREEN (v0.282.0), installed once by App rather than
+ *  threaded through every surface that can open a card.
+ *
+ *  The card is already a module-level bus — any screen calls openPlayerCard and
+ *  a host mounted once presents it — so a `leagueId` prop would have had to
+ *  cross Duel, RosterPanel and PlayerPicker to reach it, none of which have any
+ *  other use for one. This is the same shape as the engine's other installed
+ *  context (setLeagueFlags, setLeagueScoring): the host owns it, and it is
+ *  cleared the moment the league closes so a card opened from the leagues list
+ *  can never claim the last league's owner. */
+let cardLeague: string | null = null;
+export const setCardLeague = (id: string | null): void => { cardLeague = id; };
+
+export const openPlayerCard = (p: PlayerCardReq): void => {
+  track(Ev.playerCardOpened, { pos: p.pos });
+  listener?.({ ...p, leagueId: p.leagueId ?? cardLeague ?? undefined });
+};
 
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
 
@@ -41,7 +65,32 @@ export function PlayerCardHost() {
 
 function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
   const t = useTheme();
-  const { slug, name, pos, team, week, userId } = req;
+  const { slug, name, pos, team, week, userId, leagueId } = req;
+  // SUMMARY | HISTORY. There is no GAME LOG or TEAM tab, deliberately: a
+  // per-week NFL stat table and a depth chart are data this app does not hold
+  // (the baked pbp is fetched a week at a time for the board, and nothing here
+  // knows a team's depth order), and an empty tab is worse than no tab.
+  const [tab, setTab] = useState<'summary' | 'history'>('summary');
+  // Who holds him in THIS league, and what the league has done with him.
+  const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = loading, null = free agent
+  const [moves, setMoves] = useState<RegisterRow[] | null>(null);
+  useEffect(() => {
+    if (!leagueId) { setOwner(undefined); setMoves(null); return; }
+    let dead = false;
+    nativeRosters(leagueId)
+      .then(async (rows) => {
+        const mine = rows.find((r) => r.slug === slug);
+        if (dead) return;
+        if (!mine) { setOwner(null); return; }
+        const teams = await matchupTeams(leagueId, [mine.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
+        if (!dead) setOwner(teams[mine.roster_id]?.team_name ?? `Roster ${mine.roster_id}`);
+      })
+      .catch(() => { if (!dead) setOwner(undefined); });
+    leagueRegister(leagueId, 200)
+      .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [leagueId, slug]);
   // Prefer the live team layer (fresh bake + worker overrides, 0142) over
   // whatever the opening surface happened to know — see the web card.
   const showTeam = displayTeam(slug, team);
@@ -116,14 +165,96 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             </Pressable>
           )}
         </View>
-        <View style={{ gap: 7, borderTopWidth: 1, borderTopColor: t.bd, paddingTop: 11 }}>
-          {(tenure || bio?.college || bio?.age != null) ? row('CAREER', [tenure, bio?.college, bio?.age != null ? `age ${bio.age}` : null].filter(Boolean).join(' · ')) : null}
-          {inj ? row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)
-            : injTag ? row('INJURY', INJURY_LABEL[injTag] ?? injTag) : null}
-          {flagFor(slug) ? row('COMMISH', `\u2691 ${flagFor(slug)}`) : null}
-          {weekLine ? row('THIS WK', weekLine) : null}
-          {seasonLine ? row('2025', seasonLine) : null}
+
+        {/* THE FACT STRIP (v0.282.0) — the four numbers a card is opened for,
+            read at a glance instead of in a sentence. Height and weight are
+            NOT here: the bake has age, tenure, college and jersey, and
+            inventing the other two would be worse than three columns. */}
+        <View style={{ flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.bd, paddingVertical: 9 }}>
+          {([
+            ['AGE', bio?.age != null ? String(bio.age) : '—'],
+            ['EXP', bio?.exp != null ? (bio.exp === 0 ? 'ROOK' : `${bio.exp} yr`) : '—'],
+            ['NO.', bio?.num != null ? `#${bio.num}` : '—'],
+            ['PROJ', PROJ_2026.get(slug) != null ? (PROJ_2026.get(slug) as number).toFixed(1) : '—'],
+          ] as const).map(([k, v]) => (
+            <View key={k} style={{ flex: 1, alignItems: 'center' }}>
+              <Mono size={8} tone="faint" weight="700" track={0.12}>{k}</Mono>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: t.text, marginTop: 2 }}>{v}</Text>
+            </View>
+          ))}
         </View>
+
+        {/* Only ONE tab exists without a league behind the card, so the strip
+            appears only when the second has something to show. */}
+        {!!leagueId && (
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {([['summary', 'SUMMARY'], ['history', `HISTORY${moves?.length ? ` (${moves.length})` : ''}`]] as const).map(([id, label]) => (
+              <Pressable key={id} onPress={() => setTab(id)}
+                style={{ borderWidth: 1, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 6, borderColor: tab === id ? t.you : t.bd, backgroundColor: tab === id ? t.bg : 'transparent' }}>
+                <Mono size={9} weight="700" tone={tab === id ? 'you' : 'dim'}>{label}</Mono>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {(!leagueId || tab === 'summary') && (
+          <View style={{ gap: 7 }}>
+            {/* UPCOMING GAME — the top panel of Sleeper's summary, from the
+                slate this app already carries. Silent out of season, when the
+                bye is on, or before the slate for that week is loaded. */}
+            {(() => {
+              if (week == null || !showTeam) return null;
+              const g = nflGameForTeam(week, showTeam);
+              if (!g) return row('NEXT UP', 'bye — no game this week');
+              const home = g.home === showTeam;
+              const opp = home ? g.away : g.home;
+              const when = g.kickoff ? kickoffLabel(g.kickoff) : '';
+              return row('NEXT UP', `${home ? 'vs' : '@'} ${opp}${when ? ` · ${when}` : ''}`);
+            })()}
+            {owner !== undefined ? row('ROSTERED', owner ? `⇄ ${owner}` : 'free agent — nobody holds him') : null}
+            {(tenure || bio?.college) ? row('CAREER', [tenure, bio?.college].filter(Boolean).join(' · ')) : null}
+            {inj ? row('INJURY', `${INJURY_LABEL[inj.status] ?? inj.status}${inj.comment ? ` — ${inj.comment}` : ''}${inj.returnDate ? ` · est. return ${inj.returnDate}` : ''}`)
+              : injTag ? row('INJURY', INJURY_LABEL[injTag] ?? injTag) : null}
+            {flagFor(slug) ? row('COMMISH', `\u2691 ${flagFor(slug)}`) : null}
+            {weekLine ? row('THIS WK', weekLine) : null}
+            {seasonLine ? row('2025', seasonLine) : null}
+          </View>
+        )}
+
+        {/* HISTORY — this league's own transaction record for him (0186).
+            Sleeper's is the whole platform's; ours is the league's, which is
+            the half a manager argues about. */}
+        {!!leagueId && tab === 'history' && (
+          <View style={{ gap: 2 }}>
+            {moves === null && <Mono size={10} tone="faint">Loading…</Mono>}
+            {moves?.length === 0 && (
+              <Mono size={10} tone="faint" style={{ lineHeight: 15 }}>
+                No moves yet. Adds, drops, claims and trades appear here from the moment the draft ends —
+                draft night itself is in the draft room.
+              </Mono>
+            )}
+            {moves?.map((m) => (
+              <View key={m.id} style={{ flexDirection: 'row', gap: 8, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                <Text style={{ fontSize: 12, width: 16, textAlign: 'center', color: m.kind === 'drop' ? t.opp : t.you }}>
+                  {m.kind === 'drop' ? '✕' : m.kind === 'trade' ? '⇄' : m.kind === 'waiver' ? '⚑' : '✚'}
+                </Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 11.5, lineHeight: 16, color: t.text }}>
+                    <Text style={{ fontWeight: '700' }}>{m.team ?? `Roster ${m.roster_id}`}</Text>
+                    {m.kind === 'drop' ? ' dropped him'
+                      : m.kind === 'trade' ? ` traded for him${m.from_team ? ` from ${m.from_team}` : ''}`
+                      : m.kind === 'waiver' ? ` claimed him off waivers${m.bid ? ` for ${m.bid}` : ''}`
+                      : m.kind === 'commish' ? ' — moved by the commissioner'
+                      : ' signed him'}
+                  </Text>
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 1 }}>
+                    {(() => { const d = new Date(m.at); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); })()}
+                  </Mono>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </Overlay>
   );

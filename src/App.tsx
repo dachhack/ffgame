@@ -6,7 +6,7 @@ import { yahooExchange } from '@drip/core/data/providers/yahooClient';
 import { getSession, hasAuthTokensInUrl, captureAuthUrlError } from '@drip/core/data/liveApi';
 import { RequestCodeFab } from './screens/RequestCode';
 import { InstallPrompt } from './app/InstallPrompt';
-import { PlayerCardHost } from './app/playerCard';
+import { PlayerCardHost, setCardLeague } from './app/playerCard';
 import { UpdateBanner } from './app/UpdateBanner';
 import { DEMO_WEEK } from '@drip/core/config';
 
@@ -31,6 +31,11 @@ export function App() {
   // A signed-in live user already has a league — hide the "request a league code"
   // invite CTA for them (they reached the demo/sim board from their leagues).
   const loggedIn = (() => { try { return localStorage.getItem('dripLive') === '1'; } catch { return false; } })();
+
+  // The player card's league context (v0.282.0): the board knows its league
+  // through liveCtx, and clearing it on the way out keeps a card opened from
+  // the demo or the leagues list from claiming the last league's owner.
+  useEffect(() => { setCardLeague(liveCtx?.leagueId ?? null); }, [liveCtx?.leagueId]);
 
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;

@@ -22,6 +22,7 @@ import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { ChatPanel } from '../app/chat';
+import { setCardLeague } from '../app/playerCard';
 import { ScoringPanel, RosterRulesPanel, RegisterPanel } from './LeagueInfo';
 
 // ── one-shot board intent ───────────────────────────────────────────────────
@@ -117,6 +118,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // founder). Defaults false — drip is the common case, and a tile popping in
   // would be worse than one briefly showing.
   const [classic, setClassic] = useState(false);
+
+  // Cards opened from this page (TeamsRosters) get the league's own
+  // panels — who owns him, and what the league did with him (v0.282.0).
+  useEffect(() => { setCardLeague(e.league_id); return () => setCardLeague(null); }, [e.league_id]);
 
   useEffect(() => {
     leagueGameMode(e.league_id)
