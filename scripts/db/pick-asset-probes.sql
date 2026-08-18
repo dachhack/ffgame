@@ -304,9 +304,27 @@ begin
   perform assert_true((select owner_roster from pick_asset where league_id = nl
       and season = '2027' and round = 1 and original_roster = 1) = 2, 'pk15c 2027 pick moved');
   perform probe_as('f');
+  -- pk15d USED TO ASSERT THE OPPOSITE, and the change is deliberate (0190).
+  -- Under 0183 only FUTURE picks traded: `_clean_trade_picks` resolved every
+  -- pick against `_future_pick_season`, so the draft in front of you was the
+  -- one draft whose picks you could not deal. That is exactly the founder's
+  -- "trade draft positions", so the current season's own picks trade now — the
+  -- guards moved to WHICH pick (not one already used, not the one on the
+  -- clock) rather than WHICH SEASON.
+  r := propose_trade(nl, 1, 2, '[]'::jsonb, '[]'::jsonb, null,
+      '[{"season": "2025", "round": 1, "orig": 1}]'::jsonb, null);
+  perform assert_ok(r, 'pk15d the pending draft''s own picks DO trade now (0190)');
+  perform probe_as('9');
+  perform assert_ok(respond_trade((r ->> 'trade_id')::uuid, true), 'pk15e and execute');
+  perform assert_true((select owner_roster from pick_asset where league_id = nl
+      and season = '2025' and round = 1 and original_roster = 1) = 2,
+    'pk15f the rookie draft''s own pick changed hands');
+  -- A pick that does not exist is still refused, so the season resolution did
+  -- not simply stop checking.
+  perform probe_as('f');
   perform assert_err(propose_trade(nl, 1, 2, '[]'::jsonb, '[]'::jsonb, null,
-      '[{"season": "2025", "round": 1, "orig": 1}]'::jsonb, null),
-    'only future picks', 'pk15d the pending draft''s own picks don''t trade');
+      '[{"season": "2025", "round": 99, "orig": 1}]'::jsonb, null),
+    'no such pick', 'pk15g a pick that does not exist is still refused');
 end $$;
 
 select 'ALL PICK-ASSET PROBES PASSED' as result;

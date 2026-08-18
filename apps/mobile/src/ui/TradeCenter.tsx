@@ -35,7 +35,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const t = useTheme();
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [signals, setSignals] = useState<TradeSignalRow[]>([]);
-  const [assets, setAssets] = useState<PickAssetRow[]>([]);          // tradeable future picks (0183)
+  const [assets, setAssets] = useState<PickAssetRow[]>([]);          // tradeable picks: futures (0183) + startup slots (0190)
+  const [pickTradingOn, setPickTradingOn] = useState(true);          // the commissioner's switch (0190)
   const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [partner, setPartner] = useState<number | null>(null);
@@ -51,10 +52,15 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     pickAssets(leagueId).then((a) => {
-      // every FUTURE season's picks are tradeable (dynasty holds a 3-year
-      // horizon, 0185); a rolled league's pending-draft assets belong to the
-      // draft room
-      if (a.ok && a.future_season != null) setAssets(a.picks.filter((p) => p.season >= a.future_season!));
+      if (!a.ok) return;
+      setPickTradingOn(a.pick_trading !== false);
+      // FUTURE picks (dynasty holds a 3-year horizon, 0185) — and since 0190
+      // THIS season's slots too. The draft in front of you used to be the one
+      // draft whose picks you couldn't deal; now a startup slot is an asset
+      // like any other, which is also what makes a MIXED offer work — the two
+      // kinds are rows in one list and one trade carries both.
+      setAssets(a.picks.filter((p) =>
+        (a.future_season != null && p.season >= a.future_season) || p.kind === 'startup'));
     }),
   ]).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -71,9 +77,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     tap();
     set(list.some((x) => samePick(x, p)) ? list.filter((x) => !samePick(x, p)) : [...list, p]);
   };
-  /** "2027 R1" — plus whose original slot it is when it was acquired. */
-  const pickAssetLabel = (p: { season: string; round: number; orig: number }, holder: number) =>
-    `${p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+  /** "2027 R1" — plus whose original slot it is when it was acquired. A startup
+   *  slot says DRAFT rather than a season, because "2026 R1" next to "2027 R1"
+   *  reads as two future picks when one of them is a slot in the draft running
+   *  right now. */
+  const pickAssetLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
     const slugs = (side === 'give' ? x.give : x.get).map(pname);
     const rid = side === 'give' ? x.from_roster : x.to_roster;
@@ -176,9 +185,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 
   const shown = trades.slice(0, 8);
 
-  // A side's tradeable draft picks (0183), below its player list. Renders
-  // nothing until the commissioner provisions rookie rounds.
+  // A side's tradeable draft picks — rookie futures (0183) and startup slots
+  // (0190), in one list, which is what lets one offer carry both. Renders
+  // nothing until there is something to trade, and nothing at all when the
+  // commissioner has the switch off (better than offering picks the server
+  // will refuse on submit).
   const pickAssetList = (rid: number | null, sel: PickAssetRow[], set: (v: PickAssetRow[]) => void) => {
+    if (!pickTradingOn) return null;
     const owned = assets.filter((a) => a.owner === rid);
     if (owned.length === 0) return null;
     return (

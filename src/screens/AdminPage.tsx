@@ -9,6 +9,7 @@ import {
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
+  setPickTrading,
   adminUserState, type ViewAsState,
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
@@ -447,6 +448,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [mode, setMode] = useState<WaiverMode>('rolling');
   const [budget, setBudget] = useState(100);
   const [review, setReview] = useState<TradeReview>('none');
+  // The pick-trading switch (0190) — saved on the click, not with SAVE.
+  const [pickTrading, setPickTrading_] = useState(true);
+  const [pickNote, setPickNote] = useState<string | null>(null);
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
   const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
@@ -467,6 +471,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
+      pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading_(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
@@ -543,6 +548,26 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
             {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
+          </div>
+        </div>
+        {/* THE PICK SWITCH (0190). Saved on the CLICK rather than with the save
+            button beside it: turning it on PROVISIONS this league's draft slots
+            and turning it off deletes them — a write, not a draft of one — and
+            it can be refused, because a slot somebody already traded for is
+            their property and the server says so instead of deleting it. */}
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>DRAFT PICK TRADING</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(pickTrading, pickTrading ? '⛏ ON' : '⛏ OFF', () => void (async () => {
+              const next = !pickTrading;
+              const r = await setPickTrading(leagueId, next);
+              if (r.ok) { setPickTrading_(next); setPickNote(null); } else setPickNote(friendlyError(r.error ?? 'that didn’t work'));
+            })())}
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: pickNote ? 'var(--opp)' : 'var(--faint)', marginTop: 5, lineHeight: 1.5, maxWidth: 320 }}>
+            {pickNote ?? (pickTrading
+              ? 'Draft slots and rookie picks trade — before the draft and while it runs. The pick on the clock never does.'
+              : 'Players trade as usual; offers naming a draft pick are refused.')}
           </div>
         </div>
       </div>

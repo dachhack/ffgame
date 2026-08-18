@@ -16,6 +16,7 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, friendlyError,
   leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
+  setPickTrading as setPickTradingRpc, pickAssets,
   type PosCaps, type TradeReview, type WaiverMode,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -72,6 +73,10 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [mode, setMode] = useState<WaiverMode>('rolling');
   const [budgetDraft, setBudgetDraft] = useState('100');
   const [review, setReview] = useState<TradeReview>('none');
+  // The pick-trading switch (0190) — saved on the tap, not with SAVE RULES.
+  const [pickTrading, setPickTrading_] = useState(true);
+  const setPickTrading = setPickTrading_;
+  const [pickNote, setPickNote] = useState<string | null>(null);
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
   const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
@@ -103,6 +108,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
+      pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
@@ -345,6 +351,30 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <Chip label="EXECUTE ON ACCEPT" on={review === 'none'} onPress={() => { tap(); setReview('none'); }} />
             <Chip label="⚑ COMMISH REVIEW" on={review === 'commish'} onPress={() => { tap(); setReview('commish'); }} />
           </View>
+
+          {/* THE PICK SWITCH (0190). Saved on the tap rather than with the
+              rules button beside it, because turning it ON PROVISIONS this
+              league's draft slots and turning it OFF deletes them — that is a
+              write, not a draft of one, and it can be refused (a slot somebody
+              has already traded for is their property, and the server says so
+              rather than deleting it). */}
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Chip label={pickTrading ? '⛏ PICK TRADING ON' : '⛏ PICK TRADING OFF'} on={pickTrading}
+              onPress={() => {
+                tap();
+                void (async () => {
+                  const next = !pickTrading;
+                  const r = await setPickTradingRpc(leagueId, next);
+                  if (r.ok) { commit(); setPickTrading(next); setPickNote(null); }
+                  else { warn(); setPickNote(friendlyError(r.error ?? 'that didn’t work')); }
+                })();
+              }} />
+          </View>
+          <Mono size={8.5} tone={pickNote ? 'opp' : 'faint'} style={{ marginTop: 5, lineHeight: 12 }}>
+            {pickNote ?? (pickTrading
+              ? 'Draft slots and rookie picks can be traded — before the draft and while it runs. The pick on the clock is never tradeable.'
+              : 'Players trade as usual; offers naming a draft pick are refused.')}
+          </Mono>
 
           <View style={{ marginTop: 14 }}>
             <PrimaryButton label={busy ? '…' : changed ? 'SAVE RULES' : 'SAVED'} disabled={busy || !changed} onPress={() => void save()} />
