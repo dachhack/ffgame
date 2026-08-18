@@ -1835,14 +1835,31 @@ export const setRookieRounds = (leagueId: string, rounds: number) =>
   tracked(rpc<{ ok: boolean; error?: string; rookie_rounds?: number; season?: string; created?: number; removed?: number }>(
     'set_rookie_rounds', { p_league_id: leagueId, p_rounds: rounds }), 'set_rookie_rounds');
 
-export interface PickAssetRow { season: string; round: number; orig: number; owner: number; }
+export interface PickAssetRow {
+  season: string; round: number; orig: number; owner: number;
+  /** 'startup' = a slot in the draft in front of you (snakes, and can be ON THE
+   *  CLOCK); 'rookie' = a future rookie-draft pick. 0190; absent on rows read
+   *  from a database that predates it, which are all rookie ones. */
+  kind?: 'startup' | 'rookie';
+}
 export interface PickAssets {
   ok?: boolean; error?: string;
   rookie_rounds: number;
-  /** The season whose picks are tradeable right now (league season + 1). */
+  /** The season whose FUTURE picks are tradeable (league season + 1). */
   future_season: string | null;
+  /** The league's own season — its startup slots carry this tag (0190). */
+  current_season?: string | null;
+  /** The commissioner's switch (0190). False ⇒ offers naming picks are refused. */
+  pick_trading?: boolean;
   picks: PickAssetRow[];
 }
+/** The commissioner's pick-trading switch (0190). Turning it ON provisions this
+ *  league's startup slots when the draft hasn't started; OFF clears them, but
+ *  only while every one still sits with its original owner — a traded pick is
+ *  somebody's property and a settings flip must not delete it. */
+export const setPickTrading = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; pick_trading?: boolean; startup_picks?: number }>(
+    'set_pick_trading', { p_league_id: leagueId, p_on: on });
 export const pickAssets = (leagueId: string) =>
   rpc<PickAssets>('pick_assets', { p_league_id: leagueId });
 

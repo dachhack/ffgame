@@ -2108,7 +2108,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
 }) {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [signals, setSignals] = useState<TradeSignalRow[]>([]);
-  const [assets, setAssets] = useState<PickAssetRow[]>([]);          // tradeable future picks (0183)
+  const [assets, setAssets] = useState<PickAssetRow[]>([]);          // tradeable picks: futures (0183) + startup slots (0190)
+  const [pickTradingOn, setPickTradingOn] = useState(true);          // the commissioner's switch (0190)
   const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
   const [partner, setPartner] = useState<number | null>(null);
@@ -2124,10 +2125,15 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     pickAssets(leagueId).then((a) => {
-      // every FUTURE season's picks are tradeable (dynasty holds a 3-year
-      // horizon, 0185); a rolled league's pending-draft assets belong to the
-      // draft room, not here
-      if (a.ok && a.future_season != null) setAssets(a.picks.filter((p) => p.season >= a.future_season!));
+      if (!a.ok) return;
+      setPickTradingOn(a.pick_trading !== false);
+      // FUTURE picks (dynasty holds a 3-year horizon, 0185) — and since 0190
+      // THIS season's slots too. The draft in front of you used to be the one
+      // draft whose picks you couldn't deal; now a startup slot is an asset
+      // like any other, which is also what makes a MIXED offer work — the two
+      // kinds are rows in one list and one trade carries both.
+      setAssets(a.picks.filter((p) =>
+        (a.future_season != null && p.season >= a.future_season) || p.kind === 'startup'));
     }),
   ]).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
@@ -2140,9 +2146,11 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     a.season === b.season && a.round === b.round && a.orig === b.orig;
   const togglePick = (list: PickAssetRow[], set: (v: PickAssetRow[]) => void, p: PickAssetRow) =>
     set(list.some((x) => samePick(x, p)) ? list.filter((x) => !samePick(x, p)) : [...list, p]);
-  /** "2027 R1" — plus whose original slot it is when it was acquired. */
-  const pickLabel = (p: { season: string; round: number; orig: number }, holder: number) =>
-    `${p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+  /** "2027 R1" — plus whose original slot it is when it was acquired. A startup
+   *  slot says DRAFT rather than a season, because "2026 R1" beside "2027 R1"
+   *  reads as two future picks when one is a slot in the draft running now. */
+  const pickLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   const tradeLine = (t: TradeRow, side: 'give' | 'get') => {
     const slugs = (side === 'give' ? t.give : t.get).map(pname);
     const rid = side === 'give' ? t.from_roster : t.to_roster;
@@ -2206,6 +2214,9 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   // A side's tradeable draft picks (0183), below its player list. Renders
   // nothing until the commissioner provisions rookie rounds.
   const pickAssetList = (rid: number | null, sel: PickAssetRow[], set: (v: PickAssetRow[]) => void) => {
+    // Nothing at all when the commissioner has the switch off — better than
+    // offering picks the server will refuse on submit.
+    if (!pickTradingOn) return null;
     const owned = assets.filter((a) => a.owner === rid);
     if (owned.length === 0) return null;
     return (
