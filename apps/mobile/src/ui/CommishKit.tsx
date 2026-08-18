@@ -413,6 +413,9 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
   const [fTeam, setFTeam] = useState('ALL');
   const [fTen, setFTen] = useState('ALL');
   const filtersOn = fPos !== 'ALL' || fTeam !== 'ALL' || fTen !== 'ALL';
+  // What the last scoped rule saved from here reads as — shown until the next
+  // action, so a rule that vanished into the scoring editor still confirms.
+  const [ruleNote, setRuleNote] = useState<string | null>(null);
 
   const load = () => playerFlags(leagueId).then((r) => { if (Array.isArray(r)) setRows(r); }).catch(() => {});
   useEffect(() => {
@@ -449,6 +452,74 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
       commit();
       setLabelFor(null); setLabelDraft(''); setQ('');
       await load(); onChanged();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+
+  /** THE SAME FILTERS, AS A RULE INSTEAD OF A LIST (v0.278.0, founder: "can
+   *  we allow scoped bonuses for player flags?").
+   *
+   *  Flagging is per-player: it names sixty slugs and stops there — a rookie
+   *  signed in week 6 is not in the list, and nobody remembers to go back. A
+   *  SCOPED bonus (0145) is the same intent said as a rule ("rookies ×1.5"),
+   *  so it covers whoever matches, whenever. The filters on this screen
+   *  already ARE a scope, so this just hands them over rather than making the
+   *  commissioner rebuild them in the scoring editor.
+   *
+   *  Only the numeric halves travel: a scoped rule has no notion of
+   *  can't-trade / can't-start — those stay per-player flags, and the sheet
+   *  says so rather than dropping them silently. */
+  /** The filter as the rule will read it — same order scopedRuleLabel uses,
+   *  so the button's promise and the saved rule can't drift apart. */
+  const scopeWords = (): string => {
+    const parts = [
+      fPos !== 'ALL' ? fPos : null,
+      fTeam !== 'ALL' ? fTeam : null,
+      fTen === 'rookie' ? 'rookies' : fTen === 'y2_3' ? '2nd–3rd yr' : fTen === 'vet4' ? 'vets 4+' : null,
+    ].filter(Boolean);
+    const who = parts.length ? parts.join(' / ') : 'everyone';
+    const mult = rulesDraft.bonus_mult ?? 1;
+    const pts = rulesDraft.bonus_pts ?? 0;
+    const vals = [mult !== 1 ? `×${mult}` : null, pts !== 0 ? `${pts > 0 ? '+' : ''}${pts}` : null].filter(Boolean).join(' ');
+    return vals ? `${who}: ${vals}` : `${who} — set a × or ± above`;
+  };
+
+  const saveScopedRule = async () => {
+    if (busy) return;
+    const mult = rulesDraft.bonus_mult ?? 1;
+    const pts = rulesDraft.bonus_pts ?? 0;
+    if (mult === 1 && pts === 0) {
+      warn(); setErr('Set a × multiplier or ± points first — a scoped rule is a bonus, not a label.');
+      return;
+    }
+    if (!filtersOn) { warn(); setErr('Pick a position, team or tenure — that filter is the rule’s scope.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const cur = await leagueScoringGet(leagueId);
+      if (!cur?.ok) { warn(); setErr('Could not read the league’s scoring.'); return; }
+      const now = parseScoring(cur);
+      if (now.scoped.length >= 12) { warn(); setErr('At most 12 scoped rules — remove one in ⚖ SCORING first.'); return; }
+      const rule = {
+        ...(fPos !== 'ALL' ? { pos: [fPos] } : {}),
+        ...(fTeam !== 'ALL' ? { team: [fTeam] } : {}),
+        ...(fTen !== 'ALL' ? { tenure: fTen } : {}),
+        ...(mult !== 1 ? { bonus_mult: mult } : {}),
+        ...(pts !== 0 ? { bonus_pts: pts } : {}),
+      };
+      const wire = now.scoped.map((r) => ({
+        ...(r.pos?.length ? { pos: r.pos } : {}),
+        ...(r.team?.length ? { team: r.team } : {}),
+        ...(r.tenure ? { tenure: r.tenure } : {}),
+        ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
+        ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
+        ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
+      }));
+      const r = await leagueScoringSet(leagueId, now.tdBonus, now.ydMult, now.toPenalty, [...wire, rule]);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the rule.')); return; }
+      commit();
+      setRuleNote(`⚖ ${scopedRuleLabel(parseScoring({ scoped: [rule] }).scoped[0])} — saved. It pays everyone who matches, now and later.`);
+      setFPos('ALL'); setFTeam('ALL'); setFTen('ALL');
+      onChanged();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -568,6 +639,27 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
               ↑ give it a label or a rule — the label is what the league sees on every flagged player’s chip
             </Text>
       )}
+      {/* ⚖ THE SAME BONUS AS A RULE (v0.278.0). Offered only with a filter up,
+          because the filter IS the scope — and it says what it will read as
+          before you press it, since the rule lands in ⚖ SCORING rather than
+          in the flag list above. */}
+      {filtersOn && (
+        <Pressable disabled={busy} onPress={() => { tap(); void saveScopedRule(); }}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, marginTop: 8, opacity: busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.warn }}>
+            ⚖ MAKE IT A SCOPED RULE INSTEAD
+          </Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dim, marginTop: 3, lineHeight: fs(12) }}>
+            {scopeWords()} — pays everyone who matches, now and later. No player list to keep up to date.
+          </Text>
+        </Pressable>
+      )}
+      {(rulesDraft.no_trade || rulesDraft.no_add || rulesDraft.no_start || rulesDraft.no_powerups || rulesDraft.immune) && filtersOn && (
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 4, lineHeight: fs(11) }}>
+          a scoped rule carries the × and ± only — the restrictions above stay per-player flags
+        </Text>
+      )}
+      {!!ruleNote && <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.warn, marginTop: 6, lineHeight: fs(12) }}>{ruleNote}</Text>}
     </>
   );
 
@@ -575,7 +667,15 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
     <Overlay visible={visible} title="⚑ Player flags"
       subtitle="A short label the whole league sees wherever the player appears." onClose={onClose}
       footer={bulk ? bulkFooter : undefined}>
-      <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      {/* `flexShrink: 1` — the contract ui/Overlay states in its own docblock,
+          and what every other sheet in the app uses. This body carried
+          `flexGrow: 0` instead (since v0.217.0), which is a different
+          property: it refuses to GROW, and RN's default flexShrink of 0 meant
+          it also refused to shrink. With a footer under it (bulk mode) the
+          column had nothing left to give the body, and it collapsed — the
+          founder's flags sheet showed a label box, the rule chips, and an
+          empty screen where the player list should be. */}
+      <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
       {!bulk && !!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Mono size={9} tone="faint" track={0.12}>CURRENT FLAGS</Mono>
