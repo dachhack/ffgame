@@ -20,7 +20,7 @@ import {
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, slotDisplayNames, assignSpots } from '@drip/core/engine/classic';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots } from '@drip/core/engine/classic';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -35,6 +35,19 @@ import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
+
+/** Every spot chip is this wide, so the player column starts at the same x on
+ *  every row (v0.289.0).
+ *
+ *  Sized from the arithmetic, not by eye: the longest label the badge form
+ *  produces is "SUPERFLEX" (9 characters), and the chip's `fs(8.5)` resolves to
+ *  ELEVEN points, not 8.5 — theme.native's type lift pulls small sizes toward
+ *  its 15pt pivot. At a monospace advance of ~0.6em that is 9 × 11 × 0.6 ≈ 59pt
+ *  of glyphs plus 8pt of padding ≈ 67pt, so 72 clears it with a little slack.
+ *  Undersizing here does not truncate, it breaks a single word mid-glyph, which
+ *  is why the slack is deliberate. Two lines are available above that for a
+ *  commissioner's own longer name. */
+const BADGE_W = 72;
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
 
@@ -158,6 +171,17 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *  render — it is the answer to "how many more can I stash", which is why the
  *  IR and taxi sections draw their unused places too.
  *
+ *  ONE FIXED BADGE WIDTH (v0.289.0, founder: "align the players in a column to
+ *  the right and make the position label chips all the same size and large
+ *  enough to accommodate labels"). The box was `minWidth: 40` and grew with its
+ *  text, so a FLEX spot's chip ran three times the width of a QB's and shoved
+ *  that one row's player out of the column every other row shared. Now every
+ *  chip is `BADGE_W` wide whatever it says, which is what makes the faces and
+ *  names line up — and the labels FIT rather than being cut to fit: the
+ *  parenthetical eligibility comes off via `slotBadgeLabel` ("FLEX (RB/WR/TE)"
+ *  → "FLEX"), and anything still long — a commissioner's own name — wraps to a
+ *  second line inside the same box instead of widening it.
+ *
  *  NO ACTION CHIPS (v0.285.0, founder). The line used to carry →TAXI and DROP
  *  next to every name, which put an irreversible red button one thumb-width
  *  from the name you meant to tap, and made "→TAXI" a cycle you had to press
@@ -186,9 +210,9 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb }: {
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
   const bg = tone ? 'transparent' : posC?.bg ?? 'transparent';
   const badgeBox = (
-    <View style={{ minWidth: 40, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: fg, backgroundColor: bg, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4 }}>
-      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: fg }}>
-        {badge}{p && onSlot ? ' ↩' : ''}
+    <View style={{ width: BADGE_W, minHeight: 30, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: fg, backgroundColor: bg, borderRadius: 5, paddingHorizontal: 4, paddingVertical: 4 }}>
+      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: fg, textAlign: 'center' }}>
+        {slotBadgeLabel(badge)}{p && onSlot ? ' ↩' : ''}
       </Text>
     </View>
   );

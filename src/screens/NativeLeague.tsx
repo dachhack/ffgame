@@ -33,7 +33,7 @@ import {
   pickAssets, type PickAssetRow, type LeagueContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -1395,6 +1395,13 @@ function KeepersCard({ leagueId, myRoster, mine }: {
  *      IR/taxi place invites a player in; a filled one's badge sends him back.
  *    • no DROP button — dropping is the PLAYER CARD's job, two clicks deep,
  *      and the same button wherever you found him.
+ *
+ *  ONE FIXED BADGE WIDTH, as on the app (v0.289.0): the box grew with its text,
+ *  so a FLEX spot's chip ran several times the width of a QB's and pushed that
+ *  one row's player out of the column every other row shared. `slotBadgeLabel`
+ *  drops the parenthetical eligibility ("FLEX (RB/WR/TE)" → "FLEX") so the
+ *  labels FIT the box rather than being cut to fit it; a longer custom name
+ *  wraps inside the same width.
  */
 function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
   badge: string;
@@ -1410,9 +1417,10 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
   const fg = tone ?? (badgePos ? `var(--pos-${badgePos}-fg, var(--dim))` : 'var(--dim)');
   const bg = tone || !badgePos ? 'transparent' : `var(--pos-${badgePos}-bg, transparent)`;
   const badgeBox = (
-    <span className="mono" style={{ display: 'inline-block', minWidth: 42, textAlign: 'center', border: `1px solid ${fg}`,
-      background: bg, borderRadius: 5, padding: '3px 6px', fontSize: 8.5, fontWeight: 700, color: fg, whiteSpace: 'nowrap' }}>
-      {badge}{p && onSlot ? ' ↩' : ''}
+    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
+      width: 74, minHeight: 26, flex: 'none', textAlign: 'center', border: `1px solid ${fg}`,
+      background: bg, borderRadius: 5, padding: '3px 4px', fontSize: 8.5, fontWeight: 700, color: fg, lineHeight: 1.25 }}>
+      {slotBadgeLabel(badge)}{p && onSlot ? ' ↩' : ''}
     </span>
   );
   return (

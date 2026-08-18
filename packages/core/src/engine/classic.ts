@@ -148,6 +148,24 @@ export function slotAllows(d: { pos: string[]; flt?: SlotFilter | null }, p: { p
 export const slotDisplayName = (d: { label?: string; pos: string[] }): string =>
   d.label?.trim() || slotSpecLabel(d.pos);
 
+/** The display name TRIMMED FOR A BADGE (v0.289.0) — the parenthetical
+ *  eligibility dropped, so every spot chip is a short word and a column of them
+ *  can be one fixed width:
+ *
+ *    "FLEX (RB/WR/TE)"          -> "FLEX"
+ *    "SUPERFLEX (QB/RB/WR/TE)"  -> "SUPERFLEX"
+ *    "FLEX (RB/WR/TE) 2"        -> "FLEX 2"      (the duplicate index survives)
+ *    "NFC Flex"                 -> "NFC Flex"    (a commissioner's own name)
+ *
+ *  Nothing is lost by dropping it: the row underneath already prints the
+ *  player's actual position, ⚖ ROSTER SETTINGS lists what each spot accepts,
+ *  and `slotAcceptsLabel` still spells it out for the places that want the long
+ *  form (the draft room, the spot editor). This exists because the full label
+ *  made ONE chip three times the width of its neighbours, which pushed that
+ *  row's player out of the column every other row shared. */
+export const slotBadgeLabel = (name: string): string =>
+  name.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() || name;
+
 /** Display label for a spot's eligibility ("FLEX (RB/WR/TE)" or "QB/RB/K"). */
 export function slotSpecLabel(pos: string[]): string {
   const up = pos.map((p) => p.toUpperCase());
