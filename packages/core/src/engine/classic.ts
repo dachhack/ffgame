@@ -585,9 +585,25 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  *  scales the points, bonus_pts lands flat on the final. Requires the flag
  *  cache installed (setLeagueFlags) — both resolvers and both boards keep it. */
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos): number {
+  const { plays } = playsForPlayer(player, week);
+  return classicPointsFrom(plays, player, sc, scoreAs);
+}
+
+/** The same scoring, over plays you already hold (v0.284.0).
+ *
+ *  `classicPoints` reads the week's plays from the engine's module cache, which
+ *  the LIVE BOARD owns — one week at a time, installed by whichever screen is
+ *  showing it. A player card wanting a season's game log cannot use that: it
+ *  would have to install eighteen weeks over the top of the board's, and the
+ *  board would then score the wrong week. So the card fetches just this
+ *  player's rows and scores them HERE.
+ *
+ *  Deliberately the same body, not a second implementation: a game log that
+ *  disagreed with the board about what a week was worth would be worse than no
+ *  game log at all. `classicPoints` is now a two-line wrapper over it. */
+export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos): number {
   const s = normalizeClassicScoring(sc);
   const pos = scoreAs ?? player.pos;
-  const { plays } = playsForPlayer(player, week);
   let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
   let punts = 0, puntYds = 0;
   // Touchdowns he actually scored — only for a scoped rule's per-TD bonus
