@@ -534,7 +534,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // LEAGUE- AND SPOT-AWARE (v0.308.0) — see the web twin. Was the raw
         // bake, so a custom-scoring league projected under rules it does not
         // play by, and a spot-scoped bonus never showed in the spot it pays.
-        proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot),
+        proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot, slotPos),
         state: g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded

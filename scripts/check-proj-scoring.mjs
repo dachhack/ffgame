@@ -37,7 +37,7 @@ import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats2026';
 import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
 import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
-import { slateAwareProj } from '../packages/core/src/engine/classic';
+import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
   scoreKickLine, scoreDstLine, integratedPaPoints, kdstBase, hasProjection, PA_SD,
@@ -196,6 +196,49 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   const perPt = integratedPaPoints(20, { ...DEFAULT_CLASSIC_SCORING, paPt: -0.5 });
   ok('the per-point knob is applied at the mean, exactly',
     Math.abs(perPt - (integratedPaPoints(20, DEFAULT_CLASSIC_SCORING) - 10)) < 1e-9, perPt);
+}
+
+
+// ── A RETURN-ONLY SPOT PROJECTS NOTHING (v0.311.2) ─────────────────────────
+// RET is a SLOT identity, not a position: a player scored there banks return
+// production ONLY, and classicPoints has always enforced that with a
+// posOverride. The projected column never knew — it got the slot's NAME while
+// the live column got its SPEC — so a RET spot showed a receiver's whole PPR
+// line beside a live number that can only pay return yardage. Under the default
+// catalog retYd/krYd/prYd are all 0 and only retTd scores, so live is ~0
+// against a projection of 10+. We have no return-production projection at all,
+// so zero is the honest answer, and these pin it.
+{
+  const RETSPEC = ['RET'], FLEXSPEC = ['RB', 'WR', 'TE'];
+  ok('isRetSlot means EXACTLY a return-only spec, not any spec containing RET',
+    isRetSlot(RETSPEC) && !isRetSlot(['RET', 'WR']) && !isRetSlot(FLEXSPEC));
+
+  ok('a receiver projects nothing in a return-only spot',
+    projectedPoints(WR, 'S7', RETSPEC) === 0, projectedPoints(WR, 'S7', RETSPEC));
+  ok('…while the same player in a normal spot is untouched',
+    projectedPoints(WR, 'S7', FLEXSPEC) === PROJ_2026.get(WR.id),
+    projectedPoints(WR, 'S7', FLEXSPEC));
+  ok('…and a caller that passes no spec at all is untouched (every other surface)',
+    projectedPoints(WR, 'S7') === PROJ_2026.get(WR.id));
+
+  // A scoped bonus must NOT resurrect it: a flat bonus on top of an unknown is
+  // false precision, and this is the path that would quietly reintroduce it.
+  setLeagueScoring({ scoped: [{ slot: ['S7'], bonusPts: 5, bonusMult: 3 }] });
+  ok('a scoped bonus does not resurrect a return-only projection',
+    projectedPoints(WR, 'S7', RETSPEC) === 0, projectedPoints(WR, 'S7', RETSPEC));
+  clearLeagueScoring();
+
+  // THE FILL RANKS IT THE SAME WAY. bestballFillBy passes the spot to valueOf;
+  // ranking RET candidates by their full skill line would seat the best
+  // receiver rather than the best returner.
+  const value = slateAwareProj(1, []);
+  ok('the auto-fill values a return-only spot at nothing',
+    value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: RETSPEC }) === 0);
+  ok('…and values a normal spot exactly as before',
+    value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: FLEXSPEC })
+      === PROJ_2026.get(WR.id));
+  ok('…and a fill with no spot in hand is unchanged (optimalLineup passes none)',
+    value({ id: WR.id, pos: 'WR', team: 'CIN' }) === PROJ_2026.get(WR.id));
 }
 
 // ── THE CATALOG IS SCORING **PLUS** PPR ────────────────────────────────────
