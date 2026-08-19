@@ -49,10 +49,11 @@
 import { PROJ_2026 } from '../data/proj2026';
 import { PROJ_LINES, type ProjStatLine } from '../data/projStats2026';
 import { PROJ_KICK, PROJ_DST, type ProjKickLine, type ProjDstLine } from '../data/projKdst2026';
+import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
 import { scopedAdjustFor } from './leagueScoring';
 
-export type { ProjStatLine, ProjKickLine, ProjDstLine };
+export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine };
 
 /** A projected stat line scored under one catalog. Only the fields the line
  *  actually carries — see the docblock on what that leaves out. */
@@ -208,6 +209,19 @@ export function kdstBase(slug: string): number {
   return perWeek;
 }
 
+/** A return line, priced. The catalog pays `retYd` on ANY return yard and
+ *  stacks `krYd` / `prYd` on top by kind, which is exactly how the live scorer
+ *  reads a return play — so the two sides cannot disagree about a returner.
+ *
+ *  NOT CARRIED: return counts, fair catches, and the yardage a returner gains
+ *  on a play that is then wiped by penalty. None of those are priced by any
+ *  knob we have. */
+export function scoreReturnLine(line: ProjReturnLine, sc: ClassicScoring): number {
+  return line.prYd * (sc.retYd + sc.prYd)
+    + line.krYd * (sc.retYd + sc.krYd)
+    + line.retTd * sc.retTd;
+}
+
 // ── The installed league catalog ────────────────────────────────────────────
 // Same contract as every other per-league engine cache (setLeagueScoring,
 // setLeagueGolf, setLeagueFlags): a screen installs it on load and clears it on
@@ -315,11 +329,21 @@ export function projectedPoints(
   // the bug in this whole subsystem: `retYd`/`krYd`/`prYd` all default to 0 and
   // only `retTd` scores, so live is almost always 0 against a projection of 10+.
   //
-  // We have NO return-production projection — StatHead's pool carries no return
-  // yardage — so the honest number here is zero, not a smaller guess and not
-  // the player's mute rushing and receiving. Scoped bonuses are deliberately
-  // not added on top: a flat bonus over an unknown is false precision.
-  if (slotPos && isRetSlot(slotPos)) return 0;
+  // v0.313.0: StatHead now ship return components, so this is a real projection
+  // rather than the honest zero v0.311.2 had to show. A player with no return
+  // line still projects nothing — most of the league never returns a kick, and
+  // his rushing and receiving remain mute in this spot.
+  if (slotPos && isRetSlot(slotPos)) {
+    const rl = PROJ_RETURN[player.id];
+    if (!rl) return 0;
+    const perWeek = scoreReturnLine(rl, cat()) / SEASON_GAMES;
+    const radj = scopedAdjustFor(player, { slot });
+    // The scoped layers apply here exactly as they do anywhere else NOW that
+    // the value is known — v0.311.2 withheld them only because a flat bonus on
+    // top of an unknown is false precision. The per-TD bonus pays against
+    // projected RETURN touchdowns, the only ones that score in this spot.
+    return Math.round((perWeek * radj.mult + radj.pts + radj.td * (rl.retTd / SEASON_GAMES)) * 10) / 10;
+  }
   const base = PROJ_2026.get(player.id) ?? kdstBase(player.id);
   if (!base) return 0;
   const scaled = base * leagueProjRatio(player.id, player.pos);
