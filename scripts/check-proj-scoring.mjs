@@ -1,4 +1,5 @@
-// LEAGUE-AWARE PROJECTIONS (v0.308.0), checked in Node.
+// LEAGUE-AWARE PROJECTIONS (v0.308.0; re-baked off StatHead's own components in
+// v0.309.0), checked in Node.
 //
 // This lives in check:parity because the whole point of the change is that the
 // PROJECTED and the LIVE number on one board finally obey one rulebook. Two
@@ -11,8 +12,15 @@
 // catalog moving the right players and only them, the scoped layers landing in
 // the order the live scorer applies them, and every no-data path falling back
 // to the bake rather than to zero.
+//
+// v0.309.0 adds the two the earlier Sleeper bake could not make: that the stat
+// lines RECONCILE to the projection they are the components of, and that they
+// cover it completely. Both are only checkable because the two files now come
+// from one pull of one source — which is exactly why the re-bake was worth
+// doing, and exactly what would silently rot if someone refreshed one file
+// without the other.
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
-import { PROJ_LINES } from '../packages/core/src/data/projStats2026';
+import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats2026';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine,
   setLeagueProjScoring, clearLeagueProjScoring,
@@ -34,8 +42,44 @@ const RB = P('jahmyr-gibbs', 'RB'), TE = P('brock-bowers', 'TE');
 clearLeagueScoring(); clearLeagueProjScoring();
 
 ok('the bake and the stat lines both loaded (else every case below is vacuous)',
-  PROJ_2026.size > 400 && Object.keys(PROJ_LINES).length > 300,
+  PROJ_2026.size > 400 && Object.keys(PROJ_LINES).length > 400,
   [PROJ_2026.size, Object.keys(PROJ_LINES).length]);
+
+// ── THE TWO FILES ARE ONE PULL ─────────────────────────────────────────────
+// COVERAGE. A player the bake knows about but the lines don't isn't an error —
+// `leagueProjRatio` returns 1 and he keeps his stock-PPR projection — which is
+// precisely why it has to be asserted: the failure is SILENT, and it is what
+// the Sleeper bake was doing to 77 of 445 players. One source, one pull, so the
+// join is total or something has drifted.
+{
+  const missing = [...PROJ_2026.keys()].filter((slug) => !PROJ_LINES[slug]);
+  ok('every projected player has a stat line (a miss is a silent stock-PPR row)',
+    missing.length === 0, missing.slice(0, 8));
+}
+
+// RECONCILIATION. `leagueProjRatio` divides the league's scoring of a line by
+// the STANDARD scoring of that same line, and multiplies the result onto
+// PROJ_2026. That is only honest if the standard scoring of the line IS
+// PROJ_2026 — otherwise the denominator describes a different player than the
+// number it scales, which is the flaw the Sleeper bake shipped with. Both files
+// now come from one `get_projections` call, so scoring a line under the default
+// catalog and dividing by the same 17 the bake divides by must land back on the
+// baked per-week number. Tolerance is 0.2: the worst row sits at 0.124, and
+// PROJ_2026 is itself rounded to a decimal place.
+{
+  let worst = 0, who = '', sum = 0, n = 0;
+  for (const [slug, perWeek] of PROJ_2026) {
+    const line = PROJ_LINES[slug];
+    if (!line) continue;
+    const d = scoreProjLine(line, PROJ_LINE_POS[slug], DEFAULT_CLASSIC_SCORING) / 17 - perWeek;
+    sum += d; n++;
+    if (Math.abs(d) > Math.abs(worst)) { worst = d; who = slug; }
+  }
+  ok('the stat lines re-derive the bake under the standard catalog',
+    Math.abs(worst) < 0.2, { worst: +worst.toFixed(3), who, n });
+  ok('…with no systematic bias either way (a drift would tilt every ratio)',
+    Math.abs(sum / n) < 0.02, +(sum / n).toFixed(4));
+}
 
 // ── THE INVARIANT ──────────────────────────────────────────────────────────
 // A league on the standard catalog with no scoped rules must get exactly the
