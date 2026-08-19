@@ -15,6 +15,7 @@ import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
+import { pollRosters } from './poll/rosters.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
@@ -30,6 +31,9 @@ import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../packages
 
 let playerIndex = null;
 let lastInjuryPoll = 0;
+// The roster sweep's own clock. Zero means "never run", so the first tick after
+// boot takes a census — a deploy is exactly when the table is most likely stale.
+let lastRosterPoll = 0;
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
@@ -270,6 +274,17 @@ async function tick() {
     catch (e) { log('injury poll error', e.message); }
   }
 
+  // WHERE EVERY PLAYER PLAYS (v0.305.0), on the tick rather than on the daily
+  // directory refresh: 32 small ESPN fetches, so a cut, a signing or a
+  // practice-squad elevation reaches the app the same afternoon it happens.
+  if (Date.now() - lastRosterPoll >= config.rosterPollMs) {
+    lastRosterPoll = Date.now();   // set BEFORE the await: a slow sweep must not queue a second one
+    try {
+      const r = await pollRosters(playerIndex);
+      log(`rosters: ${r.teams}/32 teams, ${r.athletes} athletes — ${r.standing} standing (${r.changed} changed)`);
+    } catch (e) { log('roster sweep error', e.message); }
+  }
+
   // Native leagues: advance live draft clocks, clear due waiver claims, and
   // drop each active week's coin allowance (idempotent — see native.js).
   try {
@@ -320,7 +335,7 @@ async function main() {
       log('player index refreshed');
       await pushTeams();
     } catch (e) { log('index refresh', e.message); }
-  }, 86400e3);
+  }, config.directoryRefreshMs);
 
   // NON-REENTRANT (0199.3). On a busy slate a tick (many games polled, ESPN
   // slow) can outlast playsPollMs; overlapping ticks interleave their contexts'

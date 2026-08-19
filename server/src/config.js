@@ -41,8 +41,18 @@ export const config = {
   premiumEnforcement: process.env.PREMIUM_ENFORCEMENT === '1',
   playsPollMs: Number(process.env.PLAYS_POLL_MS || 25000),
   scoreboardPollMs: Number(process.env.SCOREBOARD_POLL_MS || 60000),
-  injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 86400000),
+  // SEVERAL TIMES A DAY (v0.305.0, founder). The off-day injury poll was a flat
+  // 24h, which meant a Wednesday practice report could be a day old when a
+  // manager set his lineup on Thursday. 3h off-days, still 1h near games.
+  injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 10800000),
   injuryPollGamedayMs: Number(process.env.INJURY_POLL_MS_GAMEDAY || 3600000),
+  // The ESPN roster sweep (32 small fetches): where every player currently
+  // plays. Separate from the Sleeper DIRECTORY refresh below, which is 14MB and
+  // stays daily because Sleeper asks for at most one pull a day — one feed
+  // answers "who exists", the other "where is he now", and only the second one
+  // churns on a cut-down week.
+  rosterPollMs: Number(process.env.ROSTER_POLL_MS || 10800000),      // 3h
+  directoryRefreshMs: Number(process.env.DIRECTORY_REFRESH_MS || 86400000), // 24h — Sleeper's own guidance
   // Weekly auto-sync: how often the worker checks if a sync is due, and the min gap
   // between full re-syncs of the current week (re-syncs catch lineup changes pre-lock).
   syncCheckMs: Number(process.env.SYNC_CHECK_MS || 3600000),         // 1h
