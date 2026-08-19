@@ -12,6 +12,7 @@ const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB']
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
+import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -393,7 +394,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueClassicSlots(leagueId, spots.map(fromSpotDraft));
-      if (r.ok) { setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      // The ROSTER RULES panel prints a roster size DERIVED from these spots
+      // (v0.297.1) — it re-reads on this notice instead of showing what it read
+      // on mount.
+      if (r.ok) { setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setRounds(r.rounds ?? null); setNote('✓ lineup saved'); notifyLeagueSettingsChanged(leagueId); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -402,7 +406,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir);
-      if (r.ok) { setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
+      if (r.ok) { setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); notifyLeagueSettingsChanged(leagueId); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -481,22 +485,42 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => (
-              <div key={i}
-                onDragOver={(e) => { if (drag != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } }}
-                onDrop={(e) => { e.preventDefault(); if (drag != null) moveSpot(drag, i); setDrag(null); }}
+              <div key={i} data-spot={i}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
-                {/* Drag handle (0174). Keyboard works too — focus it and press
-                    ↑/↓ — because HTML5 drag is mouse-only and a commissioner
-                    on a keyboard (or a touch screen) still has to reorder. */}
-                <button draggable={!busy} title="drag to reorder · or focus and press ↑ / ↓"
-                  onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; }}
-                  onDragEnd={() => setDrag(null)}
+                {/* DRAG HANDLE, ON POINTER EVENTS (v0.297.1). It was HTML5 drag
+                    — `draggable` + dragstart/drop — which a touch screen never
+                    fires: the finger scrolled the page instead, and once the
+                    panel became a scrolling SHEET (v0.296.3) that was all it
+                    could look like ("the spots don't drag and drop anymore, the
+                    window just scrolls"). Pointer events cover mouse, pen and
+                    touch in one path; `touchAction: none` on the handle is what
+                    stops the browser claiming the gesture for a scroll, and
+                    pointer capture keeps the moves coming to this element even
+                    when the finger leaves it.
+                    The list reorders LIVE under the finger, so there is no drop
+                    target to aim at — where the row is IS the answer. Keyboard
+                    ↑/↓ stays for anyone driving this without a pointer. */}
+                <button title="drag to reorder · or focus and press ↑ / ↓"
+                  onPointerDown={(e) => {
+                    if (busy) return;
+                    e.preventDefault();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    setDrag(i);
+                  }}
+                  onPointerMove={(e) => {
+                    if (drag == null) return;
+                    const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-spot]');
+                    const to = el ? Number((el as HTMLElement).dataset.spot) : NaN;
+                    if (Number.isInteger(to) && to !== drag) { moveSpot(drag, to); setDrag(to); }
+                  }}
+                  onPointerUp={(e) => { e.currentTarget.releasePointerCapture(e.pointerId); setDrag(null); }}
+                  onPointerCancel={() => setDrag(null)}
                   onKeyDown={(e) => {
                     if (e.key === 'ArrowUp') { e.preventDefault(); moveSpot(i, i - 1); }
                     if (e.key === 'ArrowDown') { e.preventDefault(); moveSpot(i, i + 1); }
                   }}
                   className="mono" aria-label={`reorder spot ${i + 1}`}
-                  style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: busy ? 'default' : 'grab', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>⠿</button>
+                  style={{ background: 'none', border: 'none', color: drag === i ? 'var(--you)' : 'var(--faint)', cursor: busy ? 'default' : 'grab', fontSize: 15, padding: '2px 4px', lineHeight: 1, touchAction: 'none' }}>⠿</button>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
                 {builderPos.map((p) => {
                   const on = sp.pos.includes(p);
@@ -564,7 +588,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               </span>
             ))}
             <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)' }}>
-              DRAFT = {rounds ?? shapeTotal} ROUNDS{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
+              {/* TWO NUMBERS SINCE 0193: the roster is what a team may HOLD,
+                  the draft is what it FILLS. IR spots are the difference —
+                  you stash into them in November, you don't draft into them. */}
+              ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir} ROUNDS{shape.ir > 0 ? ` (IR isn't drafted)` : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
 
             {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
                 does not lengthen a draft that already has its rounds, so a
@@ -580,7 +607,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            You draft the whole roster (starters + bench + taxi + IR), then stash. IR takes a real IR/Out designation only; taxi and IR players can't be started.
+            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real IR/Out designation only; taxi and IR players can't be started.
           </div>
           {extraPos.length > 0 && (
             <div className="mono" style={{ fontSize: 11, color: 'var(--you)', marginTop: 4 }}>

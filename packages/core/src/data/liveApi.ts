@@ -1306,13 +1306,16 @@ export const setLeagueClassicRoster = (leagueId: string, roster: Record<string, 
  *  each with its own eligible-position set + best-ball flag. Wins over the
  *  0161 counts when present; null/[] clears back to them. Draft-frozen. */
 export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null) =>
-  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null; starters?: number }>('set_league_classic_slots',
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }[] | null; starters?: number; rounds?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
 /** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as
  *  starters + bench + taxi + ir. */
 export const setLeagueRosterShape = (leagueId: string, bench: number, taxi: number, ir: number) =>
-  tracked(rpc<{ ok: boolean; error?: string; shape?: { bench: number; taxi: number; ir: number }; rounds?: number }>('set_league_roster_shape',
+  // `rounds` is the ROSTER (what a team may hold, IR included); `draft_rounds`
+  // is what the draft actually runs — they stopped being one number in 0193,
+  // because an IR spot is a spot you stash into, not one you draft.
+  tracked(rpc<{ ok: boolean; error?: string; shape?: { bench: number; taxi: number; ir: number }; rounds?: number; draft_rounds?: number }>('set_league_roster_shape',
     { p_league_id: leagueId, p_bench: bench, p_taxi: taxi, p_ir: ir }),
     Ev.commishAction, { tool: 'roster_shape' });
 /** Move a rostered player between ACTIVE / TAXI / IR (0164). Owner or commish;
@@ -1911,6 +1914,10 @@ export interface DraftState {
    *  roster spots arrived pre-filled; roster_size = rounds + keeper_slots. */
   keeper_slots?: number;
   roster_size?: number;
+  /** Roster spots the draft does NOT fill because they are IR (0193). `rounds`
+   *  above is already net of them; this is here so a screen can SAY why the
+   *  roster is bigger than the draft. */
+  stash_slots?: number;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Replace a seat's private draft queue with an ordered slug list. */

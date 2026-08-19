@@ -27,3 +27,30 @@ export function notifyRosterChanged(leagueId: string): void {
     try { fn(leagueId); } catch { /* one bad listener must not stop the rest */ }
   }
 }
+
+
+// ── LEAGUE SETTINGS CHANGED (v0.297.1) ──────────────────────────────────────
+// The same idea one level up: a commissioner's SETTINGS moved, so a panel
+// showing a number derived from them can re-read.
+//
+// It exists for the founder's "roster size doesn't adjust when I change the
+// roster spots above": the ROSTER destination draws two editors side by side —
+// the lineup BUILDER (starting spots, bench / taxi / IR) and the roster RULES
+// (roster size, position limits) — and the size in the second is DERIVED from
+// the first. They are separate components with separate loads, so the builder
+// could change the answer and the rules panel would go on printing the number
+// it read on mount. Now the builder says so and the rules panel re-reads.
+const settingsListeners = new Set<Listener>();
+
+/** Subscribe to "this league's settings changed"; returns the unsubscribe. */
+export function onLeagueSettingsChanged(fn: Listener): () => void {
+  settingsListeners.add(fn);
+  return () => { settingsListeners.delete(fn); };
+}
+
+/** Fired by whoever saved a setting another panel's numbers depend on. */
+export function notifyLeagueSettingsChanged(leagueId: string): void {
+  for (const fn of [...settingsListeners]) {
+    try { fn(leagueId); } catch { /* one bad listener must not stop the rest */ }
+  }
+}
