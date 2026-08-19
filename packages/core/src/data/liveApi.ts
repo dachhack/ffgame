@@ -1485,6 +1485,13 @@ export const createNativeLeague = (
  *  which is exactly the list you wanted to sort. */
 export const playerOwnership = (leagueId: string) =>
   rpc<Record<string, number> | { error: string }>('player_ownership', { p_league_id: leagueId });
+/** THE LIVE MARKET (0203): ESPN's average draft position and ownership share,
+ *  both from one poll, in one call. Empty maps mean the feed is stale — the
+ *  caller keeps the baked consensus ADP rather than blanking the column. */
+export const leagueMarket = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string; fresh?: boolean; as_of?: string | null; source?: string | null;
+        adp?: Record<string, number>; own?: Record<string, number> }>(
+    'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;

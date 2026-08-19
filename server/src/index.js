@@ -294,7 +294,7 @@ async function tick() {
     lastMarketPoll = Date.now();   // before the await, same reason as the sweep
     try {
       const r = await pollMarket(playerIndex, config.season);
-      log(`market: ${r.rows} owned% rows from ${r.seen} priced (${r.unresolved} unresolved)`);
+      log(`market: ${r.rows} rows (${r.priced} with ADP) from ${r.seen} listed (${r.unresolved} unresolved)`);
     } catch (e) { log('market poll error', e.message); }
   }
 

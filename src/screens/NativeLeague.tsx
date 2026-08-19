@@ -31,13 +31,13 @@ import {
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
-  playerOwnership,
+  leagueMarket,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -725,8 +725,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    playerOwnership(leagueId).then((r) => {
-      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
+    // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
+    // a stale feed costs freshness rather than the whole column.
+    leagueMarket(leagueId).then((r) => {
+      if (!r?.ok) return;
+      setOwn(r.own ?? {});
+      setLiveAdp(r.adp ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -1653,8 +1658,13 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    playerOwnership(leagueId).then((r) => {
-      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
+    // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
+    // a stale feed costs freshness rather than the whole column.
+    leagueMarket(leagueId).then((r) => {
+      if (!r?.ok) return;
+      setOwn(r.own ?? {});
+      setLiveAdp(r.adp ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug

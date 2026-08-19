@@ -84,11 +84,32 @@ begin
     'mk4a …so the platform''s own count comes back rather than a frozen number');
   perform assert_true(r ->> 'mk-9' is null, 'mk4b and an unrostered player drops out again');
 
+  -- ══ THE LIVE ADP (0203) ══════════════════════════════════════════════════
+  update player_market set updated_at = now();
+  update player_market set adp = 1.5 where slug = 'mk-1';
+  r := league_market(lid);
+  perform assert_ok(r, 'mk6 the market reads');
+  perform assert_true((r ->> 'fresh')::boolean, 'mk6a …and says it is fresh');
+  perform assert_true((r -> 'adp' ->> 'mk-1')::numeric = 1.5, 'mk6b ADP comes through');
+  perform assert_true((r -> 'own' ->> 'mk-1')::int = 97, 'mk6c …beside ownership, from one call');
+  perform assert_true((r -> 'adp' ? 'mk-9') = false,
+    'mk6d a player with ownership but no ADP is absent from the ADP map, not zero');
+  -- Stale: BOTH maps empty, which is the client''s cue to keep the baked
+  -- consensus rather than blank the column.
+  update player_market set updated_at = now() - interval '30 days';
+  r := league_market(lid);
+  perform assert_true((r ->> 'fresh')::boolean = false, 'mk7 a stale feed says so');
+  perform assert_true(r -> 'adp' = '{}'::jsonb and r -> 'own' = '{}'::jsonb,
+    'mk7a …and returns nothing rather than a frozen number — the bake shows through');
+  update player_market set updated_at = now();
+
   -- ══ ACCESS ═══════════════════════════════════════════════════════════════
   perform assert_true((player_ownership(lid) ? 'error') = false, 'mk5 a member may read it');
   perform probe_as('c');
   perform assert_true(player_ownership(lid) ->> 'error' = 'forbidden',
     'mk5a a non-member may not');
+  perform assert_true(league_market(lid) ->> 'error' = 'forbidden',
+    'mk5b …and the market is gated the same way');
 
   delete from player_market;
   raise notice 'market probes done';

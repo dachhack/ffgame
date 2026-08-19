@@ -14,7 +14,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Tex
 import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
-  rosterRules, injuryTags, playerOwnership,
+  rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
   keeperState, setKeepers, type KeeperState,
@@ -23,7 +23,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -276,8 +276,13 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    playerOwnership(leagueId).then((r) => {
-      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
+    // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
+    // a stale feed costs freshness rather than the whole column.
+    leagueMarket(leagueId).then((r) => {
+      if (!r?.ok) return;
+      setOwn(r.own ?? {});
+      setLiveAdp(r.adp ?? null);
     }).catch(() => {});
   }, [leagueId]);
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.

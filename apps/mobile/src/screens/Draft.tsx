@@ -27,8 +27,8 @@ import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { headshot } from '@drip/core/data/media';
-import { myFavorites, loadTeamOverrides, playerFlags, playerOwnership } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, type PoolSort } from '@drip/core/data/poolSort';
+import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
+import { sortPool, POOL_SORTS, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
@@ -87,8 +87,13 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    playerOwnership(leagueId).then((r) => {
-      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
+    // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
+    // a stale feed costs freshness rather than the whole column.
+    leagueMarket(leagueId).then((r) => {
+      if (!r?.ok) return;
+      setOwn(r.own ?? {});
+      setLiveAdp(r.adp ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());

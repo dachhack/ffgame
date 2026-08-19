@@ -19,7 +19,7 @@ import {
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy, isRetSlot,
   optimalLineup, autoSlotPlan, classicLineup, slateAwareProj, leagueEligiblePos,
 } from '../packages/core/src/engine/classic';
-import { sortPool, poolSortValue, adpFor, projFor } from '../packages/core/src/data/poolSort';
+import { sortPool, poolSortValue, adpFor, projFor, setLiveAdp, clearLiveAdp, adpIsLive } from '../packages/core/src/data/poolSort';
 import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
@@ -304,6 +304,26 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
     && poolSortValue('own', known[2], 3, own) === '90%'
     && poolSortValue('adp', 'nobody-at-all', 9) === '\u2014');
   ok('sorting never mutates the caller\u2019s array', rows.at(-1).slug === 'nobody-at-all' && rows.length === 4);
+
+  // THE LIVE MARKET OVERLAY (v0.306.1). The load-bearing property is that it
+  // OVERLAYS rather than replaces: a feed that doesn't price a player, or a
+  // feed that never arrived, must leave the baked consensus showing. A board
+  // that blanked 200 rows on a failed poll would be worse than a stale one.
+  const bakedFirst = adpFor(known[0]);
+  ok('with no feed installed, ADP is the baked consensus', bakedFirst === ADP_2026.get(known[0]));
+  ok('…and the board says it is not live', adpIsLive() === false);
+  setLiveAdp({ [known[0]]: 1.5 });
+  ok('an installed feed wins for the players it prices', adpFor(known[0]) === 1.5);
+  ok('…and the bake still answers for the ones it does not',
+    adpFor(known[1]) === ADP_2026.get(known[1]), adpFor(known[1]));
+  ok('…and the board can say it is live', adpIsLive() === true);
+  ok('a live ADP actually reorders the list',
+    sortPool(rows, 'adp')[0].slug === known[0], sortPool(rows, 'adp').map((r) => r.slug));
+  setLiveAdp({});
+  ok('an EMPTY feed is not a feed — the bake comes straight back',
+    adpFor(known[0]) === bakedFirst && adpIsLive() === false);
+  clearLiveAdp();
+  ok('and clearing restores the bake', adpFor(known[0]) === bakedFirst);
 }
 
 // ── Moving a player who is already starting somewhere ──────────────────────
