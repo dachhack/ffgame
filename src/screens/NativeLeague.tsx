@@ -109,7 +109,7 @@ const starMark = (favs: Set<string>, slug: string) =>
 export function NativeCreate({ onDone, onLeague, onBack }: {
   /** Mock created → straight into the draft room. */
   onDone: (leagueId: string, rosterId: number) => void;
-  /** Real league created → its commissioner dashboard (invite + DRAFT tab). */
+  /** Real league created → its commissioner dashboard, on ROSTER settings. */
   onLeague: (leagueId: string) => void;
   onBack: () => void;
 }) {
@@ -210,8 +210,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       setNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, 14);
       if (!sched.ok) { setErr(friendlyError(sched.error ?? 'Could not build the schedule.')); setBusy(false); return; }
-      // Straight to the league's commissioner dashboard: invite link up top,
-      // the draft one tab away.
+      // Straight to the league's commissioner dashboard, on 🧢 ROSTER: the
+      // draft drafts the roster the league is SHAPED for, and both the shape
+      // and the draft freeze the moment it starts, so the settings come first
+      // and the draft room is one destination away.
       onLeague(r.league_id);
       return;
     } catch (x) { setErr(friendlyError(x)); }

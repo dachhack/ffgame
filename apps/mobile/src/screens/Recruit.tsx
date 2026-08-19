@@ -41,10 +41,14 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
   );
 }
 
-export function Recruit({ onBack, onJoined }: {
+export function Recruit({ onBack, onJoined, onCreated }: {
   onBack: () => void;
   /** A join succeeded — the leagues list needs a reload. */
   onJoined: () => void;
+  /** A LEAGUE was created — open it on its roster settings (v0.296.6). The
+   *  draft drafts the roster the league is SHAPED for, and both the shape and
+   *  the draft freeze the moment it starts, so the settings come first. */
+  onCreated?: (leagueId: string, name: string, rosterId: number | null) => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<BoardListing[] | null>(null);
@@ -217,6 +221,9 @@ export function Recruit({ onBack, onJoined }: {
       // mode is cheapest to notice.
       setJoined(`${nm}, a ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
       setMakeOpen(false); setNameDraft('');
+      // Into the new league, on its roster settings. The `finally` below still
+      // reloads the list behind this screen for the way back.
+      onCreated?.(r.league_id, nm, r.roster_id ?? null);
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); setMakeNote(''); onJoined(); await load(); }
   };
