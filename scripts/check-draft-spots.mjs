@@ -688,24 +688,24 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // Real slugs, so the ranking is the real PROJ_2026 the resolver will use.
   const R = (id, pos, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', stats: {}, ...extra });
   const roster = [
-    R('jonathan-taylor', 'RB'),   // 20.0
-    R('josh-allen', 'QB'),        // 23.5
-    R('puka-nacua', 'WR'),        // 21.4
-    R('trevor-lawrence', 'QB'),   // 18.0
+    R('jonathan-taylor', 'RB'),   // 24.6
+    R('josh-allen', 'QB'),        // 20.4
+    R('puka-nacua', 'WR'),        // 18.4
+    R('trevor-lawrence', 'QB'),   // 18.2
   ];
   const s = spots({ pos: ['QB'] }, { pos: ['RB', 'WR', 'TE'] });
   const seatedOf = (picks) => Object.fromEntries(picks.map((p) => [p.slot, p.player.id]));
 
   ok('the projections these assertions lean on are still the baked ones',
-    PROJ_2026.get('josh-allen') === 23.5 && PROJ_2026.get('trevor-lawrence') === 18
-      && PROJ_2026.get('puka-nacua') === 21.4,
+    PROJ_2026.get('josh-allen') === 20.4 && PROJ_2026.get('trevor-lawrence') === 18.2
+      && PROJ_2026.get('puka-nacua') === 18.4,
     [PROJ_2026.get('josh-allen'), PROJ_2026.get('trevor-lawrence'), PROJ_2026.get('puka-nacua')]);
 
   // No rows at all → the seat is unmanaged, and fields its best legal lineup.
   {
     const got = seatedOf(classicLineup({ picks: [], roster, bestball: [] }, 1, 1, s));
     ok('an unmanaged seat fields its best projected lineup',
-      got.S1 === 'josh-allen' && got.S2 === 'puka-nacua', got);
+      got.S1 === 'josh-allen' && got.S2 === 'jonathan-taylor', got);
   }
   // THE ONE THAT KEEPS IT SAFE. Rows exist but hold nobody — a manager who
   // emptied every spot. hasLineup says so, and nothing is filled in.
@@ -746,30 +746,30 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
 {
   const wk1 = [{ home: 'BUF', away: 'IND' }, { home: 'LA', away: 'SF' }, { home: 'WAS', away: 'DAL' }];
   const v = slateAwareProj(1, wk1);
-  ok('a playing player keeps his projection', v({ id: 'josh-allen', team: 'BUF' }) === 23.5);
+  ok('a playing player keeps his projection', v({ id: 'josh-allen', team: 'BUF' }) === 20.4);
   ok('a KNOWN team absent from a LOADED slate is a bye — worth zero',
     v({ id: 'jonathan-taylor', team: 'KC' }) === 0);
   // The relocation-code trap: the pool says LAR/WSH where the slate says
   // LA/WAS. Un-normalized, every Rams player would read as a phantom bye.
-  ok('LAR finds the slate\u2019s LA — no phantom bye', v({ id: 'puka-nacua', team: 'LAR' }) === 21.4);
-  ok('WSH finds the slate\u2019s WAS the same way', v({ id: 'jayden-daniels', team: 'WSH' }) === 18.1);
+  ok('LAR finds the slate\u2019s LA — no phantom bye', v({ id: 'puka-nacua', team: 'LAR' }) === 18.4);
+  ok('WSH finds the slate\u2019s WAS the same way', v({ id: 'jayden-daniels', team: 'WSH' }) === 14);
   ok('an UNKNOWN team is never a bye — no team, no claim',
-    v({ id: 'josh-allen', team: '' }) === 23.5 && v({ id: 'josh-allen', team: null }) === 23.5);
-  ok('an EMPTY slate zeroes nobody', slateAwareProj(1, [])({ id: 'josh-allen', team: 'KC' }) === 23.5);
+    v({ id: 'josh-allen', team: '' }) === 20.4 && v({ id: 'josh-allen', team: null }) === 20.4);
+  ok('an EMPTY slate zeroes nobody', slateAwareProj(1, [])({ id: 'josh-allen', team: 'KC' }) === 20.4);
 
   // RULED OUT is the caller's own predicate — deliberately never injuryFor by
   // default, because that helper's baked-2025 fallback is exactly the server's
   // resting state and would bench 2026 players for last year's injuries.
   const out = slateAwareProj(1, wk1, (slug) => slug === 'josh-allen');
   ok('a ruled-out player is worth zero', out({ id: 'josh-allen', team: 'BUF' }) === 0);
-  ok('…and his healthy teammate is untouched', out({ id: 'jayden-daniels', team: 'WAS' }) === 18.1);
-  ok('no predicate means no injury claim', v({ id: 'josh-allen', team: 'BUF' }) === 23.5);
+  ok('…and his healthy teammate is untouched', out({ id: 'jayden-daniels', team: 'WAS' }) === 14);
+  ok('no predicate means no injury claim', v({ id: 'josh-allen', team: 'BUF' }) === 20.4);
 
   // No explicit slate → the module slate (runtime override, else baked 2025 —
   // correct for exactly the 2025 replay path that uses it). Week 99 has no
   // slate at all, so nothing can be proven and nobody is zeroed.
   ok('a week with NO slate loaded zeroes nobody',
-    slateAwareProj(99)({ id: 'josh-allen', team: 'XX' }) === 23.5);
+    slateAwareProj(99)({ id: 'josh-allen', team: 'XX' }) === 20.4);
 
   // The integration that motivated all of this: the fill benches a bigger
   // projection on bye for a smaller one who actually plays.
