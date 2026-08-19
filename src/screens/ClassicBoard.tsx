@@ -26,7 +26,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters,
+  nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
@@ -89,7 +89,6 @@ const mkPlayer = (slug: string) => {
 };
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
-const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)', letterSpacing: '0.08em' };
 
 // Display name straight from the slug (the opponent's side arrives as bare
 // slugs). Team units read as units, not as capitalized slug fragments.
@@ -106,11 +105,6 @@ const fmtKick = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
-const fmtLock = (iso: string | null) => {
-  if (!iso) return 'first kickoff';
-  try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
-  catch { return iso; }
-};
 
 /** One team's identity in the scoreboard: crest, name, record + seed, live
  *  score with the projected final beneath it. */
@@ -263,6 +257,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // the game.
   const [fieldGame, setFieldGame] = useState<string | null>(null);
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
+  // ── WALKING THE SEASON (v0.299.1, founder: "it would be good if you could go
+  //    to the next week all the way through the last week of the regular season
+  //    and back. A swipe action would be cool.") ──────────────────────────────
+  // null means "whatever week the league is on" — the board's own default, and
+  // what it opens on. A number is a week the manager asked for.
+  const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // The last regular-season week: the playoff start minus one. Read from the
+  // league rather than assumed, because 14 is a default and not a rule.
+  const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
+  // The live injury report is a MODULE cache React cannot see; this is the
+  // re-render signal, same shape as flagsVer above.
+  const [injuryVer, setInjuryVer] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -271,7 +277,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRos(r);
-        const m = await myMatchup(r.leagueId, r.rosterId);
+        const m = await myMatchup(r.leagueId, r.rosterId, weekWanted ?? undefined);
         if (!m) { setState('none'); return; }
         setMatchup(m);
         nativeRosters(r.leagueId).then((rows) => {
@@ -307,6 +313,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           setNames({ me: t[r.rosterId]?.team_name || 'YOU', opp: t[oppRoster]?.team_name || 'OPPONENT' });
           setAvatars({ me: t[r.rosterId]?.avatar ?? null, opp: t[oppRoster]?.avatar ?? null });
         }).catch(() => {});
+        // THE LIVE INJURY REPORT (v0.299.1, founder: "we also need any injury
+        // designations on players in the matchup view"). Nothing on this screen
+        // had ever loaded it: `injuryFor` was answering out of the BAKED 2025
+        // report, so one player wore last year's Q and everybody else wore
+        // nothing. It is a module cache, so the version bump is what redraws.
+        loadLiveInjuries(m.week).then((n) => { if (n) setInjuryVer((v) => v + 1); }).catch(() => {});
+        // The last regular-season week — the playoff start minus one — so the
+        // week stepper knows where the season ends.
+        playoffState(r.leagueId).then((ps) => {
+          if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
+        }).catch(() => {});
         // The week's NFL slate drives every player's kickoff, opponent and —
         // by absence — their bye. Scoped to the matchup's own season/week.
         liveSlate(m.week, '2026').then(setSlate).catch(() => {});
@@ -341,7 +358,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
-  }, [userId, leagueId, rosterId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, leagueId, rosterId, weekWanted]);
 
   // THE WEEK IS UNDERWAY — the only thing this flag still decides is
   // PRESENTATION (live scores rather than projections, the win bar, the
@@ -550,7 +568,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         primetime: isPrimetime(g?.kickoff),
       };
     };
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer]);
+    // injuryVer: the live report is a module cache, so its arrival is a version bump.
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -599,25 +618,49 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
    *  the board (the same dismissal grammar as the picker: backdrop, ✕,
    *  Escape). Offered only when the game has a published feed, so the door
    *  never opens onto nothing. */
+  const stepBtn: React.CSSProperties = {
+    background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4,
+    color: 'var(--dim)', fontSize: 12, lineHeight: 1, padding: '3px 7px', cursor: 'pointer',
+  };
   const fieldOpener = (e: BoardEntry | null): (() => void) | undefined => {
     if (!e?.team || !matchup || !gameFeeds.length || !gameFeedFor(matchup.week, e.team)) return undefined;
     const team = e.team;
     return () => setFieldGame(team);
   };
 
-  /** The next kickoff that will freeze one of MY spots — the honest
-   *  replacement for a league-wide lock time that no longer exists. */
-  const nextLockLabel = useMemo(() => {
-    const now = nowTs;
-    const ks = slotDefs
-      .map((d) => effective.mine[d.slot])
-      .filter(Boolean)
-      .map((slug) => gameFor(slugMeta(slug!).team, slate)?.kickoff)
-      .map((k) => (k ? Date.parse(k) : NaN))
-      .filter((ms) => Number.isFinite(ms) && ms > now);
-    if (!ks.length) return 'nothing left to lock';
-    return fmtLock(new Date(Math.min(...ks)).toISOString());
-  }, [slotDefs, effective, slate, nowTs]);
+  /** ── THE WEEK STEPPER ─────────────────────────────────────────────────
+   *  Weeks 1 … the last regular-season one. The bound comes from the league's
+   *  playoff start; until that read lands the forward arrow simply doesn't
+   *  offer a week the board can't fill, because `myMatchup` for a week with no
+   *  game returns nothing and the screen would empty. */
+  const canGo = (d: -1 | 1): boolean => {
+    const w = matchup?.week;
+    if (w == null) return false;
+    const next = w + d;
+    if (next < 1) return false;
+    if (lastRegWeek != null && next > lastRegWeek) return false;
+    return true;
+  };
+  const goWeek = (d: -1 | 1) => { if (canGo(d) && matchup) setWeekWanted(matchup.week + d); };
+
+  /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
+   *  way pages move under a thumb. Guarded on the vertical component so a
+   *  scroll down a long board is never read as a week change, and on a
+   *  distance that a tap can't reach by accident. */
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t0 = e.touches[0];
+    touch.current = t0 ? { x: t0.clientX, y: t0.clientY } : null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current; touch.current = null;
+    const t0 = e.changedTouches[0];
+    if (!start || !t0) return;
+    const dx = t0.clientX - start.x, dy = t0.clientY - start.y;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return;
+    goWeek(dx < 0 ? 1 : -1);
+  };
+
   /** Has this player's game started? The one question that decides everything
    *  editable on this screen now. A player with no game (bye) never starts. */
   const kickedOff = (slug: string | null | undefined): boolean => {
@@ -732,13 +775,26 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   };
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gap: 12 }}>
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+      style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer' }}>← LEAGUE</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span className="mono" style={{ ...mono, fontSize: 9.5, color: 'var(--faint)' }}>
-            CLASSIC · WEEK {matchup?.week} · {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? 'HALF PPR' : 'NON-PPR'}
-          </span>
+          {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line. The
+              founder: "we don't need the classic, week 1, full ppr line" — the
+              game mode and the PPR setting are league settings you set once and
+              read on the league page, not facts about the game in front of you.
+              What was worth keeping is the WEEK, and it earns its place by
+              being the control that moves you through the season. */}
+          {matchup && (
+            <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'var(--faint)' }}>
+              <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} aria-label="previous week"
+                style={{ ...stepBtn, opacity: canGo(-1) ? 1 : 0.3 }}>‹</button>
+              <span style={{ fontWeight: 700, color: 'var(--dim)', minWidth: 52, textAlign: 'center' }}>WEEK {matchup.week}</span>
+              <button onClick={() => goWeek(1)} disabled={!canGo(1)} aria-label="next week"
+                style={{ ...stepBtn, opacity: canGo(1) ? 1 : 0.3 }}>›</button>
+            </span>
+          )}
           {/* ▦ FIELDS (founder) — the drip board's all-fields idea, fed by
               classic's starters. Offered only once feeds exist: a button into
               an empty overlay would read as broken. */}
@@ -762,14 +818,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         <div style={card}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
             <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
-            {/* NO OVERALL LOCK IN CLASSIC (founder). Since 0178 each spot locks
-                at its own player's kickoff, so a single "LOCKS Wed 8:20 PM" was
-                simply untrue — it was matchup.lock_at, the drip lead, which now
-                only decides when the matchup flips to live. What IS true and
-                useful is the NEXT one of your spots to freeze. */}
+            {/* NO LOCK REMINDER (v0.299.1, founder: "we also don't need the
+                lock reminder or time"). Each spot already says its own kickoff
+                on its own row — which is where the answer belongs, since 0178
+                made locking per-spot — so a second countdown in the middle of
+                the scoreboard was the same fact, further from the thing it is
+                about. LIVE stays: that is the game's STATE, not a reminder. */}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap' }}>
-              {locked ? 'LIVE' : 'NEXT LOCK'}
-              {!locked && <div style={{ fontSize: 9, marginTop: 3 }}>{nextLockLabel}</div>}
+              {locked ? 'LIVE' : ''}
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>

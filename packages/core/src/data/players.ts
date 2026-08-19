@@ -88,6 +88,16 @@ const DEFAULTS: Record<Pos, PlayerStats> = {
   RET: { games: 14, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 
+/** A season that never happened — every counter zero, `games` zero so any
+ *  "played N games" line hides itself. For a player who cannot have a prior
+ *  season at all: a ROOKIE, whose name may collide with last year's bake
+ *  (v0.299.1). Cheaper and more honest than guessing which of two players a
+ *  name means. */
+export const NO_SEASON: PlayerStats = {
+  games: 0, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0,
+  targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0,
+};
+
 export function statsForName(fullName: string, pos: Pos): PlayerStats {
   const row = STAT_INDEX.get(normName(fullName));
   if (row) {

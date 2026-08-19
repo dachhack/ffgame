@@ -15,7 +15,7 @@ import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
 import { displayTeam } from '@drip/core/data/playerTeam';
-import { statsForName } from '@drip/core/data/players';
+import { statsForName, NO_SEASON } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
@@ -98,6 +98,15 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // surface happened to know.
   const showTeam = displayTeam(slug, team);
   const bio = PLAYER_BIO[slug];
+  // A ROOKIE HAS NO LAST SEASON (v0.299.1, founder: "why does a rookie have a
+  // 2025 stat line?"). `statsForName` matches the 2025 bake BY NAME, so a 2026
+  // rookie who shares a name with last year's player inherits his season — the
+  // founder's C. Allen, a KC rookie out of Cincinnati, wearing somebody else's
+  // 14 games. Experience is the check that settles it: a player in his first
+  // NFL season cannot have played in the one before, so whatever is keyed to
+  // his name is not his. Position already disambiguates the other famous
+  // collision (Josh Allen QB vs Josh Allen LB); this is the one it can't.
+  const rookie = bio?.exp === 0;
   // THE GAME LOG (v0.284.0) — built ONLY when its tab is opened. The season
   // bake is 1.5 MB; fetching and parsing it for a card nobody opened the log on
   // would be work for nothing, and most cards are opened to read a name and
@@ -105,7 +114,10 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   const [log, setLog] = useState<GameLogWeek[] | null>(null);
   const [logErr, setLogErr] = useState(false);
   useEffect(() => {
-    if (tab !== 'log' || log !== null) return;
+    // A ROOKIE HAS NO 2025 (v0.299.1). The log is keyed by slug and the slug
+    // comes from the NAME, so a rookie who shares one with last year's player
+    // inherits his whole season. Don't even fetch it.
+    if (tab !== 'log' || log !== null || rookie) return;
     let dead = false;
     (async () => {
       try {
@@ -123,7 +135,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   const inj = week != null ? injuryRowFor(week, slug) : null;
   const flag = flagFor(slug);
   const injTag = week != null ? injuryFor(week, slug) : null;
-  const season = statsForName(name, pos as Pos);
+  const season = rookie ? NO_SEASON : statsForName(name, pos as Pos);
   // This week so far, from whatever plays are loaded (live board installs them;
   // elsewhere this is legitimately all zeroes and we hide the row).
   const weekLine = (() => {
@@ -282,8 +294,13 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         {tab === 'log' && (
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
             {logErr && <span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load his game log.</span>}
-            {!logErr && log === null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading his season…</span>}
-            {log?.length === 0 && (
+            {!rookie && !logErr && log === null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading his season…</span>}
+            {rookie && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
+                Rookie — this is his first NFL season, so there are no games behind him yet.
+              </span>
+            )}
+            {!rookie && log?.length === 0 && (
               <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
                 No plays recorded yet this season. Weeks appear here as the games are played.
               </span>
