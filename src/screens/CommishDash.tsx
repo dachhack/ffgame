@@ -13,7 +13,7 @@ import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
-import { rosterRules, setTaxiRules, playerFlags } from '@drip/core/data/liveApi';
+import { rosterRules, setTaxiRules, setIrRules, playerFlags } from '@drip/core/data/liveApi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -325,10 +325,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // the season's first kickoff. Loaded here because they live beside the SIZE,
   // which is the number right above them.
   const [taxi, setTaxi] = useState<{ maxExp: number | null; lock: boolean; lockedNow: boolean } | null>(null);
+  // WHO MAY GO ON IR (0198) — the commissioner's own list of designations,
+  // read from the same call. Default is IR/O, the pair 0164 hardcoded.
+  const [irTags, setIrTags] = useState<string[] | null>(null);
   const loadTaxi = () => {
     rosterRules(leagueId).then((r) => {
       if (!r.ok) return;
       setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
+      setIrTags(r.ir_tags?.length ? r.ir_tags : ['IR', 'O']);
     }).catch(() => {});
   };
   useEffect(loadTaxi, [leagueId]);
@@ -338,6 +342,21 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     try {
       const r = await setTaxiRules(leagueId, maxExp, lock);
       if (r.ok) { setTaxi({ maxExp: r.max_exp ?? null, lock: r.lock !== false, lockedNow: !!r.locked_now }); setNote('✓ taxi rules saved'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  /** Toggle one designation in or out of the IR list. The server refuses an
+   *  empty list, so the last one standing can't be turned off — the button
+   *  says so rather than sending a call that will bounce. */
+  const toggleIrTag = async (tag: string) => {
+    if (busy || !irTags) return;
+    const on = irTags.includes(tag);
+    if (on && irTags.length === 1) { setNote('IR needs at least one designation — an IR spot nobody can qualify for is a spot to remove.'); return; }
+    const next = on ? irTags.filter((x) => x !== tag) : [...irTags, tag];
+    setBusy(true); setNote(null);
+    try {
+      const r = await setIrRules(leagueId, next);
+      if (r.ok) { setIrTags(r.tags?.length ? r.tags : next); setNote('✓ IR eligibility saved'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -658,8 +677,28 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real IR/Out designation only; taxi and IR players can't be started.
+            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started.
           </div>
+
+          {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────────
+              Founder: "only injured guys can be put on IR (commish chooses
+              eligible tags)". 0164 hardcoded IR/Out, which is one league's
+              answer — some run season-ending IR only, some let Doubtful ride.
+              The vocabulary is the injury report's own and nothing else. */}
+          {shape.ir > 0 && irTags && (
+            <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🏥 IR ELIGIBILITY · which designations may be stashed</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
+                {([['IR', 'IR (season-ending)'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
+                  <button key={tag} onClick={() => void toggleIrTag(tag)} disabled={busy} className="mono"
+                    style={pill(irTags.includes(tag))}>{label}</button>
+                ))}
+              </div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+                A player with none of these — including a healthy one — can't be put on IR by anyone, YOU included: this is a fact about the player, not a deadline. A player already stashed stays put when you narrow the list; he just can't go back on once he's off.
+              </div>
+            </div>
+          )}
 
           {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────────
               Who may ride it and when it shuts. Beside the SIZE, because a

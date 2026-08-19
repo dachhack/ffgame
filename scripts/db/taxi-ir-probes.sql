@@ -103,7 +103,7 @@ begin
   perform probe_as('c');
   perform assert_ok(set_roster_spot(lid, 'tx-taxi1', 'taxi'), 'tx8 taxi stash ok');
   perform assert_err(set_roster_spot(lid, 'tx-a1', 'taxi'), 'taxi is full', 'tx8a taxi cap bites');
-  perform assert_err(set_roster_spot(lid, 'tx-a1', 'ir'), 'not IR/Out', 'tx8b healthy player refused IR');
+  perform assert_err(set_roster_spot(lid, 'tx-a1', 'ir'), 'IR is for players designated', 'tx8b healthy player refused IR');
   perform assert_ok(set_roster_spot(lid, 'tx-hurt', 'ir'), 'tx8c IR player stashes');
   perform assert_err(set_roster_spot(lid, 'tx-x', 'taxi'), 'not rostered', 'tx8d unknown player refused');
 

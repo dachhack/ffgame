@@ -22,7 +22,7 @@ import {
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
-  setTaxiRules,
+  setTaxiRules, setIrRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   playerFlags,
@@ -1440,10 +1440,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // THE TAXI SQUAD'S OWN RULES (0196): who may ride it, and whether it shuts at
   // the season's first kickoff. Beside the SIZE, which is the number above it.
   const [taxi, setTaxi] = useState<{ maxExp: number | null; lock: boolean; lockedNow: boolean } | null>(null);
+  // WHO MAY GO ON IR (0198): the commissioner's own list of designations, off
+  // the same call. Default is IR/O — the pair 0164 hardcoded.
+  const [irTags, setIrTags] = useState<string[] | null>(null);
   const loadTaxi = () => {
     rosterRules(leagueId).then((r) => {
       if (!r.ok) return;
       setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
+      setIrTags(r.ir_tags?.length ? r.ir_tags : ['IR', 'O']);
     }).catch(() => {});
   };
   useEffect(loadTaxi, [leagueId]);
@@ -1453,6 +1457,20 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     try {
       const r = await setTaxiRules(leagueId, maxExp, lock);
       if (r.ok) { commit(); setTaxi({ maxExp: r.max_exp ?? null, lock: r.lock !== false, lockedNow: !!r.locked_now }); setNote('✓ taxi rules saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
+  /** Toggle one designation in or out of the IR list. The server refuses an
+   *  empty list, so the last one standing says why rather than bouncing. */
+  const saveIrTag = async (tag: string) => {
+    if (busy || !irTags) return;
+    const on = irTags.includes(tag);
+    if (on && irTags.length === 1) { warn(); setNote('IR needs at least one designation.'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const next = on ? irTags.filter((x) => x !== tag) : [...irTags, tag];
+      const r = await setIrRules(leagueId, next);
+      if (r.ok) { commit(); setIrTags(r.tags?.length ? r.tags : next); setNote('✓ IR eligibility saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
   };
@@ -1884,8 +1902,24 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               </Mono>
             </View>
           )}
+          {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────
+              0164 hardcoded IR/Out, which is one league's answer. The
+              vocabulary is the injury report's own and nothing else. */}
+          {shape.ir > 0 && irTags && (
+            <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+              <Mono size={8.5} tone="faint" weight="700">🏥 IR ELIGIBILITY · which designations may be stashed</Mono>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                {([['IR', 'IR'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
+                  <Pill key={tag} on={irTags.includes(tag)} label={label} onPress={() => void saveIrTag(tag)} />
+                ))}
+              </View>
+              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
+                A player with none of these — a healthy one included — can't be put on IR by anyone, YOU included: this is a fact about the player, not a deadline. Someone already stashed stays put when you narrow the list.
+              </Mono>
+            </View>
+          )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
+            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>

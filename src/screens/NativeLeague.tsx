@@ -30,6 +30,7 @@ import {
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
+  rosterRules, injuryTags,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
@@ -1626,6 +1627,45 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   // the app's roster since v0.281.0).
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const [fillFor, setFillFor] = useState<'taxi' | 'ir' | null>(null);          // an empty IR/taxi place, asking who
+  // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
+  // The server has enforced both of these since 0164/0196, but no screen had
+  // ever read the rules — so the picker offered every name and the rule only
+  // appeared as a red error AFTER the tap. Read them here and the picker can
+  // grey the row and say why in the same breath.
+  const [stashRules, setStashRules] = useState<{ irTags: string[]; taxiMaxExp: number | null; taxiLocked: boolean } | null>(null);
+  const [injTags, setInjTags] = useState<Record<string, string>>({});
+  useEffect(() => {
+    rosterRules(leagueId).then((r) => {
+      if (r.ok) setStashRules({
+        irTags: r.ir_tags?.length ? r.ir_tags : ['IR', 'O'],
+        taxiMaxExp: r.taxi_max_exp ?? null,
+        taxiLocked: !!r.taxi_locked_now,
+      });
+    }).catch(() => {});
+    injuryTags().then(setInjTags).catch(() => {});
+  }, [leagueId]);
+  /** Why this player may NOT go in that place — null when he may. The wording
+   *  matches the server's refusal, because the server is still the authority
+   *  and a screen that disagreed with it would be worse than one that stayed
+   *  quiet. The commissioner is exempt from the taxi LOCK (a deadline) and
+   *  from nothing else. */
+  const stashBlock = (slug: string, spot: 'taxi' | 'ir'): string | null => {
+    if (!stashRules) return null;
+    if (spot === 'ir') {
+      const tag = injTags[slug];
+      if (!tag) return `IR is for players designated ${stashRules.irTags.join('/')} — he has no designation`;
+      if (!stashRules.irTags.includes(tag)) return `IR is for players designated ${stashRules.irTags.join('/')} — he is ${tag}`;
+      return null;
+    }
+    const mx = stashRules.taxiMaxExp;
+    if (mx != null) {
+      const exp = expMap[slug];
+      if (exp == null) return `the taxi squad is for players with ${mx} or fewer years — his experience isn't known`;
+      if (exp > mx) return `the taxi squad is for players with ${mx} or fewer years — he has ${exp}`;
+    }
+    if (stashRules.taxiLocked && !team?.is_commish) return 'the taxi squad locked at the season’s first kickoff — you can still take players OFF it';
+    return null;
+  };
   const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   // null = not editing; '' = editing from empty (0187 league rename).
@@ -2171,22 +2211,34 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
             </div>
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
               {fillFor === 'ir'
-                ? 'IR holds players the league’s rules say are hurt enough — the server checks, and says so if he isn’t.'
-                : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
+                ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report — your commissioner sets that list. Everyone else is greyed out below.`
+                : stashRules?.taxiMaxExp != null
+                  ? `The taxi squad holds prospects off your active roster — your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer. He can’t be started while he’s on it.`
+                  : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
             </div>
             {mine.filter((p) => p.spot === 'active').length === 0 && (
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Nobody on your active roster to move.</div>
             )}
-            {mine.filter((p) => p.spot === 'active').map((p) => (
-              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
+            {mine.filter((p) => p.spot === 'active').map((p) => {
+              // Ineligible names stay VISIBLE and greyed rather than vanishing:
+              // "why isn't he in the list" is a worse question than "why is he
+              // greyed out", and the answer is printed right beside him.
+              const why = stashBlock(p.slug, fillFor);
+              return (
+              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6, opacity: why ? 0.45 : 1, flexWrap: 'wrap' }}>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                {fillFor === 'ir' && injTags[p.slug] && (
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)' }}>{injTags[p.slug]}</span>
+                )}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{p.team}</span>
-                <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy} className="mono"
-                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--you)' }}>{fillFor === 'ir' ? '→IR' : '→TX'}</button>
+                <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy || !!why} title={why ?? ''} className="mono"
+                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{fillFor === 'ir' ? '→IR' : '→TX'}</button>
+                {why && <span className="mono" style={{ flexBasis: '100%', fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.4 }}>{why}</span>}
               </div>
-            ))}
+              );
+            })}
             <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={() => setFillFor(null)} className="mono" style={linkBtn}>cancel</button></div>
           </div>
         </div>
