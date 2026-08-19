@@ -37,10 +37,11 @@ import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats2026';
 import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
 import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
+import { PROJ_RETURN } from '../packages/core/src/data/projReturns2026';
 import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
-  scoreKickLine, scoreDstLine, integratedPaPoints, kdstBase, hasProjection, PA_SD,
+  scoreKickLine, scoreDstLine, scoreReturnLine, integratedPaPoints, kdstBase, hasProjection, PA_SD,
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
@@ -213,7 +214,25 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   ok('isRetSlot means EXACTLY a return-only spec, not any spec containing RET',
     isRetSlot(RETSPEC) && !isRetSlot(['RET', 'WR']) && !isRetSlot(FLEXSPEC));
 
-  ok('a receiver projects nothing in a return-only spot',
+  // v0.313.0: StatHead ship return components, so the spot is priced rather
+  // than zeroed. `jamarr-chase` never returns a kick and is the control.
+  const DIKE = { id: 'chimere-dike', pos: 'WR', team: 'MIN' };
+
+  ok('the return bake loaded, and every row joins the skill bake',
+    Object.keys(PROJ_RETURN).length > 100
+    && Object.keys(PROJ_RETURN).every((s) => PROJ_2026.has(s)),
+    Object.keys(PROJ_RETURN).length);
+  ok('no two returners share a slug (a RET spot only holds RB/WR/TE/FB, never a DB)',
+    new Set(Object.keys(PROJ_RETURN)).size === Object.keys(PROJ_RETURN).length);
+
+  ok('a RETURNER is priced in a return-only spot, not zeroed',
+    projectedPoints(DIKE, 'S7', RETSPEC) > 0, projectedPoints(DIKE, 'S7', RETSPEC));
+  // …but under the DEFAULT catalog only return TDs score, so it is a fraction
+  // of his skill line. That gap IS the bug v0.311.2 fixed, now with a number.
+  ok('…and is worth far less there than in a flex spot, as the live scorer pays',
+    projectedPoints(DIKE, 'S7', RETSPEC) < projectedPoints(DIKE, 'S7', FLEXSPEC) / 5,
+    [projectedPoints(DIKE, 'S7', RETSPEC), projectedPoints(DIKE, 'S7', FLEXSPEC)]);
+  ok('a player who never returns a kick still projects nothing there',
     projectedPoints(WR, 'S7', RETSPEC) === 0, projectedPoints(WR, 'S7', RETSPEC));
   ok('…while the same player in a normal spot is untouched',
     projectedPoints(WR, 'S7', FLEXSPEC) === PROJ_2026.get(WR.id),
@@ -221,24 +240,59 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   ok('…and a caller that passes no spec at all is untouched (every other surface)',
     projectedPoints(WR, 'S7') === PROJ_2026.get(WR.id));
 
-  // A scoped bonus must NOT resurrect it: a flat bonus on top of an unknown is
-  // false precision, and this is the path that would quietly reintroduce it.
-  setLeagueScoring({ scoped: [{ slot: ['S7'], bonusPts: 5, bonusMult: 3 }] });
-  ok('a scoped bonus does not resurrect a return-only projection',
-    projectedPoints(WR, 'S7', RETSPEC) === 0, projectedPoints(WR, 'S7', RETSPEC));
+  // THE LEAGUE'S OWN RETURN RULES REACH IT, and the two yardage buckets are
+  // priced separately — a combined figure could not serve a league that pays
+  // more for punt returns than kick returns.
+  const flat = projectedPoints(DIKE, 'S7', RETSPEC);
+  setLeagueProjScoring({ retYd: 0.04 });
+  ok('paying per return yard raises a returner',
+    projectedPoints(DIKE, 'S7', RETSPEC) > flat, projectedPoints(DIKE, 'S7', RETSPEC));
+  const RAY = { id: 'kalif-raymond', pos: 'WR', team: 'DET' };   // punt-heavy
+  const SAY = { id: 'jacob-saylors', pos: 'RB', team: 'DEN' };   // kick-only
+  const evenRay = projectedPoints(RAY, 'S7', RETSPEC), evenSay = projectedPoints(SAY, 'S7', RETSPEC);
+  setLeagueProjScoring({ retYd: 0.04, prYd: 0.06 });
+  // Everyone carries SOME punt yardage in StatHead's allocation, so the
+  // kick-only man is not frozen — he just gains far less. The property that
+  // matters is that the premium is proportional to punt yardage, which is only
+  // true because the two buckets are stored separately.
+  const gainRay = projectedPoints(RAY, 'S7', RETSPEC) - evenRay;
+  const gainSay = projectedPoints(SAY, 'S7', RETSPEC) - evenSay;
+  ok('a PUNT-return premium moves the punt returner far more than the kick returner',
+    gainRay > gainSay * 5, [gainRay, gainSay]);
+  clearLeagueProjScoring();
+
+  // Scoped bonuses apply here now that the value is KNOWN — v0.311.2 withheld
+  // them only because a flat bonus over an unknown is false precision.
+  setLeagueScoring({ scoped: [{ slot: ['S7'], bonusMult: 2 }] });
+  // Doubled against the UNROUNDED base, not against the displayed number — the
+  // projection rounds once at the end, exactly as it does for every position.
+  const exact2 = Math.round(
+    (scoreReturnLine(PROJ_RETURN[DIKE.id], DEFAULT_CLASSIC_SCORING) / 17) * 2 * 10) / 10;
+  ok('a spot-scoped multiplier now reaches a return projection',
+    projectedPoints(DIKE, 'S7', RETSPEC) === exact2,
+    [projectedPoints(DIKE, 'S7', RETSPEC), exact2, flat]);
+  ok('…and still cannot conjure one for a non-returner',
+    projectedPoints(WR, 'S7', RETSPEC) === 0);
   clearLeagueScoring();
 
-  // THE FILL RANKS IT THE SAME WAY. bestballFillBy passes the spot to valueOf;
-  // ranking RET candidates by their full skill line would seat the best
-  // receiver rather than the best returner.
+  // THE FILL RANKS BY THE SAME NUMBER. Ranking RET candidates by their full
+  // skill line would seat the best receiver rather than the best returner.
   const value = slateAwareProj(1, []);
-  ok('the auto-fill values a return-only spot at nothing',
-    value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: RETSPEC }) === 0);
+  ok('the auto-fill prefers a RETURNER for a return-only spot',
+    value(DIKE, { slot: 'S7', pos: RETSPEC }) > value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: RETSPEC }),
+    [value(DIKE, { slot: 'S7', pos: RETSPEC }), value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: RETSPEC })]);
+  ok('…and agrees with the board on the same player and spot',
+    value(DIKE, { slot: 'S7', pos: RETSPEC }) === projectedPoints(DIKE, 'S7', RETSPEC));
   ok('…and values a normal spot exactly as before',
     value({ id: WR.id, pos: 'WR', team: 'CIN' }, { slot: 'S7', pos: FLEXSPEC })
       === PROJ_2026.get(WR.id));
   ok('…and a fill with no spot in hand is unchanged (optimalLineup passes none)',
     value({ id: WR.id, pos: 'WR', team: 'CIN' }) === PROJ_2026.get(WR.id));
+
+  // The scorer itself, against the default ladder: only the TD column pays.
+  ok('the return scorer prices the default catalog as return TDs alone',
+    Math.abs(scoreReturnLine(PROJ_RETURN['chimere-dike'], DEFAULT_CLASSIC_SCORING)
+      - PROJ_RETURN['chimere-dike'].retTd * 6) < 1e-9);
 }
 
 // ── THE CATALOG IS SCORING **PLUS** PPR ────────────────────────────────────
