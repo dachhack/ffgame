@@ -13,7 +13,7 @@ import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
-import { PROJ_2026, PROJ_AS_OF } from '@drip/core/data/proj2026';
+import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { statsForSlug } from '@drip/core/data/players';
 import {
   createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode,
@@ -37,9 +37,10 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 
@@ -381,7 +382,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
   queued?: boolean; onQueue?: () => void;
 }) {
   const adp = ADP_2026.get(p.slug);
-  const proj = PROJ_2026.get(p.slug);
+  const proj = projFor(p.slug, p.pos);
   const st = p.pos === 'K' || p.pos === 'DEF' ? null : statsForSlug(p.slug, p.pos as Pos);
   const stat = (label: string, v: string | number | null | undefined) => (
     v == null || v === '' ? null : (
@@ -789,6 +790,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     leagueGameMode(leagueId).then((g) => {
       if (!alive || !g.ok) return;
       setGm(g);
+      // The league's own catalog on the projection side (v0.310.0). Set here
+      // rather than at each read: every pool on this screen sorts and displays
+      // through `projFor`, which reads this module global, so a screen that
+      // showed projections without installing would quietly render them under
+      // whichever league was opened before it.
+      setLeagueProjScoring(leagueCatalogOf(g));
       if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
         leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
       }
@@ -1293,7 +1300,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           </div>
           <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
-              const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
+              const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
@@ -1766,7 +1773,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     // map empty, which makes every tenure band except ANY come back empty
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) setGm(g); }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
     keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(k.continuity === 'dynasty' ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
@@ -2203,7 +2210,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
                     the order is always legible: a list ordered by projection
                     that still printed ranks would look shuffled. */}
                 <span className="mono" style={{ fontSize: 9, color: sortBy === 'rank' ? 'var(--faint)' : 'var(--you)', width: 38, textAlign: 'right' }}
-                  title={POOL_SORTS.find((o) => o.id === sortBy)?.hint}>{poolSortValue(sortBy, p.slug, p.rank, own ?? undefined)}</span>
+                  title={POOL_SORTS.find((o) => o.id === sortBy)?.hint}>{poolSortValue(sortBy, p, own ?? undefined)}</span>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>

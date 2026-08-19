@@ -28,6 +28,7 @@ import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
 import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/leagueScoring.ts';
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
+import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
@@ -516,6 +517,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // UNCONDITIONALLY: it is a module global, so skipping the false case would
     // leave the previous matchup's golf league in force over this one.
     setLeagueGolf(gameMode.golf === true);
+    // AND THE PROJECTION CATALOG (v0.310.0). An UNMANAGED seat has no stored
+    // lineup, so `classicLineup` computes one through `slateAwareProj` — which
+    // now ranks by the league's own scoring. Installed with exactly the catalog
+    // handed to the resolve below, so the lineup this seat is given and the
+    // points it is then scored on come from one rulebook.
+    setLeagueProjScoring({ ...(gameMode.scoring ?? {}), ppr: gameMode.ppr });
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
       matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, slotDefs);

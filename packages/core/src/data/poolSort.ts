@@ -16,8 +16,9 @@
 //     order the clock will take if it runs out.
 //   • ADP  — consensus average draft position (adp2026). Ascending: earlier is
 //     first. "Who is going before my next pick."
-//   • PROJ — projected PPR points per game (proj2026). Descending. "Who scores
-//     the most", which ADP only approximates.
+//   • PROJ — projected points per game, UNDER THIS LEAGUE'S RULES as of
+//     v0.310.0 (see below). Descending. "Who scores the most", which ADP only
+//     approximates.
 //   • OWN  — the share of this platform's drafted leagues rostering him
 //     (player_ownership, 0199). Descending. "Who does everybody else have."
 //
@@ -28,6 +29,7 @@
 
 import { ADP_2026 } from './adp2026';
 import { PROJ_2026 } from './proj2026';
+import { projectedPoints } from '../engine/projScoring';
 
 export type PoolSort = 'rank' | 'adp' | 'proj' | 'own';
 
@@ -58,15 +60,40 @@ export const adpIsLive = (): boolean => liveAdp != null;
 
 export const adpFor = (slug: string): number | null =>
   liveAdp?.[slug] ?? ADP_2026.get(slug) ?? null;
-export const projFor = (slug: string): number | null => PROJ_2026.get(slug) ?? null;
+// THE PROJECTION IS THE LEAGUE'S, NOT THE BAKE'S (v0.310.0, founder: "so we
+// can apply scoring changes to the projections in waivers, drafts and the
+// matchup board by league and position?"). It could not: v0.308.0 built the
+// league-aware projection and v0.309.0 made it exact, but the only surface
+// wired to it was the matchup board's lineup rows. Every pool — waiver wire,
+// free agents, the draft room — still sorted and displayed the raw PPR bake, so
+// a TE-premium league ranked its tight ends as though it paid nothing extra.
+//
+// `projectedPoints` reads the catalog the screen installed, so this is the same
+// number the board shows for the same player. NO SLOT is passed: a player in a
+// pool is not in a lineup, and `scopedAdjustFor` stands a spot-scoped rule aside
+// where there is no spot.
+//
+// NULL STILL MEANS UNKNOWN. `projectedPoints` returns 0 for a player the bake
+// has never heard of, and 0 would sort him at the BOTTOM of a descending list
+// next to genuinely worthless players — the same claim-from-absence this file
+// opens by refusing. So the presence check comes from the bake, and only a
+// player it knows gets a number at all.
+export const projFor = (slug: string, pos?: string | null): number | null =>
+  PROJ_2026.has(slug) ? projectedPoints({ id: slug, pos: pos ?? '', team: null }) : null;
+
+/** One row of any available-player list: the shape both the order and the
+ *  displayed value are derived from. `pos` is what makes the projection the
+ *  league's — a position premium cannot be applied to a player whose position
+ *  we were not told. */
+export interface PoolRow { slug: string; pos?: string | null; rank?: number | null }
 
 /** The value a row shows for the order it is sorted by — '—' when the source
  *  doesn't know him, which is also why he sorted last. */
-export function poolSortValue(by: PoolSort, slug: string, rank?: number | null, own?: Record<string, number>): string {
-  if (by === 'rank') return rank != null ? `#${rank}` : '—';
-  if (by === 'adp') { const v = adpFor(slug); return v != null ? v.toFixed(1) : '—'; }
-  if (by === 'proj') { const v = projFor(slug); return v != null ? `${v.toFixed(1)}/g` : '—'; }
-  const o = own?.[slug];
+export function poolSortValue(by: PoolSort, row: PoolRow, own?: Record<string, number>): string {
+  if (by === 'rank') return row.rank != null ? `#${row.rank}` : '—';
+  if (by === 'adp') { const v = adpFor(row.slug); return v != null ? v.toFixed(1) : '—'; }
+  if (by === 'proj') { const v = projFor(row.slug, row.pos); return v != null ? `${v.toFixed(1)}/g` : '—'; }
+  const o = own?.[row.slug];
   return o != null ? `${o}%` : '0%';
 }
 
@@ -74,7 +101,7 @@ export function poolSortValue(by: PoolSort, slug: string, rank?: number | null, 
  *  breaks the tie. `own` is the map `playerOwnership` returns (absent = the
  *  ownership order falls back to rank, rather than claiming everyone is 0%
  *  while the call is still in flight). */
-export function sortPool<T extends { slug: string; rank?: number | null }>(
+export function sortPool<T extends PoolRow>(
   rows: T[], by: PoolSort, own?: Record<string, number> | null,
 ): T[] {
   const rankOf = (r: T) => r.rank ?? Number.MAX_SAFE_INTEGER;
@@ -84,7 +111,7 @@ export function sortPool<T extends { slug: string; rank?: number | null }>(
   // whichever direction the known values run.
   const key = (r: T): number => {
     if (by === 'adp') return adpFor(r.slug) ?? Number.MAX_SAFE_INTEGER;
-    if (by === 'proj') { const v = projFor(r.slug); return v == null ? Number.MAX_SAFE_INTEGER : -v; }
+    if (by === 'proj') { const v = projFor(r.slug, r.pos); return v == null ? Number.MAX_SAFE_INTEGER : -v; }
     const o = own?.[r.slug];
     return o == null ? Number.MAX_SAFE_INTEGER : -o;
   };

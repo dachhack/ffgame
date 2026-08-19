@@ -23,7 +23,7 @@ import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { nflGameForTeam, kickoffLabel, weekTick } from '@drip/core/data/nflSlate';
-import { PROJ_2026 } from '@drip/core/data/proj2026';
+import { projFor } from '@drip/core/data/poolSort';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { Ev, track } from '@drip/core/analytics';
 
@@ -226,7 +226,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             ['AGE', bio?.age != null ? String(bio.age) : '—'],
             ['EXP', bio?.exp != null ? (bio.exp === 0 ? 'ROOK' : `${bio.exp} yr`) : '—'],
             ['NO.', bio?.num != null ? `#${bio.num}` : '—'],
-            ['PROJ', PROJ_2026.get(slug) != null ? (PROJ_2026.get(slug) as number).toFixed(1) : '—'],
+            ['PROJ', projFor(slug, pos) != null ? (projFor(slug, pos) as number).toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ flex: 1, textAlign: 'center' }}>
               <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>{k}</div>

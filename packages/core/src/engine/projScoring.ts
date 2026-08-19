@@ -75,24 +75,52 @@ export function scoreProjLine(line: ProjStatLine, pos: string, sc: ClassicScorin
 // exit; the worker sets it before each matchup. Absent means the standard
 // catalog, which is what every drip league and every untouched classic league
 // already scores by.
-let catalog: ClassicScoring = DEFAULT_CLASSIC_SCORING;
+//
+// NOT INITIALISED TO `DEFAULT_CLASSIC_SCORING` (v0.310.0): `classic.ts` now
+// imports this module, and this module imports `classic.ts` for the catalog
+// type and the default. That cycle is fine while every reference to the default
+// sits INSIDE a function body — evaluated after both modules have finished —
+// and a crash if one sits at the top level. Whichever module the bundler
+// reaches first would then read the other's un-initialised const and throw
+// `Cannot access 'DEFAULT_CLASSIC_SCORING' before initialization`. Hence null
+// meaning "the standard catalog", resolved by `cat()` at call time.
+let catalog: ClassicScoring | null = null;
+const cat = (): ClassicScoring => catalog ?? DEFAULT_CLASSIC_SCORING;
 
 export function setLeagueProjScoring(sc?: number | Partial<ClassicScoring> | null): void {
   catalog = normalizeClassicScoring(sc);
 }
-export function clearLeagueProjScoring(): void { catalog = DEFAULT_CLASSIC_SCORING; }
-export function leagueProjScoring(): ClassicScoring { return catalog; }
+export function clearLeagueProjScoring(): void { catalog = null; }
+export function leagueProjScoring(): ClassicScoring { return cat(); }
+
+/** THE CATALOG A LEAGUE ACTUALLY SCORES BY (v0.310.0). A league stores its
+ *  adjustments in `scoring` and its per-reception value in `ppr`, SEPARATELY —
+ *  and the thing that scores a game is the two merged (`resolve.js` builds
+ *  exactly this before every classic resolve, and each board memoises it before
+ *  every live point). v0.308.0 installed `gm.scoring` alone on the projection
+ *  side, so a half-PPR league scored its receivers at ½ and projected them at
+ *  1: the same row under two rulebooks, which is the bug that whole change
+ *  exists to prevent, hiding in the one knob that isn't in `scoring`.
+ *
+ *  Every surface now installs THROUGH THIS, so the merge happens in one place
+ *  and cannot be half-remembered at the next call site. */
+export function leagueCatalogOf(
+  gm?: { scoring?: Partial<ClassicScoring> | null; ppr?: number | string | null } | null,
+): Partial<ClassicScoring> {
+  const ppr = Number(gm?.ppr);
+  return { ...(gm?.scoring ?? {}), ...(Number.isFinite(ppr) ? { ppr } : {}) };
+}
 
 /** How much this league's rules are worth to this player, as a multiple of the
  *  standard catalog. Exactly 1 when we have no line, when the line scores
  *  nothing under standard rules (kickers, defences), or when the league hasn't
  *  changed anything the line can see. */
-export function leagueProjRatio(slug: string, pos: string, sc: ClassicScoring = catalog): number {
+export function leagueProjRatio(slug: string, pos: string, sc?: ClassicScoring): number {
   const line = PROJ_LINES[slug];
   if (!line) return 1;
   const base = scoreProjLine(line, pos, DEFAULT_CLASSIC_SCORING);
   if (!(base > 0)) return 1;
-  const mine = scoreProjLine(line, pos, sc);
+  const mine = scoreProjLine(line, pos, sc ?? cat());
   return mine / base;
 }
 

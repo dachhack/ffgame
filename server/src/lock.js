@@ -11,6 +11,7 @@ import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
+import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
@@ -309,6 +310,19 @@ export async function autoSlotClassicLineups(week, slate = null) {
     // the false case would leave the previous league's rule in force over this
     // one, which is how one golf league would quietly mis-slot the whole tick.
     setLeagueGolf(mode?.golf === true);
+    // THE LEAGUE'S SCORING (v0.310.0), on the same terms and for the same
+    // reason. `slateAwareProj` ranks candidates through `projectedPoints`, so
+    // without this a league paying 6 for a passing touchdown, or a TE premium,
+    // had its auto-slot rank by STOCK PPR and seat the wrong player — on the
+    // seats least able to notice, since auto-slot exists for the ones nobody
+    // is managing. Unconditional for the same reason golf is: it is a module
+    // global, and skipping the plain-scoring case would leave the previous
+    // league's catalog in force over this one.
+    //
+    // `valueOf` above is built once for the tick and still correct: it closes
+    // over nothing but the slate and the outs, and reads the catalog at CALL
+    // time — which is inside this loop, after this install.
+    setLeagueProjScoring(leagueCatalogOf(mode));
     const slots = leagueSlotDefs(mode);
     const bestball = leagueBestball(mode);
     if (slots.every((d) => bestball.includes(d.slot))) continue;   // all best ball: nothing to set
@@ -437,6 +451,7 @@ export async function autoSlotClassicLineups(week, slate = null) {
     // The install is a module global; nothing downstream in this tick should
     // inherit the last league's rule.
     clearLeagueGolf();
+    clearLeagueProjScoring();
   }
   return slotted;
 }
