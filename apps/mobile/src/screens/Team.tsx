@@ -14,6 +14,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Tex
 import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
+  rosterRules, injuryTags,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
   keeperState, setKeepers, type KeeperState,
@@ -281,6 +282,22 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
   // Which empty place is asking to be filled — 'taxi' or 'ir' (v0.285.0).
   const [fillFor, setFillFor] = useState<'taxi' | 'ir' | null>(null);
+  // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
+  // The server has enforced both since 0164/0196, but no screen read the
+  // rules — so the picker offered every name and the rule only appeared as a
+  // red error AFTER the tap.
+  const [stashRules, setStashRules] = useState<{ irTags: string[]; taxiMaxExp: number | null; taxiLocked: boolean } | null>(null);
+  const [injTags, setInjTags] = useState<Record<string, string>>({});
+  useEffect(() => {
+    rosterRules(leagueId).then((r) => {
+      if (r.ok) setStashRules({
+        irTags: r.ir_tags?.length ? r.ir_tags : ['IR', 'O'],
+        taxiMaxExp: r.taxi_max_exp ?? null,
+        taxiLocked: !!r.taxi_locked_now,
+      });
+    }).catch(() => {});
+    injuryTags().then(setInjTags).catch(() => {});
+  }, [leagueId]);
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -333,6 +350,26 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
    *  button on every line (v0.285.0). Tapping an empty taxi place opens the
    *  picker below; tapping a filled one's badge sends him back to active. The
    *  server still enforces the caps and the IR injury gate and says why not. */
+  /** Why this player may NOT go in that place — null when he may. The wording
+   *  matches the server's refusal: the server is still the authority, and a
+   *  screen that disagreed with it would be worse than one that stayed quiet. */
+  const stashBlock = (slug: string, spot: 'taxi' | 'ir'): string | null => {
+    if (!stashRules) return null;
+    if (spot === 'ir') {
+      const tag = injTags[slug];
+      if (!tag) return `IR is for players designated ${stashRules.irTags.join('/')} — he has no designation`;
+      if (!stashRules.irTags.includes(tag)) return `IR is for players designated ${stashRules.irTags.join('/')} — he is ${tag}`;
+      return null;
+    }
+    const mx = stashRules.taxiMaxExp;
+    if (mx != null) {
+      const exp = expMap[slug];
+      if (exp == null) return `the taxi squad is for players with ${mx} or fewer years — his experience isn't known`;
+      if (exp > mx) return `the taxi squad is for players with ${mx} or fewer years — he has ${exp}`;
+    }
+    if (stashRules.taxiLocked && !team?.is_commish) return 'the taxi squad locked at the season’s first kickoff — you can still take players OFF it';
+    return null;
+  };
   const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir') => {
     tap();
     setFillFor(null);
@@ -799,23 +836,35 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       <Overlay visible={!!fillFor}
         title={fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
         subtitle={fillFor === 'ir'
-          ? 'IR holds players the league\u2019s rules say are hurt enough \u2014 the server checks, and says so if he isn\u2019t.'
-          : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}
+          ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is greyed out below.`
+          : stashRules?.taxiMaxExp != null
+            ? `The taxi squad holds prospects off your active roster \u2014 your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer.`
+            : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}
         onClose={() => setFillFor(null)}>
         <ScrollView style={{ maxHeight: 380 }}>
           {mine.filter((p) => p.spot === 'active').length === 0 && (
             <Mono size={10} tone="faint" style={{ paddingVertical: 10 }}>Nobody on your active roster to move.</Mono>
           )}
-          {mine.filter((p) => p.spot === 'active').map((p) => (
-            <Pressable key={p.slug} disabled={busy} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : 'taxi')}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy ? 0.5 : 1 }}>
-              <Face slug={p.slug} pos={p.pos} />
-              <PosPill pos={p.pos} size={8} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
-              <Mono size={8.5} tone="faint">{p.team}</Mono>
-              <Mono size={9} weight="700" tone="you">{fillFor === 'ir' ? '\u2192IR' : '\u2192TX'}</Mono>
+          {mine.filter((p) => p.spot === 'active').map((p) => {
+            // Ineligible names stay VISIBLE and greyed rather than vanishing:
+            // "why isn't he in the list" is a worse question than "why is he
+            // greyed out", and the answer prints right under him.
+            const why = fillFor ? stashBlock(p.slug, fillFor) : null;
+            return (
+            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : 'taxi')}
+              style={{ paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy || why ? 0.45 : 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Face slug={p.slug} pos={p.pos} />
+                <PosPill pos={p.pos} size={8} />
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
+                {fillFor === 'ir' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
+                <Mono size={8.5} tone="faint">{p.team}</Mono>
+                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : '\u2192TX'}</Mono>
+              </View>
+              {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}
             </Pressable>
-          ))}
+            );
+          })}
         </ScrollView>
       </Overlay>
 

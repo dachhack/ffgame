@@ -512,6 +512,25 @@ export async function loadLiveInjuries(week: number): Promise<number> {
   } catch { return 0; }
 }
 
+/** The live injury report as a plain slug → designation map (0198), for the
+ *  ROSTER screens' IR gate. Deliberately not the module cache above: that cache
+ *  is keyed to one WEEK because a board only ever asks about the week it is
+ *  showing, and a roster screen isn't showing a week at all — it is asking
+ *  "what is this player's designation right now", which is the only thing the
+ *  ESPN feed can answer anyway. Reading it separately also means opening a
+ *  roster can never clobber the week a live board has installed. */
+export async function injuryTags(): Promise<Record<string, 'O' | 'D' | 'Q' | 'IR'>> {
+  try {
+    const { data, error } = await (await client()).from('injury_status').select('player_slug, status');
+    if (error) return {};
+    const out: Record<string, 'O' | 'D' | 'Q' | 'IR'> = {};
+    for (const r of (data ?? []) as { player_slug: string; status: string }[]) {
+      if (r.status === 'O' || r.status === 'D' || r.status === 'Q' || r.status === 'IR') out[r.player_slug] = r.status;
+    }
+    return out;
+  } catch { return {}; }
+}
+
 interface InjuryStatusRow {
   player_slug: string; status: string;
   return_date: string | null; comment: string | null;
@@ -1465,7 +1484,10 @@ export const rosterRules = (leagueId: string) =>
          *  whether the squad shuts at the season's first kickoff, whether it is
          *  shut RIGHT NOW, and when that kickoff is. */
         taxi_max_exp?: number | null; taxi_lock?: boolean;
-        taxi_locked_now?: boolean; taxi_lock_at?: string | null }>(
+        taxi_locked_now?: boolean; taxi_lock_at?: string | null;
+        /** Which injury designations qualify a player for an IR spot (0198).
+         *  Defaults to ['IR','O'] — the pair 0164 hardcoded. */
+        ir_tags?: string[] }>(
     'roster_rules', { p_league_id: leagueId });
 /** Commissioner: who may ride the taxi squad, and whether it locks at the
  *  season's first kickoff (0196). Nulls leave a setting alone; `maxExp: -1`
@@ -1477,6 +1499,14 @@ export const setTaxiRules = (leagueId: string, maxExp: number | null = null, loc
                 locked_now?: boolean; lock_at?: string | null }>(
     'set_taxi_rules', { p_league_id: leagueId, p_max_exp: maxExp, p_lock: lock }),
     Ev.commishAction, { tool: 'taxi_rules' });
+/** Commissioner: which injury designations may be stashed on IR (0198). The
+ *  vocabulary is the report's own — O / D / Q / IR — and the list may not be
+ *  empty: an IR spot nobody can qualify for is a spot to remove, not a rule.
+ *  Editable at any time, like the taxi rules. */
+export const setIrRules = (leagueId: string, tags: string[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; tags?: string[] }>(
+    'set_ir_rules', { p_league_id: leagueId, p_tags: tags }),
+    Ev.commishAction, { tool: 'ir_rules' });
 /** Commissioner: edit position limits any time; roster size only pre-draft. */
 export const setRosterRules = (leagueId: string, rounds: number | null, posCaps: PosCaps | null) =>
   rpc<{ ok: boolean; error?: string; rounds?: number; pos_caps?: PosCaps }>(
