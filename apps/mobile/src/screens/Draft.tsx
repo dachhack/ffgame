@@ -17,7 +17,7 @@ import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
-  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts,
+  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
@@ -33,6 +33,7 @@ import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
+import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 
@@ -94,6 +95,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
    *  is making. */
   const [assign, setAssign] = useState(false);
   const [autos, setAutos] = useState<Record<number, boolean>>({});
+  // A MADE PICK, OPENED FOR EDITING (0194, founder: "I need to be able to click
+  // on a pick that was made and remove it or replace it with another available
+  // player"). Commissioner only; the board cell is the door.
+  const [editPick, setEditPick] = useState<DraftPickRow | null>(null);
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0);
   const ticking = useRef(false);
@@ -586,8 +591,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     const pc = t.pos[(pl?.pos ?? 'WR') as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
                     const nm = (pl?.full_name ?? cell?.slug ?? '').split(' ');
                     const last = nm.length > 1 ? nm.slice(1).join(' ') : nm[0];
+                    const canEdit = isCommish && !!cell && !auction;
                     return (
-                      <View key={r} style={{
+                      <Pressable key={r} disabled={!canEdit}
+                        onPress={canEdit ? () => { tap(); setEditPick(cell!); } : undefined}
+                        style={{
                         height: 44, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3, overflow: 'hidden',
                         backgroundColor: cell ? pc.bg : t.bg,
                         borderWidth: onClock ? 1 : StyleSheet.hairlineWidth, borderColor: onClock ? t.you : t.bd,
@@ -607,13 +615,16 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                             {onClock ? '⏱ clock' : auction ? '—' : `${r + 1}.${r % 2 === 0 ? c + 1 : teams - c}`}
                           </Text>
                         )}
-                      </View>
+                      </Pressable>
                     );
                   })}
                 </View>
               ))}
             </View>
           </ScrollView>
+          {isCommish && !auction && (
+            <Mono size={8} tone="faint" style={{ paddingTop: 6 }}>⚑ tap any made pick to remove or replace it</Mono>
+          )}
         </Card>
       )}
 
@@ -687,6 +698,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         </Card>
       )}
 
+      {/* EDIT A MADE PICK (0194) — the commissioner's fix for "round 3 went to
+          the wrong player", which undo could only reach by unwinding every pick
+          since. */}
+      {editPick && (
+        <EditPickSheet leagueId={leagueId} pick={editPick} busy={busy}
+          teamName={teamName(editPick.roster_id) ?? `Team ${editPick.roster_id}`}
+          player={poolBySlug.get(editPick.slug) ?? null}
+          available={avail}
+          onClose={() => setEditPick(null)}
+          onDone={(fn) => { setEditPick(null); void run(fn); }} />
+      )}
+
       {/* QUEUE — my private wishlist + autodraft */}
       {tab === 'queue' && (
         <Card>
@@ -730,6 +753,76 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   );
 }
 
+
+
+// ── one made pick, open for editing (0194) ──────────────────────────────────
+/** Two doors, deliberately different weights. REPLACE is the common one — the
+ *  pick went to the wrong player — so it is a search over the available pool
+ *  and one tap to commit, undoable by doing it again. REMOVE takes a player off
+ *  a roster and leaves a hole, so it asks first.
+ *
+ *  What it does NOT offer is moving a pick to another team: a pick belongs to
+ *  the seat that made it, and changing that is a trade, which has its own
+ *  machinery with both managers' consent in it. */
+function EditPickSheet({ leagueId, pick, player, teamName, available, busy, onClose, onDone }: {
+  leagueId: string; pick: DraftPickRow; player: LeaguePoolPlayer | null; teamName: string;
+  available: LeaguePoolPlayer[]; busy: boolean;
+  onClose: () => void;
+  onDone: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const t = useTheme();
+  const [q, setQ] = useState('');
+  const [armed, setArmed] = useState(false);
+  const hits = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return available
+      .filter((p) => !needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle))
+      .slice(0, 40);
+  }, [available, q]);
+  return (
+    <Overlay visible title={`⚑ ${player?.full_name ?? pick.slug}`}
+      subtitle={`PICK ${pick.round}.${pick.overall} · ${teamName.toUpperCase()}`} onClose={onClose}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+        {/* REMOVE — two taps, because it leaves the seat a player short. */}
+        {!armed ? (
+          <Pressable onPress={() => { tap(); setArmed(true); }} disabled={busy}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.opp, borderRadius: 7, paddingVertical: 9, alignItems: 'center' }}>
+            <Mono size={9.5} weight="700" tone="opp">✕ REMOVE THIS PICK</Mono>
+          </Pressable>
+        ) : (
+          <View style={{ gap: 8 }}>
+            <Mono size={9.5} tone="opp" style={{ lineHeight: 14 }}>
+              {`The cell empties, ${teamName} is one player short, and he goes back to the pool. The picks around it don't move.`}
+            </Mono>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Pressable onPress={() => { tap(); onDone(() => commishEditPick(leagueId, pick.overall, null)); }} disabled={busy}
+                style={{ backgroundColor: t.opp, borderRadius: 7, paddingHorizontal: 14, paddingVertical: 9 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent }}>REMOVE</Text>
+              </Pressable>
+              <Pressable onPress={() => { tap(); setArmed(false); }}><Mono size={9.5} tone="dim">cancel</Mono></Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* REPLACE — the common case, so it is the big half of the sheet. */}
+        <Mono size={8.5} tone="faint" track={0.12} style={{ marginTop: 16, marginBottom: 6 }}>REPLACE WITH</Mono>
+        <TextInput value={q} onChangeText={setQ} placeholder="Search available players…" placeholderTextColor={t.faint}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginBottom: 8 }} />
+        {hits.length === 0 && <Mono size={10} tone="faint">Nobody matches — widen the search.</Mono>}
+        {hits.map((p) => (
+          <Pressable key={p.slug} disabled={busy}
+            onPress={() => { tap(); onDone(() => commishEditPick(leagueId, pick.overall, p.slug)); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+            <Face slug={p.slug} pos={p.pos} size={22} />
+            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+            <PosPill pos={p.pos} size={8} />
+            <Mono size={9} tone="faint">{p.team} · #{p.rank}</Mono>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </Overlay>
+  );
+}
 
 // ── overnight pause (0153) ───────────────────────────────────────────────────
 // Hour-granular quiet window, ET — the engine (awake_deadline, 0069) has

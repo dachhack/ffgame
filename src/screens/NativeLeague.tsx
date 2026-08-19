@@ -25,7 +25,7 @@ import {
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
   setDraftQueue, myDraftQueue, setAutodraft,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
-  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts,
+  commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, type PushTokenRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
@@ -730,6 +730,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
    *  the row's button must never be ambiguous about whose pick it makes. */
   const [assign, setAssign] = useState(false);
   const [autos, setAutos] = useState<Record<number, boolean>>({});
+  // A MADE PICK, OPENED FOR EDITING (0194, founder: "I need to be able to click
+  // on a pick that was made and remove it or replace it with another available
+  // player"). Commissioner only; the cell itself is the door.
+  const [editPick, setEditPick] = useState<DraftPickRow | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0); // serverNow − clientNow, for an honest countdown
@@ -1179,9 +1183,15 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 const nm = (pl?.full_name ?? cell?.slug ?? '').split(' ');
                 const first = nm.length > 1 ? nm[0] : ' ';
                 const last = nm.length > 1 ? nm.slice(1).join(' ') : nm[0];
+                const canEdit = isCommish && !!cell && !auction;
                 return (
-                  <div key={`b-${r}-${rid}`} ref={overallHere ? onClockCellRef : undefined} style={{
+                  <div key={`b-${r}-${rid}`} ref={overallHere ? onClockCellRef : undefined}
+                    onClick={canEdit ? () => setEditPick(cell!) : undefined}
+                    role={canEdit ? 'button' : undefined}
+                    title={canEdit ? 'commish: remove or replace this pick' : undefined}
+                    style={{
                     height: 50, borderRadius: 6, padding: '4px 6px', boxSizing: 'border-box', overflow: 'hidden',
+                    cursor: canEdit ? 'pointer' : undefined,
                     background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
                     border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
                     boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
@@ -1391,6 +1401,18 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           action={myTurn && !taken.has(cardFor.slug) && !atCap(cardFor.pos)
             ? { label: auction ? 'NOMINATE $1' : 'DRAFT HIM', run: () => { const s = cardFor.slug; setCardFor(null); act(s); } }
             : null} />
+      )}
+
+      {/* EDIT A MADE PICK (0194) — the commissioner's fix for "round 3 went to
+          the wrong player", which undo could only reach by unwinding every pick
+          made since. Remove leaves the cell empty; replace swaps in place. */}
+      {editPick && (
+        <EditPickModal leagueId={leagueId} pick={editPick} busy={busy}
+          teamName={teamName(editPick.roster_id) ?? `Team ${editPick.roster_id}`}
+          player={poolBySlug.get(editPick.slug) ?? null}
+          available={avail}
+          onClose={() => setEditPick(null)}
+          onDone={(fn) => { setEditPick(null); run(fn); }} />
       )}
     </div>
   );
@@ -2652,6 +2674,86 @@ export function NotifPrefsCard({ bare }: { bare?: boolean } = {}) {
  *  MOVING A TEAM SLIDES, it doesn't swap: ↑ on the 4th seat makes it 3rd and
  *  pushes the old 3rd down to 4th, which is what "put him at the end" means and
  *  what a swap would get wrong for every seat in between. */
+/** ONE MADE PICK, OPEN FOR EDITING (0194).
+ *
+ *  Two doors and they are deliberately different weights. REPLACE is the
+ *  common one — the pick went to the wrong player and the seat should have
+ *  somebody else — so it is a search over the available pool, one tap to
+ *  commit, no confirm: it is undoable by doing it again. REMOVE takes a player
+ *  off a roster and leaves a hole, so it asks first.
+ *
+ *  What it deliberately does NOT offer is moving a pick to another team. A
+ *  pick belongs to the seat that made it; changing that is a trade, and trades
+ *  have their own machinery with both managers' consent in it. */
+function EditPickModal({ leagueId, pick, player, teamName, available, busy, onClose, onDone }: {
+  leagueId: string; pick: DraftPickRow; player: LeaguePoolPlayer | null; teamName: string;
+  available: LeaguePoolPlayer[]; busy: boolean;
+  onClose: () => void;
+  onDone: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [armed, setArmed] = useState(false);
+  const hits = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return available
+      .filter((p) => !needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle))
+      .slice(0, 40);
+  }, [available, q]);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 460, marginTop: 30 }}>
+        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+          PICK {pick.round}.{pick.overall} · {teamName}
+        </div>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginTop: 3 }}>
+          {player?.full_name ?? pick.slug}
+        </div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>
+          {player ? `${posLabel(player.pos)} · ${player.team}` : 'not in the pool any more'}
+        </div>
+
+        {/* REMOVE — two clicks, because it leaves the seat a player short. */}
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+          {!armed ? (
+            <button onClick={() => setArmed(true)} disabled={busy} className="mono"
+              style={{ ...ghostBtn, padding: '7px 10px', fontSize: 9.5, color: 'var(--opp)', borderColor: 'var(--opp)' }}>
+              ✕ REMOVE THIS PICK
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', lineHeight: 1.5, flex: '1 1 200px' }}>
+                The cell empties, {teamName} is one player short, and he goes back to the pool. The picks around it don't move.
+              </span>
+              <button onClick={() => onDone(() => commishEditPick(leagueId, pick.overall, null))} disabled={busy} className="mono"
+                style={{ ...btn, padding: '7px 12px', fontSize: 9.5, background: 'var(--opp)' }}>REMOVE</button>
+              <button onClick={() => setArmed(false)} className="mono" style={linkBtn}>cancel</button>
+            </div>
+          )}
+        </div>
+
+        {/* REPLACE — the common case, so it is the big half of the card. */}
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+          <div style={{ ...hdr, marginBottom: 6 }}>REPLACE WITH</div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search available players…"
+            style={{ ...input, marginBottom: 8 }} />
+          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            {hits.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Nobody matches — widen the search.</div>}
+            {hits.map((p) => (
+              <button key={p.slug} onClick={() => onDone(() => commishEditPick(leagueId, pick.overall, p.slug))} disabled={busy}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', padding: '7px 2px', cursor: 'pointer' }}>
+                <PosPill pos={p.pos as Pos} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={onClose} className="mono" style={linkBtn}>close</button></div>
+      </div>
+    </div>
+  );
+}
+
 function CommishDraftControls({ leagueId, st, busy, teamName, autos, assign, onAssign, onRun }: {
   leagueId: string; st: DraftState; busy: boolean;
   teamName: (rid: number | null | undefined) => string | null;
