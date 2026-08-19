@@ -11,9 +11,37 @@
 // normName (same convention as ADP and the live-scoring player index); the
 // sleeper_id column is the EXACT join — display names drift between sources
 // ("Omar Cooper Jr." vs "Omar Cooper"), Sleeper ids don't.
+//
+// ── READ THIS BEFORE RE-BAKING (v0.306.2) ──────────────────────────────────
+// The bake below is the 2026-04-12 model snapshot, and it is OUT OF DATE:
+// StatHead moved get_projections onto a live spine on 2026-08-19 and the real
+// starters moved a long way with it (Gibbs 21.1 → 26.0, McCaffrey 20.7 → 26.5,
+// Chase 20.7 → 18.1). A refresh is wanted. It is BLOCKED, deliberately, on one
+// thing:
+//
+//   `ppg` is projected points / projected GAMES, so a backup with a small
+//   games denominator scores at a starter's per-game rate. In the live pool
+//   Nick Mullens is 21.0 — above Lamar Jackson (16.6) and Mahomes (16.5) —
+//   and Joe Milton III is 19.0, where this April bake has him at 2.6. The
+//   giveaway is that it happens WITHIN a team: get_weekly_projections week 1
+//   puts Mullens (19.6) over his own starter Trevor Lawrence, Trey Lance
+//   (19.9) over Herbert (18.6), and Milton (19.3) over Prescott.
+//
+// That matters here and not everywhere, because this file is not read as a
+// season forecast — `slateAwareProj` ranks a ROSTER to set a weekly lineup
+// (autoSlotPlan, the unmanaged-seat fallback, best-ball fill). Swapping in the
+// live numbers would fix every starter's value and simultaneously teach
+// auto-slot to bench Lamar Jackson for a backup, which is a worse failure than
+// a stale number: staleness misprices a lineup, this one MIS-SETS it.
+//
+// Unblocked by either of: a projected-GAMES field (filter, or multiply back to
+// a season total), or a starter/depth-chart flag. Asked for; until one lands,
+// re-baking needs a documented guard rather than a straight replace.
+// ───────────────────────────────────────────────────────────────────────────
 import { normName } from './players';
 
-/** Model snapshot: veterans 2026-04-12 · rookies 2026-05-08 · pulled 2026-07-28 (416 players + sleeper ids). */
+/** Model snapshot: veterans 2026-04-12 · rookies 2026-05-08 · pulled 2026-07-28 (416 players + sleeper ids).
+ *  KNOWN STALE — see the refresh note above for what is blocking the update. */
 export const PROJ_AS_OF = '2026-07-28';
 
 const PROJ_CSV = `Josh Allen,QB,23.50,4984
