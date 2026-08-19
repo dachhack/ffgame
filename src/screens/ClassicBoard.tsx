@@ -15,7 +15,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
@@ -106,6 +106,90 @@ const fmtKick = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
+
+/** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
+ *  Founder, on the mobile board: "the middle of the top is super empty. Maybe
+ *  have the week's game slate with info and stats? In a chip you can select."
+ *
+ *  A FULL-WIDTH band under the two totals rather than the literal centre
+ *  column — that column is one `SPOT_COL` wide between two team heads and a
+ *  slate does not fit in it. It keeps what it is for (LIVE, the golf rule);
+ *  the emptiness the card actually had is the space beneath, and that is what
+ *  this fills.
+ *
+ *  Each chip carries what a general NFL scoreboard cannot: how many of THIS
+ *  matchup's starters are in the game and what they are worth. A game neither
+ *  side is in is dimmed, not dropped — it was asked for as the week's slate,
+ *  and hiding games would misrepresent the week. */
+function SlateStrip({ chips, sel, onSel, locked }: {
+  chips: SlateChip[]; sel: string | null; onSel: (k: string | null) => void; locked: boolean;
+}) {
+  if (!chips.length) return null;
+  const open = chips.find((c) => c.key === sel) ?? null;
+  const when = (c: SlateChip) => {
+    if (c.state === 'done') return 'FINAL';
+    if (c.state === 'live') return 'LIVE';
+    if (!c.kickoff) return '—';
+    const d = new Date(c.kickoff);
+    return Number.isNaN(d.getTime()) ? '—'
+      : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  };
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+        {chips.map((c) => {
+          const mine = c.homeCount + c.awayCount > 0;
+          const on = c.key === sel;
+          return (
+            <button
+              key={c.key}
+              onClick={() => onSel(on ? null : c.key)}
+              className="mono"
+              title={`${c.away} at ${c.home}`}
+              style={{
+                flex: '0 0 auto', minWidth: 88, textAlign: 'left', cursor: 'pointer',
+                padding: '5px 8px', borderRadius: 7, lineHeight: 1.35,
+                border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
+                background: on ? 'color-mix(in srgb, var(--you) 13%, transparent)' : 'var(--bg)',
+                color: 'var(--text)', opacity: mine ? 1 : 0.45,
+              }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: on ? 'var(--you)' : 'var(--text)' }}>{`${c.away}@${c.home}`}</div>
+              <div style={{ fontSize: 8, color: c.state === 'live' ? 'var(--warn)' : 'var(--faint)' }}>{when(c)}</div>
+              {mine && (
+                <div style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`${c.homePts.toFixed(1)} · ${c.awayPts.toFixed(1)}`}</div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {open && (
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--bd)', paddingTop: 7 }}>
+          {open.homeCount + open.awayCount === 0
+            ? <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>nobody from this matchup is in this game</span>
+            : (
+              <div style={{ display: 'flex', gap: 12 }}>
+                {([['home', open.homePlayers], ['away', open.awayPlayers]] as const).map(([side, ps]) => (
+                  <div key={side} style={{ flex: 1, minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginBottom: 3 }}>
+                      {side === 'home' ? 'YOURS' : 'THEIRS'}
+                    </div>
+                    {ps.length === 0
+                      ? <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>—</span>
+                      : ps.map((e) => (
+                          <div key={e.slug} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 9.5, padding: '1px 0' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(e.name)}</span>
+                            <span style={{ fontWeight: 700, color: 'var(--dim)' }}>{(locked ? e.live : e.proj).toFixed(1)}</span>
+                          </div>
+                        ))}
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** One team's identity in the scoreboard: crest, name, record + seed, live
  *  score with the projected final beneath it. */
@@ -271,6 +355,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // the game.
   const [fieldGame, setFieldGame] = useState<string | null>(null);
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
+  const [selGame, setSelGame] = useState<string | null>(null);
   // ── WALKING THE SEASON (v0.299.1, founder: "it would be good if you could go
   //    to the next week all the way through the last week of the regular season
   //    and back. A swipe action would be cool.") ──────────────────────────────
@@ -633,6 +718,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     });
   }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
+  // THE WEEK'S SLATE, aggregated against THIS matchup's starters (v0.312.0).
+  // Derived from the board rather than from the pool, so a chip's points and
+  // the headline totals above it can only ever agree.
+  const chips = useMemo(
+    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams) : []),
+    [board, slate, nowTs, finalTeams],
+  );
+  // A selection only means something while that game is still on the slate.
+  useEffect(() => {
+    if (selGame && !chips.some((c) => c.key === selGame)) setSelGame(null);
+  }, [chips, selGame]);
+
   // ── ▦ FIELDS (v0.270.0) ──────────────────────────────────────────────────
   /** One entry per starter with a published feed, both sides — the all-fields
    *  overlay's input. clock = MAX: a live board always shows the latest play
@@ -867,6 +964,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
+          <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
           {locked && (
             <>
               <div style={{ display: 'flex', gap: 4, marginTop: 10, height: 5 }}>
