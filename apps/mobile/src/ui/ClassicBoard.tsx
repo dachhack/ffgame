@@ -606,7 +606,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
    *  way pages move under a thumb. The responder only claims a gesture that is
    *  clearly HORIZONTAL — 20px across and twice as much across as down — so
    *  scrolling a long board is never read as a week change. */
+  //  v0.300.1: the handlers ride a WRAPPER VIEW and claim on CAPTURE. Spreading
+  //  them on the ScrollView itself (the first cut) puts the JS responder in a
+  //  fight it loses — the native scroll view intercepts the drag on Android
+  //  before the ScrollView's own responder props are ever consulted, so the
+  //  swipe simply never fired on a phone. A parent that captures gets asked
+  //  first, and only ever says yes to a gesture the guard has already proved
+  //  is horizontal, so vertical scrolling reaches the list untouched.
   const swipe = useRef(PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
     onPanResponderRelease: (_e, g) => {
       if (Math.abs(g.dx) < 70) return;
@@ -716,7 +724,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const slotDef = pickerSlot ? slotDefs.find((d) => d.slot === pickerSlot) : null;
 
   return (
-    <ScrollView {...swipe.panHandlers} contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
+    <View style={{ flex: 1 }} {...swipe.panHandlers}>
+    <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
         {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line: the game
             mode and the PPR setting are league settings you read on the league
@@ -1088,5 +1097,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           : " 🎯 slots are BEST BALL: they automatically take your highest-scoring player who isn't already started.") : ''}
       </Mono>
     </ScrollView>
+    </View>
   );
 }
