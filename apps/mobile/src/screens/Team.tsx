@@ -78,7 +78,11 @@ function KeepersCard({ leagueId, myRoster, mine }: {
     setDirty(false);
   };
   useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId, myRoster]);
-  if (!st || st.keeper_count === 0) return null;
+  // A DYNASTY LEAGUE KEEPS EVERYONE (v0.298.1, founder). Its keeper_count is
+  // derived — roster − rookie rounds — so the count is nonzero and this card
+  // used to draw, asking a manager to DECLARE what carries when the answer is
+  // "all of it". Declaring is a KEEPER-league act.
+  if (!st || st.keeper_count === 0 || st.continuity === 'dynasty') return null;
 
   const rolled = !!st.rolled_league_id;
   const carried = st.teams.find((x) => x.roster_id === myRoster)?.keep ?? [];
@@ -306,7 +310,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) setGm(g); }).catch(() => {});
-    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(k.keeper_count ?? 0); }).catch(() => {});
+    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(k.continuity === 'dynasty' ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the tap rather than on the next poll.

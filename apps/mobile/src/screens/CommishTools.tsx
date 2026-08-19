@@ -22,6 +22,7 @@ import {
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
+  setTaxiRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
@@ -1426,6 +1427,25 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
   // round count, so this bounds starters + bench + taxi + IR.
   const MAX_ROUNDS = 99;
+  // THE TAXI SQUAD'S OWN RULES (0196): who may ride it, and whether it shuts at
+  // the season's first kickoff. Beside the SIZE, which is the number above it.
+  const [taxi, setTaxi] = useState<{ maxExp: number | null; lock: boolean; lockedNow: boolean } | null>(null);
+  const loadTaxi = () => {
+    rosterRules(leagueId).then((r) => {
+      if (!r.ok) return;
+      setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
+    }).catch(() => {});
+  };
+  useEffect(loadTaxi, [leagueId]);
+  const saveTaxi = async (maxExp: number | null, lock: boolean | null) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setTaxiRules(leagueId, maxExp, lock);
+      if (r.ok) { commit(); setTaxi({ maxExp: r.max_exp ?? null, lock: r.lock !== false, lockedNow: !!r.locked_now }); setNote('✓ taxi rules saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
@@ -1811,6 +1831,29 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 draft is what it FILLS — IR spots are the difference. */}
             <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir}{shape.ir > 0 ? ' (no IR)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
+          {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────
+              Who may ride it and when it shuts — and unlike the shape, these
+              move at ANY time. */}
+          {shape.taxi > 0 && taxi && (
+            <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+              <Mono size={8.5} tone="faint" weight="700">🚕 TAXI SQUAD · who may ride it, and when it shuts</Mono>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                <Mono size={8} tone="dim">TENURE</Mono>
+                {([[null, 'ANYONE'], [0, 'ROOKIES'], [1, '≤ 1 YR'], [2, '≤ 2 YRS'], [3, '≤ 3 YRS']] as const).map(([v, label]) => (
+                  <Pill key={label} on={taxi.maxExp === v} label={label} onPress={() => void saveTaxi(v ?? -1, null)} />
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                <Mono size={8} tone="dim">LOCK</Mono>
+                <Pill on={taxi.lock} label="WK 1 KICKOFF" onPress={() => void saveTaxi(null, true)} />
+                <Pill on={!taxi.lock} label="NEVER" onPress={() => void saveTaxi(null, false)} />
+                {taxi.lockedNow && <Mono size={8} weight="700" tone="warn">🔒 LOCKED NOW</Mono>}
+              </View>
+              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
+                A locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time. Unknown experience can't prove it qualifies, so a tenure rule excludes it.
+              </Mono>
+            </View>
+          )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
             Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>

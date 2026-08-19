@@ -155,7 +155,16 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
       best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, score });
     }
   }
-  const pseudo = [...kdstEntries(), ...hcPuntEntries(extras)]
+  // K / D-ST / HC / P are TEAM-KEYED pseudo-players: one per NFL club, with no
+  // person behind them and so no tenure at all. That made them invisible to the
+  // tenure filter and they sailed into every pool — the founder's "the rookie
+  // filter is picking up kickers and def". A tenure window is a statement about
+  // PEOPLE; an entry that cannot answer it does not belong in the answer, which
+  // is the same rule `tenureOk` already applies to a player whose experience
+  // Sleeper doesn't know. So: a filtered pool drops them, an unfiltered one
+  // keeps them all.
+  const tenureFiltered = minExp != null || maxExp != null;
+  const pseudo = (tenureFiltered ? [] : [...kdstEntries(), ...hcPuntEntries(extras)])
     .filter((e) => !teams || teams.has(e.team.toUpperCase()));
   const rows = [...best.values(), ...pseudo];
   rows.sort((a, b) => a.score - b.score || a.slug.localeCompare(b.slug));
