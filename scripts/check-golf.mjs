@@ -164,5 +164,20 @@ const side = (picks, roster) => ({ picks, roster, hasLineup: true, bestball: [] 
     zeroFill(0, 10) === 10 && zeroFill(0, 10, false) === 0 && zeroFill(4, 10) === 4);
 }
 
+// ── THE WORKER HAS TO KNOW TOO ─────────────────────────────────────────────
+// This is the assertion that would have caught v0.303.0's real gap: the boards
+// installed golf and the worker never did, so a golf league's auto-slot and
+// seat agents would have set the HIGHEST-scoring lineup while the board it sits
+// under previewed the lowest. Every worker path reads the league through
+// `modeOfSettings`, so the flag surviving that mapper is the one property that
+// makes the rest reachable.
+{
+  const { modeOfSettings } = await import('../server/src/resolve.js');
+  const on = modeOfSettings({ game_mode: 'classic', golf: true });
+  const off = modeOfSettings({ game_mode: 'classic' });
+  ok('the worker\u2019s league mapper carries the golf flag', on.golf === true, on);
+  ok('\u2026and defaults it to false rather than undefined', off.golf === false, off);
+}
+
 if (fails) { console.log(`\n${fails} GOLF ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL GOLF ASSERTIONS PASSED');

@@ -10,6 +10,7 @@
 import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
+import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
@@ -299,8 +300,15 @@ export async function autoSlotClassicLineups(week, slate = null) {
   if (!byLeague.size) return 0;
 
   let slotted = 0;
+  try {
   for (const [leagueId, matchups] of byLeague) {
     const mode = modeOf.get(leagueId);
+    // GOLF (v0.303.1): "the best lineup this roster can field" means the
+    // LOWEST-scoring one there, and autoSlotPlan ranks through the engine's
+    // module global. Installed per league and set UNCONDITIONALLY — skipping
+    // the false case would leave the previous league's rule in force over this
+    // one, which is how one golf league would quietly mis-slot the whole tick.
+    setLeagueGolf(mode?.golf === true);
     const slots = leagueSlotDefs(mode);
     const bestball = leagueBestball(mode);
     if (slots.every((d) => bestball.includes(d.slot))) continue;   // all best ball: nothing to set
@@ -424,6 +432,11 @@ export async function autoSlotClassicLineups(week, slate = null) {
       if (error) throw error;
       slotted += agentPayload.length;
     }
+  }
+  } finally {
+    // The install is a module global; nothing downstream in this tick should
+    // inherit the last league's rule.
+    clearLeagueGolf();
   }
   return slotted;
 }

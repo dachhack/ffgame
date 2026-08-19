@@ -27,6 +27,7 @@ import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 // are throwaway practice and never move real coin.
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
 import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/leagueScoring.ts';
+import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
@@ -170,9 +171,14 @@ export const modeOfSettings = (s) => ({
   // best ball; when present it wins over roster/bestball (leagueSlotDefs /
   // leagueBestball resolve the precedence engine-side).
   slots: Array.isArray(s?.roster_slots) ? s.roster_slots : null,
+  // GOLF (0200): lowest weekly total wins. Carried here because everything
+  // that ranks a player — the resolver's best-ball fill, the auto-slot, the
+  // seat agents — has to know, and they all read the league through this
+  // mapper. The SCORES don't change; which end of them is good does.
+  golf: s?.golf === true,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }
@@ -506,6 +512,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // this one would be scored under someone else's bonuses.
     setLeagueScoring(scoringKnobs);
     setLeagueFlags(matchup.league_id, flagRows);
+    // GOLF (v0.303.1) rides the same synchronous install, and is set
+    // UNCONDITIONALLY: it is a module global, so skipping the false case would
+    // leave the previous matchup's golf league in force over this one.
+    setLeagueGolf(gameMode.golf === true);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
       matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, slotDefs);
