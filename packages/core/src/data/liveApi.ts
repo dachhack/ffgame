@@ -2008,6 +2008,15 @@ export const commishResumeDraft = (leagueId: string) =>
 /** Force the on-clock pick through: a chosen slug, or queue/best-available. */
 export const commishForcePick = (leagueId: string, slug?: string) =>
   rpc<{ ok: boolean; error?: string }>('commish_force_pick', { p_league_id: leagueId, p_slug: slug ?? null });
+/** EDIT A PICK THAT WAS ALREADY MADE (0194). `slug` swaps the player in place;
+ *  omitting it REMOVES the pick, leaving that cell empty and handing the player
+ *  back to the pool. Neither renumbers the board or moves the clock — the picks
+ *  around it belong to the teams that made them. Live or complete. */
+export const commishEditPick = (leagueId: string, overall: number, slug?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; action?: 'removed' | 'replaced'; overall?: number;
+                roster_id?: number; slug?: string; was?: string }>(
+    'commish_edit_pick', { p_league_id: leagueId, p_overall: overall, p_slug: slug ?? null }),
+    Ev.commishAction, { tool: 'edit_pick', removed: slug == null });
 export const commishUndoPick = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; undone_overall?: number; slug?: string }>('commish_undo_pick', { p_league_id: leagueId });
 /** THE REST OF THE COMMISSIONER'S DRAFT CONTROLS (0191).

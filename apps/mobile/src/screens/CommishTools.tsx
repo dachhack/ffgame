@@ -47,7 +47,7 @@ import { CommishToolsCard } from '../ui/CommishKit';
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
 // hides what a Sleeper-backed league manages on its own platform.
-const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean }[] }[] = [
+const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean; dripOnly?: boolean }[] }[] = [
   // MODE & SCORING was ONE mega-scroll (mode toggle + roster builder + the
   // ~36-knob catalog stacked); the scoring knobs lived two screens below the
   // fold. Split three ways (v0.259.0) to match the web rail exactly.
@@ -71,14 +71,18 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'ENGAGE', items: [
     { id: 'kit', label: '⚑ KIT' },
     { id: 'activity', label: '👁 ACTIVITY' },
-    { id: 'buffs', label: '◈ POWER-UPS' },
+    // CLASSIC LEAGUES DON'T PLAY WITH COIN (v0.297.3, founder: "classic
+    // leagues won't use power ups so they don't need that on the league menu.
+    // They don't need drip coin either"). Coin exists to buy power-ups; a
+    // classic league has neither, so both destinations leave its map.
+    { id: 'buffs', label: '◈ POWER-UPS', dripOnly: true },
     { id: 'board', label: '📣 LEAGUE BOARD', nativeOnly: true },
   ] },
   // Two wallets, two destinations — deliberately NOT one "money" screen. Drip
   // coin buys power-ups; FAAB buys players. They never trade against each
   // other, and a commissioner topping one up must not wonder which they moved.
   { title: 'MONEY', items: [
-    { id: 'coin', label: '◈ DRIP COIN' },
+    { id: 'coin', label: '◈ DRIP COIN', dripOnly: true },
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
   ] },
   // Its own group, at the bottom, with nothing else in it (0188). Deleting a
@@ -221,6 +225,10 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   // Remount lever for the child cards after a settings save — rules changes
   // (roster caps, coin budget) alter what CommishPlayers/CommishTeams show.
   const [epoch, setEpoch] = useState(0);
+  // Drip or classic: a classic league's map drops the coin and power-up
+  // destinations (v0.297.3). False until the read lands — a menu that pops
+  // items IN reads worse than one that briefly offers a room you don't need.
+  const [classic, setClassic] = useState(false);
 
   const refresh = async () => {
     if (!native) return; // native_team_state is a native-league RPC
@@ -230,7 +238,11 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
       setTeam(tm); setErr(null);
     } catch (x) { setErr(friendlyError(x)); }
   };
-  useEffect(() => { void refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  useEffect(() => {
+    void refresh();
+    leagueGameMode(leagueId).then((g) => { if (g.ok) setClassic(g.mode === 'classic'); }).catch(() => {});
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leagueId]);
 
   const myRoster = native ? (team?.my_roster_id ?? null) : rosterId;
 
@@ -304,11 +316,12 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           all fit on screen, so nothing hides behind a swipe (the mistake the
           web's phone strip made). One section renders at a time. */}
       <Card>
-        {NAV_GROUPS.filter((g) => g.items.some((it) => !it.nativeOnly || native)).map((g) => (
+        {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic)) }))
+          .filter((g) => g.items.length > 0).map((g) => (
           <View key={g.title} style={{ marginBottom: 6 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
-              {g.items.filter((it) => !it.nativeOnly || native).map((it) => {
+              {g.items.map((it) => {
                 const on = section === it.id;
                 return (
                   <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}

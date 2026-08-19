@@ -980,6 +980,18 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   // An explicit defaultTab (post-create → the draft room) still lands direct,
   // with the section already open.
   const [sectionOpen, setSectionOpen] = useState<boolean>(() => openSection);
+  // CLASSIC LEAGUES DON'T PLAY WITH COIN (v0.297.3, founder: "classic leagues
+  // won't use power ups so they don't need that on the league menu. They don't
+  // need drip coin either"). Drip coin exists to buy power-ups; a classic
+  // league has neither, so both destinations leave its map rather than opening
+  // onto controls for a currency nothing spends. Null until the read lands —
+  // and the destinations show meanwhile, because a menu that pops items in
+  // reads worse than one that briefly offers a room you don't need.
+  const [classic, setClassic] = useState(false);
+  useEffect(() => {
+    if (l.provider !== 'native') return;
+    leagueGameMode(l.league_id).then((r) => { if (r.ok) setClassic(r.mode === 'classic'); }).catch(() => {});
+  }, [l.league_id, l.provider]);
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   const wide = useWide();
   // roster_id → team name, from members (drives readable matchup labels).
@@ -1201,7 +1213,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       items: [
         ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
         { id: 'members', label: '👥 SEATS' },   // the app has always called them SEATS; one name now
-        { id: 'coin', label: '◈ DRIP COIN' },
+        ...(classic ? [] : [{ id: 'coin', label: '◈ DRIP COIN' } as TabDef<LeagueTab>]),
         { id: 'ready', label: 'PICKS' },
         { id: 'matchups', label: 'MATCHUPS' },
         ...(native ? [
@@ -1218,7 +1230,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         // adjustments. Any league kind; the same editors the ⚑ banner opens.
         { id: 'kit', label: '⚑ COMMISH KIT' },
         ...(has('activity') ? [{ id: 'activity', label: '👁 ACTIVITY' } as TabDef<LeagueTab>] : []),
-        ...(has('buffs') ? [{ id: 'buffs', label: '◈ POWER-UPS' } as TabDef<LeagueTab>] : []),
+        ...(has('buffs') && !classic ? [{ id: 'buffs', label: '◈ POWER-UPS' } as TabDef<LeagueTab>] : []),
       ],
     },
     {
