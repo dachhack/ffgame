@@ -28,8 +28,7 @@
 // the source can't separate stay in the order the league already agreed on.
 
 import { ADP_2026 } from './adp2026';
-import { PROJ_2026 } from './proj2026';
-import { projectedPoints } from '../engine/projScoring';
+import { projectedPoints, hasProjection } from '../engine/projScoring';
 
 export type PoolSort = 'rank' | 'adp' | 'proj' | 'own';
 
@@ -77,9 +76,12 @@ export const adpFor = (slug: string): number | null =>
 // has never heard of, and 0 would sort him at the BOTTOM of a descending list
 // next to genuinely worthless players — the same claim-from-absence this file
 // opens by refusing. So the presence check comes from the bake, and only a
-// player it knows gets a number at all.
+// player it knows gets a number at all. `hasProjection` rather than
+// `PROJ_2026.has` (v0.311.0): kickers and defences are baked in a separate file
+// from the skill positions, and asking the skill bake about them is how they'd
+// stay pinned to the bottom of the very list this was meant to lift them off.
 export const projFor = (slug: string, pos?: string | null): number | null =>
-  PROJ_2026.has(slug) ? projectedPoints({ id: slug, pos: pos ?? '', team: null }) : null;
+  hasProjection(slug) ? projectedPoints({ id: slug, pos: pos ?? '', team: null }) : null;
 
 /** One row of any available-player list: the shape both the order and the
  *  displayed value are derived from. `pos` is what makes the projection the

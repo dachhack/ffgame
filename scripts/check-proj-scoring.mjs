@@ -13,6 +13,13 @@
 // the order the live scorer applies them, and every no-data path falling back
 // to the bake rather than to zero.
 //
+// v0.311.0 adds the two positions that had NO projection at all — kickers and
+// team defences were not "unadjusted", they were absent, and returned 0 on the
+// first line of projectedPoints. The cases below pin the level, the ratio, the
+// pool lift, and the one piece of real arithmetic: points allowed is scored by
+// BRACKET, so a defence's expected points is not the bracket its average falls
+// in.
+//
 // v0.310.0 extends it past the matchup board. The engine was right from
 // v0.308.0 and wired to exactly ONE surface; waivers, the draft room, the
 // player cards and the auto-slot ranker all still read the raw PPR bake. The
@@ -29,9 +36,11 @@
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats2026';
 import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
+import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
 import { slateAwareProj } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
+  scoreKickLine, scoreDstLine, integratedPaPoints, kdstBase, hasProjection, PA_SD,
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
@@ -90,6 +99,93 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
     Math.abs(sum / n) < 0.02, +(sum / n).toFixed(4));
 }
 
+
+
+// ── KICKERS AND TEAM DEFENCES (v0.311.0) ───────────────────────────────────
+{
+  const K = { id: 'den-k', pos: 'K', team: 'DEN' };
+  const DST = { id: 'den-dst', pos: 'DEF', team: 'DEN' };
+
+  ok('both pools baked, all 32 teams each (a gap is a team that projects zero)',
+    Object.keys(PROJ_KICK).length === 32 && Object.keys(PROJ_DST).length === 32,
+    [Object.keys(PROJ_KICK).length, Object.keys(PROJ_DST).length]);
+  ok('every team has BOTH a kicker and a defence, on our own slug convention',
+    Object.keys(PROJ_KICK).every((s) => PROJ_DST[s.replace(/-k$/, '-dst')] != null));
+
+  // THE THING THAT WAS BROKEN: these projected 0 everywhere.
+  ok('a kicker has a projection at all', projectedPoints(K) > 0, projectedPoints(K));
+  ok('a defence has a projection at all', projectedPoints(DST) > 0, projectedPoints(DST));
+  ok('…and the pools can SEE it, so they no longer sort below unknown players',
+    projFor(K.id, 'K') > 0 && projFor(DST.id, 'DEF') > 0 && hasProjection(K.id),
+    [projFor(K.id, 'K'), projFor(DST.id, 'DEF')]);
+  ok('a team that does not exist still has no projection',
+    projFor('xxx-k') === null && projFor('xxx-dst') === null && !hasProjection('xxx-dst'));
+
+  // THE INVARIANT, which has to hold for these two exactly as it does for the
+  // skill positions: a standard league sees the baked number, to the decimal.
+  ok('the standard catalog is the identity for a kicker',
+    projectedPoints(K) === kdstBase(K.id) && leagueProjRatio(K.id, 'K') === 1);
+  ok('…and for a defence',
+    projectedPoints(DST) === kdstBase(DST.id) && leagueProjRatio(DST.id, 'DEF') === 1);
+
+  // THE POINT OF THE EXERCISE: the league's own kicker and defence rules move
+  // the projection, and only for the position they apply to.
+  setLeagueProjScoring({ fg50: 6 });                     // default 5
+  ok('paying 6 for a 50+ field goal raises the kicker',
+    projectedPoints(K) > kdstBase(K.id), [projectedPoints(K), kdstBase(K.id)]);
+  ok('…and leaves the defence alone', projectedPoints(DST) === kdstBase(DST.id));
+
+  setLeagueProjScoring({ fgMiss: 0 });                   // default -1
+  ok('forgiving missed kicks raises the kicker (attempts are in the line, not just makes)',
+    projectedPoints(K) > kdstBase(K.id), projectedPoints(K));
+
+  setLeagueProjScoring({ sack: 3 });                     // default 1
+  ok('a sack-heavy defence catalog raises the defence',
+    projectedPoints(DST) > kdstBase(DST.id), [projectedPoints(DST), kdstBase(DST.id)]);
+  ok('…and leaves the kicker alone', projectedPoints(K) === kdstBase(K.id));
+  clearLeagueProjScoring();
+
+  // A defence scores touchdowns, so a per-TD scoped bonus has to see them; a
+  // kicker does not, and must say so rather than borrowing a skill line.
+  ok('a defence has projected touchdowns', projTdsPerWeek(DST.id) > 0, projTdsPerWeek(DST.id));
+  ok('a kicker has none', projTdsPerWeek(K.id) === 0);
+}
+
+// ── POINTS ALLOWED IS A BRACKET, NOT A NUMBER ──────────────────────────────
+// The one piece of real arithmetic in the change. A defence projected at 21.3
+// points allowed does NOT sit in the 21-27 tier every week — it has shutouts
+// and it has blowouts, and the ladder pays very differently at the ends. So the
+// expected points is the ladder INTEGRATED over the spread, not the ladder
+// evaluated at the mean.
+{
+  const atMean = (y) => (y <= 0 ? DEFAULT_CLASSIC_SCORING.pa0 : y <= 6 ? DEFAULT_CLASSIC_SCORING.pa1
+    : y <= 13 ? DEFAULT_CLASSIC_SCORING.pa7 : y <= 20 ? DEFAULT_CLASSIC_SCORING.pa14
+    : y <= 27 ? DEFAULT_CLASSIC_SCORING.pa21 : y <= 34 ? DEFAULT_CLASSIC_SCORING.pa28
+    : DEFAULT_CLASSIC_SCORING.pa35);
+
+  ok('the spread is the one StatHead measured', PA_SD === 9.4, PA_SD);
+
+  // 21.3 lands in the 21-27 bracket, which our ladder pays ZERO for. Scored at
+  // the mean a top defence's points-allowed contribution vanishes entirely.
+  const den = integratedPaPoints(21.29, DEFAULT_CLASSIC_SCORING);
+  ok('a 21.3-per-game defence is worth MORE than its own bracket says',
+    atMean(21.29) === 0 && den > 0.6 && den < 0.8, [atMean(21.29), den]);
+
+  // And the direction reverses for a bad defence: the blowout tail costs it.
+  const nyj = integratedPaPoints(24.64, DEFAULT_CLASSIC_SCORING);
+  ok('a 24.6-per-game defence is worth LESS than its bracket says',
+    atMean(24.64) === 0 && nyj < 0, [atMean(24.64), nyj]);
+  ok('better defences are still worth more than worse ones', den > nyj, [den, nyj]);
+
+  // Monotone in the league's own ladder, which is the property a commissioner
+  // would actually notice: raise the shutout payout, the defence goes up.
+  const rich = integratedPaPoints(21.29, { ...DEFAULT_CLASSIC_SCORING, pa0: 30 });
+  ok('a richer shutout bracket raises the defence', rich > den, [rich, den]);
+  // The per-point knob is linear, so it needs no integration and must be exact.
+  const perPt = integratedPaPoints(20, { ...DEFAULT_CLASSIC_SCORING, paPt: -0.5 });
+  ok('the per-point knob is applied at the mean, exactly',
+    Math.abs(perPt - (integratedPaPoints(20, DEFAULT_CLASSIC_SCORING) - 10)) < 1e-9, perPt);
+}
 
 // ── THE CATALOG IS SCORING **PLUS** PPR ────────────────────────────────────
 // A league stores its adjustments in `scoring` and its per-reception value in
