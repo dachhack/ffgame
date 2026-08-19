@@ -113,7 +113,15 @@ export function Sheet({ title, subtitle, onClose, max = 620, children }: {
     return () => window.removeEventListener('keydown', on);
   }, [onClose]);
   return (
-    <ModalBackdrop onClick={onClose} zIndex={80} padTop={26}>
+    // ── THE LAYER MATTERS (v0.297.2) ──────────────────────────────────────
+    // 60, not 80. A Sheet is a CONTAINER for a destination, and the things a
+    // destination opens — the ⚑ kit's note and flag editors, the avatar
+    // picker, a confirm — are ModalBackdrop's default 70. At 80 this sheet
+    // covered them: they opened, painted underneath, and read to the founder
+    // as "manage flags and write note don't do anything". Below the modal
+    // layer, above the page (the header is 50-58), and portaled last so it
+    // still wins against anything else that also says 60.
+    <ModalBackdrop onClick={onClose} zIndex={60} padTop={26}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
         style={{
           background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10,
