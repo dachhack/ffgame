@@ -587,7 +587,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         // custom-scoring league projected under rules it does not play by —
         // and a spot-scoped bonus never appeared in the spot it pays. Same
         // three layers the live scorer applies, in the same order.
-        proj: projectedPoints({ id: slug, pos: m.pos ?? '', team: m.team }, slot),
+        proj: projectedPoints({ id: slug, pos: m.pos ?? "", team: m.team }, slot, slotPos),
         state: g ? entryState(g.kickoff, m.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded

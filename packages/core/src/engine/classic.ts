@@ -1190,7 +1190,7 @@ export function slateAwareProj(
   week: number,
   slate?: { home?: string | null; away?: string | null }[] | null,
   ruledOut?: (slug: string) => boolean,
-): (p: { id: string; pos?: string | null; team?: string | null }) => number {
+): (p: { id: string; pos?: string | null; team?: string | null }, d?: ClassicSlotDef) => number {
   const onBye = (team: string | null | undefined): boolean => {
     const t = normTeam(team ?? '');
     if (!t) return false;                          // unknown team: no claim
@@ -1200,10 +1200,16 @@ export function slateAwareProj(
     }
     return hasSlate(week) && !nflGameForTeam(week, t);
   };
-  return (p) => {
+  // `d` is the SPOT being filled, when the caller has one — `bestballFillBy`
+  // passes it and `optimalLineup` does not. It is used for exactly one thing:
+  // a return-only spot is worth nothing to a fill, because the player's rushing
+  // and receiving are mute there (v0.311.2). Ranking candidates for a RET spot
+  // by their full skill line would seat the best receiver rather than the best
+  // returner, which is the same mistake the board was making on screen.
+  return (p, d) => {
     if (ruledOut?.(p.id)) return 0;
     if (onBye(p.team)) return 0;
-    return projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team });
+    return projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }, d?.slot, d?.pos);
   };
 }
 
