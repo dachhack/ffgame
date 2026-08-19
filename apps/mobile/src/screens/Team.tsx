@@ -37,6 +37,7 @@ import { TradeCenter } from '../ui/TradeCenter';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 
 /** Every spot chip is this wide, so the player column starts at the same x on
@@ -341,7 +342,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // years_exp by slug — the tenure filter's data. A failed read leaves the
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (g.ok) setGm(g); }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
     keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(k.continuity === 'dynasty' ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
@@ -772,7 +773,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
               {/* The leading number is whatever the list is SORTED BY — a list
                   ordered by projection that still printed ranks looks shuffled. */}
               <Mono size={8.5} tone={sortBy === 'rank' ? 'faint' : 'you'} style={{ width: 34, textAlign: 'right' }}>
-                {poolSortValue(sortBy, p.slug, p.rank, own ?? undefined)}
+                {poolSortValue(sortBy, p, own ?? undefined)}
               </Mono>
               <Face slug={p.slug} pos={p.pos} />
               {/* The wire's names open cards too (founder: everywhere a name

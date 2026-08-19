@@ -300,9 +300,11 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
     ownOrder[0] === known[2] && ownOrder[1] === known[0]);
   ok('with no ownership map loaded the list holds its rank order rather than claiming everyone is 0%',
     by('own').join() === by('rank').join());
-  ok('the row label says what it sorted on', poolSortValue('rank', known[0], 1) === '#1'
-    && poolSortValue('own', known[2], 3, own) === '90%'
-    && poolSortValue('adp', 'nobody-at-all', 9) === '\u2014');
+  // v0.310.0: the value is derived from the ROW, not from a positional slug —
+  // it needs the position now, because a projection is the league's.
+  ok('the row label says what it sorted on', poolSortValue('rank', { slug: known[0], rank: 1 }) === '#1'
+    && poolSortValue('own', { slug: known[2], rank: 3 }, own) === '90%'
+    && poolSortValue('adp', { slug: 'nobody-at-all', rank: 9 }) === '\u2014');
   ok('sorting never mutates the caller\u2019s array', rows.at(-1).slug === 'nobody-at-all' && rows.length === 4);
 
   // THE LIVE MARKET OVERLAY (v0.306.1). The load-bearing property is that it

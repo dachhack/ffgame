@@ -13,6 +13,13 @@
 // the order the live scorer applies them, and every no-data path falling back
 // to the bake rather than to zero.
 //
+// v0.310.0 extends it past the matchup board. The engine was right from
+// v0.308.0 and wired to exactly ONE surface; waivers, the draft room, the
+// player cards and the auto-slot ranker all still read the raw PPR bake. The
+// cases below pin the SURFACES rather than the arithmetic — a pool that
+// REORDERS under a catalog, an auto-fill that ranks by the league's rules, and
+// the PPR knob being part of the catalog at all.
+//
 // v0.309.0 adds the two the earlier Sleeper bake could not make: that the stat
 // lines RECONCILE to the projection they are the components of, and that they
 // cover it completely. Both are only checkable because the two files now come
@@ -21,8 +28,10 @@
 // without the other.
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats2026';
+import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
+import { slateAwareProj } from '../packages/core/src/engine/classic';
 import {
-  projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine,
+  projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
@@ -79,6 +88,103 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
     Math.abs(worst) < 0.2, { worst: +worst.toFixed(3), who, n });
   ok('…with no systematic bias either way (a drift would tilt every ratio)',
     Math.abs(sum / n) < 0.02, +(sum / n).toFixed(4));
+}
+
+
+// ── THE CATALOG IS SCORING **PLUS** PPR ────────────────────────────────────
+// A league stores its adjustments in `scoring` and its per-reception value in
+// `ppr`, separately. v0.308.0 installed the first and dropped the second, so a
+// half-PPR league scored receivers at 1/2 and projected them at 1 — the exact
+// two-rulebook bug the projection work exists to prevent, hiding in the one
+// knob that doesn't live in `scoring`.
+{
+  const half = leagueCatalogOf({ scoring: { teRec: 0.5 }, ppr: 0.5 });
+  ok('the league catalog folds ppr in with the adjustments', half.ppr === 0.5, half);
+  ok('…and keeps the adjustments themselves', half.teRec === 0.5, half);
+  ok('a missing ppr leaves the default rather than writing NaN',
+    leagueCatalogOf({ scoring: { teRec: 0.5 } }).ppr === undefined
+    && leagueCatalogOf(null).ppr === undefined);
+  // Proof it reaches the NUMBER, not just the object.
+  setLeagueProjScoring(leagueCatalogOf({ scoring: {}, ppr: 0.5 }));
+  ok('half PPR actually lowers a 105-catch receiver',
+    projectedPoints(WR) < PROJ_2026.get(WR.id), [projectedPoints(WR), PROJ_2026.get(WR.id)]);
+  clearLeagueProjScoring();
+}
+
+// ── THE POOLS: WAIVERS AND THE DRAFT ROOM ──────────────────────────────────
+// `projFor` is what every available-player list sorts and displays by. These
+// are the cases that would have caught v0.308.0 shipping to one surface.
+{
+  const rows = [...PROJ_2026.keys()].map((slug, i) => ({ slug, pos: PROJ_LINE_POS[slug], rank: i + 1 }));
+  const topN = (n) => sortPool(rows, 'proj').slice(0, n).map((r) => r.slug);
+
+  ok('an unknown player has NO projection rather than a projection of zero',
+    projFor('probe-unknown-player') === null, projFor('probe-unknown-player'));
+  ok('a standard-catalog pool shows exactly the baked number',
+    projFor(RB.id, 'RB') === PROJ_2026.get(RB.id), projFor(RB.id, 'RB'));
+
+  // THE HEADLINE REORDER. A tight end premium is the most common custom rule
+  // there is, and under a big one the best TE is not "a good TE" — he is the
+  // best player available. The pool has to say so, in the order AND the number.
+  setLeagueProjScoring({ teRec: 1.5 });
+  ok('a TE premium puts the best tight end at the TOP of the pool',
+    topN(1)[0] === 'trey-mcbride', topN(3));
+  ok('…and the printed value rose with him',
+    projFor(TE.id, 'TE') > PROJ_2026.get(TE.id), [projFor(TE.id, 'TE'), PROJ_2026.get(TE.id)]);
+  ok('…and the column renders that number, not the bake',
+    poolSortValue('proj', { slug: TE.id, pos: 'TE' }) === `${projFor(TE.id, 'TE').toFixed(1)}/g`,
+    poolSortValue('proj', { slug: TE.id, pos: 'TE' }));
+
+  // A league that pays nothing per catch reorders the backs by carries.
+  setLeagueProjScoring({ ppr: 0 });
+  ok('zero PPR flips the two best backs on catch volume',
+    topN(2)[0] === 'jahmyr-gibbs' && topN(2)[1] === 'christian-mccaffrey', topN(2));
+  clearLeagueProjScoring();
+  ok('and the standard pool puts them back',
+    topN(2)[0] === 'christian-mccaffrey' && topN(2)[1] === 'jahmyr-gibbs', topN(2));
+
+  ok('rank order never consults the projection at all',
+    sortPool(rows, 'rank')[0].rank === 1);
+}
+
+// ── THE AUTO-FILL RANKER ───────────────────────────────────────────────────
+// `slateAwareProj` feeds the worker's auto-slot, the unmanaged seat's computed
+// lineup and the best-ball fill. A league's rules have to reach it, or the fill
+// disagrees with the board about who is better — on the seats least able to
+// notice, because auto-slot exists for the ones nobody is managing.
+{
+  const te = { id: TE.id, pos: 'TE', team: 'LV' };
+  const wr = { id: WR.id, pos: 'WR', team: 'CIN' };
+  const plain = slateAwareProj(1, []);
+  // Read to NUMBERS before the install. The returned closure reads the catalog
+  // at CALL time, not capture time — see the assertion below, which is the
+  // property `lock.js` leans on to build one `valueOf` per tick and still get
+  // per-league answers inside the loop.
+  const plainTe = plain(te), plainWr = plain(wr);
+  ok('the fill value is the baked projection under standard rules',
+    plainTe === PROJ_2026.get(TE.id), plainTe);
+
+  setLeagueProjScoring({ teRec: 1.5 });
+  const premium = slateAwareProj(1, []);
+  ok('a TE premium raises the tight end in the auto-fill ranking',
+    premium(te) > plainTe, [premium(te), plainTe]);
+  ok('…and leaves a receiver outside its scope alone', premium(wr) === plainWr);
+  ok('the fill and the board agree on the same player',
+    premium(te) === projectedPoints({ id: TE.id, pos: 'TE', team: 'LV' }));
+  // THE WORKER'S CONTRACT. `autoSlotClassicLineups` builds `valueOf` once for
+  // the whole tick and installs each league's catalog inside the loop. That is
+  // only correct because a closure built under one catalog answers under
+  // whichever is installed when it is CALLED — assert it, because the day it
+  // stops being true the worker silently scores every league by the first one.
+  ok('a fill closure built earlier answers under the catalog installed NOW',
+    plain(te) === premium(te), [plain(te), premium(te)]);
+
+  // The v0.252.0 contract still holds: evidence still zeroes a player, and the
+  // league's rules must not resurrect him.
+  const out = slateAwareProj(1, [], (slug) => slug === TE.id);
+  ok('a ruled-out player is still worth zero, however the league scores',
+    out(te) === 0, out(te));
+  clearLeagueProjScoring();
 }
 
 // ── THE INVARIANT ──────────────────────────────────────────────────────────

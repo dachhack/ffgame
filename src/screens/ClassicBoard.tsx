@@ -14,10 +14,9 @@ import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { projectedPoints, setLeagueProjScoring } from '@drip/core/engine/projScoring';
+import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
-import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -304,7 +303,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           // GOLF (v0.303.0) rides the same load: it is a league setting the
           // engine reads at scoring time, installed exactly like the scoring
           // adjustments below and cleared on exit with them.
-          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true);  setLeagueProjScoring(gm.scoring ?? {}); }
+          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -450,6 +449,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   }, [matchup, userId, ros]);
 
   const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
+  // THE LEAGUE'S CATALOG, ON THE PROJECTION SIDE (v0.310.0). Keyed on `sc`,
+  // not on the load callback, because `sc` IS the catalog this board scores
+  // live points with — installing anything else is how the two sides drift.
+  // v0.308.0 installed `gm.scoring` alone and dropped `ppr` with it, so a
+  // half-PPR league showed live points at ½ per catch and projections at 1.
+  // Cleared on the way out: this is a module global, and a screen that shows
+  // projections outside a league must not inherit this one's rules.
+  useEffect(() => { setLeagueProjScoring(sc); return () => clearLeagueProjScoring(); }, [sc]);
+
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
   // What each spot is CALLED on screen. The stored name (S1, RB2) is a storage
@@ -1105,7 +1113,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   </span>
                   <PosPill pos={p.pos as Pos} />
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30, textAlign: 'right' }}>{p.team}</span>
-                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{(PROJ_2026.get(p.slug) ?? 0).toFixed(1)}</span>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{projectedPoints({ id: p.slug, pos: p.pos ?? '', team: p.team }).toFixed(1)}</span>
                 </button>
               ))}
             </div>

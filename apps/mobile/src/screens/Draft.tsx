@@ -25,11 +25,11 @@ import {
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
-import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
 import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -146,6 +146,12 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     leagueGameMode(leagueId).then((g) => {
       if (!alive || !g.ok) return;
       setGm(g);
+      // The league's own catalog on the projection side (v0.310.0). Set here
+      // rather than at each read: every pool on this screen sorts and displays
+      // through `projFor`, which reads this module global, so a screen that
+      // showed projections without installing would quietly render them under
+      // whichever league was opened before it.
+      setLeagueProjScoring(leagueCatalogOf(g));
       if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
         leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
       }
@@ -558,7 +564,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             </Notice>
           )}
           {avail.slice(0, 60).map((p) => {
-            const adp = ADP_2026.get(p.slug); const proj = PROJ_2026.get(p.slug);
+            const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
             const inQ = queue.includes(p.slug);
             const capped = atCap(p.pos);
             const can = assigning ? !busy : (myTurn && !busy && !capped);

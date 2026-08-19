@@ -25,7 +25,7 @@ import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor, flagFor } from '../data/commish';
 import { golfValue, zeroFill } from './golf';
 import { scopedAdjustFor } from './leagueScoring';
-import { PROJ_2026 } from '../data/proj2026';
+import { projectedPoints } from './projScoring';
 import { normTeam } from '../data/slugMeta';
 import { hasSlate, nflGameForTeam } from '../data/nflSlate';
 
@@ -1153,6 +1153,20 @@ export interface ClassicSide {
 // best-ball preview, and the unmanaged seat's computed lineup — which is the
 // worst of them, because no manager exists to fix it.
 //
+// AND IT DOES NOT KNOW THE LEAGUE'S RULES EITHER (v0.310.0). That was the same
+// bug in a second coat: a league paying 6 for a passing touchdown, or a TE
+// premium, ranked its candidates by STOCK PPR, so auto-slot could seat the
+// wrong player on a seat with no manager to correct it. The value now runs
+// through `projectedPoints`, which is the number the board shows for the same
+// player — so the fill and the board cannot disagree about who is better.
+//
+// It passes NO SLOT, on purpose. This ranks a player before anyone knows which
+// spot he lands in, and `scopedAdjustFor` already defines the honest answer for
+// that: a spot-scoped rule stands aside where there is no spot. Position-scoped
+// rules and the whole catalog still apply, which is the part that reorders a
+// roster. A caller with no `pos` on its rows keeps every catalog knob except
+// the position reception premium — degraded, never zero.
+//
 // So the fills rank by THIS: the projection, zeroed when the player provably
 // cannot score. Two zeroes, both under the house no-guess rule (the same one
 // isBye and slotAllows follow):
@@ -1176,7 +1190,7 @@ export function slateAwareProj(
   week: number,
   slate?: { home?: string | null; away?: string | null }[] | null,
   ruledOut?: (slug: string) => boolean,
-): (p: { id: string; team?: string | null }) => number {
+): (p: { id: string; pos?: string | null; team?: string | null }) => number {
   const onBye = (team: string | null | undefined): boolean => {
     const t = normTeam(team ?? '');
     if (!t) return false;                          // unknown team: no claim
@@ -1189,7 +1203,7 @@ export function slateAwareProj(
   return (p) => {
     if (ruledOut?.(p.id)) return 0;
     if (onBye(p.team)) return 0;
-    return PROJ_2026.get(p.id) ?? 0;
+    return projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team });
   };
 }
 
