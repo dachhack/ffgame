@@ -38,7 +38,26 @@ export const POOL_SORTS: { id: PoolSort; label: string; hint: string }[] = [
   { id: 'own', label: 'OWN %', hint: 'share of drafted leagues rostering him' },
 ];
 
-export const adpFor = (slug: string): number | null => ADP_2026.get(slug) ?? null;
+// THE LIVE MARKET OVERLAY (v0.306.1, founder: "let's do 1" — the live ESPN
+// feed over the baked consensus). Same shape as every other per-league engine
+// cache: a module map behind a synchronous getter, installed when a screen
+// loads it and cleared on the way out.
+//
+// It OVERLAYS the bake rather than replacing it. `adp2026.ts` is a consensus
+// blend (FantasyPros + Sleeper + FFC) and the feed is ESPN's own draft rooms —
+// roughly 13 picks apart at the median — so a player the feed doesn't price,
+// or every player when the feed is stale, keeps the consensus number instead of
+// falling off the board. A poll failure should cost freshness, not the column.
+let liveAdp: Record<string, number> | null = null;
+export function setLiveAdp(m?: Record<string, number> | null): void {
+  liveAdp = m && Object.keys(m).length ? m : null;
+}
+export function clearLiveAdp(): void { liveAdp = null; }
+/** Is the board showing a live market right now? For the label that says so. */
+export const adpIsLive = (): boolean => liveAdp != null;
+
+export const adpFor = (slug: string): number | null =>
+  liveAdp?.[slug] ?? ADP_2026.get(slug) ?? null;
 export const projFor = (slug: string): number | null => PROJ_2026.get(slug) ?? null;
 
 /** The value a row shows for the order it is sorted by — '—' when the source
