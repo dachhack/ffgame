@@ -12,8 +12,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   leagueNote, setLeagueNote, playerFlags, setPlayerFlag, setPlayerFlagsBulk, leagueScoringGet, leagueScoringSet,
-  friendlyError, type PlayerFlagRow, type FlagRulesRaw,
+  friendlyError, leagueGameMode, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel } from '@drip/core/engine/classic';
 import {
   SCORING_BOUNDS, DEFAULT_SCORING, setLeagueScoring, parseScoring, scoringIsDefault, scoringLabel, scopedRuleLabel,
   type LeagueScoring, type ScopedBonus,
@@ -159,20 +160,53 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
   const [dMult, setDMult] = useState(1);
   const [dPts, setDPts] = useState(0);
   const [dTd, setDTd] = useState(0);
+  const [dSlot, setDSlot] = useState<Set<string>>(new Set());
+  const [dFlag, setDFlag] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // The league's lineup + flag vocabulary (v0.300.0) — a scoped rule may name a
+  // SPOT or a FLAG, and neither is guessable from the player alone.
+  const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
+  const [spots, setSpots] = useState<{ id: string; name: string }[]>([]);
+  const [flagLabels, setFlagLabels] = useState<string[]>([]);
   useEffect(() => {
     if (visible) {
       setTd(initial.tdBonus); setYd(initial.ydMult); setTo(initial.toPenalty);
       setScoped(initial.scoped ?? []);
       setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
+      setDSlot(new Set()); setDFlag(new Set());
       setErr(null);
     }
   }, [visible, initial]);
+  useEffect(() => {
+    if (!visible) return;
+    let dead = false;
+    void (async () => {
+      try {
+        const gm = await leagueGameMode(leagueId);
+        if (dead || !gm?.ok) return;
+        setMode(gm.mode === 'classic' ? 'classic' : 'drip');
+        const defs = leagueSlotDefs(gm);
+        const names = slotDisplayNames(defs);
+        setSpots(defs.map((d, i) => ({ id: d.slot, name: slotBadgeLabel(names[i] ?? d.slot) })));
+      } catch { /* pickers stay empty */ }
+    })();
+    void (async () => {
+      try {
+        const rows = await playerFlags(leagueId);
+        if (dead || !Array.isArray(rows)) return;
+        setFlagLabels([...new Set(rows.map((r) => (r.label ?? '').trim()).filter(Boolean))].sort());
+      } catch { /* ditto */ }
+    })();
+    return () => { dead = true; };
+  }, [visible, leagueId]);
+  const spotNames = useMemo(() => Object.fromEntries(spots.map((sp) => [sp.id, sp.name])), [spots]);
   const toWire = (r: ScopedBonus) => ({
     ...(r.pos?.length ? { pos: r.pos } : {}),
     ...(r.team?.length ? { team: r.team } : {}),
     ...(r.tenure ? { tenure: r.tenure } : {}),
+    ...(r.slot?.length ? { slot: r.slot } : {}),
+    ...(r.flag?.length ? { flag: r.flag } : {}),
     ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
     ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
     ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
@@ -185,11 +219,14 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
       ...(dPos.size ? { pos: [...dPos] } : {}),
       ...(dTeam !== 'ALL' ? { team: [dTeam] } : {}),
       ...(dTen !== 'ALL' ? { tenure: dTen as ScopedBonus['tenure'] } : {}),
+      ...(dSlot.size ? { slot: [...dSlot] } : {}),
+      ...(dFlag.size ? { flag: [...dFlag] } : {}),
       ...(dMult !== 1 ? { bonusMult: dMult } : {}),
       ...(dPts !== 0 ? { bonusPts: dPts } : {}),
       ...(dTd !== 0 ? { tdBonus: dTd } : {}),
     }]);
     setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
+    setDSlot(new Set()); setDFlag(new Set());
   };
   const save = async (tdV: number, ydV: number, toV: number, scopedV: ScopedBonus[] = scoped) => {
     if (busy) return;
@@ -251,20 +288,28 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
         </>
       }>
       <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-      {stepper('TD BONUS', 'extra points on every TD your players score', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
-      {stepper('YARDAGE MULTIPLIER', 'scales per-yard scoring and drip growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
-      {stepper('TURNOVER PENALTY', 'points off a player’s own bank per giveaway', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+      {/* A CLASSIC LEAGUE HAS ONLY THE SCOPED BONUSES (v0.300.0). Its scoring
+          catalog is edited on the web dash; a second TD bonus and a second
+          yardage multiplier here silently doubled knobs it already owns. */}
+      {mode !== 'classic' && <>
+        {stepper('TD BONUS', 'extra points on every TD your players score', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
+        {stepper('YARDAGE MULTIPLIER', 'scales per-yard scoring and drip growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
+        {stepper('TURNOVER PENALTY', 'points off a player’s own bank per giveaway', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+      </>}
 
       {/* SCOPED BONUSES (0145): the founder's "team, position, tenure"
-          filters — rules that pay only players matching the scope. */}
-      <View style={{ marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 12 }}>
+          filters — rules that pay only players matching the scope. v0.300.0
+          adds the SPOT he's started in and the FLAG he wears. */}
+      <View style={mode === 'classic'
+        ? { marginTop: 4 }
+        : { marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 12 }}>
         <Mono size={9} tone="faint" track={0.12}>SCOPED BONUSES</Mono>
         <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
-          Bonuses for players matching a position / team / tenure scope. Rules stack — multipliers multiply, points sum.
+          Bonuses for players matching a position / team / tenure scope — and, if you like, the SPOT they’re started in or the FLAG they wear. Rules stack — multipliers multiply, points sum.
         </Mono>
         {scoped.map((r, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-            <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.warn, lineHeight: fs(13) }}>⚖ {scopedRuleLabel(r)}</Text>
+            <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.warn, lineHeight: fs(13) }}>⚖ {scopedRuleLabel(r, spotNames)}</Text>
             <Pressable hitSlop={6} disabled={busy} onPress={() => { tap(); setScoped(scoped.filter((_, j) => j !== i)); }}>
               <Text style={{ fontSize: fs(13), color: t.opp }}>✕</Text>
             </Pressable>
@@ -281,6 +326,27 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
           ))}
         </View>
         <TeamStrip value={dTeam} set={setDTeam} />
+        {/* THE SPOT (v0.300.0): a rule about the LINEUP rather than the player
+            — the FLEX pays ×1.5 no matter who fills it. */}
+        {mode === 'classic' && spots.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <Mono size={8} tone="faint">IN SPOT</Mono>
+            {spots.map((sp) => (
+              <FilterChip key={sp.id} label={sp.name} on={dSlot.has(sp.id)} tone={t.you}
+                onPress={() => setDSlot((cur) => { const n = new Set(cur); if (n.has(sp.id)) n.delete(sp.id); else n.add(sp.id); return n; })} />
+            ))}
+          </View>
+        )}
+        {/* THE FLAG (v0.300.0): one rule that pays everyone wearing a label. */}
+        {flagLabels.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <Mono size={8} tone="faint">FLAGGED</Mono>
+            {flagLabels.map((fl) => (
+              <FilterChip key={fl} label={`⚑ ${fl}`} on={dFlag.has(fl)} tone={FLAG_PURPLE}
+                onPress={() => setDFlag((cur) => { const n = new Set(cur); if (n.has(fl)) n.delete(fl); else n.add(fl); return n; })} />
+            ))}
+          </View>
+        )}
         <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
           {mini('PTS', dMult, setDMult, 0.5, 3, 0.1, 1, (n) => `×${n}`)}
           {mini('BONUS', dPts, setDPts, -10, 10, 0.5, 0, (n) => `${n > 0 ? '+' : ''}${n}`)}

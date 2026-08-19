@@ -14,8 +14,9 @@
 // anyone, and the flag renders with the real name wherever the player appears.
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
-import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueNote, leagueScoringGet, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
+import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueGameMode, leagueNote, leagueScoringGet, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
 import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, scopedRuleLabel, parseScoring, type LeagueScoring, type ScopedBonus } from '@drip/core/engine/leagueScoring';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel } from '@drip/core/engine/classic';
 import { PLAYER_BIO } from '@drip/core/data/playerBio';
 import { headshot } from '@drip/core/data/media';
 import { ModalBackdrop, Img } from './ui';
@@ -160,12 +161,45 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
   const [dMult, setDMult] = useState(1);
   const [dPts, setDPts] = useState(0);
   const [dTd, setDTd] = useState(0);
+  const [dSlot, setDSlot] = useState<Set<string>>(new Set());
+  const [dFlag, setDFlag] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // The league's own lineup and flag vocabulary (v0.300.0) — a scoped rule can
+  // now name A SPOT or A FLAG, and neither is guessable: the spots are this
+  // league's builder rows (S1…Sn) and the flags are whatever the commissioner
+  // typed. Loaded here rather than passed in so both hosts stay one prop.
+  const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
+  const [spots, setSpots] = useState<{ id: string; name: string }[]>([]);
+  const [flagLabels, setFlagLabels] = useState<string[]>([]);
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      try {
+        const gm = await leagueGameMode(leagueId);
+        if (dead || !gm?.ok) return;
+        setMode(gm.mode === 'classic' ? 'classic' : 'drip');
+        const defs = leagueSlotDefs(gm);
+        const names = slotDisplayNames(defs);
+        setSpots(defs.map((d, i) => ({ id: d.slot, name: slotBadgeLabel(names[i] ?? d.slot) })));
+      } catch { /* the pickers just stay empty */ }
+    })();
+    void (async () => {
+      try {
+        const rows = await playerFlags(leagueId);
+        if (dead || !Array.isArray(rows)) return;
+        setFlagLabels([...new Set(rows.map((r) => (r.label ?? '').trim()).filter(Boolean))].sort());
+      } catch { /* ditto */ }
+    })();
+    return () => { dead = true; };
+  }, [leagueId]);
+  const spotNames = useMemo(() => Object.fromEntries(spots.map((sp) => [sp.id, sp.name])), [spots]);
   const toWire = (r: ScopedBonus) => ({
     ...(r.pos?.length ? { pos: r.pos } : {}),
     ...(r.team?.length ? { team: r.team } : {}),
     ...(r.tenure ? { tenure: r.tenure } : {}),
+    ...(r.slot?.length ? { slot: r.slot } : {}),
+    ...(r.flag?.length ? { flag: r.flag } : {}),
     ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
     ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
     ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
@@ -178,11 +212,14 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
       ...(dPos.size ? { pos: [...dPos] } : {}),
       ...(dTeam !== 'ALL' ? { team: [dTeam] } : {}),
       ...(dTen !== 'ALL' ? { tenure: dTen as ScopedBonus['tenure'] } : {}),
+      ...(dSlot.size ? { slot: [...dSlot] } : {}),
+      ...(dFlag.size ? { flag: [...dFlag] } : {}),
       ...(dMult !== 1 ? { bonusMult: dMult } : {}),
       ...(dPts !== 0 ? { bonusPts: dPts } : {}),
       ...(dTd !== 0 ? { tdBonus: dTd } : {}),
     }]);
     setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
+    setDSlot(new Set()); setDFlag(new Set());
   };
   const save = async (tdV: number, ydV: number, toV: number, scopedV: ScopedBonus[] = scoped) => {
     if (busy) return;
@@ -219,21 +256,32 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
     <Shell>
         {!inline && <div className="grotesk" style={{ fontSize: 16.5, fontWeight: 700, color: 'var(--text)' }}>⚖ League scoring</div>}
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
-          Adjustments layer on the base game — the metric catalog stays as written; these apply on top, to every matchup in this league. Every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.
+          {mode === 'classic'
+            ? 'Bonuses layer on top of the scoring catalog you set on the other tabs — they apply to every matchup in this league, and every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.'
+            : 'Adjustments layer on the base game — the metric catalog stays as written; these apply on top, to every matchup in this league. Every member sees them on their board. Changing them mid-week changes how the current week scores from the next tick.'}
         </div>
-        {stepper('TD BONUS', 'extra points on every touchdown your players score (defensive TDs included)', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
-        {stepper('YARDAGE MULTIPLIER', 'scales all per-yard scoring AND drip-rate growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
-        {stepper('TURNOVER PENALTY', 'points removed from a player’s own bank on an INT thrown / fumble lost (never below zero)', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+        {/* A CLASSIC LEAGUE HAS ONLY THE SCOPED BONUSES (v0.300.0, founder:
+            "adjustments for classic leagues need to be just the scoped
+            bonuses"). The three global knobs are drip-side layering over a
+            tuned base; a classic league already edits its own catalog on the
+            tabs beside this one, so a second TD bonus and a second yardage
+            multiplier here were two ways to say the same thing — and the one
+            that didn't show up in the catalog it was silently doubling. */}
+        {mode !== 'classic' && <>
+          {stepper('TD BONUS', 'extra points on every touchdown your players score (defensive TDs included)', td, setTd, SCORING_BOUNDS.tdBonus, (n) => `${n > 0 ? '+' : ''}${n}`)}
+          {stepper('YARDAGE MULTIPLIER', 'scales all per-yard scoring AND drip-rate growth', yd, setYd, SCORING_BOUNDS.ydMult, (n) => `×${n}`)}
+          {stepper('TURNOVER PENALTY', 'points removed from a player’s own bank on an INT thrown / fumble lost (never below zero)', to, setTo, SCORING_BOUNDS.toPenalty, (n) => (n === 0 ? 'off' : `−${n}`))}
+        </>}
 
         {/* SCOPED BONUSES (0145): the founder's "team, position, tenure"
             filters — rules that pay only players matching the scope. */}
-        <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: 16, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>SCOPED BONUSES</div>
+        <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginTop: mode === 'classic' ? 4 : 16, ...(mode === 'classic' ? {} : { borderTop: '1px solid var(--bd)', paddingTop: 12 }) }}>SCOPED BONUSES</div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
-          Bonuses for players matching a position / team / tenure scope. Rules stack — multipliers multiply, points sum.
+          Bonuses for players matching a position / team / tenure scope — and, if you like, the SPOT they’re started in or the FLAG they wear. Rules stack — multipliers multiply, points sum.
         </div>
         {scoped.map((r, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
-            <span className="mono" style={{ fontSize: 12.5, color: 'var(--warn)', fontWeight: 700, flex: 1, minWidth: 0 }}>⚖ {scopedRuleLabel(r)}</span>
+            <span className="mono" style={{ fontSize: 12.5, color: 'var(--warn)', fontWeight: 700, flex: 1, minWidth: 0 }}>⚖ {scopedRuleLabel(r, spotNames)}</span>
             <button onClick={() => setScoped(scoped.filter((_, j) => j !== i))} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
           </div>
         ))}
@@ -255,6 +303,38 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
               style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: dTen === t.id ? 'var(--on-accent)' : 'var(--dim)', background: dTen === t.id ? 'var(--warn)' : 'var(--bg)', border: `1px solid ${dTen === t.id ? 'var(--warn)' : 'var(--bd)'}` }}>{t.label}</button>
           ))}
         </div>
+        {/* THE SPOT (v0.300.0): "allow scoped bonuses to apply to each/any of
+            the starting roster positions as a rule". Picking none means the
+            rule follows the player wherever he is; picking spots makes it a
+            rule about the LINEUP — the FLEX pays ×1.5 no matter who fills it. */}
+        {mode === 'classic' && spots.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>IN SPOT</span>
+            {spots.map((sp) => {
+              const on = dSlot.has(sp.id);
+              return (
+                <button key={sp.id} title={sp.id} onClick={() => setDSlot((cur) => { const n = new Set(cur); if (n.has(sp.id)) n.delete(sp.id); else n.add(sp.id); return n; })} className="mono"
+                  style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{sp.name}</button>
+              );
+            })}
+            {dSlot.size > 0 && <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>only while started there</span>}
+          </div>
+        )}
+        {/* THE FLAG (v0.300.0): "we also want scoped bonuses for flags". One
+            rule that pays everyone wearing a label, instead of the same ×/+
+            typed into every flag one at a time. */}
+        {flagLabels.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>FLAGGED</span>
+            {flagLabels.map((f) => {
+              const on = dFlag.has(f);
+              return (
+                <button key={f} onClick={() => setDFlag((cur) => { const n = new Set(cur); if (n.has(f)) n.delete(f); else n.add(f); return n; })} className="mono"
+                  style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? FLAG_PURPLE : 'var(--bg)', border: `1px solid ${on ? FLAG_PURPLE : 'var(--bd)'}` }}>⚑ {f}</button>
+              );
+            })}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 7 }}>
           <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>PTS ×</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

@@ -13,7 +13,7 @@ import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
-import { rosterRules, setTaxiRules } from '@drip/core/data/liveApi';
+import { rosterRules, setTaxiRules, playerFlags } from '@drip/core/data/liveApi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -139,12 +139,15 @@ export function LastSeenPanel({ leagueId }: { leagueId: string }) {
 // only appears where the founder has flagged it available (0158).
 // A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
 // (0172) as raw input strings, so partial typing never fights the keyboard.
-type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
+// v0.300.0: the filter also carries FLAGS — the commissioner's own labels as a
+// condition on who may stand in the spot.
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[] };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
+  fFlags: [...(x.flags ?? [])],
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -156,9 +159,10 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(teams.length ? { teams } : {}),
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
+    ...(s.fFlags.length ? { flags: s.fFlags } : {}),
   };
 };
-const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
 
 // ── The scoring page's tabs (v0.213.0) ──────────────────────────────────────
 // 14 catalog sections in one endless column made "find the IDP knobs" a scroll
@@ -277,6 +281,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // first SAVE migrates it to the builder model losslessly.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // The league's flag vocabulary (v0.300.0) — the labels a spot filter may
+  // require. Empty in a league that has flagged nobody, and the row hides.
+  const [flagLabels, setFlagLabels] = useState<string[]>([]);
+  useEffect(() => {
+    playerFlags(leagueId).then((rows) => {
+      if (Array.isArray(rows)) setFlagLabels([...new Set(rows.map((r) => (r.label ?? '').trim()).filter(Boolean))].sort());
+    }).catch(() => {});
+  }, [leagueId]);
   // Which spot's PER-SLOT filter editor (0172) is open.
   const [fltOpen, setFltOpen] = useState<number | null>(null);
   // Which SCORING tab is showing (v0.213.0), and the drip-side adjustments
@@ -559,7 +571,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
                   onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
-                <button disabled={busy} title="Per-spot player filter: only these teams / this tenure window may fill the spot"
+                <button disabled={busy} title="Per-spot player filter: only these teams / this tenure window / these flagged players may fill the spot"
                   onClick={() => setFltOpen((cur) => cur === i ? null : i)}
                   className="mono" style={{ ...pill(spotHasFlt(sp)), padding: '3px 8px', fontSize: 11 }}>🔎</button>
                 <button disabled={busy || spots.length <= 1} title="Remove this spot"
@@ -579,6 +591,24 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                       placeholder="max yrs" inputMode="numeric"
                       className="mono" style={{ fontFamily: 'inherit', fontSize: 12, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 68 }} />
                     <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>rookies only → max 0 · SAVE LINEUP applies</span>
+                    {/* FLAGS AS A CONDITION (v0.300.0, founder: "allow flags as
+                        a condition for position filters"). Only shown once the
+                        league has flags to pick — an empty row would read like
+                        a broken control. */}
+                    {flagLabels.length > 0 && (
+                      <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>⚑ FLAGGED</span>
+                        {flagLabels.map((fl) => {
+                          const on = sp.fFlags.some((x) => x.toLowerCase() === fl.toLowerCase());
+                          return (
+                            <button key={fl} disabled={busy}
+                              onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fFlags: on ? x.fFlags.filter((y) => y.toLowerCase() !== fl.toLowerCase()) : [...x.fFlags, fl] })); setSpotsDirty(true); }}
+                              className="mono" style={{ ...pill(on), padding: '3px 8px', fontSize: 11 }}>{fl}</button>
+                          );
+                        })}
+                        {sp.fFlags.length > 0 && <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>only a flagged player may fill this spot</span>}
+                      </div>
+                    )}
                     <TeamChips value={sp.fTeams} disabled={busy}
                       onChange={(next) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: next })); setSpotsDirty(true); }} />
                   </div>
@@ -588,10 +618,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <button disabled={busy || spots.length >= 20}
-              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); }}
+              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [] }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure — an RB spot for rookies only) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
+              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure / a commissioner flag — an RB spot for rookies only, or a spot only your franchise tag may stand in) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>

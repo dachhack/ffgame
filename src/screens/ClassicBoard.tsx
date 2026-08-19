@@ -448,8 +448,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
     // RET spots (0171) score their occupant return-only — mirror the resolver.
-    return (slug: string | null | undefined, slotPos?: string[]) =>
-      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined) : 0);
+    // The SPOT rides along (v0.300.0): a scoped bonus can name one, so the
+    // same player is worth different numbers in different spots and the board
+    // has to score him where he is standing.
+    return (slug: string | null | undefined, slotPos?: string[], slot?: string) =>
+      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined, slot) : 0);
   }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
@@ -997,8 +1000,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   {my ? <PlayerCell slug={my} /> : <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ SET</span>}
                 </button>
               )}
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my, d.pos)) : ''}</span>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(their, d.pos)) : ''}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--you)' }}>{locked || my ? r1(pts(my, d.pos, d.slot)) : ''}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 800, textAlign: 'right', color: 'var(--dim)' }}>{locked ? r1(pts(their, d.pos, d.slot)) : ''}</span>
               <div style={{ textAlign: 'right' }}>{locked && <PlayerCell slug={their} right />}</div>
             </div>
           );

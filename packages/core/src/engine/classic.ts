@@ -22,7 +22,7 @@
 // This module owns every default; SQL stores sanitized overrides only.
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
-import { flagRulesFor } from '../data/commish';
+import { flagRulesFor, flagFor } from '../data/commish';
 import { scopedAdjustFor } from './leagueScoring';
 import { PROJ_2026 } from '../data/proj2026';
 import { normTeam } from '../data/slugMeta';
@@ -67,7 +67,15 @@ export const CLASSIC_ROSTER_MAX = 20; // starters cap, mirrored by SQL's sanitiz
 // whitelist and/or a tenure window (years_exp; 0 = rookie) — so a league can
 // run "an RB slot only for rookies". Filters gate who may FILL the spot
 // (picker + best-ball fill); they never shrink the draft pool.
-export interface SlotFilter { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }
+export interface SlotFilter {
+  teams?: string[] | null; min_exp?: number | null; max_exp?: number | null;
+  /** COMMISSIONER FLAGS as a condition (v0.300.0, founder: "allow flags as a
+   *  condition for position filters"). Only a player wearing one of these
+   *  flags may fill the spot — the spot-level twin of a scoped bonus's flag
+   *  scope, and the thing that makes "a spot only your franchise tag can
+   *  stand in" expressible. Matched on the label, case-insensitively. */
+  flags?: string[] | null;
+}
 /** `label` (0174) is the commissioner's own name for the spot ("Only NFC
  *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
  *  label can never make a spot behave differently than it reads. */
@@ -85,8 +93,11 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // keys off it changes meaning.
     if (s.label?.trim()) d.label = s.label.trim();
     // Per-spot allowable-player filter (0172) rides along to the pickers + fill.
-    if (s.teams?.length || s.min_exp != null || s.max_exp != null) {
-      d.flt = { teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null };
+    if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length) {
+      d.flt = {
+        teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null,
+        flags: s.flags ?? null,
+      };
     }
     return d;
   });
@@ -130,11 +141,22 @@ const TEAM_UNIT_POS = new Set(['K', 'DEF', 'HC', 'P']);
  *  the tenure window skips team units, and a player whose tenure is unknown
  *  can't prove eligibility while a bound is set — same no-guess rule the
  *  pool-level filter follows. */
-export function slotAllows(d: { pos: string[]; flt?: SlotFilter | null }, p: { pos: string; team?: string | null; exp?: number | null }): boolean {
+export function slotAllows(
+  d: { pos: string[]; flt?: SlotFilter | null },
+  p: { id?: string; pos: string; team?: string | null; exp?: number | null },
+): boolean {
   if (!slotEligiblePos(d.pos).includes(p.pos)) return false;
   const f = d.flt;
   if (!f) return true;
   if (f.teams?.length && !f.teams.some((t) => t.toUpperCase() === (p.team ?? '').toUpperCase())) return false;
+  // A FLAG CONDITION (v0.300.0). Same no-guess rule as tenure: without an id
+  // there is no flag to read, so the player cannot prove he qualifies.
+  if (f.flags?.length) {
+    const lab = p.id ? flagFor(p.id) : null;
+    if (!lab) return false;
+    const low = lab.trim().toLowerCase();
+    if (!f.flags.some((x) => x.trim().toLowerCase() === low)) return false;
+  }
   if ((f.min_exp != null || f.max_exp != null) && !TEAM_UNIT_POS.has(p.pos)) {
     if (p.exp == null) return false;
     if (f.min_exp != null && p.exp < f.min_exp) return false;
@@ -182,6 +204,7 @@ export function slotFilterLabel(f?: SlotFilter | null): string {
   if (f.min_exp != null || f.max_exp != null) {
     parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
   }
+  if (f.flags?.length) parts.push(`⚑ ${f.flags.join('/')}`);
   return parts.join(' · ');
 }
 
@@ -602,9 +625,9 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  *  The commissioner's flag rules (0144) apply exactly as in drip: bonus_mult
  *  scales the points, bonus_pts lands flat on the final. Requires the flag
  *  cache installed (setLeagueFlags) — both resolvers and both boards keep it. */
-export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos): number {
+export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos, slot?: string | null): number {
   const { plays } = playsForPlayer(player, week);
-  return classicPointsFrom(plays, player, sc, scoreAs);
+  return classicPointsFrom(plays, player, sc, scoreAs, slot);
 }
 
 /** The same scoring, over plays you already hold (v0.284.0).
@@ -619,7 +642,7 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
  *  Deliberately the same body, not a second implementation: a game log that
  *  disagreed with the board about what a week was worth would be worse than no
  *  game log at all. `classicPoints` is now a two-line wrapper over it. */
-export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos): number {
+export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos, slot?: string | null): number {
   const s = normalizeClassicScoring(sc);
   const pos = scoreAs ?? player.pos;
   let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
@@ -671,7 +694,7 @@ export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number 
   // a per-TD bonus pays on every touchdown he scored — the same arithmetic
   // sim.ts applies on the drip side, so one rule means one thing in both modes.
   const fr = flagRulesFor(player.id);
-  const sa = scopedAdjustFor(player);
+  const sa = scopedAdjustFor(player, { slot });
   return round1(raw * (fr.bonusMult ?? 1) * sa.mult + (fr.bonusPts ?? 0) + sa.pts + tds * sa.td);
 }
 
@@ -699,9 +722,12 @@ export function bestballFill(manual: ClassicPick[], bestball: string[], roster: 
   const score = new Map<string, number>();
   const retScore = new Map<string, number>();
   return bestballFillBy(manual, bestball, roster, slots, (p, d) => {
+    // Keyed by SPOT as well as player (v0.300.0): a scoped rule can pay
+    // differently in different spots, so one player can be worth two numbers.
     const m = isRetSlot(d.pos) ? retScore : score;
-    if (!m.has(p.id)) m.set(p.id, classicPoints(p, week, sc, isRetSlot(d.pos) ? 'RET' : undefined));
-    return m.get(p.id) ?? 0;
+    const key = `${d.slot}|${p.id}`;
+    if (!m.has(key)) m.set(key, classicPoints(p, week, sc, isRetSlot(d.pos) ? 'RET' : undefined, d.slot));
+    return m.get(key) ?? 0;
   });
 }
 
@@ -1190,7 +1216,7 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
       .sort((a, b) => (order.get(a.slot) ?? 99) - (order.get(b.slot) ?? 99))
       .map((p) => ({
         win: CLASSIC_WIN, side: which, slot: p.slot, slug: p.player.id, metric: null as null,
-        score: classicPoints(p.player, week, scoring, isRetSlot(specOf.get(p.slot) ?? []) ? 'RET' : undefined),
+        score: classicPoints(p.player, week, scoring, isRetSlot(specOf.get(p.slot) ?? []) ? 'RET' : undefined, p.slot),
       }));
     return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };
