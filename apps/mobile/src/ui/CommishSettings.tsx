@@ -382,9 +382,10 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
 
           {sec('ROSTER RULES')}
           {preDraft && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               <Mono size={9} tone="faint">ROSTER SIZE</Mono>
-              {[7, 9, 12, 14, 16].map((n) => (
+              {/* Deeper sizes since 0192 (the cap is 99, not 25). */}
+              {[7, 9, 12, 14, 16, 20, 25, 30, 40].map((n) => (
                 <Chip key={n} label={String(n)} on={rounds === n} onPress={() => { tap(); setRounds(n); }} />
               ))}
             </View>
