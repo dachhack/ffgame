@@ -19,6 +19,7 @@ import {
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy, isRetSlot,
   optimalLineup, autoSlotPlan, classicLineup, slateAwareProj,
 } from '../packages/core/src/engine/classic';
+import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 
@@ -234,6 +235,24 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('the accepts line names exactly the rule slotAllows enforces',
     slotAcceptsLabel(s) === 'WR/TE · PHI' && slotAllows(s, legal) && !slotAllows(s, wrongTeam) && !slotAllows(s, wrongPos),
     slotAcceptsLabel(s));
+}
+{
+  // A FLAG CONDITION (v0.300.0): only a player wearing one of the spot's flags
+  // may stand in it. Same no-guess rule as tenure — a player with no id has no
+  // flag to read and therefore cannot prove he qualifies.
+  clearLeagueFlags();
+  const s = spots({ pos: ['RB', 'WR', 'TE'], flags: ['Franchise Tag'] })[0];
+  const tagged = { id: 'saquon-barkley', pos: 'RB', team: 'PHI', exp: 7 };
+  const plain = { id: 'james-cook', pos: 'RB', team: 'BUF', exp: 3 };
+  ok('an unflagged league lets nobody into a flag-only spot', !slotAllows(s, tagged) && !slotAllows(s, plain));
+  setLeagueFlags('L', [{ slug: 'saquon-barkley', label: 'FRANCHISE TAG' }]);
+  ok('the flagged player may fill it (label matched case-insensitively)', slotAllows(s, tagged));
+  ok('…and an unflagged one may not', !slotAllows(s, plain));
+  ok('a player with no id can never prove a flag', !slotAllows(s, { pos: 'RB', team: 'PHI', exp: 7 }));
+  ok('the wrong label is still a miss', !slotAllows(spots({ pos: ['RB'], flags: ['Keeper'] })[0], tagged));
+  ok('the filter line names the flag', slotFilterLabel({ flags: ['Franchise Tag'] }) === '⚑ Franchise Tag',
+    slotFilterLabel({ flags: ['Franchise Tag'] }));
+  clearLeagueFlags();
 }
 
 // ── Moving a player who is already starting somewhere ──────────────────────

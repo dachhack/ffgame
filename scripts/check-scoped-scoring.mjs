@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { classicPoints } from '../packages/core/src/engine/classic';
 import { setLeagueScoring, clearLeagueScoring, scopedAdjustFor, parseScoring } from '../packages/core/src/engine/leagueScoring';
 import { installRealWeek } from '../packages/core/src/data/realPbp';
+import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -93,6 +94,39 @@ const adj = scopedAdjustFor(RB);
 ok('drip and classic agree on the adjustment', adj.mult === 1.5 && adj.pts === 2, adj);
 ok('classic applies exactly that adjustment',
   near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb * adj.mult + adj.pts));
+
+// ── THE SPOT SCOPE (v0.300.0) ───────────────────────────────────────────────
+// A rule scoped to a lineup spot is a rule about the SPOT, so it only pays
+// when the caller says which spot is being scored. The three cases that matter:
+// named spot + no spot in play (a card, a projection) pays nothing; the right
+// spot pays; the wrong spot doesn't.
+setLeagueScoring({ scoped: [{ slot: ['S7'], bonusMult: 2 }] });
+ok('a spot rule pays nothing when nothing says which spot',
+  near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb), classicPoints(RB, WEEK, { ppr: 1 }));
+ok('…pays in the spot it names',
+  near(classicPoints(RB, WEEK, { ppr: 1 }, undefined, 'S7'), baseRb * 2),
+  classicPoints(RB, WEEK, { ppr: 1 }, undefined, 'S7'));
+ok('…and not in any other spot',
+  near(classicPoints(RB, WEEK, { ppr: 1 }, undefined, 'S2'), baseRb));
+setLeagueScoring({ scoped: [{ pos: ['RB'], slot: ['S7'], bonusPts: 4 }] });
+ok('spot AND position both have to match',
+  near(classicPoints(QB, WEEK, { ppr: 1 }, undefined, 'S7'), baseQb));
+
+// ── THE FLAG SCOPE (v0.300.0) ───────────────────────────────────────────────
+// A rule scoped to a commissioner's flag reads the SAME flag cache the badge
+// renders from, matched on the label case-insensitively — the label is what
+// the commissioner typed and what the league reads.
+clearLeagueFlags();
+setLeagueScoring({ scoped: [{ flag: ['Franchise Tag'], bonusMult: 1.5 }] });
+ok('a flag rule pays nobody while nobody is flagged',
+  near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
+setLeagueFlags('L', [{ slug: 'saquon-barkley', label: 'FRANCHISE TAG' }]);
+ok('…pays the flagged player, matching the label case-insensitively',
+  near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb * 1.5), classicPoints(RB, WEEK, { ppr: 1 }));
+ok('…and leaves an unflagged player alone', near(classicPoints(QB, WEEK, { ppr: 1 }), baseQb));
+setLeagueScoring({ scoped: [{ flag: ['Keeper'], bonusMult: 1.5 }] });
+ok('a different label on the flag is a miss', near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
+clearLeagueFlags();
 
 // ── the stored (snake-case) shape parses to the same thing ─────────────────
 const parsed = parseScoring({ scoped: [{ pos: ['RB'], bonus_mult: 1.5, bonus_pts: 2 }] });

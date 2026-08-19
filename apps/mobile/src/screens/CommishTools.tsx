@@ -25,6 +25,7 @@ import {
   setTaxiRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
+  playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity,
@@ -1246,7 +1247,7 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // `k` is a client-only stable key: drag-to-reorder (v0.267.0) needs row views
 // that SURVIVE a reorder — index keys would remount the row mid-gesture and
 // kill the pan responder. Never sent to the server (fromSpotDraft ignores it).
-type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string };
+type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[] };
 let spotKeySeq = 1;
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   k: spotKeySeq++,
@@ -1254,6 +1255,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
+  fFlags: [...(x.flags ?? [])],
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -1267,7 +1269,7 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
   };
 };
-const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim());
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
 
 // Scoring groups + presets, mirroring the web (v0.219.0) so the two hosts
 // describe the catalog the same way. A preset RESETS then applies its deltas,
@@ -1406,6 +1408,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // The league's flag vocabulary (v0.300.0) — the labels a spot filter may
+  // require. Empty in a league that has flagged nobody, and the row hides.
+  const [flagLabels, setFlagLabels] = useState<string[]>([]);
+  useEffect(() => {
+    playerFlags(leagueId).then((rows) => {
+      if (Array.isArray(rows)) setFlagLabels([...new Set(rows.map((r) => (r.label ?? '').trim()).filter(Boolean))].sort());
+    }).catch(() => {});
+  }, [leagueId]);
   // Which spot's EDITOR sheet (label / filters / remove) is open (v0.267.0 —
   // the founder's "button to pop up a position label editor"; the 0172 filter
   // popover folded into it so the row itself never wraps).
@@ -1757,7 +1767,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             })}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '' }]); setSpotsDirty(true); } }} />
+            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [] }]); setSpotsDirty(true); } }} />
             <Mono size={7.5} tone="faint">⠿ drag to reorder · 🎯 best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
           </View>
 
@@ -1801,6 +1811,26 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                   <TeamChips value={sp.fTeams} disabled={busy}
                     onChange={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: v })); setSpotsDirty(true); }} />
                 </View>
+                {/* FLAGS AS A CONDITION (v0.300.0, founder: "allow flags as a
+                    condition for position filters") — a spot only a flagged
+                    player may stand in. Hidden until the league has flags. */}
+                {flagLabels.length > 0 && (
+                  <View style={{ marginTop: 10 }}>
+                    <Mono size={9} tone="faint" weight="700" track={0.12}>⚑ FLAGGED ONLY</Mono>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                      {flagLabels.map((fl) => {
+                        const on = sp.fFlags.some((x) => x.toLowerCase() === fl.toLowerCase());
+                        return (
+                          <Pill key={fl} on={on} label={fl}
+                            onPress={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fFlags: on ? x.fFlags.filter((y) => y.toLowerCase() !== fl.toLowerCase()) : [...x.fFlags, fl] })); setSpotsDirty(true); }} />
+                        );
+                      })}
+                    </View>
+                    <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
+                      {sp.fFlags.length ? 'only a player wearing one of these flags may fill this spot' : 'pick none to let anyone eligible fill it'}
+                    </Mono>
+                  </View>
+                )}
 
                 <View style={{ marginTop: 16, alignItems: 'center' }}>
                   {spots.length > 1

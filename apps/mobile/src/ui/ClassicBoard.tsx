@@ -410,8 +410,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
     // RET spots (0171) score their occupant return-only — mirror the resolver.
-    return (slug: string | null | undefined, slotPos?: string[]) =>
-      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined) : 0);
+    // The SPOT rides along (v0.300.0): a scoped bonus can name one, so the
+    // same player is worth different numbers in different spots and the board
+    // has to score him where he is standing.
+    return (slug: string | null | undefined, slotPos?: string[], slot?: string) =>
+      (slug ? classicPoints(mkPlayer(slug), matchup.week, sc, slotPos && isRetSlot(slotPos) ? 'RET' : undefined, slot) : 0);
   }, [matchup, sc, playsAt, flagsVer]);
 
   const bb = useMemo(() => new Set(bestball), [bestball]);
@@ -915,10 +918,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 <Mono size={10} tone={canEdit(d.slot) ? 'you' : 'faint'}>{canEdit(d.slot) ? '+ SET' : '—'}</Mono>
               )}
             </Pressable>
-            <Mono size={12} tone="you" weight="700">{locked || my ? r1(pts(my, d.pos)) : ''}</Mono>
+            <Mono size={12} tone="you" weight="700">{locked || my ? r1(pts(my, d.pos, d.slot)) : ''}</Mono>
             {locked && (
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
-                <Mono size={12} tone="dim" weight="700">{r1(pts(their, d.pos))}</Mono>
+                <Mono size={12} tone="dim" weight="700">{r1(pts(their, d.pos, d.slot))}</Mono>
                 {their
                   ? <View style={{ flexShrink: 1, alignItems: 'flex-end' }}>
                       <Display size={12.5}>{prettySlug(their)}</Display>
