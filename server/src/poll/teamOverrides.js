@@ -20,8 +20,27 @@ import { db } from '../supabase.js';
 /** Diff the (already-built) player index against the bake and reconcile the
  *  override table. Returns { changed, cleared } for the log line. */
 export async function syncTeamOverrides(playerIndex) {
+  const live = new Map();
+  for (const { slug, team } of playerIndex.allSlugs()) live.set(slug, team ?? null);
+  return reconcileTeamOverrides(live);
+}
+
+/** Publish a slug → team map as the drift against the bake (v0.305.0).
+ *
+ *  Split out of `syncTeamOverrides` so the two sources that know where a player
+ *  plays can share one writer. Sleeper's directory is the daily one — 14MB, and
+ *  Sleeper asks for at most one pull a day — while the ESPN roster sweep beside
+ *  it runs several times a day, which is what a cut-down week actually needs.
+ *  They agree about the table because they agree about this function: only the
+ *  MAP differs, never what is done with it.
+ *
+ *  `full` says whether the caller saw the WHOLE league. A partial map (one team
+ *  fetch failed) may only ADD what it saw — it cannot conclude that a player it
+ *  never looked for has no team, and a sweep that silently released half the
+ *  league on one bad afternoon is the failure worth designing against. */
+export async function reconcileTeamOverrides(liveTeams, full = true) {
   const want = new Map(); // slug -> team|null, only where it differs from the bake
-  for (const { slug, team } of playerIndex.allSlugs()) {
+  for (const [slug, team] of liveTeams) {
     const baked = PLAYER_BIO[slug];
     if (!baked) continue;                    // unbaked slug: nothing overlays it
     const live = team ?? null;
@@ -37,7 +56,9 @@ export async function syncTeamOverrides(playerIndex) {
   for (const [slug, team] of want) {
     if (!have.has(slug) || have.get(slug) !== team) upserts.push({ slug, team, updated_at: new Date().toISOString() });
   }
-  const stale = [...have.keys()].filter((slug) => !want.has(slug));
+  // A partial sweep never prunes: absence from a map that didn't look at every
+  // team is not evidence that the drift ended.
+  const stale = full ? [...have.keys()].filter((slug) => !want.has(slug)) : [];
 
   if (upserts.length) {
     const { error } = await db().from('player_team_override').upsert(upserts, { onConflict: 'slug' });
