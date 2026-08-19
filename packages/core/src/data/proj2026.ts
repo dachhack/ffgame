@@ -509,9 +509,6 @@ const SEASON_WEEKS = 17;
 export const PROJ_2026: Map<string, number> = new Map();
 /** Sleeper player_id → the same projection (exact join; names drift, ids don't). */
 export const PROJ_2026_SID: Map<string, number> = new Map();
-/** Sleeper player_id → engine slug. The join key for anything else baked off a
- *  Sleeper pull — the projected stat lines (v0.308.0) ride it. */
-export const PROJ_SID_TO_SLUG: Record<string, string> = {};
 for (const line of PROJ_CSV.split('\n')) {
   const c = line.split(',');
   if (c.length < 4) continue;
@@ -524,5 +521,5 @@ for (const line of PROJ_CSV.split('\n')) {
   const perWeek = Math.round((ppg * Math.min(games, SEASON_WEEKS) / SEASON_WEEKS) * 10) / 10;
   if (!PROJ_2026.has(slug)) PROJ_2026.set(slug, perWeek);
   const sid = (c[4] ?? '').trim();
-  if (sid && !PROJ_2026_SID.has(sid)) { PROJ_2026_SID.set(sid, perWeek); PROJ_SID_TO_SLUG[sid] = slug; }
+  if (sid && !PROJ_2026_SID.has(sid)) PROJ_2026_SID.set(sid, perWeek);
 }

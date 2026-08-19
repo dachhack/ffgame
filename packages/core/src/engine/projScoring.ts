@@ -12,34 +12,40 @@
 //
 // THE PROBLEM IS THAT YOU CANNOT RE-SCORE A SCALAR. A catalog values passing
 // yards, receptions and touchdowns separately, so adjusting a projection needs
-// the projection's COMPONENTS. `projStats2026.ts` supplies them — Sleeper's
-// projected stat line, joined on the sleeper_id the projection bake already
-// carries.
+// the projection's COMPONENTS. `projStats2026.ts` supplies them.
 //
-// HOW THE TWO SOURCES ARE COMBINED, and why it is a ratio rather than a
-// replacement. StatHead's number stays the authority on HOW GOOD a player is;
-// Sleeper's line is used only for the SHAPE of his production:
+// WHY IT IS A RATIO RATHER THAN A REPLACEMENT:
 //
 //     projected = PROJ_2026[slug] × ( score(line, leagueCatalog)
 //                                   / score(line, standardCatalog) )
 //
-// Any consistent scaling of the line cancels, so this never lets Sleeper's
-// absolute level overwrite StatHead's — it asks one question only: "how much
+// Any consistent scaling of the line cancels, so the line's absolute level can
+// never overwrite the baked projection's. It asks one question only: "how much
 // more, or less, is this player's production worth under THIS league's rules?"
-// It also gives the invariant that makes the change safe to ship: a league on
-// the standard catalog gets a ratio of exactly 1, so **every existing league's
-// projections are unchanged to the decimal**.
+// That gives the invariant which makes the whole thing safe to ship: a league
+// on the standard catalog gets a ratio of exactly 1, so **every existing
+// league's projections are unchanged to the decimal**.
+//
+// v0.309.0 MADE THE DENOMINATOR EXACT. v0.308.0 had to build the line from
+// SLEEPER, because StatHead served only a scalar — so the numerator and the
+// denominator were two different models' opinions of the same player, and 77 of
+// 445 players had no line at all and silently sat at a ratio of 1. StatHead
+// 1.0.67 ships their own components. Scoring them under the standard catalog
+// now reproduces StatHead's served season total to a mean residual of -0.06
+// points per SEASON, and the join is 445/445. The ratio's denominator IS the
+// projection it divides into.
 //
 // WHAT THE RATIO CAN AND CANNOT SEE. The line carries passing yards / TDs /
 // interceptions, rushing yards / TDs, and receptions / yards / TDs. That is the
 // core of scoring for QB/RB/WR/TE and the great majority of the points. It does
 // NOT carry yardage or reception milestones (pass300, rush100, rec100), splash
 // touchdowns (40+/50+), kicking, DST, IDP, return yardage, first downs or
-// two-point conversions — so a league that tunes only those sees a ratio of 1
-// and an unadjusted projection. Absent components are missing from BOTH sides
-// of the ratio, so they never distort it; they simply are not reflected. A
-// kicker or defence has an all-zero line, scores zero under both catalogs, and
-// falls back to 1 by the same rule that catches a player we have no line for.
+// two-point conversions — StatHead confirmed those do not exist anywhere in
+// their pool, so this is a source limit, not a plumbing one. A league that
+// tunes only those sees a ratio of 1 and an unadjusted projection. Absent
+// components are missing from BOTH sides of the ratio, so they never distort
+// it; they simply are not reflected. A kicker or defence has no line at all,
+// and falls back to 1 by the same rule that catches an unbaked player.
 import { PROJ_2026 } from '../data/proj2026';
 import { PROJ_LINES, type ProjStatLine } from '../data/projStats2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, type ClassicScoring } from './classic';
