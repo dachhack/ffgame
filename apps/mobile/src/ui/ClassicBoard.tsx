@@ -5,7 +5,7 @@
 // week's first kickoff (matchup.lock_at), scored by core's classicPoints off
 // the same live play stream, refreshed every 60s.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
@@ -23,7 +23,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters,
+  nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
@@ -184,11 +184,6 @@ const prettySlug = (slug: string): string => {
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
-const fmtLock = (iso: string | null) => {
-  if (!iso) return 'first kickoff';
-  try { return new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }); }
-  catch { return iso; }
-};
 const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 /** "Sun 1:00 PM" — the row's game line, in the reader's own timezone. */
 const fmtKick = (iso: string): string => {
@@ -251,12 +246,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [slate, setSlate] = useState<{ home: string; away: string; kickoff?: string | null }[]>([]);
   const [records, setRecords] = useState<Record<number, { wins: number; losses: number; ties: number; rank: number }>>({});
   const [avatars, setAvatars] = useState<{ me: string | null; opp: string | null }>({ me: null, opp: null });
+  // ── WALKING THE SEASON (v0.299.1) ─────────────────────────────────────────
+  // null = whatever week the league is on. A number is a week asked for, by
+  // the arrows or by a swipe.
+  const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
+  // The live injury report is a module cache React can't see; this redraws.
+  const [injuryVer, setInjuryVer] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
         setState('loading'); setErr(null);
-        const m = await myMatchup(leagueId, rosterId);
+        const m = await myMatchup(leagueId, rosterId, weekWanted ?? undefined);
         if (!m) { setState('none'); return; }
         setMatchup(m);
         nativeRosters(leagueId).then((rows) => {
@@ -286,6 +288,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === rosterId ? m.away_roster_id : m.home_roster_id;
+        // THE LIVE INJURY REPORT (v0.299.1). This screen had never loaded it —
+        // `injuryFor` was answering out of the BAKED 2025 report, so one player
+        // wore last year's Q and everybody else wore nothing.
+        loadLiveInjuries(m.week).then((n) => { if (n) setInjuryVer((v) => v + 1); }).catch(() => {});
+        // The last regular-season week, for the stepper's far end.
+        playoffState(leagueId).then((ps) => {
+          if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
+        }).catch(() => {});
         liveSlate(m.week, '2026').then(setSlate).catch(() => {});
         leagueStandings(leagueId).then((rows) => {
           const map: Record<number, { wins: number; losses: number; ties: number; rank: number }> = {};
@@ -319,7 +329,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
-  }, [userId, leagueId, rosterId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, leagueId, rosterId, weekWanted]);
 
   // THE WEEK IS UNDERWAY — presentation only (live scores rather than
   // projections, the win bar, the best-ball fill). Since 0178 it is NOT
@@ -515,7 +526,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         primetime: isPrimetime(g?.kickoff),
       };
     };
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer]);
+    // injuryVer: the live report is a module cache, so its arrival is a version bump.
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -572,18 +584,38 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   };
   const fieldFeed = fieldGame && matchup ? gameFeedFor(matchup.week, fieldGame) : null;
 
-  /** The next kickoff that will freeze one of MY spots — the honest
-   *  replacement for a league-wide lock time that no longer exists. */
-  const nextLockLabel = useMemo(() => {
-    const ks = slotDefs
-      .map((d) => effective.mine[d.slot])
-      .filter(Boolean)
-      .map((slug) => gameFor(slugMeta(slug!).team, slate)?.kickoff)
-      .map((k) => (k ? Date.parse(k) : NaN))
-      .filter((ms) => Number.isFinite(ms) && ms > nowTs);
-    if (!ks.length) return 'nothing left to lock';
-    return fmtLock(new Date(Math.min(...ks)).toISOString());
-  }, [slotDefs, effective, slate, nowTs]);
+  /** ── THE WEEK STEPPER (v0.299.1) ──────────────────────────────────────
+   *  Weeks 1 … the last regular-season one, whose bound comes from the
+   *  league's playoff start. Until that read lands the forward arrow won't
+   *  offer a week the board can't fill — `myMatchup` for a week with no game
+   *  returns nothing, and the screen would empty. */
+  const canGo = (d: -1 | 1): boolean => {
+    const w = matchup?.week;
+    if (w == null) return false;
+    const next = w + d;
+    if (next < 1) return false;
+    if (lastRegWeek != null && next > lastRegWeek) return false;
+    return true;
+  };
+  const goWeek = (d: -1 | 1) => { if (canGo(d) && matchup) { tap(); setWeekWanted(matchup.week + d); } };
+
+  /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
+   *  way pages move under a thumb. The responder only claims a gesture that is
+   *  clearly HORIZONTAL — 20px across and twice as much across as down — so
+   *  scrolling a long board is never read as a week change. */
+  const swipe = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+    onPanResponderRelease: (_e, g) => {
+      if (Math.abs(g.dx) < 70) return;
+      weekStep.current(g.dx < 0 ? 1 : -1);
+    },
+  })).current;
+  // The responder is created ONCE (a fresh one mid-gesture cancels it), so the
+  // handler reads the current step through a ref rather than closing over the
+  // first render's copy.
+  const weekStep = useRef(goWeek);
+  weekStep.current = goWeek;
+
 
   /** Has this player's game started? The one question that decides everything
    *  editable on this screen now. A player with no game (bye) never starts. */
@@ -681,11 +713,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const slotDef = pickerSlot ? slotDefs.find((d) => d.slot === pickerSlot) : null;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
+    <ScrollView {...swipe.panHandlers} contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-        <Mono size={9} tone="faint" track={0.1}>
-          CLASSIC · WEEK {matchup?.week} · {ppr === 1 ? 'FULL PPR' : ppr === 0.5 ? 'HALF PPR' : 'NON-PPR'}
-        </Mono>
+        {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line: the game
+            mode and the PPR setting are league settings you read on the league
+            page, not facts about the game in front of you. The week stayed and
+            earns its place by moving you through the season — arrows here, and
+            a swipe anywhere on the board. */}
+        {matchup && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Pressable onPress={() => goWeek(-1)} disabled={!canGo(-1)} hitSlop={8}>
+              <Mono size={12} tone={canGo(-1) ? 'dim' : 'faint'}>‹</Mono>
+            </Pressable>
+            <Mono size={9} tone="dim" weight="700" track={0.1}>WEEK {matchup.week}</Mono>
+            <Pressable onPress={() => goWeek(1)} disabled={!canGo(1)} hitSlop={8}>
+              <Mono size={12} tone={canGo(1) ? 'dim' : 'faint'}>›</Mono>
+            </Pressable>
+          </View>
+        )}
         {/* ▦ FIELDS (founder) — the same all-fields idea the drip board has,
             fed by classic's starters. Only offered once feeds exist: a chip
             into an empty sheet would read as broken. */}
@@ -701,12 +746,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
             <View style={{ alignItems: 'center' }}>
-              {/* NO OVERALL LOCK IN CLASSIC (founder). Since 0178 each spot
-                  locks at its own player's kickoff, so one "LOCKS Wed 8:20 PM"
-                  was untrue — that was matchup.lock_at, the drip lead, which
-                  now only decides when the matchup flips live. */}
-              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : 'NEXT LOCK'}</Mono>
-              {!locked && <Mono size={8} tone="faint" style={{ marginTop: 2 }}>{nextLockLabel}</Mono>}
+              {/* NO LOCK REMINDER (v0.299.1, founder). Every spot already says
+                  its own kickoff on its own row — which is where the answer
+                  belongs, since 0178 made locking per-spot. LIVE stays: that is
+                  the game's STATE, not a reminder. */}
+              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : ''}</Mono>
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
