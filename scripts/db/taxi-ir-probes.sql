@@ -75,7 +75,8 @@ begin
   perform assert_true((league_game_mode(lid) -> 'shape' ->> 'bench')::int = 4, 'tx5c shape readable');
 
   -- derived rounds must fit the 5..25 draft window
-  perform assert_err(set_league_roster_shape(lid, 0, 0, 0), '5–25 rounds', 'tx6 too few rounds refused');
+  -- The FLOOR is unchanged; the ceiling moved to 99 in 0192, so the message did.
+  perform assert_err(set_league_roster_shape(lid, 0, 0, 0), '5–99 rounds', 'tx6 too few rounds refused');
 
   -- a builder save re-syncs rounds: 5 spots ⇒ 5+4+1+1 = 11
   r := set_league_classic_slots(lid,

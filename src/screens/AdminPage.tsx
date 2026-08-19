@@ -341,7 +341,10 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, opacity: pending ? 1 : 0.5 }}>
               <button onClick={() => pending && setRounds(Math.max(5, rounds - 1))} className="mono" style={stepBtn} disabled={!pending}>−</button>
               <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{rounds}</span>
-              <button onClick={() => pending && setRounds(Math.min(25, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
+              {/* 5–99 since 0192 — the old 25 was a sanity bound on a table
+                  that had quietly become the ceiling on how big a roster a
+                  league may run. */}
+              <button onClick={() => pending && setRounds(Math.min(99, rounds + 1))} className="mono" style={stepBtn} disabled={!pending}>＋</button>
             </div>
           </div>
         )}

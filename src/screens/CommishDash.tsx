@@ -304,6 +304,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   }, [view, leagueId, adjust]);
   // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
+  // round count, so this is the ceiling on starters + bench + taxi + IR.
+  const MAX_ROUNDS = 99;
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
@@ -464,7 +467,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           Switch to CLASSIC under GAME MODE to shape a traditional {view === 'lineup' ? 'starting lineup' : 'scoring catalog'}.
         </div>
       )}
-      {view === 'lineup' && mode === 'classic' && spots && (
+      {view === 'lineup' && mode === 'classic' && spots && (() => {
+        // starters + the three stashes: what the draft's rounds will be.
+        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir;
+        return (
         <div style={{ marginTop: 10 }}>
           {/* The roster POSITION BUILDER (0163, the founder's sketch): each row is
               one starting spot — its own eligible-position set, its own best-ball
@@ -544,16 +550,21 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-            {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
+            {/* THE TOTAL IS THE CEILING (0192). Each box used to stop at its own
+                number — bench 20, taxi 8, IR 8 — which is why a deep dynasty
+                ran out of room with rounds to spare. The draft's 5–99 window is
+                the only real limit, so the ＋ stops when the SUM would leave
+                it. */}
+            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir']] as const).map(([label, key]) => (
               <span key={key} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 8px' }}>
                 {label}
                 <button onClick={() => void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) })} disabled={busy || shape[key] === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12.5 }}>−</button>
                 <span style={{ minWidth: 12, textAlign: 'center', color: 'var(--you)' }}>{shape[key]}</span>
-                <button onClick={() => void saveShape({ ...shape, [key]: Math.min(max, shape[key] + 1) })} disabled={busy || shape[key] >= max} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12.5 }}>＋</button>
+                <button onClick={() => void saveShape({ ...shape, [key]: shape[key] + 1 })} disabled={busy || shapeTotal >= MAX_ROUNDS} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12.5 }}>＋</button>
               </span>
             ))}
             <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)' }}>
-              DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS
+              DRAFT = {rounds ?? shapeTotal} ROUNDS{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
 
             {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
                 does not lengthen a draft that already has its rounds, so a
@@ -597,7 +608,8 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {view === 'scoring' && (
         <div>
           <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>

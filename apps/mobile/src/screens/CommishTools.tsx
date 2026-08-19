@@ -1410,6 +1410,9 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // a fast drag crossing two rows in one frame reads correct neighbours.
   const orderRef = useRef<number[]>([]);
   const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
+  // round count, so this bounds starters + bench + taxi + IR.
+  const MAX_ROUNDS = 99;
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
@@ -1653,7 +1656,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under 🎮 MODE for the full scoring editor.
         </Mono>
       )}
-      {view === 'lineup' && mode === 'classic' && spots && (
+      {view === 'lineup' && mode === 'classic' && spots && (() => {
+        // starters + the three stashes: what the draft's rounds will be.
+        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir;
+        return (
         <View>
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
               starting spot — its own eligible positions + best-ball flag. */}
@@ -1773,19 +1779,22 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             ); })()}
           </Overlay>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-            {([['BENCH', 'bench', 20], ['TAXI', 'taxi', 8], ['IR', 'ir', 8]] as const).map(([label, key, max]) => (
+            {/* THE TOTAL IS THE CEILING (0192): bench 20 / taxi 8 / IR 8 were
+                per-box numbers that ran a deep dynasty out of room with rounds
+                to spare. The draft's 5–99 window is the only real limit. */}
+            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir']] as const).map(([label, key]) => (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>{label}</Text>
                 <Pressable disabled={busy || shape[key] === 0} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) }); }} hitSlop={6}>
                   <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.you }}> − </Text>
                 </Pressable>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you, minWidth: 12, textAlign: 'center' }}>{shape[key]}</Text>
-                <Pressable disabled={busy || shape[key] >= max} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.min(max, shape[key] + 1) }); }} hitSlop={6}>
+                <Pressable disabled={busy || shapeTotal >= MAX_ROUNDS} onPress={() => { tap(); void saveShape({ ...shape, [key]: shape[key] + 1 }); }} hitSlop={6}>
                   <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.you }}> ＋ </Text>
                 </Pressable>
               </View>
             ))}
-            <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? spots.length + shape.bench + shape.taxi + shape.ir} ROUNDS</Mono>
+            <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? shapeTotal} ROUNDS{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
             Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
@@ -1819,7 +1828,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </Mono>
           </View>
         </View>
-      )}
+        );
+      })()}
       {view === 'scoring' && mode === 'classic' && (
         <View>
           <Mono size={8.5} tone="faint" weight="700">⚖ SCORING  every value is yours to set</Mono>
