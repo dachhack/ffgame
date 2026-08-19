@@ -22,6 +22,7 @@ import {
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
+  setLeagueGolf,
   setTaxiRules, setIrRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
@@ -1247,7 +1248,7 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // `k` is a client-only stable key: drag-to-reorder (v0.267.0) needs row views
 // that SURVIVE a reorder — index keys would remount the row mid-gesture and
 // kill the pan responder. Never sent to the server (fromSpotDraft ignores it).
-type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[] };
+type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string };
 let spotKeySeq = 1;
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   k: spotKeySeq++,
@@ -1256,6 +1257,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
   fFlags: [...(x.flags ?? [])],
+  zero: x.zero_pts != null ? String(x.zero_pts) : '',
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -1267,9 +1269,15 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(teams.length ? { teams } : {}),
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
+    // FLAGS (v0.301.0) — the app collected them and never sent them; the web
+    // twin has carried them since the day they landed.
+    ...(s.fFlags.length ? { flags: s.fFlags } : {}),
+    // The zero-fill rule (0200). Never sent on a best-ball spot — the server
+    // refuses the pair, and the control below can't produce it either.
+    ...(!s.bb && s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
-const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length || s.zero.trim());
 
 // Scoring groups + presets, mirroring the web (v0.219.0) so the two hosts
 // describe the catalog the same way. A preset RESETS then applies its deltas,
@@ -1405,6 +1413,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
+  // GOLF (v0.303.0): null until the mode load lands, so neither pill lights up
+  // on a guess.
+  const [golf, setGolf] = useState<boolean | null>(null);
+  const saveGolf = async (on: boolean) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueGolf(leagueId, on);
+      if (r.ok) { commit(); setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest wins' : '✓ golf mode off'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
@@ -1501,7 +1521,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   };
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
-      setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); scInit(r.scoring ?? {});
+      setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -1668,6 +1688,28 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             : <Mono size={8} tone="faint" style={{ alignSelf: 'center' }}>CLASSIC{'\n'}not unlocked</Mono>}
         </View>
       </View>
+      {/* ── GOLF MODE (v0.303.0) ──────────────────────────────────────────
+          One setting that inverts who wins. It sits beside GAME MODE because
+          it changes no scoring value at all — a touchdown is worth what the
+          catalog says — it changes which end of the leaderboard you aim at,
+          which is a fact about the GAME. Frozen at the draft for the same
+          reason the mode is: you draft a golf league inside out. */}
+      {mode === 'classic' && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Mono size={9.5} weight="700" track={0.12} tone="faint">⛳ GOLF MODE</Mono>
+              <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
+                The LOWEST weekly total wins — standings, tiebreaks and playoffs all read the other way. Scoring itself is untouched. Pairs with the ⛳ zero-fill on each starting spot. Locks at the draft.
+              </Mono>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Pill on={golf === false} label="HIGH" onPress={() => void saveGolf(false)} />
+              <Pill on={golf === true} label="⛳ LOW" onPress={() => void saveGolf(true)} />
+            </View>
+          </View>
+        </View>
+      )}
       {/* K/DST FILL (v0.225.0) — a setup decision about what the league
           rosters, so it sits with the game mode exactly as it does on web.
           PORTED DELIBERATELY PARTIALLY: the mode selector is the part that
@@ -1770,7 +1812,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     )}
                   </View>
                   <Pressable disabled={busy}
-                    onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
+                    onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb, zero: x.bb ? x.zero : '' })); setSpotsDirty(true); }}
                     style={{ borderRadius: 999, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
                     <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯</Text>
                   </Pressable>
@@ -1785,7 +1827,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             })}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [] }]); setSpotsDirty(true); } }} />
+            <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [], zero: '' }]); setSpotsDirty(true); } }} />
             <Mono size={7.5} tone="faint">⠿ drag to reorder · 🎯 best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
           </View>
 
@@ -1848,6 +1890,37 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                       {sp.fFlags.length ? 'only a player wearing one of these flags may fill this spot' : 'pick none to let anyone eligible fill it'}
                     </Mono>
                   </View>
+                )}
+
+                {/* ── THE ZERO-FILL RULE (v0.303.0) ────────────────────────
+                    What this spot banks when it is EMPTY, or when whoever
+                    stands in it scores nothing. Not available on a best-ball
+                    spot: that spot fills itself, so "unfilled" is not a state
+                    it has, and the server refuses the pair rather than storing
+                    half of what was asked for. */}
+                <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>⛳ ZERO-FILL</Mono>
+                {sp.bb ? (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
+                    Not available on a 🎯 best-ball spot — it fills itself from whoever is left, so it is never unfilled. Turn best ball off first.
+                  </Mono>
+                ) : (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <TextInput value={sp.zero}
+                        onChangeText={(v) => { const n = v.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: n })); setSpotsDirty(true); }}
+                        placeholder="off" keyboardType="number-pad" placeholderTextColor={t.faint}
+                        style={{ fontFamily: MONO, fontSize: fs(13), color: sp.zero ? t.warn : t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.zero ? t.warn : t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, width: 70, textAlign: 'center' }} />
+                      <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: fs(12) }}>
+                        points this spot banks if it’s empty, or if its player scores nothing. Blank = off.
+                      </Mono>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                      {['', '5', '10', '15'].map((v) => (
+                        <Pill key={v || 'off'} on={sp.zero === v} label={v === '' ? 'OFF' : v}
+                          onPress={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: v })); setSpotsDirty(true); }} />
+                      ))}
+                    </View>
+                  </>
                 )}
 
                 <View style={{ marginTop: 16, alignItems: 'center' }}>
@@ -1919,7 +1992,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
+            Any position combination per spot · 🎯 BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>

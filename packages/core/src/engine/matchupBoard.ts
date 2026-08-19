@@ -15,6 +15,7 @@
 import type { Pos } from '../types';
 import type { ClassicSlotDef } from './classic';
 import type { Roof } from '../data/stadiums';
+import { leagueIsGolf } from './golf';
 
 /** One player as the board needs them — the caller resolves identity, we do
  *  the arithmetic. `live` is points ALREADY scored; `proj` is the full-game
@@ -121,7 +122,11 @@ export function projectEntry(e: BoardEntry): number {
 export function winProbability(myProjected: number, oppProjected: number, myLeft: number, oppLeft: number): number {
   const left = myLeft + oppLeft;
   const sigma = Math.max(3, 28 * Math.sqrt(left / 18));
-  const z = (myProjected - oppProjected) / sigma;
+  // GOLF (v0.303.0): the margin that means "ahead" runs the other way. Only the
+  // SIGN of the evidence flips — the spread, the shrink and the 1%/99% floor
+  // are statements about how much is still unresolved, which golf doesn't
+  // change.
+  const z = (leagueIsGolf() ? oppProjected - myProjected : myProjected - oppProjected) / sigma;
   const p = 1 / (1 + Math.exp(-z * 1.6));
   // Never claim certainty while anything is unresolved — a 100% that then
   // loses is the one number nobody forgives.
@@ -181,16 +186,40 @@ export function buildMatchupBoard(input: {
     away: away.starters[d.slot] ?? null,
   }));
 
+  // THE ZERO-FILL RULE (v0.303.0): a spot with the rule banks its designated
+  // points when it scores nothing — INCLUDING when nobody is standing in it,
+  // which is why these are indexed by spot rather than read off the entries.
+  //
+  // "Scores nothing" is only decidable when the spot is SETTLED. An empty spot
+  // is settled from the first whistle (nobody is going to play it); a filled
+  // one is settled when his game is done. A player at zero in the second
+  // quarter has not scored nothing, he has not scored YET, and paying the fill
+  // early would show a total that walks backwards when he catches a pass.
+  const zeroOf = new Map(slots.map((d) => [d.slot, d.zeroPts ?? null]));
+  const fillLive = (e: BoardEntry | null, slot: string): number => {
+    const z = zeroOf.get(slot) ?? null;
+    if (z == null) return e ? e.live : 0;
+    if (!e) return z;
+    return e.state === 'done' && e.live === 0 ? z : e.live;
+  };
+  const fillProj = (e: BoardEntry | null, slot: string): number => {
+    const z = zeroOf.get(slot) ?? null;
+    if (z == null) return e ? projectEntry(e) : 0;
+    if (!e) return z;
+    const p = projectEntry(e);
+    return p === 0 ? z : p;
+  };
+  const slotOrder = slots.map((d) => d.slot);
   const side = (s: SideInput, mine: (BoardEntry | null)[], theirs: (BoardEntry | null)[]): BoardSide => {
     const played = mine.filter((e): e is BoardEntry => !!e);
-    const live = r2(played.reduce((a, e) => a + e.live, 0));
-    const projected = r2(played.reduce((a, e) => a + projectEntry(e), 0));
+    const live = r2(mine.reduce((a, e, i) => a + fillLive(e, slotOrder[i]), 0));
+    const projected = r2(mine.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0));
     // An EMPTY starting spot counts as nothing scored and nothing to come —
     // it is not "yet to play", because nobody is going to play it. Counting it
     // would tell a manager to keep waiting on a slot they simply left blank.
     const left = played.filter((e) => e.state !== 'done').length;
     const theirPlayed = theirs.filter((e): e is BoardEntry => !!e);
-    const theirProjected = theirPlayed.reduce((a, e) => a + projectEntry(e), 0);
+    const theirProjected = theirs.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0);
     const theirLeft = theirPlayed.filter((e) => e.state !== 'done').length;
     return {
       rosterId: s.rosterId,

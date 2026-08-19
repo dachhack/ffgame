@@ -23,6 +23,7 @@
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor, flagFor } from '../data/commish';
+import { golfValue, zeroFill } from './golf';
 import { scopedAdjustFor } from './leagueScoring';
 import { PROJ_2026 } from '../data/proj2026';
 import { normTeam } from '../data/slugMeta';
@@ -34,7 +35,7 @@ export const CLASSIC_WIN = 'wk';
 // A lineup is COUNTS per slot type. Names generate as TYPE or TYPE+index
 // (RB1, RB2 …) — with the default config this reproduces the original nine
 // names exactly, so pre-0161 leagues' saved rows keep meaning what they meant.
-export interface ClassicSlotDef { slot: string; type: string; pos: Pos[]; flt?: SlotFilter; label?: string }
+export interface ClassicSlotDef { slot: string; type: string; pos: Pos[]; flt?: SlotFilter; label?: string; zeroPts?: number | null }
 export type ClassicRoster = Record<string, number>;
 
 export const CLASSIC_SLOT_TYPES: { type: string; label: string; pos: Pos[] }[] = [
@@ -79,7 +80,12 @@ export interface SlotFilter {
 /** `label` (0174) is the commissioner's own name for the spot ("Only NFC
  *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
  *  label can never make a spot behave differently than it reads. */
-export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean; label?: string }
+/** `zero_pts` (v0.303.0) is THE ZERO-FILL RULE on this spot: an unfilled spot,
+ *  or one whose player scores nothing, banks this many points instead. Mutually
+ *  exclusive with `bb` — the founder's rule verbatim ("these spots can't also
+ *  be best ball"), and it could hardly be otherwise: a best-ball spot fills
+ *  itself from whoever is left, so "unfilled" is not a state it has. */
+export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean; label?: string; zero_pts?: number | null }
 
 export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[] | null {
   if (!Array.isArray(spec) || !spec.length) return null;
@@ -93,6 +99,9 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // keys off it changes meaning.
     if (s.label?.trim()) d.label = s.label.trim();
     // Per-spot allowable-player filter (0172) rides along to the pickers + fill.
+    // The zero-fill rule (v0.303.0) rides along to the resolver and the board.
+    // Never on a best-ball spot: the two are mutually exclusive by definition.
+    if (s.zero_pts != null && !s.bb) d.zeroPts = s.zero_pts;
     if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length) {
       d.flt = {
         teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null,
@@ -718,7 +727,9 @@ export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number 
 }
 
 export interface ClassicPick { slot: string; player: Player }
-export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string; metric: null; score: number }
+/** `slug` is null only for an UNFILLED spot carrying a zero-fill rule
+ *  (v0.303.0): the spot scores, so it has to appear, but nobody played it. */
+export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number }
 export interface ClassicResult {
   home: number; away: number;
   slots: ClassicSlotScore[];
@@ -808,7 +819,10 @@ export function bestballFillBy(
   const w = order.map((d) => cands.map((c) => {
     if (!slotAllows(d, c)) return -Infinity;
     const v = valueOf(c, d);
-    return Number.isFinite(v) ? v : 0;
+    // GOLF (v0.303.0): the fill takes the LOWEST scorer there. Re-expressing
+    // the value keeps this search — and its tie canonicalization below —
+    // exactly as written; only what "more valuable" means changes.
+    return golfValue(Number.isFinite(v) ? v : 0);
   }));
   const heldBy = assignByValue(order.length, cands.length, w);
   // Canonicalize ties: when two spots could swap occupants at the SAME total,
@@ -1026,7 +1040,10 @@ export function optimalLineup<T extends SpotPlayer>(
   // Value once per player: `matchSpots` is called on the sorted list, and a
   // comparator that re-derives a projection per comparison is the expensive
   // half of this on a full roster.
-  const val = players.map((p) => valueOf(p) || 0);
+  // GOLF (v0.303.0): "best" means LOWEST there, so the value is re-expressed
+  // rather than the search rewritten — inverting here means every caller of
+  // optimalLineup inherits it and none of them can forget.
+  const val = players.map((p) => golfValue(valueOf(p) || 0));
   // Ties break toward the input order (stable), so two players a league values
   // identically always land the same way round.
   const order = players.map((_, i) => i).sort((a, b) => val[b] - val[a] || a - b);
@@ -1226,17 +1243,27 @@ export function classicLineup(s: ClassicSide, week: number, sc?: number | Partia
  *  the shape the commissioner built. */
 export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week: number, sc?: number | Partial<ClassicScoring>, slots: ClassicSlotDef[] = CLASSIC_SLOTS): ClassicResult {
   const scoring = normalizeClassicScoring(sc);
-  const order = new Map(slots.map((s, i) => [s.slot, i]));
+  // Slot order is now the walk order (v0.303.0) rather than a sort key: rows
+  // are produced FROM `slots`, so they come out in the league's shape already.
   // RET spots (0171) score their occupant as a RETURNER — return production
   // only — no matter what else the player did that day.
   const specOf = new Map(slots.map((s) => [s.slot, s.pos as string[]]));
   const side = (s: ClassicSide, which: 'home' | 'away') => {
-    const rows = classicLineup(s, week, scoring, slots)
-      .sort((a, b) => (order.get(a.slot) ?? 99) - (order.get(b.slot) ?? 99))
-      .map((p) => ({
-        win: CLASSIC_WIN, side: which, slot: p.slot, slug: p.player.id, metric: null as null,
-        score: classicPoints(p.player, week, scoring, isRetSlot(specOf.get(p.slot) ?? []) ? 'RET' : undefined, p.slot),
-      }));
+    const filled = new Map(classicLineup(s, week, scoring, slots).map((p) => [p.slot, p.player]));
+    // THE ZERO-FILL RULE (v0.303.0) is why this walks the SLOTS rather than the
+    // picks: a spot nobody filled now scores, so it has to produce a row. A
+    // spot with no rule and no player produces nothing, exactly as before.
+    const rows: ClassicSlotScore[] = [];
+    for (const d of slots) {
+      const player = filled.get(d.slot);
+      const raw = player
+        ? classicPoints(player, week, scoring, isRetSlot(specOf.get(d.slot) ?? []) ? 'RET' : undefined, d.slot)
+        : 0;
+      // The resolver runs on FINAL numbers, so every spot is settled here.
+      const score = zeroFill(raw, d.zeroPts);
+      if (!player && score === 0) continue;
+      rows.push({ win: CLASSIC_WIN, side: which, slot: d.slot, slug: player?.id ?? null, metric: null, score });
+    }
     return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };
   const h = side(home, 'home'), a = side(away, 'away');
