@@ -52,6 +52,9 @@ export const config = {
   // answers "who exists", the other "where is he now", and only the second one
   // churns on a cut-down week.
   rosterPollMs: Number(process.env.ROSTER_POLL_MS || 10800000),      // 3h
+  // ESPN ownership percentages (0202) — 105KB a pull, so this can be as current
+  // as anything else on the board.
+  marketPollMs: Number(process.env.MARKET_POLL_MS || 10800000),      // 3h
   directoryRefreshMs: Number(process.env.DIRECTORY_REFRESH_MS || 86400000), // 24h — Sleeper's own guidance
   // Weekly auto-sync: how often the worker checks if a sync is due, and the min gap
   // between full re-syncs of the current week (re-syncs catch lineup changes pre-lock).
