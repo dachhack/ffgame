@@ -27,7 +27,8 @@ import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
 import { headshot } from '@drip/core/data/media';
-import { myFavorites, loadTeamOverrides, playerFlags } from '@drip/core/data/liveApi';
+import { myFavorites, loadTeamOverrides, playerFlags, playerOwnership } from '@drip/core/data/liveApi';
+import { sortPool, POOL_SORTS, type PoolSort } from '@drip/core/data/poolSort';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
@@ -80,7 +81,16 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp, only when a spot filters on tenure (0172)
   const [q, setQ] = useState('');
-  const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // Multi-select positions + the sort order (v0.302.0). A position the server
+  // caps at ZERO (0195 — no starting spot accepts it) isn't offered at all.
+  const [posSel, setPosSel] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<PoolSort>('rank');
+  const [own, setOwn] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    playerOwnership(leagueId).then((r) => {
+      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    }).catch(() => {});
+  }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
   const [, setFlagVer] = useState(0); // commish flags landed in the cache (0141)
@@ -209,13 +219,20 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     return cap != null && (myPosCount[p] ?? 0) >= cap;
   };
 
+  /** A position the league caps at ZERO can't be drafted at all (0195), so it
+   *  is neither offered nor listed — "no kickers if there is no kicker spot",
+   *  answered off the server's own number. */
+  const bannedPos = (p: string) => st?.pos_caps?.[p as keyof PosCaps] === 0;
+  const posChips = useMemo(
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p)),
+    [st?.pos_caps]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !taken.has(p.slug)
-      && (pos === 'ALL' || p.pos === pos)
+      && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-    return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, taken, q, pos, starMode, favs]);
+    return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
+  }, [pool, taken, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -507,14 +524,26 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            {POS_FILTERS.map((p) => {
-              const fill = myRoster == null ? '' : p === 'ALL'
-                ? ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`
-                : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
-              return <Chip key={p} label={`${p}${fill}`} on={pos === p} onPress={() => { tap(); setPos(p); }} />;
+            <Chip label={`ALL${myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}`}
+              on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
+            {posChips.map((p) => {
+              const fill = myRoster == null ? '' : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
+              return (
+                <Chip key={p} label={`${p}${fill}`} on={posSel.has(p)}
+                  onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
+              );
             })}
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
+          </View>
+          {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
+              so it stays the default even here where ADP and PROJ already
+              print beside every name. */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+            <Mono size={8} tone="faint">SORT</Mono>
+            {POOL_SORTS.map((o) => (
+              <Chip key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
+            ))}
           </View>
           {assigning && (
             <Notice tone="warn">
@@ -550,9 +579,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     <FlagChip slug={p.slug} size={7.5} />
                   </View>
                 </Pressable>
-                <View style={{ alignItems: 'flex-end', width: 52 }}>
+                <View style={{ alignItems: 'flex-end', width: 56 }}>
                   <Mono size={9}>{adp != null ? `ADP ${adp.toFixed(0)}` : '—'}</Mono>
-                  <Mono size={9} tone="faint">{proj != null ? `${proj.toFixed(1)}p` : ''}</Mono>
+                  <Mono size={9} tone="faint">
+                    {proj != null ? `${proj.toFixed(1)}p` : ''}{own ? `${proj != null ? ' · ' : ''}${own[p.slug] ?? 0}%` : ''}
+                  </Mono>
                 </View>
                 <Pressable hitSlop={8} onPress={() => toggleQueue(p.slug)}>
                   <Text style={{ fontSize: 15, color: inQ ? t.warn : t.faint }}>{inQ ? '★' : '☆'}</Text>

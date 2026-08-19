@@ -14,7 +14,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Tex
 import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
-  rosterRules, injuryTags,
+  rosterRules, injuryTags, playerOwnership,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
   keeperState, setKeepers, type KeeperState,
@@ -22,7 +22,8 @@ import {
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots } from '@drip/core/engine/classic';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos } from '@drip/core/engine/classic';
+import { sortPool, POOL_SORTS, poolSortValue, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -269,7 +270,16 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
-  const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // POSITIONS ARE A MULTI-SELECT NOW (v0.302.0). Empty = every position the
+  // LEAGUE can roster, which is not the same as every position.
+  const [posSel, setPosSel] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<PoolSort>('rank');
+  const [own, setOwn] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    playerOwnership(leagueId).then((r) => {
+      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    }).catch(() => {});
+  }, [leagueId]);
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.
   const [tenure, setTenure] = useState<TenureBand>('any');
   const [nflTeam, setNflTeam] = useState('ALL');
@@ -344,7 +354,12 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
   const cap = team?.roster_cap ?? null;
-  const full = cap != null && mine.length >= cap;
+  // FULL means "no ACTIVE seat left" (0199), not "the roster total is
+  // reached": a signing always lands active, and an empty taxi or IR place is
+  // not a bench spot. Falls back to the total when the server didn't say.
+  const seats = team?.active_seats ?? null;
+  const activeHeld = mine.filter((p) => p.spot === 'active').length;
+  const full = seats != null ? activeHeld >= seats : (cap != null && mine.length >= cap);
 
   /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
    *  button on every line (v0.285.0). Tapping an empty taxi place opens the
@@ -404,16 +419,24 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     };
   }, [mine, slotDefs, slotNames, expMap]);
 
+  /** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
+   *  kickers if there is no kicker spot on the roster"). Null = no restriction. */
+  const eligiblePos = useMemo(
+    () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null }),
+    [gm]);
+  const posChips = useMemo(
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && (!eligiblePos || eligiblePos.has(p))),
+    [eligiblePos]);
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !rostered.has(p.slug)
-      && (pos === 'ALL' || p.pos === pos)
+      && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
       && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-    return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
+    return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
+  }, [pool, rostered, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
   /** The teams actually IN this pool, so the filter never offers an empty one. */
   const poolTeams = useMemo(
     () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
@@ -701,9 +724,21 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         <TextInput value={q} onChangeText={setQ} placeholder="Search players or teams…" placeholderTextColor={t.faint}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-          {POS_FILTERS.map((p) => <Chip key={p} label={p} on={pos === p} onPress={() => { tap(); setPos(p); }} />)}
+          <Chip label="ALL" on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
+          {posChips.map((p) => (
+            <Chip key={p} label={p} on={posSel.has(p)}
+              onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
+          ))}
           <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
           <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
+        </View>
+        {/* THE ORDER (v0.302.0). Rank is the pool's own, and what the draft
+            clock follows, so it stays the default. */}
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <Mono size={8} tone="faint">SORT</Mono>
+          {POOL_SORTS.map((o) => (
+            <Chip key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
+          ))}
         </View>
         {/* Tenure BANDS rather than a number box — nobody searches for
             "exactly 6 accrued seasons" — with ROOKIES as the first band so it
@@ -729,7 +764,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           const can = !busy && myRoster != null && !blocked;
           return (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
-              <Mono size={8.5} tone="faint" style={{ width: 28 }}>#{p.rank}</Mono>
+              {/* The leading number is whatever the list is SORTED BY — a list
+                  ordered by projection that still printed ranks looks shuffled. */}
+              <Mono size={8.5} tone={sortBy === 'rank' ? 'faint' : 'you'} style={{ width: 34, textAlign: 'right' }}>
+                {poolSortValue(sortBy, p.slug, p.rank, own ?? undefined)}
+              </Mono>
               <Face slug={p.slug} pos={p.pos} />
               {/* The wire's names open cards too (founder: everywhere a name
                   is, a card is one tap away) — deciding whether to ADD him is

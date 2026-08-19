@@ -17,8 +17,10 @@
 import {
   assignSpots, slotAllows, slotDisplayName, slotDisplayNames, slotAcceptsLabel, slotFilterLabel,
   classicSlotsFromSpec, classicSlots, planSpotMove, bestballFillBy, isRetSlot,
-  optimalLineup, autoSlotPlan, classicLineup, slateAwareProj,
+  optimalLineup, autoSlotPlan, classicLineup, slateAwareProj, leagueEligiblePos,
 } from '../packages/core/src/engine/classic';
+import { sortPool, poolSortValue, adpFor, projFor } from '../packages/core/src/data/poolSort';
+import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
@@ -253,6 +255,55 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('the filter line names the flag', slotFilterLabel({ flags: ['Franchise Tag'] }) === '⚑ Franchise Tag',
     slotFilterLabel({ flags: ['Franchise Tag'] }));
   clearLeagueFlags();
+}
+
+// ── WHICH POSITIONS THE LEAGUE CAN ROSTER (v0.302.0) ───────────────────────
+// The waiver wire filters on this, so it has to agree with what a spot will
+// actually accept — offering a kicker a league can never start is the bug,
+// and hiding a flex-eligible back would be the worse one.
+{
+  const spec = [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['RB', 'WR', 'TE'] }];
+  const e = leagueEligiblePos({ slots: spec });
+  ok('a league with no K or DEF spot cannot roster one', !e.has('K') && !e.has('DEF'));
+  ok('…and can roster everything its spots accept', ['QB', 'RB', 'WR', 'TE'].every((p) => e.has(p)));
+  ok('a RET spot opens the ball-carriers it stands for',
+    ['RB', 'WR', 'TE', 'FB'].every((p) => leagueEligiblePos({ slots: [{ pos: ['RET'] }] }).has(p)));
+  ok('a league with a kicker spot keeps kickers', leagueEligiblePos({ slots: [{ pos: ['K'] }] }).has('K'));
+  ok('no lineup at all means no restriction', leagueEligiblePos(null) === null
+    && leagueEligiblePos({ slots: [] }) === null, leagueEligiblePos({ slots: [] }));
+}
+
+// ── THE ORDER OF AN AVAILABLE-PLAYER LIST (v0.302.0) ───────────────────────
+// Four orders over one list. The load-bearing property is the LAST one: a
+// player the source doesn't know sorts last in every order, because an unknown
+// ADP is not an ADP of zero and a missing projection is not zero points.
+{
+  const known = [...PROJ_2026.keys()].filter((k) => ADP_2026.has(k)).slice(0, 3);
+  ok('the bake has players with both an ADP and a projection (else this is vacuous)', known.length === 3, known);
+  const rows = known.map((slug, i) => ({ slug, rank: i + 1 }))
+    .concat([{ slug: 'nobody-at-all', rank: 99 }]);
+  const own = { [known[2]]: 90, [known[0]]: 10 };
+  const by = (o, extra) => sortPool(rows, o, extra).map((r) => r.slug);
+  ok('rank order is the pool\u2019s own', by('rank')[0] === known[0] && by('rank').at(-1) === 'nobody-at-all');
+  const adpOrder = by('adp');
+  ok('ADP runs earliest first',
+    adpFor(adpOrder[0]) <= adpFor(adpOrder[1]) && adpFor(adpOrder[1]) <= adpFor(adpOrder[2]),
+    adpOrder.map((x) => adpFor(x)));
+  const projOrder = by('proj');
+  ok('PROJ runs highest first',
+    projFor(projOrder[0]) >= projFor(projOrder[1]) && projFor(projOrder[1]) >= projFor(projOrder[2]),
+    projOrder.map((x) => projFor(x)));
+  ok('an unknown player sorts LAST in every order, never first',
+    ['adp', 'proj', 'own'].every((o) => by(o, own).at(-1) === 'nobody-at-all'));
+  const ownOrder = by('own', own);
+  ok('ownership runs highest first, and an unowned player is behind an owned one',
+    ownOrder[0] === known[2] && ownOrder[1] === known[0]);
+  ok('with no ownership map loaded the list holds its rank order rather than claiming everyone is 0%',
+    by('own').join() === by('rank').join());
+  ok('the row label says what it sorted on', poolSortValue('rank', known[0], 1) === '#1'
+    && poolSortValue('own', known[2], 3, own) === '90%'
+    && poolSortValue('adp', 'nobody-at-all', 9) === '\u2014');
+  ok('sorting never mutates the caller\u2019s array', rows.at(-1).slug === 'nobody-at-all' && rows.length === 4);
 }
 
 // ── Moving a player who is already starting somewhere ──────────────────────

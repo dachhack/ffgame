@@ -125,3 +125,4 @@ $RUN -f scripts/db/pos-default-probes.sql | grep -E "PROBE FAIL|ALL POS-DEFAULT 
 $RUN -f scripts/db/taxi-rules-probes.sql | grep -E "PROBE FAIL|ALL TAXI-RULES PROBES" || { echo "TAXI-RULES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/scoped-scope-probes.sql | grep -E "PROBE FAIL|ALL SCOPED-SCOPE PROBES" || { echo "SCOPED-SCOPE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/ir-eligibility-probes.sql | grep -E "PROBE FAIL|ALL IR-ELIGIBILITY PROBES" || { echo "IR-ELIGIBILITY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/seat-cap-probes.sql | grep -E "PROBE FAIL|ALL SEAT-CAP PROBES" || { echo "SEAT-CAP PROBES FAILED"; exit 1; }

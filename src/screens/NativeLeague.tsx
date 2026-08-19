@@ -31,11 +31,13 @@ import {
   leagueTrades, proposeTrade, respondTrade, cancelTrade,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
+  playerOwnership,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
+import { sortPool, POOL_SORTS, poolSortValue, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -71,9 +73,9 @@ function fmtCountdown(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNode; onClick: () => void }) {
+function Chip({ on, children, onClick, title }: { on?: boolean; children: React.ReactNode; onClick: () => void; title?: string }) {
   return (
-    <button onClick={onClick} className="mono" style={{
+    <button onClick={onClick} title={title} className="mono" style={{
       fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
       color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--surface)',
       border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 11px',
@@ -716,7 +718,17 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp, only when a spot filters on tenure (0172)
   const [cardFor, setCardFor] = useState<LeaguePoolPlayer | null>(null);
   const [q, setQ] = useState('');
-  const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // Multi-select positions + the sort order (v0.302.0). Empty = every position
+  // the league can roster; a position the server caps at ZERO (0195 — no spot
+  // accepts it) isn't offered at all, since drafting one is refused anyway.
+  const [posSel, setPosSel] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<PoolSort>('rank');
+  const [own, setOwn] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    playerOwnership(leagueId).then((r) => {
+      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    }).catch(() => {});
+  }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
   const [proxyDraft, setProxyDraft] = useState<Record<string, string>>({});   // per-lot hidden-max inputs
@@ -851,13 +863,21 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     return cap != null && (myPosCount[pos] ?? 0) >= cap;
   };
 
+  /** A position the league caps at ZERO can't be drafted at all (0195), so it
+   *  is neither offered as a chip nor listed — "no kickers if there is no
+   *  kicker spot on the roster", answered off the server's own number rather
+   *  than a second derivation that could disagree with it. */
+  const bannedPos = (p: string) => st?.pos_caps?.[p as keyof PosCaps] === 0;
+  const posChips = useMemo(
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p)),
+    [st?.pos_caps]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !taken.has(p.slug)
-      && (pos === 'ALL' || p.pos === pos)
+      && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-    return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, taken, q, pos, starMode, favs]);
+    return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
+  }, [pool, taken, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -1237,13 +1257,26 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            {POS_FILTERS.map((p) => {
-              const fill = myRoster == null ? '' : p === 'ALL'
-                ? ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`
-                : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
-              return <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}{fill}</Chip>;
+            <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>
+              ALL{myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}
+            </Chip>
+            {posChips.map((p) => {
+              const fill = myRoster == null ? '' : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
+              return (
+                <Chip key={p} on={posSel.has(p)}
+                  onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}{fill}</Chip>
+              );
             })}
             <StarChips mode={starMode} setMode={setStarMode} />
+          </div>
+          {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
+              so it stays the default even here where ADP and PROJ are already
+              printed beside every name. */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>SORT</span>
+            {POOL_SORTS.map((o) => (
+              <Chip key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
+            ))}
           </div>
           {assigning && (
             <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 7, padding: '7px 9px', marginBottom: 8 }}>
@@ -1251,7 +1284,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             </div>
           )}
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
-            <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 20 }} />
+            <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 38, textAlign: 'right' }}>ADP</span><span style={{ width: 38, textAlign: 'right' }}>PROJ</span><span style={{ width: 34, textAlign: 'right' }}>OWN</span><span style={{ width: 20 }} />
           </div>
           <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
@@ -1279,6 +1312,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   </button>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 38, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 38, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}
+                    title="share of this platform's drafted leagues rostering him">{own ? `${own[p.slug] ?? 0}%` : '—'}</span>
                   <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px', flexShrink: 0 }}>{inQ ? '★' : '☆'}</button>
                 </div>
@@ -1608,10 +1643,20 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
-  const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>('ALL');
+  // POSITIONS ARE A MULTI-SELECT NOW (v0.302.0, founder: "allow multiple select
+  // in the waiver filters"). Empty = every position the league can roster,
+  // which is not the same as every position — see `eligiblePos`.
+  const [posSel, setPosSel] = useState<Set<string>>(new Set());
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.
   const [tenure, setTenure] = useState<TenureBand>('any');
   const [nflTeam, setNflTeam] = useState('ALL');
+  const [sortBy, setSortBy] = useState<PoolSort>('rank');
+  const [own, setOwn] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    playerOwnership(leagueId).then((r) => {
+      if (r && typeof r === 'object' && !('error' in r)) setOwn(r as Record<string, number>);
+    }).catch(() => {});
+  }, [leagueId]);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
@@ -1729,7 +1774,13 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
   const cap = team?.roster_cap ?? null;
-  const full = cap != null && mine.length >= cap;
+  // FULL means "no ACTIVE seat for another player" (0199), not "the roster
+  // total is reached": a signing always lands active, and a taxi or IR place
+  // standing empty is not a bench spot. Falls back to the total for a league
+  // the server hasn't told us the seat count for.
+  const seats = team?.active_seats ?? null;
+  const activeHeld = mine.filter((p) => p.spot === 'active').length;
+  const full = seats != null ? activeHeld >= seats : (cap != null && mine.length >= cap);
 
   // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.285.0) ────────────────────────
   // Was one flat list of everybody with a spot tag; now it is the shape the
@@ -1766,17 +1817,33 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     run(() => setRosterSpot(leagueId, slug, spot));
   };
 
+  /** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
+   *  kickers if there is no kicker spot on the roster"). Null = no restriction
+   *  (drip, or a classic league with no lineup spec). Same derivation the
+   *  server's 0195 pos-cap default follows, so the wire never offers a player
+   *  the signing would be refused. */
+  const eligiblePos = useMemo(
+    () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null }),
+    [gm]);
+  /** The chips actually worth offering: the league's own positions, in the
+   *  canonical order. A league that can't roster a kicker doesn't get a K chip
+   *  that would only ever return nothing. */
+  const posChips = useMemo(
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && (!eligiblePos || eligiblePos.has(p))),
+    [eligiblePos]);
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => !rostered.has(p.slug)
-      && (pos === 'ALL' || p.pos === pos)
+      // No selection = every position the LEAGUE can roster, not every
+      // position there is. Picking chips narrows within that.
+      && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
       && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule,
       // the same one a 0172 rookies-only spot follows.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
-    return starApply(base, starMode, favs, (p) => p.slug);
-  }, [pool, rostered, q, pos, nflTeam, tenure, expMap, starMode, favs]);
+    return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
+  }, [pool, rostered, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
   /** The teams actually IN this pool, so the picker never offers an empty
    *  filter — a league whose pool is one conference should not list 32. */
   const poolTeams = useMemo(
@@ -2083,8 +2150,20 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-          {POS_FILTERS.map((p) => <Chip key={p} on={pos === p} onClick={() => setPos(p)}>{posLabel(p)}</Chip>)}
+          <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>ALL</Chip>
+          {posChips.map((p) => (
+            <Chip key={p} on={posSel.has(p)}
+              onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}</Chip>
+          ))}
           <StarChips mode={starMode} setMode={setStarMode} />
+        </div>
+        {/* THE ORDER (v0.302.0). Rank is what the draft clock follows, so it
+            stays the default; the other three answer questions rank can't. */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>SORT</span>
+          {POOL_SORTS.map((o) => (
+            <Chip key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
+          ))}
         </div>
         {/* Tenure + NFL team (founder). Tenure is BANDS rather than a number
             box: nobody searches for "exactly 6 accrued seasons", they want
@@ -2110,7 +2189,11 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
             const left = waivedFor(p);
             return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30 }}>#{p.rank}</span>
+                {/* The leading number is whatever the list is SORTED BY, so
+                    the order is always legible: a list ordered by projection
+                    that still printed ranks would look shuffled. */}
+                <span className="mono" style={{ fontSize: 9, color: sortBy === 'rank' ? 'var(--faint)' : 'var(--you)', width: 38, textAlign: 'right' }}
+                  title={POOL_SORTS.find((o) => o.id === sortBy)?.hint}>{poolSortValue(sortBy, p.slug, p.rank, own ?? undefined)}</span>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>

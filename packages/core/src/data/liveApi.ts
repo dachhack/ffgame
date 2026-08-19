@@ -1473,6 +1473,12 @@ export const createNativeLeague = (
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
     p_game_mode: gameMode, p_continuity: continuity, p_continuity_n: continuityN,
   });
+/** OWNERSHIP % (0199): slug → the whole-percent share of this platform's
+ *  drafted leagues rostering him. Platform-wide on purpose — a number that
+ *  counted only your own league would be 0% for everyone on the waiver wire,
+ *  which is exactly the list you wanted to sort. */
+export const playerOwnership = (leagueId: string) =>
+  rpc<Record<string, number> | { error: string }>('player_ownership', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
@@ -2155,6 +2161,10 @@ export const processWaivers = (leagueId: string) =>
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
+  /** ACTIVE SEATS (0199): starters + bench — what an ADD is bounded by, as
+   *  distinct from `roster_cap`, which is the whole roster with its stash
+   *  places. `active_held` is how many of them this manager is using. */
+  active_seats?: number | null; active_held?: number | null;
   /** Per-position roster limits (null value = uncapped). */
   pos_caps?: PosCaps;
   /** Waiver system: rolling priority (default) or FAAB blind bids. */
