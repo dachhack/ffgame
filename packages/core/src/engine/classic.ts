@@ -103,6 +103,25 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
   });
 }
 
+/** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
+ *  kickers if there is no kicker spot on the roster"). The union of what every
+ *  starting spot accepts — a bench player who can never start anywhere is a
+ *  player the league has no use for, so the bench doesn't widen the set. This
+ *  is the same derivation 0195 gave `league_pos_cap` server-side, kept in step
+ *  on purpose: the waiver wire should not offer a player the server would
+ *  refuse to let you sign.
+ *
+ *  Null means NO RESTRICTION — a drip league, or a classic league with no
+ *  lineup spec, plays the whole board. */
+export function leagueEligiblePos(mode?: { roster?: ClassicRoster | null; slots?: SlotSpec[] | null } | null): Set<string> | null {
+  const hasSpec = Array.isArray(mode?.slots) && mode.slots.length > 0;
+  const hasCounts = !!mode?.roster && Object.keys(mode.roster).length > 0;
+  if (!hasSpec && !hasCounts) return null;
+  const out = new Set<string>();
+  for (const d of leagueSlotDefs(mode)) for (const p of slotEligiblePos(d.pos)) out.add(p.toUpperCase());
+  return out.size ? out : null;
+}
+
 /** One resolver for "what are this league's slots": builder spec wins, then
  *  the 0161 counts, then the default nine. */
 export function leagueSlotDefs(mode?: { roster?: ClassicRoster | null; slots?: SlotSpec[] | null } | null): ClassicSlotDef[] {
