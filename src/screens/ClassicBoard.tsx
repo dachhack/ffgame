@@ -150,6 +150,15 @@ function TeamHead({ side, align, accent, mode }: {
  *  length, or the builder's label feature stops meaning anything once the
  *  games start. The positions are named as well as coloured, because colour
  *  alone asks the reader to have memorised the palette. */
+/** THE BOARD'S CENTRE COLUMN, in one number (v0.303.2, founder: "bestball
+ *  middle text is not aligned with non bestball"). Every row of this board is
+ *  its own grid, so an `auto` middle sized itself to that row's own label — a
+ *  long spot name ("Rookie BB", "FLEX (RB/WR/TE)") widened its row's centre and
+ *  pushed that row's names and scores off the line every other row sat on. A
+ *  fixed column is the only thing separate grids can agree about, and the
+ *  header, the starters and the bench all take it. */
+const SPOT_COL = 104;
+
 function SlotPill({ pos, label }: { pos: string[]; label: string }) {
   // FLEX-style spots list what they accept; a single-position spot would just
   // repeat itself, so it shows the name alone.
@@ -162,11 +171,11 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
         ))}
       </div>
       <span className="mono" title={posLine ? `${label} — ${posLine}` : label}
-        style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pos[0]}-fg, var(--text))`, textAlign: 'center', lineHeight: 1.25, maxWidth: 86 }}>
+        style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pos[0]}-fg, var(--text))`, textAlign: 'center', lineHeight: 1.25, maxWidth: SPOT_COL }}>
         {label}
       </span>
       {posLine && (
-        <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.2, maxWidth: 86 }}>{posLine}</span>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.2, maxWidth: SPOT_COL }}>{posLine}</span>
       )}
     </div>
   );
@@ -827,7 +836,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           asserting something about a lineup that can still change. */}
       {board && (
         <div style={card}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
             <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
             {/* NO LOCK REMINDER (v0.299.1, founder: "we also don't need the
                 lock reminder or time"). Each spot already says its own kickoff
@@ -901,7 +910,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                       is no opponent column to mirror (their picks are sealed),
                       so the row spans the width instead of leaving half the
                       screen blank beside a one-sided lineup. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
                     {row.home ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <BoardCell e={row.home} align="left"
@@ -964,7 +973,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   const a = board[k].away[i] ?? null;
                   return (
                     <div key={i} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
                         {h ? <BoardCell e={h} align="left" onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
                           {k === 'bench' ? 'BN' : 'IR'}
