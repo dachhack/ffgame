@@ -257,7 +257,9 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
       <Row k="ROSTER SIZE" v={`${rr.rounds ?? gm.rounds ?? '—'} players`} tone="you" />
       <Row k="STARTING SPOTS" v={`${defs.length}`} />
       {!!gm.shape?.bench && <Row k="BENCH" v={`${gm.shape.bench}`} />}
-      {!!gm.shape?.taxi && <Row k="TAXI" v={`${gm.shape.taxi}`} />}
+      {!!gm.shape?.taxi && (
+        <Row k="TAXI" v={`${gm.shape.taxi}${rr.taxi_max_exp != null ? ` · ≤ ${rr.taxi_max_exp} yr${rr.taxi_max_exp === 1 ? '' : 's'}` : ''}${rr.taxi_lock === false ? ' · never locks' : rr.taxi_locked_now ? ' · LOCKED' : ' · locks at kickoff'}`} />
+      )}
       {!!gm.shape?.ir && <Row k="IR" v={`${gm.shape.ir}`} />}
 
       <Head>STARTING LINEUP</Head>

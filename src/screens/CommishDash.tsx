@@ -13,6 +13,7 @@ import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
+import { rosterRules, setTaxiRules } from '@drip/core/data/liveApi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -308,6 +309,26 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
   // round count, so this is the ceiling on starters + bench + taxi + IR.
   const MAX_ROUNDS = 99;
+  // THE TAXI SQUAD'S OWN RULES (0196): who may ride it, and whether it shuts at
+  // the season's first kickoff. Loaded here because they live beside the SIZE,
+  // which is the number right above them.
+  const [taxi, setTaxi] = useState<{ maxExp: number | null; lock: boolean; lockedNow: boolean } | null>(null);
+  const loadTaxi = () => {
+    rosterRules(leagueId).then((r) => {
+      if (!r.ok) return;
+      setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
+    }).catch(() => {});
+  };
+  useEffect(loadTaxi, [leagueId]);
+  const saveTaxi = async (maxExp: number | null, lock: boolean | null) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setTaxiRules(leagueId, maxExp, lock);
+      if (r.ok) { setTaxi({ maxExp: r.max_exp ?? null, lock: r.lock !== false, lockedNow: !!r.locked_now }); setNote('✓ taxi rules saved'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
@@ -609,6 +630,33 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
             You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real IR/Out designation only; taxi and IR players can't be started.
           </div>
+
+          {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────────
+              Who may ride it and when it shuts. Beside the SIZE, because a
+              taxi squad is those three facts and nothing else — and unlike the
+              shape, these move at ANY time: a commissioner reopening the taxi
+              in November is answering a November question. */}
+          {shape.taxi > 0 && taxi && (
+            <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🚕 TAXI SQUAD · who may ride it, and when it shuts</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--dim)' }}>TENURE</span>
+                {([[null, 'ANYONE'], [0, 'ROOKIES'], [1, '≤ 1 YR'], [2, '≤ 2 YRS'], [3, '≤ 3 YRS']] as const).map(([v, label]) => (
+                  <button key={label} onClick={() => void saveTaxi(v ?? -1, null)} disabled={busy} className="mono"
+                    style={pill(taxi.maxExp === v)}>{label}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--dim)' }}>LOCK</span>
+                <button onClick={() => void saveTaxi(null, true)} disabled={busy} className="mono" style={pill(taxi.lock)}>AT WEEK 1 KICKOFF</button>
+                <button onClick={() => void saveTaxi(null, false)} disabled={busy} className="mono" style={pill(!taxi.lock)}>NEVER</button>
+                {taxi.lockedNow && <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)' }}>🔒 LOCKED NOW</span>}
+              </div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+                A locked taxi squad refuses new arrivals; taking a player OFF it is always allowed, and YOU can move players either way at any time. A player whose experience Sleeper doesn't know can't prove he qualifies, so a tenure rule excludes him.
+              </div>
+            </div>
+          )}
           {extraPos.length > 0 && (
             <div className="mono" style={{ fontSize: 11, color: 'var(--you)', marginTop: 4 }}>
               UNLOCKED FOR THIS LEAGUE: {extraPos.join(' · ')} — after changing spots or filters, hit ↻ REFRESH PLAYER POOL (league page) so the draft pool matches.

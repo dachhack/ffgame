@@ -1460,8 +1460,23 @@ export const rosterRules = (leagueId: string) =>
         waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: 'none' | 'commish';
         waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
-        fa_start_min?: number | null; fa_end_min?: number | null }>(
+        fa_start_min?: number | null; fa_end_min?: number | null;
+        /** The taxi squad's rules (0196): the tenure ceiling (null = anyone),
+         *  whether the squad shuts at the season's first kickoff, whether it is
+         *  shut RIGHT NOW, and when that kickoff is. */
+        taxi_max_exp?: number | null; taxi_lock?: boolean;
+        taxi_locked_now?: boolean; taxi_lock_at?: string | null }>(
     'roster_rules', { p_league_id: leagueId });
+/** Commissioner: who may ride the taxi squad, and whether it locks at the
+ *  season's first kickoff (0196). Nulls leave a setting alone; `maxExp: -1`
+ *  clears the tenure ceiling. Editable AT ANY TIME, unlike the roster shape —
+ *  a commissioner reopening the taxi in November is answering a November
+ *  question. */
+export const setTaxiRules = (leagueId: string, maxExp: number | null = null, lock: boolean | null = null) =>
+  tracked(rpc<{ ok: boolean; error?: string; max_exp?: number | null; lock?: boolean;
+                locked_now?: boolean; lock_at?: string | null }>(
+    'set_taxi_rules', { p_league_id: leagueId, p_max_exp: maxExp, p_lock: lock }),
+    Ev.commishAction, { tool: 'taxi_rules' });
 /** Commissioner: edit position limits any time; roster size only pre-draft. */
 export const setRosterRules = (leagueId: string, rounds: number | null, posCaps: PosCaps | null) =>
   rpc<{ ok: boolean; error?: string; rounds?: number; pos_caps?: PosCaps }>(

@@ -122,3 +122,4 @@ $RUN -f scripts/db/roster-size-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-SIZE 
 $RUN -f scripts/db/ir-rounds-probes.sql | grep -E "PROBE FAIL|ALL IR-ROUNDS PROBES" || { echo "IR-ROUNDS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/edit-pick-probes.sql | grep -E "PROBE FAIL|ALL EDIT-PICK PROBES" || { echo "EDIT-PICK PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/pos-default-probes.sql | grep -E "PROBE FAIL|ALL POS-DEFAULT PROBES" || { echo "POS-DEFAULT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/taxi-rules-probes.sql | grep -E "PROBE FAIL|ALL TAXI-RULES PROBES" || { echo "TAXI-RULES PROBES FAILED"; exit 1; }
