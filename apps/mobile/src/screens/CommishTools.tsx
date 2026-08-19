@@ -1794,10 +1794,12 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 </Pressable>
               </View>
             ))}
-            <Mono size={8.5} weight="700" tone="you">DRAFT = {rounds ?? shapeTotal} ROUNDS{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
+            {/* TWO NUMBERS SINCE 0193: the roster is what a team may HOLD, the
+                draft is what it FILLS — IR spots are the difference. */}
+            <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir}{shape.ir > 0 ? ' (no IR)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft the whole roster (starters + bench + taxi + IR), then stash · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
+            Any position combination per spot · 🎯 BB fills itself · 🔎 limits who may fill the spot (teams / tenure — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a real IR/Out designation · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>

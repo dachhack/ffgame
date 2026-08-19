@@ -29,6 +29,7 @@ import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data
 import { forceResolve } from '@drip/core/data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar, Sheet } from '../app/ui';
+import { onLeagueSettingsChanged } from '@drip/core/data/rosterBus';
 import { useStore } from '../app/store';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { CommishToolsPanel } from '../app/commishKit';
@@ -303,7 +304,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) setDerived(r.mode === 'classic'); }).catch(() => {});
   }, [leagueId]);
-  useEffect(() => {
+  const loadRules = () => {
     rosterRules(leagueId).then((r) => {
       if (r.error || !r.ok) { setMsg(r.error ?? 'could not load roster rules'); return; }
       setRounds(r.rounds ?? 12);
@@ -311,6 +312,16 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
       setCaps(Object.fromEntries(POS_CAP_KEYS.map((k) =>
         [k, r.pos_caps?.[k] ?? CAP_UNLIMITED])) as Record<(typeof POS_CAP_KEYS)[number], number>);
     }).catch((e) => setMsg(errMsg(e, 'could not load roster rules')));
+  };
+  // ROSTER SIZE IS DERIVED, SO IT HAS TO FOLLOW (v0.297.1, founder: "roster
+  // size doesn't adjust when I change the roster spots above"). The builder is
+  // a SIBLING component with its own load, so it could change this number and
+  // this panel would go on printing what it read on mount. It re-reads on the
+  // builder's notice now.
+  useEffect(() => {
+    loadRules();
+    return onLeagueSettingsChanged((id) => { if (id === leagueId) loadRules(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
   if (!caps || rounds == null) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
   const pending = draftStatus === 'pending';
@@ -361,7 +372,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save rules'}</button>
       </div>
       <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. {derived ? 'Roster size comes from the builder (starters + bench + taxi + IR) on the ROSTER tab.' : `Roster size ${pending ? 'can change until the draft starts' : 'is locked once the draft starts'}.`} Rosters already over a lowered limit keep their players — the limit blocks new adds.
+        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. {derived ? 'Roster size comes from the builder (starters + bench + taxi + IR) on the ROSTER tab — the DRAFT is that minus the IR spots, which are stashed into rather than drafted.' : `Roster size ${pending ? 'can change until the draft starts' : 'is locked once the draft starts'}.`} Rosters already over a lowered limit keep their players — the limit blocks new adds.
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>
