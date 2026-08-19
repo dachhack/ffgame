@@ -1,7 +1,6 @@
 // GENERATED — StatHead 2026 PROJECTED KICKER AND TEAM-DEFENCE LINES.
-// Source: Stathead MCP `get_projections` (stathead-mcp 1.0.69, position K and
-// DST), as_of 2026-08-19T14:17:42.640Z — the same pull and instant as
-// `proj2026.ts` and `projStats2026.ts`.
+// Source: Stathead MCP `get_projections` (stathead-mcp 1.0.70, position K and
+// DST), as_of 2026-08-19T20:12:09.434Z.
 //
 // ── WHY THIS FILE EXISTS ───────────────────────────────────────────────────
 // Until now a kicker or a defence projected at **zero**, everywhere. Not
@@ -47,9 +46,33 @@
 // runs about 6.4 down to 5.0 points a game, which is roughly what a board
 // SHOULD look like when the signal is this thin.
 //
-// `fum_rec`, `def_td`, `st_td` and `safety` are league rates — identical for
-// every team, because no team-level signal survives ten seasons. They are real
-// values rather than placeholders, and they will never differentiate anybody.
+// `fum_rec`, `def_td`, `st_td` and `safety` are league rates: StatHead publish
+// one number for all 32 teams, because no team-level signal survives ten
+// seasons. They vary slightly here only because the schedule factor below
+// scales every component, not because anyone thinks Denver recovers more
+// fumbles than Dallas.
+//
+// ── SCHEDULE STRENGTH IS ALREADY IN THESE NUMBERS (1.0.70) ─────────────────
+// StatHead now apply per-team, per-position 2026 schedule difficulty to the K
+// and DST season lines before serving them. **DO NOT re-apply it** from their
+// `get_schedule_strength` tool — the factors are published as data AND baked
+// into these two positions, and multiplying again double-counts. They are
+// deliberately NOT applied to QB/RB/WR/TE, whose weekly matchup multipliers
+// normalise to mean 1 and so move points between weeks without moving a season
+// total. We have not applied them to the skill positions either: StatHead say
+// plainly they cannot backtest a skill-position schedule adjustment (they keep
+// no historical projection-base snapshots to test against), and an unbacktested
+// multiplier on 445 players is exactly the kind of guess this project refuses.
+// The cost is an acknowledged asymmetry — a defence's easy slate is in its
+// projection, a receiver's is not — and that is the honest side of the trade.
+//
+// IT ROUGHLY DOUBLED THE SPREAD. Before the schedule was applied the whole
+// 32-team defence board ran 6.4 to 5.0 points a game; it now runs 7.0 (DEN) to
+// 4.5 (DAL). Worth knowing when reading the accuracy note above, because the
+// RMSE figures StatHead quote were measured BEFORE this was applied — a wider
+// spread makes the board look more decisive without anything yet showing it
+// forecasts better. If anything that sharpens the rule rather than softening
+// it: re-price with these, don't rank on them.
 //
 // ── THE LEVEL IS OURS, NOT THEIRS (and this is deliberate) ─────────────────
 // Every other bake in this project stores StatHead's own points. These two
@@ -70,6 +93,10 @@
 //   get_projections { position: 'DST', limit: 40, output_format: 'csv',
 //     fields: 'name,projPts,pts_allow_pg,sack,def_int,fum_rec,def_td,st_td,safety' }
 //   get_rosters     { season: 2026, position: 'K', fields: 'player_name,team' }
+// The kicker pull carries no `team`, which is why the roster call is in the
+// list: our pool rosters TEAM units, so a named kicker has to be resolved to
+// one. Re-check the mapping on every refresh — a team changing its starting
+// kicker moves the whole line.
 // The band field names carry a literal '+' and hyphens (`fga_50+`, `fga_0-29`);
 // nothing else is accepted and an unknown name is dropped SILENTLY, so check
 // the response actually contains the columns before baking it.
@@ -94,72 +121,72 @@ export interface ProjDstLine {
 }
 
 /** slug,fga0,fgm0,fga30,fgm30,fga40,fgm40,fga50,fgm50,xpa,xpm */
-const KICK_CSV = `ari-k,7.60,7.30,9.60,8.80,9.80,7.70,7.20,4.80,40.30,38.10
-atl-k,7.70,7.60,9.70,9.30,9.90,8.10,7.30,5.10,40.80,38.60
-bal-k,7.60,7.40,9.60,9,9.80,7.80,7.30,4.90,39.70,37.50
-buf-k,7.20,7,9.20,8.50,9.40,7.40,6.90,4.60,44.70,42.20
-car-k,7.10,7,9,8.40,9.20,7.30,6.80,4.60,36.70,34.60
-chi-k,7.50,7.40,9.60,9,9.80,7.90,7.20,5,43.20,40.80
-cin-k,7.50,7.30,9.50,8.90,9.70,7.70,7.20,4.90,41.60,39.30
-cle-k,7.10,6.90,8.90,8.40,9.10,7.30,6.70,4.60,35.30,33.40
-dal-k,8.20,8.10,10.40,9.80,10.70,8.60,7.90,5.40,43.60,41.20
-den-k,7.60,7.40,9.60,8.90,9.80,7.80,7.20,4.90,39.60,37.50
-det-k,7.50,7.40,9.50,8.90,9.70,7.80,7.20,4.90,45.50,43
-gb-k,7.40,7.20,9.40,8.70,9.60,7.60,7.10,4.80,41.80,39.50
-hou-k,8.50,8.40,10.70,10.10,11,8.80,8.10,5.60,41,38.80
-ind-k,7.80,7.60,9.90,9.20,10.10,8,7.50,5,42.40,40.10
+const KICK_CSV = `ari-k,7.60,7.30,9.60,8.80,9.80,7.70,7.20,4.80,40.20,38
+atl-k,7.70,7.70,9.80,9.30,10,8.20,7.40,5.20,41,38.70
+bal-k,7.50,7.40,9.50,8.90,9.80,7.80,7.20,4.90,39.30,37.10
+buf-k,7.20,7,9.10,8.40,9.30,7.30,6.90,4.60,44.20,41.80
+car-k,7.20,7,9.10,8.50,9.30,7.40,6.90,4.60,37,34.90
+chi-k,7.50,7.40,9.50,9,9.80,7.80,7.20,4.90,43.10,40.70
+cin-k,7.50,7.40,9.50,8.90,9.70,7.80,7.20,4.90,41.70,39.50
+cle-k,7.20,7.10,9.10,8.50,9.30,7.50,6.90,4.70,35.90,33.90
+dal-k,8.20,8.10,10.40,9.80,10.60,8.60,7.80,5.40,43.40,41
+den-k,7.50,7.30,9.50,8.80,9.70,7.70,7.10,4.90,39.10,37
+det-k,7.60,7.50,9.60,9,9.90,7.90,7.30,5,46,43.50
+gb-k,7.30,7.20,9.30,8.70,9.50,7.60,7,4.80,41.50,39.20
+hou-k,8.60,8.50,10.90,10.20,11.10,9,8.20,5.70,41.60,39.30
+ind-k,7.60,7.40,9.70,9,9.90,7.80,7.30,4.90,41.50,39.20
 jax-k,7.50,7.50,9.60,9,9.80,7.90,7.20,5,42.50,40.20
-kc-k,7.70,7.60,9.80,9.10,10,8,7.40,5,39.30,37.20
+kc-k,7.70,7.60,9.80,9.20,10,8,7.40,5.10,39.50,37.40
 la-k,7.40,7.30,9.40,8.80,9.60,7.70,7.10,4.80,45.50,43
-lac-k,7.90,7.90,10.10,9.50,10.30,8.30,7.60,5.30,39.80,37.60
-lv-k,7.60,7.40,9.60,8.90,9.80,7.70,7.20,4.90,33.40,31.60
+lac-k,7.80,7.80,10,9.40,10.20,8.20,7.50,5.20,39.40,37.20
+lv-k,7.50,7.30,9.60,8.90,9.80,7.70,7.20,4.90,33.30,31.50
 mia-k,7.70,7.50,9.70,9.10,9.90,7.90,7.30,5,39.10,36.90
-min-k,8,7.90,10.20,9.60,10.40,8.40,7.70,5.30,38.30,36.20
-ne-k,7.40,7.10,9.30,8.60,9.50,7.50,7,4.70,41.50,39.20
-no-k,7.70,7.50,9.80,9.10,10,8,7.40,5,34,32.10
+min-k,8,7.90,10.10,9.60,10.40,8.40,7.60,5.30,38.20,36.10
+ne-k,7.30,7.10,9.30,8.60,9.50,7.50,7,4.70,41.20,38.90
+no-k,7.80,7.70,9.90,9.30,10.20,8.10,7.50,5.10,34.60,32.70
 nyg-k,7,6.90,8.90,8.30,9.10,7.20,6.70,4.60,37.70,35.60
-nyj-k,7.40,7.30,9.40,8.80,9.60,7.70,7.10,4.90,35.40,33.50
-phi-k,7.30,7.20,9.30,8.60,9.50,7.50,7,4.70,39.60,37.50
-pit-k,7.80,7.70,9.90,9.30,10.10,8.20,7.40,5.20,40.60,38.40
-sea-k,8.10,7.90,10.20,9.60,10.50,8.40,7.70,5.30,44.70,42.20
-sf-k,7.70,7.60,9.70,9.20,10,8,7.30,5.10,43.50,41.10
-tb-k,7.80,7.70,9.90,9.30,10.10,8.10,7.40,5.10,40.10,37.90
-ten-k,7.50,7.30,9.50,8.80,9.70,7.70,7.20,4.80,36.60,34.60
-was-k,7.50,7.40,9.60,8.90,9.80,7.80,7.20,4.90,40.90,38.60`;
+nyj-k,7.30,7.20,9.30,8.70,9.50,7.60,7,4.80,35.10,33.20
+phi-k,7.30,7.10,9.30,8.60,9.50,7.50,7,4.70,39.50,37.40
+pit-k,7.70,7.70,9.80,9.30,10,8.10,7.40,5.10,40.40,38.10
+sea-k,8.10,7.90,10.20,9.60,10.40,8.40,7.70,5.30,44.60,42.20
+sf-k,7.80,7.70,9.90,9.30,10.10,8.10,7.40,5.10,44.10,41.70
+tb-k,7.90,7.80,10.10,9.50,10.30,8.30,7.60,5.20,40.80,38.50
+ten-k,7.50,7.30,9.50,8.80,9.70,7.70,7.10,4.80,36.50,34.50
+was-k,7.60,7.40,9.60,8.90,9.80,7.80,7.20,4.90,41,38.70`;
 
 /** slug,paPg,sack,int,fumRec,defTd,stTd,safety */
-const DST_CSV = `ari-dst,24.35,39.20,11.70,7.70,0.87,0.85,0.37
-atl-dst,23.21,42.20,12.30,7.70,0.87,0.85,0.37
-bal-dst,22.76,40,11.90,7.70,0.87,0.85,0.37
-buf-dst,22.40,39.40,12.20,7.70,0.87,0.85,0.37
-car-dst,23.74,38.40,12.10,7.70,0.87,0.85,0.37
-chi-dst,23.24,39.90,12.60,7.70,0.87,0.85,0.37
-cin-dst,24.43,39.50,12.20,7.70,0.87,0.85,0.37
-cle-dst,22.89,42.40,11.60,7.70,0.87,0.85,0.37
-dal-dst,25.30,40.60,11.60,7.70,0.87,0.85,0.37
-den-dst,21.29,45.90,12,7.70,0.87,0.85,0.37
-det-dst,22.87,41.40,12.20,7.70,0.87,0.85,0.37
-gb-dst,22.28,40.10,11.90,7.70,0.87,0.85,0.37
-hou-dst,21.61,42.60,12.80,7.70,0.87,0.85,0.37
-ind-dst,23.35,40.10,12.30,7.70,0.87,0.85,0.37
-jax-dst,22.48,38.80,12.40,7.70,0.87,0.85,0.37
-kc-dst,21.69,40,11.80,7.70,0.87,0.85,0.37
-la-dst,22.45,41.70,12.40,7.70,0.87,0.85,0.37
-lac-dst,21.60,41.90,12.60,7.70,0.87,0.85,0.37
-lv-dst,23.78,39.90,11.60,7.70,0.87,0.85,0.37
-mia-dst,23.39,40,11.70,7.70,0.87,0.85,0.37
-min-dst,22.02,42.30,12.10,7.70,0.87,0.85,0.37
-ne-dst,22.21,39.50,11.80,7.70,0.87,0.85,0.37
-no-dst,22.85,41.10,11.90,7.70,0.87,0.85,0.37
-nyg-dst,23.92,40.70,11.50,7.70,0.87,0.85,0.37
-nyj-dst,24.64,38.70,10.90,7.70,0.87,0.85,0.37
-phi-dst,21.63,41,12.20,7.70,0.87,0.85,0.37
-pit-dst,22.49,41.50,12.40,7.70,0.87,0.85,0.37
-sea-dst,21.64,41.90,12.50,7.70,0.87,0.85,0.37
-sf-dst,23.08,37.60,11.50,7.70,0.87,0.85,0.37
-tb-dst,23.16,40.40,11.90,7.70,0.87,0.85,0.37
-ten-dst,24.62,40.20,11.50,7.70,0.87,0.85,0.37
-was-dst,23.93,40.80,11.60,7.70,0.87,0.85,0.37`;
+const DST_CSV = `ari-dst,25.21,37.70,11.30,7.40,0.83,0.82,0.36
+atl-dst,22.73,43.40,12.60,7.90,0.89,0.87,0.38
+bal-dst,22.48,40.70,12.10,7.80,0.88,0.86,0.38
+buf-dst,21.72,40.80,12.70,8,0.90,0.88,0.39
+car-dst,24.41,37.50,11.80,7.50,0.85,0.83,0.36
+chi-dst,23.38,39.50,12.50,7.60,0.86,0.84,0.37
+cin-dst,23.83,40.90,12.60,8,0.90,0.88,0.39
+cle-dst,22.41,43.70,12,7.90,0.89,0.88,0.39
+dal-dst,26.69,38.30,10.90,7.20,0.82,0.80,0.35
+den-dst,20.08,48.80,12.70,8.20,0.92,0.90,0.40
+det-dst,22.17,42.90,12.60,8,0.90,0.88,0.39
+gb-dst,22.79,39,11.60,7.50,0.84,0.83,0.36
+hou-dst,21.97,41.80,12.50,7.50,0.85,0.83,0.37
+ind-dst,22.77,41.40,12.70,7.90,0.90,0.88,0.39
+jax-dst,23.28,37.60,12,7.40,0.84,0.82,0.36
+kc-dst,21.09,41.10,12.20,7.90,0.89,0.87,0.38
+la-dst,22.68,41,12.20,7.60,0.85,0.84,0.37
+lac-dst,21.17,42.90,12.90,7.90,0.89,0.87,0.38
+lv-dst,22.96,41.50,12.10,8,0.90,0.88,0.39
+mia-dst,22.95,40.50,11.80,7.80,0.88,0.86,0.38
+min-dst,23.25,39.70,11.30,7.20,0.81,0.80,0.35
+ne-dst,21.61,40.60,12.10,7.90,0.89,0.87,0.38
+no-dst,22.23,42.40,12.30,7.90,0.89,0.88,0.39
+nyg-dst,25.08,38.60,10.90,7.30,0.82,0.81,0.36
+nyj-dst,23.45,40.70,11.50,8.10,0.91,0.89,0.39
+phi-dst,23.04,38.20,11.40,7.20,0.81,0.79,0.35
+pit-dst,22.29,42.20,12.60,7.80,0.88,0.86,0.38
+sea-dst,22.02,40.90,12.10,7.50,0.85,0.83,0.36
+sf-dst,23.16,37.30,11.40,7.60,0.86,0.84,0.37
+tb-dst,23.33,40.20,11.80,7.60,0.86,0.85,0.37
+ten-dst,24.88,39.90,11.40,7.60,0.86,0.84,0.37
+was-dst,25.19,38.60,11,7.30,0.82,0.80,0.35`;
 
 const num = (c: string[], i: number): number => { const v = Number(c[i]); return Number.isFinite(v) ? v : 0; };
 

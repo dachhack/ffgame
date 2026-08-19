@@ -181,6 +181,17 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   // would actually notice: raise the shutout payout, the defence goes up.
   const rich = integratedPaPoints(21.29, { ...DEFAULT_CLASSIC_SCORING, pa0: 30 });
   ok('a richer shutout bracket raises the defence', rich > den, [rich, den]);
+
+  // ACROSS THE WHOLE BAKED POOL: allowing fewer points is never worth less.
+  // The integral is a weighted sum over a ladder that is itself monotone, so
+  // this must hold for every pair — and it is the property that would break
+  // first if a bracket boundary or the weighting were ever miswritten.
+  const byPa = Object.entries(PROJ_DST).sort((a, b) => a[1].paPg - b[1].paPg);
+  const bad = byPa.filter(([, d], i) =>
+    i > 0 && integratedPaPoints(d.paPg, DEFAULT_CLASSIC_SCORING)
+           > integratedPaPoints(byPa[i - 1][1].paPg, DEFAULT_CLASSIC_SCORING) + 1e-9);
+  ok('across all 32 defences, fewer points allowed is never worth less',
+    bad.length === 0, bad.map(([t]) => t));
   // The per-point knob is linear, so it needs no integration and must be exact.
   const perPt = integratedPaPoints(20, { ...DEFAULT_CLASSIC_SCORING, paPt: -0.5 });
   ok('the per-point knob is applied at the mean, exactly',
