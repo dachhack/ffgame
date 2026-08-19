@@ -253,6 +253,88 @@ export function buildMatchupBoard(input: {
  *  board already loads. Returns BYE when the team simply isn't playing —
  *  which is the honest reading of "no game in this week's slate", and the one
  *  case a manager needs flagged before lock. */
+/** ── THE WEEK'S SLATE, AS THIS MATCHUP SEES IT (v0.312.0) ──────────────────
+ *
+ *  Founder, on the scoreboard card: "the middle of the top is super empty.
+ *  Maybe have the week's game slate with info and stats? In a chip you can
+ *  select."
+ *
+ *  WHAT MAKES THIS DIFFERENT FROM AN NFL SCOREBOARD, and the reason it lives
+ *  in the engine rather than in a host: the interesting fact about Bills-Texans
+ *  is not the score, it is that THREE OF MY STARTERS ARE IN IT and two of my
+ *  opponent's. A generic scoreboard is a worse version of an app the manager
+ *  already has on their phone. This one answers "what is riding on this game",
+ *  which nothing else can tell them.
+ *
+ *  Every game on the slate is returned, in kickoff order, whether or not the
+ *  matchup touches it — it was asked for as "the week's game slate", and a row
+ *  of chips that silently omits games would misrepresent the week. Involvement
+ *  is carried per chip instead (`homeCount`/`awayCount`) so a host can dim the
+ *  ones nobody is in rather than hide them.
+ *
+ *  POINTS FOLLOW THE BOARD'S OWN RULE: `projectEntry` is the same blend the side
+ *  totals use, so a chip's numbers always sum toward the headline score above
+ *  it rather than telling a second story. BENCH IS EXCLUDED for exactly the
+ *  reason the side totals exclude it — a bench player in this game is not
+ *  riding on it. */
+export interface SlateChip {
+  /** 'BUF@HOU' — stable, and the selection key a host holds. */
+  key: string;
+  home: string;
+  away: string;
+  kickoff: string | null;
+  state: 'pre' | 'live' | 'done';
+  /** Starters each side has in this game, and what they are worth. */
+  homeCount: number;
+  awayCount: number;
+  homePts: number;
+  awayPts: number;
+  homePlayers: BoardEntry[];
+  awayPlayers: BoardEntry[];
+}
+
+export function slateChips(
+  starters: BoardSlotRow[],
+  slate: { home: string; away: string; kickoff?: string | null }[],
+  now: number,
+  finalTeams?: Set<string>,
+): SlateChip[] {
+  const out: SlateChip[] = [];
+  for (const g of slate) {
+    const home = (g.home ?? '').toUpperCase();
+    const away = (g.away ?? '').toUpperCase();
+    if (!home || !away) continue;                     // a half-written slate row claims nothing
+    const inGame = (e: BoardEntry | null): boolean => {
+      const t = (e?.team ?? '').toUpperCase();
+      return !!t && (t === home || t === away);
+    };
+    const homePlayers = starters.map((r) => r.home).filter(inGame) as BoardEntry[];
+    const awayPlayers = starters.map((r) => r.away).filter(inGame) as BoardEntry[];
+    const sum = (es: BoardEntry[]) => r2(es.reduce((n, e) => n + projectEntry(e), 0));
+    out.push({
+      key: `${away}@${home}`,
+      home, away,
+      kickoff: g.kickoff ?? null,
+      // The game's state is its HOME team's — one game, one kickoff, and
+      // entryState already folds in the inferred-final set the board built.
+      state: entryState(g.kickoff, home, now, finalTeams),
+      homeCount: homePlayers.length,
+      awayCount: awayPlayers.length,
+      homePts: sum(homePlayers),
+      awayPts: sum(awayPlayers),
+      homePlayers, awayPlayers,
+    });
+  }
+  // Kickoff order, and a game with no kickoff sorts last rather than first —
+  // an unknown time is not midnight.
+  return out.sort((a, b) => {
+    const ta = a.kickoff ? Date.parse(a.kickoff) : Number.MAX_SAFE_INTEGER;
+    const tb = b.kickoff ? Date.parse(b.kickoff) : Number.MAX_SAFE_INTEGER;
+    return (Number.isFinite(ta) ? ta : Number.MAX_SAFE_INTEGER)
+         - (Number.isFinite(tb) ? tb : Number.MAX_SAFE_INTEGER);
+  });
+}
+
 export function gameFor(team: string | null | undefined, slate: { home: string; away: string; kickoff?: string | null }[]):
   { opponent: string; kickoff: string | null; home: boolean } | null {
   if (!team) return null;

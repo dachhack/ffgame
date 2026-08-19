@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -139,6 +139,63 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   setSlugMetaOverrides([{ slug: 'carnell-tate', pos: 'RB', team: 'KC' }]);
   ok('a live pool override still beats every bake', slugMeta('carnell-tate').team === 'KC');
   clearSlugMetaOverrides();
+}
+
+
+// ── THE WEEK'S SLATE AS THIS MATCHUP SEES IT (v0.312.0) ────────────────────
+// The scoreboard's chip row. What earns a guard here is that the chips must
+// agree with the headline totals above them — a strip telling a second story
+// about the same players is worse than no strip — and that a game nobody is in
+// is still REPORTED, because it was asked for as the week's slate.
+{
+  const E = (slug, team, live, proj, state) => ({ slug, name: slug, pos: 'WR', team, live, proj, state });
+  const starters = [
+    { slot: 'S1', label: 'QB', pos: ['QB'], home: E('a', 'BUF', 10, 12, 'live'), away: E('b', 'HOU', 5, 9, 'live') },
+    { slot: 'S2', label: 'RB', pos: ['RB'], home: E('c', 'BUF', 0, 8, 'pre'), away: E('d', 'KC', 0, 7, 'pre') },
+    { slot: 'S3', label: 'WR', pos: ['WR'], home: null, away: E('e', 'SF', 20, 6, 'done') },
+  ];
+  const slate = [
+    { home: 'HOU', away: 'BUF', kickoff: '2026-09-13T17:00:00Z' },
+    { home: 'LA', away: 'SF', kickoff: '2026-09-13T20:05:00Z' },
+    { home: 'DEN', away: 'LV', kickoff: '2026-09-14T00:20:00Z' },   // nobody in it
+  ];
+  const now = Date.parse('2026-09-13T18:00:00Z');
+  const chips = slateChips(starters, slate, now, new Set(['SF', 'LA']));
+
+  ok('every game on the slate gets a chip, including one nobody is in',
+    chips.length === 3, chips.map((c) => c.key));
+  ok('chips run in kickoff order', chips.map((c) => c.key).join() === 'BUF@HOU,SF@LA,LV@DEN',
+    chips.map((c) => c.key));
+
+  const buf = chips[0], lv = chips[2];
+  ok('a chip counts BOTH sides of the fantasy matchup separately',
+    buf.homeCount === 2 && buf.awayCount === 1, [buf.homeCount, buf.awayCount]);
+  ok('…and a game nobody is in reports zero rather than being hidden',
+    lv.homeCount === 0 && lv.awayCount === 0 && lv.homePts === 0);
+
+  // THE LOAD-BEARING ONE. A chip's points use projectEntry, the same blend the
+  // side totals use — so the strip and the headline can never disagree.
+  const expect = (es) => es.reduce((n, e) => n + projectEntry(e), 0);
+  ok('chip points are the board\u2019s own blend, not a second opinion',
+    Math.abs(buf.homePts - expect([starters[0].home, starters[1].home])) < 1e-9,
+    [buf.homePts, expect([starters[0].home, starters[1].home])]);
+  ok('a DONE player is worth what he scored, inside a chip too',
+    chips[1].awayPts === 20, chips[1].awayPts);
+
+  ok('state comes off the game, and an inferred FINAL wins over the clock',
+    buf.state === 'live' && chips[1].state === 'done', [buf.state, chips[1].state]);
+  ok('a chip lists the players it counted', buf.homePlayers.length === 2
+    && buf.homePlayers.every((e) => ['BUF', 'HOU'].includes(e.team)));
+
+  // Degenerate slates must not mint chips.
+  ok('a half-written slate row claims nothing',
+    slateChips(starters, [{ home: 'BUF', away: '' }], now).length === 0);
+  ok('an empty slate is an empty strip, not a crash',
+    slateChips(starters, [], now).length === 0 && slateChips([], slate, now).length === 3);
+  // An unknown kickoff sorts LAST — an unknown time is not midnight.
+  const noKick = slateChips(starters, [{ home: 'X', away: 'Y' }, ...slate], now);
+  ok('a game with no kickoff sorts last rather than first',
+    noKick.at(-1).key === 'Y@X', noKick.map((c) => c.key));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
