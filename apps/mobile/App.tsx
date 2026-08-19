@@ -87,6 +87,11 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
+  // A one-shot destination for ⚑ COMMISSIONER: creating a league lands on
+  // 🧩 ROSTER (v0.296.6). Cleared on the way out so the next visit gets the
+  // map, which is where a commissioner who did NOT just create a league wants
+  // to start.
+  const [toolsSection, setToolsSection] = useState<string | null>(null);
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
@@ -305,7 +310,14 @@ export function App() {
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'board' ? (
           <View style={{ flex: 1 }}>
-            <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} />
+            <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)}
+              // Created a league → its ⚑ COMMISSIONER tools, open on 🧩 ROSTER.
+              onCreated={(leagueId, name, rosterId) => {
+                setLeaguesEpoch((n) => n + 1);
+                setOpen({ leagueId, rosterId, name, native: true, commish: true, pickUserId: undefined });
+                setToolsSection('lineup');
+                setView('commishtools');
+              }} />
           </View>
         ) : view === 'draft' && open?.native ? (
           // A seatless commissioner has no MATCHUP to go back to — back means
@@ -316,10 +328,11 @@ export function App() {
         ) : view === 'chat' && open ? (
           <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}`} leagueId={open.leagueId} /></View>
         ) : view === 'commishtools' && open ? (
-          <View style={{ flex: 1 }}><CommishTools leagueId={open.leagueId} native={open.native} rosterId={open.rosterId}
+          <View style={{ flex: 1 }}><CommishTools key={`tools-${open.leagueId}-${toolsSection ?? ''}`}
+            leagueId={open.leagueId} native={open.native} rosterId={open.rosterId} initialSection={toolsSection}
             // A seatless commissioner has nowhere else in the league to land —
             // back means back to the leagues list.
-            onBack={() => { if (open.rosterId == null) { setOpen(null); setView('picks'); } else setView('home'); }}
+            onBack={() => { setToolsSection(null); if (open.rosterId == null) { setOpen(null); setView('picks'); } else setView('home'); }}
             // Vacating your own seat invalidates open.rosterId — leave the
             // league view entirely; Leagues remounts with the fresh shape.
             onSelfUnassigned={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>

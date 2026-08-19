@@ -189,8 +189,12 @@ function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassigned }: {
+export function CommishTools({ leagueId, native, rosterId, initialSection, onBack, onSelfUnassigned }: {
   leagueId: string;
+  /** Open on a destination rather than the map — creating a league lands on
+   *  🧩 ROSTER (v0.296.6), because the draft drafts the roster the league is
+   *  SHAPED for and both freeze when it starts. */
+  initialSection?: string | null;
   /** Platform (Sleeper) leagues get seat/co-manager/coin management only —
    *  rosters, waivers and rules live on the platform, so those cards hide.
    *  The RPCs behind the seats card are league-agnostic (0022/0042/0052). */
@@ -210,7 +214,7 @@ export function CommishTools({ leagueId, native, rosterId, onBack, onSelfUnassig
   // Which destination is open (v0.264.0): null = the map alone. Tapping a
   // chip pops the section up FROM BELOW as a bottom sheet — the app's own
   // idiom (Overlay) over the web console's tap-into-a-lone-panel pattern.
-  const [section, setSection] = useState<string | null>(null);
+  const [section, setSection] = useState<string | null>(initialSection ?? null);
   // The roster builder's drag-to-reorder (v0.267.0) freezes the sheet's
   // scroll while a row rides the finger — two vertical gestures, one winner.
   const [sheetScroll, setSheetScroll] = useState(true);

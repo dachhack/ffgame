@@ -715,7 +715,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'create') return (
     <NativeCreate
       onDone={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); refresh(); setView('draft'); }}
-      onLeague={(leagueId) => { setManageId(leagueId); setManageTab('draft'); refresh(); setView('commishdash'); }}
+      // STRAIGHT TO 🧢 ROSTER (v0.296.6, founder: "after you create a league,
+      // you should go to the roster settings so the draft can reflect the
+      // correct number and type of positions"). It used to land on ⛏ DRAFT,
+      // which is the room you want SECOND: the draft drafts the roster the
+      // league is shaped for, and the shape freezes the moment it starts.
+      onLeague={(leagueId) => { setManageId(leagueId); setManageTab('lineup'); refresh(); setView('commishdash'); }}
       onBack={() => setView('home')} />
   );
   if (view === 'draft' && target) return (
