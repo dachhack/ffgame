@@ -1296,7 +1296,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1311,6 +1311,12 @@ export const setLeagueClassicAccess = (leagueId: string, on: boolean) =>
     Ev.commishAction, { tool: 'classic_access', on });
 /** Best ball (0159): which classic slots fill themselves. All nine = full
  *  best ball; a subset = hybrid; [] = off. Classic leagues only, commish. */
+/** GOLF MODE (0200): lowest weekly total wins. Classic only, and it locks
+ *  once the draft starts — you draft a golf league inside out. */
+export const setLeagueGolf = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; golf?: boolean }>('set_league_golf',
+    { p_league_id: leagueId, p_on: on }),
+    Ev.commishAction, { tool: 'golf', on });
 export const setLeagueBestball = (leagueId: string, slots: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
     { p_league_id: leagueId, p_slots: slots }),
@@ -1324,8 +1330,8 @@ export const setLeagueClassicRoster = (leagueId: string, roster: Record<string, 
 /** The roster POSITION BUILDER (0163): an ordered list of starting spots,
  *  each with its own eligible-position set + best-ball flag. Wins over the
  *  0161 counts when present; null/[] clears back to them. Draft-frozen. */
-export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null }[] | null) =>
-  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null }[] | null; starters?: number; rounds?: number }>('set_league_classic_slots',
+export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; starters?: number; rounds?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
 /** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as

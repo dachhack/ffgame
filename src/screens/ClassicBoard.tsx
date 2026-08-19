@@ -13,6 +13,7 @@ import type { Pos } from '@drip/core/types';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
+import { setLeagueGolf } from '@drip/core/engine/golf';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -214,6 +215,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   const [roster, setRoster] = useState<Record<string, number>>({});
   const [flagsVer, setFlagsVer] = useState(0);
   const [bestball, setBestball] = useState<string[]>([]);
+  // Golf as REACT state as well as an engine install: the board has to SAY so
+  // on screen, because a total that means the opposite of what it looks like
+  // is the one thing this screen must never let happen.
+  const [golf, setGolf] = useState(false);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
@@ -286,7 +291,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         }).catch(() => {});
         leagueGameMode(r.leagueId).then(async (gm) => {
           if (gm.ok && gm.ppr != null) setPpr(Number(gm.ppr));
-          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); }
+          // GOLF (v0.303.0) rides the same load: it is a league setting the
+          // engine reads at scoring time, installed exactly like the scoring
+          // adjustments below and cleared on exit with them.
+          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -827,8 +835,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                 made locking per-spot — so a second countdown in the middle of
                 the scoreboard was the same fact, further from the thing it is
                 about. LIVE stays: that is the game's STATE, not a reminder. */}
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+            {/* GOLF (v0.303.0) has to be SAID here. Two numbers side by side
+                read as "bigger is winning" in every scoreboard anyone has ever
+                looked at, and in this league that is backwards — so the one
+                place the totals meet is the one place the rule belongs. */}
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
               {locked ? 'LIVE' : ''}
+              {golf && <div style={{ color: 'var(--warn)', fontWeight: 700 }}>⛳ LOW WINS</div>}
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>

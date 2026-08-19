@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
@@ -141,13 +141,14 @@ export function LastSeenPanel({ leagueId }: { leagueId: string }) {
 // (0172) as raw input strings, so partial typing never fights the keyboard.
 // v0.300.0: the filter also carries FLAGS — the commissioner's own labels as a
 // condition on who may stand in the spot.
-type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[] };
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
   fMin: x.min_exp != null ? String(x.min_exp) : '',
   fMax: x.max_exp != null ? String(x.max_exp) : '',
   fFlags: [...(x.flags ?? [])],
+  zero: x.zero_pts != null ? String(x.zero_pts) : '',
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -160,6 +161,9 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
+    // The zero-fill rule (0200). Never sent on a best-ball spot — the server
+    // refuses the pair, and the toggle below can't produce it either.
+    ...(!s.bb && s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
@@ -275,6 +279,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
+  // GOLF (v0.303.0): null until the mode load lands, so neither button lights
+  // up on a guess.
+  const [golf, setGolf] = useState<boolean | null>(null);
+  const saveGolf = async (on: boolean) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueGolf(leagueId, on);
+      if (r.ok) { setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest total wins' : '✓ golf mode off'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   // The roster POSITION BUILDER (0163, founder's sketch): draft rows edited
   // locally, one SAVE writes the whole spec. Initialized from the stored spec,
   // or derived from the 0161 counts + best-ball names so a legacy league's
@@ -377,7 +393,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setScDraft(d);
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); scInit(r.scoring ?? {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -510,11 +526,30 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       {/* The RECEPTIONS pills used to live here (v0.213.1: removed). PPR is a
           scoring decision, so it rides the SCORING page's presets now — this
           tab is just "which game are we playing". */}
-      {view === 'mode' && mode === 'classic' && (
+      {view === 'mode' && mode === 'classic' && (<>
+        {/* ── GOLF MODE (v0.303.0) ──────────────────────────────────────────
+            One setting that inverts who wins. It belongs beside GAME MODE
+            rather than under SCORING because it doesn't change a single
+            scoring value — a touchdown is worth exactly what the catalog says.
+            It changes which end of the leaderboard you are aiming at, which is
+            a fact about the GAME. Frozen at the draft for the same reason the
+            game mode is: you draft a golf league inside out. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>⛳ GOLF MODE</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+              The LOWEST weekly total wins the matchup — standings, tiebreaks and playoffs all read the other way. Nothing about scoring changes: a touchdown is worth what your catalog says. Pairs with the ⛳ zero-fill on each starting spot under ⚖ TEAMS &amp; ROSTERS, which makes an empty spot the worst thing that can happen to you rather than the best. Locks once the draft starts.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => void saveGolf(false)} disabled={busy || golf === null} className="mono" style={pill(golf === false)}>HIGH WINS</button>
+            <button onClick={() => void saveGolf(true)} disabled={busy || golf === null} className="mono" style={pill(golf === true)}>⛳ LOW WINS</button>
+          </div>
+        </div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Receptions, bonuses and every other value live under ⚖ SCORING — start from a preset there, then tune anything.
         </div>
-      )}
+      </>)}
       {/* A drip league has no classic lineup or scoring to set — say so rather
           than render an empty pane. */}
       {view !== 'mode' && mode === 'drip' && (
@@ -588,8 +623,21 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   title="name this spot — e.g. Only NFC Players. Naming it doesn't change who may fill it; the chips and 🔎 filter do that."
                   className="mono" style={{ fontFamily: 'inherit', fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: sp.label ? 'var(--text)' : 'var(--faint)', border: `1px solid ${sp.label ? 'var(--bd)' : 'transparent'}`, borderRadius: RADIUS, flex: 1, minWidth: 90, textAlign: 'right' }} />
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
-                  onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
+                  onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb, zero: x.bb ? x.zero : '' })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
+                {/* THE ZERO-FILL RULE (v0.303.0): what this spot banks when it
+                    is empty, or when whoever stands in it scores nothing.
+                    Greyed out on a best-ball spot — that spot fills itself, so
+                    "unfilled" is not a state it has, and the server refuses the
+                    pair rather than storing half of it. */}
+                <span title={sp.bb ? "a best-ball spot fills itself — it is never unfilled, so it can't carry this rule"
+                  : 'ZERO-FILL: points this spot banks if it is empty, or if its player scores nothing. Blank = off.'}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, opacity: sp.bb ? 0.35 : 1 }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>⛳</span>
+                  <input value={sp.zero} disabled={busy || !!sp.bb} inputMode="numeric" placeholder="—" maxLength={3}
+                    onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: v })); setSpotsDirty(true); }}
+                    className="mono" style={{ fontFamily: 'inherit', fontSize: 11, width: 34, textAlign: 'center', padding: '3px 4px', background: 'var(--bg)', color: sp.zero ? 'var(--warn)' : 'var(--faint)', border: `1px solid ${sp.zero ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: RADIUS }} />
+                </span>
                 <button disabled={busy} title="Per-spot player filter: only these teams / this tenure window / these flagged players may fill the spot"
                   onClick={() => setFltOpen((cur) => cur === i ? null : i)}
                   className="mono" style={{ ...pill(spotHasFlt(sp)), padding: '3px 8px', fontSize: 11 }}>🔎</button>
@@ -637,10 +685,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <button disabled={busy || spots.length >= 20}
-              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [] }]); setSpotsDirty(true); }}
+              onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [], zero: '' }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · 🔎 limits who may fill the spot (teams / tenure / a commissioner flag — an RB spot for rookies only, or a spot only your franchise tag may stand in) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
+              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · ⛳ is the ZERO-FILL: points the spot banks if it's empty or its player scores nothing (blank = off; not available on a BB spot) · 🔎 limits who may fill the spot (teams / tenure / a commissioner flag — an RB spot for rookies only, or a spot only your franchise tag may stand in) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
