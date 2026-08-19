@@ -10,6 +10,7 @@ import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
+import { projectedPoints, setLeagueProjScoring } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, type BoardEntry, type BoardSide } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { PROJ_2026 } from '@drip/core/data/proj2026';
@@ -273,7 +274,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         leagueGameMode(leagueId).then(async (gm) => {
           // GOLF (v0.303.0) rides the same load: a league setting the engine
           // reads at scoring time, installed like the scoring adjustments.
-          if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true); }
+          if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true);  setLeagueProjScoring(gm.scoring ?? {}); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -512,7 +513,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   const entryFor = useMemo(() => {
     void playsAt; void flagsVer;
-    return (slug: string | null | undefined, slotPos?: string[]): BoardEntry | null => {
+    return (slug: string | null | undefined, slotPos?: string[], slot?: string): BoardEntry | null => {
       if (!slug) return null;
       const meta = slugMeta(slug);
       const g = gameFor(meta.team, slate);
@@ -522,7 +523,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         pos: meta.pos ?? '',
         team: meta.team ?? null,
         live: pts(slug, slotPos),
-        proj: PROJ_2026.get(slug) ?? 0,
+        // LEAGUE- AND SPOT-AWARE (v0.308.0) — see the web twin. Was the raw
+        // bake, so a custom-scoring league projected under rules it does not
+        // play by, and a spot-scoped bonus never showed in the spot it pays.
+        proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot),
         state: g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
@@ -545,7 +549,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     const mkSide = (rid: number, team: string, avatar: string | null, lineup: Record<string, string | null>, benchList: PoolPlayer[]) => ({
       rosterId: rid, team, avatar,
       record: records[rid] ?? null,
-      starters: Object.fromEntries(slotDefs.map((d) => [d.slot, entryFor(lineup[d.slot], d.pos)])),
+      starters: Object.fromEntries(slotDefs.map((d) => [d.slot, entryFor(lineup[d.slot], d.pos, d.slot)])),
       bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
