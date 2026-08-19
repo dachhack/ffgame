@@ -123,10 +123,11 @@ export function scoreKickLine(line: ProjKickLine, sc: ClassicScoring): number {
  *  checked it against their own served totals rather than taking it: subtract
  *  everything else from their `projPts` and the residual is what they price
  *  points-allowed at. Integrating OUR ladder — which they have never seen —
- *  over normal(paPg, 9.4) reproduces that residual to 0.005, 0.000 and 0.002
- *  points a game for Denver, Houston and the Chargers. Scoring at the mean is
- *  off by about 0.65 a game on all three, roughly a tenth of a defence's whole
- *  projection, and always in the same direction.
+ *  over normal(paPg, 9.4) reproduces that residual across ALL 32 defences to a
+ *  mean of 0.0007 points a game, worst case 0.011 — and it still does after
+ *  1.0.70 applied schedule strength on their side, which moved every line.
+ *  Scoring at the mean instead is off by about 0.65 a game on a good defence,
+ *  roughly a tenth of its whole projection, and always in the same direction.
  *
  *  The ladder here is `classicScorePlay`'s, copied from it: a bracket boundary
  *  that drifted between the live scorer and this one would be the same
