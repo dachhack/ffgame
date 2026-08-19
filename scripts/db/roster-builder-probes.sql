@@ -168,14 +168,22 @@ begin
   set local role authenticated;
   perform probe_as('b');
   -- stored at this point: [{QB}, {RB, bb}] — the sf6 re-set above.
-  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
-    'can only shrink', 'sb11 the same spec is not a shrink');
+  -- 0201: a SAME-LENGTH save is no longer refused on sight — that is how a
+  -- rename arrives. Re-saving the spec unchanged is now a no-op that succeeds,
+  -- and every assertion below still holds because they change something real.
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
+    'sb11 re-saving the spec unchanged is a no-op, not an error (0201)');
+  perform assert_ok(set_league_classic_slots(lid,
+    '[{"pos":["QB"],"label":"Under Center"},{"pos":["RB"],"bb":true}]'::jsonb),
+    'sb11z …and a RENAME is the one post-draft edit it allows');
+  perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
+    'sb11y put the name back');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true},{"pos":["WR"]}]'::jsonb),
-    'can only shrink', 'sb11a growing is refused');
+    'rename spots, or shrink', 'sb11a growing is refused');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["WR"]}]'::jsonb),
-    'exactly as drafted', 'sb11b a prefix-length EDIT is refused');
+    'can only be RENAMED', 'sb11b a prefix-length EDIT is refused');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"bb":true}]'::jsonb),
-    'exactly as drafted', 'sb11c flipping best ball on a surviving spot is an edit');
+    'can only be RENAMED', 'sb11c flipping best ball on a surviving spot is an edit');
   perform assert_err(set_league_classic_slots(lid, null),
     'locks once the draft', 'sb11d clearing the spec post-draft is refused');
   -- THE LEGAL SHRINK: drop the tail spot. Cosmetic differences must not fail
@@ -190,7 +198,7 @@ begin
     'sb12c the draft itself is untouched');
   -- and the hatch never reopens the door it closed
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
-    'can only shrink', 'sb13 growing back is still refused');
+    'rename spots, or shrink', 'sb13 growing back is still refused');
 
 end $$;
 

@@ -830,12 +830,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                           used to be one button that opened the picker, which
                           left no way to simply READ about the player standing
                           in it. */}
-                      {settable && (
-                        <Pressable hitSlop={8} onPress={() => { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); }}
-                          style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }}>
-                          <Mono size={9} tone="you" weight="700">⇄</Mono>
-                        </Pressable>
-                      )}
                     </>
                   ) : (
                     <Pressable onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }} style={{ flex: 1 }}>
@@ -843,12 +837,30 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
                     </Pressable>
                   )}
+                  {/* ⇄ THE SWAP KEEPS ITS SPACE EVEN WHEN IT ISN'T THERE
+                      (v0.303.2, founder: "bestball middle text is not aligned
+                      with non bestball"). It used to render only on a settable
+                      spot, so a BEST-BALL row — which is never settable — lost
+                      the chip's width and every column after it slid across.
+                      One board, one set of columns: the chip's box is always
+                      here, sometimes empty. */}
+                  <View style={{ width: 26, alignItems: 'center' }}>
+                    {row.home && settable && (
+                      <Pressable hitSlop={8} onPress={() => { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); }}
+                        style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }}>
+                        <Mono size={9} tone="you" weight="700">⇄</Mono>
+                      </Pressable>
+                    )}
+                  </View>
                   <Mono size={11} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 38, textAlign: 'right' }}>
                     {scoreOf(row.home)}
                   </Mono>
-                  <View style={{ alignItems: 'center' }}>
+                  {/* …and the centre column is FIXED at the pill's own width,
+                      so a long spot name ("Rookie BB", "FLEX (RB/WR/TE)") can
+                      never widen it and shove the scores around. */}
+                  <View style={{ width: 66, alignItems: 'center' }}>
                     <SlotPill pos={row.pos} label={row.label} />
-                    {auto && <Mono size={7} tone="you">🎯 AUTO</Mono>}
+                    {auto && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
                   </View>
                   <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
                     {scoreOf(row.away)}
