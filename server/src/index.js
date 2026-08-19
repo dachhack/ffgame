@@ -16,6 +16,7 @@ import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { pollRosters } from './poll/rosters.js';
+import { pollMarket } from './poll/market.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
@@ -34,6 +35,7 @@ let lastInjuryPoll = 0;
 // The roster sweep's own clock. Zero means "never run", so the first tick after
 // boot takes a census — a deploy is exactly when the table is most likely stale.
 let lastRosterPoll = 0;
+let lastMarketPoll = 0;
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
@@ -283,6 +285,17 @@ async function tick() {
       const r = await pollRosters(playerIndex);
       log(`rosters: ${r.teams}/32 teams, ${r.athletes} athletes — ${r.standing} standing (${r.changed} changed)`);
     } catch (e) { log('roster sweep error', e.message); }
+  }
+
+  // HOW WIDELY EACH PLAYER IS ROSTERED (0202): ESPN's ownership percentages,
+  // which the wire and the draft board sort by. Cheap enough (105KB) to keep
+  // current; the platform's own league-derived count stays the fallback.
+  if (Date.now() - lastMarketPoll >= config.marketPollMs) {
+    lastMarketPoll = Date.now();   // before the await, same reason as the sweep
+    try {
+      const r = await pollMarket(playerIndex, config.season);
+      log(`market: ${r.rows} owned% rows from ${r.seen} priced (${r.unresolved} unresolved)`);
+    } catch (e) { log('market poll error', e.message); }
   }
 
   // Native leagues: advance live draft clocks, clear due waiver claims, and
