@@ -124,19 +124,40 @@ where l.name = :'LEAGUE'
 order by sl.synced_at desc nulls last, sl.week, sl.roster_id;
 
 \echo ''
-\echo '── 4. …and which weeks does he NOT appear in? ──'
-\echo '   A week that has lineups but no row here is a week the drop reached.'
-select sl.week, max(sl.synced_at) as last_written
-from sleeper_lineup sl
-join league l on l.id = sl.league_id
-where l.name = :'LEAGUE'
-  and not exists (
-    select 1 from jsonb_array_elements(sl.starters_json) e
-    where e->>'full' ilike '%' || :'PLAYER' || '%'
-       or e->>'player_slug' = lower(replace(:'PLAYER', ' ', '-'))
-  )
-group by sl.week
-order by max(sl.synced_at) desc nulls last;
+\echo '── 4. How many rosters hold him, per week? ──'
+\echo '   0  = the drop reached this week.'
+\echo '   1  = still held here.'
+\echo '   12 = a whole-pool seed; everyone holds everyone, so this says nothing'
+\echo '        about the drop.'
+\echo ''
+\echo '   THIS USED TO BE A `not exists` OVER ROWS AND WAS USELESS. It asked'
+\echo '   "is there a lineup row without him", which is true in every week that'
+\echo '   has more than one roster — he can only be on one of them — so it'
+\echo '   listed nearly every week regardless of the answer, and stayed silent'
+\echo '   exactly on the whole-pool weeks where all twelve DO hold him. The'
+\echo '   question has to be asked per (week, roster) and then aggregated.'
+with held as (
+  select sl.week, sl.roster_id, sl.synced_at,
+         exists (
+           select 1 from jsonb_array_elements(sl.starters_json) e
+           where e->>'full' ilike '%' || :'PLAYER' || '%'
+              or e->>'player_slug' = lower(replace(:'PLAYER', ' ', '-'))
+         ) as holds
+  from sleeper_lineup sl
+  join league l on l.id = sl.league_id
+  where l.name = :'LEAGUE'
+)
+select
+  week,
+  max(synced_at)                        as last_written,
+  count(*) filter (where holds)         as rosters_holding,
+  count(*)                              as rosters,
+  case when count(*) filter (where holds) = 0 then 'drop reached this week'
+       when count(*) filter (where holds) = count(*) then 'whole-pool seed — says nothing'
+       else 'still held' end            as reading
+from held
+group by week
+order by max(synced_at) desc nulls last, week;
 
 \echo ''
 \echo '── 5. Is this league even in the sync loop? ──'
