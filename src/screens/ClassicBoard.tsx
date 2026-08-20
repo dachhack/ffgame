@@ -29,7 +29,7 @@ import {
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
-import { PlayerImg, PosPill } from '../app/ui';
+import { PlayerImg, PosPill, useIsMobile } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
@@ -287,11 +287,45 @@ function TeamHead({ side, align, accent, mode }: {
  *  fixed column is the only thing separate grids can agree about, and the
  *  header, the starters and the bench all take it. */
 const SPOT_COL = 104;
+/** ── THE SAME COLUMN, SIZED FOR A PHONE (v0.323.1) ─────────────────────────
+ *
+ *  Founder, on mobile web: "let's make more room for player names." The board
+ *  was rendering "C. Br…", "K. C…", "D. St…", "T. W…" down the whole home
+ *  column while the away column showed full names — an asymmetry that says
+ *  where the width was going.
+ *
+ *  MEASURED AT 393px (an iPhone in Safari), the home name box was **35px**.
+ *  The arithmetic: 393 − 24 page padding − 28 row padding = 341; minus the
+ *  104px centre and two 10px gaps leaves 108 a side; the home cell then spends
+ *  32 on the face and ~34 on the ⇄ swap button that only IT carries, and 35 is
+ *  what was left. The away cell, with no swap, had 68 — which is why one column
+ *  truncated and the other did not.
+ *
+ *  Four changes, each measured in headless Chromium at 360/393/430:
+ *    • this column 104 → 72 (the label already wraps, so nothing is lost);
+ *    • the face 32 → 26, the gaps 10 → 6, the row padding 14 → 10;
+ *    • the ⇄ moves down onto the position line, where there is slack, instead
+ *      of standing beside the name and taking width the name needed;
+ *    • the duplicated eligibility line goes (see SlotPill).
+ *
+ *  393px: home 35 → **100**, away 68 → 100, neither clipped. 360px — the
+ *  smallest common phone — 19 → 83, and both stop clipping there too. Row
+ *  height is unchanged at 57px, so none of this costs scroll. */
+const SPOT_COL_NARROW = 72;
+/** Phones, not tablets: at 481+ the wide numbers already fit comfortably. */
+const NARROW_MAX = 480;
 
-function SlotPill({ pos, label }: { pos: string[]; label: string }) {
+function SlotPill({ pos, label, width }: { pos: string[]; label: string; width: number }) {
   // FLEX-style spots list what they accept; a single-position spot would just
   // repeat itself, so it shows the name alone.
-  const posLine = pos.length > 1 ? pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join('/') : null;
+  const rawPosLine = pos.length > 1 ? pos.map((p) => (p === 'DEF' ? 'D/ST' : p)).join('/') : null;
+  // …and neither does a spot whose LABEL already lists them: the stock flex is
+  // named "FLEX (RB/WR/TE)", so the line under it read "RB/WR/TE" — the same
+  // fact, one line lower, on a screen where lines are the scarce thing. A
+  // league's own label ("Rookie BB") still gets its line, because that one
+  // genuinely does not say what it takes.
+  const posLine = rawPosLine && !label.replace(/\s/g, '').toUpperCase().includes(rawPosLine.replace(/\s/g, '').toUpperCase())
+    ? rawPosLine : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 0 }}>
       <div style={{ display: 'flex', width: 54, height: 6, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--bd)' }}>
@@ -300,11 +334,11 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
         ))}
       </div>
       <span className="mono" title={posLine ? `${label} — ${posLine}` : label}
-        style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pos[0]}-fg, var(--text))`, textAlign: 'center', lineHeight: 1.25, maxWidth: SPOT_COL }}>
+        style={{ fontSize: 9.5, fontWeight: 700, color: `var(--pos-${pos[0]}-fg, var(--text))`, textAlign: 'center', lineHeight: 1.25, maxWidth: width }}>
         {label}
       </span>
       {posLine && (
-        <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.2, maxWidth: SPOT_COL }}>{posLine}</span>
+        <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', textAlign: 'center', lineHeight: 1.2, maxWidth: width }}>{posLine}</span>
       )}
     </div>
   );
@@ -312,31 +346,44 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
 
 /** A player on one side of a row: name, position line, game line, score.
  *  Mirrored for the away side so both read outward from the centre pill. */
-function BoardCell({ e, align, onName }: {
+function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
   e: import('@drip/core/engine/matchupBoard').BoardEntry | null; align: 'left' | 'right';
   /** The NAME opens the player card (v0.283.0, founder) — reading about a
    *  player and changing his spot are different intentions, so the row stops
    *  being one big button. */
   onName?: () => void;
+  /** Face size and inner gap, narrower on a phone — see SPOT_COL_NARROW. */
+  face?: number;
+  gap?: number;
+  /** A small control for this cell — the ⇄ swap. It rides on the POSITION
+   *  LINE rather than beside the name (v0.323.1): as a sibling of the whole
+   *  cell it was taking ~34px off the name box on the one side that has it,
+   *  which is why the home column truncated and the away column did not. The
+   *  position line is short ("RB · CIN") and had the room going spare, so this
+   *  costs the name nothing and the row no height. */
+  action?: React.ReactNode;
 }) {
   const right = align === 'right';
   if (!e) return <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', textAlign: align }}>Empty</div>;
   const dim = e.state === 'done';
   return (
-    <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+    <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap, minWidth: 0 }}>
       {/* The face goes on the OUTER edge so both sides read outward from the
           centre pill, the same way the names and scores do. PlayerImg already
           degrades headshot → team logo → position pill, so a missing portrait
           costs the picture and never the row. */}
-      <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={32} />
+      <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={face} />
       <div style={{ textAlign: align, minWidth: 0, flex: 1 }}>
       <div onClick={onName ? (ev) => { ev.stopPropagation(); onName(); } : undefined}
         title={onName ? 'open the player card' : undefined}
         style={{ fontSize: 14, fontWeight: 700, color: dim ? 'var(--dim)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onName ? 'pointer' : undefined }}>{e.name}</div>
-      <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: 'var(--faint)' }}>
-        <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
-        {e.team ? ` · ${e.team}` : ''}
-        {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
+      <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5, flexDirection: right ? 'row-reverse' : 'row' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
+          {e.team ? ` · ${e.team}` : ''}
+          {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
+        </span>
+        {action}
       </div>
       </div>
     </div>
@@ -798,6 +845,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // A WHOLE-POOL PRESEASON WEEK, SAID OUT LOUD (v0.322.0). See isRehearsalPool:
   // the seed is deliberate, and the silence about it was not.
   const rehearsal = isRehearsalPool(pool.length);
+
+  // ROOM FOR NAMES ON A PHONE (v0.323.1) — see SPOT_COL_NARROW for the
+  // measurements. One flag drives all four dimensions so the board cannot end
+  // up half-narrow, and the centre column stays the SAME width in the header,
+  // the starters and the bench, which is the whole reason it is fixed at all.
+  const narrow = useIsMobile(NARROW_MAX);
+  const spotCol = narrow ? SPOT_COL_NARROW : SPOT_COL;
+  const faceSize = narrow ? 26 : 32;
+  const cellGap = narrow ? 6 : 8;
+  const colGap = narrow ? 6 : 10;
+  const rowPadX = narrow ? 10 : 14;
   // A selection only means something while that game is still on the slate.
   useEffect(() => {
     if (selGame && !chips.some((c) => c.key === selGame)) setSelGame(null);
@@ -1038,7 +1096,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
 
       {board && (
         <div style={card}>
-          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${spotCol}px minmax(0, 1fr)`, alignItems: 'center', gap: colGap }}>
             <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
             {/* NO LOCK REMINDER (v0.299.1, founder: "we also don't need the
                 lock reminder or time"). Each spot already says its own kickoff
@@ -1191,24 +1249,26 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               const auto = bb.has(row.slot);
               const settable = canEdit(row.slot);
               return (
-                <div key={row.slot} style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--bd)' }}>
+                <div key={row.slot} style={{ padding: `10px ${rowPadX}px 12px`, borderTop: '1px solid var(--bd)' }}>
                   {/* tier 1 — who, either side of the spot pill. Pre-lock there
                       is no opponent column to mirror (their picks are sealed),
                       so the row spans the width instead of leaving half the
                       screen blank beside a one-sided lineup. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${spotCol}px minmax(0, 1fr)`, alignItems: 'center', gap: colGap }}>
                     {row.home ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <BoardCell e={row.home} align="left"
-                          onName={() => openPlayerCard({ slug: row.home!.slug, name: row.home!.name, pos: row.home!.pos, team: row.home!.team ?? '', week: matchup?.week, userId })} />
-                        {/* ⇄ THE SWAP, its own small control (founder). The row
-                            used to be one button into the picker, which left no
-                            way to simply READ about the player in it. */}
-                        {settable && (
-                          <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)} title="change this spot" className="mono"
-                            style={{ flex: 'none', fontSize: 10, fontWeight: 700, color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '3px 7px', cursor: 'pointer' }}>⇄</button>
-                        )}
-                      </div>
+                      /* ⇄ THE SWAP, still its own small control (founder) — the
+                         row is not one big button, because reading about a
+                         player and changing his spot are different intentions.
+                         v0.323.1 only moves it: it now rides on the POSITION
+                         LINE inside the cell instead of standing beside the
+                         name, where it was taking ~34px off the name box on the
+                         one side that has it. See SPOT_COL_NARROW. */
+                      <BoardCell e={row.home} align="left" face={faceSize} gap={cellGap}
+                        onName={() => openPlayerCard({ slug: row.home!.slug, name: row.home!.name, pos: row.home!.pos, team: row.home!.team ?? '', week: matchup?.week, userId })}
+                        action={settable ? (
+                          <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)} title="change this spot" aria-label={`change ${row.label}`} className="mono"
+                            style={{ flex: 'none', fontSize: 9, fontWeight: 700, color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 5px', lineHeight: 1.35, cursor: 'pointer' }}>⇄</button>
+                        ) : undefined} />
                     ) : settable ? (
                       <button onClick={() => setPickerSlot(pickerSlot === row.slot ? null : row.slot)} title="set this spot"
                         style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit', minWidth: 0 }}>
@@ -1216,10 +1276,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                       </button>
                     ) : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <SlotPill pos={row.pos} label={row.label} />
+                      <SlotPill pos={row.pos} label={row.label} width={spotCol} />
                       {auto && <span className="mono" title="best ball — fills itself with your best eligible player" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
                     </div>
-                    <BoardCell e={row.away} align="right"
+                    <BoardCell e={row.away} align="right" face={faceSize} gap={cellGap}
                       onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />
                   </div>
                   {/* tier 2 — where and when, and the number */}
@@ -1258,13 +1318,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   const h = board[k].home[i] ?? null;
                   const a = board[k].away[i] ?? null;
                   return (
-                    <div key={i} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
-                        {h ? <BoardCell e={h} align="left" onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
+                    <div key={i} style={{ padding: `9px ${rowPadX}px 11px`, borderTop: '1px solid var(--bd)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${spotCol}px minmax(0, 1fr)`, alignItems: 'center', gap: colGap }}>
+                        {h ? <BoardCell e={h} align="left" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
                           {k === 'bench' ? 'BN' : 'IR'}
                         </span>
-                        {a ? <BoardCell e={a} align="right" onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
+                        {a ? <BoardCell e={a} align="right" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 7 }}>
                         {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} /> : <span />}
