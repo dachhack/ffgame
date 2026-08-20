@@ -9,13 +9,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   chatPost, chatMessages, chatDelete, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin,
+  chatPostPoll, pollCast, chatPin, chatReact,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
+import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -252,12 +253,68 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
   );
 }
 
+/** QUICK REACTIONS on one message (v0.329.0) — the web chat's Reactions in RN.
+ *  See there for the reasoning; in short: counts always visible because they
+ *  ARE the content, the six-chip picker behind a `+` because six always-on
+ *  chips under every message is furniture, and a one-message repaint rather
+ *  than a reload so the list does not scroll away under the thumb. */
+function Reactions({ m, leagueId, onChange }: {
+  m: ChatMessage; leagueId: string; onChange: (id: number, r: ChatReactionCount[]) => void;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const shown = orderedReactions(m.reactions);
+  const react = async (emoji: string) => {
+    if (busy) return;
+    setBusy(true); setOpen(false); tap();
+    try {
+      const r = await chatReact(leagueId, m.id, emoji);
+      if (r.ok && r.reactions) { commit(); onChange(m.id, r.reactions); }
+    } catch { /* the counts simply do not move */ }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>
+      {shown.map((r) => (
+        <Pressable key={r.emoji} onPress={() => void react(r.emoji)} hitSlop={4}
+          accessibilityLabel={`${reactionLabel(r.emoji)}, ${r.n}${r.mine ? ', including you' : ''}`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: 999,
+            paddingHorizontal: 7, paddingVertical: 1, borderWidth: StyleSheet.hairlineWidth,
+            borderColor: r.mine ? t.you : t.bd, backgroundColor: r.mine ? alpha(t.you, 14) : t.bg }}>
+          <Text style={{ fontSize: 11 }}>{r.emoji}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, color: r.mine ? t.you : t.dim }}>{r.n}</Text>
+        </Pressable>
+      ))}
+      <Pressable onPress={() => { tap(); setOpen((v) => !v); }} hitSlop={6} accessibilityLabel="add a reaction"
+        style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1,
+          borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{open ? '×' : '+'}</Text>
+      </Pressable>
+      {open && CHAT_REACTIONS.map((r) => (
+        <Pressable key={r.emoji} onPress={() => void react(r.emoji)} hitSlop={4} accessibilityLabel={r.label}
+          style={{ borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: t.bg }}>
+          <Text style={{ fontSize: 14 }}>{r.emoji}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
   const [pins, setPins] = useState<ChatMessage[]>([]);
   const [pinsOpen, setPinsOpen] = useState(false);
+  // Repaint ONE message's reactions in place (v0.329.0) — not load(): the poll
+  // already refreshes, and refetching on every tap yanks the scroll away from
+  // the message being reacted to.
+  const applyReactions = (id: number, reactions: ChatReactionCount[]) => {
+    setMsgs((cur) => (cur ?? []).map((m) => (m.id === id ? { ...m, reactions } : m)));
+    setPins((cur) => cur.map((m) => (m.id === id ? { ...m, reactions } : m)));
+  };
   const [members, setMembers] = useState<{ id: string; name: string; me: boolean }[]>([]);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -355,6 +412,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                   <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
                 </>
               : <MsgBody body={m.body} names={names} />}
+            <Reactions m={m} leagueId={leagueId} onChange={applyReactions} />
           </Pressable>
         ))}
         <View style={{ height: 6 }} />
