@@ -14,6 +14,7 @@
 //     get into a league"; a separate screen would split that question in two.
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { crestInitial } from '@drip/core/data/crest';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity,
@@ -36,7 +37,7 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
     <View style={{ width: size, height: size, borderRadius: Math.round(size * 0.19), overflow: 'hidden', flexShrink: 0, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
       {show
         ? <Image source={{ uri: url }} onError={() => setFailed(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        : <Text style={{ fontFamily: MONO, fontSize: Math.round(size * 0.42), fontWeight: '700', color: t.faint }}>{(name ?? '?').trim().charAt(0).toUpperCase() || '?'}</Text>}
+        : <Text style={{ fontFamily: MONO, fontSize: Math.round(size * 0.42), fontWeight: '700', color: t.faint }}>{crestInitial(name)}</Text>}
     </View>
   );
 }

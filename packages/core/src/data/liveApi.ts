@@ -327,9 +327,15 @@ export async function myLinkedSleeper(userId: string): Promise<{ userId: string;
     : null;
 }
 
-export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; }
+export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; }
 
-/** Preview a league by invite code (so we can show "You're joining <name>"). */
+/** Preview a league by invite code (so we can show "You're joining <name>").
+ *
+ *  CALLABLE SIGNED OUT since 0206 — that grant is the feature. The moment this
+ *  answer is wanted is the moment before there is an authenticated anybody, and
+ *  for four years it was granted to `authenticated` only, so the join screen
+ *  could only say "Join your league." in the abstract to someone who had just
+ *  been handed a link and had no way to tell which league it was for. */
 export async function previewLeague(code: string): Promise<LeaguePreview | null> {
   const { data, error } = await (await client()).rpc('league_by_invite', { code: code.trim() });
   if (error) throw error;

@@ -15,6 +15,31 @@ import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
 
+/** A league/team crest: the image when there is one, a lettered box when there
+ *  is not (v0.324.0). The RULE lives in core (`crestFor`) so both platforms and
+ *  the parity test agree on it; this is only the drawing.
+ *
+ *  `onError` matters as much as the fallback: a mirrored avatar whose upstream
+ *  has since 404'd is indistinguishable from a good one until the browser tries
+ *  it, and a broken-image icon is worse than the letter it replaced. */
+export function Crest({ crest, size = 32, radius = 7 }: {
+  crest: import('@drip/core/data/crest').Crest; size?: number; radius?: number;
+}) {
+  const [broken, setBroken] = useState(false);
+  const box: React.CSSProperties = { width: size, height: size, borderRadius: radius, flexShrink: 0 };
+  if (crest.url && !broken) {
+    return <img src={crest.url} alt="" width={size} height={size} onError={() => setBroken(true)}
+      style={{ ...box, objectFit: 'cover' }} />;
+  }
+  return (
+    <div aria-hidden style={{
+      ...box, background: 'var(--bg)', border: '1px solid var(--bd)',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      fontWeight: 700, fontSize: Math.round(size * 0.44), color: 'var(--faint)',
+    }}>{crest.initial}</div>
+  );
+}
+
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
 export function useIsMobile(maxWidth = 760): boolean {
   const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(`(max-width:${maxWidth}px)`).matches);
