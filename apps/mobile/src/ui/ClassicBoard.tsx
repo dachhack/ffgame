@@ -61,7 +61,7 @@ function SlateStrip({ chips, sel, onSel, locked }: {
       : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
   };
   return (
-    <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: t.bd, paddingTop: 8 }}>
+    <View style={{ paddingVertical: 4 }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
         {chips.map((c) => {
           const mine = c.homeCount + c.awayCount > 0;
@@ -333,7 +333,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // The lineup is a card over the board since v0.321.0 — see the web board's
   // note. On a phone it is the change that matters most: twelve spots with two
   // game cards each, plus both benches, was most of the screen.
-  const [lineupOpen, setLineupOpen] = useState(false);
+  const [slateOpen, setSlateOpen] = useState(false);
   const [fieldGame, setFieldGame] = useState<string | null>(null); // team abbr locating the game
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
   const [selGame, setSelGame] = useState<string | null>(null);
@@ -907,18 +907,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
             <View style={{ alignItems: 'center', width: 104 }}>
-              {/* ── THE LINEUP CHIP (v0.321.0) ─────────────────────────────
+              {/* ── THE SLATE CHIP (v0.321.0, repointed v0.322.2) ─────────
                   The one column that belongs to neither side, and the way in
                   to the lineup. It ABSORBS the old bare "LIVE": "⏵ 2 LIVE"
                   says the same thing about the game's state and then says how
                   many of YOUR games, which the single word never could.
                   GOLF (v0.303.0) still has to be said here: two numbers side
                   by side read as "bigger is winning" everywhere else. */}
-              <Pressable onPress={() => setLineupOpen(true)}
+              <Pressable onPress={() => setSlateOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open lineup. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
+                accessibilityLabel={`Open the NFL slate. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
                 style={{ width: '100%', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 4, borderRadius: 5, borderWidth: 1, borderColor: lineChip.tone === 'live' ? t.you : t.bd, backgroundColor: t.bg }}>
-                <Mono size={7.5} tone="faint" weight="700" track={0.1}>LINEUP</Mono>
+                <Mono size={7.5} tone="faint" weight="700" track={0.1}>NFL SLATE</Mono>
                 <Mono size={10.5} weight="700" style={{ color: lineChip.tone === 'live' ? t.you : t.text }}>
                   {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
                 </Mono>
@@ -931,7 +931,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
-          <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
           {locked && (
             <>
               <View style={{ flexDirection: 'row', gap: 4, marginTop: 9, height: 5 }}>
@@ -962,24 +961,35 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           rows stay tappable into the picker (this is the only lineup screen
           the app has), and THEIR column is absent rather than blank, because
           sealed_pick's RLS hands out an opponent's picks only once locked. */}
-      {/* ── THE LINEUP, AS A SHEET OVER THE BOARD (v0.321.0) ───────────────
-          Founder: "let's make the lineup be a pop up when you click on a chip
-          in the middle of the top panel (currently blank space)."
-
-          The board keeps the SCOREBOARD and the SLATE — how the matchup is
-          going, and what is on. The lineup is a question with a moment rather
-          than a standing one, and on a phone it was most of the screen.
-
-          `Overlay` rather than a hand-rolled Modal, so this dismisses the same
-          way the picker and the field board do (backdrop, ✕, the same slide),
-          and so stacked Modals — flaky on Android, per the note below — stay a
-          thing this screen does exactly once. */}
+      {/* ── THE NFL SLATE, AS A SHEET OVER THE BOARD (v0.322.2) ───────────
+          Founder: "the nfl game slate is what pops up if clicked on the center
+          chip." `Overlay` rather than a hand-rolled Modal, so this dismisses
+          the same way the picker and the field board do (backdrop, ✕, the same
+          slide), and so stacked Modals — flaky on Android, per the note below
+          — stay a thing this screen does exactly once. */}
       <Overlay
-        visible={!!board && lineupOpen}
-        title="LINEUP"
+        visible={!!board && slateOpen}
+        title="NFL SLATE"
         subtitle={`${lineChip.label}${lineChip.detail ? ` · ${lineChip.detail}` : ''}`}
-        onClose={() => setLineupOpen(false)}>
+        onClose={() => setSlateOpen(false)}>
         {!!board && (
+          <Card style={{ paddingVertical: 2 }}>
+            <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
+          </Card>
+        )}
+      </Overlay>
+
+      {/* ── THE LINEUP IS THE BOARD (v0.322.2) ─────────────────────────────
+          v0.321.0 put the LINEUP behind the centre chip and left the NFL slate
+          on the board. Wrong way round — the founder: "I still want the head
+          to head line up on the matchup board, but the nfl game slate is what
+          pops up if clicked on the center chip."
+
+          The lineup IS long on a phone, and that was the argument for hiding
+          it. But this screen is the matchup board, and the head to head is the
+          thing it is for; the slate is reference material, and the shorter of
+          the two besides. See the web board for the same note. */}
+      {!!board && (
         <>
           <Card style={{ paddingVertical: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 6 }}>
@@ -1084,8 +1094,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             );
           })}
         </>
-        )}
-      </Overlay>
+      )}
 
       {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
           sides of the lock since v0.237.0, but if it can't assemble this is

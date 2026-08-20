@@ -18,6 +18,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.322.2 — the swap: the head to head is the board, the slate is the card
+
+Founder: "We are missing communication here. I still want the head to head line
+up on the matchup board, but the nfl game slate is what pops up if clicked on
+the center chip."
+
+v0.321.0 read the request backwards. It put the LINEUP behind the centre chip
+and left the NFL slate on the board permanently. This reverses that: the head
+to head lineup — starters, bench, taxi/IR, both sides — is back as the board's
+permanent content, and the chip now opens the SLATE.
+
+WHY THE FIRST VERSION WAS WRONG, since the reasoning was not stupid. The lineup
+IS long: twelve spots with two game cards each, plus both benches, is most of a
+phone, and hiding the long thing does buy screen. But the screen is called the
+matchup board and the head to head is the thing it is FOR. The slate is the
+reference material you go and look up, and it is the shorter of the two, so the
+swap costs almost nothing and the chip still opens onto something worth a card.
+
+NOTHING IN THE ENGINE CHANGED, which is the tell that the chip was already
+right. `lineupChipSummary` was always counting GAMES — "8 GAMES", "3 LIVE",
+"9 starters to play", next kickoff — because it summarises the games this
+side's lineup is in. That is exactly the label a control that opens the slate
+wants. Only the chip's heading (LINEUP → NFL SLATE), its destination and its
+accessible name moved.
+
+The rehearsal notice is NOT repeated inside the sheet, unlike the lineup card
+it replaces: that warning is about whose ROSTER you are looking at, and the
+slate is the same twelve games whoever holds whom.
+
+MEASURED, because this is the second layout in two versions to put that
+scrollable chip row inside a new container, and v0.322.1 was exactly that bug.
+A 16-game slate (1498px of chips) inside the new sheet, in headless Chromium:
+
+  @390:  doc=390  col=358  cardRight=374   scrolls=true
+  @768:  doc=768  col=720  cardRight=744   scrolls=true
+  @1440: doc=1440 col=720  cardRight=1080  scrolls=true
+
+Both platforms. Mobile keeps `Overlay` rather than a hand-rolled Modal, so the
+sheet dismisses the way every other card on that screen does.
+
+
 ### v0.322.1 — the board wasn't hiding the matchup, it was pushing it off the screen
 
 Founder, on web, with a screenshot: "Looks like we hid the matchup instead of
