@@ -38,7 +38,7 @@ import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats20
 import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
 import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
 import { PROJ_RETURN } from '../packages/core/src/data/projReturns2026';
-import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD } from '../packages/core/src/data/projTeamRoles2026';
+import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, TEAM_ROLE_NAME } from '../packages/core/src/data/projTeamRoles2026';
 import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
@@ -308,14 +308,28 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   const HCBAD = { id: 'ari-hc', pos: 'HC', team: 'ARI' }; // -4.16 margin, 6.3 wins
   const PU = { id: 'pit-p', pos: 'P', team: 'PIT' };      // 73.4 punts, most in the league
 
-  ok('both bakes loaded — 32 coaches, and the punters that exist upstream',
-    Object.keys(PROJ_HC).length === 32 && Object.keys(PROJ_PUNT).length === 30,
+  // EVERY TEAM HAS ONE, like K and DST (founder). Two punters are filled from
+  // StatHead's own positional mean because they have no upstream row — for a
+  // TEAM slot that is right, since every team really does punt.
+  ok('both bakes cover all 32 teams',
+    Object.keys(PROJ_HC).length === 32 && Object.keys(PROJ_PUNT).length === 32,
     [Object.keys(PROJ_HC).length, Object.keys(PROJ_PUNT).length]);
   ok('every coach and punter keys to our own team pseudo-player convention',
     Object.keys(PROJ_HC).every((k) => k.endsWith('-hc'))
     && Object.keys(PROJ_PUNT).every((k) => k.endsWith('-p')));
   ok('the pools can see them, so they no longer sort below unknown players',
     hasProjection('la-hc') && hasProjection('pit-p') && !hasProjection('xxx-hc'));
+
+  // NAMES ARE DISPLAY ONLY. The projection belongs to the TEAM, which is what
+  // makes a mid-season coaching change harmless: the slug, the roster row and
+  // every stored lineup survive it, and only the name goes stale.
+  ok('every coach slot names its current coach', Object.keys(PROJ_HC)
+    .every((k) => (TEAM_ROLE_NAME[k] ?? '').length > 1), Object.keys(PROJ_HC)
+    .filter((k) => !TEAM_ROLE_NAME[k]));
+  ok('a filled punter has no name to claim, and says so by absence',
+    !TEAM_ROLE_NAME['chi-p'] && !TEAM_ROLE_NAME['den-p']);
+  ok('naming a role does not change what it scores',
+    projectedPoints({ id: 'la-hc', pos: 'HC', team: 'LA' }) === 0);
 
   // THE DEFINING PROPERTY: worth nothing until a commissioner says otherwise.
   ok('a coach projects EXACTLY zero under the default catalog',
@@ -345,8 +359,11 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   setLeagueProjScoring({ puntPt: 1, puntYd: 0.05 });
   ok('a punter league gives the punter a projection', projectedPoints(PU) > 0, projectedPoints(PU));
   ok('…scaled by volume', projectedPoints(PU) > projectedPoints({ id: 'car-p', pos: 'P', team: 'CAR' }));
-  ok('a team with no punter upstream still projects nothing, not a stand-in',
-    projectedPoints({ id: 'chi-p', pos: 'P', team: 'CHI' }) === 0);
+  ok('a filled team punts like the league average rather than not at all',
+    projectedPoints({ id: 'chi-p', pos: 'P', team: 'CHI' }) > 0,
+    projectedPoints({ id: 'chi-p', pos: 'P', team: 'CHI' }));
+  ok('…and a team that does not exist still projects nothing',
+    projectedPoints({ id: 'xxx-p', pos: 'P', team: 'XXX' }) === 0);
   ok('…and a coach is untouched by punt scoring', projectedPoints(HC) === 0);
   clearLeagueProjScoring();
 }
