@@ -20,6 +20,7 @@ import {
   optimalLineup, autoSlotPlan, classicLineup, slateAwareProj, leagueEligiblePos,
 } from '../packages/core/src/engine/classic';
 import { sortPool, poolSortValue, adpFor, projFor, setLiveAdp, clearLiveAdp, adpIsLive } from '../packages/core/src/data/poolSort';
+import { disambiguateSlugs } from '../packages/core/src/data/nativeLeague';
 import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
@@ -784,6 +785,54 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     ok('the fill benches a 20-point bye for a 15-point player who plays',
       plan.length === 1 && plan[0].player === 'omarion-hampton', plan);
   }
+}
+
+
+// ── TWO PEOPLE, ONE NAME (0205) ────────────────────────────────────────────
+// `league_pool` is keyed (league_id, slug) and the slug is a normalised name,
+// so a duplicate name cannot be two rows. It used to be resolved by DROPPING
+// one — a commissioner could roster only one of the two Byron Youngs, with
+// nothing on screen to say why. The loser is renamed now, and these pin the
+// rule, because the failure it replaces was SILENT.
+{
+  // Sorted best-first, as buildDraftPool hands them over.
+  const rows = [
+    { slug: 'byron-young', sleeperId: '9001', who: 'LB LA' },     // better
+    { slug: 'byron-young', sleeperId: '9002', who: 'DL PHI' },    // worse
+    { slug: 'jaylon-jones', sleeperId: '9003', who: 'DB IND' },
+    { slug: 'jaylon-jones', sleeperId: '9004', who: 'DB CHI' },
+    { slug: 'la-dst', who: 'team unit' },                          // no id
+    { slug: 'la-k', who: 'team unit' },
+  ];
+  disambiguateSlugs(rows);
+  ok('every slug in a pool is unique after disambiguation',
+    new Set(rows.map((r) => r.slug)).size === rows.length, rows.map((r) => r.slug));
+  ok('the BETTER player keeps the clean slug',
+    rows[0].slug === 'byron-young' && rows[0].who === 'LB LA', rows[0]);
+  ok('…and the other takes his own Sleeper id as the suffix',
+    rows[1].slug === 'byron-young-9002', rows[1].slug);
+  ok('a second collision is handled independently of the first',
+    rows[2].slug === 'jaylon-jones' && rows[3].slug === 'jaylon-jones-9004',
+    [rows[2].slug, rows[3].slug]);
+  ok('a team pseudo-player is left alone — it is not a person and cannot collide',
+    rows[4].slug === 'la-dst' && rows[5].slug === 'la-k');
+
+  // STABLE ACROSS RE-SEEDS. A slug is stored in native_roster, sealed_pick and
+  // a dozen other tables, so a rename that moved between seeds would orphan
+  // every one of them. Same input, same output — and running it again is a
+  // no-op rather than stacking a second suffix.
+  const again = disambiguateSlugs(rows.map((r) => ({ ...r })));
+  ok('re-running on already-disambiguated rows changes nothing',
+    again.map((r) => r.slug).join() === rows.map((r) => r.slug).join(), again.map((r) => r.slug));
+
+  // An entry with no id CANNOT be renamed, so a collision between two id-less
+  // rows would still lose one. That cannot happen (team slugs are minted
+  // unique) but the behaviour is pinned so a future caller learns it here
+  // rather than in production.
+  const noIds = [{ slug: 'dup' }, { slug: 'dup' }];
+  disambiguateSlugs(noIds);
+  ok('without an id there is nothing to disambiguate WITH, and it says so by leaving them equal',
+    noIds[0].slug === 'dup' && noIds[1].slug === 'dup');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

@@ -130,3 +130,4 @@ $RUN -f scripts/db/golf-mode-probes.sql | grep -E "PROBE FAIL|ALL GOLF-MODE PROB
 $RUN -f scripts/db/rename-spot-probes.sql | grep -E "PROBE FAIL|ALL RENAME-SPOT PROBES" || { echo "RENAME-SPOT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/market-probes.sql | grep -E "PROBE FAIL|ALL MARKET PROBES" || { echo "MARKET PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/manual-sync-probes.sql | grep -E "PROBE FAIL|ALL MANUAL-SYNC PROBES" || { echo "MANUAL-SYNC PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/identity-probes.sql | grep -E "PROBE FAIL|ALL IDENTITY PROBES" || { echo "IDENTITY PROBES FAILED"; exit 1; }
