@@ -41,11 +41,19 @@ export function CardUnreadPill({ leagueId }: { leagueId: string }) {
   );
 }
 
+/** ONE RED DOT on the chat chip (v0.327.0). Founder: "let's get a tiny red dot
+ *  on the chat icon when there are unread messages."
+ *
+ *  It was `t.you` — the accent — unless the unread happened to mention you,
+ *  which made "somebody wrote in the league" the same colour as every lit chip
+ *  and live number on the screen. A notification has to be the one thing that
+ *  colour. Matches the web strip and v0.292.0's league card, where the founder
+ *  asked for the same thing in the same words. */
 export function ChatChipDot({ leagueId, active }: { leagueId: string; active: boolean }) {
   const t = useTheme();
   const u = useChatUnread(leagueId);
   if (active || u.n === 0) return null;
-  return <View style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 4, backgroundColor: u.mention ? t.warn : t.you }} />;
+  return <View style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 4, backgroundColor: t.opp }} />;
 }
 
 

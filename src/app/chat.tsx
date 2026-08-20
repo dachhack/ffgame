@@ -12,6 +12,7 @@
 // Opening a surface marks it read server-side (fetching the latest page IS
 // the read); the badge poll never marks anything.
 import { Ev, track } from '@drip/core/analytics';
+import { mentionIds } from '@drip/core/data/mentions';
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
@@ -114,7 +115,16 @@ function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; 
   );
 }
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 0, width: '100%', maxWidth: 440, height: 'min(560px, 86vh)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' };
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 0, width: '100%', maxWidth: 440, height: 'min(560px, 86vh)',
+  // `maxHeight: 100%` is the half that keeps the COMPOSER on screen (v0.327.0).
+  // ModalBackdrop now sizes itself to the visual viewport when the keyboard is
+  // up, but `86vh` is measured against the LAYOUT viewport, which the keyboard
+  // does not shrink — so without this the card stayed full-height inside a
+  // third-height backdrop and its bottom row, the message box, sat under the
+  // keys. With it, the flex column compresses and the composer rides the
+  // bottom of whatever is actually visible.
+  maxHeight: '100%',
+  display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' };
 const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 13, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '9px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' };
 const btn: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 5, padding: '9px 14px', cursor: 'pointer', whiteSpace: 'nowrap' };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer', padding: '2px 4px' };
@@ -247,7 +257,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     setBusy(true); setErr(null);
     try {
       // mentions travel as ids, derived from the @names still present at send
-      const mentions = members.filter((m) => !m.me && body.includes(`@${m.name}`)).map((m) => m.id);
+      // @all (v0.327.0) — the rule lives in core/data/mentions so this and the
+      // native app cannot drift on which "@all"s are real ones.
+      const mentions = mentionIds(body, members);
       const r = await chatPost(leagueId, body, mentions);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return; }
       setDraft(''); setGifOpen(false); await load();
@@ -270,6 +282,11 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const sugg = mq != null && mq.length <= 24 && !mq.includes('@')
     ? members.filter((m) => !m.me && m.name.toLowerCase().startsWith(mq.toLowerCase()) && m.name.toLowerCase() !== mq.toLowerCase().trim()).slice(0, 5)
     : [];
+  // @all rides the same row (v0.327.0). A mention nobody can discover is a
+  // feature only the person who built it uses — it offers itself the moment an
+  // `@` is typed, and stops once it has been completed.
+  const suggAll = mq != null && mq.length <= 3 && 'all'.startsWith(mq.toLowerCase()) && mq.toLowerCase() !== 'all'
+    && members.some((m) => !m.me);
 
   return (
     <>
@@ -324,8 +341,15 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
         {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
-        {sugg.length > 0 && (
+        {(sugg.length > 0 || suggAll) && (
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {suggAll && (
+              <button onClick={() => setDraft(draft.slice(0, at) + '@all ')} className="mono"
+                title="mention everyone in the league"
+                style={{ fontSize: 9, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 9px', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)' }}>
+                @all
+              </button>
+            )}
             {sugg.map((s) => (
               <button key={s.id} onClick={() => setDraft(draft.slice(0, at) + '@' + s.name + ' ')} className="mono"
                 style={{ fontSize: 9, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 9px', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)' }}>
@@ -344,7 +368,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               style={{ ...linkBtn, fontSize: 11, padding: '0 2px', alignSelf: 'center' }}>GIF</button>
           )}
           <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length) void sendBody(draft.trim()); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length && !suggAll) void sendBody(draft.trim()); }}
             placeholder="message the league… (@ to mention)" style={{ ...input, fontSize: 12.5 }} />
           <button onClick={() => void sendBody(draft.trim())} disabled={busy || !draft.trim()} className="mono"
             style={{ ...btn, padding: '9px 16px', opacity: busy || !draft.trim() ? 0.5 : 1 }}>➤</button>

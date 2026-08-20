@@ -15,6 +15,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { Ev, track } from '@drip/core/analytics';
+import { mentionIds } from '@drip/core/data/mentions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -280,8 +281,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     if (!body || busy) return;
     setBusy(true); setErr(null);
     try {
-      // mentions travel as ids, derived from the @names still present at send
-      const mentions = members.filter((m) => !m.me && body.includes(`@${m.name}`)).map((m) => m.id);
+      // mentions travel as ids — the rule (including @all) lives in
+      // core/data/mentions so the two apps cannot disagree about it.
+      const mentions = mentionIds(body, members);
       const r = await chatPost(leagueId, body, mentions);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return; }
       commit(); setDraft(''); setGifOpen(false); await load();
@@ -310,6 +312,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   // whatever follows as the query (team names may contain spaces).
   const at = draft.lastIndexOf('@');
   const mq = at >= 0 && (at === 0 || /\s/.test(draft[at - 1])) ? draft.slice(at + 1) : null;
+  // @all rides the same row (v0.327.0) — a mention nobody can discover is a
+  // feature only its author uses.
+  const suggAll = mq != null && mq.length <= 3 && 'all'.startsWith(mq.toLowerCase()) && mq.toLowerCase() !== 'all';
   const sugg = mq != null && mq.length <= 24 && !mq.includes('@')
     ? members.filter((m) => !m.me && m.name.toLowerCase().startsWith(mq.toLowerCase()) && m.name.toLowerCase() !== mq.toLowerCase().trim()).slice(0, 5)
     : [];
@@ -358,8 +363,14 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
-        {sugg.length > 0 && (
+        {(sugg.length > 0 || (suggAll && members.some((m) => !m.me))) && (
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {suggAll && members.some((m) => !m.me) && (
+              <Pressable onPress={() => { tap(); setDraft(draft.slice(0, at) + '@all '); }}
+                style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: t.bg }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.warn }}>@all</Text>
+              </Pressable>
+            )}
             {sugg.map((s) => (
               <Pressable key={s.id} onPress={() => { tap(); setDraft(draft.slice(0, at) + '@' + s.name + ' '); }}
                 style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: t.bg }}>
