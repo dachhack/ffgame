@@ -4,7 +4,7 @@
 // different tagline." A classic league has no hidden picks and no effects, so
 // pitching them to a recruit is not a tone problem — it is a description of a
 // game they are not about to play.
-import { taglineFor, NEUTRAL_BLURB } from '../packages/core/src/data/leagueTagline';
+import { taglineFor, NEUTRAL_BLURB, joinDoorFor } from '../packages/core/src/data/leagueTagline';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -45,6 +45,35 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
     taglineFor('  Classic ').label === 'CLASSIC' && taglineFor('DRIP').label === 'DRIP');
   ok('a known mode always carries a label; the neutral one never does',
     taglineFor('classic').label !== '' && taglineFor('nope').label === '');
+}
+
+// ── THE DOOR: seat / waitlist / "League Full" (v0.326.0) ──────────────────
+{
+  ok('a free seat means the link just seats you',
+    joinDoorFor({ seatsOpen: 3, waitlistOpen: true }) === 'seat');
+  ok('full with the room open is a waitlist',
+    joinDoorFor({ seatsOpen: 0, waitlistOpen: true }) === 'waitlist');
+  ok('full with the room CLOSED is League Full',
+    joinDoorFor({ seatsOpen: 0, waitlistOpen: false }) === 'full');
+
+  // SEATS BEAT THE FLAG. A commissioner who closed the room and then freed a
+  // seat has not barred the door, and telling an invited recruit the league is
+  // full while a seat sits empty is the worst wrong answer available.
+  ok('a free seat beats a closed waiting room',
+    joinDoorFor({ seatsOpen: 1, waitlistOpen: false }) === 'seat');
+
+  // UNKNOWN MUST NOT READ AS FULL — an older build's preview carries neither
+  // field, and turning a joinable league away is worse than saying nothing.
+  ok('a preview with no seat count says nothing special',
+    joinDoorFor({}) === 'seat');
+  ok('a null seat count is not zero', joinDoorFor({ seatsOpen: null, waitlistOpen: false }) === 'seat');
+  ok('an unknown flag on a full league still offers the waiting room',
+    joinDoorFor({ seatsOpen: 0 }) === 'waitlist'
+    && joinDoorFor({ seatsOpen: 0, waitlistOpen: null }) === 'waitlist');
+  ok('only an explicit false closes the door',
+    joinDoorFor({ seatsOpen: 0, waitlistOpen: undefined }) === 'waitlist');
+  ok('a negative seat count is treated as full, not as room',
+    joinDoorFor({ seatsOpen: -1, waitlistOpen: false }) === 'full');
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

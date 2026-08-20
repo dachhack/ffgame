@@ -60,3 +60,35 @@ export function taglineFor(mode?: GameMode | null): LeagueTagline {
   }
   return { label: '', blurb: NEUTRAL_BLURB, known: false };
 }
+
+// ── IS THERE ROOM, AND IS THE DOOR OPEN (v0.326.0) ────────────────────────
+//
+// Founder: "Can we have a commish option to close the waiting room. Just
+// 'League Full'."
+//
+// The three states a recruit holding an invite link can be in, decided in one
+// place so the join screen, the preview card and the test cannot drift:
+//
+//   'seat'      — a seat is free; the link seats you on arrival.
+//   'waitlist'  — full, but the commissioner still takes waiters (0125).
+//   'full'      — full AND the waiting room is closed (0208). Nothing to join.
+//
+// SEATS BEAT THE FLAG. Closing the waiting room is not closing the league, and
+// a commissioner who closed it and then freed a seat has not accidentally
+// barred the door — so `seats > 0` answers 'seat' whatever the flag says.
+//
+// UNKNOWN IS NOT 'full'. A preview from a build older than 0208 carries no
+// seats and no flag, and guessing 'full' would turn a joinable league away.
+// Absent means "say nothing special", which is what 'seat' renders as.
+
+export type JoinDoor = 'seat' | 'waitlist' | 'full';
+
+export function joinDoorFor(o: { seatsOpen?: number | null; waitlistOpen?: boolean | null }): JoinDoor {
+  // NULL IS ABSENCE, NOT ZERO — and `Number(null)` is 0, which would quietly
+  // turn "this build didn't tell me" into "no seats left" and bar a joinable
+  // league. Checked before the coercion, deliberately.
+  if (o.seatsOpen === null || o.seatsOpen === undefined) return 'seat';
+  const seats = Number(o.seatsOpen);
+  if (!Number.isFinite(seats) || seats > 0) return 'seat';
+  return o.waitlistOpen === false ? 'full' : 'waitlist';
+}

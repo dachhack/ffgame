@@ -69,6 +69,11 @@ export function friendlyError(x: unknown): string {
     return 'That Sleeper account is already linked to a different login. Sign in with that account, or ask your commissioner for help.';
   if (m.includes('invalid code'))
     return 'That code didn’t match a league. Double-check it with your commissioner.';
+  // 0208's closed waiting room. Matched on the WHOLE phrase, not on 'full':
+  // 'roster full — drop someone' and 'lineup is full — 8 slots max' are
+  // different messages about different things and must keep their own words.
+  if (m.includes('league is full'))
+    return 'That league is full and isn’t taking a waiting list. Ask whoever sent you the link whether another seat is opening.';
   return raw.charAt(0).toUpperCase() + raw.slice(1) + (/[.!?]$/.test(raw) ? '' : '.');
 }
 
@@ -327,7 +332,14 @@ export async function myLinkedSleeper(userId: string): Promise<{ userId: string;
     : null;
 }
 
-export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; game_mode?: string | null; }
+export interface LeaguePreview {
+  league_id: string; name: string; season: string; provider?: string;
+  avatar_url?: string | null; game_mode?: string | null;
+  /** Unclaimed seats (0208). 0 = the league is full. */
+  seats_open?: number | null;
+  /** Whether a full league still takes waiters (0208). False = "League Full". */
+  waitlist_open?: boolean | null;
+}
 
 /** Preview a league by invite code (so we can show "You're joining <name>").
  *
@@ -1258,6 +1270,16 @@ export const joinLeague = (code: string) =>
 export interface LeagueJoiner { app_user_id: string; email: string | null; }
 /** Admin/commish: users who've joined a league's pool but aren't rostered yet. */
 export const adminLeagueJoiners = (leagueId: string) => rpc<LeagueJoiner[]>('admin_league_joiners', { p_league_id: leagueId });
+
+/** THE COMMISSIONER'S DOOR ON THE WAITING ROOM (0208).
+ *
+ *  Founder: "Can we have a commish option to close the waiting room. Just
+ *  'League Full'." Closed, a FULL league refuses new joiners instead of queuing
+ *  them; it changes nothing while a seat is free, and it never evicts the
+ *  people already waiting — `waiting` comes back so the UI can say so. */
+export const setLeagueWaitlist = (leagueId: string, open: boolean) =>
+  rpc<{ ok: boolean; error?: string; waitlist_open?: boolean; waiting?: number }>(
+    'set_league_waitlist', { p_league_id: leagueId, p_open: open });
 export const commishOverview = () => rpc<AdminLeague[]>('commish_overview');
 export interface MatchupPicks { home_roster_id: number; away_roster_id: number; home_app_user: string | null; away_app_user: string | null; picks: { app_user_id: string; game_window: string; roster_slot: string; player_slug: string | null; metric_id: string | null }[]; home_lineup: { player_slug: string | null; pos: string | null }[]; away_lineup: { player_slug: string | null; pos: string | null }[]; home_buffs: string[]; away_buffs: string[]; home_unlocks?: string[]; away_unlocks?: string[]; home_extra?: number; away_extra?: number; }
 export const adminMatchupPicks = (matchupId: string) => rpc<MatchupPicks>('admin_matchup_picks', { p_matchup_id: matchupId });

@@ -16,7 +16,7 @@ import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
 import { crestFor } from '@drip/core/data/crest';
-import { taglineFor } from '@drip/core/data/leagueTagline';
+import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -367,6 +367,27 @@ function AuthForm() {
             {taglineFor(preview.lg.game_mode).blurb}
           </div>
         )}
+        {/* FULL, SAID BEFORE THE ACCOUNT IS MADE (v0.326.0). The whole point of
+            a closed waiting room is that a recruit is not strung along; finding
+            out after signing up would be the same string, one screen later.
+            0208 puts seats and the door in the signed-out preview so this can
+            be said here, to someone who has typed nothing yet. */}
+        {playerCtx && preview.st === 'found' && (() => {
+          // ONE RULE, SHARED (joinDoorFor). An inline `seats_open === 0` here
+          // read a NULL seat count — which is what a build older than 0208
+          // sends — as "no seats left", and would have told an invited recruit
+          // a joinable league was full.
+          const door = joinDoorFor({ seatsOpen: preview.lg.seats_open, waitlistOpen: preview.lg.waitlist_open });
+          if (door === 'seat') return null;
+          return (
+            <div className="mono" style={{ fontSize: 10, marginTop: 10, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto',
+              color: door === 'full' ? 'var(--warn, #c66)' : 'var(--dim)' }}>
+              {door === 'full'
+                ? <><span style={{ fontWeight: 700 }}>LEAGUE FULL.</span> This league has no seats left and isn’t taking a waiting list. Ask whoever sent the link whether another is opening.</>
+                : <>This league is full right now — you can still join its waiting room, and the commissioner deals you in when a seat opens.</>}
+            </div>
+          );
+        })()}
         {/* A code that matched nothing. Said HERE rather than after the account
             is made, which is where they would otherwise find out. `error` says
             nothing at all — a hiccuped lookup is not evidence about the code. */}
