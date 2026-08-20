@@ -48,8 +48,15 @@
 //   rung." So we price punts and punt yards, and a league that has set only the
 //   average ladder sees no projection response. Asked for; not yet available.
 // • TWO-POINT CONVERSIONS (`hc2pt`). Not modelled upstream.
-// • CHICAGO AND DENVER HAVE NO PUNTER ROW. 30 of 32 teams are covered and the
-//   other two project zero rather than a league-average stand-in.
+// • CHICAGO AND DENVER HAVE NO PUNTER ROW UPSTREAM, and are filled here with
+//   StatHead's own positional-mean line — the identical 61.9 / 2938 / 24.5 row
+//   they already stamp on Baltimore, Buffalo and Houston, who have no settled
+//   starter either. Founder: "let's make them generic to the team like K and
+//   DST. So every team has one." That is the right call for a TEAM slot and it
+//   is not the false precision we refused for fullbacks: every team really does
+//   employ a punter and really will punt about sixty times, so a zero would be
+//   the wrong claim, whereas ten identical FULLBACKS on a board would each look
+//   like a distinct projection of a distinct player.
 //
 // ── CAVEATS FROM StatHead, KEPT BECAUSE THEY ARE NOT OBVIOUS ───────────────
 // • PUNT VOLUME BELONGS TO THE OFFENSE, NOT THE PUNTER (yoy r=+0.46), and the
@@ -136,9 +143,11 @@ atl-p,61,2871,23.80
 bal-p,61.90,2938,24.50
 buf-p,61.90,2938,24.50
 car-p,59,2777,24.10
+chi-p,61.90,2938,24.50
 cin-p,62.50,3046,25.40
 cle-p,72.70,3456,27.80
 dal-p,59.10,2848,23.20
+den-p,61.90,2938,24.50
 det-p,60,2865,24.30
 gb-p,60.40,2897,23.50
 hou-p,61.90,2938,24.50
@@ -182,4 +191,92 @@ for (const line of P_CSV.split('\n')) {
   const c = line.split(',');
   if (c.length < 4) continue;
   PROJ_PUNT[c[0].trim()] = { punts: num(c, 1), puntYd: num(c, 2), in20: num(c, 3) };
+}
+
+// ── WHO THESE ACTUALLY ARE (display only) ──────────────────────────────────
+// Founder: "Maybe we can pull the starter from rosters, that's just color
+// though. Do we have current head coach or some way to get that — they can
+// change mid season."
+//
+// THE PROJECTION IS THE TEAM'S, NOT THE PERSON'S, and that is what makes a
+// mid-season change harmless: `den-hc` is "Denver's head coach", so firing one
+// and hiring another leaves the slot, the roster row and every stored lineup
+// untouched. Only the NAME below goes stale, and a stale name is a cosmetic
+// bug rather than a scoring one. Nothing reads this map to score anything.
+//
+// Both come from the same 1.0.84 pull as the lines above — the coach rows carry
+// the current 2026 staff (Jesse Minter at Baltimore, Todd Monken at Cleveland,
+// Robert Saleh at Tennessee), so a refresh picks up changes for free. The two
+// filled punters have no name on purpose: there is no starter to name, and the
+// pool already renders "CHI Punter".
+const ROLE_NAME_CSV = `la-hc,Sean McVay
+sea-hc,Mike Macdonald
+det-hc,Dan Campbell
+bal-hc,Jesse Minter
+sf-hc,Kyle Shanahan
+buf-hc,Sean McDermott
+ne-hc,Mike Vrabel
+kc-hc,Andy Reid
+phi-hc,Nick Sirianni
+hou-hc,DeMeco Ryans
+jax-hc,Liam Coen
+chi-hc,Ben Johnson
+gb-hc,Matt LaFleur
+cin-hc,Zac Taylor
+lac-hc,Jim Harbaugh
+min-hc,Kevin O'Connell
+den-hc,Sean Payton
+pit-hc,Mike McCarthy
+dal-hc,Brian Schottenheimer
+tb-hc,Todd Bowles
+ind-hc,Shane Steichen
+no-hc,Kellen Moore
+nyg-hc,John Harbaugh
+car-hc,Dave Canales
+was-hc,Dan Quinn
+atl-hc,Raheem Morris
+cle-hc,Todd Monken
+ten-hc,Robert Saleh
+mia-hc,Jeff Hafley
+lv-hc,Klint Kubliak
+nyj-hc,Aaron Glenn
+ari-hc,Jonathan Gannon
+pit-p,Cameron Johnston
+cle-p,Corey Bojorquez
+min-p,Johnny Hekker
+ne-p,Bryce Baringer
+ari-p,Blake Gillikin
+lv-p,AJ Cole
+sea-p,Michael Dickson
+tb-p,Riley Dixon
+sf-p,Corliss Waitman
+nyj-p,Austin McNamara
+phi-p,Braden Mann
+lac-p,J.K. Scott
+ten-p,Tommy Townsend
+cin-p,Ryan Rehkow
+jax-p,Logan Cooke
+was-p,Tress Way
+no-p,Ryan Wright
+ind-p,Rigoberto Sanchez
+bal-p,Luke Elzinga
+buf-p,Tommy Doman
+hou-p,Jack Stonehouse
+mia-p,Bradley Pinion
+gb-p,Daniel Whelan
+kc-p,Matt Araiza
+atl-p,Jake Bailey
+det-p,Jack Fox
+nyg-p,Jordan Stout
+dal-p,Bryan Anger
+la-p,Ethan Evans
+car-p,Sam Martin`;
+
+/** Engine slug → the human currently in that role, for a card or a tooltip.
+ *  Absent for a filled row. Never used in scoring. */
+export const TEAM_ROLE_NAME: Record<string, string> = {};
+for (const line of ROLE_NAME_CSV.split('\n')) {
+  const i = line.indexOf(',');
+  if (i < 1) continue;
+  TEAM_ROLE_NAME[line.slice(0, i).trim()] = line.slice(i + 1).trim();
 }
