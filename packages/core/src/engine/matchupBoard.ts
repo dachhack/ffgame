@@ -335,6 +335,93 @@ export function slateChips(
   });
 }
 
+/** What the LINEUP CHIP says (v0.321.0).
+ *
+ *  Founder: "make the lineup be a pop up when you click on a chip in the middle
+ *  of the top panel (currently blank space). We can make the lineup chip
+ *  informative about games and games in progress."
+ *
+ *  The centre column of the scoreboard is one `SPOT_COL` wide and, before lock,
+ *  held nothing at all. It now holds the way IN to the lineup — so the chip has
+ *  to earn that space by saying something a manager wants at a glance, not just
+ *  the word "lineup".
+ *
+ *  IT COUNTS ONLY GAMES THIS SIDE HAS A STARTER IN, which is the opposite of
+ *  `slateChips`' rule and deliberately so. The strip below is "the week", and it
+ *  lists every game because omitting one would misrepresent the slate. This is
+ *  "your afternoon": a manager reading "3 LIVE" wants that to mean three of
+ *  THEIR games are on, not that the league is playing somewhere. The two
+ *  therefore disagree on purpose and neither is wrong.
+ *
+ *  NO DATE FORMATTING HERE. The counts and the tone are the testable part; the
+ *  kickoff comes back as the raw ISO string so each host renders it with the
+ *  clock helper it already uses (`kickoffLabel`), rather than this file growing
+ *  a second, subtly different notion of what "Sun 1:00 PM" means. */
+export interface LineupChipSummary {
+  /** Games this side has a starter in, split by state. */
+  live: number;
+  done: number;
+  pre: number;
+  /** Games with at least one of this side's starters. */
+  games: number;
+  /** STARTERS, not games — a manager with three players in one game is one
+   *  game and three players, and both numbers are worth having. */
+  playersLive: number;
+  playersDone: number;
+  playersPre: number;
+  /** Points already banked in games that are live or finished. */
+  livePts: number;
+  /** Earliest kickoff still ahead, ISO, or null when nothing is left to start. */
+  nextKickoff: string | null;
+  tone: 'live' | 'pre' | 'done';
+  /** The face of the chip — counts only, so it never needs a clock. */
+  label: string;
+  /** The line under it. Empty when there is nothing true left to say. */
+  detail: string;
+}
+
+export function lineupChipSummary(chips: SlateChip[], side: 'home' | 'away'): LineupChipSummary {
+  const count = (c: SlateChip) => (side === 'home' ? c.homeCount : c.awayCount);
+  const points = (c: SlateChip) => (side === 'home' ? c.homePts : c.awayPts);
+  const mine = chips.filter((c) => count(c) > 0);
+
+  let live = 0, done = 0, pre = 0;
+  let playersLive = 0, playersDone = 0, playersPre = 0, livePts = 0;
+  let nextKickoff: string | null = null;
+  for (const c of mine) {
+    const n = count(c);
+    if (c.state === 'live') { live++; playersLive += n; livePts += points(c); }
+    else if (c.state === 'done') { done++; playersDone += n; livePts += points(c); }
+    else {
+      pre++; playersPre += n;
+      // Earliest remaining kickoff. A game with no known kickoff cannot be the
+      // NEXT one — an unknown time is not "now", and claiming it is would put a
+      // countdown on the chip that nothing supports.
+      if (c.kickoff && (nextKickoff === null || Date.parse(c.kickoff) < Date.parse(nextKickoff))) nextKickoff = c.kickoff;
+    }
+  }
+
+  const tone: LineupChipSummary['tone'] = live > 0 ? 'live' : mine.length > 0 && pre === 0 ? 'done' : 'pre';
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const label = live > 0 ? `${live} LIVE`
+    : tone === 'done' ? 'ALL FINAL'
+    // 'GAMES', spelled out: the default pluraliser appends a lowercase 's',
+    // which on an upper-case label reads as "3 GAMEs".
+    : plural(mine.length, 'GAME', 'GAMES');
+  const detail = live > 0 ? `${playersLive} playing · ${playersPre} to come`
+    : tone === 'done' ? `${plural(playersDone, 'starter')} played`
+    // Before anything kicks off, the honest thing is the size of the day.
+    : mine.length > 0 ? `${plural(playersPre, 'starter')} to play`
+    : '';
+
+  return {
+    live, done, pre, games: mine.length,
+    playersLive, playersDone, playersPre,
+    livePts: r2(livePts),
+    nextKickoff, tone, label, detail,
+  };
+}
+
 export function gameFor(team: string | null | undefined, slate: { home: string; away: string; kickoff?: string | null }[]):
   { opponent: string; kickoff: string | null; home: boolean } | null {
   if (!team) return null;

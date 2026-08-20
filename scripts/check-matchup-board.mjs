@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -196,6 +196,83 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   const noKick = slateChips(starters, [{ home: 'X', away: 'Y' }, ...slate], now);
   ok('a game with no kickoff sorts last rather than first',
     noKick.at(-1).key === 'Y@X', noKick.map((c) => c.key));
+}
+
+// ── THE LINEUP CHIP (v0.321.0) ──────────────────────────────────────────────
+// The chip that opens the lineup, in the scoreboard column that belonged to
+// nobody. It has to be informative enough to justify taking the space, and
+// truthful about WHOSE games it is counting.
+{
+  const E = (slug, team, live, proj, state) => ({ slug, name: slug, pos: 'WR', team, live, proj, state });
+  const starters = [
+    { slot: 'S1', label: 'QB', pos: ['QB'], home: E('a', 'BUF', 10, 12, 'live'), away: E('b', 'HOU', 5, 9, 'live') },
+    { slot: 'S2', label: 'RB', pos: ['RB'], home: E('c', 'BUF', 0, 8, 'pre'), away: E('d', 'KC', 0, 7, 'pre') },
+    { slot: 'S3', label: 'WR', pos: ['WR'], home: null, away: E('e', 'SF', 20, 6, 'done') },
+  ];
+  const slate = [
+    { home: 'HOU', away: 'BUF', kickoff: '2026-09-13T17:00:00Z' },   // live, 2 home / 1 away
+    { home: 'LA', away: 'SF', kickoff: '2026-09-13T20:05:00Z' },     // done, 1 away
+    { home: 'KC', away: 'NE', kickoff: '2026-09-14T00:20:00Z' },     // pre, 1 away
+    { home: 'DEN', away: 'LV', kickoff: '2026-09-14T01:00:00Z' },    // nobody in it
+  ];
+  const now = Date.parse('2026-09-13T18:00:00Z');
+  const chips = slateChips(starters, slate, now, new Set(['SF', 'LA']));
+  const home = lineupChipSummary(chips, 'home');
+  const away = lineupChipSummary(chips, 'away');
+
+  // THE RULE THAT DIFFERS FROM THE STRIP BELOW IT, on purpose. `slateChips`
+  // lists every game in the week; this counts only the games this side has a
+  // starter in, because "3 LIVE" has to mean three of MINE.
+  ok('the chip counts only games this side has a starter in',
+    home.games === 1 && away.games === 3, [home.games, away.games]);
+  ok('…so a game nobody is in never reaches it',
+    !chips.some((c) => c.key === 'LV@DEN' && (c.homeCount || c.awayCount)) && home.games + 0 === 1);
+
+  // GAMES vs STARTERS are different numbers and both are carried: two players
+  // in one live game is one game and two starters.
+  ok('two starters in one game is ONE live game and TWO players',
+    home.live === 1 && home.playersLive === 2, [home.live, home.playersLive]);
+  ok('the away side sees its own split', away.live === 1 && away.done === 1 && away.pre === 1,
+    [away.live, away.done, away.pre]);
+
+  // TONE drives the colour, and 'live' has to beat everything — a manager with
+  // a game on wants that first.
+  ok('any live game makes the chip live', home.tone === 'live' && away.tone === 'live');
+  ok('the label leads with the live count', home.label === '1 LIVE', home.label);
+  ok('the detail splits playing from still to come',
+    away.detail === '1 playing · 1 to come', away.detail);
+
+  // A side with nothing left running reads FINAL rather than "0 LIVE".
+  const doneOnly = lineupChipSummary(
+    slateChips([{ slot: 'S1', label: 'WR', pos: ['WR'], home: E('e', 'SF', 20, 6, 'done'), away: null }],
+      [{ home: 'LA', away: 'SF', kickoff: '2026-09-13T20:05:00Z' }], now, new Set(['SF', 'LA'])), 'home');
+  ok('a finished slate says ALL FINAL, not 0 LIVE', doneOnly.tone === 'done' && doneOnly.label === 'ALL FINAL',
+    [doneOnly.tone, doneOnly.label]);
+  ok('…and reports what played', doneOnly.detail === '1 starter played', doneOnly.detail);
+
+  // Before anything starts: the size of the day, and the next kickoff — which
+  // is the ONLY place a time appears, because it is the next thing to happen.
+  const early = Date.parse('2026-09-13T10:00:00Z');
+  const pre = lineupChipSummary(slateChips(starters, slate, early), 'away');
+  ok('before kickoff the chip sizes the day', pre.tone === 'pre' && pre.label === '3 GAMES',
+    [pre.tone, pre.label]);
+  ok('…counts the starters, not the games, in the detail', pre.detail === '3 starters to play', pre.detail);
+  ok('…and points at the EARLIEST kickoff still ahead',
+    pre.nextKickoff === '2026-09-13T17:00:00Z', pre.nextKickoff);
+  ok('singulars are not "1 starters"',
+    lineupChipSummary(slateChips([starters[1]], [slate[2]], early), 'away').detail === '1 starter to play');
+
+  // A kickoff nobody knows cannot be the NEXT one — claiming it is would put a
+  // countdown on the chip that nothing supports.
+  const noTime = lineupChipSummary(
+    slateChips([{ slot: 'S1', label: 'WR', pos: ['WR'], home: E('z', 'KC', 0, 5, 'pre'), away: null }],
+      [{ home: 'KC', away: 'NE' }], early), 'home');
+  ok('an unknown kickoff is not offered as the next one', noTime.nextKickoff === null, noTime.nextKickoff);
+
+  // Degenerate input must produce a chip that says nothing rather than a lie.
+  const empty = lineupChipSummary([], 'home');
+  ok('no games at all is silent, not "0 GAMES to play"',
+    empty.games === 0 && empty.detail === '' && empty.tone === 'pre', empty);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
