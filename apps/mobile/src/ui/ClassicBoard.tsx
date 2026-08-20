@@ -11,7 +11,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -330,6 +330,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // cache — because setLiveGameFeed writes a map React cannot see; the row
   // count here is what ties the fields to a re-render when the feeds land.
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  // The lineup is a card over the board since v0.321.0 — see the web board's
+  // note. On a phone it is the change that matters most: twelve spots with two
+  // game cards each, plus both benches, was most of the screen.
+  const [lineupOpen, setLineupOpen] = useState(false);
   const [fieldGame, setFieldGame] = useState<string | null>(null); // team abbr locating the game
   const [gameFeeds, setGameFeeds] = useState<GameFeedRow[]>([]);
   const [selGame, setSelGame] = useState<string | null>(null);
@@ -680,6 +684,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     () => (board ? slateChips(board.starters, slate, nowTs, finalTeams) : []),
     [board, slate, nowTs, finalTeams],
   );
+
+  // 'home' is this caller's own side on the board, so the chip counts THEIR
+  // games rather than the league's. See lineupChipSummary.
+  const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
   // A selection is only meaningful while that game is still on the slate —
   // changing week must not leave a chip open for a game that isn't there.
   useEffect(() => {
@@ -882,15 +890,28 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
-            <View style={{ alignItems: 'center' }}>
-              {/* NO LOCK REMINDER (v0.299.1, founder). Every spot already says
-                  its own kickoff on its own row — which is where the answer
-                  belongs, since 0178 made locking per-spot. LIVE stays: that is
-                  the game's STATE, not a reminder. */}
-              {/* GOLF (v0.303.0) has to be SAID here: two numbers side by side
-                  read as "bigger is winning" everywhere else. */}
-              <Mono size={8.5} tone="faint">{locked ? 'LIVE' : ''}</Mono>
-              {golf && <Mono size={8} tone="warn" weight="700">⛳ LOW WINS</Mono>}
+            <View style={{ alignItems: 'center', width: 104 }}>
+              {/* ── THE LINEUP CHIP (v0.321.0) ─────────────────────────────
+                  The one column that belongs to neither side, and the way in
+                  to the lineup. It ABSORBS the old bare "LIVE": "⏵ 2 LIVE"
+                  says the same thing about the game's state and then says how
+                  many of YOUR games, which the single word never could.
+                  GOLF (v0.303.0) still has to be said here: two numbers side
+                  by side read as "bigger is winning" everywhere else. */}
+              <Pressable onPress={() => setLineupOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open lineup. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
+                style={{ width: '100%', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 4, borderRadius: 5, borderWidth: 1, borderColor: lineChip.tone === 'live' ? t.you : t.bd, backgroundColor: t.bg }}>
+                <Mono size={7.5} tone="faint" weight="700" track={0.1}>LINEUP</Mono>
+                <Mono size={10.5} weight="700" style={{ color: lineChip.tone === 'live' ? t.you : t.text }}>
+                  {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
+                </Mono>
+                {!!lineChip.detail && <Mono size={7} tone="faint" style={{ textAlign: 'center' }}>{lineChip.detail}</Mono>}
+                {lineChip.tone === 'pre' && !!lineChip.nextKickoff && (
+                  <Mono size={7} tone="faint">{fmtKick(lineChip.nextKickoff)}</Mono>
+                )}
+              </Pressable>
+              {golf && <Mono size={8} tone="warn" weight="700" style={{ marginTop: 3 }}>⛳ LOW WINS</Mono>}
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
@@ -924,7 +945,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           rows stay tappable into the picker (this is the only lineup screen
           the app has), and THEIR column is absent rather than blank, because
           sealed_pick's RLS hands out an opponent's picks only once locked. */}
-      {board && (
+      {/* ── THE LINEUP, AS A SHEET OVER THE BOARD (v0.321.0) ───────────────
+          Founder: "let's make the lineup be a pop up when you click on a chip
+          in the middle of the top panel (currently blank space)."
+
+          The board keeps the SCOREBOARD and the SLATE — how the matchup is
+          going, and what is on. The lineup is a question with a moment rather
+          than a standing one, and on a phone it was most of the screen.
+
+          `Overlay` rather than a hand-rolled Modal, so this dismisses the same
+          way the picker and the field board do (backdrop, ✕, the same slide),
+          and so stacked Modals — flaky on Android, per the note below — stay a
+          thing this screen does exactly once. */}
+      <Overlay
+        visible={!!board && lineupOpen}
+        title="LINEUP"
+        subtitle={`${lineChip.label}${lineChip.detail ? ` · ${lineChip.detail}` : ''}`}
+        onClose={() => setLineupOpen(false)}>
+        {!!board && (
         <>
           <Card style={{ paddingVertical: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 6 }}>
@@ -1029,7 +1067,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             );
           })}
         </>
-      )}
+        )}
+      </Overlay>
 
       {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
           sides of the lock since v0.237.0, but if it can't assemble this is

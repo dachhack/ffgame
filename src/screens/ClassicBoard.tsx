@@ -15,7 +15,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -350,6 +350,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // setLiveGameFeed writes a module cache React cannot see, and the row count
   // here is what ties the fields to a re-render when the feeds land.
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  // THE LINEUP IS NOW A CARD OVER THE BOARD (v0.321.0), opened from the chip in
+  // the scoreboard's middle column. Closed by default: the scoreboard and the
+  // slate answer "how am I doing", and the lineup answers "who have I got" —
+  // a question with a moment rather than a permanent one.
+  const [lineupOpen, setLineupOpen] = useState(false);
   // One game's field + play log, as a CARD over the board (v0.271.0 — the
   // founder walked back v0.270.0's new tab: "just a card"). Team abbr locates
   // the game.
@@ -492,7 +497,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // Escape closes the picker and the game-field card — a dialog you can only
   // dismiss with a mouse is a dialog a keyboard user is stuck in.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPickerSlot(null); setFieldGame(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPickerSlot(null); setFieldGame(null); setLineupOpen(false); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -731,6 +736,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     () => (board ? slateChips(board.starters, slate, nowTs, finalTeams) : []),
     [board, slate, nowTs, finalTeams],
   );
+
+  // THE LINEUP CHIP'S CONTENT (v0.321.0). 'home' is always the caller's own
+  // side on this board — `TeamHead side={board.home} accent="var(--you)"` — so
+  // the chip counts THEIR games, not the league's.
+  const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
   // A selection only means something while that game is still on the slate.
   useEffect(() => {
     if (selGame && !chips.some((c) => c.key === selGame)) setSelGame(null);
@@ -965,8 +975,33 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                 looked at, and in this league that is backwards — so the one
                 place the totals meet is the one place the rule belongs. */}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-              {locked ? 'LIVE' : ''}
-              {golf && <div style={{ color: 'var(--warn)', fontWeight: 700 }}>⛳ LOW WINS</div>}
+              {/* ── THE LINEUP CHIP (v0.321.0) ─────────────────────────────
+                  This column was empty before lock, and it is the one place on
+                  the board that belongs to NEITHER side — which makes it the
+                  right home for the thing that is about the whole matchup.
+                  The chip both opens the lineup and reports the state of the
+                  games it contains, so the space earns itself twice. */}
+              <button onClick={() => setLineupOpen(true)}
+                title="Your lineup, and both sides' spots"
+                aria-label={`Open lineup — ${lineChip.label}${lineChip.detail ? `, ${lineChip.detail}` : ''}`}
+                style={{
+                  width: '100%', display: 'block', cursor: 'pointer', textAlign: 'center',
+                  background: 'var(--bg)', borderRadius: 5, padding: '5px 4px',
+                  border: `1px solid ${lineChip.tone === 'live' ? 'var(--you)' : 'var(--bd)'}`,
+                }}>
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>LINEUP</div>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 800, lineHeight: 1.3, color: lineChip.tone === 'live' ? 'var(--you)' : 'var(--text)' }}>
+                  {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
+                </div>
+                {lineChip.detail && (
+                  <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', lineHeight: 1.3, whiteSpace: 'normal' }}>{lineChip.detail}</div>
+                )}
+                {/* The clock only where a clock is the next thing to happen. */}
+                {lineChip.tone === 'pre' && lineChip.nextKickoff && (
+                  <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', lineHeight: 1.3 }}>{fmtKick(lineChip.nextKickoff)}</div>
+                )}
+              </button>
+              {golf && <div style={{ color: 'var(--warn)', fontWeight: 700, marginTop: 4 }}>⛳ LOW WINS</div>}
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
@@ -1008,8 +1043,33 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
             opponent's picks only once locked ("THE security boundary", 0001) —
             so the away column says so rather than rendering blanks that read
             as "they haven't set a lineup". */}
-      {board && (
-        <>
+      {/* ── THE LINEUP, AS A CARD OVER THE BOARD (v0.321.0) ────────────────
+          Founder: "let's make the lineup be a pop up when you click on a chip
+          in the middle of the top panel (currently blank space)."
+
+          The board's permanent content is now the SCOREBOARD and the SLATE —
+          how the matchup is going, and what is on. The lineup is a question
+          with a moment ("who have I got in this game?") rather than a standing
+          one, and it was pushing everything else off the screen: twelve spots
+          with two game cards each, plus both benches, is most of a phone.
+
+          Same overlay pattern as the picker and the field board — backdrop,
+          stopPropagation, Escape, ✕ — so there is one way to dismiss a card on
+          this screen and it works everywhere. The container carries no card
+          styling of its own: the blocks inside already are cards, and nesting
+          them would draw a border around a border. */}
+      {board && lineupOpen && (
+        <div onClick={() => setLineupOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
+                LINEUP · {lineChip.label}
+              </span>
+              <button onClick={() => setLineupOpen(false)} aria-label="close lineup" className="mono"
+                style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+            </div>
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, padding: '10px 14px 6px' }}>
               <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>STARTERS</span>
@@ -1107,7 +1167,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               </div>
             );
           })}
-        </>
+          </div>
+        </div>
       )}
 
       {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
