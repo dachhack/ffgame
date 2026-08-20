@@ -22,6 +22,7 @@ import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
+import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
 import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
@@ -73,12 +74,53 @@ async function espnWeekFor(season, seasonType) {
   return next;
 }
 
-/** The regular-season week everything non-preseason keys off: Sleeper's own
- *  notion when it has one (it's authoritative in season), else ESPN's, else 1. */
-async function regularWeek(season) {
-  try { const s = await getState(); const w = Number(s.week); if (w >= 1) return w; } catch { /* fall through */ }
-  return (await espnWeekFor(season, REGULAR_SEASON)) ?? 1;
+/** First kickoff of regular-season week 1, cached for the process. ESPN answers
+ *  correctly when asked with an EXPLICIT `week=1`; it is only the
+ *  un-parameterised call whose week number drifts through August. Week 1's
+ *  fixtures do not move, so this is fetched once and kept. */
+let week1KickoffMs;
+async function week1Kickoff(season) {
+  if (week1KickoffMs !== undefined) return week1KickoffMs;
+  try {
+    const g = await getGames(season, 1, REGULAR_SEASON, 24 * 3600e3);
+    const ks = g.map((x) => x.kickoffMs).filter(Number.isFinite);
+    week1KickoffMs = ks.length ? Math.min(...ks) : null;
+  } catch { week1KickoffMs = null; }   // unknown, not zero — the rule handles null
+  return week1KickoffMs;
 }
+
+/** The regular-season week everything non-preseason keys off.
+ *
+ *  v0.320.0: this used to be "Sleeper's week, else ESPN's, else 1", and the
+ *  middle term is wrong for the six weeks of every year when it is the only
+ *  term available. Sleeper sits at 0 all August, and ESPN's regular-season
+ *  scoreboard called WITHOUT a `week` parameter reports a number that drifts
+ *  forward with the calendar (2 on 19 Aug, 3 on 20 Aug) over a 100-event bag
+ *  spanning January playoffs to September. The worker was mirroring rosters
+ *  into weeks 2, 3, 4 — weeks nobody can open — while WEEK 1 went unwritten.
+ *  See `regularWeekFrom` (core) for the rule and its tests. */
+async function regularWeek(season) {
+  let sleeperWeek = null, sleeperSeasonType = null;
+  // BOTH FIELDS, ALWAYS. `week` alone is the preseason week during August and
+  // reading it as a regular-season week is the bug this replaced.
+  try { const st = await getState(); sleeperWeek = Number(st.week); sleeperSeasonType = st.season_type ?? null; }
+  catch { /* Sleeper down — the rules below cover it */ }
+  // Only reach for the kickoff when Sleeper cannot answer — in season the first
+  // rule wins and this costs nothing.
+  const needGuard = !((sleeperSeasonType === 'regular' || sleeperSeasonType === 'post')
+                      && Number.isFinite(sleeperWeek) && sleeperWeek >= 1);
+  const [espnWeek, k1] = await Promise.all([
+    needGuard ? espnWeekFor(season, REGULAR_SEASON) : Promise.resolve(null),
+    needGuard ? week1Kickoff(season) : Promise.resolve(null),
+  ]);
+  const choice = regularWeekFrom({ sleeperWeek, sleeperSeasonType, espnWeek, week1KickoffMs: k1, nowMs: Date.now() });
+  if (choice.reason !== lastWeekReason) {
+    log('regular week:', choice.week, `(${choice.reason})`);
+    lastWeekReason = choice.reason;
+  }
+  return choice.week;
+}
+let lastWeekReason = null;
 
 /** PURE: which contexts to run, given the two week numbers already looked up.
  *  Split out from the I/O so the policy is testable without a network — the
