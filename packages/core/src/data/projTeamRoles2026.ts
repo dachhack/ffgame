@@ -204,17 +204,32 @@ for (const line of P_CSV.split('\n')) {
 // untouched. Only the NAME below goes stale, and a stale name is a cosmetic
 // bug rather than a scoring one. Nothing reads this map to score anything.
 //
-// Both come from the same 1.0.84 pull as the lines above — the coach rows carry
-// the current 2026 staff (Jesse Minter at Baltimore, Todd Monken at Cleveland,
-// Robert Saleh at Tennessee), so a refresh picks up changes for free. The two
-// filled punters have no name on purpose: there is no starter to name, and the
-// pool already renders "CHI Punter".
+// PUNTER NAMES COME FROM THE 1.0.84 PULL. COACH NAMES DO NOT — they are
+// hand-corrected against the web, because StatHead's were wrong for three of
+// the ten teams that changed coach in the 2026 cycle (v0.315.2, founder: "can
+// you double check all the coaches with a web query? ATL is Kevin Stefanski").
+//
+// 2026 was a ten-change cycle, tied for the most ever. StatHead had seven of
+// them right — Minter at Baltimore, Monken at Cleveland, Hafley at Miami,
+// Harbaugh at the Giants, Saleh at Tennessee, McCarthy at Pittsburgh, Kubiak at
+// Las Vegas — and kept the FIRED INCUMBENT for the other three: Raheem Morris
+// at Atlanta (fired 4 Jan, replaced by Kevin Stefanski), Sean McDermott at
+// Buffalo (fired 19 Jan, replaced by Joe Brady) and Jonathan Gannon at Arizona
+// (fired after 3-14, replaced by Mike LaFleur). Their Las Vegas spelling was
+// also "Kubliak". Verified team by team; the other 22 did not change.
+//
+// SO DO NOT BLINDLY OVERWRITE THIS BLOCK ON A REFRESH. Re-check the changed
+// teams against a real source. The reason this is survivable rather than
+// serious is below: the number belongs to the team, not the person.
+//
+// The two filled punters have no name on purpose: there is no starter to name,
+// and the pool already renders "CHI Punter".
 const ROLE_NAME_CSV = `la-hc,Sean McVay
 sea-hc,Mike Macdonald
 det-hc,Dan Campbell
 bal-hc,Jesse Minter
 sf-hc,Kyle Shanahan
-buf-hc,Sean McDermott
+buf-hc,Joe Brady
 ne-hc,Mike Vrabel
 kc-hc,Andy Reid
 phi-hc,Nick Sirianni
@@ -234,13 +249,13 @@ no-hc,Kellen Moore
 nyg-hc,John Harbaugh
 car-hc,Dave Canales
 was-hc,Dan Quinn
-atl-hc,Raheem Morris
+atl-hc,Kevin Stefanski
 cle-hc,Todd Monken
 ten-hc,Robert Saleh
 mia-hc,Jeff Hafley
-lv-hc,Klint Kubliak
+lv-hc,Klint Kubiak
 nyj-hc,Aaron Glenn
-ari-hc,Jonathan Gannon
+ari-hc,Mike LaFleur
 pit-p,Cameron Johnston
 cle-p,Corey Bojorquez
 min-p,Johnny Hekker
