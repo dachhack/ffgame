@@ -269,8 +269,14 @@ export function buildMatchupBoard(input: {
  *  Every game on the slate is returned, in kickoff order, whether or not the
  *  matchup touches it — it was asked for as "the week's game slate", and a row
  *  of chips that silently omits games would misrepresent the week. Involvement
- *  is carried per chip instead (`homeCount`/`awayCount`) so a host can dim the
- *  ones nobody is in rather than hide them.
+ *  is carried per chip (`homeCount`/`awayCount`) as an ADDITION to each game
+ *  rather than as its reason to exist.
+ *
+ *  v0.323.0: and every chip carries the GAME's own score too (`slateScores`),
+ *  because the first cut let a game nobody was in arrive empty — dimmed, no
+ *  numbers, and a detail panel reading "nobody from this matchup is in this
+ *  game". A game with none of your players still has a score, and the score is
+ *  the reason to look at it.
  *
  *  POINTS FOLLOW THE BOARD'S OWN RULE: `projectEntry` is the same blend the side
  *  totals use, so a chip's numbers always sum toward the headline score above
@@ -284,6 +290,11 @@ export interface SlateChip {
   away: string;
   kickoff: string | null;
   state: 'pre' | 'live' | 'done';
+  /** The GAME's own score, when it has one — null before kickoff and for any
+   *  game the worker has no feed for. Nothing to do with the matchup: this is
+   *  what the scoreboard in the bar says. */
+  homeScore: number | null;
+  awayScore: number | null;
   /** Starters each side has in this game, and what they are worth. */
   homeCount: number;
   awayCount: number;
@@ -293,11 +304,85 @@ export interface SlateChip {
   awayPlayers: BoardEntry[];
 }
 
+/** ── THE REAL SCORE OF EVERY GAME (v0.323.0) ───────────────────────────────
+ *
+ *  Founder: "lets expand the shown game slate to include all nfl games, not
+ *  just the one's in the matchup."
+ *
+ *  `slateChips` always returned every game — the omission was never in the
+ *  data. What made the slate read as matchup-only is that a game nobody was in
+ *  arrived EMPTY: dimmed to 45%, no numbers, and a detail panel that said
+ *  "nobody from this matchup is in this game". Correct, and useless. A game
+ *  with none of your players still has a score, and the score is the reason to
+ *  look at it.
+ *
+ *  The feeds are already on the board — both hosts load `weekGameFeeds(week)`
+ *  for the whole week, and the worker polls EVERY live game (`gamesToPollFrom`
+ *  filters on state, not on whether anyone rostered a player in it), so a feed
+ *  exists for every game that has kicked off. `GamePlay` carries `hs`/`as`, the
+ *  score AFTER that play. So the week's scoreboard was sitting in memory
+ *  unread.
+ *
+ *  THE LAST PLAY, NOT THE HIGHEST SCORE. Taking `max(hs)` would be robust to
+ *  unordered plays and is wrong for the case that matters: ESPN revises plays
+ *  mid-game, and a touchdown overturned on review LOWERS the score. `max` would
+ *  pin the board to a number the broadcast has already taken back. So this
+ *  takes the play with the greatest game-elapsed clock, ties broken by array
+ *  order — order-robust and revision-correct at once. */
+export function slateScores(
+  feeds: { key?: string | null; plays?: { c?: number; hs?: number; as?: number }[] | null }[] | null | undefined,
+): Record<string, { home: number; away: number }> {
+  const out: Record<string, { home: number; away: number }> = {};
+  for (const f of feeds ?? []) {
+    const key = (f?.key ?? '').toUpperCase();
+    const plays = f?.plays;
+    if (!key || !Array.isArray(plays) || !plays.length) continue;
+    let best: { c?: number; hs?: number; as?: number } | null = null;
+    for (const p of plays) {
+      if (!p) continue;
+      const c = Number(p.c);
+      if (!Number.isFinite(c)) continue;
+      // `>=` so a tie keeps the LATER array entry — the revised copy.
+      if (best === null || c >= Number(best.c)) best = p;
+    }
+    const hs = Number(best?.hs);
+    const as = Number(best?.as);
+    if (!Number.isFinite(hs) || !Number.isFinite(as)) continue;
+    out[key] = { home: hs, away: as };
+  }
+  return out;
+}
+
+/** ── WHAT THE WHOLE SLATE ADDS UP TO (v0.323.0) ────────────────────────────
+ *
+ *  Counts EVERY game, which is the half `lineupChipSummary` deliberately does
+ *  not do — that one counts only the games this side has a starter in, because
+ *  it titles a chip about your day. Both are wanted, and the sheet header was
+ *  using the wrong one: "NFL SLATE · 8 GAMES" over sixteen chips is a caption
+ *  contradicting the thing it captions, and it is a fair guess that this is
+ *  what "not just the one's in the matchup" was reading. */
+export interface SlateSummary {
+  games: number; live: number; done: number; pre: number;
+  /** How many of them this matchup actually has a starter in. */
+  involved: number;
+}
+export function slateSummary(chips: SlateChip[]): SlateSummary {
+  let live = 0, done = 0, pre = 0, involved = 0;
+  for (const c of chips ?? []) {
+    if (c.state === 'live') live++; else if (c.state === 'done') done++; else pre++;
+    if (c.homeCount + c.awayCount > 0) involved++;
+  }
+  return { games: (chips ?? []).length, live, done, pre, involved };
+}
+
 export function slateChips(
   starters: BoardSlotRow[],
   slate: { home: string; away: string; kickoff?: string | null }[],
   now: number,
   finalTeams?: Set<string>,
+  /** `slateScores(feeds)`. Optional: a host with no feeds loaded yet still gets
+   *  a full slate, just without the numbers. */
+  scores?: Record<string, { home: number; away: number }>,
 ): SlateChip[] {
   const out: SlateChip[] = [];
   for (const g of slate) {
@@ -311,10 +396,13 @@ export function slateChips(
     const homePlayers = starters.map((r) => r.home).filter(inGame) as BoardEntry[];
     const awayPlayers = starters.map((r) => r.away).filter(inGame) as BoardEntry[];
     const sum = (es: BoardEntry[]) => r2(es.reduce((n, e) => n + projectEntry(e), 0));
+    const sc = scores?.[`${away}@${home}`];
     out.push({
       key: `${away}@${home}`,
       home, away,
       kickoff: g.kickoff ?? null,
+      homeScore: sc ? sc.home : null,
+      awayScore: sc ? sc.away : null,
       // The game's state is its HOME team's — one game, one kickoff, and
       // entryState already folds in the inferred-final set the board built.
       state: entryState(g.kickoff, home, now, finalTeams),

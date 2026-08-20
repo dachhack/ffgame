@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.323.0 — the slate is the NFL's, not the matchup's: every game, with its score
+
+Founder: "lets expand the shown game slate to include all nfl games, not just
+the one's in the matchup."
+
+THE GAMES WERE NEVER MISSING, which is worth saying because the obvious fix
+would have been to go looking for a filter that does not exist. `slateChips`
+has returned every row of `nfl_slate` since v0.312.0, in kickoff order, and its
+own header says so. What made a sixteen-game slate READ as matchup-only is that
+a game nobody was in arrived empty:
+
+  • the whole chip rendered at 45% opacity;
+  • it carried no numbers, only teams and a kickoff time;
+  • clicking it said "nobody from this matchup is in this game" — true, and
+    nothing at all about the game you just clicked;
+  • and the sheet was captioned with `lineupChipSummary`, which counts only the
+    games THIS SIDE has a starter in. So sixteen chips sat under the heading
+    "NFL SLATE · 8 GAMES" — a caption contradicting the thing it captions, and
+    the most likely thing "not just the one's in the matchup" was reading.
+
+THE SCORE WAS ALREADY IN MEMORY. Both boards load `weekGameFeeds(week)` for the
+whole week, and the worker polls EVERY live game — `gamesToPollFrom` filters on
+game state, not on whether anyone rostered a player in it — so `game_feed` has
+a row for every game that has kicked off. `GamePlay` carries `hs`/`as`, the
+score after that play. So the week's scoreboard was sitting there unread, and
+`slateScores(feeds)` is the whole of the new data path: no fetch, no migration,
+no worker change.
+
+THE LAST PLAY, NOT THE HIGHEST SCORE. `max(hs)` would be robust to unordered
+plays and wrong for the case that matters: ESPN revises plays mid-game, and a
+touchdown overturned on review LOWERS the score, so max() would pin the board
+to a number the broadcast has taken back. Instead: the play with the greatest
+game-elapsed clock, ties broken by array order (the later entry is the revised
+copy). Order-robust and revision-correct at once, and both halves are asserted.
+
+WHAT CHANGED ON SCREEN. Every chip is now first-class — full strength, with its
+own score when it has one and its kickoff when it does not. The distinction is
+carried by the TEAM NAMES (dim when you have nobody in it) rather than by
+fading the whole chip, so a score you have no stake in is still readable. Your
+stake stays as an addition to a game that stands on its own. The detail panel
+leads with the game — teams, score, state — before saying anything about the
+matchup. And the sheet is captioned by `slateSummary`, which counts everything,
+with "N with a starter from this matchup" as the second line.
+
+A NULL SCORE IS NOT 0-0. A game with no feed reports null and renders its
+kickoff; 0-0 is a real score a real game can have, and conflating the two would
+put a fake scoreline on every game that has not started.
+
+20 new parity assertions (525 total). Both platforms.
+
+
 ### v0.322.2 — the swap: the head to head is the board, the slate is the card
 
 Founder: "We are missing communication here. I still want the head to head line

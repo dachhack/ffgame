@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -196,6 +196,71 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   const noKick = slateChips(starters, [{ home: 'X', away: 'Y' }, ...slate], now);
   ok('a game with no kickoff sorts last rather than first',
     noKick.at(-1).key === 'Y@X', noKick.map((c) => c.key));
+
+  // ── EVERY GAME'S OWN SCORE (v0.323.0) ────────────────────────────────────
+  // Founder: "expand the shown game slate to include all nfl games, not just
+  // the one's in the matchup." The games were never missing — a game nobody was
+  // in simply arrived EMPTY, so the slate read as matchup-only. These assert the
+  // half that fixes it: the score, which every game has whoever is in it.
+  {
+    const P = (c, hs, as) => ({ c, hs, as });
+    const feeds = [
+      // Out of order on purpose, and with a REVISION: the last play by clock is
+      // 14-10, having been 14-17 earlier in the array. A max() would report 17.
+      { key: 'BUF@HOU', plays: [P(600, 7, 10), P(1800, 14, 10), P(1200, 14, 17)] },
+      { key: 'SF@LA', plays: [P(3600, 24, 31)] },
+      { key: 'LV@DEN', plays: [] },                       // kicked off, no plays yet
+    ];
+    const sc = slateScores(feeds);
+    ok('a game\u2019s score is its LAST play by clock, not its highest',
+      sc['BUF@HOU'].home === 14 && sc['BUF@HOU'].away === 10, sc['BUF@HOU']);
+    ok('\u2026which is the point: a TD overturned on review LOWERS the score',
+      sc['BUF@HOU'].away !== 17);
+    ok('a feed with no plays yields no score rather than 0-0',
+      sc['LV@DEN'] === undefined, sc['LV@DEN']);
+    ok('a tie on the clock keeps the LATER array entry (the revised copy)',
+      slateScores([{ key: 'A@B', plays: [P(10, 3, 0), P(10, 3, 7)] }])['A@B'].away === 7);
+    ok('feed keys are matched case-insensitively',
+      slateScores([{ key: 'sf@la', plays: [P(1, 6, 0)] }])['SF@LA'].home === 6);
+    ok('junk feeds are skipped rather than crashing',
+      Object.keys(slateScores([null, { key: '' }, { key: 'X@Y', plays: null },
+        { key: 'Q@R', plays: [{ c: NaN, hs: 1, as: 2 }] }])).length === 0);
+    ok('no feeds at all is an empty map, not a throw',
+      Object.keys(slateScores(undefined)).length === 0 && Object.keys(slateScores([])).length === 0);
+
+    const scored = slateChips(starters, slate, now, new Set(['SF', 'LA']), sc);
+    ok('the score rides on the chip', scored[0].homeScore === 14 && scored[0].awayScore === 10,
+      [scored[0].homeScore, scored[0].awayScore]);
+    // THE ONE THAT MATTERS TO THE REQUEST: a game with none of your players
+    // still carries its own score.
+    const den = scored.find((c) => c.key === 'LV@DEN');
+    ok('a game NOBODY in the matchup is in is still a first-class chip',
+      den.homeCount === 0 && den.awayCount === 0 && den.state === 'pre', den.state);
+    const withDen = slateChips(starters, slate, now, new Set(['SF', 'LA']),
+      { ...sc, 'LV@DEN': { home: 3, away: 0 } });
+    ok('\u2026and shows a real score when it has one',
+      withDen.find((c) => c.key === 'LV@DEN').homeScore === 3);
+    ok('a game with no feed reports null, never 0 — 0-0 is a real score',
+      scored[2].homeScore === null && scored[2].awayScore === null, scored[2].homeScore);
+    ok('omitting scores entirely leaves every chip null rather than breaking',
+      slateChips(starters, slate, now).every((c) => c.homeScore === null));
+  }
+
+  // ── THE SHEET'S CAPTION COUNTS THE SLATE, NOT YOUR SHARE OF IT ───────────
+  // The header read `lineupChipSummary`, which counts only the games this side
+  // has a starter in — so a sixteen-game sheet was captioned "8 GAMES".
+  {
+    const sum = slateSummary(chips);
+    ok('slateSummary counts EVERY game', sum.games === 3, sum.games);
+    ok('\u2026and says how many the matchup is actually in', sum.involved === 2, sum.involved);
+    ok('the two summaries disagree ON PURPOSE — that gap was the bug',
+      sum.games > lineupChipSummary(chips, 'home').games,
+      [sum.games, lineupChipSummary(chips, 'home').games]);
+    ok('states partition the slate exactly once',
+      sum.live + sum.done + sum.pre === sum.games, sum);
+    ok('an empty slate summarises to zeroes rather than NaN',
+      slateSummary([]).games === 0 && slateSummary([]).involved === 0);
+  }
 }
 
 // ── THE LINEUP CHIP (v0.321.0) ──────────────────────────────────────────────
