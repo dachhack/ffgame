@@ -335,6 +335,32 @@ export function slateChips(
   });
 }
 
+/** A "roster" this big is not a roster (v0.322.0).
+ *
+ *  The preseason boards (weeks 101-104) are seeded with the WHOLE player pool
+ *  on purpose — founder: "we want the 101,102,103,104 weeks to have all
+ *  players" — so every manager is holding every player and the rehearsal can
+ *  use anyone. That is deliberate, and this constant does not fight it.
+ *
+ *  What it fixes is that the board never SAID so, and a whole-pool week is
+ *  indistinguishable from a broken one if you are the manager looking at it.
+ *  It is what produced "Senz0Tanaka dropped Carson Beck yesterday but he's
+ *  still on the roster": the drop had landed correctly in every week the sync
+ *  writes, and the board was showing week 103, where Beck is on all twelve
+ *  rosters along with everybody else.
+ *
+ *  DETECTED FROM THE POOL, NOT FROM THE WEEK NUMBER. `week > 100` would be an
+ *  inference about how preseason weeks happen to be seeded today; the size of
+ *  the thing in front of the manager is the fact itself, and it stays true if
+ *  a whole-pool week is ever minted somewhere else. A real Sleeper roster is
+ *  15-25; the threshold matches `roster-drop-diag.sql`'s so the screen and the
+ *  diagnostic can never disagree about what they are looking at. */
+export const WHOLE_POOL_MIN = 200;
+
+export function isRehearsalPool(entries: number): boolean {
+  return entries >= WHOLE_POOL_MIN;
+}
+
 /** What the LINEUP CHIP says (v0.321.0).
  *
  *  Founder: "make the lineup be a pop up when you click on a chip in the middle

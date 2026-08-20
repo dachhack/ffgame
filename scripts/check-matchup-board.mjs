@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -273,6 +273,21 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   const empty = lineupChipSummary([], 'home');
   ok('no games at all is silent, not "0 GAMES to play"',
     empty.games === 0 && empty.detail === '' && empty.tone === 'pre', empty);
+}
+
+// ── THE REHEARSAL POOL (v0.322.0) ───────────────────────────────────────────
+// A whole-pool preseason week is indistinguishable from a broken roster unless
+// the board says which it is. Detected from the SIZE of what the manager is
+// holding, not from the week number.
+{
+  ok('a real Sleeper roster is not a rehearsal', !isRehearsalPool(20) && !isRehearsalPool(25));
+  ok('a whole-pool seed is', isRehearsalPool(1024));
+  ok('an empty pool is not a rehearsal either — it is an empty pool',
+    !isRehearsalPool(0));
+  // The threshold is shared with roster-drop-diag.sql on purpose: the screen
+  // and the diagnostic must never disagree about what they are looking at.
+  ok('the threshold sits between the two shapes, not near either',
+    WHOLE_POOL_MIN > 30 && WHOLE_POOL_MIN < 900, WHOLE_POOL_MIN);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
