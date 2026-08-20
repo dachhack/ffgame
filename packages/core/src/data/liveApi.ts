@@ -2141,10 +2141,12 @@ export const makeDraftPick = (leagueId: string, slug: string) =>
  *  awards + auto-nominations. Idempotent — any member's poll may call it. */
 export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number; lots_awarded?: number }>('draft_tick', { p_league_id: leagueId });
 
-export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; }
+export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; sleeper_id?: string | null; }
 export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {
   const { data, error } = await (await client()).from('league_pool')
-    .select('slug, full_name, pos, team, rank, waived_until, espn_id')
+    // sleeper_id (0205) rides along so `setSlugMetaOverrides` can install the
+    // identity the IDP bake is keyed by — see slugMeta.slugSleeperId.
+    .select('slug, full_name, pos, team, rank, waived_until, espn_id, sleeper_id')
     .eq('league_id', leagueId).order('rank').range(0, 1999);
   if (error) throw error;
   return (data ?? []) as LeaguePoolPlayer[];
