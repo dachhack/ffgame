@@ -14,6 +14,7 @@ import {
 import { inviteLink, inviteMessage } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -85,7 +86,8 @@ export function ScoringView({ leagueId }: { leagueId: string }) {
   if (!gm.ok) return <Mono size={10} tone="opp" style={{ padding: 14 }}>Couldn't load the scoring.</Mono>;
 
   const classic = gm.mode === 'classic';
-  const sc = normalizeClassicScoring({ ...(gm.scoring ?? {}), ...(gm.ppr != null ? { ppr: gm.ppr } : {}) });
+  // Through leagueCatalogOf (0209) — see the web copy.
+  const sc = normalizeClassicScoring(leagueCatalogOf(gm));
   return (
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
       <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} tone="you" />
