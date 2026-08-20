@@ -18,6 +18,70 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.328.0 — RECEPTION becomes a field you can type in
+
+Founder, looking at the SCORING panel: "Do we have just points for a
+reception?" Then: "yep. Let's add reception."
+
+WE DID AND WE DIDN'T. `ClassicScoring.ppr` has always been a real scoring value
+— every catch pays it, in classic.ts:
+
+    pts += sc.ppr + (pos === 'TE' ? sc.teRec : pos === 'RB' ? sc.rbRec : …)
+
+— and it defaults to 1. But it was the ONE value in the catalog with no input
+anywhere. 0157 gave it a dedicated `settings_json.ppr` home; v0.213.1 pulled the
+RECEPTIONS pills off the game-mode tab on the grounds that PPR is a scoring
+decision; and it came to rest reachable only through the SCORING page's four
+PRESETS. A preset RESETS every other value, so you could not change PPR without
+losing your tuning — and nothing between 0, ½ and 1 was reachable at all.
+
+It now has a box in RECEIVING, sitting ABOVE the three CATCH BONUS fields,
+because those are additive on top of it and that is much easier to read
+correctly with the base directly above them. (The founder had just set TE CATCH
+BONUS to 1 on a full-PPR league — which is 2 points per tight-end catch.)
+
+── THE TRAP: ONE NUMBER, TWO HOMES ────────────────────────────────────────
+
+`ppr` now lives in `settings_json.ppr` AND in `scoring_classic`. Two homes for
+one number is how a setting starts lying: save 0.5 in one and every sentence
+rendered from the other still says "full PPR" — and plenty are, on the invite
+preview, the recruit card and the board's own explainer line.
+
+So BOTH WRITERS WRITE BOTH. `set_league_classic_scoring` mirrors ppr out to
+`settings_json.ppr`; `set_league_game_mode` (the presets) mirrors its ppr INTO
+the catalog. Probed in both directions, plus "the two homes agree" as its own
+assertion.
+
+── THE BUG THAT WOULD HAVE MADE THIS A SILENT NO-OP ───────────────────────
+
+`leagueCatalogOf` merged as `{ ...gm.scoring, ...(ppr) }` — settings_json LAST.
+And `league_game_mode` COALESCES that value to 1, so it is never absent. A ppr
+typed into the new field would have been saved, stored, and then overwritten by
+the default on every single read. The field would have looked like it worked.
+
+Precedence flipped: the catalog copy wins when present, since its existence
+means a commissioner set it deliberately. Asserted, including a catalog ppr of
+ZERO — a non-PPR league is a real league, and any truthiness-based merge would
+silently make it full PPR.
+
+── AND THE HELPER'S OWN COMMENT WAS FALSE ─────────────────────────────────
+
+`leagueCatalogOf` says "every surface now installs THROUGH THIS, so the merge
+happens in one place and cannot be half-remembered at the next call site." Six
+call sites were doing their own spread — both LeagueInfo panels, both player
+cards, both ClassicBoards — and two of them hardcoded `ppr: gm.ppr ?? 1`, which
+priced players at full PPR in a half-PPR league. All six now go through it, and
+the comment is true.
+
+── THE CLAMP IS ITS OWN, deliberately ────────────────────────────────────
+
+Not `event_keys` (one decimal — would round a 0.25-PPR league to 0.3). Not
+`yard_keys` (caps at 1 — 1.5 PPR is a real setting). `ppr` gets [0, 5] at two
+decimals. Both edge cases are probed.
+
+10 new probe cases (56 suites) and 14 new parity assertions (635 total).
+
+
 ### v0.327.0 — chat: the keyboard stops covering it, @all works, and the dot is red
 
 Three founder reports in one pass, all on the chat.

@@ -14,6 +14,7 @@ import { flagFor } from '@drip/core/data/commish';
 import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName, NO_SEASON } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
@@ -130,7 +131,8 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         // plays are the BAKED season (v0.285.0) — bundled with the app, so
         // this is a parse and not a round trip.
         const gm = leagueId ? await leagueGameMode(leagueId).catch(() => null) : null;
-        const scoring = gm?.ok && gm.mode === 'classic' ? { ...(gm.scoring ?? {}), ppr: gm.ppr ?? 1 } : null;
+        // leagueCatalogOf (0209) — see the web player card.
+        const scoring = gm?.ok && gm.mode === 'classic' ? leagueCatalogOf(gm) : null;
         const weeks = await playerSeasonLog(slug);
         if (dead) return;
         setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, weeks, scoring));

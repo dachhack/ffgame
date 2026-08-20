@@ -13,6 +13,7 @@ import {
 import { inviteLink, inviteMessage } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { shortName } from '@drip/core/data/players';
 import { slugMeta } from '@drip/core/data/slugMeta';
 
@@ -83,7 +84,9 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
   if (!gm.ok) return <div style={box(bare)}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the scoring.</span></div>;
 
   const classic = gm.mode === 'classic';
-  const sc = normalizeClassicScoring({ ...(gm.scoring ?? {}), ...(gm.ppr != null ? { ppr: gm.ppr } : {}) });
+  // Through leagueCatalogOf (0209) — it owns which of the two `ppr` homes
+  // wins, and an inline spread here is exactly how that decision drifts.
+  const sc = normalizeClassicScoring(leagueCatalogOf(gm));
   return (
     <div style={box(bare)}>
       <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} accent />

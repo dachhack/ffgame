@@ -17,6 +17,7 @@ import { flagFor } from '@drip/core/data/commish';
 import { displayTeam } from '@drip/core/data/playerTeam';
 import { statsForName, NO_SEASON } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
@@ -124,7 +125,9 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         // The league's own scoring decides the points column; a drip league has
         // no classic table, so buildGameLog prints statlines alone.
         const gm = leagueId ? await leagueGameMode(leagueId).catch(() => null) : null;
-        const scoring = gm?.ok && gm.mode === 'classic' ? { ...(gm.scoring ?? {}), ppr: gm.ppr ?? 1 } : null;
+        // leagueCatalogOf (0209): this spread had `ppr` last and defaulted
+        // it to 1, so a league scoring 0.5 a catch priced players at 1.
+        const scoring = gm?.ok && gm.mode === 'classic' ? leagueCatalogOf(gm) : null;
         const weeks = await playerSeasonLog(slug);
         if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, weeks, scoring));
       } catch { if (!dead) setLogErr(true); }

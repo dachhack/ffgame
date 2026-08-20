@@ -395,8 +395,19 @@ export function leagueProjScoring(): ClassicScoring { return cat(); }
 export function leagueCatalogOf(
   gm?: { scoring?: Partial<ClassicScoring> | null; ppr?: number | string | null } | null,
 ): Partial<ClassicScoring> {
+  // ── WHICH ppr WINS (0209) ────────────────────────────────────────────────
+  // `ppr` has two homes: settings_json.ppr (0157's, surfaced as `gm.ppr`) and
+  // the scoring catalog, where 0209 gave it a box. Both writers write both, so
+  // for anything saved from today on they agree and the order is moot.
+  //
+  // THE ORDER IS FOR THE ROWS THAT PREDATE THAT. The catalog copy only exists
+  // if something wrote it, so its presence means "a commissioner set this
+  // deliberately" — it goes LAST and wins. The old spread had `gm.ppr` last,
+  // and since league_game_mode COALESCES that to 1 it is never absent: a ppr
+  // saved into the catalog would have been overwritten by the default on every
+  // read, and the new field would have looked like it saved and done nothing.
   const ppr = Number(gm?.ppr);
-  return { ...(gm?.scoring ?? {}), ...(Number.isFinite(ppr) ? { ppr } : {}) };
+  return { ...(Number.isFinite(ppr) ? { ppr } : {}), ...(gm?.scoring ?? {}) };
 }
 
 /** How much this league's rules are worth to this player, as a multiple of the

@@ -49,7 +49,7 @@ import {
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
-import { DEFAULT_CLASSIC_SCORING } from '../packages/core/src/engine/classic';
+import { DEFAULT_CLASSIC_SCORING, CLASSIC_SCORING_FIELDS, CLASSIC_SCORING_SECTIONS, normalizeClassicScoring } from '../packages/core/src/engine/classic';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -475,6 +475,50 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   ok('half PPR actually lowers a 105-catch receiver',
     projectedPoints(WR) < PROJ_2026.get(WR.id), [projectedPoints(WR), PROJ_2026.get(WR.id)]);
   clearLeagueProjScoring();
+}
+
+// ── WHICH ppr WINS (0209) ─────────────────────────────────────────────────
+// `ppr` has two homes: settings_json.ppr (surfaced as `gm.ppr`, and COALESCED
+// TO 1 by league_game_mode, so it is never absent) and the scoring catalog,
+// where 0209 gave it an editable box. The old spread put `gm.ppr` last — which
+// means a value typed into the new field would have been overwritten by that
+// default on every single read: saved, stored, and ignored.
+{
+  const typed = leagueCatalogOf({ scoring: { ppr: 0.25 }, ppr: 1 });
+  ok('a ppr in the CATALOG beats the settings_json copy', typed.ppr === 0.25, typed);
+  ok('…including when the settings_json copy is the coalesced default of 1',
+    leagueCatalogOf({ scoring: { ppr: 0 }, ppr: 1 }).ppr === 0);
+  // Zero is the case a truthiness check would get wrong: a non-PPR league is a
+  // real league, and `scoring.ppr || gm.ppr` would silently make it full PPR.
+  ok('a catalog ppr of ZERO is honoured, not treated as absent',
+    leagueCatalogOf({ scoring: { ppr: 0 }, ppr: 1 }).ppr === 0);
+  // The legacy direction still works — leagues that never touched the field.
+  ok('with no catalog copy the settings_json one is used',
+    leagueCatalogOf({ scoring: { teRec: 0.5 }, ppr: 0.5 }).ppr === 0.5);
+  ok('…and the adjustments still survive the reorder',
+    leagueCatalogOf({ scoring: { teRec: 0.5, ppr: 0.25 }, ppr: 1 }).teRec === 0.5);
+  ok('neither present is still undefined, not NaN',
+    leagueCatalogOf({ scoring: {} }).ppr === undefined);
+}
+
+// ── RECEPTION IS AN EDITABLE FIELD (0209) ─────────────────────────────────
+// It was the ONE value in the catalog with no box: reachable only by applying
+// a preset, which resets every other value.
+{
+  const rec = CLASSIC_SCORING_FIELDS.find((f) => f.key === 'ppr');
+  ok('ppr is in the editable field list at all', !!rec, rec);
+  ok('…labelled RECEPTION, the thing it pays for', rec?.label === 'RECEPTION', rec?.label);
+  ok('…and NOT per-yard, which would clamp it to 1 in SQL', !rec?.perYard);
+  // It has to sit in RECEIVING, next to the bonuses that stack on top of it.
+  const recv = CLASSIC_SCORING_SECTIONS.find((s) => s.section === 'RECEIVING');
+  ok('it lives in the RECEIVING section', recv?.fields.some((f) => f.key === 'ppr'));
+  ok('…above the catch bonuses that are ADDITIVE to it',
+    recv.fields.findIndex((f) => f.key === 'ppr') < recv.fields.findIndex((f) => f.key === 'teRec'));
+  // normalizeClassicScoring must round-trip it now that the loop covers it.
+  ok('a saved ppr survives normalization', normalizeClassicScoring({ ppr: 0.25 }).ppr === 0.25);
+  ok('…and the legacy bare-number shorthand still works',
+    normalizeClassicScoring(0.5).ppr === 0.5);
+  ok('the default is still a point per catch', normalizeClassicScoring({}).ppr === 1);
 }
 
 // ── THE POOLS: WAIVERS AND THE DRAFT ROOM ──────────────────────────────────

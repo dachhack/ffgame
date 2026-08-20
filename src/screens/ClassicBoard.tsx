@@ -14,7 +14,7 @@ import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
+import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -636,7 +636,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     return () => { stop = true; window.clearInterval(t); };
   }, [matchup, userId, ros]);
 
-  const sc = useMemo<Partial<ClassicScoring>>(() => ({ ...scoring, ppr }), [scoring, ppr]);
+  // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
+  // has a settings_json home and a catalog home, and a bare `{...scoring,
+  // ppr}` puts the settings_json one last — which would overwrite a
+  // per-reception value a commissioner had just typed into the field.
+  const sc = useMemo<Partial<ClassicScoring>>(() => leagueCatalogOf({ scoring, ppr }), [scoring, ppr]);
   // THE LEAGUE'S CATALOG, ON THE PROJECTION SIDE (v0.310.0). Keyed on `sc`,
   // not on the load callback, because `sc` IS the catalog this board scores
   // live points with — installing anything else is how the two sides drift.

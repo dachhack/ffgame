@@ -290,9 +290,11 @@ export function rosterLabel(roster?: ClassicRoster | null): string {
 // ── Commissioner-editable scoring (0160, widened 0161) ──────────────────────
 // Every number the classic scorer uses, as a league setting. Overrides live in
 // settings_json.scoring_classic (sanitized + clamped in SQL, same camelCase
-// keys); this module alone knows the defaults. `ppr` still rides
-// settings_json.ppr (the dedicated RECEPTIONS control); normalizeClassicScoring
-// folds it in. The 300/400 + 100/200 bonuses STACK (Sleeper's behavior) and
+// keys); this module alone knows the defaults. `ppr` is an ordinary field of
+// that catalog since 0209 — it ALSO still rides settings_json.ppr, which many
+// surfaces read directly to render sentences ("full PPR"), and both writers
+// write both so the two cannot drift. `leagueCatalogOf` decides between them
+// for rows written before 0209. The 300/400 + 100/200 bonuses STACK (Sleeper's behavior) and
 // are computed on the player's week totals.
 export interface ClassicScoring {
   passYd: number; passTd: number; int: number; pass300: number; pass400: number;
@@ -397,6 +399,13 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'rushFd', label: '1ST DOWN' }, { key: 'rush2pt', label: '2-PT RUSH' },
   ] },
   { section: 'RECEIVING', fields: [
+    // RECEPTION FIRST (0209, founder: "do we have just points for a
+    // reception?"). It is the value every catch pays before any position bonus
+    // is considered, and it was the one number in this catalog with no box —
+    // reachable only by applying a PRESET, which resets everything else. The
+    // three CATCH BONUS fields below are ADDITIVE ON TOP of it, which is much
+    // easier to read correctly with the base sitting directly above them.
+    { key: 'ppr', label: 'RECEPTION' },
     { key: 'recYd', label: 'REC YD', perYard: true }, { key: 'recTd', label: 'REC TD' }, { key: 'teRec', label: 'TE CATCH BONUS' },
     { key: 'rbRec', label: 'RB CATCH BONUS' }, { key: 'wrRec', label: 'WR CATCH BONUS' }, { key: 'targetPt', label: 'TARGET' },
     { key: 'rec100', label: '100+ YD GAME' }, { key: 'rec200', label: '200+ YD GAME' },
@@ -484,6 +493,10 @@ export function normalizeClassicScoring(x?: number | Partial<ClassicScoring> | n
     const v = Number((x as Partial<ClassicScoring> | null | undefined)?.[f.key]);
     if (Number.isFinite(v)) out[f.key] = v;
   }
+  // `ppr` used to need its own line here because it was NOT in the field list
+  // (it lived in settings_json.ppr alone). 0209 gave it a box, so the loop above
+  // already covers it; this stays only for the legacy bare-number shorthand
+  // handled at the top, and is a no-op for any object the loop has seen.
   const p = Number((x as Partial<ClassicScoring> | null | undefined)?.ppr);
   if (Number.isFinite(p)) out.ppr = p;
   return out;
