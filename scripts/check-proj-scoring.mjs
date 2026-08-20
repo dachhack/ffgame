@@ -38,10 +38,12 @@ import { PROJ_LINES, PROJ_LINE_POS } from '../packages/core/src/data/projStats20
 import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/poolSort';
 import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
 import { PROJ_RETURN } from '../packages/core/src/data/projReturns2026';
+import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD } from '../packages/core/src/data/projTeamRoles2026';
 import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
-  scoreKickLine, scoreDstLine, scoreReturnLine, integratedPaPoints, kdstBase, hasProjection, PA_SD,
+  scoreKickLine, scoreDstLine, scoreReturnLine, scoreHcLine, scorePuntLine, marginBracketShares,
+  integratedPaPoints, kdstBase, hasProjection, PA_SD,
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
@@ -293,6 +295,87 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
   ok('the return scorer prices the default catalog as return TDs alone',
     Math.abs(scoreReturnLine(PROJ_RETURN['chimere-dike'], DEFAULT_CLASSIC_SCORING)
       - PROJ_RETURN['chimere-dike'].retTd * 6) < 1e-9);
+}
+
+
+// ── HEAD COACHES AND PUNTERS (v0.315.0) ────────────────────────────────────
+// The last two rosterable positions that projected nothing. Both are priced
+// DIRECTLY under the league's catalog rather than as a ratio, because every
+// knob for both defaults to 0 — there is no standard coach or punter scoring to
+// divide by, and the ratio's denominator would be zero.
+{
+  const HC = { id: 'la-hc', pos: 'HC', team: 'LA' };      // +3.29 margin, 10.3 wins
+  const HCBAD = { id: 'ari-hc', pos: 'HC', team: 'ARI' }; // -4.16 margin, 6.3 wins
+  const PU = { id: 'pit-p', pos: 'P', team: 'PIT' };      // 73.4 punts, most in the league
+
+  ok('both bakes loaded — 32 coaches, and the punters that exist upstream',
+    Object.keys(PROJ_HC).length === 32 && Object.keys(PROJ_PUNT).length === 30,
+    [Object.keys(PROJ_HC).length, Object.keys(PROJ_PUNT).length]);
+  ok('every coach and punter keys to our own team pseudo-player convention',
+    Object.keys(PROJ_HC).every((k) => k.endsWith('-hc'))
+    && Object.keys(PROJ_PUNT).every((k) => k.endsWith('-p')));
+  ok('the pools can see them, so they no longer sort below unknown players',
+    hasProjection('la-hc') && hasProjection('pit-p') && !hasProjection('xxx-hc'));
+
+  // THE DEFINING PROPERTY: worth nothing until a commissioner says otherwise.
+  ok('a coach projects EXACTLY zero under the default catalog',
+    projectedPoints(HC) === 0, projectedPoints(HC));
+  ok('…and so does a punter', projectedPoints(PU) === 0, projectedPoints(PU));
+
+  // …and the moment the league prices them, they appear.
+  setLeagueProjScoring({ hcWin: 5, hcLoss: 1 });
+  const la = projectedPoints(HC), ari = projectedPoints(HCBAD);
+  ok('a league that pays for wins gives the coach a projection', la > 0, la);
+  ok('…and the better coach is worth more', la > ari, [la, ari]);
+  // 10.3 wins x 5 + 6.6 losses x 1, over 17 games — arithmetic, not a vibe.
+  ok('…priced exactly on StatHead\u2019s own win and loss counts',
+    Math.abs(la - Math.round((PROJ_HC['la-hc'].wins * 5 + PROJ_HC['la-hc'].losses * 1) / 17 * 10) / 10) < 1e-9,
+    la);
+  ok('…and a punter is untouched by coach scoring', projectedPoints(PU) === 0);
+
+  // THE MARGIN LADDER separates coaches the win column alone cannot.
+  const flatLa = la, flatAri = ari;
+  setLeagueProjScoring({ hcWin: 5, hcLoss: 1, hcWm25: 10 });
+  ok('a blowout bonus raises both coaches', projectedPoints(HC) > flatLa && projectedPoints(HCBAD) > flatAri);
+  ok('…and raises the FAVOURITE more, because he wins big more often',
+    (projectedPoints(HC) - flatLa) > (projectedPoints(HCBAD) - flatAri),
+    [projectedPoints(HC) - flatLa, projectedPoints(HCBAD) - flatAri]);
+  clearLeagueProjScoring();
+
+  setLeagueProjScoring({ puntPt: 1, puntYd: 0.05 });
+  ok('a punter league gives the punter a projection', projectedPoints(PU) > 0, projectedPoints(PU));
+  ok('…scaled by volume', projectedPoints(PU) > projectedPoints({ id: 'car-p', pos: 'P', team: 'CAR' }));
+  ok('a team with no punter upstream still projects nothing, not a stand-in',
+    projectedPoints({ id: 'chi-p', pos: 'P', team: 'CHI' }) === 0);
+  ok('…and a coach is untouched by punt scoring', projectedPoints(HC) === 0);
+  clearLeagueProjScoring();
+}
+
+// ── THE MARGIN BRACKET SHAPE ───────────────────────────────────────────────
+// StatHead publish win/loss/tie counts AND a per-game margin sd. We take the
+// TOTALS from them and only the SHAPE from a normal, because integrating the
+// normal ourselves reproduced their wins closely (9.98 vs 10.3) but overstated
+// TIES eightfold (0.52 vs 0.06) — NFL margins are lumpy, overtime resolves most
+// zeros. These pin the shape so that stays true.
+{
+  ok('the spread is the one StatHead fitted', MARGIN_GAME_SD === 12.71, MARGIN_GAME_SD);
+  const b = marginBracketShares(3.29);
+  ok('win shares are a distribution, summing to exactly 1',
+    Math.abs(b.win.reduce((a, c) => a + c, 0) - 1) < 1e-9, b.win);
+  ok('…and so are loss shares', Math.abs(b.loss.reduce((a, c) => a + c, 0) - 1) < 1e-9);
+  ok('a FAVOURITE wins big more often than he loses big',
+    b.win[5] > b.loss[5], [b.win[5], b.loss[5]]);
+  const und = marginBracketShares(-4.16);
+  ok('and an underdog is the mirror of that', und.loss[5] > und.win[5], [und.loss[5], und.win[5]]);
+  // A dead-even coach must be symmetric — the property that breaks first if a
+  // bracket boundary is miswritten on one side only.
+  const even = marginBracketShares(0);
+  ok('a coach with no edge has identical win and loss shapes',
+    even.win.every((v, i) => Math.abs(v - even.loss[i]) < 1e-9), [even.win, even.loss]);
+  // Ties are excluded from the ladder: a tie is not a margin bracket, and
+  // including m=0 is exactly what overstated them.
+  ok('the ladder never counts a tie as a margin',
+    Math.abs(marginBracketShares(0).win.reduce((a, c) => a + c, 0) - 1) < 1e-9);
 }
 
 // ── THE CATALOG IS SCORING **PLUS** PPR ────────────────────────────────────

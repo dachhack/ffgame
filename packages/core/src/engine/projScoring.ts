@@ -50,10 +50,11 @@ import { PROJ_2026 } from '../data/proj2026';
 import { PROJ_LINES, type ProjStatLine } from '../data/projStats2026';
 import { PROJ_KICK, PROJ_DST, type ProjKickLine, type ProjDstLine } from '../data/projKdst2026';
 import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
+import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, type ProjHcLine, type ProjPuntLine } from '../data/projTeamRoles2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
 import { scopedAdjustFor } from './leagueScoring';
 
-export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine };
+export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine, ProjHcLine, ProjPuntLine };
 
 /** A projected stat line scored under one catalog. Only the fields the line
  *  actually carries — see the docblock on what that leaves out. */
@@ -170,6 +171,58 @@ export function scoreDstLine(line: ProjDstLine, sc: ClassicScoring): number {
     + integratedPaPoints(line.paPg, sc) * SEASON_GAMES;
 }
 
+/** A punter's season, priced. Punts and punt yards only.
+ *
+ *  THE AVERAGE LADDER IS DELIBERATELY ABSENT. `pta44`…`pta33` pay on a WEEK's
+ *  punting average, and a season average cannot be scored against a weekly rung
+ *  — the same mistake as scoring a defence's season points-allowed against the
+ *  bracket its mean falls in. StatHead ship a season `punt_avg` and no per-game
+ *  spread for it, so there is nothing honest to integrate. A league that has
+ *  set only the ladder sees no response, which is the house rule: absent data
+ *  gets no claim. */
+export function scorePuntLine(line: ProjPuntLine, sc: ClassicScoring): number {
+  return line.punts * sc.puntPt + line.puntYd * sc.puntYd;
+}
+
+/** The share of a coach's WINS (and, separately, LOSSES) that land in each of
+ *  the catalog's six margin brackets.
+ *
+ *  Brackets are `classicScorePlay`'s, copied from it: |m| ≤4, ≤9, ≤14, ≤19,
+ *  ≤24, else. The shape comes from a normal on `marginPg`; the TOTALS do not —
+ *  see the docblock in `projTeamRoles2026.ts` for why (a plain normal
+ *  overstates ties eightfold, because NFL margins are lumpy and overtime
+ *  resolves most zeros). So these are normalised to sum to 1 within each side,
+ *  and the caller multiplies by StatHead's own win and loss counts. */
+export function marginBracketShares(marginPg: number, sd = MARGIN_GAME_SD): { win: number[]; loss: number[] } {
+  const win = [0, 0, 0, 0, 0, 0], loss = [0, 0, 0, 0, 0, 0];
+  let wTot = 0, lTot = 0;
+  for (let m = -70; m <= 70; m++) {
+    if (m === 0) continue;                       // a tie is not a margin bracket
+    const w = Math.exp(-0.5 * ((m - marginPg) / sd) ** 2);
+    const a = Math.abs(m);
+    const b = a <= 4 ? 0 : a <= 9 ? 1 : a <= 14 ? 2 : a <= 19 ? 3 : a <= 24 ? 4 : 5;
+    if (m > 0) { win[b] += w; wTot += w; } else { loss[b] += w; lTot += w; }
+  }
+  for (let i = 0; i < 6; i++) {
+    win[i] = wTot > 0 ? win[i] / wTot : 0;
+    loss[i] = lTot > 0 ? loss[i] / lTot : 0;
+  }
+  return { win, loss };
+}
+
+/** A head coach's season, priced. Result + margin ladder + points + downs,
+ *  exactly the fields `classicScorePlay`'s `HC` branch scores. */
+export function scoreHcLine(line: ProjHcLine, sc: ClassicScoring): number {
+  const { win, loss } = marginBracketShares(line.marginPg);
+  const wm = [sc.hcWm1, sc.hcWm5, sc.hcWm10, sc.hcWm15, sc.hcWm20, sc.hcWm25];
+  const lm = [sc.hcLm1, sc.hcLm5, sc.hcLm10, sc.hcLm15, sc.hcLm20, sc.hcLm25];
+  let out = line.wins * sc.hcWin + line.losses * sc.hcLoss + line.ties * sc.hcTie
+    + line.points * sc.hcPts
+    + line.thirdDown * sc.hc3dc + line.fourthDown * sc.hc4dc;
+  for (let i = 0; i < 6; i++) out += line.wins * win[i] * wm[i] + line.losses * loss[i] * lm[i];
+  return out;
+}
+
 /** The projected season points of a K or DST under one catalog, or null for
  *  anyone who is neither. */
 function scoreKdst(slug: string, sc: ClassicScoring): number | null {
@@ -177,7 +230,20 @@ function scoreKdst(slug: string, sc: ClassicScoring): number | null {
   if (k) return scoreKickLine(k, sc);
   const d = PROJ_DST[slug];
   if (d) return scoreDstLine(d, sc);
+  const h = PROJ_HC[slug];
+  if (h) return scoreHcLine(h, sc);
+  const p = PROJ_PUNT[slug];
+  if (p) return scorePuntLine(p, sc);
   return null;
+}
+
+/** Is this a team pseudo-player whose catalog knobs ALL default to zero — a
+ *  head coach or a punter? Those cannot be priced as a ratio against a standard
+ *  scoring, because there is no standard: the denominator would be 0. They are
+ *  priced directly under whatever the league installed, which is why they need
+ *  their own branch in `projectedPoints` rather than riding `kdstBase`. */
+function isZeroDefaultRole(slug: string): boolean {
+  return PROJ_HC[slug] != null || PROJ_PUNT[slug] != null;
 }
 
 /** THE LEVEL, PRICED BY US. Unlike every other bake in this project these two
@@ -197,7 +263,8 @@ const kdstBaseCache = new Map<string, number>();
  *  check against `PROJ_2026` alone would have quietly kept every kicker and
  *  defence at the bottom of the list this change exists to lift them off. */
 export function hasProjection(slug: string): boolean {
-  return PROJ_2026.has(slug) || PROJ_KICK[slug] != null || PROJ_DST[slug] != null;
+  return PROJ_2026.has(slug) || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
+    || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null;
 }
 
 export function kdstBase(slug: string): number {
@@ -343,6 +410,18 @@ export function projectedPoints(
     // top of an unknown is false precision. The per-TD bonus pays against
     // projected RETURN touchdowns, the only ones that score in this spot.
     return Math.round((perWeek * radj.mult + radj.pts + radj.td * (rl.retTd / SEASON_GAMES)) * 10) / 10;
+  }
+  // A COACH OR A PUNTER IS PRICED DIRECTLY (v0.315.0). Every catalog knob for
+  // both defaults to 0, so their `kdstBase` is 0 and the `if (!base)` guard
+  // below would return zero even under a league that pays them — and the ratio
+  // they would otherwise ride divides by that same zero. They get the league's
+  // OWN scoring of their line, with no standard to compare against, because
+  // there is no standard coach or punter scoring anywhere in fantasy.
+  if (isZeroDefaultRole(player.id)) {
+    const raw = scoreKdst(player.id, cat()) ?? 0;
+    if (!raw) return 0;                          // a league that pays them nothing
+    const zadj = scopedAdjustFor(player, { slot });
+    return Math.round((raw / SEASON_GAMES * zadj.mult + zadj.pts) * 10) / 10;
   }
   const base = PROJ_2026.get(player.id) ?? kdstBase(player.id);
   if (!base) return 0;
