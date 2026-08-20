@@ -16,10 +16,30 @@ async function getJson(url, tries = 4) {
   throw new Error(`scoreboard fetch failed: ${url}`);
 }
 
-/** Normalized games for a season-week. state ∈ pre | in | post. */
-export async function getGames(season, week, seasonType = 2) {
+// ── A SHORT, OPT-IN CACHE (v0.314.0) ───────────────────────────────────────
+// The scoreboard is ~194KB and `syncWeek` fetches it TWICE per league — once
+// through `weekKickoffMs`, once through `buildSlate` — for data that is
+// identical across every league in the same week. At 100 leagues that is 200
+// identical requests and ~39MB per sync pass, and a manual refresh button
+// (0204) turns that from a scheduled cost into a user-triggered one.
+//
+// DEFAULTS TO OFF, deliberately. `maxAgeMs` is 0 unless a caller asks for
+// staleness, so the live play tick — which reads scores and game state off this
+// same call — is byte-for-byte unchanged and can never be served an old board.
+// Only callers that want FIXTURES (kickoff times, who plays whom) opt in, and
+// those move a couple of times a day.
+const gamesCache = new Map();   // key → { at, games }
+
+/** Normalized games for a season-week. state ∈ pre | in | post.
+ *  `maxAgeMs` > 0 permits a cached answer that recent — fixtures only. */
+export async function getGames(season, week, seasonType = 2, maxAgeMs = 0) {
+  const key = `${season}:${week}:${seasonType}`;
+  if (maxAgeMs > 0) {
+    const hit = gamesCache.get(key);
+    if (hit && Date.now() - hit.at < maxAgeMs) return hit.games;
+  }
   const d = await getJson(SB(season, week, seasonType));
-  return (d.events ?? []).map((e) => {
+  const games = (d.events ?? []).map((e) => {
     const comp = e.competitions?.[0] ?? {};
     const cs = comp.competitors ?? [];
     const teams = cs.map((c) => c.team?.abbreviation);
@@ -34,6 +54,10 @@ export async function getGames(season, week, seasonType = 2) {
       away: cs.find((c) => c.homeAway === 'away')?.team?.abbreviation ?? teams[1],
     };
   });
+  // Stored whatever the caller asked for, so a fresh fetch by the play tick
+  // still primes the cache for the fixture readers behind it.
+  gamesCache.set(key, { at: Date.now(), games });
+  return games;
 }
 
 /** Bucket an ISO kickoff into a window id by its US-Eastern day + hour (Intl
@@ -78,13 +102,13 @@ export function slateFromGames(games) {
 }
 
 /** The live slate for a season-week from ESPN (fetches the scoreboard). */
-export async function buildSlate(season, week, seasonType = 2) {
-  return slateFromGames(await getGames(season, week, seasonType));
+export async function buildSlate(season, week, seasonType = 2, maxAgeMs = 0) {
+  return slateFromGames(await getGames(season, week, seasonType, maxAgeMs));
 }
 
 /** Earliest kickoff of the week (epoch ms), the matchup lock_at. */
-export async function weekKickoffMs(season, week, seasonType = 2) {
-  const games = await getGames(season, week, seasonType);
+export async function weekKickoffMs(season, week, seasonType = 2, maxAgeMs = 0) {
+  const games = await getGames(season, week, seasonType, maxAgeMs);
   const ks = games.map((g) => g.kickoffMs).filter(Number.isFinite);
   return ks.length ? Math.min(...ks) : null;
 }

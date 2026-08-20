@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
+  requestLeagueSync, leagueSyncState, type SyncState,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage } from '@drip/core/data/invite';
@@ -220,6 +221,72 @@ function SlotRow({ name, pos, bb, filter }: { name: string; pos: string[]; bb: b
   );
 }
 
+/** ── REFRESH FROM SLEEPER (0204, founder: "Can we let users do a manual
+ *  refresh?") ───────────────────────────────────────────────────────────────
+ *
+ *  The worker mirrors Sleeper every 6 hours and ONLY for leagues in its
+ *  PILOT_LEAGUE_IDS allowlist — so for most Sleeper leagues this is not a
+ *  convenience, it is the only way their rosters ever move.
+ *
+ *  It draws nothing on a native league: `league_sync_state` answers whether
+ *  there is an upstream at all, in the call the control already makes, and a
+ *  button that can only ever say "nothing to refresh" is worse than no button.
+ *
+ *  A COOLDOWN REFUSAL IS NOT AN ERROR. The RPC answers ok:true, queued:false
+ *  with the seconds remaining, and this renders it as plain information —
+ *  nothing went wrong, the league simply refreshed a moment ago. */
+export function SleeperRefresh({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<SyncState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = () => leagueSyncState(leagueId).then(setSt).catch(() => setSt({ ok: false }));
+  useEffect(() => { void load(); }, [leagueId]);
+  // While a request is in flight, follow it — the worker answers on its own
+  // ~25s tick, so the button has to keep looking rather than assume.
+  useEffect(() => {
+    if (!st?.pending) return;
+    const t = setInterval(() => { void load(); }, 5000);
+    return () => clearInterval(t);
+  }, [st?.pending, leagueId]);
+
+  if (!st?.ok || !st.sleeper) return null;
+  const wait = st.retry_in ?? 0;
+
+  const press = async () => {
+    setBusy(true); setMsg(null);
+    const r = await requestLeagueSync(leagueId);
+    setBusy(false);
+    if (!r.ok) { setMsg(r.error ?? 'could not queue'); return; }
+    if (!r.queued) { setMsg(`just refreshed — try again in ${r.retry_in ?? 0}s`); await load(); return; }
+    setMsg('queued — the worker picks this up within about half a minute');
+    await load();
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+      <button
+        className="mono"
+        onClick={() => void press()}
+        disabled={busy || st.pending || wait > 0}
+        style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px',
+          borderRadius: 5, border: '1px solid var(--bd)', background: 'var(--bg)',
+          color: st.pending ? 'var(--faint)' : 'var(--you)',
+          cursor: busy || st.pending || wait > 0 ? 'default' : 'pointer',
+          opacity: busy || st.pending || wait > 0 ? 0.55 : 1,
+        }}>
+        {st.pending ? '↻ REFRESHING…' : wait > 0 ? `↻ WAIT ${wait}s` : '↻ REFRESH FROM SLEEPER'}
+      </button>
+      <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>
+        {msg ?? (st.last_at
+          ? `last ${st.last_ok === false ? 'attempt failed' : 'refreshed'} ${new Date(st.last_at).toLocaleString()}`
+          : 'rosters mirror from Sleeper every few hours')}
+      </span>
+    </div>
+  );
+}
+
 export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const [rr, setRr] = useState<Awaited<ReturnType<typeof rosterRules>> | null>(null);
@@ -236,6 +303,7 @@ export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: 
   const mode = rr.waiver_mode ?? 'rolling';
   return (
     <div style={box(bare)}>
+      <SleeperRefresh leagueId={leagueId} />
       <Head>ROSTER</Head>
       <Row k="ROSTER SIZE" v={`${rr.rounds ?? gm.rounds ?? '—'} players`} accent />
       <Row k="STARTING SPOTS" v={`${defs.length}`} />

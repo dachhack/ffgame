@@ -8,6 +8,7 @@ import { Pressable, ScrollView, Share, Text, TextInput, View } from 'react-nativ
 import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
+  requestLeagueSync, leagueSyncState, type SyncState,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage } from '@drip/core/data/invite';
@@ -237,6 +238,66 @@ function SlotRow({ name, pos, bb, filter }: { name: string; pos: string[]; bb: b
 }
 
 // ── 🧢 ROSTER RULES ─────────────────────────────────────────────────────────
+/** ── REFRESH FROM SLEEPER (0204, founder: "Can we let users do a manual
+ *  refresh?") ───────────────────────────────────────────────────────────────
+ *  The twin of the web control. The worker mirrors Sleeper every 6 hours and
+ *  only for leagues in its PILOT_LEAGUE_IDS allowlist, so for most Sleeper
+ *  leagues this is the ONLY way their rosters ever move.
+ *
+ *  Draws nothing on a native league — `league_sync_state` says whether there is
+ *  an upstream, in the call this already makes. A cooldown refusal is rendered
+ *  as information rather than an error, because nothing went wrong. */
+function SleeperRefresh({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<SyncState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = () => leagueSyncState(leagueId).then(setSt).catch(() => setSt({ ok: false }));
+  useEffect(() => { void load(); }, [leagueId]);
+  useEffect(() => {
+    if (!st?.pending) return;
+    const iv = setInterval(() => { void load(); }, 5000);
+    return () => clearInterval(iv);
+  }, [st?.pending, leagueId]);
+
+  if (!st?.ok || !st.sleeper) return null;
+  const wait = st.retry_in ?? 0;
+  const off = busy || !!st.pending || wait > 0;
+
+  const press = async () => {
+    setBusy(true); setMsg(null); tap();
+    const r = await requestLeagueSync(leagueId);
+    setBusy(false);
+    if (!r.ok) { warn(); setMsg(r.error ?? 'could not queue'); return; }
+    if (!r.queued) { setMsg(`just refreshed — try again in ${r.retry_in ?? 0}s`); await load(); return; }
+    commit();
+    setMsg('queued — picked up within about half a minute');
+    await load();
+  };
+
+  return (
+    <View style={{ marginBottom: 10, gap: 4 }}>
+      <Pressable
+        onPress={() => { if (!off) void press(); }}
+        style={{
+          alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6,
+          borderRadius: 6, borderWidth: 1, borderColor: t.bd, backgroundColor: t.bg,
+          opacity: off ? 0.55 : 1,
+        }}>
+        <Mono size={9.5} weight="700" tone={st.pending ? 'faint' : 'you'}>
+          {st.pending ? '↻ REFRESHING…' : wait > 0 ? `↻ WAIT ${wait}s` : '↻ REFRESH FROM SLEEPER'}
+        </Mono>
+      </Pressable>
+      <Mono size={8.5} tone="faint">
+        {msg ?? (st.last_at
+          ? `last ${st.last_ok === false ? 'attempt failed' : 'refreshed'} ${new Date(st.last_at).toLocaleString()}`
+          : 'rosters mirror from Sleeper every few hours')}
+      </Mono>
+    </View>
+  );
+}
+
 export function RosterRulesView({ leagueId }: { leagueId: string }) {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const [rr, setRr] = useState<Awaited<ReturnType<typeof rosterRules>> | null>(null);
@@ -253,6 +314,7 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
   const mode = rr.waiver_mode ?? 'rolling';
   return (
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+      <SleeperRefresh leagueId={leagueId} />
       <Head>ROSTER</Head>
       <Row k="ROSTER SIZE" v={`${rr.rounds ?? gm.rounds ?? '—'} players`} tone="you" />
       <Row k="STARTING SPOTS" v={`${defs.length}`} />

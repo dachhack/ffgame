@@ -20,7 +20,7 @@ import { pollMarket } from './poll/market.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
-import { syncAllLeagues } from './sync.js';
+import { syncAllLeagues, syncWeek } from './sync.js';
 import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
@@ -39,6 +39,7 @@ let lastMarketPoll = 0;
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
+let manualSyncing = false;
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -141,6 +142,57 @@ async function syncTick() {
     log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`);
   } catch (e) { log('weekly sync error', e.message); }
   finally { syncing = false; }
+}
+
+/** MANUAL REFRESH (0204): service whatever a manager asked for.
+ *
+ *  The client cannot call Sleeper for us and this worker has no HTTP surface,
+ *  so a button writes a `sync_request` row and this drains it on the tick that
+ *  is already running. It calls the SAME `syncWeek` the scheduled path calls —
+ *  one code path, two triggers — so the manual and automatic refreshes cannot
+ *  drift apart.
+ *
+ *  Its own loop rather than a step inside `tick()`: a Sleeper round trip must
+ *  never stretch a play tick, and a request that throws must not take the live
+ *  board down with it. Every outcome is written back to the row, including the
+ *  failures, because the button is showing a manager what happened.
+ */
+async function manualSyncTick() {
+  if (manualSyncing) return;
+  const { data: reqs } = await db().from('sync_request')
+    .select('league_id, requested_at')
+    .is('finished_at', null)
+    .order('requested_at', { ascending: true })
+    .limit(5);                                   // a burst is drained over a few ticks, not in one
+  if (!reqs?.length) return;
+  manualSyncing = true;
+  try {
+    const season = config.season;
+    const week = await regularWeek(season);
+    for (const r of reqs) {
+      // Claim it first. A crash mid-sync then leaves a row with started_at set
+      // and finished_at null, which reads as "in flight" rather than silently
+      // re-running on every tick forever.
+      await db().from('sync_request').update({ started_at: new Date().toISOString() })
+        .eq('league_id', r.league_id).is('started_at', null);
+      const { data: lg } = await db().from('league')
+        .select('sleeper_league_id, provider').eq('id', r.league_id).single();
+      let ok = false, note = null;
+      if (!lg || lg.provider !== 'sleeper' || !lg.sleeper_league_id) {
+        note = 'not a Sleeper league';           // the RPC guards this too; belt and braces
+      } else {
+        try {
+          await syncWeek(lg.sleeper_league_id, week, season, playerIndex);
+          ok = true; note = `week ${week}`;
+        } catch (e) { note = String(e?.message ?? e).slice(0, 200); }
+      }
+      await db().from('sync_request')
+        .update({ finished_at: new Date().toISOString(), ok, note })
+        .eq('league_id', r.league_id);
+      log('manual sync', r.league_id, ok ? 'ok' : `failed — ${note}`);
+    }
+  } catch (e) { log('manual sync tick error', e.message); }
+  finally { manualSyncing = false; }
 }
 
 /** One context's pass: fetch its scoreboard, then lock → poll → resolve →
@@ -363,6 +415,11 @@ async function main() {
   };
   await guardedTick();
   setInterval(() => { void guardedTick(); }, config.playsPollMs);
+
+  // Manual refresh queue (0204) — its own loop at the play cadence, so a
+  // manager's button answers in ~25s without a Sleeper round trip ever landing
+  // inside a play tick.
+  setInterval(() => manualSyncTick().catch((e) => log('manual sync error', e.message)), config.playsPollMs);
 
   // App push notifications (0150): detect + deliver on a 60s sweep, its own
   // loop — a slow FCM round must never stretch a play tick.
