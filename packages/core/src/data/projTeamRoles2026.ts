@@ -218,8 +218,14 @@ for (const line of P_CSV.split('\n')) {
 // (fired after 3-14, replaced by Mike LaFleur). Their Las Vegas spelling was
 // also "Kubliak". Verified team by team; the other 22 did not change.
 //
-// SO DO NOT BLINDLY OVERWRITE THIS BLOCK ON A REFRESH. Re-check the changed
-// teams against a real source. The reason this is survivable rather than
+// AS OF MCP 1.0.87 THE FEED HAS CAUGHT UP: they corrected Atlanta, Buffalo and
+// Arizona and fixed the Las Vegas spelling after we reported them, so all four
+// names below now AGREE with the source rather than overriding it, and
+// `new_coach` is a computed 10 of 32 rather than a hardcoded 7.
+//
+// SO DO NOT BLINDLY OVERWRITE THIS BLOCK ON A REFRESH ANYWAY. Agreement today
+// is not a guarantee for the next coaching cycle. Re-check the changed teams
+// against a real source. The reason this is survivable rather than
 // serious is below: the number belongs to the team, not the person.
 //
 // The two filled punters have no name on purpose: there is no starter to name,

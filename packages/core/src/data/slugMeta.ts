@@ -8,9 +8,18 @@ import { PLAYER_BIO } from './playerBio';
 import { teamFor } from './playerTeam';
 
 // Relocation / alt codes → the slate's codes (matches buildLeague.normTeam).
+//
+// AZ → ARI (v0.318.0) is the newest and was added on evidence rather than on
+// principle: StatHead found that nflverse's ROSTER files say `AZ` while its
+// SCHEDULE says `ARI`, and their weekly builder keyed matchups on the schedule
+// code — so all 34 Arizona defenders carried an all-null weekly strip and Budda
+// Baker projected nothing in any week of the season. They fixed it at source
+// and nothing reaches us as `AZ` today. This mapping is here so that if any
+// future feed does, it is a no-op instead of a silent slate-gating miss: an
+// unrecognised team code does not error here, it just never matches a game.
 export function normTeam(t: string): string {
   const u = (t ?? '').toUpperCase();
-  return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u;
+  return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u === 'AZ' ? 'ARI' : u;
 }
 
 // Runtime overlay (0200.1) — live meta for players the BAKE doesn't know.

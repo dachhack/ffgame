@@ -790,11 +790,54 @@ for (const p of [QB, WR, RB, TE]) {
   // A knob we have no component for must not silently move anyone — that is
   // the honest failure mode, and it has to be visible rather than approximated.
   {
-    setLeagueProjScoring({ idpSackYd: 1, idpTackle10: 5 });
+    setLeagueProjScoring({ idpSackYd: 1, idpIntRetYd: 1, idpFumRetTd50: 5 });
     const unmoved = projectedPoints(D('micah-parsons', '7640'));
     clearLeagueProjScoring();
     ok('a knob with no component behind it moves nobody rather than guessing',
       unmoved === projectedPoints(D('micah-parsons', '7640')));
+  }
+
+  // ══ THE 10+ TACKLE GAME, NOW PRICED (v0.318.0) ══════════════════════════
+  // The gap v0.317.0 shipped with, and the reason it was left open: StatHead
+  // had no field for it, and assuming Poisson would have been wrong by ~9x on
+  // low-volume players. `weeks_10plus_tackle` arrived in MCP 1.0.87, integrated
+  // over a negative binomial, and these pin that we pay it as a GAME COUNT.
+  {
+    const BUDDA = { id: 'budda-baker', pos: 'DB', team: null, sleeperId: '4081' };
+    setLeagueProjScoring({ idpTackle10: 5 });
+    const withBonus = projectedPoints(BUDDA);
+    clearLeagueProjScoring();
+    const plain = projectedPoints(BUDDA);
+    ok('a 10+ tackle bonus pays against expected GAMES',
+      near(withBonus - plain, (2.02 * 5) / 17), [withBonus, plain]);
+  }
+  {
+    // THE CASE THE POISSON WOULD HAVE BOTCHED. An edge rusher averaging ~3
+    // tackles a game clears 10+ about seven times a century, not never and not
+    // often — and it must be paid a small non-zero amount rather than either 0
+    // or the ~9x a Poisson would have implied at this level.
+    const line = idpLineFor('myles-garrett', '3973');
+    ok('a low-volume defender still has a real, small 10+ tackle expectation',
+      line.w10tk > 0 && line.w10tk < 0.1, line.w10tk);
+    ok('…and a volume tackler has an order of magnitude more',
+      idpLineFor('budda-baker', '4081').w10tk > 20 * line.w10tk);
+  }
+  {
+    // A pure-rusher who never gets there is paid nothing, the other half of it.
+    const KINGSLEY = { id: 'kingsley-jonathan', pos: 'DL', team: null, sleeperId: '8776' };
+    setLeagueProjScoring({ idpTackle10: 10 });
+    const q = projectedPoints(KINGSLEY);
+    clearLeagueProjScoring();
+    ok('…and a defender who never reaches 10 tackles is paid nothing for it',
+      q === projectedPoints(KINGSLEY));
+  }
+  {
+    // All three thresholds are independent knobs and must not bleed into one
+    // another — a tackle bonus paying a sack threshold would be invisible.
+    const F = idpLineFor('zaire-franklin', '5346');
+    const only10 = scoreIdpLine(F, { ...DEFAULT_CLASSIC_SCORING, idpTackle10: 1 })
+      - scoreIdpLine(F, DEFAULT_CLASSIC_SCORING);
+    ok('the 10+ tackle knob pays exactly its own game count', near(only10, F.w10tk), only10);
   }
 
   // ══ THE POOL LIFTS THEM OFF THE BOTTOM ══════════════════════════════════
