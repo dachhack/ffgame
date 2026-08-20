@@ -18,6 +18,78 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.327.0 — chat: the keyboard stops covering it, @all works, and the dot is red
+
+Three founder reports in one pass, all on the chat.
+
+── 1. "WHEN YOU TYPE IN THE CHAT, YOUR KEYBOARD COVERS THE CHAT WINDOW" ────
+
+Mobile web. `ModalBackdrop` already tracked `window.visualViewport` — but only
+reacted to ZOOM:
+
+    const zoomed = v.scale !== 1 || v.offsetTop !== 0 || v.offsetLeft !== 0;
+
+An open keyboard on Android Chrome shrinks the VISUAL viewport and leaves the
+LAYOUT one alone: scale stays 1, both offsets stay 0. So `zoomed` was false, the
+backdrop fell back to `inset: 0`, and the card was laid out against a full-screen
+height whose bottom third was under the keys. The composer lives at the bottom
+of that card. So does the send button.
+
+TWO HALVES, because either alone leaves it broken: the backdrop now also reacts
+to a HEIGHT-ONLY shrink, and the card takes `maxHeight: 100%` — its `86vh` is
+measured against the layout viewport, which the keyboard does not shrink, so
+without the cap it stayed full-height inside a third-height backdrop.
+
+THE THRESHOLD IS NOT A FUDGE. The visual viewport also shrinks by a few dozen
+pixels when the URL bar slides in, and reacting to that would make every modal
+jitter as the page scrolls. A keyboard costs 250-350px; 120 sits comfortably
+above browser chrome and well below any keyboard.
+
+Measured in headless Chromium, composer bottom against the visible area:
+
+  iPhone + keyboard   BEFORE 599 vs 508  UNDER    →  AFTER 495 vs 508  visible
+  Pixel  + keyboard   BEFORE 599 vs 535  UNDER    →  AFTER 522 vs 535  visible
+  no keyboard         BEFORE 599 vs 844  visible  →  AFTER 571 vs 844  visible
+
+The last row is the one that says the fix costs nothing when there is no
+keyboard: the card is still its full 560.
+
+── 2. "DOES @all WORK?" ───────────────────────────────────────────────────
+
+No. Mentions were derived by matching each member's name against the body, so
+`@all` matched nobody and the message posted as ordinary text — no mention rows,
+no badges, no dot for anyone. The sender had every reason to believe they had
+just told the league something. A mention that silently reaches nobody is worse
+than not having the feature: the entire value of typing one is confidence it
+landed.
+
+It works now, on both platforms, and the rule moved to `core/data/mentions` so
+the two apps cannot drift on which "@all"s are real.
+
+THE WORD BOUNDARY IS THE PART WORTH TESTING. A league with a manager called
+Allen — or Ally, or anyone whose name starts with those three letters — would
+otherwise broadcast to everybody every time somebody addressed them. `@all`
+means everybody, `@allen` means Allen, and the difference is one lookahead.
+Asserted in both directions, along with the case that matters most: a false
+POSITIVE. Pinging a whole league by accident is the failure people remember.
+
+`@all` also rides the @-suggestion row now. A mention nobody can discover is a
+feature only its author uses.
+
+── 3. "A TINY RED DOT ON THE CHAT ICON WHEN THERE ARE UNREAD MESSAGES" ────
+
+The dot existed. It was `var(--you)` — the accent teal — and only turned red
+when the unread happened to MENTION you, which made "somebody wrote in the
+league" the same colour as every lit chip and every live number on the screen.
+A notification has to be the one thing on a page that is that colour.
+
+Red for any unread now, on both platforms, matching v0.292.0's league card where
+the founder asked for the same thing in the same words. The mention distinction
+survives where it does not compete for attention: the accessible name.
+
+22 new parity assertions (621 total) in a new `check:mentions`.
+
+
 ### v0.326.0 — "League Full": a commissioner can close the waiting room
 
 Founder: "Can we have a commish option to close the waiting room. Just 'League

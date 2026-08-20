@@ -97,7 +97,7 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo }: {
                   if (isChat) { setChatOpen(true); setUnread({ n: 0, mention: false }); return; }
                   onGo(c.id as StripRoom);
                 }}
-                aria-label={isChat ? 'Chat' : undefined}
+                aria-label={isChat ? (unread.n > 0 ? `Chat — ${unread.n} unread${unread.mention ? ', you were mentioned' : ''}` : 'Chat') : undefined}
                 aria-current={on ? 'page' : undefined}
                 className={isChat ? undefined : 'mono'}
                 style={{
@@ -110,8 +110,19 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo }: {
                   lineHeight: isChat ? 1.25 : undefined, cursor: 'pointer',
                 }}>
                 {c.label}
+                {/* ── ONE RED DOT (v0.327.0) ───────────────────────────────
+                    Founder: "let's get a tiny red dot on the chat icon when
+                    there are unread messages." The dot existed, and was
+                    `var(--you)` — the accent teal — unless the unread happened
+                    to mention you, which made "somebody wrote in the league"
+                    the same colour as every lit chip and every live number on
+                    the screen. A notification has to be the one thing on a page
+                    that is that colour.
+                    Consistent with v0.292.0's league card, where the founder
+                    asked for the same thing in the same words: one red dot. */}
                 {isChat && unread.n > 0 && (
-                  <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, minWidth: 8, height: 8, borderRadius: 999, background: unread.mention ? 'var(--opp)' : 'var(--you)' }} />
+                  <span aria-hidden
+                    style={{ position: 'absolute', top: -3, right: -3, minWidth: 8, height: 8, borderRadius: 999, background: 'var(--opp)' }} />
                 )}
               </button>
             );

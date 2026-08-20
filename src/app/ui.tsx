@@ -74,7 +74,22 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
     if (!v) return;
     const update = () => {
       const zoomed = v.scale !== 1 || v.offsetTop !== 0 || v.offsetLeft !== 0;
-      setVv(zoomed ? { top: v.offsetTop, left: v.offsetLeft, width: v.width, height: v.height } : null);
+      // ── THE SOFT KEYBOARD (v0.327.0) ──────────────────────────────────
+      // Founder: "when you type in the chat, your keyboard covers the chat
+      // window." The zoom test above misses it entirely. On Android Chrome an
+      // open keyboard shrinks the VISUAL viewport and leaves the LAYOUT one
+      // alone — scale stays 1, both offsets stay 0 — so `zoomed` was false,
+      // this fell back to `inset: 0`, and the card was laid out against a
+      // full-screen height whose bottom third was under the keyboard. The
+      // composer lives at the bottom of that card. So did the send button.
+      //
+      // THE THRESHOLD IS NOT A FUDGE. The visual viewport also shrinks by a
+      // few dozen pixels when the URL bar slides in, and reacting to that
+      // would make every modal jitter as the page scrolls. A keyboard costs
+      // 250-350px; 120 is comfortably above the browser chrome and well below
+      // any keyboard.
+      const keyboard = window.innerHeight - v.height > 120;
+      setVv(zoomed || keyboard ? { top: v.offsetTop, left: v.offsetLeft, width: v.width, height: v.height } : null);
     };
     update();
     v.addEventListener('resize', update);
@@ -92,7 +107,9 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
         position: 'fixed',
         ...(vv ? { top: vv.top, left: vv.left, width: vv.width, height: vv.height } : { inset: 0 }),
         background: 'rgba(0,0,0,0.6)', zIndex, display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        padding: `${padTop}px 16px`, overflow: 'auto',
+        // Less headroom once the keyboard has taken most of the screen: 40px of
+        // it is a tenth of what's left, and it buys nothing.
+        padding: `${vv ? Math.min(padTop, 12) : padTop}px 16px`, overflow: 'auto',
       }}
     >
       {children}
