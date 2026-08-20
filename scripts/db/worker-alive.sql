@@ -32,17 +32,46 @@
 \echo '   (kickoff in 43m, every 5m, took 18.2s)"), so the deploy run log says'
 \echo '   what the cadence WAS rather than leaving you to derive it.'
 \echo '   NULL = a row written before 0122, not a fault.'
+\echo ''
+\echo '   ONE ROW PER LEAGUE, and labelled by provider — both learned the hard'
+\echo '   way. Grouping by (league, week) with limit 12 let a single league with'
+\echo '   fourteen mirrored weeks fill the whole answer and push the other'
+\echo '   leagues off the bottom, which reads as "those leagues never sync".'
+\echo '   And a NATIVE league has no Sleeper upstream at all — nothing mirrors'
+\echo '   it, so its rows are written by native roster ops and it will ALWAYS'
+\echo '   look hours stale here. That is correct, not a fault, and it belongs'
+\echo '   in the output rather than in the reader.'
 select
   l.name,
-  sl.week,
-  max(sl.synced_at)                                        as last_sync,
+  case when l.provider = 'sleeper' and coalesce(l.sleeper_league_id, '') not like 'native-%'
+       then 'sleeper (mirrored)' else 'native (no upstream — staleness expected)' end as kind,
+  max(sl.synced_at)                                          as last_sync,
   case when max(sl.synced_at) is null then 'unknown (pre-0122 row)'
-       else age(now(), max(sl.synced_at))::text || ' ago' end as freshness
+       else age(now(), max(sl.synced_at))::text || ' ago' end as freshness,
+  (array_agg(sl.week order by sl.synced_at desc nulls last))[1] as freshest_week,
+  count(distinct sl.week)                                    as weeks_mirrored
 from sleeper_lineup sl
 join league l on l.id = sl.league_id
-group by 1, 2
-order by max(sl.synced_at) desc nulls last, 1
-limit 12;
+group by l.id, l.name, l.provider, l.sleeper_league_id
+order by max(sl.synced_at) desc nulls last;
+
+\echo ''
+\echo '── 0b. Does the FRESHEST row carry the group key? ──'
+\echo '   Section 2 answers this per week but is ordered by week, so on a'
+\echo '   preseason board the 10x test weeks crowd out the week actually being'
+\echo '   synced. This asks it of the newest row per league, which is the only'
+\echo '   one that says anything about the code running right now.'
+with newest as (
+  select distinct on (sl.league_id) sl.league_id, sl.week, sl.synced_at, sl.starters_json
+  from sleeper_lineup sl
+  order by sl.league_id, sl.synced_at desc nulls last
+)
+select
+  l.name, n.week, n.synced_at,
+  jsonb_array_length(n.starters_json)                      as entries,
+  (n.starters_json::text like '%"grp"%')                   as has_grp
+from newest n join league l on l.id = n.league_id
+order by n.synced_at desc nulls last;
 
 \echo ''
 \echo '── 1. Did the week mirror land? (matchup, written by syncWeek) ──'
