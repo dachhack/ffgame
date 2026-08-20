@@ -51,6 +51,7 @@ import { PROJ_LINES, type ProjStatLine } from '../data/projStats2026';
 import { PROJ_KICK, PROJ_DST, type ProjKickLine, type ProjDstLine } from '../data/projKdst2026';
 import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
 import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, type ProjHcLine, type ProjPuntLine } from '../data/projTeamRoles2026';
+import { PROJ_FB } from '../data/projFb2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
 import { scopedAdjustFor } from './leagueScoring';
 
@@ -234,6 +235,13 @@ function scoreKdst(slug: string, sc: ClassicScoring): number | null {
   if (h) return scoreHcLine(h, sc);
   const p = PROJ_PUNT[slug];
   if (p) return scorePuntLine(p, sc);
+  // A FULLBACK is a skill player who simply never made the main bake — the
+  // pool keeps four backs a team and nflverse labels him an RB, so he was
+  // squeezed out before being considered. He scores exactly like one, priced at
+  // `pos: 'FB'` because the live scorer's reception premium is RB/WR/TE only
+  // and a fullback earns plain PPR.
+  const f = PROJ_FB[slug];
+  if (f) return scoreProjLine(f, 'FB', sc);
   return null;
 }
 
@@ -264,7 +272,7 @@ const kdstBaseCache = new Map<string, number>();
  *  defence at the bottom of the list this change exists to lift them off. */
 export function hasProjection(slug: string): boolean {
   return PROJ_2026.has(slug) || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
-    || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null;
+    || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null || PROJ_FB[slug] != null;
 }
 
 export function kdstBase(slug: string): number {
