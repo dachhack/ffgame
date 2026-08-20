@@ -18,6 +18,73 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.324.0 — the way in: which league you’re joining, and a crest that isn’t a hole
+
+Two founder reports, both about the same journey — a stranger arriving with a
+link and trying to become a manager.
+
+── 1. "IF YOU GO IN WITH A CODE, IT SHOULD SHOW YOU THE LEAGUE YOU ARE JOINING
+      BEFORE THE SIGN UP ACTION" ──────────────────────────────────────────
+
+The lookup already existed, and its own comment already said this was the job.
+Migration 0002: "Look up a league by code so the client can show \"You’re
+joining <name>\" before the user commits."
+
+It was granted to `authenticated` ONLY. And the moment the preview is wanted is
+the moment before there is an authenticated anybody. So for four years the join
+screen could say nothing but "Join your league." in the abstract, to someone who
+had just been handed a link by a friend and had no way to tell which league it
+was for — or whether the code was still live — until after making an account.
+
+Migration 0206 grants it to `anon` and adds `avatar_url` so the card has a
+crest. What that exposes, stated rather than waved at: the league’s name,
+season, provider and avatar, to a caller who ALREADY HOLDS the invite code —
+which is the same credential `redeem_invite` accepts as proof of invitation, so
+showing it one screen earlier grants nothing the code did not already grant. On
+enumeration: 8 hex characters is 4.3 billion values, a hit returns a league
+NAME, and the same surface is reachable by anyone willing to make a free
+account. Judged worth it; the reasoning is in the migration so the next person
+can disagree with it on the evidence.
+
+FOUR STATES, because three of them collapse into a lie if you merge them:
+asking, found, a code that matched nothing, and a lookup that FAILED. The last
+two are kept apart deliberately — telling someone their invite is dead because
+the network hiccuped turns a retry into a giving-up. `error` says nothing extra.
+
+Only the PLAYER code is previewed: `league_by_invite` matches `invite_code`,
+and a commissioner’s claim code lives in a different column, so previewing one
+with the other would report every commish link as an unknown league.
+
+── 2. "THE LEAGUE AVATARS ARE BLANK FOR NATIVE LEAGUES" ───────────────────
+
+The leagues card drew `avatar_url ? <img> : <empty bordered square>`. A Sleeper
+league arrives with avatars already made and mirrored by the import; a NATIVE
+league has no upstream to mirror and nothing in the app ever writes that column
+— so every native seat drew the empty box, on every team, forever. Not a missing
+image, a missing SOURCE, which no amount of retrying fixes.
+
+The board already knew what to do: `TeamHead` has drawn a lettered box since
+v0.228.0. `crestFor` is that rule extracted so both platforms and the test share
+ONE definition — team avatar → league avatar → letter. The middle rung is what
+rescues a native league whose commissioner set a league image, and rung three
+always answers, so a card can always draw something.
+
+`crestInitial` takes the first LETTER OR DIGIT, not `charAt(0)`: team names are
+user-typed, and "⚡ Bolts" or "’96 Packers" would otherwise hand back a glyph
+that says nothing about which team it is.
+
+MOBILE WAS ALREADY RIGHT and was checked rather than assumed — its leagues list
+has drawn a lettered crest all along. Its two local copies now borrow
+`crestInitial` so the emoji case is handled the same way in both places.
+
+The web `Crest` also handles `onError`: a mirrored avatar whose upstream has
+since 404’d is indistinguishable from a good one until the browser tries it,
+and a broken-image icon is worse than the letter it replaced.
+
+19 new parity assertions (576 total) plus a new SQL probe suite whose real
+subject is the GRANT — invisible in application code, silent when wrong.
+
+
 ### v0.323.2 — the invite link went to the demo board. Every one of them.
 
 Founder: "I want to get people into a classic league. It looks like following

@@ -6,6 +6,7 @@
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { crestInitial } from '@drip/core/data/crest';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread,
   type AdminLeague, type Enrollment, type WaitlistRow,
@@ -43,7 +44,7 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
         <Image source={{ uri: url }} onError={() => setFailed(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       ) : (
         <Text style={{ fontFamily: MONO, fontSize: Math.round(size * 0.42), fontWeight: '700', color: t.faint }}>
-          {(name ?? '?').trim().charAt(0).toUpperCase() || '?'}
+          {crestInitial(name)}
         </Text>
       )}
     </View>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
-import { SiteSettings, VersionTag, Img } from '../app/ui';
+import { SiteSettings, VersionTag, Img, Crest } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
@@ -15,6 +15,7 @@ import {
 import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
+import { crestFor } from '@drip/core/data/crest';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -230,6 +231,36 @@ function AuthForm() {
   })();
   const commishCtx = inviteContext === 'commish';
   const playerCtx = inviteContext === 'player';
+
+  // ── WHICH LEAGUE AM I JOINING? (v0.324.0) ────────────────────────────────
+  // Founder: "If you go in with a code, it should show you the league you are
+  // joining before the sign up action."
+  //
+  // The lookup has existed since 0002 and its own comment says it is for
+  // showing "You're joining <name>" BEFORE the user commits — but it was
+  // granted to `authenticated` only, and the moment it is wanted is the moment
+  // before there is an authenticated anybody. Migration 0206 grants it to
+  // `anon`; this is the half that asks.
+  //
+  // FOUR STATES, because three of them look identical if you collapse them:
+  // still asking, a real league, a code nothing matched, and a lookup that
+  // FAILED. The last two must not be confused — telling someone their invite
+  // is dead because the network hiccuped would turn a retry into a giving-up.
+  type Preview = { st: 'loading' } | { st: 'found'; lg: LeaguePreview } | { st: 'unknown' } | { st: 'error' };
+  const [preview, setPreview] = useState<Preview>({ st: 'loading' });
+  useEffect(() => {
+    let code: string | null = null;
+    // Only the PLAYER invite: league_by_invite matches `invite_code`, and a
+    // commissioner's claim code lives in a different column — previewing one
+    // with the other would report every commish link as an unknown league.
+    try { code = localStorage.getItem('dripInviteCode'); } catch { /* ignore */ }
+    if (!code) return;
+    let dead = false;
+    previewLeague(code)
+      .then((lg) => { if (!dead) setPreview(lg ? { st: 'found', lg } : { st: 'unknown' }); })
+      .catch(() => { if (!dead) setPreview({ st: 'error' }); });
+    return () => { dead = true; };
+  }, []);
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -304,6 +335,32 @@ function AuthForm() {
             : playerCtx ? 'Sign in to claim your team and set your lineup.'
             : 'Sign in to play your week live — drips, nukes and reveals on real NFL games.'}
         </div>}
+        {/* THE LEAGUE YOU ARE JOINING (v0.324.0), above the form for the same
+            reason the invite wall below is: what a visitor needs to know about
+            what they are signing up FOR belongs before they type a password,
+            not in the fine print after it. */}
+        {playerCtx && preview.st === 'found' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginTop: 14,
+            padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--you)', borderRadius: 8 }}>
+            <Crest crest={crestFor({ leagueAvatar: preview.lg.avatar_url, leagueName: preview.lg.name })} size={34} radius={7} />
+            <div style={{ textAlign: 'left', minWidth: 0 }}>
+              <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>YOU&rsquo;RE JOINING</div>
+              <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{preview.lg.name}</div>
+              <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>
+                {preview.lg.season}{preview.lg.provider === 'native' ? '' : preview.lg.provider ? ` · ${preview.lg.provider}` : ''}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* A code that matched nothing. Said HERE rather than after the account
+            is made, which is where they would otherwise find out. `error` says
+            nothing at all — a hiccuped lookup is not evidence about the code. */}
+        {playerCtx && preview.st === 'unknown' && (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--warn, #c66)', marginTop: 14, lineHeight: 1.5 }}>
+            That invite link doesn&rsquo;t match a league any more — the code may have been reset.
+            Ask whoever sent it for a fresh one; you can still sign in below.
+          </div>
+        )}
         {/* Invite expectations belong ABOVE the form, not in the fine print below
             it — an un-invited visitor shouldn't discover the wall after typing a
             password. */}
@@ -1207,9 +1264,12 @@ function LeagueCard({ e, card, commish, userId, onPodBuild, onOpen, unread, alar
     <div style={{ ...card2, padding: 12 }}>
       {/* identity row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        {e.avatar_url
-          ? <img src={e.avatar_url} alt="" width={32} height={32} style={{ borderRadius: 7, flexShrink: 0 }} />
-          : <div style={{ width: 32, height: 32, borderRadius: 7, background: 'var(--bg)', border: '1px solid var(--bd)', flexShrink: 0 }} />}
+        {/* THE CREST, WITH SOMETHING TO SAY (v0.324.0). This was `avatar_url ?
+            <img> : <empty box>`, and a NATIVE league has no upstream to mirror
+            an avatar from — so every native seat drew the empty box, forever.
+            crestFor() falls team → league → letter; see data/crest.ts. */}
+        <Crest crest={crestFor({ teamAvatar: e.avatar_url, leagueAvatar: e.league?.avatar_url, teamName: e.team_name, leagueName: e.league?.name })}
+          size={32} radius={7} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
