@@ -153,7 +153,7 @@ function SlateStrip({ chips, sel, onSel, locked }: {
   // bound is the whole point: a bare `1fr` is `minmax(auto, 1fr)`, and `auto`
   // means min-content, which is exactly the floor that did the stretching.
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8, minWidth: 0 }}>
+    <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
         {chips.map((c) => {
           const mine = c.homeCount + c.awayCount > 0;
@@ -372,7 +372,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // the scoreboard's middle column. Closed by default: the scoreboard and the
   // slate answer "how am I doing", and the lineup answers "who have I got" —
   // a question with a moment rather than a permanent one.
-  const [lineupOpen, setLineupOpen] = useState(false);
+  const [slateOpen, setSlateOpen] = useState(false);
   // One game's field + play log, as a CARD over the board (v0.271.0 — the
   // founder walked back v0.270.0's new tab: "just a card"). Team abbr locates
   // the game.
@@ -515,7 +515,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // Escape closes the picker and the game-field card — a dialog you can only
   // dismiss with a mouse is a dialog a keyboard user is stuck in.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPickerSlot(null); setFieldGame(null); setLineupOpen(false); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPickerSlot(null); setFieldGame(null); setSlateOpen(false); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -1016,21 +1016,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                 looked at, and in this league that is backwards — so the one
                 place the totals meet is the one place the rule belongs. */}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', textAlign: 'center', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-              {/* ── THE LINEUP CHIP (v0.321.0) ─────────────────────────────
+              {/* ── THE SLATE CHIP (v0.321.0, repointed v0.322.2) ─────────
                   This column was empty before lock, and it is the one place on
                   the board that belongs to NEITHER side — which makes it the
-                  right home for the thing that is about the whole matchup.
-                  The chip both opens the lineup and reports the state of the
-                  games it contains, so the space earns itself twice. */}
-              <button onClick={() => setLineupOpen(true)}
-                title="Your lineup, and both sides' spots"
-                aria-label={`Open lineup — ${lineChip.label}${lineChip.detail ? `, ${lineChip.detail}` : ''}`}
+                  right home for the thing that is about neither team: the NFL
+                  slate. The chip both opens it and reports the state of the
+                  games in it, so the space earns itself twice. */}
+              <button onClick={() => setSlateOpen(true)}
+                title="The NFL slate — every game with a starter in it"
+                aria-label={`Open the NFL slate — ${lineChip.label}${lineChip.detail ? `, ${lineChip.detail}` : ''}`}
                 style={{
                   width: '100%', display: 'block', cursor: 'pointer', textAlign: 'center',
                   background: 'var(--bg)', borderRadius: 5, padding: '5px 4px',
                   border: `1px solid ${lineChip.tone === 'live' ? 'var(--you)' : 'var(--bd)'}`,
                 }}>
-                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>LINEUP</div>
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>NFL SLATE</div>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 800, lineHeight: 1.3, color: lineChip.tone === 'live' ? 'var(--you)' : 'var(--text)' }}>
                   {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
                 </div>
@@ -1046,7 +1046,6 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
-          <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
           {locked && (
             <>
               <div style={{ display: 'flex', gap: 4, marginTop: 10, height: 5 }}>
@@ -1070,6 +1069,38 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         </div>
       )}
 
+      {/* ── THE NFL SLATE, AS A CARD OVER THE BOARD (v0.322.2) ────────────
+          Founder: "the nfl game slate is what pops up if clicked on the center
+          chip." Same overlay pattern as the picker, the field board and the
+          player card — backdrop, stopPropagation, Escape, ✕ — so there is one
+          way to dismiss a card on this screen and it works everywhere.
+
+          The rehearsal notice is NOT repeated in here, unlike the lineup card
+          it replaces: that warning is about whose ROSTER you are looking at,
+          and the slate is the same twelve games whoever holds whom. */}
+      {board && slateOpen && (
+        <div onClick={() => setSlateOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
+                NFL SLATE · {lineChip.label}
+              </span>
+              <button onClick={() => setSlateOpen(false)} aria-label="close the slate" className="mono"
+                style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+            </div>
+            {/* `minWidth: 0` is load-bearing, not tidiness — see SlateStrip:
+                the chip row's min-content width is the sum of all its chips,
+                and without a floor of 0 it stretches this column instead of
+                scrolling inside it. */}
+            <div style={{ ...card, minWidth: 0 }}>
+              <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── STARTERS, head to head ─────────────────────────────────────────
           Since v0.237.0 this renders BEFORE the lock too, on the founder's
           Sleeper reference: a manager wants to see the week — kickoffs,
@@ -1084,41 +1115,27 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
             opponent's picks only once locked ("THE security boundary", 0001) —
             so the away column says so rather than rendering blanks that read
             as "they haven't set a lineup". */}
-      {/* ── THE LINEUP, AS A CARD OVER THE BOARD (v0.321.0) ────────────────
-          Founder: "let's make the lineup be a pop up when you click on a chip
-          in the middle of the top panel (currently blank space)."
+      {/* ── THE LINEUP IS THE BOARD (v0.322.2) ─────────────────────────────
+          v0.321.0 put the LINEUP behind the centre chip and left the NFL slate
+          on the board permanently. That was the wrong way round, and the
+          founder said so plainly: "I still want the head to head line up on
+          the matchup board, but the nfl game slate is what pops up if clicked
+          on the center chip."
 
-          The board's permanent content is now the SCOREBOARD and the SLATE —
-          how the matchup is going, and what is on. The lineup is a question
-          with a moment ("who have I got in this game?") rather than a standing
-          one, and it was pushing everything else off the screen: twelve spots
-          with two game cards each, plus both benches, is most of a phone.
+          The reasoning that got it backwards is worth keeping, because it was
+          reasonable and still wrong: the lineup IS long, and hiding the long
+          thing does buy screen. But this screen is called the matchup board,
+          and the head to head is the thing it is FOR. What a manager wants at
+          a glance is their twelve spots against their opponent's; the league's
+          other games are the reference material you go and look up. The slate
+          is also the shorter of the two, so the swap costs almost nothing and
+          the chip still opens onto something worth a card.
 
-          Same overlay pattern as the picker and the field board — backdrop,
-          stopPropagation, Escape, ✕ — so there is one way to dismiss a card on
-          this screen and it works everywhere. The container carries no card
-          styling of its own: the blocks inside already are cards, and nesting
-          them would draw a border around a border. */}
-      {board && lineupOpen && (
-        <div onClick={() => setLineupOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
-          <div onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
-                LINEUP · {lineChip.label}
-              </span>
-              <button onClick={() => setLineupOpen(false)} aria-label="close lineup" className="mono"
-                style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
-            </div>
-            {/* Repeated inside the card because this is where a manager comes
-                LOOKING for their roster — the notice on the board behind it is
-                covered by this very overlay. */}
-            {rehearsal && (
-              <div className="mono" style={{ fontSize: 9, color: 'var(--warn, #c66)', lineHeight: 1.5 }}>
-                PRESEASON REHEARSAL — every player is available here. Your real roster is on Week 1.
-              </div>
-            )}
+          The chip's summary is unchanged and did not need to change — it was
+          always counting GAMES ("8 GAMES", "3 LIVE", "9 starters to play"),
+          which is exactly the right label for a control that opens the slate. */}
+      {board && (
+        <>
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, padding: '10px 14px 6px' }}>
               <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>STARTERS</span>
@@ -1216,8 +1233,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               </div>
             );
           })}
-          </div>
-        </div>
+        </>
       )}
 
       {/* The plain setter grid, now the FALLBACK ONLY: the board covers both
