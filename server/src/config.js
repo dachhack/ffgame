@@ -56,10 +56,29 @@ export const config = {
   // as anything else on the board.
   marketPollMs: Number(process.env.MARKET_POLL_MS || 10800000),      // 3h
   directoryRefreshMs: Number(process.env.DIRECTORY_REFRESH_MS || 86400000), // 24h — Sleeper's own guidance
-  // Weekly auto-sync: how often the worker checks if a sync is due, and the min gap
-  // between full re-syncs of the current week (re-syncs catch lineup changes pre-lock).
-  syncCheckMs: Number(process.env.SYNC_CHECK_MS || 3600000),         // 1h
-  weeklySyncRefreshMs: Number(process.env.WEEKLY_SYNC_MS || 21600000), // 6h
+  // ── AUTO-SYNC (v0.319.0) ──────────────────────────────────────────────────
+  // `syncCheckMs` is how often the worker ASKS whether a sync is due; the gap
+  // between actual syncs is decided per-instant by `syncCadenceAt` (core:
+  // data/syncCadence.ts) from the clock and the week's kickoffs. The check has
+  // to be at least as fast as the tightest rung it can be asked to honour — a
+  // 1-minute cadence polled hourly is a 1-hour cadence — and it is cheap: a
+  // cached fixture read and some arithmetic, with no network call unless a sync
+  // actually fires.
+  syncCheckMs: Number(process.env.SYNC_CHECK_MS || 30000),           // 30s
+  // Public pods (0089) used to share `syncCheckMs`, which was fine while that
+  // meant an hour. v0.319.0 dropped it to 30s for the sync ramp, and a shared
+  // knob would have silently multiplied the pod loop — an ESPN week lookup plus
+  // `ensurePods` DB writes — by 120. Its own constant, at the old value.
+  podCheckMs: Number(process.env.POD_CHECK_MS || 3600000),            // 1h
+  // Fixtures (kickoff times) move a couple of times a day, so the cadence
+  // decision reads them through the opt-in scoreboard cache (v0.314.0) rather
+  // than pulling 194KB from ESPN every 30 seconds.
+  fixtureCacheMs: Number(process.env.FIXTURE_CACHE_MS || 600000),    // 10m
+  // RETIRED as the sync gap, kept as the FLOOR the cadence can never undercut,
+  // so a misconfigured ramp cannot hammer Sleeper. Set WEEKLY_SYNC_MS to pin
+  // the old flat behaviour (21600000 = the pre-v0.319.0 six hours).
+  syncFloorMs: Number(process.env.SYNC_FLOOR_MS || 60000),           // 1m
+  weeklySyncRefreshMs: Number(process.env.WEEKLY_SYNC_MS || 0),      // 0 = use the cadence
 };
 
 /** Throws unless the Supabase service credentials are present. */
