@@ -485,7 +485,7 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
           <button onClick={copy} className="mono" style={{ ...btn, borderColor: copied ? 'var(--you)' : 'var(--bd)', color: copied ? 'var(--you)' : 'var(--dim)' }}>
             {copied ? '\u2713 COPIED' : '\u29c9 COPY LINK'}
           </button>
-          {canShare && <button onClick={send} className="mono" style={{ ...btn, borderColor: 'var(--you)', color: 'var(--you)' }}>\u21ea SEND THE INVITE</button>}
+          {canShare && <button onClick={send} className="mono" style={{ ...btn, borderColor: 'var(--you)', color: 'var(--you)' }}>⇪ SEND THE INVITE</button>}
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8 }}>
           Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
@@ -495,7 +495,7 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
       {commish && (<>
         <Head>POST TO THE BOARD</Head>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 8 }}>
-          Lists the league publicly so managers you don\u2019t know can claim an open seat. Commissioner only — a link
+          Lists the league publicly so managers you don’t know can claim an open seat. Commissioner only — a link
           invites a friend, the board invites strangers.
         </div>
         {listing === null ? <Loading /> : (<>

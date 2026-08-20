@@ -9,6 +9,7 @@ import { InstallPrompt } from './app/InstallPrompt';
 import { PlayerCardHost, setCardLeague } from './app/playerCard';
 import { UpdateBanner } from './app/UpdateBanner';
 import { DEMO_WEEK } from '@drip/core/config';
+import { readInviteParams } from '@drip/core/data/invite';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
 // landing payload small. DemoBoard (the landing) + the request-code FAB stay eager
@@ -84,20 +85,34 @@ export function App() {
         });
       return;
     }
-    if (p.get('live') === '1') {
-      const code = p.get('code');
+    // ── AN INVITE IS ENOUGH ON ITS OWN (v0.323.2) ──────────────────────────
+    // This used to require `live=1`, and `?code=` alone fell through every
+    // branch: nothing stashed, nothing navigated, and the visitor landed on the
+    // default route — the demo board. Which is exactly what every invite link
+    // built by `inviteLink` looked like, so every one of them went nowhere.
+    // `inviteLink` now emits `live=1` as well, but the links already SENT are
+    // out of our hands, so the flag became sufficient rather than necessary.
+    //
+    // `readInviteParams` is what makes that safe: it matches only the eight-hex
+    // shape `gen_invite_code()` produces, and refuses outright when a `state`
+    // param is present — so a Supabase PKCE return (`?code=<long token>`) or a
+    // provider round trip is never mistaken for an invite. See invite.ts.
+    const explicit = p.get('live') === '1';
+    const invited = readInviteParams((k) => p.get(k), explicit);
+    if (explicit || invited) {
+      const stash = (key: string, val?: string) => {
+        if (val) { try { localStorage.setItem(key, val); } catch { /* ignore */ } }
+      };
       // A SOLO- pass (0097) rides the same ?code= param but is redeemed by the
       // solo-pass flow, not the league-invite form.
-      if (code && /^solo-/i.test(code)) { try { localStorage.setItem('dripSoloPass', code.toUpperCase()); } catch { /* ignore */ } }
-      else if (code) { try { localStorage.setItem('dripInviteCode', code.toUpperCase()); } catch { /* ignore */ } }
+      stash('dripSoloPass', invited?.solo);
+      stash('dripInviteCode', invited?.invite);
       // A commissioner invite link (?commish=CODE) → stash the commish code so it
       // survives the magic-link bounce; LiveOnboard opens the claim screen.
-      const commish = p.get('commish');
-      if (commish) { try { localStorage.setItem('dripCommishCode', commish.toUpperCase()); } catch { /* ignore */ } }
+      stash('dripCommishCode', invited?.commish);
       // A DFS league invite link (?dfs=CODE) → stash; LiveOnboard auto-joins
       // after sign-in (0094 — the link IS the access; no card in the chooser).
-      const dfs = p.get('dfs');
-      if (dfs) { try { localStorage.setItem('dripDfsCode', dfs.toUpperCase()); } catch { /* ignore */ } }
+      stash('dripDfsCode', invited?.dfs);
       const finish = () => {
         navigate({ name: 'live' });
         // Consume the params so a later refresh doesn't teleport back into Live (the
