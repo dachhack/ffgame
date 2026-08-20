@@ -41,7 +41,21 @@ begin
   select count(*) into n from information_schema.routines r
     join information_schema.parameters p on p.specific_name = r.specific_name
    where r.routine_name = 'league_by_invite' and p.parameter_mode = 'OUT';
-  if n <> 5 then raise exception 'PROBE FAIL: league_by_invite returns % columns, expected 5 — anon reads every one', n; end if;
+  if n <> 6 then raise exception 'PROBE FAIL: league_by_invite returns % columns, expected 6 — anon reads every one', n; end if;
+
+  -- 3b. GAME MODE (0207) — what lets the join card say "Classic" rather than
+  --     pitching hidden picks to someone joining a classic league. UNSET means
+  --     'drip', the same default every other reader of settings_json uses.
+  if got.game_mode <> 'drip' then
+    raise exception 'PROBE FAIL: an unset game_mode should read as drip, got %', got.game_mode;
+  end if;
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb) || jsonb_build_object('game_mode', 'classic')
+   where id = lg;
+  select * into got from league_by_invite('A1B2C3D4');
+  if got.game_mode <> 'classic' then
+    raise exception 'PROBE FAIL: a classic league previews as %, not classic', got.game_mode;
+  end if;
+  if got.name <> 'Kickoff League' then raise exception 'PROBE FAIL: the rest of the row broke'; end if;
 
   -- 4. THE CODE IS NORMALISED both ways, so a link that arrives lowercased (or
   --    with a stray space from a chat client) still previews.

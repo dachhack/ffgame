@@ -327,7 +327,7 @@ export async function myLinkedSleeper(userId: string): Promise<{ userId: string;
     : null;
 }
 
-export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; }
+export interface LeaguePreview { league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; game_mode?: string | null; }
 
 /** Preview a league by invite code (so we can show "You're joining <name>").
  *
