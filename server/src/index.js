@@ -21,6 +21,7 @@ import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, mate
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
+import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { sweepNative } from './native.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
@@ -119,8 +120,7 @@ function gameDay(games, now = Date.now()) {
 }
 
 /** Auto weekly sync: mirror every configured league's schedule + lineups. Fires on
- *  boot, on NFL week rollover, and every config.weeklySyncRefreshMs (to catch lineup
- *  changes before lock). Guarded against overlap — at ~100 leagues a sync can run
+ *  boot and thereafter on the cadence below (to catch lineup changes before lock). Guarded against overlap — at ~100 leagues a sync can run
  *  longer than one play tick, so it lives on its own (slower) interval.
  *
  *  Always the REGULAR-season week, and no preseason early-return. Sleeper has no
@@ -128,18 +128,69 @@ function gameDay(games, now = Date.now()) {
  *  old version turned that into "skip the sync entirely while preseason is on",
  *  which meant a league that DRAFTED in August got no rosters until someone ran
  *  the CLI by hand. Syncing the regular-season week is both correct and the thing
- *  that fixes that. */
+ *  that fixes that.
+ *
+ *  v0.319.0: the gap between syncs is no longer a constant. See
+ *  `syncCadenceAt` — 20 minutes through the overnight waiver window, hourly
+ *  otherwise, and tightening from two hours before each kickoff to one minute
+ *  at lock.
+ *
+ *  WEEK ROLLOVER IS NO LONGER ITS OWN TRIGGER, and does not need to be. It used
+ *  to force a sync so a new week's pairings landed promptly; now the cadence
+ *  itself is at worst hourly, and a rolled week self-corrects on the first due
+ *  tick — every kickoff for the previous week is in the past, so the ramp goes
+ *  quiet and the hourly rung fires. Rollover happens midweek, far from any
+ *  kickoff, which is precisely when an hour of lag costs nothing. */
 async function syncTick() {
   if (syncing || !config.leagueIds.length) return;
+  const now = Date.now();
+
+  // ── THE CADENCE DECISION (v0.319.0), BEFORE ANY NETWORK CALL ────────────
+  // Fixtures come from the opt-in scoreboard cache, so this runs every 30s for
+  // the price of some arithmetic. Keyed on the LAST SYNCED WEEK rather than a
+  // fresh `regularWeek()` — that is an ESPN round trip, and the week is only
+  // needed here to say which kickoffs to read. Before the first sync there is
+  // no week yet, and none is needed: `lastSyncAt` is 0, so the boot sync fires
+  // unconditionally and establishes it.
+  let cadence = { intervalMs: config.syncFloorMs, reason: 'boot' };
+  if (lastSyncAt) {
+    let kickoffs = [];
+    if (lastSyncedWeek != null) {
+      try {
+        const fixtures = await getGames(config.season, lastSyncedWeek, config.seasonType, config.fixtureCacheMs);
+        kickoffs = fixtures.map((g) => g.kickoffMs).filter(Number.isFinite);
+      } catch (e) {
+        // Fixtures unavailable is not a reason to stop syncing — it is a reason
+        // to fall back to the schedule that needs no fixtures at all.
+        log('sync cadence: fixtures unavailable —', e.message);
+      }
+    }
+    cadence = syncCadenceAt(now, kickoffs);
+    // WEEKLY_SYNC_MS pins the pre-v0.319.0 flat behaviour if it is ever needed;
+    // the floor stops a mis-set ramp from hammering Sleeper.
+    const pinned = config.weeklySyncRefreshMs;
+    const intervalMs = Math.max(config.syncFloorMs, pinned || cadence.intervalMs);
+    if (now - lastSyncAt < intervalMs) return;
+    cadence = pinned ? { intervalMs, reason: 'pinned by WEEKLY_SYNC_MS' } : { ...cadence, intervalMs };
+  }
+
   const season = config.season;
   const week = await regularWeek(season);
-  const due = week !== lastSyncedWeek || Date.now() - lastSyncAt >= config.weeklySyncRefreshMs;
-  if (!due) return;
   syncing = true;
   try {
     const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
+    const took = Date.now() - now;
     lastSyncedWeek = week; lastSyncAt = Date.now();
-    log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`);
+    log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`,
+      `(${cadence.reason}, every ${Math.round(cadence.intervalMs / 60_000)}m, took ${(took / 1000).toFixed(1)}s)`);
+    // A pass that outruns its own cadence is not broken — the non-reentrancy
+    // guard absorbs the next firing — but it means the schedule above is
+    // aspirational rather than real, and that should be visible in the log
+    // rather than inferred from timestamps weeks later.
+    if (took > cadence.intervalMs) {
+      log(`weekly sync WARNING: pass took ${(took / 1000).toFixed(1)}s but the cadence asks for one every`,
+        `${Math.round(cadence.intervalMs / 60_000)}m — raise SYNC_FLOOR_MS or reduce league count`);
+    }
   } catch (e) { log('weekly sync error', e.message); }
   finally { syncing = false; }
 }
@@ -457,7 +508,7 @@ async function main() {
       if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
     };
     await podTick().catch((e) => log('pod tick error', e.message));
-    setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.syncCheckMs);
+    setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
   } else {
     log('no PILOT_LEAGUE_IDS set — weekly auto-sync disabled');
   }
