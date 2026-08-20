@@ -502,7 +502,7 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
           <Text selectable numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, lineHeight: 14 }}>{link}</Text>
         </View>
         <Pressable onPress={send} style={{ borderWidth: 1, borderColor: t.you, borderRadius: 6, paddingVertical: 11, alignItems: 'center', marginTop: 8 }}>
-          <Mono size={10} weight="700" tone="you">\u21ea SEND THE INVITE</Mono>
+          <Mono size={10} weight="700" tone="you">⇪ SEND THE INVITE</Mono>
         </Pressable>
         <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
           Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
@@ -512,7 +512,7 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
       {commish && (<>
         <Head>POST TO THE BOARD</Head>
         <Mono size={9.5} tone="dim" style={{ lineHeight: 14, marginBottom: 8 }}>
-          Lists the league publicly so managers you don\u2019t know can claim an open seat. Commissioner only \u2014 a link
+          Lists the league publicly so managers you don’t know can claim an open seat. Commissioner only — a link
           invites a friend, the board invites strangers.
         </Mono>
         {listing === null ? <Loading /> : (<>
@@ -526,7 +526,7 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
           </View>
           <TextInput
             value={blurb} onChangeText={setBlurb} multiline
-            placeholder="A line about your league \u2014 what makes it worth joining?"
+            placeholder="A line about your league — what makes it worth joining?"
             placeholderTextColor={t.faint}
             style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, color: t.text, fontFamily: MONO, fontSize: fs(10), padding: 10, minHeight: 66, textAlignVertical: 'top' }} />
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>

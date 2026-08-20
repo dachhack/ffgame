@@ -18,6 +18,58 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.323.2 — the invite link went to the demo board. Every one of them.
+
+Founder: "I want to get people into a classic league. It looks like following
+this link just goes to the demo board."
+
+He is right, and it was total: EVERY invite link built since v0.291.0 landed on
+the marketing route. Not a bad league, not a stale code — the link never
+reached the join flow at all.
+
+THE CAUSE WAS A COMMENT. invite.ts opened with, in capitals, "THE LINK ALREADY
+WORKED; NOTHING BUILT ONE. `?code=XXXX` has been a complete path for a long
+time — App.tsx reads it off the landing URL, stashes it as `dripInviteCode`…"
+
+App.tsx does no such thing. It reads the invite code inside
+`if (p.get('live') === '1')` and nowhere else. A bare `?code=` matched the auth
+branch (no), the Yahoo branch (no), the live branch (no) — and fell out of the
+effect entirely. Nothing stashed, nothing navigated, default route, demo board.
+
+This is v0.320.0's lesson wearing a different hat: a comment described a
+NEIGHBOURING module's behaviour, the neighbour disagreed, and nobody asked it.
+Both times the check was seconds of reading. Ask the neighbour.
+
+FIXED AT BOTH ENDS, deliberately:
+  • `inviteLink` now emits `?live=1&code=…` — the form App.tsx has always
+    understood, and the form LiveOnboard's commissioner link already used (it
+    built its own by hand, which is why THAT link worked and this one didn't);
+  • App.tsx now also accepts a BARE `?code=`, because the links already sent are
+    out of our hands and would otherwise stay broken forever.
+
+THE SHAPE TEST IS LOAD-BEARING, not tidiness. `?code=` is also how Supabase's
+PKCE flow returns an auth code, so "any ?code= is an invite" would stash a
+secret in localStorage and skip the exchange. `gen_invite_code()` (migration
+0002) makes exactly eight hex characters, and a PKCE token never can be — so
+`readInviteParams` matches `/^[0-9a-f]{8}$/i` and refuses outright whenever a
+`state` param is present. Both are asserted.
+
+AND `live=1` STILL MEANS "TRUST ME". With the flag present the params are taken
+at face value as before, so a legacy or hand-made code is stashed and fails at
+the redeem form WITH A MESSAGE rather than vanishing. The shape test guards the
+INFERENCE path only.
+
+── THE SECOND BUG, VISIBLE IN THE SAME SCREENSHOT ─────────────────────────
+The Recruit panel rendered `\u21ea SEND THE INVITE` and "managers you
+don\u2019t know" — the escapes printed verbatim. JSX TEXT AND JSX ATTRIBUTES DO
+NOT PROCESS BACKSLASH ESCAPES; only JS string literals do. The same file gets
+`'\u2713 COPIED'` right two lines above, because that one is inside quotes
+inside braces. Five sites across both platforms, all in the Recruit panels, all
+from the same paste. Swept for and fixed; the sweep now returns nothing.
+
+32 new parity assertions (557 total), in a new `check:invite`.
+
+
 ### v0.323.1 — room for player names on a phone: 35px → 100px
 
 Founder, on mobile web with a screenshot: "let's make more room for player
