@@ -2411,3 +2411,30 @@ export const adminSetPot = (leagueId: string, on: boolean, ante?: number, cap?: 
  *  frozen pot is voided and every chip goes back to whoever put it in. */
 export const adminClosePots = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; closed?: number }>('admin_close_pots', { p_league_id: leagueId });
+
+// ── MANUAL SLEEPER REFRESH (0204) ──────────────────────────────────────────
+// The worker mirrors Sleeper on a 6-hour cadence, and only for leagues in its
+// PILOT_LEAGUE_IDS allowlist — so for most Sleeper leagues this button is not a
+// convenience, it is the only way their rosters ever move. The RPC queues a
+// request; the worker drains it on its next 25s tick with the same `syncWeek`
+// the scheduled path uses.
+
+export interface SyncAsk { ok: boolean; queued?: boolean; pending?: boolean; retry_in?: number; error?: string }
+
+/** Ask the worker to re-mirror this league. A `queued:false` answer with a
+ *  `retry_in` is the COOLDOWN, not a failure — render it as "just refreshed",
+ *  never as an error. */
+export async function requestLeagueSync(leagueId: string): Promise<SyncAsk> {
+  const { data, error } = await (await client()).rpc('request_league_sync', { p_league_id: leagueId });
+  if (error) return { ok: false, error: error.message };
+  return (data ?? { ok: false, error: 'no answer' }) as SyncAsk;
+}
+
+export interface SyncState { ok: boolean; sleeper?: boolean; pending?: boolean; last_at?: string | null; last_ok?: boolean | null; note?: string | null; retry_in?: number; error?: string }
+
+/** What the button shows between presses — in flight, last outcome, cooldown. */
+export async function leagueSyncState(leagueId: string): Promise<SyncState> {
+  const { data, error } = await (await client()).rpc('league_sync_state', { p_league_id: leagueId });
+  if (error) return { ok: false, error: error.message };
+  return (data ?? { ok: false }) as SyncState;
+}

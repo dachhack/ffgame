@@ -96,7 +96,13 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   // harmless only because the sync was skipped entirely in preseason mode — now
   // that both contexts run together (index.js), that would fetch preseason
   // kickoffs for a regular-season week.
-  const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON);
+  // FIXTURES, NOT SCORES (v0.314.0): both of these read kickoff times and who
+  // plays whom, which move a couple of times a day — so they accept a 5-minute
+  // cached scoreboard rather than pulling 194KB twice per league. At 100
+  // leagues this is the difference between 200 identical ESPN requests per sync
+  // pass and one. The live play tick does NOT opt in and is unchanged.
+  const SLATE_TTL_MS = 300_000;
+  const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON, SLATE_TTL_MS);
   // Lineups lock 1h before the week's first kickoff (client shows the same lead).
   const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
 
@@ -104,7 +110,7 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
   // season, so slate-gating + the K/DST bye check below use the correct windows
   // and byes. Stored in nfl_slate so the client can load it too.
   try {
-    const slate = await buildSlate(season, week, REGULAR_SEASON);
+    const slate = await buildSlate(season, week, REGULAR_SEASON, SLATE_TTL_MS);
     if (slate.length) {
       setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
       await db().from('nfl_slate').upsert(
