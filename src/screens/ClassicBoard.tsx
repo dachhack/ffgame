@@ -134,8 +134,26 @@ function SlateStrip({ chips, sel, onSel, locked }: {
     return Number.isNaN(d.getTime()) ? '—'
       : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
   };
+  // ── WHY THIS SCROLLER NEEDS ITS ANCESTORS CAPPED (v0.322.1) ─────────────
+  // `overflowX: 'auto'` makes this row SCROLL only once something upstream
+  // gives it a width to scroll within. It does not shrink itself: the chips are
+  // `flex: 0 0 auto`, so the row's MIN-CONTENT width is the sum of all of them
+  // — 1028px on an 11-game slate — and a plain `overflow` on a block child does
+  // not zero that contribution to its ancestors.
+  //
+  // The board's page container was `display: 'grid'` with no template, whose
+  // implicit `auto` track sizes to its widest item's min-content. `maxWidth:
+  // 720` capped the container's BOX and not that track, so the card rendered
+  // 1062px wide inside a 744px page: the slate ran off the screen, the
+  // scoreboard's two `1fr` tracks stretched with it, and the AWAY TEAM HEAD
+  // ended up past the right edge — the matchup looked hidden, when in fact it
+  // had been pushed off. Measured in headless Chromium, before and after.
+  //
+  // Fixed by `minmax(0, 1fr)` on every `fr` track from the page down. The lower
+  // bound is the whole point: a bare `1fr` is `minmax(auto, 1fr)`, and `auto`
+  // means min-content, which is exactly the floor that did the stretching.
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8, minWidth: 0 }}>
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
         {chips.map((c) => {
           const mine = c.homeCount + c.awayCount > 0;
@@ -925,8 +943,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   };
 
   return (
+    /* GRID TRACKS MUST BE CAPPED, NOT MERELY MAX-WIDTHED (v0.322.1). This
+       container is the one that broke: `display: grid` with no template gives
+       an implicit `auto` track that grows to its widest item's MIN-CONTENT
+       width, and `maxWidth` caps the BOX, not the track. See SlateStrip. */
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-      style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gap: 12 }}>
+      style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer' }}>← LEAGUE</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -981,7 +1003,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
 
       {board && (
         <div style={card}>
-          <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
             <TeamHead side={board.home} align="left" accent="var(--you)" mode={locked ? 'live' : 'proj'} />
             {/* NO LOCK REMINDER (v0.299.1, founder: "we also don't need the
                 lock reminder or time"). Each spot already says its own kickoff
@@ -1081,7 +1103,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
         <div onClick={() => setLineupOpen(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
+            style={{ width: '100%', minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
                 LINEUP · {lineChip.label}
@@ -1114,7 +1136,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                       is no opponent column to mirror (their picks are sealed),
                       so the row spans the width instead of leaving half the
                       screen blank beside a one-sided lineup. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
                     {row.home ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <BoardCell e={row.home} align="left"
@@ -1142,7 +1164,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   </div>
                   {/* tier 2 — where and when, and the number */}
                   {(row.home || row.away) && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 7 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 7 }}>
                       {row.home ? <GameCard e={row.home} align="left" onOpen={fieldOpener(row.home)} /> : <div />}
                       {row.away ? <GameCard e={row.away} align="right" onOpen={fieldOpener(row.away)} /> : <div />}
                     </div>
@@ -1177,14 +1199,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                   const a = board[k].away[i] ?? null;
                   return (
                     <div key={i} style={{ padding: '9px 14px 11px', borderTop: '1px solid var(--bd)' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${SPOT_COL}px minmax(0, 1fr)`, alignItems: 'center', gap: 10 }}>
                         {h ? <BoardCell e={h} align="left" onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
                           {k === 'bench' ? 'BN' : 'IR'}
                         </span>
                         {a ? <BoardCell e={a} align="right" onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 7 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 7 }}>
                         {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} /> : <span />}
                         {a ? <GameCard e={a} align="right" onOpen={fieldOpener(a)} /> : <span />}
                       </div>
@@ -1214,7 +1236,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           // when a manager needs the positions spelled out.
           const accepts = slotAcceptsLabel(d);
           return (
-            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 52px 52px 1fr', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '104px minmax(0, 1fr) 52px 52px minmax(0, 1fr)', alignItems: 'center', gap: 6, padding: '8px 12px', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
               <div style={{ minWidth: 0 }}>
                 <div className="mono" title={nameOf(d)} style={{ fontSize: 9.5, fontWeight: 700, color: auto ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(d)}{auto ? ' 🎯' : ''}</div>
                 {accepts && <div className="mono" title={accepts} style={{ fontSize: 8, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{accepts}</div>}

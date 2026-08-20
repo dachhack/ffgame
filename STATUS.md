@@ -18,6 +18,51 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.322.1 — the board wasn't hiding the matchup, it was pushing it off the screen
+
+Founder, on web, with a screenshot: "Looks like we hid the matchup instead of
+the nfl games slate. It also stretches beyond the screen."
+
+Both sentences are the same bug, and it is not a design question — the away
+team head was never hidden, it was rendered past the right edge of the window.
+
+WHAT WAS ACTUALLY WRONG. The board's page container is `display: grid` with no
+`gridTemplateColumns`. That gives an implicit `auto` track, which sizes to its
+widest item's MIN-CONTENT width — and `maxWidth: 720` caps the container's BOX,
+not the track inside it. The slate strip's chips are `flex: 0 0 auto`, so an
+11-game slate has a min-content width of 1028px; `overflowX: 'auto'` on that row
+makes it SCROLLABLE but does not shrink it, and a plain `overflow` on a block
+child does not zero its contribution to an ancestor's intrinsic width.
+
+So the card rendered 1062px wide inside a 744px page. The slate ran off the
+screen, the scoreboard's two `1fr` tracks stretched with it, and the away team
+head landed at x≈1065 on a 390px viewport. Nothing was conditionally hidden.
+
+MEASURED, NOT REASONED ABOUT. The structure was reproduced in headless Chromium
+and measured before and after, at 390 / 768 / 1440 / 2560:
+
+  BEFORE @390:  doc=1082  card=1062  awayHeadRight=1065  slateScrolls=false
+  AFTER  @390:  doc=390   card=350   awayHeadRight=353   slateScrolls=true
+  AFTER  @768:  doc=768   card=720   awayHeadRight=727   slateScrolls=true
+
+Note what the 1440 and 2560 rows say: BEFORE "fits" on a wide monitor while
+still being a 1062px card in a 720px layout. The bug was never absent there,
+only invisible — which is why it survived until someone opened it narrow.
+
+THE FIX. `minmax(0, 1fr)` on every `fr` track from the page container down. The
+lower bound is the entire point: a bare `1fr` means `minmax(auto, 1fr)`, and
+that `auto` is min-content — exactly the floor that did the stretching. The
+slate strip and the lineup overlay's inner column also get `minWidth: 0`.
+
+MOBILE IS UNAFFECTED and was checked rather than assumed: its slate is a
+horizontal `ScrollView`, which clips by construction, and React Native has no
+CSS grid to blow out.
+
+Not covered by `check:parity`, which is Node-only and cannot lay out a box. The
+measurements above are recorded in the code comment at `SlateStrip` so the next
+person meets the numbers where the mistake lives.
+
+
 2026-08-20 — **"PRESEASON REHEARSAL" — THE BOARD NOW SAYS WHEN IT ISN'T YOUR ROSTER** (`v0.322.0`, no migration, core + web + mobile + parity): re-running `roster-drop-diag.sql` after `v0.320.0` **confirmed the week fix took, and named what is left**. Week 1 now writes on the cadence — `last_written` 19 minutes ago, against 2 days before — and Carson Beck's drop reads `rosters_holding = 0` on weeks 1 and 2 (the two the worker has touched since the drop) and `1` on weeks 3-14, which are Aug-18 snapshots taken before it. The sync is correct end to end. **WHAT REMAINS IS PRESENTATION, AND IT IS THE WHOLE ORIGINAL COMPLAINT.** Section 2 still reports MISMATCH — worker writes week 1, board opens week **103** — and that is now working as SPECIFIED: the founder wants 101-104 to hold every player for the rehearsal. But a whole-pool week is **indistinguishable from a broken roster** if you are the manager looking at it, and that is precisely how it was read: Beck is on all twelve rosters there, along with everybody else. The board never said so. It does now, above the scoreboard and again inside the lineup overlay (which covers the board behind it, so the notice has to exist in both): "PRESEASON REHEARSAL — every player in the league is available on this board, so adds and drops will not show here. Your real roster is on Week 1." **DETECTED FROM THE POOL, NOT THE WEEK NUMBER** (`isRehearsalPool`, `WHOLE_POOL_MIN = 200`): `week > 100` would be an inference about how preseason weeks happen to be seeded today, while the SIZE of the thing in front of the manager is the fact itself and stays true if a whole-pool week is ever minted elsewhere. The threshold is shared with `roster-drop-diag.sql`'s so the screen and the diagnostic can never disagree about what they are looking at. **This resolves itself around 1 September**, when 104's games are over and `defaultOpenWeek` falls through to week 1 — so the notice is for the ten days in between, which are exactly the ten days before launch when a manager wrongly concluding "this app lost my roster" is most expensive. 4 new parity assertions. 508 parity assertions green, full battery green + APK 32200.
 
 2026-08-20 — **THE LINEUP IS A CARD OVER THE BOARD, OPENED BY A CHIP THAT SAYS WHAT'S ON** (`v0.321.0`, no migration, core + web + mobile + parity): founder — "let's make the lineup be a pop up when you click on a chip in the middle of the top panel (currently blank space). We can make the lineup chip informative about games and games in progress." **THE SPACE:** the scoreboard is a `1fr | SPOT_COL | 1fr` grid and the middle column belongs to NEITHER side — which is why it was empty before lock and why it is the right home for the one thing that is about the whole matchup. **THE CHIP EARNS IT TWICE**, as the way in AND as a report: `⏵ 2 LIVE / 3 playing · 4 to come` while games are on, `ALL FINAL / 9 starters played` when they are over, `5 GAMES / 7 starters to play` with the next kickoff before anything starts. **It counts only games THIS SIDE has a starter in, which is deliberately the opposite of `slateChips`' rule** — the strip below is "the week" and lists every game because omitting one would misrepresent the slate; the chip is "your afternoon", and a manager reading "3 LIVE" needs that to mean three of THEIRS. The two disagree on purpose and neither is wrong. **IT ABSORBS THE OLD BARE `LIVE`**: "⏵ 2 LIVE" says the same thing about the game's state and then says how many, which one word never could. **WHY THE LINEUP MOVES:** the board's standing content is now the scoreboard and the slate — how the matchup is going, and what is on. The lineup answers "who have I got", a question with a moment rather than a permanent one, and twelve spots with two game cards each plus both benches was most of a phone. Web uses the picker/field-card overlay pattern (backdrop, stopPropagation, ✕, and Escape now closes it too); mobile uses the shared `Overlay` rather than a hand-rolled Modal, so stacked Modals — flaky on Android per the existing note — stay something this screen does exactly once. **The `!board` fallback editor stays INLINE on purpose:** if the board cannot assemble, the lineup editor is the whole screen's value, and hiding it behind a chip that summarises games it could not compute would be exactly backwards. **NO DATE FORMATTING IN CORE** — `nextKickoff` comes back as raw ISO and each host renders it with the `fmtKick` it already has, rather than the engine growing a second notion of what "Sun 1:00 PM" means. 15 new parity assertions; one caught `3 GAMEs`, the default pluraliser appending a lowercase 's' to an upper-case label. 504 parity assertions green, full battery green + APK 32100.
