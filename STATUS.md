@@ -18,6 +18,61 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.323.1 — room for player names on a phone: 35px → 100px
+
+Founder, on mobile web with a screenshot: "let's make more room for player
+names." The board was rendering "C. Br…", "K. C…", "D. St…", "T. W…", "D. S…",
+"L. M…" down the entire HOME column while the AWAY column showed "J. Williams",
+"T. Kelce", "S. Barkley", "J. Jefferson" in full.
+
+THE ASYMMETRY IS THE CLUE, and it named the culprit before any measuring. Both
+columns are `minmax(0, 1fr)` in the same grid, so they are the same width — the
+home cell just spends more of it. It carries the ⇄ swap button; the away cell
+does not.
+
+MEASURED AT 393px (an iPhone in Safari), the home name box was **35px**:
+
+  393 − 24 page padding − 28 row padding      = 341
+  341 − 104 centre column − 2×10 column gap   = 217, so 108 a side
+  108 − 32 face − 8 gap                       = 68   ← what AWAY gets
+  68 − ~26 swap − 8 gap                       = 35   ← what HOME gets
+
+Four changes, each measured in headless Chromium at 360/393/430/768/1440:
+
+  • the centre column 104 → 72 on phones. Nothing is lost: the spot label has
+    always had `maxWidth` with no `nowrap`, so it simply wraps.
+  • the face 32 → 26, the gaps 10 → 6, the row padding 14 → 10.
+  • THE ⇄ MOVES DOWN ONE LINE, onto the position line inside the cell. It is
+    still its own small control — the row is deliberately not one big button —
+    but "RB · CIN" is short and had the room going spare, so the swap now costs
+    the name nothing and the row no height.
+  • the duplicated eligibility line goes. The stock flex is labelled "FLEX
+    (RB/WR/TE)" and the line beneath it read "RB/WR/TE" — the same fact, one
+    line lower. A league's own label ("Rookie BB") still gets its line, because
+    that one genuinely does not say what it takes.
+
+  @ 360   BEFORE home= 19 CLIP  away= 51 CLIP   →  AFTER home= 83  away= 83
+  @ 393   BEFORE home= 35 CLIP  away= 68 CLIP   →  AFTER home=100  away=100
+  @ 430   BEFORE home= 54 CLIP  away= 86        →  AFTER home=118  away=118
+  @ 768   BEFORE home=211       away=243        →  AFTER home=243  away=243
+  @1440   BEFORE home=211       away=243        →  AFTER home=243  away=243
+
+Nearly 3× on the side that was unreadable, the two columns finally equal, and
+NO CLIPPING at any width including 360 — the smallest common phone, where both
+sides were truncating before. Row height is unchanged (57px), so none of it is
+paid for in scroll.
+
+ONE FLAG DRIVES ALL FOUR DIMENSIONS (`useIsMobile(480)`, the hook the app
+already had) so the board cannot end up half-narrow, and the centre column stays
+the same width in the header, the starters and the bench — which is the whole
+reason v0.303.2 made it fixed.
+
+THE NATIVE APP IS UNTOUCHED, checked rather than assumed. Its board is a
+different layout — one flex row per pair with fixed 26/38/66px columns, both
+sides through the same tracks — so it has neither the asymmetry nor the
+104px centre. Changing it would risk the alignment v0.303.2 was asked for.
+
+
 ### v0.323.0 — the slate is the NFL's, not the matchup's: every game, with its score
 
 Founder: "lets expand the shown game slate to include all nfl games, not just
