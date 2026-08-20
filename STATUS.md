@@ -18,6 +18,71 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.325.0 — a classic league stops being sold as a drip league, and a full league says so
+
+── 1. "IF THE LEAGUE BEING ADVERTISED IS A CLASSIC LEAGUE, WE NEED A DIFFERENT
+      TAGLINE" ────────────────────────────────────────────────────────────
+
+Founder, looking at a chat unfurl of an invite link. The card read "Head-to-head
+fantasy football of hidden picks and live effects. Seal a secret metric behind
+every player…" — which describes DRIP mode. A classic league has no hidden
+picks and no effects, so that is not a tone problem: it describes a game the
+recruit is not about to play.
+
+WHAT CANNOT BE DONE, checked rather than assumed. dripfantasy.com is GitHub
+Pages (.github/workflows/deploy.yml) — a pure static host that returns the same
+index.html for every query string — and a link unfurler reads meta tags without
+running JavaScript. So `?code=A1B2C3D4` CANNOT carry its own og:description.
+Per-league unfurls need a server in front of the site: a decision about
+hosting, not something code can route around. Left for the founder to call.
+
+WHAT WAS DONE INSTEAD, in two halves:
+  • THE STATIC COPY IS NOW TRUE OF BOTH MODES. index.html led with the drip
+    pitch everywhere — title, description, og:description, twitter:description,
+    both image alts and the JSON-LD. It now leads with what every league here
+    is ("Head-to-head fantasy football, scored live over real NFL
+    play-by-play") and names classic and drip as the two ways to play.
+  • THE APP’S OWN JOIN SCREEN DOES vary per league, because it runs JavaScript
+    and holds the code. Migration 0207 adds `game_mode` to `league_by_invite`
+    (0206 having made it callable signed-out), and the "YOU’RE JOINING" card
+    now badges CLASSIC or DRIP and carries the matching one-liner.
+
+AN UNKNOWN MODE GETS THE NEUTRAL LINE, never a guess: a league on some future
+mode this build has not heard of is described in terms true of all of them.
+Unset reads as 'drip', matching `league_game_mode`, the resolver and the board —
+a different default here would make the join card disagree with the game.
+
+── 2. "WHEN THE LEAGUE IS FULL, WHAT HAPPENS TO PEOPLE TRYING TO GET IN?" ──
+
+Asked as a question; the answer turned out to contain a bug.
+
+WHAT IS SUPPOSED TO HAPPEN, and does at the database: `native_join` (0125,
+superseding 0064's flat rejection) puts a joiner in `league_join` — the waiting
+room — and returns `{ok: true, status: 'waitlisted'}`. 'waitlisted' is a
+SUCCESS: the join happened, it just came without a seat. The commissioner sees
+them via `admin_league_joiners` and deals them in, as an owner when a seat opens
+or as a co-manager on an existing team.
+
+WHAT ACTUALLY HAPPENED ON THE INVITE-LINK PATH. Because waitlisting is `ok:
+true`, the `!r.ok` guard never fired:
+  • WEB cleared the stashed code and called `onJoined()` — dropping the recruit
+    on a leagues list with nothing in it and no explanation whatsoever;
+  • MOBILE was worse: it announced "you joined <league>", which is a straight
+    lie — no team, no lineup, nothing on the list.
+
+The BOARD join in both apps has handled this correctly since 0125 ("the waiting
+room for X — the commissioner deals you in from there"). The INVITE-LINK join —
+the path every recruit actually arrives on — never did. Both now say it, web
+with its own screen (rendered instead of the code form, because re-offering the
+box would read as "that didn't work, try again", the opposite of true).
+
+SLEEPER LEAGUES DO NOT HAVE THIS SHAPE: `redeem_invite` matches your Sleeper
+account to a roster that already exists, so there is no "full" — either your
+username is a manager in that league or it is not, and it says so.
+
+12 new parity assertions (588 total) in a new `check:tagline`.
+
+
 ### v0.324.0 — the way in: which league you’re joining, and a crest that isn’t a hole
 
 Two founder reports, both about the same journey — a stranger arriving with a

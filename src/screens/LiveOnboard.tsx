@@ -16,6 +16,7 @@ import { track, identify, Ev } from '@drip/core/analytics';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
 import { crestFor } from '@drip/core/data/crest';
+import { taglineFor } from '@drip/core/data/leagueTagline';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
 import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -348,8 +349,22 @@ function AuthForm() {
               <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{preview.lg.name}</div>
               <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>
                 {preview.lg.season}{preview.lg.provider === 'native' ? '' : preview.lg.provider ? ` · ${preview.lg.provider}` : ''}
+                {/* WHICH GAME THIS LEAGUE PLAYS (v0.325.0). Founder: "if the
+                    league being advertised is a classic league, we need a
+                    different tagline." The static unfurl can't vary per code
+                    (GitHub Pages — see leagueTagline.ts), but the moment the
+                    recruit lands HERE the app knows, and can stop pitching
+                    hidden picks to someone joining a classic league. */}
+                {!!taglineFor(preview.lg.game_mode).label && (
+                  <span style={{ color: 'var(--you)', fontWeight: 700 }}>{` · ${taglineFor(preview.lg.game_mode).label}`}</span>
+                )}
               </div>
             </div>
+          </div>
+        )}
+        {playerCtx && preview.st === 'found' && (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 8, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
+            {taglineFor(preview.lg.game_mode).blurb}
           </div>
         )}
         {/* A code that matched nothing. Said HERE rather than after the account
@@ -1819,6 +1834,9 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
   // with no words here reads as a hang, and the wait is real (~a minute).
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [askCode, setAskCode] = useState(false); // "don't have a code?" request sheet
+  // A FULL LEAGUE: joined, but seatless (v0.325.0). Not an error — the join
+  // happened — so it gets its own state rather than being squeezed into `err`.
+  const [waitlisted, setWaitlisted] = useState<string | null>(null);
   // The check() retry loop can outlive the component; don't set state after unmount.
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
@@ -1834,6 +1852,23 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [userId]);
+
+  // WHAT A FULL LEAGUE LOOKS LIKE (v0.325.0). Rendered instead of the form,
+  // because there is nothing left for them to do here and re-offering the code
+  // box would read as "that didn't work, try again" — the opposite of true.
+  const waitlistScreen = waitlisted && (
+    <div style={card}>
+      <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--you)' }}>{waitlisted} is full.</div>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', marginTop: 10, lineHeight: 1.6 }}>
+        You&rsquo;re in its waiting room — the join went through, it just doesn&rsquo;t come with a team yet.
+        The commissioner deals you in from there, either as an owner when a seat opens or as a co-manager
+        on an existing team. Nothing more to do; the league shows up here the moment you have a seat.
+      </div>
+      <button onClick={onJoined} className="mono" style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14 }}>
+        ← BACK TO MY LEAGUES
+      </button>
+    </div>
+  );
 
   const find = async (c0?: string) => {
     const c = (c0 ?? code).trim();
@@ -1913,6 +1948,18 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
       const r = await nativeJoin(code, teamName || undefined);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not join.')); setBusy(false); return; }
       try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      // A FULL LEAGUE IS A SUCCESS WITHOUT A SEAT (v0.325.0). native_join
+      // (0125) waitlists instead of turning you away and returns
+      // `{ok: true, status: 'waitlisted'}` — so `!r.ok` is false and this path
+      // used to clear the code and drop the joiner on a leagues list with
+      // nothing in it, having told them nothing at all. The board's join has
+      // said this properly since 0125; the INVITE-LINK join never did, which is
+      // the path every recruit actually arrives on.
+      if ((r as { status?: string }).status === 'waitlisted') {
+        setWaitlisted(r.league ?? 'that league');
+        setBusy(false);
+        return;
+      }
       onJoined();
     } catch (x) { setErr(friendlyError(x)); setBusy(false); }
   };
@@ -1926,9 +1973,16 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
       const r = await joinLeague(code);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not join.')); setBusy(false); return; }
       try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      if ((r as { status?: string }).status === 'waitlisted') {
+        setWaitlisted((r as { league?: string }).league ?? 'that league');
+        setBusy(false);
+        return;
+      }
       onJoined();
     } catch (x) { setErr(friendlyError(x)); setBusy(false); }
   };
+
+  if (waitlistScreen) return waitlistScreen;
 
   return (
     <>

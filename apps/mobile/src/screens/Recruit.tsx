@@ -182,7 +182,16 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       const r = await nativeJoin(code, inviteTeam.trim() || undefined);
       if (r.ok) {
         commit(); setInviteDraft(''); setInviteTeam('');
-        setJoined(r.league ?? 'your league');
+        // A FULL LEAGUE IS A SUCCESS WITHOUT A SEAT (v0.325.0). native_join
+        // (0125) waitlists rather than turning you away, returning
+        // `{ok: true, status: 'waitlisted'}` — and this branch announced "you
+        // joined <league>", which was a straight lie: no team, no lineup, and
+        // nothing on the leagues list to show for it. The BOARD join in this
+        // same file has said it properly since 0125; the invite-code join,
+        // which is the path every recruit actually arrives on, never did.
+        setJoined((r as { status?: string }).status === 'waitlisted'
+          ? `the waiting room for ${r.league ?? 'that league'} — it's full, so the commissioner deals you in from there`
+          : (r.league ?? 'your league'));
         onJoined();
       } else { warn(); setErr(friendlyError(r.error ?? 'that code did not work')); }
     } catch (e) { warn(); setErr(friendlyError(e)); }
