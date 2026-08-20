@@ -18,6 +18,64 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.329.0 — quick reactions in chat
+
+Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,
+surprise etc."
+
+Six of them — 👍 👎 🔥 😂 😮 💯 — on every message, both platforms. Migration
+0210 models them on `poll_vote` (0148), which is the same shape one row down: a
+per (message, user) row, RPC-only with no RLS policies, folded into the message
+JSON by `_chat_message_json` so the message list AND the pins strip both get
+them without a second query.
+
+── A FIXED SET, NOT FREE EMOJI ────────────────────────────────────────────
+
+Free-text emoji would mean an unbounded number of distinct values per message
+(so the per-message aggregate stops being a small fixed row), a moderation
+surface nobody asked for, and a strip that cannot lay itself out because it
+does not know what is coming. A closed set renders as the same six chips every
+time, which is the point of a QUICK reaction: you are choosing, not composing.
+
+THE LIST IS DUPLICATED IN SQL AND THAT IS CHECKED. `_chat_reaction_ok` holds
+the same six, and SQL cannot import TypeScript — so check-mentions READS THE
+MIGRATION FILE and asserts the two lists are identical. A reaction the client
+offers and the server rejects is a button that does nothing, and nothing
+surfaces that until somebody taps it.
+
+── THE KEY IS (message, user, EMOJI) ──────────────────────────────────────
+
+Not (message, user), which is what `poll_vote` uses. A second poll choice must
+REPLACE the first because the options compete; 👍 and 😂 on the same message do
+not. Tapping the same one again removes it — that is what makes it a toggle
+rather than a tally, and without it there is no way to undo a mis-tap.
+
+── THE PROBE THAT EARNED ITS KEEP ─────────────────────────────────────────
+
+`league_message.id` is a GLOBAL sequence. A toggle scoped only by id would let
+a member of one league react to another league's message by naming a number —
+and it would show up there, to people they have never shared a room with. The
+RPC takes `p_league_id` and predicates on it; the probe drives it from a real
+second league and asserts the refusal.
+
+── ORDER IS THE CLIENT'S, NOT THE SERVER'S ────────────────────────────────
+
+The aggregate orders by count, which is right for a summary and wrong for a row
+of controls: a chip that moves between the moment you look at it and the moment
+you tap it is a chip you tap wrong. `orderedReactions` folds the counts back
+into the fixed list order. Emoji outside the list — rows from a future or past
+version — are kept at the end rather than dropped, because a count that exists
+belongs to whoever left it.
+
+Counts are always visible (they ARE the content); the six-chip picker sits
+behind a `+`, since six always-on chips under every message is furniture rather
+than chat. Tapping repaints ONE message from the RPC's own return value rather
+than reloading — a chat that refetches on every tap scrolls away from the
+message you were reacting to.
+
+8 new probe cases (57 suites) and 14 new parity assertions (649 total).
+
+
 ### v0.328.0 — RECEPTION becomes a field you can type in
 
 Founder, looking at the SCORING panel: "Do we have just points for a

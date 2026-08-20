@@ -13,10 +13,11 @@
 // the read); the badge poll never marks anything.
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
+import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin,
+  chatPostPoll, pollCast, chatPin, chatReact,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
@@ -229,6 +230,71 @@ function MessageScroll({ children, dep }: { children: React.ReactNode; dep: unkn
   );
 }
 
+/** QUICK REACTIONS on one message (v0.329.0).
+ *
+ *  Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,
+ *  surprise etc."
+ *
+ *  WHAT IS SHOWN WHEN vs WHAT CAN BE ADDED. A message with reactions shows
+ *  them, always, because the counts are the content — that is what a reaction
+ *  is for. The six-chip PICKER is behind a `+`, because six always-on chips
+ *  under every message would be more furniture than chat.
+ *
+ *  OPTIMISTIC, and it has to be. `chat_react` returns the message's whole new
+ *  reaction set, so a tap repaints one message rather than refetching the page
+ *  — a chat that reloads on every tap scrolls away from the thing you were
+ *  reacting to. On failure the server's answer is simply not applied.
+ */
+function Reactions({ m, leagueId, onChange }: {
+  m: ChatMessage; leagueId: string; onChange: (id: number, r: ChatReactionCount[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const shown = orderedReactions(m.reactions);
+  const react = async (emoji: string) => {
+    if (busy) return;
+    setBusy(true); setOpen(false);
+    try {
+      const r = await chatReact(leagueId, m.id, emoji);
+      if (r.ok && r.reactions) onChange(m.id, r.reactions);
+    } catch { /* the counts simply do not move */ }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+      {shown.map((r) => (
+        <button key={r.emoji} onClick={() => void react(r.emoji)} disabled={busy}
+          aria-label={`${reactionLabel(r.emoji)} — ${r.n}${r.mine ? ', including you' : ''}`}
+          aria-pressed={r.mine}
+          title={reactionLabel(r.emoji)}
+          className="mono"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+            fontSize: 10, lineHeight: 1.4, borderRadius: 999, padding: '1px 7px',
+            border: `1px solid ${r.mine ? 'var(--you)' : 'var(--bd)'}`,
+            background: r.mine ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'var(--bg)',
+            color: r.mine ? 'var(--you)' : 'var(--dim)',
+          }}>
+          <span style={{ fontSize: 11 }}>{r.emoji}</span>{r.n}
+        </button>
+      ))}
+      <button onClick={() => setOpen((v) => !v)} aria-label="add a reaction" title="add a reaction" className="mono"
+        style={{ cursor: 'pointer', fontSize: 10, lineHeight: 1.4, borderRadius: 999, padding: '1px 7px',
+          border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--faint)' }}>
+        {open ? '×' : '+'}
+      </button>
+      {open && CHAT_REACTIONS.map((r) => (
+        <button key={r.emoji} onClick={() => void react(r.emoji)} disabled={busy}
+          aria-label={r.label} title={r.label}
+          style={{ cursor: 'pointer', fontSize: 13, lineHeight: 1.2, borderRadius: 999, padding: '1px 5px',
+            border: '1px solid var(--you)', background: 'var(--bg)' }}>
+          {r.emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
   const [pins, setPins] = useState<ChatMessage[]>([]);
@@ -265,6 +331,13 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       setDraft(''); setGifOpen(false); await load();
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
+  };
+  // Repaint ONE message's reactions in place (v0.329.0). Not `load()`: the
+  // 8-second poll already refreshes the page, and refetching on every tap
+  // would yank the scroll position away from the message being reacted to.
+  const applyReactions = (id: number, reactions: ChatReactionCount[]) => {
+    setMsgs((cur) => (cur ?? []).map((m) => (m.id === id ? { ...m, reactions } : m)));
+    setPins((cur) => cur.map((m) => (m.id === id ? { ...m, reactions } : m)));
   };
   const del = async (id: number) => {
     try { const r = await chatDelete(leagueId, id); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
@@ -334,6 +407,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               : <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                   <Body body={m.body} names={names} />
                 </div>}
+            <Reactions m={m} leagueId={leagueId} onChange={applyReactions} />
           </div>
         ))}
       </MessageScroll>

@@ -1704,6 +1704,8 @@ export interface ChatPoll { options: { text: string; votes: number }[]; total: n
 export interface ChatMessage {
   id: number; body: string; at: string; author: string; author_id: string; mine: boolean;
   kind: 'text' | 'poll'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  /** Quick reactions (0210), counted per emoji. Only ones somebody used. */
+  reactions?: import('./chatReactions').ChatReactionCount[];
 }
 export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
 export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
@@ -1724,6 +1726,13 @@ export const chatMessages = (leagueId: string, before?: number) =>
   rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] }>('chat_messages', {
     p_league_id: leagueId, p_before: before ?? null, p_limit: 50,
   });
+/** TOGGLE a quick reaction (0210). Returns the message's whole reaction set so
+ *  the caller can repaint one message without refetching the page — a chat that
+ *  reloads on every tap is a chat that scrolls away from you. */
+export const chatReact = (leagueId: string, messageId: number, emoji: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; on?: boolean; reactions?: import('./chatReactions').ChatReactionCount[] }>(
+    'chat_react', { p_league_id: leagueId, p_message_id: messageId, p_emoji: emoji }),
+    Ev.chatReacted, { emoji });
 export const chatDelete = (leagueId: string, id: number) =>
   rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
 export const dmSend = (leagueId: string, to: string, body: string) =>

@@ -61,6 +61,7 @@ export const Ev = {
   chatPosted: 'chat_posted',              // {kind:'text'|'gif'|'poll', dm, mentions} — message accepted by the server
   pollVoted: 'poll_voted',                // cast or changed a vote on a league poll
   chatPinned: 'chat_pinned',              // {on} — commish pinned/unpinned a message
+  chatReacted: 'chat_reacted',            // {emoji} — a quick reaction toggled (0210)
   tradeProposed: 'trade_proposed',        // native league: offer sent
   tradeResponded: 'trade_responded',      // {action:'accept'|'reject'|'cancel'} — answered an offer
   waiverClaimed: 'waiver_claimed',        // {type:'waiver'|'fa'} — claim placed / free agent added
