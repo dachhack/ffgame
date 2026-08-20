@@ -19,8 +19,18 @@
 
 \echo ''
 \echo '── 0. When did the weekly sync last write each league? ──'
-\echo '   THE heartbeat. The sync runs on boot and every 6h (weeklySyncRefreshMs),'
-\echo '   so anything older than that during the season means it is not ticking.'
+\echo '   THE heartbeat. Since v0.319.0 the sync cadence is NOT a constant, so'
+\echo '   "how stale is too stale" depends on when you are asking:'
+\echo '     04:00-10:00 ET (waivers) ....... every 20m'
+\echo '     otherwise ...................... every 1h'
+\echo '     2h -> 30m before a kickoff ..... every 5m'
+\echo '     30m -> 10m ..................... every 2m'
+\echo '     final 10m to lock .............. every 1m'
+\echo '   So 40m old at 3pm on a Wednesday is FINE; 40m old ten minutes before'
+\echo '   a 1pm Sunday kickoff means it is not ticking. The worker logs which'
+\echo '   rule it used on every pass ("weekly sync: week N - x/y leagues'
+\echo '   (kickoff in 43m, every 5m, took 18.2s)"), so the deploy run log says'
+\echo '   what the cadence WAS rather than leaving you to derive it.'
 \echo '   NULL = a row written before 0122, not a fault.'
 select
   l.name,
