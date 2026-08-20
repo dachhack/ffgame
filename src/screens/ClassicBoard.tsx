@@ -15,7 +15,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -158,21 +158,37 @@ function SlateStrip({ chips, sel, onSel, locked }: {
         {chips.map((c) => {
           const mine = c.homeCount + c.awayCount > 0;
           const on = c.key === sel;
+          const hasScore = c.homeScore !== null && c.awayScore !== null;
           return (
             <button
               key={c.key}
               onClick={() => onSel(on ? null : c.key)}
               className="mono"
-              title={`${c.away} at ${c.home}`}
+              title={`${c.away} at ${c.home}${mine ? ' — you have starters in this game' : ''}`}
               style={{
                 flex: '0 0 auto', minWidth: 88, textAlign: 'left', cursor: 'pointer',
                 padding: '5px 8px', borderRadius: 7, lineHeight: 1.35,
                 border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
                 background: on ? 'color-mix(in srgb, var(--you) 13%, transparent)' : 'var(--bg)',
-                color: 'var(--text)', opacity: mine ? 1 : 0.45,
+                color: 'var(--text)',
               }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: on ? 'var(--you)' : 'var(--text)' }}>{`${c.away}@${c.home}`}</div>
-              <div style={{ fontSize: 8, color: c.state === 'live' ? 'var(--warn)' : 'var(--faint)' }}>{when(c)}</div>
+              {/* NO OPACITY ON THE WHOLE CHIP (v0.323.0). A game nobody is in
+                  used to render at 45% with no numbers, which is how a full
+                  sixteen-game slate came to read as matchup-only. The teams
+                  carry the distinction now — dim when you have nobody in it —
+                  and the SCORE stays at full strength either way, because the
+                  score is the reason the game is on the card at all. */}
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: on ? 'var(--you)' : mine ? 'var(--text)' : 'var(--dim)' }}>{`${c.away}@${c.home}`}</div>
+              {hasScore ? (
+                <div style={{ display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{`${c.awayScore}-${c.homeScore}`}</span>
+                  <span style={{ fontSize: 7.5, color: c.state === 'live' ? 'var(--warn)' : 'var(--faint)' }}>{when(c)}</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 8, color: c.state === 'live' ? 'var(--warn)' : 'var(--faint)' }}>{when(c)}</div>
+              )}
+              {/* Your stake in it, as an ADDITION to a game that already stands
+                  on its own — never as the thing that makes it worth showing. */}
               {mine && (
                 <div style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`${c.homePts.toFixed(1)} · ${c.awayPts.toFixed(1)}`}</div>
               )}
@@ -182,8 +198,19 @@ function SlateStrip({ chips, sel, onSel, locked }: {
       </div>
       {open && (
         <div style={{ marginTop: 8, borderTop: '1px solid var(--bd)', paddingTop: 7 }}>
+          {/* THE GAME FIRST, ALWAYS (v0.323.0) — the old panel opened a
+              non-matchup game onto the single sentence "nobody from this
+              matchup is in this game", which is true and tells you nothing
+              about the game you just clicked. */}
+          <div className="mono" style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 6 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{`${open.away} @ ${open.home}`}</span>
+            {open.homeScore !== null && open.awayScore !== null && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{`${open.awayScore}-${open.homeScore}`}</span>
+            )}
+            <span style={{ fontSize: 9, color: open.state === 'live' ? 'var(--warn)' : 'var(--faint)' }}>{when(open)}</span>
+          </div>
           {open.homeCount + open.awayCount === 0
-            ? <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>nobody from this matchup is in this game</span>
+            ? <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>no starters from this matchup are in it</span>
             : (
               <div style={{ display: 'flex', gap: 12 }}>
                 {([['home', open.homePlayers], ['away', open.awayPlayers]] as const).map(([side, ps]) => (
@@ -747,13 +774,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     });
   }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
+  // EVERY GAME'S SCORE (v0.323.0). `gameFeeds` is the whole week's feeds, and
+  // the worker polls every live game rather than only rostered ones, so this is
+  // the real NFL scoreboard — no extra fetch, it was already in memory.
+  const liveScores = useMemo(() => slateScores(gameFeeds), [gameFeeds]);
+
   // THE WEEK'S SLATE, aggregated against THIS matchup's starters (v0.312.0).
   // Derived from the board rather than from the pool, so a chip's points and
   // the headline totals above it can only ever agree.
   const chips = useMemo(
-    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams) : []),
-    [board, slate, nowTs, finalTeams],
+    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams, liveScores) : []),
+    [board, slate, nowTs, finalTeams, liveScores],
   );
+  // THE WEEK'S SCOREBOARD (v0.323.0), out of the feeds the board already has —
+  // every game the worker has polled, not only the ones this matchup is in.
+  const slateTotals = useMemo(() => slateSummary(chips), [chips]);
 
   // THE LINEUP CHIP'S CONTENT (v0.321.0). 'home' is always the caller's own
   // side on this board — `TeamHead side={board.home} accent="var(--you)"` — so
@@ -1084,8 +1119,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: '100%', minWidth: 0, maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 10, margin: 'auto 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              {/* THE HEADER COUNTS THE SLATE, NOT YOUR SHARE OF IT (v0.323.0).
+                  It read `lineChip.label` — the games THIS SIDE has a starter
+                  in — so a sixteen-game sheet was captioned "8 GAMES", a
+                  caption contradicting the thing it captions. */}
               <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
-                NFL SLATE · {lineChip.label}
+                NFL SLATE · {slateTotals.games} {slateTotals.games === 1 ? 'GAME' : 'GAMES'}
+                {slateTotals.live > 0 && <span style={{ color: 'var(--warn)' }}>{` · ${slateTotals.live} LIVE`}</span>}
               </span>
               <button onClick={() => setSlateOpen(false)} aria-label="close the slate" className="mono"
                 style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
@@ -1095,6 +1135,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
                 and without a floor of 0 it stretches this column instead of
                 scrolling inside it. */}
             <div style={{ ...card, minWidth: 0 }}>
+              <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.5 }}>
+                every game this week · {slateTotals.involved} with a starter from this matchup
+              </div>
               <SlateStrip chips={chips} sel={selGame} onSel={setSelGame} locked={locked} />
             </div>
           </div>

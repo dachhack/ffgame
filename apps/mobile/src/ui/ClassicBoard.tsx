@@ -11,7 +11,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -66,6 +66,7 @@ function SlateStrip({ chips, sel, onSel, locked }: {
         {chips.map((c) => {
           const mine = c.homeCount + c.awayCount > 0;
           const on = c.key === sel;
+          const hasScore = c.homeScore !== null && c.awayScore !== null;
           return (
             <Pressable
               key={c.key}
@@ -73,10 +74,21 @@ function SlateStrip({ chips, sel, onSel, locked }: {
               style={{
                 paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7, minWidth: 84,
                 borderWidth: 1, borderColor: on ? t.you : t.bd,
-                backgroundColor: on ? `${t.you}22` : t.bg, opacity: mine ? 1 : 0.45,
+                backgroundColor: on ? `${t.you}22` : t.bg,
               }}>
-              <Mono size={9} weight="700" tone={on ? 'you' : 'text'}>{`${c.away}@${c.home}`}</Mono>
-              <Mono size={7.5} tone={c.state === 'live' ? 'warn' : 'faint'} style={{ marginTop: 1 }}>{when(c)}</Mono>
+              {/* No chip-wide opacity (v0.323.0) — see the web board: a game
+                  nobody is in rendered at 45% with no numbers, which is how a
+                  full slate came to read as matchup-only. The teams carry the
+                  distinction; the SCORE stays at full strength either way. */}
+              <Mono size={9} weight="700" tone={on ? 'you' : mine ? 'text' : 'dim'}>{`${c.away}@${c.home}`}</Mono>
+              {hasScore ? (
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
+                  <Mono size={9.5} weight="700">{`${c.awayScore}-${c.homeScore}`}</Mono>
+                  <Mono size={7} tone={c.state === 'live' ? 'warn' : 'faint'}>{when(c)}</Mono>
+                </View>
+              ) : (
+                <Mono size={7.5} tone={c.state === 'live' ? 'warn' : 'faint'} style={{ marginTop: 1 }}>{when(c)}</Mono>
+              )}
               {mine && (
                 <Mono size={8} tone="dim" style={{ marginTop: 2 }}>
                   {`${c.homePts.toFixed(1)} · ${c.awayPts.toFixed(1)}`}
@@ -88,8 +100,17 @@ function SlateStrip({ chips, sel, onSel, locked }: {
       </ScrollView>
       {open && (
         <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: t.bd, paddingTop: 7 }}>
+          {/* The game first, always (v0.323.0) — the old panel opened a
+              non-matchup game onto one sentence about the matchup. */}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7, marginBottom: 6 }}>
+            <Mono size={9.5} weight="700">{`${open.away} @ ${open.home}`}</Mono>
+            {open.homeScore !== null && open.awayScore !== null && (
+              <Mono size={9.5} weight="700">{`${open.awayScore}-${open.homeScore}`}</Mono>
+            )}
+            <Mono size={8.5} tone={open.state === 'live' ? 'warn' : 'faint'}>{when(open)}</Mono>
+          </View>
           {open.homeCount + open.awayCount === 0
-            ? <Mono size={8.5} tone="faint">nobody from this matchup is in this game</Mono>
+            ? <Mono size={8.5} tone="faint">no starters from this matchup are in it</Mono>
             : (
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 {([['home', open.homePlayers], ['away', open.awayPlayers]] as const).map(([side, ps]) => (
@@ -677,13 +698,21 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     });
   }, [matchup, rosterId, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
+  // EVERY GAME'S SCORE (v0.323.0). `gameFeeds` is the whole week's feeds, and
+  // the worker polls every live game rather than only rostered ones, so this is
+  // the real NFL scoreboard — no extra fetch, it was already in memory.
+  const liveScores = useMemo(() => slateScores(gameFeeds), [gameFeeds]);
+
   // THE WEEK'S SLATE, aggregated against THIS matchup's starters (v0.312.0).
   // Derived from the board rather than from the pool, so a chip's points and
   // the headline totals above it can only ever agree.
   const chips = useMemo(
-    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams) : []),
-    [board, slate, nowTs, finalTeams],
+    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams, liveScores) : []),
+    [board, slate, nowTs, finalTeams, liveScores],
   );
+  // THE WEEK'S SCOREBOARD (v0.323.0), out of the feeds the board already has —
+  // every game the worker has polled, not only the ones this matchup is in.
+  const slateTotals = useMemo(() => slateSummary(chips), [chips]);
 
   // 'home' is this caller's own side on the board, so the chip counts THEIR
   // games rather than the league's. See lineupChipSummary.
@@ -970,7 +999,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       <Overlay
         visible={!!board && slateOpen}
         title="NFL SLATE"
-        subtitle={`${lineChip.label}${lineChip.detail ? ` · ${lineChip.detail}` : ''}`}
+        subtitle={`${slateTotals.games} ${slateTotals.games === 1 ? 'game' : 'games'}${slateTotals.live ? ` · ${slateTotals.live} live` : ''} · ${slateTotals.involved} with a starter from this matchup`}
         onClose={() => setSlateOpen(false)}>
         {!!board && (
           <Card style={{ paddingVertical: 2 }}>
