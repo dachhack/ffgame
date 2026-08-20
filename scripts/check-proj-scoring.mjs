@@ -328,6 +328,26 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
     .filter((k) => !TEAM_ROLE_NAME[k]));
   ok('a filled punter has no name to claim, and says so by absence',
     !TEAM_ROLE_NAME['chi-p'] && !TEAM_ROLE_NAME['den-p']);
+
+  // THE THREE StatHead HAD WRONG (v0.315.2). 2026 was a ten-change coaching
+  // cycle and their feed kept the FIRED incumbent for three of them. Pinned by
+  // name because a silent regression here puts a sacked coach back on the board
+  // — the exact thing the founder caught by eye.
+  ok('Atlanta is Kevin Stefanski, not the coach they fired in January',
+    TEAM_ROLE_NAME['atl-hc'] === 'Kevin Stefanski', TEAM_ROLE_NAME['atl-hc']);
+  ok('Buffalo is Joe Brady', TEAM_ROLE_NAME['buf-hc'] === 'Joe Brady', TEAM_ROLE_NAME['buf-hc']);
+  ok('Arizona is Mike LaFleur', TEAM_ROLE_NAME['ari-hc'] === 'Mike LaFleur', TEAM_ROLE_NAME['ari-hc']);
+  ok('…and Las Vegas is spelled Kubiak', TEAM_ROLE_NAME['lv-hc'] === 'Klint Kubiak', TEAM_ROLE_NAME['lv-hc']);
+  // Nobody who lost their job in the 2026 cycle is still on a board.
+  {
+    const sacked = ['Raheem Morris', 'Sean McDermott', 'Jonathan Gannon', 'Kevin Stefanski'];
+    const stillHere = Object.entries(TEAM_ROLE_NAME)
+      .filter(([k, v]) => k.endsWith('-hc') && sacked.includes(v));
+    // Stefanski IS still coaching — at Atlanta — so only his old team may not claim him.
+    ok('no team still lists a coach it parted with', !stillHere.some(([k]) =>
+      k === 'atl-hc' && TEAM_ROLE_NAME[k] === 'Raheem Morris')
+      && TEAM_ROLE_NAME['cle-hc'] !== 'Kevin Stefanski', stillHere);
+  }
   ok('naming a role does not change what it scores',
     projectedPoints({ id: 'la-hc', pos: 'HC', team: 'LA' }) === 0);
 
