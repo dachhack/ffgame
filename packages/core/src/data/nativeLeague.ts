@@ -23,7 +23,13 @@ import { ADP_2026 } from './adp2026';
 import { loadPlayerDirectory } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 
-export interface DraftPoolEntry { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number; }
+export interface DraftPoolEntry {
+  slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number;
+  /** The Sleeper player id — the STABLE identity (0205). Absent for the team
+   *  pseudo-players (`den-k`, `den-dst`, `den-hc`, `den-p`), which are not
+   *  people and have no Sleeper row. */
+  sleeperId?: string;
+}
 
 const POOL_POS = new Set(['QB', 'RB', 'WR', 'TE']);
 const POOL_CAP = 1200;      // server accepts 2000; keep the board browsable
@@ -76,6 +82,7 @@ function bakedPool2025(): DraftPoolEntry[] {
   }
   rows.push(...kdstEntries());
   rows.sort((a, b) => a.score - b.score || a.slug.localeCompare(b.slug));
+  disambiguateSlugs(rows);
   return rows.map(({ score: _score, ...r }) => r);
 }
 
@@ -100,6 +107,37 @@ function hcPuntEntries(positions: string[]): (DraftPoolEntry & { score: number }
     if (positions.includes('P')) out.push({ slug: `${code}-p`, full: `${t} Punter`, pos: 'P', team: t, score: BENCH_BASE + 500 + i * 0.01 });
   });
   return out;
+}
+
+/** ── TWO PEOPLE, ONE NAME (0205) ──────────────────────────────────────────
+ *  `league_pool` is keyed `(league_id, slug)` and the slug is a normalised
+ *  name, so a duplicate name cannot be two rows. It used to be resolved by
+ *  DROPPING one — `byron-young` is Byron Young the Rams linebacker (81.2
+ *  projected points) and Byron Young the Eagles lineman (36.0), and a
+ *  commissioner could only ever roster one of them, with nothing on screen to
+ *  say why.
+ *
+ *  Now the loser is RENAMED. Callers pass rows already sorted best-first, so
+ *  the higher-ranked player keeps the clean slug and the other takes
+ *  `<slug>-<sleeperId>`: deterministic, stable across re-seeds (a Sleeper id
+ *  does not change), and unique because the id is.
+ *
+ *  A renamed slug misses every baked lookup we own — PLAYER_BIO, ADP_2026,
+ *  PROJ_2026 — which is survivable ONLY because the pool carries the truth for
+ *  those: `setSlugMetaOverrides` hands the boards his position and team, and
+ *  `league_pool.sleeper_id` now lets a projection find him. That is why the id
+ *  had to land in the same migration.
+ *
+ *  MUTATES IN PLACE and returns the same array — the caller is building a pool
+ *  and has no use for a copy. An entry with no id is left alone: a team
+ *  pseudo-player is not a person, and its slug is unique by construction. */
+export function disambiguateSlugs<T extends { slug: string; sleeperId?: string }>(rows: T[]): T[] {
+  const taken = new Set<string>();
+  for (const r of rows) {
+    if (taken.has(r.slug) && r.sleeperId) r.slug = `${r.slug}-${r.sleeperId}`;
+    taken.add(r.slug);
+  }
+  return rows;
 }
 
 export async function buildDraftPool(onProgress?: (note: string) => void, opts?: PoolOpts): Promise<DraftPoolEntry[]> {
@@ -146,13 +184,19 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
       : adp
         ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : undefined)
         ?? (p.rank != null ? BENCH_BASE + p.rank : FLOOR);
-    const prev = best.get(slug);
+    // KEYED BY THE SLEEPER ID, NOT THE SLUG (0205). This map used to be keyed by
+    // slug, which meant two different active players with the same name were
+    // one entry and the worse-scoring one VANISHED — `byron-young` is Byron
+    // Young the Rams linebacker (81.2 projected points) and Byron Young the
+    // Eagles lineman (36.0), and a commissioner could only ever roster one.
+    // The identity is the id; the slug is a label that happens to collide.
+    const prev = best.get(p.id);
     if (!prev || score < prev.score) {
       // espnId rides along so the draft board / team screens can render
       // headshots for players outside the baked 2025 map (i.e. rookies).
       // exp (0172) rides along too — league_pool stores it so per-slot tenure
       // filters can check eligibility at lineup time.
-      best.set(slug, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, score });
+      best.set(p.id, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, sleeperId: p.id, score });
     }
   }
   // K / D-ST / HC / P are TEAM-KEYED pseudo-players: one per NFL club, with no
