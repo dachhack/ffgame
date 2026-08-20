@@ -39,6 +39,7 @@ import { sortPool, poolSortValue, projFor } from '../packages/core/src/data/pool
 import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
 import { PROJ_RETURN } from '../packages/core/src/data/projReturns2026';
 import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, TEAM_ROLE_NAME } from '../packages/core/src/data/projTeamRoles2026';
+import { PROJ_FB } from '../packages/core/src/data/projFb2026';
 import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
@@ -297,6 +298,46 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
       - PROJ_RETURN['chimere-dike'].retTd * 6) < 1e-9);
 }
 
+
+
+// ── FULLBACKS (v0.315.3) ───────────────────────────────────────────────────
+// Five of StatHead's fifteen. The other ten are byte-identical — the positional
+// mean stamped on every fullback the model has nothing specific to say about —
+// and ten identical numbers wearing ten different names is false precision that
+// looks like knowledge. The contrast with the FILLED punters is the point: a
+// punter slot is a TEAM slot that must be filled, a fullback is a person.
+{
+  const JUS = { id: 'kyle-juszczyk', pos: 'FB', team: 'SF' };
+  const OUZ = { id: 'robbie-ouzts', pos: 'FB', team: 'SEA' };   // one of the identical ten
+
+  ok('only the separated fullbacks are baked', Object.keys(PROJ_FB).length === 5,
+    Object.keys(PROJ_FB).length);
+  ok('a fullback with a real projection has one', projectedPoints(JUS) > 0, projectedPoints(JUS));
+  ok('…and one the model could not separate has none, rather than the league mean',
+    projectedPoints(OUZ) === 0 && !hasProjection(OUZ.id));
+  ok('the pools can see the baked ones', hasProjection(JUS.id));
+  ok('a standard league gets the standard scoring of his own line, exactly',
+    leagueProjRatio(JUS.id, 'FB') === 1 && projectedPoints(JUS) === kdstBase(JUS.id));
+
+  // HE SCORES AS THE LIVE SCORER SCORES HIM. `classicScorePlay`'s reception
+  // premium is TE/RB/WR only, so a fullback earns plain PPR and nothing else —
+  // the one property that would silently diverge if we priced him as an RB.
+  const flat = projectedPoints(JUS);
+  setLeagueProjScoring({ rbRec: 1 });
+  ok('an RB catch bonus does NOT reach a fullback, matching the live scorer',
+    projectedPoints(JUS) === flat, [projectedPoints(JUS), flat]);
+  setLeagueProjScoring({ ppr: 0 });
+  ok('…but zero PPR cuts him hard, because he is a receiver first',
+    projectedPoints(JUS) < flat * 0.7, [projectedPoints(JUS), flat]);
+  setLeagueProjScoring({ rushTd: 12 });
+  ok('…and his rushing touchdowns are priced too', projectedPoints(JUS) > flat);
+  clearLeagueProjScoring();
+  ok('and clearing restores him', projectedPoints(JUS) === flat);
+
+  // Passing is structurally zero: a fullback who throws is a trick play.
+  ok('no fullback carries a passing line',
+    Object.values(PROJ_FB).every((l) => l.passYd === 0 && l.passTd === 0 && l.int === 0));
+}
 
 // ── HEAD COACHES AND PUNTERS (v0.315.0) ────────────────────────────────────
 // The last two rosterable positions that projected nothing. Both are priced
