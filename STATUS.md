@@ -18,6 +18,66 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.326.0 — "League Full": a commissioner can close the waiting room
+
+Founder: "Can we have a commish option to close the waiting room. Just 'League
+Full'."
+
+WHERE THIS SITS. 0125 made a full native league WAITLIST a joiner rather than
+turn them away — `native_join` writes `league_join`, returns
+`{ok: true, status: 'waitlisted'}`, and the commissioner deals them in. That is
+the right default for a league still filling up and the wrong one for a league
+that is done: a queue nobody will ever work through is a room full of people
+who think they might still get in.
+
+Migration 0208 adds `league.waitlist_open` (default TRUE — closing is opt-in and
+nothing changes for any existing league) and `set_league_waitlist`, guarded by
+the same commissioner check every other league setting takes.
+
+TWO THINGS THE FLAG DELIBERATELY DOES NOT DO, both easy to assume from the
+words "close the waiting room", and both asserted:
+  • IT DOES NOT CLOSE THE LEAGUE. With a seat free, an invite link seats the
+    next arrival immediately whatever the flag says. It only bites when full.
+  • IT DOES NOT EVICT. Anyone already queued stays in `league_join` and stays
+    assignable; the RPC returns that count so the UI can say "the 3 already
+    waiting are still here" instead of implying the list was cleared.
+
+AND IT NEVER LOCKS OUT A SITTING MANAGER. `native_join`'s "already seated?"
+check runs BEFORE the door, so a manager re-opening their own league is not
+"trying to get in". There is a probe for exactly this, because getting it wrong
+would lock a commissioner out of the league they just closed.
+
+THE BACK DOOR IS SHUT TOO. `join_league` (0043) writes the SAME `league_join`
+table without consulting seats — the native UI never routes there, but a closed
+door that can be walked around by calling a different RPC is not closed. Guarded
+NARROWLY: native leagues, flag off, and no free seat. Platform leagues are
+untouched, because "no open seat" means something else for an ESPN/Yahoo pool
+join and refusing there would break it. Probed both ways.
+
+SAID BEFORE THE SIGN-UP, which is the whole point. 0208 also puts `seats_open`
+and `waitlist_open` into `league_by_invite` — already signed-out-callable since
+0206 — so someone holding an invite link is told "LEAGUE FULL" before making an
+account. Finding out afterwards would be the same stringing-along, one screen
+later.
+
+`joinDoorFor` decides seat / waitlist / full in ONE place so the join screen,
+the preview card and the test cannot drift. Two rules in it earn their keep:
+  • SEATS BEAT THE FLAG — a commissioner who closed the room and then freed a
+    seat has not barred the door.
+  • UNKNOWN IS NOT FULL. A preview from a build older than 0208 carries neither
+    field, and `Number(null)` is 0 — so the first cut read "didn't tell me" as
+    "no seats left" and would have turned a joinable league away. Caught by the
+    assertion, not by the browser: `seatsOpen: null` is checked before the
+    coercion now.
+
+The control sits on the SEATS tab on both platforms — where "is there room" is
+already being answered — and renders even with nobody queued, because closing
+the door is something you do BEFORE the queue forms.
+
+9 new parity assertions (597 total) and a 9-case probe suite whose subjects are
+mostly what must NOT change.
+
+
 ### v0.325.0 — a classic league stops being sold as a drip league, and a full league says so
 
 ── 1. "IF THE LEAGUE BEING ADVERTISED IS A CLASSIC LEAGUE, WE NEED A DIFFERENT

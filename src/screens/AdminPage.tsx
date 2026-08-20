@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -1504,6 +1504,11 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <div className="mono" style={{ ...mono, fontSize: 12, color: nj ? 'var(--dim)' : 'var(--you)', marginBottom: 6 }}>
               {members.length - nj}/{members.length} joined{nj ? ` · ${nj} not yet` : ''}
             </div>
+            {/* THE WAITING-ROOM DOOR (v0.326.0, founder: "can we have a commish
+                option to close the waiting room. Just 'League Full'"). Lives on
+                SEATS because that is where "is there room" is already being
+                answered, and it only means anything once nj === 0. */}
+            <WaitlistDoor l={l} seatsOpen={nj} joiners={joiners.length} />
             {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
             {!!nd && (
               <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
@@ -1965,6 +1970,68 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
 
 // Admin/commish-map a roster to a person by email. Enrolls now if they've signed
 // in, otherwise records a pending claim that auto-links on their next sign-in.
+/** "LEAGUE FULL" — the commissioner's door on the waiting room (v0.326.0).
+ *
+ *  Founder: "Can we have a commish option to close the waiting room. Just
+ *  'League Full'."
+ *
+ *  The default (0125) is that a full native league WAITLISTS a joiner rather
+ *  than turning them away, and the commissioner deals them in from this very
+ *  screen. That is right for a league still filling up and wrong for one that
+ *  is done: a queue nobody will ever work through is a room full of people who
+ *  think they might still get in.
+ *
+ *  TWO THINGS THIS CONTROL HAS TO BE HONEST ABOUT, because both are easy to
+ *  assume wrongly from the words "close the waiting room":
+ *   • it does NOT close the league. With a seat free, an invite link still
+ *     seats the next arrival immediately — which is why the copy below leads
+ *     with the seat count rather than the switch.
+ *   • it does NOT evict. Anyone already queued stays, and stays assignable;
+ *     the RPC returns that count so this can say so instead of implying the
+ *     list was cleared. */
+function WaitlistDoor({ l, seatsOpen, joiners }: { l: AdminLeague; seatsOpen: number; joiners: number }) {
+  // The flag is not on AdminLeague, so this owns its own state: unknown until
+  // the first toggle, and rendered from the league row when it is present.
+  const [open, setOpen] = useState<boolean | null>((l as { waitlist_open?: boolean }).waitlist_open ?? null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  if (l.provider !== 'native') return null;   // only native leagues have a waiting room
+  const shut = open === false;
+  const flip = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueWaitlist(l.league_id, shut);
+      if (!r.ok) { setNote(friendlyError(r.error ?? 'could not change that')); return; }
+      setOpen(!!r.waitlist_open);
+      setNote(r.waitlist_open
+        ? 'Waiting room open — a full league queues new joiners for you.'
+        : `Closed. New joiners see “League Full”.${r.waiting ? ` The ${r.waiting} already waiting are still here and still assignable.` : ''}`);
+    } catch (e) { setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: 8, padding: '8px 10px', border: '1px solid var(--bd)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>WAITING ROOM</span>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, color: shut ? 'var(--warn)' : 'var(--you)' }}>
+          {open === null ? '—' : shut ? 'CLOSED · “League Full”' : 'OPEN'}
+        </span>
+        <button onClick={flip} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.5 : 1 }}>
+          {shut ? 'reopen' : 'close · say “League Full”'}
+        </button>
+        {joiners > 0 && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)' }}>{joiners} waiting</span>}
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+        {seatsOpen > 0
+          ? `${seatsOpen} seat${seatsOpen > 1 ? 's' : ''} still open — an invite link seats the next arrival straight away, whatever this says.`
+          : 'No seats left, so this is what a new joiner meets: a queue, or a closed door.'}
+      </div>
+      {note && <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>{note}</div>}
+    </div>
+  );
+}
+
 function AssignRoster({ initial, seated, stillOnPlatform, joiners = [], onAssign, onClaimSelf }: { initial: string; seated?: boolean; stillOnPlatform?: boolean; joiners?: LeagueJoiner[]; onAssign: (a: { email?: string; appUserId?: string }) => Promise<{ ok: boolean; error?: string; status?: string }>; onClaimSelf?: () => Promise<{ ok: boolean; error?: string; status?: string }> }) {
   const [email, setEmail] = useState(initial);
   const [busy, setBusy] = useState(false);

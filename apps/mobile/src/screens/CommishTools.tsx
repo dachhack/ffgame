@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  adminAssignRoster, adminLeagueJoiners, adminLeagueMembers, commishBulkCoin,
+  adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
   commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError,
   leagueInvite, nativeTeamState,
@@ -944,6 +944,23 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
   const [coinSign, setCoinSign] = useState<1 | -1>(1);                // grant vs dock
   const [mgrs, setMgrs] = useState<TeamManagerRow[]>([]);             // co-managers (0125)
   const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);         // the waiting room
+  // 0208's door. Unknown until toggled — the league row this screen has does
+  // not carry the flag, and guessing 'open' would mislabel a closed league.
+  const [waitlistOpen, setWaitlistOpen] = useState<boolean | null>(null);
+  const [waitlistNote, setWaitlistNote] = useState<string | null>(null);
+  const flipWaitlist = async () => {
+    tap();
+    const next = waitlistOpen === false;   // closed → reopen, else close
+    try {
+      const r = await setLeagueWaitlist(leagueId, next);
+      if (!r.ok) { warn(); setWaitlistNote(friendlyError(r.error ?? 'could not change that')); return; }
+      commit();
+      setWaitlistOpen(!!r.waitlist_open);
+      setWaitlistNote(r.waitlist_open
+        ? 'Open — a full league queues new joiners for you.'
+        : `Closed. New joiners see “League Full”.${r.waiting ? ` The ${r.waiting} already waiting are still here.` : ''}`);
+    } catch (e) { warn(); setWaitlistNote(friendlyError(e)); }
+  };
   const [mgrFor, setMgrFor] = useState<AdminMember | null>(null);     // add-co-manager target
   const [mgrDraft, setMgrDraft] = useState('');
   const [renameFor, setRenameFor] = useState<AdminMember | null>(null);
@@ -1066,6 +1083,24 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
           </View>
         );
       })}
+
+      {/* THE DOOR ON THE WAITING ROOM (v0.326.0, founder: "can we have a commish
+          option to close the waiting room. Just 'League Full'"). Rendered even
+          with nobody queued, because closing it is something you do BEFORE the
+          queue forms — a control that only appears once people are waiting is a
+          control you find too late. See the web board for the full note; in
+          short it does not close the league (a free seat still seats the next
+          arrival) and it does not evict anyone already waiting. */}
+      <View style={{ marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Mono size={9} tone="faint" track={0.12}>WAITING ROOM</Mono>
+          <Mono size={9.5} weight="700" tone={waitlistOpen === false ? 'warn' : 'you'}>
+            {waitlistOpen === null ? '—' : waitlistOpen ? 'OPEN' : 'CLOSED · “League Full”'}
+          </Mono>
+          <Chip label={waitlistOpen === false ? 'REOPEN' : 'CLOSE'} onPress={flipWaitlist} />
+        </View>
+        {!!waitlistNote && <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>{waitlistNote}</Mono>}
+      </View>
 
       {/* the waiting room: joined, no seat yet. Deal them in as owners of an
           open seat, or attach them to a full team as a co-manager — the two

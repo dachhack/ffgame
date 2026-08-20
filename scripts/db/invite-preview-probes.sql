@@ -41,7 +41,7 @@ begin
   select count(*) into n from information_schema.routines r
     join information_schema.parameters p on p.specific_name = r.specific_name
    where r.routine_name = 'league_by_invite' and p.parameter_mode = 'OUT';
-  if n <> 6 then raise exception 'PROBE FAIL: league_by_invite returns % columns, expected 6 — anon reads every one', n; end if;
+  if n <> 8 then raise exception 'PROBE FAIL: league_by_invite returns % columns, expected 8 — anon reads every one', n; end if;
 
   -- 3b. GAME MODE (0207) — what lets the join card say "Classic" rather than
   --     pitching hidden picks to someone joining a classic league. UNSET means
