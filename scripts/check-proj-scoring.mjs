@@ -40,11 +40,12 @@ import { PROJ_KICK, PROJ_DST } from '../packages/core/src/data/projKdst2026';
 import { PROJ_RETURN } from '../packages/core/src/data/projReturns2026';
 import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, TEAM_ROLE_NAME } from '../packages/core/src/data/projTeamRoles2026';
 import { PROJ_FB } from '../packages/core/src/data/projFb2026';
+import { idpLineFor, IDP_ROWS } from '../packages/core/src/data/projIdp2026';
 import { slateAwareProj, isRetSlot } from '../packages/core/src/engine/classic';
 import {
   projectedPoints, leagueProjRatio, projTdsPerWeek, scoreProjLine, leagueCatalogOf,
   scoreKickLine, scoreDstLine, scoreReturnLine, scoreHcLine, scorePuntLine, marginBracketShares,
-  integratedPaPoints, kdstBase, hasProjection, PA_SD,
+  integratedPaPoints, kdstBase, hasProjection, PA_SD, scoreIdpLine,
   setLeagueProjScoring, clearLeagueProjScoring,
 } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
@@ -635,6 +636,177 @@ for (const p of [QB, WR, RB, TE]) {
     near(projectedPoints(WR), PROJ_2026.get(WR.id) * ratio * 2), projectedPoints(WR));
   clearLeagueScoring(); clearLeagueProjScoring();
   ok('and clearing both restores the bake', projectedPoints(WR) === PROJ_2026.get(WR.id));
+}
+
+
+// ── IDP (v0.317.0) ─────────────────────────────────────────────────────────
+// The bake this project fixed its identity model in order to be able to make.
+// StatHead's IDP model is the one they claim a win for — 24% better than a flat
+// league mean on RMSE — and until now a DL/LB/DB here sorted by nothing at all.
+//
+// The cases that earn their keep: that the file is keyed by IDENTITY and
+// therefore prices BOTH Byron Youngs (a name-keyed bake structurally cannot),
+// that a colliding bare slug refuses to guess, that the level reconciles to
+// StatHead's own served total, and that the weekly threshold bonuses are paid
+// against GAME COUNTS rather than against a season mean — the one piece of
+// arithmetic here that is easy to get quietly wrong.
+{
+  const D = (id, sleeperId) => ({ id, pos: 'LB', team: null, sleeperId });
+  // The three live collisions, from the bake's own docblock.
+  const YOUNG_LB = '10917', YOUNG_DL = '10925';   // Byron Young, LA / PHI
+  const MURPHY_DL = '11668', MURPHY_DB = '5864';  // Byron Murphy II / Byron Murphy
+  const JONES_IND = '11052', JONES_CHI = '8702';  // Jaylon Jones, IND / CHI
+
+  ok('the IDP bake loaded (else every case below is vacuous)', IDP_ROWS === 963, IDP_ROWS);
+
+  // ══ A PLAYER IS AN ID, NOT A NAME ═══════════════════════════════════════
+  // THE CASE 0205 EXISTED FOR. Both men answer to `byron-young`; the Rams
+  // linebacker is worth well over twice the Eagles lineman, and a name-keyed
+  // bake would have had to pick one and misprice the other by ~2.4 pts/week.
+  const lb = projectedPoints(D('byron-young', YOUNG_LB));
+  const dl = projectedPoints(D('byron-young', YOUNG_DL));
+  ok('both Byron Youngs are priced, not just whichever sorted first', lb > 0 && dl > 0, [lb, dl]);
+  ok('…and they are priced as the DIFFERENT PLAYERS they are', lb > dl * 2, [lb, dl]);
+  ok('both Byron Murphys are priced',
+    projectedPoints(D('byron-murphy', MURPHY_DB)) > projectedPoints(D('byron-murphy', MURPHY_DL)) &&
+    projectedPoints(D('byron-murphy', MURPHY_DL)) > 0);
+  ok('both Jaylon Joneses are priced',
+    projectedPoints(D('jaylon-jones', JONES_IND)) > projectedPoints(D('jaylon-jones', JONES_CHI)) &&
+    projectedPoints(D('jaylon-jones', JONES_CHI)) > 0);
+
+  // A BARE COLLIDING SLUG REFUSES TO GUESS. "We don't know which man this is"
+  // is a true statement and the projection column can render it as blank; a
+  // coin flip between 4.1 and 1.8 a week cannot be told apart from knowledge.
+  ok('a colliding slug with no identity projects nothing rather than guessing',
+    projectedPoints({ id: 'byron-young', pos: 'LB', team: null }) === 0);
+  ok('…and hasProjection agrees, so the pool sorts him as unknown not as zero',
+    hasProjection('byron-young') === false);
+  ok('…but the same slug WITH an identity is projected',
+    hasProjection('byron-young', YOUNG_LB) === true);
+
+  // 0205's other half: the pool renames the loser to `<slug>-<sleeperId>`, and
+  // that slug has to find its own projection with no id argument at all.
+  ok('a slug the pool disambiguated resolves through the id inside it',
+    near(projectedPoints({ id: `byron-young-${YOUNG_DL}`, pos: 'LB', team: null }), dl),
+    projectedPoints({ id: `byron-young-${YOUNG_DL}`, pos: 'LB', team: null }));
+  ok('…and a disambiguating suffix for someone we do not project stays unpriced',
+    projectedPoints({ id: 'byron-young-99999999', pos: 'LB', team: null }) === 0);
+
+  // The 960 unambiguous names, and the 74 undrafted rookies among them who have
+  // no Sleeper id at all, must still resolve with nothing but a slug.
+  ok('an unambiguous defender needs no id', projectedPoints({ id: 'micah-parsons', pos: 'LB', team: null }) > 0);
+  ok('…including one Sleeper has not indexed (no id in the bake at all)',
+    projectedPoints({ id: 'david-bailey', pos: 'LB', team: null }) > 0);
+
+  // ══ THE LEVEL RECONCILES TO STATHEAD'S OWN TOTAL ════════════════════════
+  // Our base is our OWN standard scoring of their components, so it must
+  // reproduce their served projPts — the same reconciliation the K/DST bake
+  // rests on. Their roll-up: tackle 1, sack 2, INT 3, fumble recovery 2,
+  // def TD 6, safety 2.
+  const SERVED = [                       // name, sleeperId, StatHead projPts
+    ['micah-parsons', '7640', 59.6], ['maxx-crosby', '5991', 63.7],
+    ['budda-baker', '4081', 91.4], ['tj-watt', '4070', 66.1],
+    ['byron-young', YOUNG_LB, 70.0], ['byron-young', YOUNG_DL, 29.8],
+  ];
+  let worst = 0, worstWho = '';
+  for (const [slug, sid, served] of SERVED) {
+    const line = idpLineFor(slug, sid);
+    const mine = line ? scoreIdpLine(line, DEFAULT_CLASSIC_SCORING) : NaN;
+    const d = Math.abs(mine - served);
+    if (!(d <= worst)) { worst = d; worstWho = `${slug}/${sid}`; }
+  }
+  ok('our standard scoring of their components reproduces their season total',
+    worst < 0.55, [worstWho, worst.toFixed(2)]);
+
+  // …and the per-week base is that total over 17, like every other bake here.
+  const parsons = idpLineFor('micah-parsons', '7640');
+  ok('the per-week base is the season total over 17',
+    near(kdstBase('micah-parsons'), scoreIdpLine(parsons, DEFAULT_CLASSIC_SCORING) / 17),
+    kdstBase('micah-parsons'));
+
+  // ══ ASSISTS ARE DERIVED, AND THE PREMIUMS STACK ═════════════════════════
+  // The catalog pays solo/assist ON TOP of the per-tackle point, which is
+  // exactly what classicScorePlay does with a live tackle. A league that pays
+  // both premiums equally must therefore be identical to one that raises the
+  // base tackle by the same amount — if that fails, the split is being used as
+  // a replacement rather than as a premium somewhere.
+  const line = idpLineFor('zaire-franklin', '5346');
+  ok('solo + assist = combined tackles (assists are the remainder)',
+    near(scoreIdpLine(line, { ...DEFAULT_CLASSIC_SCORING, idpTackle: 0, idpSolo: 1, idpAst: 1 }),
+         scoreIdpLine(line, { ...DEFAULT_CLASSIC_SCORING, idpTackle: 1, idpSolo: 0, idpAst: 0 })
+         - scoreIdpLine({ ...line, tackles: 0, solo: 0 }, DEFAULT_CLASSIC_SCORING)
+         + scoreIdpLine({ ...line, tackles: 0, solo: 0 }, DEFAULT_CLASSIC_SCORING)));
+  ok('a solo-only premium pays less than an every-tackle one',
+    scoreIdpLine(line, { ...DEFAULT_CLASSIC_SCORING, idpSolo: 1 })
+      < scoreIdpLine(line, { ...DEFAULT_CLASSIC_SCORING, idpSolo: 1, idpAst: 1 }));
+
+  // ══ THE THRESHOLD BONUSES ARE COUNTS, NOT RATES ═════════════════════════
+  // The error StatHead explicitly warn about, and it is a large one: Parsons
+  // averages ~0.51 sacks a game and so NEVER clears "2+ in a game" on a season
+  // mean, yet he is expected to clear it 1.47 times a season. A league paying
+  // +5 for a 2-sack game owes him 7.35 points, not 0.
+  {
+    setLeagueProjScoring({ idpSack2: 5 });
+    const withBonus = projectedPoints(D('micah-parsons', '7640'));
+    clearLeagueProjScoring();
+    const plain = projectedPoints(D('micah-parsons', '7640'));
+    ok('a 2+ sack bonus pays against expected GAMES, not against a season mean',
+      near(withBonus - plain, (1.47 * 5) / 17), [withBonus, plain]);
+  }
+  {
+    // …and the man who never clears it gets nothing, which is the other half.
+    setLeagueProjScoring({ idpSack2: 5 });
+    const q = projectedPoints({ id: 'jack-kiser', pos: 'LB', team: null, sleeperId: '12653' });
+    clearLeagueProjScoring();
+    ok('…and a linebacker who never has a 2-sack game is paid nothing for it',
+      q === projectedPoints({ id: 'jack-kiser', pos: 'LB', team: null, sleeperId: '12653' }));
+  }
+
+  // ══ THE CATALOG MOVES THE RIGHT DEFENDERS ═══════════════════════════════
+  // A tackle-heavy league must lift the off-ball linebacker over the edge
+  // rusher, and a sack-heavy one must do the reverse. This is the whole reason
+  // to store components rather than a points total.
+  {
+    const HEAVY_TACKLE = D('zaire-franklin', '5346');   // 99.8 tackles, 2.0 sacks
+    const HEAVY_SACK = D('micah-parsons', '7640');      // 40.7 tackles, 8.7 sacks
+    setLeagueProjScoring({ idpTackle: 2 });
+    const tackleLeague = [projectedPoints(HEAVY_TACKLE), projectedPoints(HEAVY_SACK)];
+    // A BIG-PLAY LEAGUE HAS TO DEVALUE TACKLES, not merely pay more for sacks —
+    // and finding that out is what this case is for. Franklin out-tackles
+    // Parsons by 59 a season, so at `idpTackle: 1` the sack would have to be
+    // worth ~8.9 points before the edge rusher passes him; raising sacks alone
+    // to 8 leaves the linebacker ahead 6.9 to 6.6. `tackle 0.5 / sack 6` is the
+    // real archetype and it does flip them, which is the honest version of this
+    // assertion — the first draft asserted the flip at `sack: 8` and was simply
+    // wrong about the arithmetic rather than finding a bug.
+    setLeagueProjScoring({ idpTackle: 0.5, idpSack: 6 });
+    const sackLeague = [projectedPoints(HEAVY_TACKLE), projectedPoints(HEAVY_SACK)];
+    clearLeagueProjScoring();
+    ok('a tackle-heavy league ranks the off-ball linebacker first',
+      tackleLeague[0] > tackleLeague[1], tackleLeague);
+    ok('…and a big-play league (tackle 0.5, sack 6) flips them',
+      sackLeague[1] > sackLeague[0], sackLeague);
+  }
+  // A knob we have no component for must not silently move anyone — that is
+  // the honest failure mode, and it has to be visible rather than approximated.
+  {
+    setLeagueProjScoring({ idpSackYd: 1, idpTackle10: 5 });
+    const unmoved = projectedPoints(D('micah-parsons', '7640'));
+    clearLeagueProjScoring();
+    ok('a knob with no component behind it moves nobody rather than guessing',
+      unmoved === projectedPoints(D('micah-parsons', '7640')));
+  }
+
+  // ══ THE POOL LIFTS THEM OFF THE BOTTOM ══════════════════════════════════
+  // Before this, `projFor` returned null for every defender and they sorted
+  // below a third-string kicker. This is the surface the bake exists to fix.
+  ok('the pool now projects a defender at all', projFor('micah-parsons', 'LB') > 0);
+  ok('…and ranks the best linebacker above a replacement one',
+    projFor('carson-schwesinger', 'LB') > projFor('brennan-jackson', 'LB'));
+
+  // ══ THE STANDARD CATALOG IS UNTOUCHED ═══════════════════════════════════
+  ok('a standard-catalog league is unchanged by all of the above',
+    projectedPoints(WR) === PROJ_2026.get(WR.id) && projectedPoints(QB) === PROJ_2026.get(QB.id));
 }
 
 if (fails) { console.log(`\n${fails} PROJ-SCORING ASSERTION(S) FAILED`); process.exit(1); }

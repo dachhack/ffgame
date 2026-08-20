@@ -23,13 +23,51 @@ export function normTeam(t: string): string {
 // so every slugMeta consumer resolves live players correctly. Same
 // module-global contract as the other engine caches.
 const overlay = new Map<string, { pos: Pos; team: string }>();
-export function setSlugMetaOverrides(rows: { slug: string; pos?: string | null; team?: string | null }[]): void {
+
+// SLUG → SLEEPER ID (0205 / v0.317.0). Separate from the meta overlay because
+// it answers a different question and has a different lifetime: `slugMeta`
+// resolves a POSITION, which the bakes can usually guess, while this resolves
+// an IDENTITY, which nothing else can. The IDP bake is the only one keyed by
+// identity — three of its 963 slugs name two different men each — so a
+// projection for `byron-young` is unanswerable without it.
+//
+// Installed by the same call, from the same pool rows, because a board that
+// knows a player's position from the pool knows his id too, and asking every
+// projection call site to thread an extra argument would have meant six edits
+// that could each be forgotten separately.
+const idBySlug = new Map<string, string>();
+
+export function setSlugMetaOverrides(
+  rows: { slug: string; pos?: string | null; team?: string | null; sleeperId?: string | null; sleeper_id?: string | null }[],
+): void {
   for (const r of rows) {
+    // The id is installed even when the row has no position — the two travel
+    // together but neither is a precondition for the other, and dropping an id
+    // because a pos was missing would silently mis-price a defender.
+    const id = r.sleeperId ?? r.sleeper_id;
+    if (r.slug && id) idBySlug.set(r.slug, id);
     if (!r.slug || !r.pos) continue;
     overlay.set(r.slug, { pos: r.pos as Pos, team: normTeam(r.team ?? '') });
   }
 }
-export function clearSlugMetaOverrides(): void { overlay.clear(); }
+export function clearSlugMetaOverrides(): void { overlay.clear(); idBySlug.clear(); }
+
+/** Install a whole slug → Sleeper id map, as `league_pool_ids` (0205) serves
+ *  it. The boards that RENDER projections build their rosters from
+ *  `sleeper_lineup.starters_json`, which carries no id at all, so the pool's
+ *  own map is the only way a matchup board can tell the two Byron Youngs
+ *  apart. Merged rather than replacing: a board may install a roster's meta
+ *  and the league's ids from two different reads that land in either order. */
+export function setSlugSleeperIds(ids: Record<string, string | null | undefined>): void {
+  for (const [slug, id] of Object.entries(ids)) if (slug && id) idBySlug.set(slug, id);
+}
+
+/** This slug's Sleeper id, if a league pool has been installed and knows one.
+ *  Undefined is the normal answer away from a pool — every bake except IDP is
+ *  name-keyed, and IDP resolves 960 of its 963 rows by name alone. */
+export function slugSleeperId(slug: string): string | undefined {
+  return idBySlug.get(slug);
+}
 
 export function slugMeta(slug: string): { pos: Pos; team: string } {
   // A missing slug resolves to the same neutral answer as an unknown one.

@@ -29,6 +29,7 @@
 
 import { ADP_2026 } from './adp2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
+import { slugSleeperId } from './slugMeta';
 
 export type PoolSort = 'rank' | 'adp' | 'proj' | 'own';
 
@@ -81,7 +82,9 @@ export const adpFor = (slug: string): number | null =>
 // from the skill positions, and asking the skill bake about them is how they'd
 // stay pinned to the bottom of the very list this was meant to lift them off.
 export const projFor = (slug: string, pos?: string | null): number | null =>
-  hasProjection(slug) ? projectedPoints({ id: slug, pos: pos ?? '', team: null }) : null;
+  hasProjection(slug, slugSleeperId(slug))
+    ? projectedPoints({ id: slug, pos: pos ?? '', team: null })
+    : null;
 
 /** One row of any available-player list: the shape both the order and the
  *  displayed value are derived from. `pos` is what makes the projection the

@@ -14,7 +14,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
+import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -22,7 +22,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/ga
 import {
   myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leagueScoringGet,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
@@ -409,6 +409,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // an EMPTY team — which reads as a bye on the board and scores as a WR
         // in classicPoints. The pool row knows his real position and team.
         setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
+        // …but a roster blob carries no IDENTITY, and the IDP bake is keyed by
+        // one: three of its 963 slugs name two different men. `league_pool_ids`
+        // (0205) is the map that tells them apart, and it exists for this.
+        // Best-effort — a Sleeper-mirror league has no native pool and answers
+        // with an empty map, which costs nothing and resolves the other 960.
+        leaguePoolIds(leagueId).then((r2) => setSlugSleeperIds(r2?.ids ?? {})).catch(() => {});
         const map: Record<string, string | null> = {};
         const seal: Record<string, boolean> = {};
         for (const p of pk) {

@@ -52,8 +52,10 @@ import { PROJ_KICK, PROJ_DST, type ProjKickLine, type ProjDstLine } from '../dat
 import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
 import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, type ProjHcLine, type ProjPuntLine } from '../data/projTeamRoles2026';
 import { PROJ_FB } from '../data/projFb2026';
+import { idpLineFor, type ProjIdpLine } from '../data/projIdp2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
 import { scopedAdjustFor } from './leagueScoring';
+import { slugSleeperId } from '../data/slugMeta';
 
 export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine, ProjHcLine, ProjPuntLine };
 
@@ -226,7 +228,14 @@ export function scoreHcLine(line: ProjHcLine, sc: ClassicScoring): number {
 
 /** The projected season points of a K or DST under one catalog, or null for
  *  anyone who is neither. */
-function scoreKdst(slug: string, sc: ClassicScoring): number | null {
+function scoreKdst(slug: string, sc: ClassicScoring, sleeperId?: string | null): number | null {
+  // A DEFENDER FIRST, and resolved by IDENTITY rather than by name — this is
+  // the only bake in the project where two live players share a slug, so the
+  // id has to be consulted before anything keyed on the name is. See
+  // `idpLineFor`; a colliding slug with no id resolves to nothing rather than
+  // to whichever man sorted first.
+  const idp = idpLineFor(slug, sleeperId);
+  if (idp) return scoreIdpLine(idp, sc);
   const k = PROJ_KICK[slug];
   if (k) return scoreKickLine(k, sc);
   const d = PROJ_DST[slug];
@@ -270,17 +279,22 @@ const kdstBaseCache = new Map<string, number>();
  *  K/DST bake lives in a different file from the skill bake, so a presence
  *  check against `PROJ_2026` alone would have quietly kept every kicker and
  *  defence at the bottom of the list this change exists to lift them off. */
-export function hasProjection(slug: string): boolean {
+export function hasProjection(slug: string, sleeperId?: string | null): boolean {
   return PROJ_2026.has(slug) || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
-    || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null || PROJ_FB[slug] != null;
+    || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null || PROJ_FB[slug] != null
+    || idpLineFor(slug, sleeperId) != null;
 }
 
-export function kdstBase(slug: string): number {
-  const hit = kdstBaseCache.get(slug);
+export function kdstBase(slug: string, sleeperId?: string | null): number {
+  // KEYED ON THE IDENTITY, not the slug alone: both Byron Youngs answer to
+  // `byron-young`, and a slug-keyed cache would serve the linebacker's 4.1 a
+  // week to the lineman on every render after the first.
+  const key = sleeperId ? `${slug}|${sleeperId}` : slug;
+  const hit = kdstBaseCache.get(key);
   if (hit !== undefined) return hit;
-  const total = scoreKdst(slug, DEFAULT_CLASSIC_SCORING);
+  const total = scoreKdst(slug, DEFAULT_CLASSIC_SCORING, sleeperId);
   const perWeek = total == null ? 0 : Math.round((total / SEASON_GAMES) * 10) / 10;
-  kdstBaseCache.set(slug, perWeek);
+  kdstBaseCache.set(key, perWeek);
   return perWeek;
 }
 
@@ -295,6 +309,44 @@ export function scoreReturnLine(line: ProjReturnLine, sc: ClassicScoring): numbe
   return line.prYd * (sc.retYd + sc.prYd)
     + line.krYd * (sc.retYd + sc.krYd)
     + line.retTd * sc.retTd;
+}
+
+/** A defender's line, priced. Every knob the catalog exposes for an IDP that
+ *  StatHead give us a component for, and nothing else.
+ *
+ *  ASSISTS ARE DERIVED. `tackles`, `solo` and `assist` are linearly dependent
+ *  and the bake stores the first two, so the assist count is the remainder —
+ *  clamped at zero because a rounding artefact must never pay a negative
+ *  bonus. The catalog treats solo and assist as PREMIUMS ON TOP of the
+ *  per-tackle point rather than as replacements for it, which is exactly how
+ *  `classicScorePlay` reads a live tackle: `sc.idpTackle + (tt === 's' ?
+ *  sc.idpSolo : tt === 'a' ? sc.idpAst : 0)`. So the two sides agree by
+ *  construction rather than by coincidence.
+ *
+ *  THE THRESHOLD BONUSES ARE PAID AGAINST GAME COUNTS, not against a season
+ *  mean. `w2sack` and `w3pd` are expected NUMBERS OF GAMES that clear the bar,
+ *  already integrated upstream over the per-game distribution — so they
+ *  multiply the per-game bonus directly. Scoring a season total against a
+ *  weekly threshold is the error StatHead warn about and it is a large one:
+ *  Micah Parsons averages 0.51 sacks a game and so never clears "2+ in a
+ *  game", yet clears it 1.47 times a season.
+ *
+ *  NOT PRICED, because the source has no component for them: sack yards,
+ *  interception and fumble return yards, the 50+ yard return-TD bonuses, the
+ *  10+ tackle game, and safeties. See the bake's docblock. */
+export function scoreIdpLine(line: ProjIdpLine, sc: ClassicScoring): number {
+  const assists = Math.max(0, line.tackles - line.solo);
+  return line.tackles * sc.idpTackle + line.solo * sc.idpSolo + assists * sc.idpAst
+    + line.tfl * sc.idpTfl
+    + line.sack * sc.idpSack
+    + line.qbHit * sc.idpQbHit
+    + line.pd * sc.idpPd
+    + line.int * sc.idpInt
+    + line.ff * sc.idpFf
+    + line.fumRec * sc.idpFr
+    + line.defTd * sc.idpTd
+    + line.w2sack * sc.idpSack2
+    + line.w3pd * sc.idpPd3;
 }
 
 // ── The installed league catalog ────────────────────────────────────────────
@@ -343,13 +395,15 @@ export function leagueCatalogOf(
  *  standard catalog. Exactly 1 when we have no line, when the line scores
  *  nothing under standard rules (kickers, defences), or when the league hasn't
  *  changed anything the line can see. */
-export function leagueProjRatio(slug: string, pos: string, sc?: ClassicScoring): number {
+export function leagueProjRatio(
+  slug: string, pos: string, sc?: ClassicScoring, sleeperId?: string | null,
+): number {
   const cur = sc ?? cat();
   // A kicker or a defence is priced from its OWN components, not the skill
   // line — which it doesn't have, and which would otherwise fall straight
   // through to the `return 1` below and leave both positions unadjustable.
-  const kd = scoreKdst(slug, DEFAULT_CLASSIC_SCORING);
-  if (kd != null) return kd > 0 ? (scoreKdst(slug, cur) as number) / kd : 1;
+  const kd = scoreKdst(slug, DEFAULT_CLASSIC_SCORING, sleeperId);
+  if (kd != null) return kd > 0 ? (scoreKdst(slug, cur, sleeperId) as number) / kd : 1;
   const line = PROJ_LINES[slug];
   if (!line) return 1;
   const base = scoreProjLine(line, pos, DEFAULT_CLASSIC_SCORING);
@@ -361,9 +415,13 @@ export function leagueProjRatio(slug: string, pos: string, sc?: ClassicScoring):
 /** Projected touchdowns per WEEK — what a per-TD scoped bonus (0145) has to be
  *  multiplied by. The line is a season total and PROJ_2026 is a per-week value,
  *  so the season is 17 here for the same reason it is there. */
-export function projTdsPerWeek(slug: string): number {
+export function projTdsPerWeek(slug: string, sleeperId?: string | null): number {
   const line = PROJ_LINES[slug];
   if (line) return (line.passTd + line.rushTd + line.recTd) / SEASON_GAMES;
+  // A defender returns them too, and a per-TD scoped bonus has to see those on
+  // the same terms as a receiver's.
+  const idp = idpLineFor(slug, sleeperId);
+  if (idp) return idp.defTd / SEASON_GAMES;
   // A defence scores touchdowns too, and a per-TD scoped bonus has to see them.
   // A kicker has none, and says so rather than falling through to a skill line
   // he doesn't have.
@@ -390,10 +448,18 @@ export function projTdsPerWeek(slug: string): number {
  *  it: a spot-scoped rule stands aside rather than paying where there is no
  *  spot. */
 export function projectedPoints(
-  player: { id: string; pos: string; team?: string | null },
+  player: { id: string; pos: string; team?: string | null; sleeperId?: string | null },
   slot?: string | null,
   slotPos?: string[] | null,
 ): number {
+  // The pool has carried a Sleeper id since 0205 and the IDP bake is keyed by
+  // it. A caller holding a pool row passes it directly; every other caller
+  // falls back to the id a board installed with `setSlugMetaOverrides`, which
+  // is why none of the six projection call sites had to change. Away from a
+  // pool both are absent and the bake still resolves 960 of its 963 defenders
+  // by name — only the three colliding slugs go unpriced, which is the honest
+  // answer to "which Byron Young is this".
+  const sid = player.sleeperId ?? slugSleeperId(player.id);
   // A RETURN-ONLY SPOT PROJECTS NOTHING (v0.311.2). `RET` is a SLOT identity,
   // not a position: a player scored there banks return production ONLY, and
   // `classicPoints` enforces that with a `posOverride` the live column has
@@ -426,20 +492,20 @@ export function projectedPoints(
   // OWN scoring of their line, with no standard to compare against, because
   // there is no standard coach or punter scoring anywhere in fantasy.
   if (isZeroDefaultRole(player.id)) {
-    const raw = scoreKdst(player.id, cat()) ?? 0;
+    const raw = scoreKdst(player.id, cat(), sid) ?? 0;
     if (!raw) return 0;                          // a league that pays them nothing
     const zadj = scopedAdjustFor(player, { slot });
     return Math.round((raw / SEASON_GAMES * zadj.mult + zadj.pts) * 10) / 10;
   }
-  const base = PROJ_2026.get(player.id) ?? kdstBase(player.id);
+  const base = PROJ_2026.get(player.id) ?? kdstBase(player.id, sid);
   if (!base) return 0;
-  const scaled = base * leagueProjRatio(player.id, player.pos);
+  const scaled = base * leagueProjRatio(player.id, player.pos, undefined, sid);
   const adj = scopedAdjustFor(player, { slot });
-  const out = scaled * adj.mult + adj.pts + adj.td * projTdsPerWeek(player.id);
+  const out = scaled * adj.mult + adj.pts + adj.td * projTdsPerWeek(player.id, sid);
   return Math.round(out * 10) / 10;
 }
 
 /** Convenience for callers that hold a slug and a position rather than a
  *  player object — the draft board's PROJ column. */
-export const projectedFor = (slug: string, pos: string): number =>
-  projectedPoints({ id: slug, pos });
+export const projectedFor = (slug: string, pos: string, sleeperId?: string | null): number =>
+  projectedPoints({ id: slug, pos, sleeperId });
