@@ -331,9 +331,16 @@ export function scoreReturnLine(line: ProjReturnLine, sc: ClassicScoring): numbe
  *  Micah Parsons averages 0.51 sacks a game and so never clears "2+ in a
  *  game", yet clears it 1.47 times a season.
  *
+ *  ALL THREE weekly thresholds are priced (v0.318.0). `idpTackle10` was the
+ *  one gap in v0.317.0 and StatHead shipped `weeks_10plus_tackle` in 1.0.87 —
+ *  integrated over a NEGATIVE BINOMIAL rather than the calibrated Poisson the
+ *  other two use, because the Poisson error on tackles is level-dependent (9.4x
+ *  at 2 a game, 1.03x at 8) so no single constant fixes it. The bake's docblock
+ *  carries the measurement.
+ *
  *  NOT PRICED, because the source has no component for them: sack yards,
- *  interception and fumble return yards, the 50+ yard return-TD bonuses, the
- *  10+ tackle game, and safeties. See the bake's docblock. */
+ *  interception and fumble return yards, the 50+ yard return-TD bonuses, and
+ *  safeties. See the bake's docblock. */
 export function scoreIdpLine(line: ProjIdpLine, sc: ClassicScoring): number {
   const assists = Math.max(0, line.tackles - line.solo);
   return line.tackles * sc.idpTackle + line.solo * sc.idpSolo + assists * sc.idpAst
@@ -346,7 +353,8 @@ export function scoreIdpLine(line: ProjIdpLine, sc: ClassicScoring): number {
     + line.fumRec * sc.idpFr
     + line.defTd * sc.idpTd
     + line.w2sack * sc.idpSack2
-    + line.w3pd * sc.idpPd3;
+    + line.w3pd * sc.idpPd3
+    + line.w10tk * sc.idpTackle10;
 }
 
 // ── The installed league catalog ────────────────────────────────────────────
