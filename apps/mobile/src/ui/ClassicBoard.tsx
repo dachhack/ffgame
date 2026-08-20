@@ -11,7 +11,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -688,6 +688,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // 'home' is this caller's own side on the board, so the chip counts THEIR
   // games rather than the league's. See lineupChipSummary.
   const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
+
+  // A whole-pool preseason week, said out loud (v0.322.0). See isRehearsalPool.
+  const rehearsal = isRehearsalPool(pool.length);
   // A selection is only meaningful while that game is still on the slate —
   // changing week must not leave a chip open for a game that isn't there.
   useEffect(() => {
@@ -887,6 +890,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           hidden: nothing has happened, so a win % would be asserting
           something about a lineup that can still change. */}
       {board && (
+        <>
+        {/* ── "THIS IS NOT YOUR ROSTER" (v0.322.0) ─────────────────────────
+            Weeks 101-104 hold the whole player pool by design, so every
+            manager holds every player. Unsaid, that is indistinguishable from
+            a roster that has broken — which is exactly how it was read. */}
+        {rehearsal && (
+          <Card style={{ borderColor: t.warn }}>
+            <Mono size={9} tone="warn" weight="700" track={0.08}>PRESEASON REHEARSAL</Mono>
+            <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
+              Every player in the league is available on this board, so adds and drops will not show here. Your real roster is on Week 1.
+            </Mono>
+          </Card>
+        )}
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TeamHead side={board.home} align="left" mode={locked ? 'live' : 'proj'} />
@@ -937,6 +953,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             </>
           )}
         </Card>
+        </>
       )}
 
       {/* ── STARTERS, head to head ─────────────────────────────────────────

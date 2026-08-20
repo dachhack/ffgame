@@ -15,7 +15,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -741,6 +741,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
   // side on this board — `TeamHead side={board.home} accent="var(--you)"` — so
   // the chip counts THEIR games, not the league's.
   const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
+
+  // A WHOLE-POOL PRESEASON WEEK, SAID OUT LOUD (v0.322.0). See isRehearsalPool:
+  // the seed is deliberate, and the silence about it was not.
+  const rehearsal = isRehearsalPool(pool.length);
   // A selection only means something while that game is still on the slate.
   useEffect(() => {
     if (selGame && !chips.some((c) => c.key === selGame)) setSelGame(null);
@@ -960,6 +964,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
           can't tell you which one you're looking at. Pre-lock the whole
           projection half is hidden: nothing has happened, so a win % would be
           asserting something about a lineup that can still change. */}
+      {/* ── "THIS IS NOT YOUR ROSTER" (v0.322.0) ───────────────────────────
+          Weeks 101-104 hold the whole player pool by design, so every manager
+          is holding every player. Without this line that is indistinguishable
+          from a roster that has broken — which is exactly how it was read
+          ("dropped Carson Beck yesterday but he's still on the roster"): the
+          drop HAD landed in every week the sync writes, and the board was
+          showing a rehearsal week where he is on all twelve rosters. */}
+      {rehearsal && (
+        <div className="mono" style={{ ...card, borderColor: 'var(--warn, #c66)', padding: '9px 12px', fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.55 }}>
+          <span style={{ color: 'var(--warn, #c66)', fontWeight: 700, letterSpacing: '0.08em' }}>PRESEASON REHEARSAL</span>
+          {' — every player in the league is available on this board, so adds and drops will not show here. '}
+          Your real roster is on Week 1.
+        </div>
+      )}
+
       {board && (
         <div style={card}>
           <div style={{ display: 'grid', gridTemplateColumns: `1fr ${SPOT_COL}px 1fr`, alignItems: 'center', gap: 10 }}>
@@ -1070,6 +1089,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
               <button onClick={() => setLineupOpen(false)} aria-label="close lineup" className="mono"
                 style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
             </div>
+            {/* Repeated inside the card because this is where a manager comes
+                LOOKING for their roster — the notice on the board behind it is
+                covered by this very overlay. */}
+            {rehearsal && (
+              <div className="mono" style={{ fontSize: 9, color: 'var(--warn, #c66)', lineHeight: 1.5 }}>
+                PRESEASON REHEARSAL — every player is available here. Your real roster is on Week 1.
+              </div>
+            )}
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, padding: '10px 14px 6px' }}>
               <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>STARTERS</span>
