@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.333.0 — a short pass is an arc, not a flagpole (and my last fix over-applied)
+
+Founder, on the same field visual after v0.332.0: "Still this. Looks like we
+have the line on the ground, and the arch above for the pass. It should just be
+arch then the yards after the arch."
+
+Two defects, and the second one was mine.
+
+── 1. THE ARC HEIGHT NEVER CHANGED ────────────────────────────────────────
+
+The flight arc's control point was a FIXED `TOP - 6` — the top of the field —
+however far the ball actually travelled. A 50-yard bomb got a graceful arc; a
+five-yard checkdown got the SAME apex squeezed into a fifth of the width, which
+renders as a tall narrow spike floating above a short flat line. Two marks that
+plainly belong to one play stop reading as one play, which is exactly what "the
+line on the ground, and the arch above" describes.
+
+`arcControlY` now scales the apex with the distance flown. The clamp's top end
+IS the old fixed value, so long throws are pixel-identical — nothing that
+already looked right moves. A quadratic peaks at HALF its control offset, which
+is why the constants read twice as tall as the curve you see.
+
+── 2. v0.332.0 PUT EVERY CARRY ON ITS OWN LANE ────────────────────────────
+
+That fix was aimed at kick returns, where the runback genuinely retraces its own
+flight path, and it dropped the carried phase to a lane four units below. But it
+applied to EVERY carry — including a pass's run-after, which continues in the
+same direction and meets the arc end to end. So a plain reception got its
+continuous motion split into an arc plus a separate line below it: the exact
+"line on the ground and an arch above" the founder was looking at, introduced by
+the previous fix rather than left over from before it.
+
+`overlaps` already knew the difference and was already asserted. Now it decides:
+the lane is for a carry that doubles back over its own flight, and nothing else.
+
+── RENDERED BEFORE AND AFTER, not reasoned about ──────────────────────────
+
+Four fields drawn in headless Chromium at the real geometry. The short-pass
+BEFORE panel reproduces the founder's screenshot exactly — spike, step, flat
+line. AFTER is one gentle arc flowing into the carry. The long-pass panels are
+indistinguishable, which is the check that mattered: the fix had to leave the
+plays that already looked right alone.
+
+The native port needed `pathLen` updated too — it measures the arc to drive a
+length-based draw animation, and a length computed against the old fixed apex
+would overrun a short arc and leave it drawn only part way.
+
+8 new parity assertions (677 total), including that a long throw's height is
+unchanged to within 0.01px.
+
+
 ### v0.332.0 — the double line on the field: a runback drawn over its own kick
 
 Founder, on a punt in the field visual: "We've got a double line thing going

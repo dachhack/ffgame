@@ -25,7 +25,7 @@ import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { teamLogo } from '@drip/core/data/media';
-import { playPath } from '@drip/core/engine/playPath';
+import { playPath, arcControlY } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix } from '../theme.native';
@@ -58,7 +58,10 @@ const AnimatedG = Animated.createAnimatedComponent(G);
  *  here — sampled for the quadratic, exact for the straight line. */
 function pathLen(x1: number, x2: number, curved: boolean): number {
   if (!curved) return Math.abs(x2 - x1);
-  const cx = (x1 + x2) / 2, cy = TOP - 6;
+  // The SAME control point the path uses (v0.333.0) — it scales with the
+  // throw now, and a length measured against the old fixed apex would overrun
+  // a short arc and leave it drawn only part way.
+  const cx = (x1 + x2) / 2, cy = arcControlY(x1, x2, MID, TOP);
   let len = 0, px = x1, py = MID;
   for (let i = 1; i <= 16; i++) {
     const t = i / 16, u = 1 - t;
@@ -122,7 +125,7 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
   // they each used to own a copy of — and so `overlaps`, the property that
   // made a returned kick look like a doubled line, is asserted rather than
   // eyeballed. See engine/playPath.
-  const { catchX, carrying } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
+  const { catchX, carrying, overlaps } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
   /** The CARRIED phase rides its own lane just under the flight path
    *  (v0.332.0). Both were drawn at MID, which is fine for a pass — the
    *  run-after continues the same way, so air and carry meet end to end — and
@@ -132,7 +135,10 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
    *  shared geometry: 41.8px on a punt, 87.0px on a kickoff. See the web's
    *  FieldView for the full note — this is a port and must not drift from it. */
   const CARRY_DY = 4;
-  const carryY = MID + CARRY_DY;
+  // The lane is for a carry that DOUBLES BACK over its own flight, not for
+  // every carry — see the web view. A pass's run-after continues the same way
+  // and belongs in line with the arc.
+  const carryY = overlaps ? MID + CARRY_DY : MID;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -153,7 +159,7 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
   const airLen = arc ? pathLen(arc.x1, catchX ?? arc.x2, isPassy) : 0;
   // + the drop into the carry lane, or the stroke animation runs out before the
   // runback is fully drawn and the line stops mid-field.
-  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false) + CARRY_DY : 0;
+  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false) + (overlaps ? CARRY_DY : 0) : 0;
   useEffect(() => {
     if (!arc) return;
     air.setValue(0); run.setValue(0);
@@ -235,7 +241,7 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
           <G>
             <AnimatedPath
               d={isPassy
-                ? `M ${arc.x1} ${MID} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${TOP - 6} ${catchX ?? arc.x2} ${MID}`
+                ? `M ${arc.x1} ${MID} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, MID, TOP)} ${catchX ?? arc.x2} ${MID}`
                 : `M ${arc.x1} ${MID} L ${arc.x2} ${MID}`}
               fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
               strokeDasharray={`${airLen}`}
@@ -243,7 +249,9 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
             />
             {carrying && (
               <AnimatedPath
-                d={`M ${catchX} ${MID} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`}
+                d={overlaps
+                  ? `M ${catchX} ${MID} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
+                  : `M ${catchX} ${MID} L ${arc.x2} ${MID}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                 strokeDasharray={`${runLen}`}
                 strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runLen, 0] }) as unknown as number}

@@ -10,7 +10,7 @@
 // In check:parity because the geometry is shared by two platforms that each
 // used to own a copy, and because "do these two strokes lie on top of each
 // other" is exactly the kind of thing you cannot see in a diff.
-import { playPath } from '../packages/core/src/engine/playPath';
+import { playPath, arcControlY } from '../packages/core/src/engine/playPath';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -67,6 +67,31 @@ const run = (cur) => {
   const silly = run({ ty: 'Pass Reception', tm: 'HOU', yl: 75, yl2: 45, yac: 900 });
   ok('an absurd yac is clamped rather than drawn off the field',
     silly.catchX <= xOf(100, 'HOU') + 0.01 && silly.catchX >= FX - 0.01, silly);
+}
+
+// ── THE ARC'S HEIGHT SCALES WITH THE THROW (v0.333.0) ──────────────────────
+// It was pinned at TOP-6 whatever the distance, so a five-yard checkdown got a
+// 50-yard bomb's apex squeezed into a fifth of the width — a tall narrow spike
+// over a short flat line, which is why one play read as two marks.
+{
+  const TOP = 12, MID = 63;                       // the FieldViews' own numbers
+  const y = (d) => arcControlY(0, d, MID, TOP);
+  ok('a long throw keeps exactly the height it had — no regression',
+    Math.abs(y(200) - (TOP - 6)) < 0.01, y(200));
+  ok('a short throw is much lower than a long one', y(17) > y(200) + 20, [y(17), y(200)]);
+  ok('…but still visibly airborne, or a pass looks like a run', y(17) < MID - 10, y(17));
+  ok('height never dips below the baseline', y(0) < MID && y(1) < MID);
+  ok('it rises with distance and never falls', (() => {
+    let prev = Infinity;
+    for (let d = 0; d <= 250; d += 5) { const v = y(d); if (v > prev + 1e-9) return false; prev = v; }
+    return true;
+  })());
+  ok('it is clamped at the top — a cross-field throw does not leave the card',
+    y(10_000) === TOP - 6, y(10_000));
+  ok('direction does not matter, only distance',
+    Math.abs(arcControlY(300, 100, MID, TOP) - arcControlY(100, 300, MID, TOP)) < 1e-9);
+  ok('junk input does not produce NaN',
+    Number.isFinite(y(NaN)) && Number.isFinite(arcControlY(undefined, null, MID, TOP)));
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
