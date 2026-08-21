@@ -11,6 +11,7 @@
 // used to own a copy, and because "do these two strokes lie on top of each
 // other" is exactly the kind of thing you cannot see in a diff.
 import { playPath, arcControlY } from '../packages/core/src/engine/playPath';
+import { unopposedCopy, claimsOpponentAbsent } from '../packages/core/src/data/slotLabels';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -92,6 +93,31 @@ const run = (cur) => {
     Math.abs(arcControlY(300, 100, MID, TOP) - arcControlY(100, 300, MID, TOP)) < 1e-9);
   ok('junk input does not produce NaN',
     Number.isFinite(y(NaN)) && Number.isFinite(arcControlY(undefined, null, MID, TOP)));
+}
+
+// ── AN EMPTY HALF OF A SLOT MEANS TWO DIFFERENT THINGS (v0.334.0) ─────────
+// Founder: "hmm game hasn't started yet and this is unopposed, but there's a
+// whole full roster on my opponent's side." Nothing was wrong with the roster —
+// one component draws both a genuinely UNOPPOSED STARTER (the opponent really
+// did leave the spot empty) and a BACKUP (no counterpart anywhere, by
+// construction), and they shared the same words.
+{
+  const starter = unopposedCopy(false);
+  const backup = unopposedCopy(true);
+
+  // THE RULE, asserted rather than the wording — which is free to change.
+  ok('an unopposed STARTER may say the opponent is absent, because they are',
+    claimsOpponentAbsent(starter), starter);
+  ok('a BACKUP must NEVER say it — it has no counterpart to be absent',
+    !claimsOpponentAbsent(backup), backup);
+
+  ok('the two are actually different', starter.blank !== backup.blank && starter.chip !== backup.chip);
+  ok('both halves are filled — a blank blank is how this went unnoticed',
+    [starter, backup].every((c) => c.blank.trim() && c.chip.trim()));
+  ok('the backup copy names what it IS', /BACKUP|BENCH/i.test(`${backup.blank} ${backup.chip}`), backup);
+  // The chip sits in a fixed-width strip beside the row.
+  ok('the chips stay short enough for the strip',
+    starter.chip.length <= 8 && backup.chip.length <= 8, [starter.chip, backup.chip]);
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
