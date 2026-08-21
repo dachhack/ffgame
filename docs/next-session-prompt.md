@@ -191,17 +191,21 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    the join convention; `proj2026.ts` additionally documents why the stored
    number is `ppg * games / 17` and not StatHead's `ppg` — read that before
    changing the shape of the bake.
-3. **The live web drip surface never installs pool `slugMeta` overrides** —
-   audit `Matchup.tsx` / `cardTable` consumers and install
-   `setSlugMetaOverrides(pool)` where the live league's pool loads.
-4. **Audit server-side `injuryFor` callers** — with no live install and no
-   season set it serves the BAKED 2025 report.
-5. **Nobody is told when someone lands in a league's waiting room.** Offered,
+3. **Audit server-side `injuryFor` callers** — with no live install and no
+   season set it serves the BAKED 2025 report. Note the shape of the fix that
+   landed for the sibling bug in v0.337.2 (below): the client-side half of this
+   family is already handled, so check what the WORKER resolves, not the
+   screens.
+4. **Nobody is told when someone lands in a league's waiting room.** Offered,
    not built (v0.326.0 added the commissioner's "League Full" close).
-6. **Reply to StatHead** about their "unknown fields are named" message not
+5. **Reply to StatHead** about their "unknown fields are named" message not
    firing in CSV mode (`docs/mcp-requests.md`).
-7. Dynasty polish when it earns a session: multi-year futures, draft-day pick
+6. Dynasty polish when it earns a session: multi-year futures, draft-day pick
    trades, resizing a ROLLED league's pending rookie draft.
+
+_Done and merged this arc: the web's live screens now install the league pool's
+slug meta at the `buildLiveLeague` chokepoint (v0.337.2), and the app's
+commissioner map lays out in two columns (v0.337.1)._
 
 ## How the founder works
 
