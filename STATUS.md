@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.337.2 — the web's live screens stop reading a 2025 fallback
+
+The app's boards have installed the league pool's own slug meta since 0200.1;
+the web's live drip screens never did, leaving them the last surface resolving
+players through the raw bake. `poolToPlayer` already prefers a row's pos/team,
+so the ENGINE players were fine — but everything reading `slugMeta` directly
+was not: cardTable for the team logo, playerCard and ui.tsx for the injury
+badge. A 2026 player the 2025 bake has never heard of came back as WR with an
+EMPTY team, and an empty team reads as a BYE.
+
+Fixed at the chokepoint — `buildLiveLeague`, which all three web live screens
+(Matchup, LeagueHubPage, LiveOnboard) already call — rather than at each
+screen.
+
+The trap worth remembering: `slugMeta` consults the overlay BEFORE the bake, so
+an override is authoritative. The ESPN shape of `starters_json` is
+`{ slug, full, pos }` with NO team, so mapping rows straight through would
+install `team: ''` and MASK a real baked team — turning a working player into a
+bye, the exact bug being fixed. Each row is resolved exactly as `poolToPlayer`
+resolves it, so the overlay can only add information, never subtract it.
+
+New `check:livemeta` suite (10 assertions, wired into `check:parity`), on a
+pure exported `poolMetaRows`. Verified it bites: reverting to the naive mapping
+fails the masking assertion.
+
 ### v0.337.1 — the commissioner map lines up in two columns
 
 Founder, on the app's Commissioner screen: "can we align these better in the
