@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.1 — agent seats check the wire hourly, and stop re-asking
+
+Founder, after asking when agents actually act: "Let's also just make
+claims/checks hourly."
+
+v0.338.0 put the sweep in `tickContext`, which fires on `playsPollMs` — **every
+25 seconds**. I had sized `MAX_CLAIMS_PER_SWEEP` calling that "often" without
+checking what it meant. Two consequences, both real:
+
+  • the planner is deterministic, so a seat with an unresolved claim re-derived
+    the same plan every 25s and `submit_waiver_claim` refused it as a duplicate
+    — ~3,000 wasted RPCs and log lines per claim between filing and the 3am run;
+  • an agent took every player within 25 seconds of him clearing waivers, at
+    3am, ahead of every human in the league.
+
+Now hourly (`config.seatWireMs`, keyed per context so two active week contexts
+don't starve each other), and the sweep counts OUTSTANDING claims rather than
+only the ones it files: a seat holds at most two, excludes their players from
+its own candidate pool, treats a promised drop as spent, and discounts an open
+seat a drop-less pending claim would take. Removing a pending drop from the
+planning roster cannot change what it plans against, because a drop is only
+ever chosen from players who are NOT in the best lineup.
+
+The hourly cadence is also the answer to the free-agent race: fast enough that
+an injury is answered the same afternoon, slow enough that the seat reads as a
+manager checking in rather than a bot camping the wire.
+
 ### v0.338.0 — an unclaimed seat works the wire
 
 Founder: "Automated players for classic leagues. not only slotting players, but

@@ -55,6 +55,10 @@ export const config = {
   // ESPN ownership percentages (0202) — 105KB a pull, so this can be as current
   // as anything else on the board.
   marketPollMs: Number(process.env.MARKET_POLL_MS || 10800000),      // 3h
+  // AGENT SEATS ON THE WIRE (v0.338.1). Hourly, not per tick: the tick is 25s,
+  // and at that rate an agent takes every cleared player within half a minute
+  // of him becoming available — at 3am, ahead of every human in the league.
+  seatWireMs: Number(process.env.SEAT_WIRE_MS || 3600000),           // 1h
   directoryRefreshMs: Number(process.env.DIRECTORY_REFRESH_MS || 86400000), // 24h — Sleeper's own guidance
   // ── AUTO-SYNC (v0.319.0) ──────────────────────────────────────────────────
   // `syncCheckMs` is how often the worker ASKS whether a sync is due; the gap

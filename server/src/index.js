@@ -39,6 +39,10 @@ let lastInjuryPoll = 0;
 // boot takes a census — a deploy is exactly when the table is most likely stale.
 let lastRosterPoll = 0;
 let lastMarketPoll = 0;
+// ctx.tag → when this context last swept the wire. Keyed per CONTEXT rather
+// than globally: two active week contexts (preseason beside the regular
+// season) would otherwise take turns starving each other of an hourly slot.
+const lastSeatWire = new Map();
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
@@ -355,14 +359,24 @@ async function tickContext(ctx, season) {
     const auto = await autoSlotClassicLineups(week, slate);
     if (auto) log(`[${ctx.tag}] auto-slotted`, auto, 'classic spots');
   } catch (e) { log(`[${ctx.tag}] auto-slot`, e.message); }
-  try {
-    // AFTER the lineup fill, deliberately. The wire's whole notion of a "hole"
-    // is a starting spot the roster cannot answer, so it must read the lineup
-    // the fill has already settled — running it first would have it transact
-    // for holes auto-slot was about to close from the bench.
-    const wired = await sweepSeatWire(week, slate, log);
-    if (wired) log(`[${ctx.tag}] seat wire`, wired, 'agent transactions');
-  } catch (e) { log(`[${ctx.tag}] seat wire`, e.message); }
+  // HOURLY, not every tick (v0.338.1). The tick is 25 seconds, which made an
+  // agent seat take every player the moment he cleared — at 3am, ahead of every
+  // human in the league — and re-file the same pending claim ~3,000 times a day
+  // for the RPC to refuse. An hour is fast enough that an injury is answered
+  // the same afternoon and slow enough that the seat behaves like a manager who
+  // checks in, rather than a bot camping the wire.
+  //
+  // AFTER the lineup fill, deliberately: the wire's whole notion of a "hole" is
+  // a starting spot the roster cannot answer, so it must read the lineup the
+  // fill has already settled — running first would have it transact for holes
+  // auto-slot was about to close from the bench.
+  if (Date.now() - (lastSeatWire.get(ctx.tag) ?? 0) >= config.seatWireMs) {
+    lastSeatWire.set(ctx.tag, Date.now());   // before the await: a slow sweep must not queue a second
+    try {
+      const wired = await sweepSeatWire(week, slate, log);
+      if (wired) log(`[${ctx.tag}] seat wire`, wired, 'agent transactions');
+    } catch (e) { log(`[${ctx.tag}] seat wire`, e.message); }
+  }
 
   const locked = await lockDueMatchups(new Date(), wk, week);
   if (locked) log(`[${ctx.tag}] locked`, locked, 'matchups');
