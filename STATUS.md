@@ -18,6 +18,54 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.332.0 — the double line on the field: a runback drawn over its own kick
+
+Founder, on a punt in the field visual: "We've got a double line thing going
+on."
+
+THE FIELD DRAWS A PLAY IN TWO PHASES: the ball in the AIR (an arc from the
+snap to where it came down) and the ball being CARRIED (a flat line from there
+to where the play ended). Both were drawn at the same y.
+
+For a PASS that is right — the run-after continues in the same direction, so
+the two meet end to end and read as one continuous play. For a KICK it is
+wrong, because the returner runs BACK the way the ball came. The runback then
+retraced the flight path in the same colour, at the same width, at the same y.
+Two strokes, one line.
+
+MEASURED AGAINST THE REAL GEOMETRY rather than squinted at (W=400, EZ=26,
+FX=EZ, FW=W-2*EZ — the FieldViews' own constants):
+
+  pass + YAC        air 235-287   carry 183-235   meet end to end
+  punt + return     air  71-270   carry  71-113   OVERLAP 41.8px
+  kickoff + return  air  43-252   carry  43-130   OVERLAP 87.0px
+
+THE OVERLAP IS NOT WRONG IN THE DATA. The ball really did fly out and get run
+back over the same grass; a punt that travels 45 yards and comes back 12 covers
+that 12 twice. What is wrong is drawing two phases of one play on one line and
+leaving the reader to work out which is which.
+
+So the carried phase gets its own lane, four units under the flight path, with
+a short drop at the catch so the two still read as one play. The football moves
+to whichever lane the play actually ENDED in, or it would float above the
+runback. The native port needed the same fix AND a longer dash length — its
+draw animation is length-driven, so without adding the drop the runback stopped
+short mid-field.
+
+── AND THE GEOMETRY MOVED TO ONE PLACE ────────────────────────────────────
+
+Both FieldViews owned a copy of the split arithmetic, and the native file
+carried a comment saying it was a port "at the SAME geometry" that must not
+drift — which is a comment asking to be broken. It is now `engine/playPath`,
+called by both, with `overlaps` as an explicit property rather than something
+you notice in a screenshot. 13 assertions cover it, including the ones this bug
+lives between: a pass MUST meet end to end, a returned punt and a returned
+kickoff MUST overlap, and a fair catch (`ret: 0`) must not draw a zero-length
+carry at all.
+
+13 new parity assertions (669 total). Both platforms.
+
+
 ### v0.331.0 — the field is the game's, not the player's; and a missing metric says so
 
 Two founder reports from one live preseason window.

@@ -25,6 +25,7 @@ import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { teamLogo } from '@drip/core/data/media';
+import { playPath } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix } from '../theme.native';
@@ -109,7 +110,6 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
 
   const isPassy = cur ? /Pass|Interception|Punt|Kickoff|Field Goal/.test(cur.ty) : false;
   const incomplete = cur ? /Incompletion/.test(cur.ty) : false;
-  const completedPass = cur ? /Pass Reception|Passing Touchdown/.test(cur.ty) : false;
   const INCOMPLETE_DEPTH = 12;
   const arc = cur && (cur.yl !== cur.yl2 || incomplete) ? {
     x1: mx(xOf(cur.yl, cur.tm)),
@@ -118,11 +118,21 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
       : mx(xOf(cur.yl2, cur.tm2 ?? cur.tm)),
     color: accent ?? (cur.sc ? t.warn : cur.to ? t.fx.nuke : t.dimstrong),
   } : null;
-  const yacX = arc && completedPass && cur!.yac != null && cur!.yl !== cur!.yl2
-    ? mx(xOf(Math.min(100, Math.max(0, cur!.yl2 + cur!.yac)), cur!.tm2 ?? cur!.tm)) : null;
-  const retX = arc && cur!.ret != null && /Kickoff|Punt/.test(cur!.ty)
-    ? mx(xOf(Math.min(108, cur!.yl2 + cur!.ret), cur!.tm2 ?? cur!.tm)) : null;
-  const catchX = yacX ?? retX;
+  // Through playPath (v0.332.0) so the two ports cannot drift on geometry
+  // they each used to own a copy of — and so `overlaps`, the property that
+  // made a returned kick look like a doubled line, is asserted rather than
+  // eyeballed. See engine/playPath.
+  const { catchX, carrying } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
+  /** The CARRIED phase rides its own lane just under the flight path
+   *  (v0.332.0). Both were drawn at MID, which is fine for a pass — the
+   *  run-after continues the same way, so air and carry meet end to end — and
+   *  wrong for a KICK, where the returner runs back the way the ball came and
+   *  the runback retraced the arc in the same colour at the same width and y.
+   *  Founder: "we've got a double line thing going on." Measured overlap at the
+   *  shared geometry: 41.8px on a punt, 87.0px on a kickoff. See the web's
+   *  FieldView for the full note — this is a port and must not drift from it. */
+  const CARRY_DY = 4;
+  const carryY = MID + CARRY_DY;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -141,7 +151,9 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
   const air = useRef(new Animated.Value(0)).current;
   const run = useRef(new Animated.Value(0)).current;
   const airLen = arc ? pathLen(arc.x1, catchX ?? arc.x2, isPassy) : 0;
-  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false) : 0;
+  // + the drop into the carry lane, or the stroke animation runs out before the
+  // runback is fully drawn and the line stops mid-field.
+  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false) + CARRY_DY : 0;
   useEffect(() => {
     if (!arc) return;
     air.setValue(0); run.setValue(0);
@@ -229,10 +241,10 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
               strokeDasharray={`${airLen}`}
               strokeDashoffset={air.interpolate({ inputRange: [0, 1], outputRange: [airLen, 0] }) as unknown as number}
             />
-            {catchX != null && catchX !== arc.x2 && (
+            {carrying && (
               <AnimatedPath
-                d={`M ${catchX} ${MID} L ${arc.x2} ${MID}`}
-                fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
+                d={`M ${catchX} ${MID} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`}
+                fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                 strokeDasharray={`${runLen}`}
                 strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runLen, 0] }) as unknown as number}
               />
@@ -242,7 +254,7 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
               : <Circle cx={arc.x1} cy={MID} r={3} fill={arc.color} />}
             {incomplete
               ? <SvgText x={arc.x2} y={MID + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
-              : <SvgText x={arc.x2} y={MID + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
+              : <SvgText x={arc.x2} y={(carrying ? carryY : MID) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
           </G>
         )}
 
