@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
+import { playPath } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile } from './ui';
 
@@ -276,7 +277,6 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
 
   const isPassy = cur ? /Pass|Interception|Punt|Kickoff|Field Goal/.test(cur.ty) : false;
   const incomplete = cur ? /Incompletion/.test(cur.ty) : false;
-  const completedPass = cur ? /Pass Reception|Passing Touchdown/.test(cur.ty) : false;
   // Incompletions never move the spot (yl === yl2), so draw a stylized throw:
   // a fixed-depth arc toward the attacked end zone, ending in an ✕.
   const INCOMPLETE_DEPTH = 12;
@@ -293,15 +293,18 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   // line — the returner ends at yl2 having run `ret` yards, so the catch sits
   // ret yards behind it in the return team's coordinates; a catch inside the
   // end zone maps past 100 and renders there naturally).
-  const yacX = arc && completedPass && cur!.yac != null && cur!.yl !== cur!.yl2
-    ? mx(xOf(Math.min(100, Math.max(0, cur!.yl2 + cur!.yac)), cur!.tm2 ?? cur!.tm))
-    : null;
-  const retX = arc && cur!.ret != null && /Kickoff|Punt/.test(cur!.ty)
-    ? mx(xOf(Math.min(108, cur!.yl2 + cur!.ret), cur!.tm2 ?? cur!.tm))
-    : null;
-  const catchX = yacX ?? retX;
+  // Through playPath (v0.332.0) so the two ports cannot drift on geometry
+  // they each used to own a copy of — and so `overlaps`, the property that
+  // made a returned kick look like a doubled line, is asserted rather than
+  // eyeballed. See engine/playPath.
+  const { catchX, carrying } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
   const offLogo = cur ? teamLogo(cur.tm) : null;
   const midY = (TOP + BOT) / 2;
+  /** The carried phase rides its own lane just under the flight path — see the
+   *  note at the arc. Small enough to read as the same play, big enough that a
+   *  runback never lies on top of the kick that produced it. */
+  const CARRY_DY = 4;
+  const carryY = midY + CARRY_DY;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -376,10 +379,29 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
           ))}
           {/* first-down line */}
           {!over && fdX != null && <line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />}
-          {/* last-play arc (re-mounts per play → draw animation). A completed
-              pass with YAC splits at the catch point: air arc, then a flat
-              run-after line. The offense logo marks the snap; the play ends in
-              a football — or an ✕ for an incompletion. */}
+          {/* last-play arc (re-mounts per play → draw animation). A play splits
+              at the catch point: the ball in the AIR rides the centre line, the
+              ball being CARRIED rides its own lane just below it, joined by a
+              short drop at the catch. The offense logo marks the snap; the play
+              ends in a football — or an ✕ for an incompletion.
+
+              ── WHY THE CARRY GETS ITS OWN LANE (v0.332.0) ──────────────────
+              Founder, on a punt: "we've got a double line thing going on."
+              Both strokes were drawn at midY, which is fine for a pass — the
+              run-after continues in the SAME direction, so air and carry meet
+              end to end — and wrong for a KICK, where the returner runs back
+              the way the ball came. The runback then retraced the flight path
+              in the same colour at the same width and y, and read as one line
+              drawn twice. Measured against the real geometry (W=400, EZ=26):
+
+                pass + YAC       air 235→287  carry 183→235  meet end to end
+                punt + return    air  71→270  carry  71→113  OVERLAP 41.8px
+                kickoff + return air  43→252  carry  43→130  OVERLAP 87.0px
+
+              The overlap is not a mistake in the data — the ball really did fly
+              out and get run back over the same grass. It is a mistake to draw
+              two phases of a play on one line and expect the reader to know
+              which is which. */}
           {arc && (
             <g key={cur!.pid ?? cur!.c}>
               <path d={isPassy
@@ -387,17 +409,19 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
                 : `M ${arc.x1} ${midY} L ${arc.x2} ${midY}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
                 pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
-              {catchX != null && catchX !== arc.x2 && (
-                <path d={`M ${catchX} ${midY} L ${arc.x2} ${midY}`}
-                  fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
+              {carrying && (
+                <path d={`M ${catchX} ${midY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`}
+                  fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                   pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .35s ease .5s both' }} />
               )}
               {offLogo
                 ? <image href={offLogo} x={arc.x1 - 5.5} y={midY - 5.5} width={11} height={11} />
                 : <circle cx={arc.x1} cy={midY} r={3} fill={arc.color} />}
+              {/* The ball ends where the PLAY ended — on the carry lane when the
+                  play was carried, or it would float above the runback. */}
               {incomplete
                 ? <text x={arc.x2} y={midY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
-                : <text x={arc.x2} y={midY + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
+                : <text x={arc.x2} y={(carrying ? carryY : midY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
             </g>
           )}
           {/* line of scrimmage + ball marker (transitions to each new spot) */}

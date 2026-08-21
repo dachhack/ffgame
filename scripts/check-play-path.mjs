@@ -1,0 +1,73 @@
+// THE PLAY PATH SPLIT (v0.332.0), checked in Node.
+//
+// Founder, on a punt: "we've got a double line thing going on." Both field
+// views drew the AIR and CARRY halves of a play on the same horizontal line.
+// For a pass that is right — the run-after continues the same way, so they meet
+// end to end. For a KICK the returner runs BACK the way the ball came, so the
+// runback retraced the arc in the same colour at the same y and read as one
+// line drawn twice.
+//
+// In check:parity because the geometry is shared by two platforms that each
+// used to own a copy, and because "do these two strokes lie on top of each
+// other" is exactly the kind of thing you cannot see in a diff.
+import { playPath } from '../packages/core/src/engine/playPath';
+
+let fails = 0;
+const ok = (name, cond, got) => {
+  if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
+  else console.log(`ok   ${name}`);
+};
+
+// The FieldViews' own constants and xOf, so this tests the REAL geometry.
+const W = 400, EZ = 26, FX = EZ, FW = W - 2 * EZ;
+const AWAY = 'LV';
+const xOf = (yte, tm) => FX + ((tm === AWAY ? 100 - yte : yte) / 100) * FW;
+const run = (cur) => {
+  const x1 = xOf(cur.yl, cur.tm);
+  const x2 = xOf(cur.yl2, cur.tm2 ?? cur.tm);
+  return { ...playPath(cur, x1, x2, xOf), x1, x2 };
+};
+
+// ── A PASS MEETS END TO END ────────────────────────────────────────────────
+{
+  const r = run({ ty: 'Pass Reception', tm: 'HOU', yl: 75, yl2: 45, yac: 15 });
+  ok('a completed pass splits at the catch', r.carrying && r.catchX != null);
+  ok('…and its two halves do NOT overlap — the run-after continues forward',
+    !r.overlaps, r);
+}
+
+// ── A KICK DOUBLES BACK: THE CASE THAT WAS REPORTED ────────────────────────
+{
+  const punt = run({ ty: 'Punt', tm: 'HOU', tm2: 'LV', yl: 70, yl2: 75, ret: 12 });
+  ok('a punt with a return splits', punt.carrying);
+  ok('…and its halves DO overlap — the runback retraces the flight',
+    punt.overlaps, punt);
+  const ko = run({ ty: 'Kickoff', tm: 'HOU', tm2: 'LV', yl: 65, yl2: 70, ret: 25 });
+  ok('a returned kickoff overlaps too', ko.overlaps, ko);
+}
+
+// ── PLAYS THAT NEVER SPLIT ─────────────────────────────────────────────────
+{
+  ok('a plain rush is one stroke', !run({ ty: 'Rush', tm: 'HOU', yl: 70, yl2: 62 }).carrying);
+  ok('a sack is one stroke', !run({ ty: 'Sack', tm: 'HOU', yl: 70, yl2: 77 }).carrying);
+  ok('an incompletion is one stroke — nothing was carried',
+    !run({ ty: 'Pass Incompletion', tm: 'HOU', yl: 70, yl2: 70 }).carrying);
+  ok('a catch with no yac does not split',
+    !run({ ty: 'Pass Reception', tm: 'HOU', yl: 75, yl2: 45 }).carrying);
+  ok('a return of zero does not draw a zero-length carry',
+    !run({ ty: 'Punt', tm: 'HOU', tm2: 'LV', yl: 70, yl2: 75, ret: 0 }).carrying);
+  ok('nothing at all is not a crash', !playPath(null, 0, 0, xOf).carrying);
+}
+
+// ── THE CLAMPS ARE REAL, NOT DECORATION ────────────────────────────────────
+{
+  const deep = run({ ty: 'Kickoff', tm: 'HOU', tm2: 'LV', yl: 65, yl2: 98, ret: 30 });
+  ok('a kick fielded in the end zone still yields a finite split',
+    Number.isFinite(deep.catchX), deep);
+  const silly = run({ ty: 'Pass Reception', tm: 'HOU', yl: 75, yl2: 45, yac: 900 });
+  ok('an absurd yac is clamped rather than drawn off the field',
+    silly.catchX <= xOf(100, 'HOU') + 0.01 && silly.catchX >= FX - 0.01, silly);
+}
+
+if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
+console.log('\nALL PLAY-PATH ASSERTIONS PASSED');
