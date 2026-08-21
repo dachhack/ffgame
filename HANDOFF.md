@@ -1,35 +1,136 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-17 · Build `v0.263.0`_
+_Last updated: 2026-08-21 · Build `v0.337.0` · migrations through `0212`_
 
-> Two later versions extend the sections below:
->
-> **v0.262.0 (0184)**: dynasty at creation + the 🏰 badge —
-> `league_is_dynasty()` is the one badge predicate, carried by `my_teams` +
-> `keeper_state`.
->
-> **v0.263.0 (0185) — read this one before touching dynasty**: the
-> CONTINUITY AXIS. REDRAFT / ★ KEEPER / 🏰 DYNASTY is ONE selection
-> (`set_league_continuity`, `settings_json.continuity`, derived for older
-> leagues by `league_continuity()`), living in 🎮 MODE & SEASON and on both
-> create forms (`create_native_league(p_continuity, p_continuity_n)` — the
-> 0184 p_dynasty signature is GONE). Dynasty deals pick assets for the NEXT
-> THREE SEASONS (rollover carries every future season's assets, trades
-> intact, and re-provisions to keep the horizon at three); trades take a
-> per-element pick season (`_clean_trade_picks` v2; omitted = next season).
-> Keeper/redraft switches delete untraded futures and refuse while any is
-> traded. And the SUPER BOWL GATE: `_season_over` (Feb 15 of season+1)
-> gates `rollover_league` — commissioners see "opens after the Super Bowl"
-> until then, ADMINS BYPASS for testing, `keeper_state` carries
-> season_over/admin/continuity/rookie_rounds. The 🔁 NEXT SEASON panels are
-> now read-only summaries + declarations + the pick map + the gated roll.
-> Probe fixtures that roll over live in PAST seasons (2024) because of the
-> gate — keep doing that. Also: the dynasty-suite flake was dy4a's literal
-> 'p01' colliding with roster 2's random draft — fixed with a
-> guaranteed-distinct slug; if a suite flakes ~1-in-4, suspect a fixture
-> literal colliding with the random draft order first.
+> **Read `docs/next-session-prompt.md` first** — it is the current, complete
+> kickoff: hosts, discipline, the battery, the APK ritual, this environment's
+> limits, the bug classes, and what to pick up. This file is the long tail
+> behind it, newest section first. Everything below the v0.337.0 section dates
+> from v0.263.0 and earlier; its design decisions still hold, but its "NEXT
+> SESSION" list does not — use the one in the kickoff prompt.
 
-## NEXT SESSION — read this first
+## Where this arc left off (v0.264.0 → v0.337.0)
+
+Seventy-odd versions across roughly two weeks, driven almost entirely by the
+founder's screenshots. `git log --oneline --first-parent` is the changelog and
+reads well; `STATUS.md` carries the full reasoning for v0.322.1 onward. What is
+worth carrying forward, rather than re-derived:
+
+### The season's shape
+
+The engine and league infrastructure are launch-ready. The work in this arc was
+almost all **presentation, onboarding and the last mile of correctness** — the
+things a new player hits in their first ten minutes. Projections now cover
+every position including kickers, defences, head coaches and punters; the game
+log scores by the league's own rules; the matchup board walks the season; golf
+mode, taxi squads, IR and scoped bonuses all landed. First lock is **Sep 9**.
+
+### The metric mystery, and what it taught
+
+Worth reading in full in `STATUS.md` (v0.330.0 → v0.337.0), because it is the
+template for a whole class of bug and it took three versions to find:
+
+The founder asked "how did Montgomery get no metric?" I reasoned from the code
+to a *data* cause and was confidently wrong. A diagnostic (0211's
+`admin_metricless_picks`, surfaced as an admin panel button — the right move
+with no live DB credentials here) proved the row was fine. Then the founder
+sent two screenshots of the SAME pick, on web and app, disagreeing: web said
+"Rush Yards", the app said nothing. The bug was the opposite of my guess —
+`lookup()` in `engine/matchup.ts` fabricated `pickMetric(found, 0)` for a pick
+whose metric was empty, so the **web was drawing a metric the resolver would
+never score**. The fix was to delete the default (`metricId: pk.metricId ?? ''`)
+and let the empty seat read as empty, loudly (`NO_METRIC_LABEL`).
+
+Three lessons, in order of how much time they save:
+
+1. **Reproduce before diagnosing.** Two clients disagreeing is a client bug,
+   full stop; one query would have said so on day one.
+2. **A screen must show the row the engine reads.** Anything a client
+   *computes* for display is a second rulebook waiting to diverge.
+3. **`''` is not caught by `??`.** It is the engine's canonical no-metric
+   value and it sails past every null-coalescing default. `isMetricSet()` in
+   `data/metrics.ts` is the one predicate; use it.
+
+Then the founder's actual feature ask closed the loop: "we should auto pick a
+metric if there is none just like we auto slot players." That became
+`metricGapFills` in `data/aiLineup.ts`, called from `lockDueWindows` in
+`server/src/lock.js` **before** the lock update — deliberately server-side,
+because a client-side default is exactly what had just been removed. Rules that
+earned assertions: an empty string is a gap; a row with no PLAYER is not a
+metric gap (that's auto-slotting's job); an unresolvable position is skipped,
+not guessed.
+
+### The field visual
+
+`packages/core/src/engine/playPath.ts` is new and holds the geometry: where the
+catch is (`playPath`), how high the arc goes (`arcControlY`), and which side of
+the field the play draws on (`playSide` / `playSideDy`, read off the play text).
+The two hosts render it separately — `src/app/FieldView.tsx` and
+`apps/mobile/src/ui/FieldView.tsx` — so **the mobile `pathLen()` must be kept in
+step with the path** or the animation desyncs.
+
+Two corrections live in that history. v0.332.0 fixed a double line (a runback
+drawn over its own kick) by giving every carry its own lane; the founder came
+straight back with "it should just be arch then the yards after the arch," and
+v0.333.0 gated the lane on `overlaps`. Gate a new behavior on the condition
+that motivated it.
+
+Also: the field is the GAME's, not the player's (v0.331.0) — it renders
+whether or not your player is in the play — and a backup's empty half now says
+"— BACKUP · NOT MATCHED UP —" instead of claiming the opponent is absent
+(`data/slotLabels.ts`). The BOX SCORE chip opens `engine/boxScore.ts`, every
+player in that game by team with live stat lines.
+
+### Getting people in the door
+
+`v0.323.2` is the one to remember: **every invite link went to the demo board.**
+An onboarding path that silently lands somewhere plausible is worse than one
+that errors. The arc that followed added: which league you're joining and a
+crest that isn't a hole (0207), a classic league no longer sold as a drip
+league, a league-full waiting room, and a commissioner's switch to close it
+(`league.waitlist_open`, 0208). **Nothing notifies anyone when a person lands
+in that waiting room** — offered, not built.
+
+Chat grew up alongside it (0210): reactions in a fixed order
+(`data/chatReactions.ts`), `@all` (`data/mentions.ts`), a red dot for unread,
+and a composer that the Android keyboard no longer covers — an Android keyboard
+shrinks the *visual viewport* with `scale === 1` and zero offsets, which is how
+you detect it.
+
+### Layout, measured not guessed
+
+`ClassicBoard.tsx` was blowing past the right edge of a phone because the page
+container was `display: 'grid'` with no template: a bare `1fr` track is
+`minmax(auto, 1fr)`, `auto` is min-content, and one wide child pushes the whole
+page sideways. `minmax(0, 1fr)` everywhere fixed it. The narrow layout
+(`NARROW_MAX = 480`, `SPOT_COL_NARROW = 72`) drives face size, gaps and padding
+off `useIsMobile`.
+
+Every one of these was measured in headless Chromium at
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome` — card width 1062 → 720,
+name box 35 → 100px, composer bottom 599 → 495, punt overlap 41.8px. **Do this
+first.** A screenshot says something is wrong; the browser says by how much.
+
+### Probes
+
+`check:parity` is now **718 assertions across 16 scripts**;
+`run-scratch-probes.sh` runs **59 suites**, all wired. The trap that cost real
+time: **all suites share one database**, so a global assertion ("exactly 1
+metricless pick") passes alone and fails in the suite. Scope to your fixture,
+or assert a delta.
+
+---
+
+## NEXT SESSION — read this first (SUPERSEDED)
+
+> This list is from v0.263.0. The current one is in
+> `docs/next-session-prompt.md`. Item 1 (live-fire the dynasty loop) is
+> still open and still needs the founder; items 4 and 5 are still open;
+> item 3 is now the Sep 9 projection refresh. The dynasty design notes
+> that follow — the CONTINUITY AXIS (`set_league_continuity`), the
+> Super Bowl gate on `rollover_league`, and season-tagged pick assets —
+> are current: read them before touching dynasty.
+
 
 The ENTIRE dynasty arc shipped this session: v0.260.0 (rollover + keepers +
 the rookie draft, migration 0182) and v0.261.0 (tradeable pick assets,

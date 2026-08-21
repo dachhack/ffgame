@@ -5,118 +5,174 @@ _Paste this into a fresh session to continue Drip Fantasy (dripfantasy.com)._
 ---
 
 You're continuing **Drip Fantasy** — real-time H2H fantasy football, live at
-**https://www.dripfantasy.com**, mid-transition of playtesters from web to the
-Android app during the 2026 preseason. The founder (super admin:
-mlporritt@gmail.com) drives; ship small, verified increments.
+**https://www.dripfantasy.com** with a sideloaded Android app. The founder
+(super admin: mlporritt@gmail.com) drives, usually from a phone, usually with a
+screenshot. Ship small, verified increments.
 
-**State as of this handoff: `v0.166.1`, everything merged and deployed.**
-Migrations through **0132** applied to production; web (Pages), worker (Fly) and
-functions deploy from `main` automatically; latest sideloaded APK is
-**versionCode 16601**.
+**State at handoff: `v0.337.0`, everything merged and deployed.** Migrations
+through **0212** applied; latest APK is **versionCode 33700**. Work branch:
+`claude/dynasty-season-rollover-dt4xbk` (reset onto merged `main`).
+
+**The forcing function: first lock is Sep 9, 2026.** Everything competes with
+that date.
 
 ## The three hosts, one core
 
 - `packages/core/` — `@drip/core`: shared data layer (`data/liveApi.ts` is the
-  RPC surface), analytics, version. Web and app both import it.
-- Web: `src/` (Vite + React, GitHub Pages). Signed-in shell:
-  `src/screens/LiveOnboard.tsx`; admin console `src/screens/AdminPage.tsx`.
+  RPC surface), the scoring engine (`engine/`), analytics, version. Both
+  clients import it. **If a rule can be stated without a screen, it belongs
+  here** — that's what makes it testable without a database.
+- Web: `src/` (Vite + React, GitHub Pages). Signed-in shell
+  `src/screens/LiveOnboard.tsx`; admin console `src/screens/AdminPage.tsx`;
+  the board `src/screens/ClassicBoard.tsx`; the field `src/app/FieldView.tsx`.
 - App: `apps/mobile/` (Expo/RN, sideloaded playtest APKs). Routing is a view
-  union in `App.tsx` — tabs per open native league: `▦ MATCHUP / ⛏ DRAFT /
-  ⇄ MY TEAM / ⚑ COMMISH` (`'picks' | 'draft' | 'team' | 'commishtools'`).
-  Screens: `Leagues` (ALL / ⚑ COMMISH filter; every commissioned league listed,
-  Sleeper ones included), `LivePicks`, `Draft`, `Team` (own team only),
-  `CommishTools` (seats/co-managers/coin/players/settings; platform leagues get
-  the league-agnostic subset), `Admin`, `Recruit`. Shared UI in
-  `apps/mobile/src/ui/` (`CommishSettings`, `LeagueExtras`, `TradeCenter`,
-  `AvatarGrid`, `prims`).
-- Worker: `server/` (Fly). `src/index.js` ticks per active week context
-  (regular + preseason at +100); `sweepNative` advances drafts, clears waivers,
-  and auto-grants the weekly coin allowance.
+  union in `App.tsx`; shared UI in `apps/mobile/src/ui/`.
+- Worker: `server/` (Fly). `src/index.js` ticks per active week context;
+  `src/lock.js` seals windows; `sweepNative` advances drafts and waivers.
+
+Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
+`deploy-functions.yml`, `migrate.yml` applies only NEW migration files).
 
 ## Non-negotiable discipline
 
-1. **Migrations**: numbered files in `supabase/migrations/` (next: **0133**).
-   `migrate.yml` applies only NEW files on merge to `main`. Before ANY merge,
-   prove the migration with **`./scripts/db/run-scratch-probes.sh`** — spins a
-   throwaway Postgres 16, applies all migrations, runs SEVEN probe suites (all
-   must pass). Add probes for anything you add. Traps that have bitten:
-   - RLS policy subqueries run AS THE CALLER → checks against no-policy tables
-     must live in SECURITY DEFINER helpers (see `co_manages_pick`, 0125).
-   - Probes must run pick/RLS sections under `set local role authenticated` —
-     superuser bypasses RLS and proves nothing.
-   - Worker-only functions: `revoke … from public; grant … to service_role`
-     (see `adjust_wallet`, `auto_weekly_budget`).
-2. **Versioning**: bump `packages/core/src/version.ts` every deployable change
-   (patch per deploy, minor per feature). APK `versionCode` = version × 100
-   pattern: v0.166.1 → 16601.
-3. **Merge flow**: work on your `claude/…` branch → PR → squash-merge to
-   `main` → `git fetch origin main && git checkout -B <branch> origin/main &&
-   git push -u origin <branch> --force-with-lease=<branch>:<old-sha>`.
-4. **APK ritual** (arm64 only; the override doesn't survive `--clean` unless
-   env is set at BOTH steps):
+1. **Migrations**: numbered files in `supabase/migrations/` (next: **0213**).
+   Before ANY merge, prove it with **`./scripts/db/run-scratch-probes.sh`** —
+   spins a throwaway Postgres 16, applies every migration, runs **59 probe
+   suites**. Every migration gets probes, and they must be **wired into the
+   runner**, not just written. Traps that have bitten, more than once:
+   - **All suites share ONE database.** A global assertion ("exactly 1
+     metricless pick") will pass alone and fail in the suite. Scope every
+     assertion to your own fixture league, or assert a delta.
+   - `auth.uid()` is shimmed from the **`app.uid`** setting, not
+     `request.jwt.claims`. `app_user.id` FKs to `auth.users`.
+   - Run pick/RLS sections under `set local role authenticated` — superuser
+     bypasses RLS and proves nothing.
+   - RLS policy subqueries run AS THE CALLER → cross-table checks live in
+     SECURITY DEFINER helpers.
+   - When you copy a SQL function body to extend it, copy it from the **LIVE**
+     migration and re-read it. Do not reconstruct it from memory.
+   - `is_admin()` checks the `app_admin` table by email. There is no column.
+2. **Versioning**: bump `packages/core/src/version.ts` on every deployable
+   change (patch per deploy, minor per feature). Docs-only commits don't bump.
+   APK `versionCode` = version × 100: v0.337.0 → 33700.
+3. **The battery, before every merge**:
    ```
-   cd apps/mobile && export ANDROID_HOME=/opt/android-sdk \
-     ANDROID_VERSION_CODE=<code> \
-     VITE_POSTHOG_KEY=phc_mSSEUxhSRiRPaVmpPvFAWNUaZHf2x6yNznHvocSA7tSS
-   npx expo prebuild --platform android --clean
-   cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+   npx tsc --noEmit                          # web
+   (cd apps/mobile && npx tsc --noEmit)      # app
+   npm run check:parity                      # 718 assertions, 16 scripts
+   npx vite build
+   ./scripts/db/run-scratch-probes.sh        # 59 suites
+   (cd server && npm run --silent smoke)
    ```
-   Verify before sending, every time: apksigner cert `CN=Drip Fantasy
-   Playtest`; `versionCode` in `assets/app.config`; PostHog key in
-   `assets/app.config`; new version string present and old one ABSENT in the
-   Hermes bundle — check **both ASCII and UTF-16-LE** encodings.
-   **THE TREE IS FROZEN WHILE GRADLE RUNS.** Metro bundles from the working
-   tree AS IT IS during the build, not from the commit you launched at —
-   editing mid-build produced two hybrid APKs on 2026-08-14 (caught only by
-   the version-string check). Background the build if you like, but commit
-   nothing, bump nothing, and edit nothing until it exits. Also: this remote
-   env has NO Android SDK baked in — install JDK 17 + cmdline-tools + accept
-   licenses first (see HANDOFF 2026-08-13), or bake them into a SessionStart
-   hook.
+4. **Merge flow**: work on the `claude/…` branch → PR → squash-merge to `main`
+   → `git fetch origin main && git checkout -B <branch> origin/main &&
+   git push -u origin <branch> --force-with-lease`.
+5. **APK ritual** (arm64 only), when `apps/mobile` or `packages/core` changed:
+   ```
+   cd apps/mobile
+   export ANDROID_HOME=/opt/android-sdk ANDROID_VERSION_CODE=<code>
+   npx expo prebuild --platform android --no-install
+   printf 'sdk.dir=/opt/android-sdk\n' > android/local.properties
+   (cd android && ANDROID_HOME=/opt/android-sdk \
+      ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a)
+   ```
+   Verify with **build-tools 35.0.0**'s `apksigner` (36.0.0 is also installed
+   and is not the one to use). Certificate digest must be
+   `b3fb017fcaaede1fdba4f44ffdad6db821987302321e60974f814f22436649b1`; check
+   `versionCode` in `assets/app.config`; confirm the new version string is in
+   the Hermes bundle and the old one is ABSENT — **both ASCII and UTF-16-LE**.
+   **THE TREE IS FROZEN WHILE GRADLE RUNS** — Metro bundles the working tree as
+   it is, not the commit you launched from. Background the build if you like,
+   but commit nothing and edit nothing until it exits. Send with
+   `SendUserFile`, then `rm` the staged copy and confirm `git status` is clean.
+
+## This environment
+
+- **No live database credentials.** `.env.local` is gitignored and absent.
+  Production cannot be queried from here — that's what the scratch probes and
+  the admin panels are for. To read production, hand the founder a SQL file and
+  use **Actions → Run a database query** (`dbquery.yml`), or build the read as
+  an admin RPC + panel (see `admin_metricless_picks`, 0211).
+- **Headless Chromium is at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`
+  and it has been decisive over and over.** Every CSS/SVG bug this session was
+  solved by *measuring* in it — card width, name-box px, composer position,
+  arc apex, path overlap — not by reasoning from a screenshot. Measure before
+  and after. Do this first, not last.
+- Outbound HTTPS goes through an agent proxy. Never disable TLS verification or
+  unset `HTTPS_PROXY`; see `/root/.ccr/README.md`.
+- GitHub MCP `actions_list` responses overflow context — save to a file and
+  parse with python. GitHub 502s on merge are common: verify with
+  `pull_request_read` before retrying, because the merge usually landed.
+
+## Bug classes worth recognizing on sight
+
+- **Two rulebooks.** The client computes a value the server will never score.
+  Monty's "missing metric" was this: the web fabricated `pickMetric(found, 0)`
+  in `lookup()` and displayed a metric the resolver ignored (v0.336.0). If a
+  screen shows something, it must be the row the engine reads.
+- **`??` does not catch an empty string.** `''` is the engine's canonical
+  no-metric value; `metricId ?? default` sails straight past it. Same family:
+  `Number(null) === 0` read a null seat count as "no seats".
+- **`scorePlay` is a chain of `if (metricId === '…')` ending in `return 0`.**
+  A metric that isn't in the chain scores exactly zero, silently.
+- **CSS grid blowout**: bare `1fr` means `minmax(auto, 1fr)`, and `auto` is
+  min-content. A wide child pushes the whole page off-screen. Use
+  `minmax(0, 1fr)` on every track. `maxWidth` caps the box, not the track.
+- **Over-applying a fix.** v0.332.0 gave every carry its own lane; the founder
+  came back with "it should just be arch then the yards after the arch." Gate
+  the new behavior on the condition that actually motivated it.
+- **Source-reading assertions** (a test that greps a migration or a TS file)
+  guard duplicated lists and removed defaults well — strip `//` comment lines
+  before matching, or the assertion catches the comment explaining itself.
 
 ## Load-bearing design decisions (don't re-derive)
 
-- **Coin**: `team_wallet` (league, roster) + `coin_ledger`; invariant
-  `sum(delta) == coins` — never UPDATE balances, always ledger via
-  `adjust_wallet`. Levers: per-seat `commish_seed_coin`, league-wide
-  `commish_bulk_coin` / `commish_clear_coin` (0131), weekly allowance
-  `commish_set_weekly_budget` + idempotent per-week grant. **The allowance
-  auto-grants**: worker calls `auto_weekly_budget(week)` each tick (0132), same
-  idem_key as the manual button → one payment per (league, week, roster).
-- **Analytics identity**: `identify()` takes ONLY the Supabase user id (both
-  hosts), email attached as a trait; all other handles (Sleeper username) go
-  through `setTraits()` — a second identified id would permanently split the
-  person in PostHog. Persons split before 2026-08-13 stay split.
-- **Co-managers (0125)**: co-managers write the OWNER's `sealed_pick` rows;
-  identity threads as `pick_user_id` through `my_teams()` → Enrollment →
-  `OpenLeague` → LivePicks. Power-up inventories stay personal; wallets are
-  roster-keyed.
-- **Illegal-roster lockout (0128)**: `enforce_legal_roster` on `sealed_pick` +
-  `applied_state`. **Admins are exempt** — to see the lock fire, test with a
-  non-admin account.
-- **Single chokepoints**: `fa_window_open()` gates all FA adds;
-  the `applied_state` trigger covers every power-up path; `my_teams()` feeds
-  both clients' league lists. Extend these, don't fork them.
-- Self-driving pattern: idempotent server fn + client-load call + worker sweep
-  as safety net (`process_waivers` is the template).
+- **`draft.rounds` means ROSTER SIZE.** Keepers split "picks a team makes" from
+  "roster cap" via `draft.keeper_slots`; every cap consumer is untouched.
+- **Coin**: `team_wallet` + `coin_ledger`, invariant `sum(delta) == coins`.
+  Never UPDATE a balance; always ledger through `adjust_wallet`.
+- **Continuity is ONE axis**: REDRAFT / ★ KEEPER / 🏰 DYNASTY
+  (`set_league_continuity`). Rollover is gated by `_season_over` (Feb 15 of
+  season+1); admins bypass for testing, so dynasty probe fixtures live in PAST
+  seasons (2024). Dynasty pick assets are season-tagged; `rollover_league`
+  carries them and re-provisions to keep a three-season horizon.
+- **Analytics identity**: `identify()` takes ONLY the Supabase user id; every
+  other handle goes through `setTraits()`.
+- **Single chokepoints**: `fa_window_open()` gates FA adds; the `applied_state`
+  trigger covers every power-up path; `my_teams()` feeds both clients' league
+  lists; `lockDueWindows` is where a window seals. Extend these, don't fork.
+- **Auto-courtesies happen at lock, on the server**: auto-slot fields your best
+  eligible player for an empty spot, and (v0.337.0) `metricGapFills` fills a
+  missing metric — both inside `lockDueWindows`, before the lock update, so no
+  window is ever sealed incomplete.
 
-## What shipped in the last session (2026-08-13, v0.165.0 → v0.166.1)
+## What to pick up
 
-⚑ COMMISH tab (commissioner tools out of MY TEAM; gear-menu Commish screen
-deleted); PostHog identity fix; every commissioned league in Your Leagues with
-ALL/⚑ COMMISH filter (Sleeper leagues get MATCHUP + COMMISH tabs, seat
-management works there); per-seat coin balances on the 💰 chips (0130); bulk
-grant/dock + zero-all + weekly allowance card (0131); auto weekly allowance
-(0132). Another session shipped 0129 (admin fixes a lead's mistyped email).
+1. **Live-fire the dynasty loop** on a real league before the season relies on
+   it: keeper count + rookie rounds, declare keepers, trade a pick, roll, open
+   the new league on both hosts, run the draft, confirm the traded slot lands
+   on the acquirer's clock. The probes cover the SQL end to end; **no
+   production league has ever rolled over.** Needs the founder.
+2. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** — `PROJ_AS_OF` is
+   2026-07-28. Auto-slot, seat agents, previews and keeper defaults all rank
+   by it.
+3. **The live web drip surface never installs pool `slugMeta` overrides** —
+   audit `Matchup.tsx` / `cardTable` consumers and install
+   `setSlugMetaOverrides(pool)` where the live league's pool loads.
+4. **Audit server-side `injuryFor` callers** — with no live install and no
+   season set it serves the BAKED 2025 report.
+5. **Nobody is told when someone lands in a league's waiting room.** Offered,
+   not built (v0.326.0 added the commissioner's "League Full" close).
+6. **Reply to StatHead** about their "unknown fields are named" message not
+   firing in CSV mode (`docs/mcp-requests.md`).
+7. Dynasty polish when it earns a session: multi-year futures, draft-day pick
+   trades, resizing a ROLLED league's pending rookie draft.
 
-## Open items / watchouts
+## How the founder works
 
-- **Real-device passes never done** for: co-manager loop (LEAVE → MANAGE →
-  ＋ME), draft-room mock, trades end-to-end, lockout banner (needs non-admin),
-  the new coin card, Sleeper-league COMMISH tab.
-- **Preseason live-fire test** pending: watch a real evening window go
-  scheduled → live → sealed picks → scores (⚙ → Admin health `LAST PLAY IN`).
-- Playtesters are being moved onto the app mid-season — expect quick-turn asks;
-  the cadence is: implement → probe → merge → verified APK per request.
-- GitHub MCP `actions_list` responses overflow context — parse the saved JSON
-  file with python (see any recent session transcript for the idiom).
+Screenshots, one line of context, high trust, fast cadence. They are usually
+right about *what* is wrong and not always about *why* — reproduce before
+diagnosing. When a fix lands wrong they say so plainly and immediately; take
+that as the signal to narrow the fix, not to defend it. Every change ships the
+same day it's asked for: version bump, STATUS entry, battery, PR, squash-merge,
+branch reset, and a verified APK when the app changed.
