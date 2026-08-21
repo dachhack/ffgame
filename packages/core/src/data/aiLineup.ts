@@ -384,3 +384,47 @@ function gridFill(tagged: Tagged[]): { picks: AiPick[]; bench: Benched[] } {
   }
   return { picks, bench: leftover.map((p) => ({ win: marquee.id, p })) };
 }
+
+// ── AUTO-PICK A METRIC FOR A PICK THAT HAS NONE (v0.337.0) ────────────────
+//
+// Founder: "we should auto pick a metric if there is none just like we auto
+// slot players."
+//
+// The worker calls this at LOCK, in the same breath as sealing the window, so
+// a pick that kept its player but lost its metric — 0024 (a locked-metric
+// unlock disarmed), 0026 (a refund), 0062 (a combodrip change) all null it on
+// purpose so the manager re-picks — never seals as a seat that scores exactly
+// zero all window.
+//
+// THE DECISION LIVES HERE, not in the worker, because "which rows are gaps and
+// which metric does each get" is the part that can be WRONG, and it is testable
+// without a database. The worker keeps the reading and writing.
+//
+// `posOf` is injected rather than imported so this stays a pure function: the
+// caller already knows how it resolves a slug (the worker uses slugMeta).
+
+export interface MetricGapRow { id: string | number; player_slug?: string | null; metric_id?: string | null }
+
+/** Rows needing a metric, paired with the one to write.
+ *
+ *  A row with no PLAYER is not a gap — it is an empty spot, which is
+ *  auto-slotting's job and not this one's. A row whose position cannot be
+ *  resolved is skipped rather than guessed: writing the wrong metric is worse
+ *  than writing none, because none is at least visibly none. */
+export function metricGapFills<T extends MetricGapRow>(
+  rows: readonly T[] | null | undefined,
+  posOf: (slug: string) => string | null | undefined,
+): { id: T['id']; metric: string }[] {
+  const out: { id: T['id']; metric: string }[] = [];
+  for (const r of rows ?? []) {
+    if (!r || !r.player_slug) continue;
+    // Empty string is as dead as null and much harder to see — see isMetricSet.
+    if (typeof r.metric_id === 'string' && r.metric_id.trim() !== '') continue;
+    const pos = posOf(r.player_slug);
+    if (!pos) continue;
+    const metric = DEFAULT_AI_METRIC[pos as Pos];
+    if (!metric) continue;
+    out.push({ id: r.id, metric });
+  }
+  return out;
+}
