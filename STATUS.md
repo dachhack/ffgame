@@ -18,6 +18,60 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.3 — the box score reads like a box score
+
+Founder: "sort the box score by offense vs defense, then by position then by
+yards (highest at the top)."
+
+It was one flat involvement ranking (`weigh`: yards + TDs + defensive stats),
+so a 6-tackle linebacker outranked a 46-yard receiver and every position was
+interleaved. You could not scan it for "how did the backs do", which is most of
+what a box score is for.
+
+Now side → position → yards → weight → slug. Two judgement calls worth knowing:
+
+  • YARDS is the full total, passing at face value — not `weigh`'s 0.4 passing
+    discount. That discount exists to compare a QB against a RB; inside a group
+    of QBs it only distorts the answer, and the groups are the point now.
+  • WEIGHT survives as the tiebreak and earns its place: every defender has
+    zero yards, so within LB or DB it does the entire ordering — tackles, sacks
+    and picks, the only sensible reading of "highest at the top" for someone
+    who gains none.
+
+K, P and RET sit on the OFFENSIVE half, where a box-score reader looks for
+them. Not reusing `matchupBoard`'s POS_ORDER, the closest existing list: it
+ranks FB after DB, so it encodes no offense/defense split at all.
+
+New `check:boxorder` suite (11 assertions) on the now-exported comparator —
+`gameBoxScore` reads a week's plays from module globals, so asserting through
+it would pin the plumbing rather than the judgement. The file's own comment had
+claimed a test asserted this ordering; none existed until now.
+
+### v0.338.2 — ALL GAMES means all games
+
+Founder: "it looks like the games in the field view are just the ones with
+match up players in them? Should be all games."
+
+Correct, and the code said so out loud — `FieldView.tsx` described itself as
+"every NFL game WITH A SLOTTED PLAYER", and `Matchup.tsx` built its entries as
+"one entry per slotted player". The board's map was keyed off those entries, so
+a game nobody in your matchup was playing in did not exist as far as that
+screen was concerned. On a two-game preseason Friday that reads as a broken
+feed rather than a filter, which is how it was reported.
+
+New `allGameFeeds(week)` in gameFeed.ts — the feed could only ever answer
+"which game is this player in", and this screen asks the opposite question. The
+board seeds from the whole slate first, then overlays entries for tinting and
+clock.
+
+Two things preserved deliberately. A game an entry landed on keeps its SLOT
+clock, so the field still mirrors exactly what the slot rows show — the seeded
+Infinity must never survive there, and an assertion pins it. And games your
+matchup is in sort to the front, so a full 16-game slate doesn't bury the two
+you care about; the rest keep the feed's schedule order.
+
+New `check:fieldboard` suite (18 assertions), wired into `check:parity`.
+
 ### v0.338.1 — agent seats check the wire hourly, and stop re-asking
 
 Founder, after asking when agents actually act: "Let's also just make

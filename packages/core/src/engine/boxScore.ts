@@ -33,10 +33,38 @@ export interface BoxRow {
    *  cards phrase the same numbers the same way. */
   stat: string;
   line: StatLine;
-  /** What the sort ran on — exposed so a caller can show it if it ever wants
-   *  to, and so the test can assert the ordering rather than infer it. */
+  /** Involvement score. No longer the primary sort (v0.338.3) — it is the
+   *  TIEBREAK, and the one that orders defenders, for whom "yards" is not a
+   *  measure of anything. Exposed so the assertions can pin the ordering
+   *  rather than infer it. */
   weight: number;
+  /** Total yards — scrimmage plus return, passing at FULL value. The sort key
+   *  within a position group. Deliberately not `weigh`'s discounted passing:
+   *  that discount exists to compare a QB against a RB, and inside a group of
+   *  QBs it only distorts the answer. */
+  yards: number;
+  /** Which half of the box score this row belongs to. */
+  side: 'off' | 'def';
 }
+
+/** The defensive positions. Everything else — including K, P and the returner
+ *  slot — sits on the offensive half, which is where a box score reader looks
+ *  for them.
+ *
+ *  NOT `matchupBoard`'s POS_ORDER, which is the closest existing list and
+ *  cannot serve: it ranks FB after DB, so it does not encode an offense /
+ *  defense split at all. Ordering a lineup and ordering a box score are
+ *  different questions and this is the one place that needs the split. */
+const DEF_POS = new Set<string>(['DEF', 'DL', 'LB', 'DB']);
+
+/** Reading order within each half. Conventional football order on offense;
+ *  the team unit first on defense, then front to back. */
+const POS_RANK: Record<string, number> = {
+  QB: 0, RB: 1, FB: 2, WR: 3, TE: 4, K: 5, P: 6, RET: 7, HC: 8,
+  DEF: 0, DL: 1, LB: 2, DB: 3,
+};
+
+const totalYards = (s: StatLine): number => s.passYds + s.rushYds + s.recYds + s.retYds;
 
 export interface GameBox {
   home: BoxRow[];
@@ -80,9 +108,32 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     const pos = (meta.pos ?? 'WR') as Pos;
     (team === H ? out.home : out.away).push({
       slug, pos, team, line, weight: weigh(line), stat: fmtStat(pos, line),
+      yards: totalYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',
     });
   }
-  const bySlug = (a: BoxRow, b: BoxRow) => (b.weight - a.weight) || a.slug.localeCompare(b.slug);
-  out.home.sort(bySlug); out.away.sort(bySlug);
+  out.home.sort(boxRowOrder); out.away.sort(boxRowOrder);
   return out;
 }
+
+/** OFFENSE, THEN POSITION, THEN YARDS (v0.338.3, founder's call).
+ *
+ *  It used to be one flat involvement ranking, which put a 6-tackle linebacker
+ *  above a 46-yard receiver and made the list impossible to scan for "how did
+ *  the backs do" — the question a box score exists to answer.
+ *
+ *  `weight` survives as the TIEBREAK, and it is doing real work rather than
+ *  padding the chain: every defender has 0 yards, so within LB or DB it is
+ *  `weight` that does the whole ordering — tackles, sacks and picks, which is
+ *  the only sensible reading of "highest at the top" for a player who gains
+ *  none. The slug is last so the order is total and stable.
+ *
+ *  Exported so it can be asserted on its own: `gameBoxScore` reads a week's
+ *  play table through module globals, so pinning the order through it would
+ *  mean installing a PBP week to test a comparator. The rule is the part with
+ *  judgement in it, and this is the part to assert. */
+export const boxRowOrder = (a: BoxRow, b: BoxRow): number =>
+    (a.side === b.side ? 0 : a.side === 'off' ? -1 : 1)
+    || ((POS_RANK[a.pos] ?? 99) - (POS_RANK[b.pos] ?? 99))
+    || (b.yards - a.yards)
+    || (b.weight - a.weight)
+    || a.slug.localeCompare(b.slug);
