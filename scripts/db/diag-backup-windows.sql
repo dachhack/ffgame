@@ -1,8 +1,14 @@
 -- READ-ONLY diagnostic: why did a seat play nobody in a window?
 -- Run via the "Run a database query" workflow WITHOUT allow_writes.
 --
--- Set the league below, and the week floor. 100 covers the PRESEASON board
--- weeks (PRE 1..4 are 101..104); use 0 for a regular season.
+-- Runs across EVERY league by default — `league_name` is a LIKE pattern and '%'
+-- matches all of them. That is deliberate: narrowing it means editing and
+-- committing this file before you can ask the question, which is the wrong
+-- shape for "why is this window empty" at 7am. Narrow it only if the output is
+-- noisy: '%Dytesty%' and the like work.
+--
+-- `week_floor` 100 covers the PRESEASON board weeks (PRE 1..4 are 101..104);
+-- use 0 for a regular season.
 --
 -- Answers, per seat and window: who controls the seat, whether it has an
 -- account at all, how many picks it fielded, and whether the auto-fill had any
@@ -31,7 +37,7 @@
 -- a real bug: the fill could have run and didn't. Check lineup_policy first —
 -- 'empty' is the commissioner opting out, and then zero is correct.
 
-\set league_name 'Turf Warriors'
+\set league_name '%'
 \set week_floor 100
 
 -- The league's fill policy and mode. 'empty' means missed/partial seats are
@@ -41,11 +47,11 @@ select name,
        lineup_policy,
        coalesce(settings_json ->> 'game_mode', 'drip') as game_mode,
        (preseason_at is not null) as preseason_toggle_on
-  from league where name = :'league_name';
+  from league where name like :'league_name' order by name;
 
 select l.name league, m.week, m.status, m.id matchup_id
   from matchup m join league l on l.id = m.league_id
-  where l.name = :'league_name' and m.week >= :week_floor order by m.week;
+  where l.name like :'league_name' and m.week >= :week_floor order by m.week;
 
 -- Seats: who controls them, enrollment, per-window pick counts.
 -- Picks are counted under the seat's OWN identity — its account, or its agent
@@ -65,7 +71,7 @@ select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
   left join sealed_pick sp on sp.matchup_id = m.id
     and sp.app_user_id = coalesce(lm.app_user_id, sa.agent_user_id)
     and sp.player_slug is not null
-  where l.name = :'league_name' and m.week >= :week_floor
+  where l.name like :'league_name' and m.week >= :week_floor
   group by l.name, m.week, lm.sleeper_roster_id, lm.team_name, lm.controller,
            lm.enrolled, lm.app_user_id, sa.agent_user_id, sp.game_window
   order by m.week, seat, sp.game_window;
@@ -74,14 +80,15 @@ select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
 -- entry counts. A seat MISSING from these rows entirely has no lineup row at
 -- all for that week, which is not the same as having an empty one — and is the
 -- commonest cause of a silent unopposed window in preseason.
-select sl.week, sl.roster_id seat, jsonb_array_length(sl.starters_json) pool_rows
+select l.name league, sl.week, sl.roster_id seat,
+       jsonb_array_length(sl.starters_json) pool_rows
   from sleeper_lineup sl join league l on l.id = sl.league_id
-  where l.name = :'league_name' and sl.week >= :week_floor
-  order by sl.week, seat;
+  where l.name like :'league_name' and sl.week >= :week_floor
+  order by l.name, sl.week, seat;
 
 -- THE SUMMARY: every seat that fielded NOTHING, with its diagnosis beside it.
 -- This is the one to read first; the queries above are the detail behind it.
-select m.week, lm.sleeper_roster_id seat, lm.team_name,
+select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
        (lm.app_user_id is not null) has_account,
        (sa.agent_user_id is not null) has_agent,
        lm.controller, lm.enrolled,
@@ -106,17 +113,17 @@ select m.week, lm.sleeper_roster_id seat, lm.team_name,
     and sa.roster_id = lm.sleeper_roster_id
   left join sleeper_lineup sl on sl.league_id = m.league_id
     and sl.week = m.week and sl.roster_id = lm.sleeper_roster_id
-  where l.name = :'league_name' and m.week >= :week_floor
+  where l.name like :'league_name' and m.week >= :week_floor
     and not exists (
       select 1 from sealed_pick sp
       where sp.matchup_id = m.id
         and sp.app_user_id = coalesce(lm.app_user_id, sa.agent_user_id)
         and sp.player_slug is not null)
-  order by m.week, seat;
+  order by l.name, m.week, seat;
 
 -- The applied backup assignments on those matchups (0137).
-select m.week, a.app_user_id, a.payload_json->'targeted'->'backups' backups
+select l.name league, m.week, a.app_user_id, a.payload_json->'targeted'->'backups' backups
   from applied_state a join matchup m on m.id = a.matchup_id
   join league l on l.id = m.league_id
-  where l.name = :'league_name' and m.week >= :week_floor
+  where l.name like :'league_name' and m.week >= :week_floor
     and a.payload_json->'targeted' ? 'backups';
