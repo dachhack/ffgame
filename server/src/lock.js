@@ -15,7 +15,8 @@ import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '.
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
-import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS } from '../../packages/core/src/data/aiLineup.ts';
+import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
+import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -486,12 +487,73 @@ export async function lockDueMatchups(now = new Date(), winKicks = null, week = 
  *  any still-unlocked picks whose window has kicked off — the moment a window's
  *  picks become final AND readable by the opponent. Runs every tick; a no-op
  *  when nothing is newly due. Returns count of picks sealed. */
+/** ── AUTO-PICK A METRIC (v0.337.0) ─────────────────────────────────────────
+ *
+ *  Founder: "we should auto pick a metric if there is none just like we auto
+ *  slot players."
+ *
+ *  A pick can lose its metric while KEEPING its player. Three paths null it on
+ *  purpose so the manager re-picks — 0024 (a locked-metric unlock disarmed),
+ *  0026 (a refund), 0062 (a combodrip quantity change) — and each is right on
+ *  its own. What none of them does is make sure the manager comes back before
+ *  kickoff. If they don't, the seal freezes a player who scores EXACTLY ZERO:
+ *  `scorePlay` is a chain of `if (metricId === '…')` ending in `return 0`.
+ *
+ *  So the courtesy auto-slotting already extends to an empty SPOT now extends
+ *  to an empty METRIC, at the same moment and by the same rule: the position's
+ *  honest default from DEFAULT_AI_METRIC — a steady scorer for that spot,
+ *  chosen without seeing the week's box score.
+ *
+ *  ON THE SERVER, DELIBERATELY. v0.336.0 removed a CLIENT-side default that did
+ *  something that looked identical and was not: it drew a metric the resolver
+ *  would never score, so the board promised points that could not arrive. The
+ *  difference is that this one WRITES. What the manager sees after lock is what
+ *  the engine will score, because it is the same row.
+ *
+ *  BEFORE THE LOCK UPDATE, in the same call, so the row seals with its metric
+ *  already on it and no window can ever be sealed metricless — not even for the
+ *  moment between two statements.
+ *
+ *  UNLOCKED ROWS ONLY. A locked row is a sealed decision and stays one; this
+ *  fills a gap on the way in, it does not rewrite history. */
+async function fillMissingMetrics(matchupIds, wins) {
+  if (!matchupIds.length || !wins.length) return 0;
+  const { data: rows, error } = await db().from('sealed_pick')
+    .select('id, player_slug, metric_id')
+    .in('matchup_id', matchupIds).eq('locked', false).in('game_window', wins)
+    .not('player_slug', 'is', null);
+  if (error) { console.error('[lock] metric backfill read:', error.message); return 0; }
+  // An EMPTY STRING is as dead as a null and just as invisible — see
+  // isMetricSet in core; the client can persist one and the engine uses '' for
+  // its own unopposed seat.
+  // The DECISION is core's (metricGapFills) — which rows are gaps and which
+  // metric each gets is the part that can be wrong, and it is testable there
+  // without a database. This function keeps the reading and the writing.
+  const fills = metricGapFills(rows, (slug) => { try { return slugMeta(slug).pos; } catch { return null; } });
+  if (!fills.length) return 0;
+  // Grouped so a window full of gaps costs one write per METRIC, not per row.
+  const byMetric = new Map();
+  for (const f of fills) {
+    if (!byMetric.has(f.metric)) byMetric.set(f.metric, []);
+    byMetric.get(f.metric).push(f.id);
+  }
+  let n = 0;
+  for (const [metric, ids] of byMetric) {
+    const { error: upErr } = await db().from('sealed_pick').update({ metric_id: metric }).in('id', ids);
+    if (upErr) { console.error('[lock] metric backfill write:', upErr.message); continue; }
+    n += ids.length;
+  }
+  if (n) console.log('[lock] auto-picked a metric for', n, 'pick(s) with a player and none');
+  return n;
+}
+
 export async function lockDueWindows(week, winKicks, now = new Date()) {
   const dueWins = dueWindows(winKicks, now);
   if (!dueWins || !dueWins.size) return 0;
   const { data: ms } = await db().from('matchup').select('id')
     .eq('week', week).in('status', ['live', 'final']);
   if (!ms || !ms.length) return 0;
+  await fillMissingMetrics(ms.map((m) => m.id), [...dueWins]);
   const { data } = await db().from('sealed_pick')
     .update({ locked: true, revealed_at: now.toISOString() })
     .in('matchup_id', ms.map((m) => m.id)).eq('locked', false).in('game_window', [...dueWins])

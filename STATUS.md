@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.337.0 — auto-pick a metric, the way we auto-slot a player
+
+Founder: "we should auto pick a metric if there is none just like we auto slot
+players."
+
+Exactly the right frame. Auto-slotting already extends a courtesy at lock — you
+left a spot empty, the worker fields your best eligible player rather than
+letting the seat sit dead. A pick that kept its PLAYER and lost its METRIC is
+the same situation one level down, and nothing was catching it: the seal froze
+a player who scores EXACTLY ZERO all window, because `scorePlay` is a chain of
+`if (metricId === '…')` ending in `return 0`.
+
+Three paths null a metric on purpose so the manager re-picks — 0024 (a
+locked-metric unlock disarmed), 0026 (a refund), 0062 (a combodrip change) —
+and each is right on its own. What none of them does is make sure the manager
+comes back before kickoff. Now the worker does it for them.
+
+── ON THE SERVER, WHICH IS THE WHOLE POINT ────────────────────────────────
+
+v0.336.0 removed a CLIENT-side default that looked identical and was not: it
+drew a metric the resolver would never score, so the board promised points that
+could not arrive. This one WRITES. What you see after lock is what the engine
+scores, because it is the same row.
+
+It runs INSIDE `lockDueWindows`, before the lock update in the same call, so no
+window is ever sealed metricless — not even for the moment between two
+statements. Unlocked rows only: a locked row is a sealed decision and stays one.
+
+── THE DECISION IS CORE'S, THE READING AND WRITING IS THE WORKER'S ────────
+
+`metricGapFills` decides which rows are gaps and which metric each gets, because
+that is the part that can be wrong and it is testable without a database. Three
+rules earn their assertions:
+
+  • An EMPTY STRING is a gap, not a value. It is as dead as null and much
+    harder to see (see isMetricSet — `??` sails straight past it).
+  • A row with NO PLAYER is not a metric gap. That is an empty spot, which is
+    auto-slotting's job; filling a metric onto it would invent half a pick.
+  • An unresolvable position is SKIPPED, not guessed. A wrong metric scores
+    something, which reads as a working pick; none at least reads as none.
+
+And one that guards the defaults themselves: no position may default to a
+metric that scores nothing for the player holding it — the bug
+DEFAULT_AI_METRIC was written to fix was a QB defaulting to `fg` and a DEF to
+`suppress`, both of which bank zero for their own man.
+
+13 new parity assertions (718 total).
+
+
 ### v0.336.0 — the web was inventing a metric the server would never score
 
 Founder, with two screenshots of the SAME pick at the SAME moment, both on

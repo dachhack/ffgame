@@ -13,6 +13,7 @@
 import { playPath, arcControlY, playSide, playSideDy } from '../packages/core/src/engine/playPath';
 import { unopposedCopy, claimsOpponentAbsent } from '../packages/core/src/data/slotLabels';
 import { isMetricSet } from '../packages/core/src/data/metrics';
+import { metricGapFills, DEFAULT_AI_METRIC } from '../packages/core/src/data/aiLineup';
 import { readFileSync } from 'node:fs';
 
 let fails = 0;
@@ -196,6 +197,57 @@ const run = (cur) => {
   // '' rather than null is deliberate: SlotInput.metricId is `string` through
   // the resolver, and '' is already the engine's unopposed-seat value.
   ok('and isMetricSet agrees that is "no metric"', !isMetricSet(''));
+}
+
+// ── AUTO-PICKING A METRIC (v0.337.0) ──────────────────────────────────────
+// Founder: "we should auto pick a metric if there is none just like we auto
+// slot players." The worker does it AT LOCK — so a pick that kept its player
+// and lost its metric never seals as a seat that scores exactly zero.
+{
+  const POS = { 'a-rb': 'RB', 'b-wr': 'WR', 'c-qb': 'QB', 'd-te': 'TE', 'e-k': 'K', 'x-none': null };
+  const posOf = (slug) => POS[slug];
+  const fill = (rows) => metricGapFills(rows, posOf);
+
+  ok('a null metric is filled with the position default',
+    fill([{ id: 1, player_slug: 'a-rb', metric_id: null }])[0]?.metric === DEFAULT_AI_METRIC.RB);
+  ok('…and so is an EMPTY STRING, which is just as dead and harder to see',
+    fill([{ id: 2, player_slug: 'b-wr', metric_id: '' }])[0]?.metric === DEFAULT_AI_METRIC.WR);
+  ok('…and whitespace', fill([{ id: 3, player_slug: 'c-qb', metric_id: '   ' }]).length === 1);
+  ok('a missing key counts as missing',
+    fill([{ id: 4, player_slug: 'd-te' }])[0]?.metric === DEFAULT_AI_METRIC.TE);
+
+  // THE ONE THAT MUST NOT FIRE. A pick the manager already made is a decision.
+  ok('a pick that HAS a metric is left alone',
+    fill([{ id: 5, player_slug: 'a-rb', metric_id: 'td' }]).length === 0);
+
+  // An empty SPOT is auto-slotting's job, not this one's — filling a metric
+  // onto a row with no player would invent half a pick.
+  ok('a row with no player is not a metric gap',
+    fill([{ id: 6, player_slug: null, metric_id: null }]).length === 0
+    && fill([{ id: 7, metric_id: null }]).length === 0);
+
+  // Guessing is worse than abstaining: a wrong metric scores something, which
+  // reads as a working pick, where none at least reads as none.
+  ok('an unresolvable position is skipped, not guessed',
+    fill([{ id: 8, player_slug: 'x-none', metric_id: null }]).length === 0);
+  ok('an unknown slug is skipped too',
+    fill([{ id: 9, player_slug: 'nobody', metric_id: null }]).length === 0);
+
+  ok('every filled metric is a real, non-empty id',
+    fill([{ id: 10, player_slug: 'a-rb' }, { id: 11, player_slug: 'e-k' }])
+      .every((f) => isMetricSet(f.metric)));
+  ok('ids are carried through untouched',
+    fill([{ id: 'abc', player_slug: 'b-wr' }])[0]?.id === 'abc');
+  ok('empty input is empty output, never a throw',
+    fill([]).length === 0 && fill(null).length === 0 && fill(undefined).length === 0);
+  ok('a junk row does not stop the good ones beside it',
+    fill([null, { id: 12, player_slug: 'a-rb' }]).length === 1);
+
+  // The defaults themselves must score for the PLAYER — the bug DEFAULT_AI_METRIC
+  // was created to fix was a QB defaulting to 'fg' and a DEF to 'suppress',
+  // both of which bank nothing for the man holding them.
+  ok('no position defaults to a metric that scores nothing for its own player',
+    DEFAULT_AI_METRIC.QB !== 'fg' && DEFAULT_AI_METRIC.DEF !== 'suppress');
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
