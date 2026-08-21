@@ -57,6 +57,7 @@ interface Rules {
   mode: WaiverMode; budget: number; review: TradeReview;
   clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
+  agentWaivers: boolean;
 }
 
 export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'waivers' }: {
@@ -81,6 +82,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
   const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
   const [holdDays, setHoldDays] = useState(1);
+  const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
   const [listed, setListed] = useState<boolean | null>(null);      // null = still loading
@@ -106,10 +108,15 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
+        // Absent means ON (0213) — the same default league_agent_waivers
+        // applies, spelled once here so the switch can never render the
+        // opposite of what the worker will do.
+        agentWaivers: r.agent_waivers !== false,
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setAgentWaivers(cur.agentWaivers);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
       setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
@@ -140,10 +147,11 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
         dowChanged ? (clearDow ?? []) : null,
-        faDowChanged ? (faDow ?? []) : null);
+        faDowChanged ? (faDow ?? []) : null,
+        agentWaivers !== init.agentWaivers ? agentWaivers : null);
       if (r.ok) {
         commit();
-        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd });
+        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, agentWaivers });
         setMsg('✓ saved'); onSaved();
       } else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
@@ -197,6 +205,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const sec = (label: string) => <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>{label}</Mono>;
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd
+    || agentWaivers !== init.agentWaivers
     || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
     || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
 
@@ -374,6 +383,23 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             {pickNote ?? (pickTrading
               ? 'Draft slots and rookie picks can be traded — before the draft and while it runs. The pick on the clock is never tradeable.'
               : 'Players trade as usual; offers naming a draft pick are refused.')}
+          </Mono>
+
+          {/* EMPTY SEATS ON THE WIRE (0213). Saved WITH the rules, unlike the
+              pick switch above it: this one only writes a settings flag, so
+              there is nothing to provision and nothing that can be refused.
+              It is deliberately separate from the auto-slot opt-out — filling
+              a lineup from players a seat already owns is housekeeping, while
+              adding and dropping changes the league's pool and spends FAAB, and
+              a commissioner can reasonably want the first without the second. */}
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Chip label={agentWaivers ? '🤖 EMPTY SEATS CLAIM' : '🤖 EMPTY SEATS SIT'} on={agentWaivers}
+              onPress={() => { tap(); setAgentWaivers(!agentWaivers); }} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+            {agentWaivers
+              ? 'Seats nobody manages fill holes and take clear upgrades from waivers and free agency — never dropping a player who is in their starting lineup.'
+              : 'Seats nobody manages still set their lineups, but never add or drop.'}
           </Mono>
 
           <View style={{ marginTop: 14 }}>

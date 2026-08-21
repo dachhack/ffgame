@@ -1560,7 +1560,11 @@ export const rosterRules = (leagueId: string) =>
         taxi_locked_now?: boolean; taxi_lock_at?: string | null;
         /** Which injury designations qualify a player for an IR spot (0198).
          *  Defaults to ['IR','O'] — the pair 0164 hardcoded. */
-        ir_tags?: string[] }>(
+        ir_tags?: string[];
+        /** May unclaimed seats file waiver claims and free-agent adds (0213)?
+         *  The server resolves the default, so absent here means the read
+         *  failed — not that the feature is off. */
+        agent_waivers?: boolean }>(
     'roster_rules', { p_league_id: leagueId });
 /** Commissioner: who may ride the taxi squad, and whether it locks at the
  *  season's first kickoff (0196). Nulls leave a setting alone; `maxExp: -1`
@@ -1620,13 +1624,19 @@ export const setTransactionRules = (
   /** Days instant adds wait for the waiver run (0127). [] clears; null = leave
    *  unchanged. */
   faAfterWaiversDow: number[] | null = null,
+  /** May UNCLAIMED seats work the wire (0213)? Separate from the auto-slot
+   *  opt-out on purpose: filling a lineup from players the seat already owns
+   *  is housekeeping, while adding and dropping changes the league's pool and
+   *  spends its FAAB. Absent = on. */
+  agentWaivers: boolean | null = null,
 ) =>
-  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview }>(
+  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean }>(
     'set_transaction_rules', {
       p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
       p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
+      p_agent_waivers: agentWaivers,
     });
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player

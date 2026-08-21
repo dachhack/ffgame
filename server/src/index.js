@@ -24,6 +24,7 @@ import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
 import { sweepNative } from './native.js';
+import { sweepSeatWire } from './seatWire.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
@@ -354,6 +355,14 @@ async function tickContext(ctx, season) {
     const auto = await autoSlotClassicLineups(week, slate);
     if (auto) log(`[${ctx.tag}] auto-slotted`, auto, 'classic spots');
   } catch (e) { log(`[${ctx.tag}] auto-slot`, e.message); }
+  try {
+    // AFTER the lineup fill, deliberately. The wire's whole notion of a "hole"
+    // is a starting spot the roster cannot answer, so it must read the lineup
+    // the fill has already settled — running it first would have it transact
+    // for holes auto-slot was about to close from the bench.
+    const wired = await sweepSeatWire(week, slate, log);
+    if (wired) log(`[${ctx.tag}] seat wire`, wired, 'agent transactions');
+  } catch (e) { log(`[${ctx.tag}] seat wire`, e.message); }
 
   const locked = await lockDueMatchups(new Date(), wk, week);
   if (locked) log(`[${ctx.tag}] locked`, locked, 'matchups');
