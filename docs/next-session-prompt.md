@@ -153,9 +153,14 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    the new league on both hosts, run the draft, confirm the traded slot lands
    on the acquirer's clock. The probes cover the SQL end to end; **no
    production league has ever rolled over.** Needs the founder.
-2. **Refresh `proj2026.ts` + `adp2026.ts` before Sep 9** — `PROJ_AS_OF` is
-   2026-07-28. Auto-slot, seat agents, previews and keeper defaults all rank
-   by it.
+2. **Rebake `proj2026.ts` + `adp2026.ts` through August** — both are as of
+   **2026-08-19**, and ADP moves all summer, so they want a weekly pull right
+   up to the Sep 9 lock. Auto-slot, seat agents, previews and keeper defaults
+   all rank by these numbers, so a stale bake mis-ranks every one of them.
+   Each file's header carries its own `get_projections` / `get_adp` call and
+   the join convention; `proj2026.ts` additionally documents why the stored
+   number is `ppg * games / 17` and not StatHead's `ppg` — read that before
+   changing the shape of the bake.
 3. **The live web drip surface never installs pool `slugMeta` overrides** —
    audit `Matchup.tsx` / `cardTable` consumers and install
    `setSlugMetaOverrides(pool)` where the live league's pool loads.
