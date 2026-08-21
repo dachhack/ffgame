@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.334.0 — a backup's empty half was making a claim about the opponent
+
+Founder, on a locked TNF window before kickoff: "hmm game hasn't started yet and
+this is unopposed, but there's a whole full roster on my opponent's side."
+
+NOTHING WAS WRONG WITH THE ROSTER, and nothing was wrong with the data. One
+component draws BOTH of these — keyed on `canSub`, which is whether the player
+can sub in — and they were sharing the same words:
+
+  • AN UNOPPOSED STARTER. The opponent really did leave that spot empty.
+    "— NO OPPONENT —" is true, and worth saying loudly: the player banks full
+    value against nobody and pays UNOPPOSED_COIN.
+
+  • A BACKUP. A bench player with no counterpart ANYWHERE, by construction —
+    the game has no such pairing. It banks 0 unless it subs into one of YOUR
+    starter spots at the final, which the line directly beneath already says.
+
+Telling the second story with the first one's words makes a claim about the
+opponent's roster that is not merely unhelpful but FALSE. The screenshot shows
+the chip reading BACKUP and the empty half reading "— NO OPPONENT —" three
+inches apart, which is the board contradicting itself.
+
+A backup now says what it is — "— BACKUP · NOT MATCHED UP —" over a BENCH chip —
+and the unopposed-starter copy is untouched, because there it is accurate and
+carries real money.
+
+── THE ASSERTION IS THE RULE, NOT THE WORDING ─────────────────────────────
+
+`claimsOpponentAbsent()` is exported next to the copy so the test can say the
+thing that matters — a BACKUP must never claim the opponent is absent; an
+unopposed starter may, because they are — without freezing the words. Copy
+changes; the rule should not.
+
+MOBILE IS UNAFFECTED, checked rather than assumed: its Duel pairs slots by
+index and has no backup row of its own, so this vocabulary exists only on web.
+
+6 new parity assertions (683 total).
+
+
 ### v0.333.0 — a short pass is an arc, not a flagpole (and my last fix over-applied)
 
 Founder, on the same field visual after v0.332.0: "Still this. Looks like we

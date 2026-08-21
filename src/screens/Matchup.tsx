@@ -9,6 +9,7 @@ import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGam
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel, LOCK_LEAD_MS, windowLockMs } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
+import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -2922,13 +2923,20 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
         {cards && (
           <div aria-hidden style={{ flex: 'none', width: 72, height: 96, boxSizing: 'border-box', borderRadius: 8, border: '2px solid color-mix(in srgb, var(--text) 25%, transparent)', background: 'color-mix(in srgb, var(--text) 5%, var(--surface))', opacity: 0.55 }} />
         )}
-        <span className="mono" style={{ flex: 1, textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>— NO OPPONENT —</span>
+        {/* A BACKUP'S EMPTY HALF IS NOT ABOUT THE OPPONENT (v0.334.0). This
+            component draws two different things — a genuinely unopposed
+            STARTER, where the opponent really did leave the spot empty, and a
+            BACKUP, which has no counterpart anywhere by construction. Sharing
+            "— NO OPPONENT —" between them made the second one assert something
+            false about the opponent's roster, which is how a full roster came
+            to look like an absent one. See data/slotLabels. */}
+        <span className="mono" style={{ flex: 1, textAlign: 'center', fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)' }}>{unopposedCopy(canSub).blank}</span>
       </div>
     );
 
     const unoppCenter = (
       <>
-        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>UNOPP</span>
+        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>{unopposedCopy(canSub).chip}</span>
         {slot.events.length > 0 && (
           <button onClick={onToggle} className="mono" style={{ background: 'none', border: 'none', fontSize: 7, letterSpacing: '0.1em', color: 'var(--faint)', padding: 0 }}>{open ? 'HIDE ▲' : 'LOG ▾'}</button>
         )}
