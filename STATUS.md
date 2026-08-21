@@ -18,6 +18,59 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.330.0 — the dead-seat audit, as a button
+
+Founder: "how did Montgomery get no metric?" → then, on the .sql file that
+answered it: "can we run the sql by action?"
+
+THE LITERAL ANSWER IS NO, and that is worth writing down. This session has no
+live credentials — `.env.local` is gitignored and absent, and the probe runner
+spins up a throwaway Postgres — so nothing here can query production, and it
+should not be able to. What CAN happen is moving the query to where the data
+already is, behind the same `is_admin()` gate SYSTEM HEALTH takes, so the answer
+is a tap from a phone instead of a psql prompt.
+
+WHAT IT LOOKS FOR. A `sealed_pick` with a player and no metric. `scorePlay`
+(engine/sim.ts) is a chain of `if (metricId === '…')` ending in `return 0`, so a
+null matches nothing and falls through: the pick scores EXACTLY ZERO for the
+whole window whatever the player does. The seat is occupied and dead, and
+nothing on the board says so — which is how the question got asked.
+
+`metric_id` is nullable on purpose: 0024 (a locked-metric unlock disarmed), 0026
+(coin refund) and 0062 (combodrip quantity change) all null it while KEEPING the
+player, so the manager re-picks. Each is right alone; none makes sure the manager
+returns before the window LOCKS.
+
+THREE THINGS THE PANEL SAYS THAT A ROW COUNT WOULD NOT:
+  • LOCKED vs not — the difference between a warning and a window the manager
+    can no longer save.
+  • `sibling_slots_with_metric` — whether that seat's OTHER slots carry metrics.
+    If they do, it was set up properly and LOST one, which points at
+    0024/0026/0062 rather than at somebody who never finished.
+  • `agent_rows`, counted apart — autoLineup always assigns a metric
+    (DEFAULT_AI_METRIC; RB → 'rush'), so an AI seat here means something nulled
+    it AFTER the worker wrote it: a different bug, and it says so in red.
+
+IT REPORTS, IT NEVER REPAIRS. Rewriting somebody's sealed lineup from an audit
+is not a diagnostic; `admin_set_picks` (0021) is the deliberate version of that.
+Asserted.
+
+ON DEMAND, NOT ON A POLL, unlike the health panel beside it: this is a
+full-table scan across every league, and running it every ten seconds to answer
+a question nobody asked is how a diagnostic becomes a load problem.
+
+── THE PROBE WAS WRONG BEFORE THE CODE WAS ────────────────────────────────
+
+First run: "expected exactly 1 metricless pick, got 35". The audit was right —
+every probe suite in the run shares one database and several leave metricless
+picks behind. The assertions now scope to the fixture's own league, and
+`agent_rows` is asserted as a DELTA rather than an absolute. Left as a comment
+in the file, because the next person to write a cross-league probe will hit it.
+
+8 probe cases; 58 suites. Classic windows are excluded throughout — classic has
+no metrics, so a null there is correct and would drown the signal.
+
+
 ### v0.329.0 — quick reactions in chat
 
 Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,
