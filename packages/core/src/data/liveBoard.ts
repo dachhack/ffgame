@@ -8,7 +8,7 @@ import type { BuiltLeague } from './league';
 import { REG_SEASON_WEEKS } from './league';
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { shortName, teamForName, normName } from './players';
-import { slugMeta, normTeam } from './slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides } from './slugMeta';
 import { entrySlug, entryTeam, type PoolEntry } from './poolEntry';
 import { getSupabase } from './supabaseClient';
 import { liveSlate } from './liveApi';
@@ -42,6 +42,47 @@ function poolToPlayer(p: PoolEntry): Player {
   return { id, name: shortName(full), full, pos, team, stats: { ...ZERO } };
 }
 
+/** Pool rows → `setSlugMetaOverrides` input (v0.337.2).
+ *
+ *  `poolToPlayer` already prefers a row's pos/team over the bake, so the ENGINE
+ *  players were always fine. Everything else on the web's live surface was not:
+ *  those screens read `slugMeta` directly — cardTable for the team logo,
+ *  playerCard and ui.tsx for the injury badge — and a 2026 player the 2025 bake
+ *  has never heard of resolved to WR with an EMPTY team. The app's boards
+ *  installed around that in 0200.1; the web's live screens never did, which
+ *  left them the last surface reading the raw fallback.
+ *
+ *  Each row is resolved EXACTLY as `poolToPlayer` resolves it, for one specific
+ *  reason: the ESPN shape of `starters_json` is `{ slug, full, pos }` with NO
+ *  team, and `slugMeta` consults the overlay BEFORE the bake — so mapping a row
+ *  straight through would install `team: ''` and MASK a real baked team,
+ *  turning a working player into a bye. Falling back through `meta.team` and
+ *  `teamForName` means this overlay can only ever ADD information, never
+ *  subtract it, and never disagrees with the Player the engine built from the
+ *  same row.
+ *
+ *  Sleeper-shaped rows carry `sleeper_id`, so identities ride along on the same
+ *  pass (0205): `setSlugMetaOverrides` installs an id whenever the row has one,
+ *  independently of whether it had a position. An ESPN row without one simply
+ *  contributes nothing.
+ *
+ *  Pure and export-only-for-testing: the whole rule is stateable without a
+ *  database or a screen, so it is asserted directly (scripts/check-live-meta.mjs). */
+export function poolMetaRows(rows: PoolEntry[]): { slug: string; pos: Pos; team: string; sleeperId?: string | null }[] {
+  return rows.flatMap((p) => {
+    const slug = entrySlug(p);
+    if (!slug) return [];
+    const meta = slugMeta(slug);
+    const full = p.full || slug.replace(/-/g, ' ');
+    return [{
+      slug,
+      pos: ((p.pos as Pos) || meta.pos),
+      team: normTeam(entryTeam(p)) || meta.team || teamForName(full) || '',
+      sleeperId: p.sleeper_id,
+    }];
+  });
+}
+
 /**
  * Assemble a BuiltLeague for one league from its DB rows, entered as the given
  * roster. `week` picks which week's rosters seed each team's player pool.
@@ -63,6 +104,10 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
   for (const row of (poolsRes.data ?? []) as { roster_id: number; starters_json: PoolEntry[] | null }[]) {
     poolByRoster.set(row.roster_id, Array.isArray(row.starters_json) ? row.starters_json : []);
   }
+
+  // Install the league's own meta before ANY of it is read — see
+  // `poolMetaRows` for why the resolution is not just the row mapped through.
+  setSlugMetaOverrides(poolMetaRows([...poolByRoster.values()].flat()));
 
   const players: Record<string, Player> = {};
   const excluded: string[] = []; // rostered players we couldn't map to an NFL team
