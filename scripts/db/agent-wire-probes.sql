@@ -126,6 +126,18 @@ begin
       where league_id = lid and roster_id = open_seat and status = 'pending') = 1,
     'aw2c exactly one pending claim FOR THIS FIXTURE seat');
 
+  -- ══ 2d. THE DUPLICATE THE WORKER NOW AVOIDS (v0.338.1) ═══════════════════
+  -- The planner is deterministic, so a seat with an unresolved claim re-derives
+  -- the same plan on the next sweep. This is what the database answers, and it
+  -- is why the worker counts OUTSTANDING claims rather than only the ones it
+  -- files this run: without that it re-filed and was refused every 25 seconds
+  -- from filing until the waiver run.
+  perform assert_err(submit_waiver_claim(lid, open_seat, 'aw-21', 'aw-5', 0), 'already pending',
+    'aw2d a second claim on the same player is refused while the first is pending');
+  perform assert_true((select count(*) from waiver_claim
+      where league_id = lid and roster_id = open_seat and status = 'pending') = 1,
+    'aw2e …and the refusal left exactly one pending claim, not two');
+
   -- ══ 3. THE BOUNDARY: NOT A SEAT A HUMAN HOLDS ════════════════════════════
   -- This is the assertion the whole design hangs on.
   perform assert_err(add_free_agent(lid, b_seat, 'aw-22', null), 'forbidden',

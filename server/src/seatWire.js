@@ -20,10 +20,17 @@ import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '.
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
 
-/** Most claims one seat files in a single sweep. The sweep runs every tick, so
- *  this is a rate limit, not a budget: a seat with three holes fixes them over
- *  three ticks rather than filing a burst that reads as a bot going haywire. */
-const MAX_CLAIMS_PER_SWEEP = 2;
+/** How many claims a seat may have OUTSTANDING — pending ones included, not
+ *  just the ones filed this run.
+ *
+ *  It counts what is already pending because the planner is deterministic: on
+ *  the next sweep it picks the same best player, whose claim is still sitting
+ *  unresolved, and `submit_waiver_claim` answers "claim already pending". At
+ *  the original every-tick cadence that was a refused RPC and a log line every
+ *  25 seconds from filing until the 3am run — thousands of them, burying the
+ *  lines worth reading. Counting outstanding claims means the seat files two
+ *  and then goes quiet until the waiver run answers. */
+const MAX_OUTSTANDING_CLAIMS = 2;
 
 /**
  * File waiver claims and free-agent adds for every unclaimed seat that wants
@@ -87,6 +94,18 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         .select('roster_id,slug,spot').eq('league_id', lg.id);
       const owned = new Set((allRos ?? []).map((r) => r.slug));
 
+      // WHAT THIS SEAT HAS ALREADY ASKED FOR. A pending claim has not moved
+      // anybody yet — the added player is still unowned and the dropped player
+      // is still on the roster — so without this the planner re-derives the
+      // identical plan every run and every claim is refused as a duplicate.
+      const { data: pendRows } = await db().from('waiver_claim')
+        .select('roster_id,add_slug,drop_slug').eq('league_id', lg.id).eq('status', 'pending');
+      const pendingBySeat = new Map();
+      for (const c of pendRows ?? []) {
+        if (!pendingBySeat.has(c.roster_id)) pendingBySeat.set(c.roster_id, []);
+        pendingBySeat.get(c.roster_id).push(c);
+      }
+
       // no_add (0144) is enforced by a TRIGGER THAT RAISES, not by a returned
       // error, so a flagged add would abort this sweep rather than cost one
       // claim. The planner filters flags too, but through the engine's flag
@@ -115,9 +134,21 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const mine = (allRos ?? []).filter((r) => r.roster_id === seat.roster_id);
         // taxi/IR never start, so they are neither lineup value nor a drop the
         // planner may spend — it reasons about the ACTIVE roster only (0164).
+        const pending = pendingBySeat.get(seat.roster_id) ?? [];
+        // Already at its outstanding limit: it has spoken, and the waiver run
+        // is what answers next. Nothing to compute.
+        const room = MAX_OUTSTANDING_CLAIMS - pending.length;
+        if (room <= 0) continue;
+        const pendingAdds = new Set(pending.map((c) => c.add_slug));
+        const pendingDrops = new Set(pending.map((c) => c.drop_slug).filter(Boolean));
+
+        // A player already promised as the price of a pending claim is spent.
+        // Removing him CANNOT change the lineup this plans against — a drop is
+        // only ever chosen from players who are NOT in the best lineup — so
+        // this narrows what may be dropped again without altering any value.
         const roster = mine.filter((r) => r.spot === 'active')
           .map((r) => meta.get(r.slug))
-          .filter((p) => p && p.pos)
+          .filter((p) => p && p.pos && !pendingDrops.has(p.slug))
           .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null }));
         if (!roster.length) continue;
 
@@ -136,11 +167,13 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const outs = new Set((injRows ?? []).map((r) => r.player_slug));
         const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
 
-        const plan = seatWirePlan(slots, roster, available, valueOf, {
+        const plan = seatWirePlan(slots, roster, available.filter((p) => !pendingAdds.has(p.id)), valueOf, {
           faab,
           budget,
-          openSeats: Math.max(0, activeSeats - roster.length),
-          maxClaims: MAX_CLAIMS_PER_SWEEP,
+          // A pending claim with no drop will TAKE a seat if it wins, so the
+          // places still open are the ones nothing has been promised.
+          openSeats: Math.max(0, activeSeats - roster.length - pending.filter((c) => !c.drop_slug).length),
+          maxClaims: room,
         });
 
         for (const c of plan) {
