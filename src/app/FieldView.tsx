@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
-import { playPath } from '@drip/core/engine/playPath';
+import { playPath, arcControlY } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile } from './ui';
 
@@ -297,14 +297,21 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   // they each used to own a copy of — and so `overlaps`, the property that
   // made a returned kick look like a doubled line, is asserted rather than
   // eyeballed. See engine/playPath.
-  const { catchX, carrying } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
+  const { catchX, carrying, overlaps } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
   const offLogo = cur ? teamLogo(cur.tm) : null;
   const midY = (TOP + BOT) / 2;
   /** The carried phase rides its own lane just under the flight path — see the
    *  note at the arc. Small enough to read as the same play, big enough that a
    *  runback never lies on top of the kick that produced it. */
   const CARRY_DY = 4;
-  const carryY = midY + CARRY_DY;
+  // ── THE LANE IS FOR DOUBLING BACK, NOT FOR EVERY CARRY (v0.333.0) ────────
+  // v0.332.0 put EVERY carried phase on its own lane, which was an
+  // over-application of a fix aimed at kick returns. For a pass the run-after
+  // continues in the SAME direction and meets the arc end to end — one
+  // continuous motion — and dropping it to a second lane split that motion into
+  // "a line on the ground and an arch above", which is exactly what the founder
+  // then reported. `overlaps` already knew the difference; now it decides.
+  const carryY = overlaps ? midY + CARRY_DY : midY;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -405,12 +412,14 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
           {arc && (
             <g key={cur!.pid ?? cur!.c}>
               <path d={isPassy
-                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${TOP - 6} ${catchX ?? arc.x2} ${midY}`
+                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, midY, TOP)} ${catchX ?? arc.x2} ${midY}`
                 : `M ${arc.x1} ${midY} L ${arc.x2} ${midY}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
                 pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
               {carrying && (
-                <path d={`M ${catchX} ${midY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`}
+                <path d={overlaps
+                  ? `M ${catchX} ${midY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
+                  : `M ${catchX} ${midY} L ${arc.x2} ${midY}`}
                   fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                   pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .35s ease .5s both' }} />
               )}

@@ -78,3 +78,40 @@ export function playPath(cur: PlayPathInput | null | undefined, x1: number, x2: 
   const shared = Math.min(air[1], carry[1]) - Math.max(air[0], carry[0]);
   return { catchX, carrying: true, overlaps: shared > 0.01 };
 }
+
+// ── HOW HIGH THE BALL GOES (v0.333.0) ─────────────────────────────────────
+//
+// Founder, on a short pass: "Looks like we have the line on the ground, and the
+// arch above for the pass. It should just be arch then the yards after the
+// arch."
+//
+// Both views drew the flight arc with a control point at a FIXED `TOP - 6` —
+// the top of the field — however far the ball actually travelled. A 50-yard
+// bomb got a graceful arc; a five-yard checkdown got the same apex squeezed
+// into a fifth of the width, which renders as a tall narrow spike floating
+// above a short flat line. Two marks that plainly belong to one play stop
+// looking like one play, which is what "line on the ground AND an arch above"
+// is describing.
+//
+// So the apex scales with how far the ball flew. A long throw keeps exactly the
+// height it has today (the clamp's top end IS `TOP - 6`, so nothing regresses
+// on the plays that already looked right); a short one gets a proportionate
+// bump that reads as a throw rather than a flagpole.
+//
+// A QUADRATIC PEAKS AT HALF ITS CONTROL OFFSET, which is why the numbers here
+// look twice as tall as the curve you see: `Q` reaches midway between the
+// baseline and the control point, never to it.
+
+/** Control-point Y for a flight arc between two x positions.
+ *  `midY` is the baseline; `top` is the top of the field. */
+export function arcControlY(x1: number, x2: number, midY: number, top: number): number {
+  const dist = Math.abs((Number(x2) || 0) - (Number(x1) || 0));
+  // The ceiling is today's fixed value, so long throws are untouched.
+  const maxDepth = midY - (top - 6);
+  // The floor keeps a very short throw visibly airborne — a pass with no arc at
+  // all is indistinguishable from a run, and the whole point of the arc is that
+  // the ball left the ground.
+  const minDepth = Math.min(18, maxDepth);
+  const depth = Math.min(maxDepth, Math.max(minDepth, dist * 0.7));
+  return midY - depth;
+}
