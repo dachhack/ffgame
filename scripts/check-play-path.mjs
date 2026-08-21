@@ -12,6 +12,8 @@
 // other" is exactly the kind of thing you cannot see in a diff.
 import { playPath, arcControlY, playSide, playSideDy } from '../packages/core/src/engine/playPath';
 import { unopposedCopy, claimsOpponentAbsent } from '../packages/core/src/data/slotLabels';
+import { isMetricSet } from '../packages/core/src/data/metrics';
+import { readFileSync } from 'node:fs';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -167,6 +169,33 @@ const run = (cur) => {
     && playSideDy('left', false, LANE) === -playSideDy('right', false, LANE));
   ok('the offset scales with the lane it is given',
     playSideDy('right', true, 10) === 10 && playSideDy('right', true, 0) === 0);
+}
+
+// ── THE CLIENT MUST NOT INVENT A METRIC (v0.336.0) ────────────────────────
+// `lookup()` in engine/matchup.ts resolved a pick with no metric to the
+// POSITION'S DEFAULT. The server scores what is stored — scorePlay is a chain
+// of `if (metricId === '…')` ending in `return 0` — so the web board drew "Rush
+// Yards" over a pick that banks nothing, and accrued a drip rate for a metric
+// nobody fielded. It surfaced only because the phone disagreed with the web in
+// front of the founder; on its own the web board was plausible and wrong.
+//
+// Read from SOURCE, like the reaction whitelist, because the failure mode is
+// someone helpfully restoring the default: it makes the board look complete,
+// and nothing else in the suite would notice.
+{
+  const src = readFileSync(new URL('../packages/core/src/engine/matchup.ts', import.meta.url), 'utf8');
+  const fn = /function lookup\([\s\S]*?\n\}/.exec(src);
+  ok('lookup() is still findable in matchup.ts', !!fn);
+  // Comments stripped first — the note explaining the removal NAMES the thing
+  // it removed, and a check that reads its own documentation as a violation is
+  // a check that cries wolf until somebody deletes it.
+  const body = (fn ? fn[0] : '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  ok('lookup does NOT substitute a default metric', !/pickMetric\s*\(/.test(body), body.slice(0, 160));
+  ok('…it passes the stored value through, empty when there is none',
+    /pk\.metricId \?\? ''/.test(body));
+  // '' rather than null is deliberate: SlotInput.metricId is `string` through
+  // the resolver, and '' is already the engine's unopposed-seat value.
+  ok('and isMetricSet agrees that is "no metric"', !isMetricSet(''));
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }

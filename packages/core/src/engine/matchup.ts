@@ -390,7 +390,28 @@ function lookup(pools: Record<WindowId, Player[]>, picks: Record<string, Pick>, 
   if (!pk) return null;
   for (const w of Object.values(pools)) {
     const found = w.find((p) => p.id === pk.playerId);
-    if (found) return { player: found, metricId: pk.metricId ?? pickMetric(found, 0) };
+    // ── NEVER INVENT A METRIC (v0.336.0) ──────────────────────────────────
+    // This was `pk.metricId ?? pickMetric(found, 0)` — the position's default,
+    // substituted client-side whenever a pick arrived without one.
+    //
+    // That is a SECOND RULEBOOK. The server scores what is STORED: `scorePlay`
+    // is a chain of `if (metricId === '…')` ending in `return 0`, so a pick
+    // with no metric banks nothing all window. The web board meanwhile drew
+    // "Rush Yards" over it and accrued a drip rate for a metric nobody
+    // fielded — promising points that could never arrive.
+    //
+    // Found because the two clients disagreed in front of the founder: the
+    // same pick, at the same moment, read "Rush Yards DRIP" on web and
+    // "NO METRIC · scores 0" on the phone. The phone was right; the web was
+    // defaulting. Two clients disagreeing is the only reason anyone looked —
+    // on its own the web board was perfectly plausible and simply wrong.
+    //
+    // EMPTY STRING rather than null: `SlotInput.metricId` is `string` through
+    // the whole resolver, and '' is already this engine's "no metric" value
+    // (resolveSlot takes `metricId: ''` for the unopposed seat). `scorePlay('')`
+    // matches no branch and returns 0 — the server's answer — and
+    // `isMetricSet('')` is false, so both boards now say NO METRIC · scores 0.
+    if (found) return { player: found, metricId: pk.metricId ?? '' };
   }
   return null;
 }

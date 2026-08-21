@@ -176,6 +176,22 @@ export function realPbpFor(week: number, playerId: string): RealPlay[] | null {
   return sp && sp.length ? sp : null;
 }
 
+/** EVERY player with plays in a loaded week (v0.336.0).
+ *
+ *  The box score needs to ask "who was in this game" and nothing here could
+ *  answer it — every reader was keyed by a slug you already had. Same
+ *  precedence as `realPbpFor`: a LIVE week is exclusive, because mixing in the
+ *  baked 2025 week of the same number would put last year's players in tonight's
+ *  box score. */
+export function realPbpSlugs(week: number): string[] {
+  const live = livePbp.get(week);
+  if (live) return Object.keys(live);
+  const baked = cache.get(week)?.pbp;
+  const synth = synthPbp.get(week);
+  if (!baked && !synth) return [];
+  return [...new Set([...Object.keys(baked ?? {}), ...Object.keys(synth ?? {})])];
+}
+
 /** A team's offensive possession intervals [startSec,endSec] for a loaded week
  *  (for the possession-gated WR drip); empty if not loaded/known. */
 export function realPossFor(week: number, team: string): number[][] {

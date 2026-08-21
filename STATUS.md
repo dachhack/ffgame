@@ -18,6 +18,66 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.336.0 — the web was inventing a metric the server would never score
+
+Founder, with two screenshots of the SAME pick at the SAME moment, both on
+v0.335.0: "Monty has no metric in the app, but rush yards in web."
+
+THE PHONE WAS RIGHT. `lookup()` in engine/matchup.ts resolved a pick like this:
+
+    metricId: pk.metricId ?? pickMetric(found, 0)
+
+— the POSITION'S DEFAULT, substituted client-side whenever a pick arrived
+without one. That is a SECOND RULEBOOK. The server scores what is STORED:
+`scorePlay` is a chain of `if (metricId === '…')` ending in `return 0`, so a
+pick with no metric banks nothing all window. The web board meanwhile drew
+"Rush Yards DRIP" over it and accrued a drip rate for a metric nobody fielded —
+promising points that could never arrive.
+
+It surfaced ONLY because the two clients disagreed in front of the founder. On
+its own the web board was perfectly plausible and simply wrong, which is the
+whole difficulty with a fabricated default: it makes the screen look complete.
+v0.331.0's NO METRIC marker — which existed because of an earlier report on
+this same player — is what made the phone able to say so out loud.
+
+'' RATHER THAN NULL. `SlotInput.metricId` is `string` through the entire
+resolver (threading null through it produced 27 type errors and a refactor of
+the scoring path at the end of a long night), and '' is ALREADY this engine's
+no-metric value — `resolveSlot` takes `metricId: ''` for the unopposed seat.
+`scorePlay('')` matches no branch and returns 0, which is the server's answer,
+and `isMetricSet('')` is false, so both boards now say NO METRIC · scores 0.
+One line, no type surgery, and the two clients agree with each other and with
+the resolver.
+
+GUARDED FROM SOURCE, like the reaction whitelist: the assertion reads
+matchup.ts and fails if `lookup` ever calls `pickMetric` again. The failure mode
+is somebody helpfully restoring the default — it makes the board look finished,
+and nothing else in the suite would notice. Comments are stripped first, because
+the note explaining the removal names the thing it removed, and a check that
+reads its own documentation as a violation is a check that gets deleted.
+
+── ALSO: THE BOX SCORE (founder's ask) ────────────────────────────────────
+
+"a small chip at the bottom of the field visual. when you click it, you get a
+pop up with all the players in that game by team and their current stat lines."
+
+▤ BOX SCORE under the field opens exactly that. EVERYONE with a stat in the
+game, not just the rostered ones — which is why it cannot be built from the
+matchup's picks, and why `realPbpSlugs` had to be added: every reader in
+realPbp was keyed by a slug you already had, so nothing could answer "who was
+in this game". Same live-week exclusivity as `realPbpFor`, or last year's
+players would appear in tonight's box score.
+
+It accumulates through the same `statlineFrom` the cards use and formats with
+the same `fmtStat`, so the popup and the board cannot disagree about a number.
+Ordered by involvement; players with no stat are dropped, because a live week's
+play table holds everyone the poller has ever written a row for and a listing
+padded with a hundred 0-0 lines is a roster, not a box score. It follows the
+log's clock, so scrubbing scrubs both.
+
+4 new parity assertions (705 total).
+
+
 ### v0.335.0 — the play draws on the side its text says it went
 
 Founder: "If the play says right or left can we have the play draw on that side

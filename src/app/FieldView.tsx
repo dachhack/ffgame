@@ -14,8 +14,10 @@ import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from 
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
+import { gameBoxScore } from '@drip/core/engine/boxScore';
+import { slugMeta } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
-import { useIsMobile } from './ui';
+import { useIsMobile, ModalBackdrop } from './ui';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -69,7 +71,7 @@ export function FieldView({ week, team, clock, collapsible }: { week: number; te
   useGameFeedWeek(week);
   const feed = gameFeedFor(week, team);
   if (!feed) return null;
-  const field = <Field feed={feed} clock={clock} />;
+  const field = <Field feed={feed} clock={clock} week={week} />;
   return collapsible ? <FieldCollapse>{field}</FieldCollapse> : field;
 }
 
@@ -86,11 +88,11 @@ export function SlotFieldViews({ week, youTeam, theirTeam, youClock, theirClock 
   return (
     <FieldCollapse>
       {you && their && you.key === their.key
-        ? <Field feed={you} clock={Math.max(youClock, theirClock)} />
+        ? <Field feed={you} clock={Math.max(youClock, theirClock)} week={week} />
         : (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile || !you || !their ? '1fr' : '1fr 1fr', gap: 6 }}>
-            {you && <Field feed={you} clock={youClock} />}
-            {their && <Field feed={their} clock={theirClock} />}
+            {you && <Field feed={you} clock={youClock} week={week} />}
+            {their && <Field feed={their} clock={theirClock} week={week} />}
           </div>
         )}
     </FieldCollapse>
@@ -207,7 +209,7 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
             <div key={g.feed.key}
               ref={(el) => { if (el) cardRefs.current.set(g.feed.key, el); else cardRefs.current.delete(g.feed.key); }}
               style={{ borderRadius: 6, outline: focusKey === g.feed.key ? '2px solid var(--you)' : '2px solid transparent', outlineOffset: 2, transition: 'outline-color .4s ease' }}>
-              <Field feed={g.feed} clock={g.clock} pidSide={(pid) => {
+              <Field feed={g.feed} clock={g.clock} week={week} pidSide={(pid) => {
                 if (pid == null) return null;
                 const y = g.you.has(pid), t = g.their.has(pid);
                 return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
@@ -220,12 +222,13 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
   );
 }
 
-function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pidSide?: (pid?: number) => PlaySide | null }) {
+function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null }) {
   const { away, home, plays } = feed;
   // ↔ mirror this game's field to match the viewer's TV broadcast — the feed
   // carries no camera orientation, so the default (away attacks right) is a
   // convention; the flip is remembered per game.
   const [flip, setFlip] = useState(() => { try { return localStorage.getItem(`fvflip:${feed.key}`) === '1'; } catch { return false; } });
+  const [boxOpen, setBoxOpen] = useState(false);
   const toggleFlip = () => setFlip((f) => { const n = !f; try { localStorage.setItem(`fvflip:${feed.key}`, n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const mx = (x: number) => (flip ? W - x : x); // mirror an x coordinate
   // Latest play at/under the feed clock = the play being shown; the next one
@@ -490,6 +493,77 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
           {accent && <span style={{ color: accent }}>● </span>}{cur.txt}
         </div>
       )}
+      {/* ── BOX SCORE (v0.336.0) ─────────────────────────────────────────
+          Founder: "a small chip at the bottom of the field visual. when you
+          click it, you get a pop up with all the players in that game by team
+          and their current stat lines."
+
+          EVERYONE in the game, not just the rostered ones — that is the whole
+          point, and it is why this cannot be built from the matchup's picks.
+          It reads `gameBoxScore`, which accumulates through the same
+          `statlineFrom` the cards use, so the popup and the board can never
+          disagree about a number.
+
+          It follows the CLOCK, so scrubbing the log scrubs the box score with
+          it rather than always reporting the present. */}
+      <div style={{ textAlign: 'center', marginTop: 5 }}>
+        <button onClick={() => setBoxOpen(true)} className="mono"
+          title={`Every player with stats in ${away} @ ${home}`}
+          style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 8px', cursor: 'pointer' }}>
+          ▤ BOX SCORE
+        </button>
+      </div>
+      {boxOpen && <BoxScoreCard week={week} home={home} away={away} clock={clock} onClose={() => setBoxOpen(false)} />}
     </div>
+  );
+}
+
+/** A slug as a readable name. Local rather than imported: ClassicBoard's copy
+ *  leans on its own `shortName`, and a box-score row has room for the full one. */
+function boxName(slug: string): string {
+  if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
+  if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
+  return slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+}
+
+/** All of a game's players and their lines, by team (v0.336.0). */
+function BoxScoreCard({ week, home, away, clock, onClose }: {
+  week: number; home: string; away: string; clock: number; onClose: () => void;
+}) {
+  const box = useMemo(() => gameBoxScore(week, home, away, clock), [week, home, away, clock]);
+  const col = (label: string, rows: typeof box.home) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
+        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={14} height={14} style={{ display: 'block' }} />}{label}
+      </div>
+      {rows.length === 0
+        ? <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>— nothing yet —</div>
+        : rows.map((r) => (
+          <div key={r.slug} style={{ padding: '3px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boxName(r.slug)}</span>
+            </div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', lineHeight: 1.35 }}>{r.stat}</div>
+          </div>
+        ))}
+    </div>
+  );
+  return (
+    <ModalBackdrop onClick={onClose} zIndex={80}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', minWidth: 0, maxWidth: 560, margin: 'auto 0', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>▤ {away} @ {home}</span>
+          <button onClick={onClose} aria-label="close the box score" className="mono"
+            style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</div>
+        {/* Said plainly: an empty column is a player who has not touched the
+            ball, not a player the box score forgot. */}
+        <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
+          everyone with a stat in this game · most involved first · follows the log's clock
+        </div>
+      </div>
+    </ModalBackdrop>
   );
 }
