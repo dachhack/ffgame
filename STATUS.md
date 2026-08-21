@@ -18,6 +18,111 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.331.0 — the field is the game's, not the player's; and a missing metric says so
+
+Two founder reports from one live preseason window.
+
+── 1. "THE GAME FIELD VISUAL DOESN'T SHOW UNLESS THERE IS A PLAY WITH YOUR
+      PLAYER?" ────────────────────────────────────────────────────────────
+
+Exactly right, and `slot.real` was the gate:
+
+    {open && slot.real && <SlotFieldViews … />}
+
+`real` is `REAL_WEEKS.has(week) || !!realRawPlays(player, week)`. REAL_WEEKS is
+the baked 2025 set (1-22), so on ANY other week — every live one, including the
+preseason windows being played right now — it is true only once one of the two
+players has recorded a play HIMSELF. The LV@HOU game could be under way with six
+plays in the log and the field still hidden, because neither Bech nor Montgomery
+had touched the ball.
+
+The field is a picture of the GAME. Whether your man has carried it yet is not
+the question it answers, and "nothing has happened to him yet" is precisely when
+you want to watch.
+
+NOTHING REPLACES THE GATE, because the real condition was already enforced one
+level down: `FieldView`/`SlotFieldViews` return null when `gameFeedFor` has no
+feed, and the worker only writes a feed once the game has plays (`gameToFeed`:
+`if (!all.length) return null`). `slot.real` only ever subtracted.
+
+── 2. "HOW DID MONTGOMERY GET NO METRIC?" → "looks like just an app issue" ──
+
+Correct on both counts. The follow-up screenshot from the WEB board shows
+"Rush Yards DRIP" on that very card, so the metric is in the data and the phone
+— twelve versions behind — was the one not showing it.
+
+The lasting fix is not the display of that one card but the fact that the board
+was SILENT either way. A pick with no metric scores EXACTLY ZERO: `scorePlay` is
+a chain of `if (metricId === '…')` ending in `return 0`, so a pick that matches
+no branch banks nothing all window. The card rendered that as an ordinary 0.0.
+Both boards now say NO METRIC · scores 0, in warn colour.
+
+AND THE CASE `??` MISSES. The cards read `metric?.name ?? p.metric_id ?? null`.
+`??` falls through on null and undefined ONLY — an EMPTY STRING sails past it,
+arrives as '', and then fails the `!!metricName` render test. The chip vanishes
+with no null anywhere in sight, which is the hardest version of this to find,
+and the engine itself uses `metricId: ''` for the unopposed seat. `isMetricSet`
+is now the one predicate the render, the audit and the test all share, and 0212
+teaches yesterday's audit the same lesson — an audit that catches one shape and
+not the other is worse than none, because it answers "no dead seats" and is
+believed.
+
+7 new parity assertions (656 total); the audit probe now fixtures both shapes.
+
+
+### v0.330.0 — the dead-seat audit, as a button
+
+Founder: "how did Montgomery get no metric?" → then, on the .sql file that
+answered it: "can we run the sql by action?"
+
+THE LITERAL ANSWER IS NO, and that is worth writing down. This session has no
+live credentials — `.env.local` is gitignored and absent, and the probe runner
+spins up a throwaway Postgres — so nothing here can query production, and it
+should not be able to. What CAN happen is moving the query to where the data
+already is, behind the same `is_admin()` gate SYSTEM HEALTH takes, so the answer
+is a tap from a phone instead of a psql prompt.
+
+WHAT IT LOOKS FOR. A `sealed_pick` with a player and no metric. `scorePlay`
+(engine/sim.ts) is a chain of `if (metricId === '…')` ending in `return 0`, so a
+null matches nothing and falls through: the pick scores EXACTLY ZERO for the
+whole window whatever the player does. The seat is occupied and dead, and
+nothing on the board says so — which is how the question got asked.
+
+`metric_id` is nullable on purpose: 0024 (a locked-metric unlock disarmed), 0026
+(coin refund) and 0062 (combodrip quantity change) all null it while KEEPING the
+player, so the manager re-picks. Each is right alone; none makes sure the manager
+returns before the window LOCKS.
+
+THREE THINGS THE PANEL SAYS THAT A ROW COUNT WOULD NOT:
+  • LOCKED vs not — the difference between a warning and a window the manager
+    can no longer save.
+  • `sibling_slots_with_metric` — whether that seat's OTHER slots carry metrics.
+    If they do, it was set up properly and LOST one, which points at
+    0024/0026/0062 rather than at somebody who never finished.
+  • `agent_rows`, counted apart — autoLineup always assigns a metric
+    (DEFAULT_AI_METRIC; RB → 'rush'), so an AI seat here means something nulled
+    it AFTER the worker wrote it: a different bug, and it says so in red.
+
+IT REPORTS, IT NEVER REPAIRS. Rewriting somebody's sealed lineup from an audit
+is not a diagnostic; `admin_set_picks` (0021) is the deliberate version of that.
+Asserted.
+
+ON DEMAND, NOT ON A POLL, unlike the health panel beside it: this is a
+full-table scan across every league, and running it every ten seconds to answer
+a question nobody asked is how a diagnostic becomes a load problem.
+
+── THE PROBE WAS WRONG BEFORE THE CODE WAS ────────────────────────────────
+
+First run: "expected exactly 1 metricless pick, got 35". The audit was right —
+every probe suite in the run shares one database and several leave metricless
+picks behind. The assertions now scope to the fixture's own league, and
+`agent_rows` is asserted as a DELTA rather than an absolute. Left as a comment
+in the file, because the next person to write a cross-league probe will hit it.
+
+8 probe cases; 58 suites. Classic windows are excluded throughout — classic has
+no metrics, so a null there is correct and would drown the signal.
+
+
 ### v0.329.0 — quick reactions in chat
 
 Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,

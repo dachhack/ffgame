@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -249,6 +249,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {tab === 'system' && (
         <>
           <HealthPanel />
+          {/* The audit sits under health because it answers the same kind of
+              question — "is anything quietly wrong right now" — but on demand. */}
+          <MetriclessPanel />
           <MarkFreeToggle />
           <DemoCardThemePanel />
           <PremiumTierPanel />
@@ -2999,6 +3002,86 @@ const ago = (iso: string | null): string => {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 };
+
+/** DEAD SEATS: picks with a player and no metric (v0.330.0).
+ *
+ *  Founder, on a live window: "how did Montgomery get no metric?" — then "can
+ *  we run the sql by action?"
+ *
+ *  The .sql file that answered the first question needed a psql prompt and live
+ *  credentials. This is the same query where the data already is, behind the
+ *  same admin gate as SYSTEM HEALTH, so the answer is a tap from a phone.
+ *
+ *  WHY IT MATTERS: `scorePlay` is a chain of `if (metricId === '…')` ending in
+ *  `return 0`. A null matches nothing and falls through — the pick scores
+ *  exactly zero for the whole window whatever the player does, and nothing on
+ *  the board says so.
+ *
+ *  ON DEMAND, NOT ON A POLL. Unlike SYSTEM HEALTH next to it, this is a
+ *  full-table scan across every league; running it every 10 seconds to answer a
+ *  question nobody asked is how a diagnostic becomes a load problem. */
+function MetriclessPanel() {
+  const [a, setA] = useState<MetriclessAudit | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try { setA(await adminMetriclessPicks()); }
+    catch (e) { setErr(errMsg(e, 'audit failed')); }
+    finally { setBusy(false); }
+  };
+  const locked = (a?.picks ?? []).filter((p) => p.locked).length;
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+        <div style={h}>DEAD SEATS · picks with no metric</div>
+        <button onClick={run} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.5 : 1 }}>
+          {busy ? '…' : a ? '↻ re-run' : 'RUN AUDIT'}
+        </button>
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        A pick with a player and no metric scores <b>exactly zero</b> — the seat is
+        occupied and dead, and the board doesn’t say so. Classic windows are excluded:
+        they have no metrics, so a null there is correct.
+      </div>
+      {err && <Muted text={err} />}
+      {a && !a.ok && <Muted text={a.error ?? 'forbidden'} />}
+      {a?.ok && (
+        <>
+          <div className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, marginBottom: 8, color: (a.total ?? 0) === 0 ? 'var(--you)' : 'var(--warn)' }}>
+            {(a.total ?? 0) === 0
+              ? '✓ none — every fielded pick has a metric'
+              : `${a.total} dead seat${a.total === 1 ? '' : 's'}${locked ? ` · ${locked} already LOCKED` : ''}`}
+            {a.truncated && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> (showing the first {a.picks?.length})</span>}
+          </div>
+          {/* An agent row should be impossible — autoLineup always assigns a
+              metric — so it is called out rather than buried in the list. */}
+          {!!a.agent_rows && (
+            <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--opp)', marginBottom: 8, lineHeight: 1.5 }}>
+              ⚠ {a.agent_rows} of these sit on an AI seat, which autoLineup should make impossible —
+              something nulled the metric AFTER the worker wrote it.
+            </div>
+          )}
+          {(a.by_team ?? []).map((t) => (
+            <div key={`${t.league}/${t.team}`} className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
+              {t.league} · <b style={{ color: 'var(--text)' }}>{t.team}</b>
+              {t.controller === 'ai' ? ' 🤖' : ''} — {t.n}{t.locked ? ` (${t.locked} locked)` : ''}
+            </div>
+          ))}
+          {(a.picks ?? []).slice(0, 25).map((p) => (
+            <div key={`${p.league}-${p.week}-${p.win}-${p.slot}-${p.player_slug}`} className="mono"
+              style={{ ...mono, fontSize: 11, color: 'var(--faint)', padding: '2px 0' }}>
+              wk{p.week} {p.win}/{p.slot} · {p.player_slug} · {p.team}
+              {p.locked && <span style={{ color: 'var(--opp)' }}> LOCKED</span>}
+              {p.sibling_slots_with_metric > 0 && <span> · set up properly, lost this one</span>}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
 
 // System health: ingest + resolve freshness, status mix. Polls every 10s.
 function HealthPanel() {

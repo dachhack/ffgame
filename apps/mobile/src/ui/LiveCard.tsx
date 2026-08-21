@@ -19,6 +19,7 @@
 // without reading a number.
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
+import { isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import type { Pos } from '@drip/core/theme';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { useWobble, HotGlow } from './animations';
@@ -225,9 +226,20 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
             rather than one truncated: "Receiving Yards" ellipsed to
             "Receiving …" loses the only word that distinguishes it from
             "Receiving TDs". */}
-        {!!metricName && (
+        {/* A MISSING METRIC IS SAID OUT LOUD (v0.331.0). This used to render
+            nothing at all, so a pick that scores exactly zero — scorePlay
+            falls through to `return 0` when the metric matches no branch —
+            looked like a perfectly normal card with 0.0 on it. "How did
+            Montgomery get no metric?" is the question that produced; the card
+            should have been answering it. Warn-coloured, because the seat is
+            dead and the manager can only fix it before the window locks. */}
+        {isMetricSet(metricName) ? (
           <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%', minHeight: 36, justifyContent: 'center' }}>
             <Text numberOfLines={2} style={{ fontSize: 11, fontWeight: '800', color: accent, textAlign: mirror ? 'right' : 'left' }}>{metricName}</Text>
+          </View>
+        ) : (
+          <View style={{ backgroundColor: alpha(t.warn, 12), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(t.warn, 60), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%', minHeight: 36, justifyContent: 'center' }}>
+            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.warn, textAlign: mirror ? 'right' : 'left' }}>{NO_METRIC_LABEL}</Text>
           </View>
         )}
         {/* Score sits under the chip rather than in its own column: the web

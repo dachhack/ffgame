@@ -7,6 +7,7 @@
 import { mentionsEveryone, mentionIds } from '../packages/core/src/data/mentions';
 import { CHAT_REACTIONS, CHAT_REACTION_EMOJI, orderedReactions, reactionLabel } from '../packages/core/src/data/chatReactions';
 import { readFileSync } from 'node:fs';
+import { isMetricSet, NO_METRIC_LABEL } from '../packages/core/src/data/metrics';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -105,6 +106,27 @@ const LEAGUE = [ME, { id: 'a', name: 'Allen' }, { id: 'b', name: 'Bird Law' }, {
   ok('empty and null are empty, not a crash',
     orderedReactions([]).length === 0 && orderedReactions(null).length === 0 && orderedReactions(undefined).length === 0);
   ok('a malformed row is skipped', orderedReactions([null, { n: 1 }, { emoji: '👍', n: 1, mine: false }]).length === 1);
+}
+
+// ── A MISSING METRIC (v0.331.0) ────────────────────────────────────────────
+// Founder: "how did Montgomery get no metric?" A pick whose metric is missing
+// scores EXACTLY ZERO — scorePlay is a chain of `if (metricId === '…')` ending
+// in `return 0` — and the card rendered it as an ordinary 0.0.
+{
+  ok('a real metric is set', isMetricSet('rush') && isMetricSet('recyd'));
+  ok('null and undefined are not', !isMetricSet(null) && !isMetricSet(undefined));
+  // THE ONE THAT MATTERS. The cards read `metric?.name ?? p.metric_id ?? null`,
+  // and `??` falls through on null/undefined ONLY — so '' sails past it, then
+  // fails the `!!metricName` render test. The chip vanishes with no null
+  // anywhere in sight, which is the hardest version of this to find. The engine
+  // itself uses `metricId: ''` for the unopposed seat, so it is in circulation.
+  ok('an EMPTY STRING is not set — the case `??` misses', !isMetricSet(''));
+  ok('…nor is whitespace', !isMetricSet('   ') && !isMetricSet('\t'));
+  ok('a non-string is not set', !isMetricSet(42) && !isMetricSet({}));
+  ok('the placeholder says it scores zero, not just that it is absent',
+    /0/.test(NO_METRIC_LABEL) && NO_METRIC_LABEL.trim() !== '');
+  // A blank label would put us straight back to an invisible dead seat.
+  ok('the placeholder is itself renderable', isMetricSet(NO_METRIC_LABEL));
 }
 
 if (fails) { console.log(`\n${fails} MENTION ASSERTION(S) FAILED`); process.exit(1); }

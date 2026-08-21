@@ -1043,6 +1043,32 @@ export const adminPickReadiness = (leagueId: string, week: number) => rpc<PickRe
  *  week. Not to be confused with league.synced_at, which is the league IMPORT
  *  time and reads days old on a perfectly healthy worker. */
 export interface AdminHealth { now: string; leagues: number; enrolled: number; matchups_by_status: Record<string, number>; live_matchups: number; live_play_count: number; sim_play_count: number; last_play_ingest: string | null; last_state_update: string | null; last_lineup_sync: string | null; }
+/** THE METRICLESS-PICK AUDIT (0211). Read-only, admin-gated.
+ *
+ *  A `sealed_pick` with a player and no metric scores EXACTLY ZERO — scorePlay
+ *  is a chain of `if (metricId === '…')` ending in `return 0`, so a null falls
+ *  through. The seat is occupied and dead and the board does not say so. This
+ *  finds them across every league. It reports; it never repairs. */
+export interface MetriclessPick {
+  league: string; week: number; win: string; slot: string; player_slug: string;
+  team: string; controller: string; locked: boolean;
+  /** How many of that seat's OTHER slots DO carry a metric. >0 means the seat
+   *  was set up properly and then lost one, which points at the paths that null
+   *  a metric deliberately (0024/0026/0062) rather than at someone who never
+   *  finished. */
+  sibling_slots_with_metric: number;
+}
+export interface MetriclessAudit {
+  ok: boolean; error?: string; total?: number; truncated?: boolean;
+  picks?: MetriclessPick[];
+  by_team?: { league: string; team: string; controller: string; n: number; locked: number }[];
+  /** Should always be 0: autoLineup always assigns a metric, so an agent row
+   *  here means something nulled it AFTER the worker wrote it. */
+  agent_rows?: number;
+}
+export const adminMetriclessPicks = (limit = 200) =>
+  rpc<MetriclessAudit>('admin_metricless_picks', { p_limit: limit });
+
 export const adminHealth = () => rpc<AdminHealth>('admin_health');
 export const adminSetPicks = (matchupId: string, appUserId: string, rows: { game_window: string; roster_slot: string; player_slug: string; metric_id: string }[]) =>
   rpc<{ ok: boolean; count?: number; error?: string }>('admin_set_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId, p_rows: rows });
