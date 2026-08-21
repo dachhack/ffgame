@@ -33,9 +33,19 @@
 --      toggling preseason OFF DELETES them — so a re-toggle without a re-seed
 --      leaves exactly this shape: `pool_rows` null or 0, picks 0.
 --
--- `picks = 0` with `has_account = true` and `pool_rows > 0` is a THIRD case and
--- a real bug: the fill could have run and didn't. Check lineup_policy first —
--- 'empty' is the commissioner opting out, and then zero is correct.
+-- `picks = 0` with `has_account = true` and `pool_rows > 0` is a THIRD case,
+-- and the only one worth chasing — but read the STATUS column before you do:
+--
+--   • a SCHEDULED matchup has not locked, and the fill runs at lock, so zero
+--     picks there is a week that has not started, not a miss. The first run of
+--     this file reported a whole scheduled week as bugs;
+--   • `has_account` is read NOW. A seat that was unclaimed when the window
+--     sealed could not store picks at all, and a human claiming it later makes
+--     the history read as an accounted seat that fielded nothing. On a past
+--     week, check when the seat was claimed before calling it a bug.
+--
+-- And check lineup_policy — 'empty' is the commissioner opting out, and then
+-- zero is correct.
 
 \set league_name '%'
 \set week_floor 100
@@ -94,7 +104,13 @@ select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
        lm.controller, lm.enrolled,
        coalesce(jsonb_array_length(sl.starters_json), -1) pool_rows,  -- -1 = no lineup row at all
        l.lineup_policy,
+       m.status,
        case
+         -- FIRST, because it is the commonest false positive and it fooled the
+         -- author of this file: the fill runs AT LOCK, so a scheduled matchup
+         -- having no picks is not a miss, it is a week that has not started.
+         when m.status = 'scheduled'
+           then 'not locked yet — the fill runs at lock, nothing is wrong'
          when lm.app_user_id is null and sa.agent_user_id is null
            then 'unclaimed seat — cannot store picks; resolve-time rebuild only'
          when sl.starters_json is null
@@ -103,7 +119,13 @@ select l.name league, m.week, lm.sleeper_roster_id seat, lm.team_name,
            then 'lineup row is EMPTY — nothing to field from'
          when l.lineup_policy = 'empty'
            then 'commissioner policy is empty — zero is correct'
-         else 'HAS an account and a pool — the fill should have run; this is a bug'
+         -- CAVEAT, and it matters: `app_user_id` is read NOW, not as it was at
+         -- lock. A seat that was UNCLAIMED when the window sealed could not
+         -- store picks, and if a human took it afterwards this reads as an
+         -- accounted seat that fielded nothing. So on a past week this is
+         -- "worth investigating", not "proven bug" — check whether the seat
+         -- was claimed before or after that week locked.
+         else 'account + pool + locked and still empty — investigate (see caveat: was the seat claimed AFTER this week locked?)'
        end as diagnosis
   from matchup m
   join league l on l.id = m.league_id
