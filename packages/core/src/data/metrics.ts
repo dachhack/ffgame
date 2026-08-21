@@ -97,3 +97,31 @@ export function defaultMetric(pos: Pos): Metric {
   const list = (METRICS[pos] || METRICS.WR).filter((m) => !m.lock);
   return list[0];
 }
+
+// ── IS A METRIC ACTUALLY SET? (v0.331.0) ──────────────────────────────────
+//
+// Founder, on a live window: "how did Montgomery get no metric?" — then, having
+// looked: "looks like just an app issue."
+//
+// Both halves are worth encoding, because the board was silent either way.
+//
+// WHY IT MATTERS AT ALL: `scorePlay` (engine/sim.ts) is a chain of
+// `if (metricId === '…')` ending in `return 0`. A pick whose metric is missing
+// matches nothing and falls through — it scores EXACTLY ZERO for the whole
+// window whatever the player does. The seat is occupied and dead.
+//
+// WHY A HELPER RATHER THAN `!!id`: the cards read the metric through
+// `metric?.name ?? p.metric_id ?? null`, and `??` only falls through on null
+// and undefined. An EMPTY STRING sails past it, arrives as `''`, and then fails
+// the `!!metricName` render test — so the chip vanishes with no null anywhere
+// in sight. `''` is not hypothetical: the engine itself uses `metricId: ''` for
+// the unopposed seat. One predicate, so the render, the audit and the test all
+// agree on what "missing" means.
+export function isMetricSet(id?: string | null): boolean {
+  return typeof id === 'string' && id.trim() !== '';
+}
+
+/** What a card shows in place of a metric name. Not blank: a blank chip is
+ *  indistinguishable from a normal card, which is exactly how a dead seat went
+ *  unnoticed until someone asked about it. */
+export const NO_METRIC_LABEL = 'NO METRIC · scores 0';

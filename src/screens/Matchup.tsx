@@ -8,7 +8,7 @@ import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel, LOCK_LEAD_MS, windowLockMs } from '@drip/core/data/nflSlate';
-import { METRICS, metricById } from '@drip/core/data/metrics';
+import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -2971,7 +2971,8 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;
         })()}
         {(phase === 'final' || done) && <BuffFxRow side={mineBackup ? 'you' : 'their'} fx={mineBackup ? slot.youBuffFx : slot.theirBuffFx} />}
-        {open && slot.real && <FieldView week={week} team={be.player.team} clock={bclock} collapsible />}
+        {/* Same gate, same reason (v0.331.0) — see SlotFieldViews below. */}
+        {open && <FieldView week={week} team={be.player.team} clock={bclock} collapsible />}
         {open && (() => {
           const log = buildLog(bEvents);
           return (
@@ -3096,7 +3097,26 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
       )}
       {final && <BuffFxRow side="you" fx={slot.youBuffFx} stake={slot.youStake} />}
       {final && <BuffFxRow side="their" fx={slot.theirBuffFx} />}
-      {open && slot.real && (
+      {/* ── THE FIELD IS THE GAME'S, NOT THE PLAYER'S (v0.331.0) ──────────
+          Founder: "looks like the game field visual doesn't show unless there
+          is a play with your player?" Exactly right, and `slot.real` was the
+          gate. That flag is `REAL_WEEKS.has(week) || !!realRawPlays(player)` —
+          true for the baked 2025 weeks (1-22), and on any OTHER week only once
+          one of the two players has recorded a play himself.
+
+          So on a live preseason window the LV@HOU game could be under way with
+          six plays in the log and the field still hidden, because neither Bech
+          nor Montgomery had touched the ball. The field is a picture of the
+          GAME; whether your man has carried it yet is not the question it
+          answers, and "nothing has happened to him yet" is precisely when you
+          want to watch.
+
+          Nothing is needed in its place: FieldView/SlotFieldViews already
+          return null when `gameFeedFor` has no feed, and the worker only writes
+          a feed once the game has plays (gameToFeed: `if (!all.length) return
+          null`). So the real condition — is there a game to draw — was already
+          enforced one level down, and `slot.real` only ever subtracted. */}
+      {open && (
         <SlotFieldViews week={week} youTeam={slot.you.player.team} theirTeam={slot.their.player.team} youClock={youClock} theirClock={theirClock} />
       )}
       {open && (() => {
@@ -3173,7 +3193,10 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // the same height regardless of label length; desktop keeps it inline.
   const metricChip = (
     <div title={metricEf || undefined} style={{ display: 'inline-flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? (side === 'you' ? 'flex-end' : 'flex-start') : 'baseline', maxWidth: '100%', gap: isMobile ? 0 : 5, marginTop: isMobile ? 2 : 0, padding: isMobile ? '2px 7px' : '3px 8px', borderRadius: 4, background: `color-mix(in srgb, ${accent} 16%, transparent)`, border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`, cursor: metricEf ? 'help' : undefined }}>
-      <span className="grotesk" style={{ fontSize: isMobile ? 9.5 : 13, fontWeight: 700, color: accent, letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metricName}</span>
+      {/* A MISSING METRIC IS SAID OUT LOUD (v0.331.0). Blank read as a normal
+          card, and a pick with no metric scores EXACTLY ZERO — scorePlay is a
+          chain of `if (metricId === '…')` ending in `return 0`. */}
+      <span className="grotesk" style={{ fontSize: isMobile ? 9.5 : 13, fontWeight: 700, color: isMetricSet(metricName) ? accent : 'var(--warn)', letterSpacing: '0.01em', lineHeight: 1.25, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isMetricSet(metricName) ? metricName : NO_METRIC_LABEL}</span>
       <span className="mono" style={{ fontSize: fs(7), fontWeight: 700, letterSpacing: '0.1em', color: accent, opacity: 0.85, whiteSpace: 'nowrap', lineHeight: 1.25 }}>{tag}</span>
     </div>
   );

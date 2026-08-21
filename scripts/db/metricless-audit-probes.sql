@@ -30,7 +30,11 @@ begin
   insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id, locked)
   values (mid, ua, 'tnf', 'S1', 'jack-bech',        'recyd', false),
          (mid, ua, 'tnf', 'S2', 'david-montgomery',  null,   true),
-         (mid, ua, 'classic', 'RB1', 'someone-else', null,   false);
+         (mid, ua, 'classic', 'RB1', 'someone-else', null,   false),
+         -- 0212: an EMPTY STRING is equally dead and equally invisible — `??`
+         -- falls through on null only, so '' reaches the card and fails the
+         -- render test with no null anywhere in sight.
+         (mid, ua, 'snf', 'S3', 'empty-string-man',  '',     false);
 
   -- Not an admin → refused. The audit reads every league in the system.
   perform set_config('app.uid', ua::text, false);
@@ -52,21 +56,25 @@ begin
   --    correct — it is a cross-league audit.)
   select count(*) into n from jsonb_array_elements(r -> 'picks') p
     where p ->> 'league' = 'Audit League';
-  if n <> 1 then
-    raise exception 'PROBE FAIL: expected exactly 1 metricless pick in the fixture league, got % — %', n, r -> 'picks';
+  if n <> 2 then
+    raise exception 'PROBE FAIL: expected 2 metricless picks (one null, one empty string) in the fixture league, got % — %', n, r -> 'picks';
   end if;
   if (select count(*) from jsonb_array_elements(r -> 'picks') p where p ->> 'win' = 'classic') <> 0 then
     raise exception 'PROBE FAIL: a classic null was reported as a finding';
   end if;
-  if (select p ->> 'player_slug' from jsonb_array_elements(r -> 'picks') p
-        where p ->> 'league' = 'Audit League' limit 1) <> 'david-montgomery' then
-    raise exception 'PROBE FAIL: wrong row reported — %', r -> 'picks';
+  if (select count(*) from jsonb_array_elements(r -> 'picks') p
+        where p ->> 'league' = 'Audit League' and p ->> 'player_slug' = 'david-montgomery') <> 1 then
+    raise exception 'PROBE FAIL: the null-metric row was not reported — %', r -> 'picks';
+  end if;
+  if (select count(*) from jsonb_array_elements(r -> 'picks') p
+        where p ->> 'league' = 'Audit League' and p ->> 'player_slug' = 'empty-string-man') <> 1 then
+    raise exception 'PROBE FAIL: an EMPTY-STRING metric was missed — %', r -> 'picks';
   end if;
 
   -- 2. The LOCKED flag rides along: that is the difference between a warning
   --    and a window the manager can no longer save.
   if not (select (p ->> 'locked')::boolean from jsonb_array_elements(r -> 'picks') p
-            where p ->> 'league' = 'Audit League' limit 1) then
+            where p ->> 'league' = 'Audit League' and p ->> 'player_slug' = 'david-montgomery') then
     raise exception 'PROBE FAIL: the locked flag did not survive';
   end if;
 
@@ -74,14 +82,14 @@ begin
   --    metric, so it was set up properly and then lost one — 0024/0026/0062,
   --    not a manager who never finished.
   if (select (p ->> 'sibling_slots_with_metric')::int from jsonb_array_elements(r -> 'picks') p
-        where p ->> 'league' = 'Audit League' limit 1) <> 1 then
+        where p ->> 'league' = 'Audit League' and p ->> 'player_slug' = 'david-montgomery') <> 1 then
     raise exception 'PROBE FAIL: sibling count wrong — %', r -> 'picks';
   end if;
 
   -- 4. Grouped by team, with the controller, so "one workflow slip" and "a code
   --    path writing nulls" look different at a glance.
   if (select count(*) from jsonb_array_elements(r -> 'by_team') t
-        where t ->> 'league' = 'Audit League' and t ->> 'team' = 'Audit Team' and (t ->> 'n')::int = 1) <> 1 then
+        where t ->> 'league' = 'Audit League' and t ->> 'team' = 'Audit Team' and (t ->> 'n')::int = 2) <> 1 then
     raise exception 'PROBE FAIL: by_team did not name the team — %', r -> 'by_team';
   end if;
 
@@ -91,8 +99,8 @@ begin
   n := (r ->> 'agent_rows')::int;
   update league_membership set controller = 'ai' where league_id = lg and app_user_id = ua;
   r := admin_metricless_picks();
-  if (r ->> 'agent_rows')::int <> n + 1 then
-    raise exception 'PROBE FAIL: flipping the seat to AI did not move agent_rows (% → %)', n, r ->> 'agent_rows';
+  if (r ->> 'agent_rows')::int <> n + 2 then
+    raise exception 'PROBE FAIL: flipping the seat to AI did not move agent_rows by 2 (% → %)', n, r ->> 'agent_rows';
   end if;
 
   -- 6. The cap is honest about itself rather than quietly showing less. With
@@ -111,7 +119,7 @@ begin
   if (select metric_id from sealed_pick where matchup_id = mid and roster_slot = 'S2') is not null then
     raise exception 'PROBE FAIL: the audit wrote a metric';
   end if;
-  if (select count(*) from sealed_pick where matchup_id = mid) <> 3 then
+  if (select count(*) from sealed_pick where matchup_id = mid) <> 4 then
     raise exception 'PROBE FAIL: the audit changed the pick rows';
   end if;
 

@@ -11,7 +11,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { teamLogo } from '@drip/core/data/media';
-import { metricById } from '@drip/core/data/metrics';
+import { metricById, isMetricSet } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { teamFor } from '@drip/core/data/playerTeam';
 import { openPlayerCard } from './PlayerCardSheet';
@@ -162,7 +162,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         key={`${win}-${slot}-${who}`}
         side={who} idx={idx}
         slug={player.slug} name={player.full} pos={player.pos} team={slugTeam(player)}
-        metricName={metric?.name ?? p.metric_id ?? null}
+        // `||`, not `??` (v0.331.0): an empty-string metric_id sails past
+        // `??` and then fails the render test, so the chip vanished with no
+        // null anywhere in sight. isMetricSet is the shared predicate.
+        metricName={isMetricSet(metric?.name) ? metric!.name : isMetricSet(p.metric_id) ? p.metric_id! : null}
         bank={row ? round1(Number(row.score)) : null}
         hot={!!row?.hot}
         nuked={!!row?.nuked}
