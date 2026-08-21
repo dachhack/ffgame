@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.337.1 — the commissioner map lines up in two columns
+
+Founder, on the app's Commissioner screen: "can we align these better in the
+app?"
+
+The map's chips were intrinsic-width in a `flexWrap` row, so every group broke
+raggedly — SET UP 3-then-2, RUN THE SEASON 3-then-1 — and no two labels shared
+a left edge. Now `justifyContent: 'space-between'` with a `49%` chip width:
+two straight columns, emoji aligned down each one, and an odd-count group
+leaves its gap on the right instead of scattering it.
+
+Measured in headless Chromium before changing anything: the widest label
+(⇄ WAIVERS & TRADES) is 147dp at `fs(9.5)`, and the founder's screenshot scale
+put their device near 412dp, where the track is 173dp. The grid still fits the
+widest label down to a 360dp screen. Labels are deliberately NOT
+`numberOfLines={1}` — below that width a wrapped label still says which
+destination it is, where an ellipsis would not.
+
 ### v0.337.0 — auto-pick a metric, the way we auto-slot a player
 
 Founder: "we should auto pick a metric if there is none just like we auto slot

@@ -323,12 +323,25 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           .filter((g) => g.items.length > 0).map((g) => (
           <View key={g.title} style={{ marginBottom: 6 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+            {/* TWO FIXED COLUMNS, not an intrinsic-width wrap (v0.337.1).
+                Content-sized chips wrapped raggedly — SET UP broke 3-then-2
+                and RUN THE SEASON 3-then-1, so every group ended on a short
+                line and no two labels shared a left edge. `space-between` +
+                a ~half width gives two straight columns: the emoji all line
+                up, and a group with an odd count leaves its gap on the right
+                instead of scattering it. Measured at the widest label
+                (⇄ WAIVERS & TRADES, 147dp at this type size) against the
+                narrowest track this grid produces. */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 5, marginTop: 4 }}>
               {g.items.map((it) => {
                 const on = section === it.id;
                 return (
                   <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}
-                    style={{ borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
+                    style={{ width: '49%', borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
+                    {/* deliberately NOT numberOfLines={1}: the track fits the
+                        widest label down to a 360dp screen, and below that a
+                        wrapped label still says which destination it is where
+                        an ellipsis would not. */}
                     <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
                   </Pressable>
                 );
