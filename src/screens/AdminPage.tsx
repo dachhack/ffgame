@@ -459,6 +459,7 @@ interface TxnRules {
   mode: WaiverMode; budget: number; review: TradeReview;
   clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
+  agentWaivers: boolean;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [init, setInit] = useState<TxnRules | null>(null);
@@ -472,6 +473,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
   const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
   const [holdDays, setHoldDays] = useState(1);
+  const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -486,10 +488,13 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
+        // Absent means ON (0213), the same default league_agent_waivers uses.
+        agentWaivers: r.agent_waivers !== false,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading_(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setAgentWaivers(cur.agentWaivers);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
   if (!init) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
@@ -510,8 +515,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
         dowChanged ? (clearDow ?? []) : null,
-        faDowChanged ? (faDow ?? []) : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd }); setMsg('✓ saved'); }
+        faDowChanged ? (faDow ?? []) : null,
+        agentWaivers !== init.agentWaivers ? agentWaivers : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, agentWaivers }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -572,6 +578,24 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             and turning it off deletes them — a write, not a draft of one — and
             it can be refused, because a slot somebody already traded for is
             their property and the server says so instead of deleting it. */}
+        {/* EMPTY SEATS ON THE WIRE (0213). Unlike the pick switch below it this
+            saves with the rules button — it writes a settings flag and nothing
+            else, so there is nothing to provision and nothing to refuse. Kept
+            separate from the auto-slot opt-out on purpose: filling a lineup
+            from players a seat already owns is housekeeping, while adding and
+            dropping changes the pool and spends FAAB. */}
+        <div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>UNMANAGED SEATS</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+            {toggle(agentWaivers, agentWaivers ? '🤖 CLAIM' : '🤖 SIT', () => setAgentWaivers(!agentWaivers))}
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5, maxWidth: 320 }}>
+            {agentWaivers
+              ? 'Seats nobody manages fill holes and take clear upgrades from waivers and free agency — never dropping a player in their starting lineup.'
+              : 'Seats nobody manages still set lineups, but never add or drop.'}
+          </div>
+        </div>
+
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>DRAFT PICK TRADING</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>

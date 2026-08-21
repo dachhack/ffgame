@@ -18,6 +18,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.0 — an unclaimed seat works the wire
+
+Founder: "Automated players for classic leagues. not only slotting players, but
+also using waivers."
+
+The slotting half already shipped — `autoSlotClassicLineups` has fielded an
+agent seat's best legal lineup every tick since v0.248.0. What seat agents
+(0180) had never done is TRANSACT, so an agent seat's week-3 ACL was still a
+hole in December while the replacement sat in the pool.
+
+**Policy** (founder's calls): fill holes on any gain, take an upgrade only above
+2 projected points/week, never drop a player who is in the best lineup, bid
+gain × $3 capped at 25% of remaining FAAB, and a commissioner switch separate
+from the auto-slot opt-out. The hole/upgrade asymmetry is the design — one
+threshold either ignores injuries or churns.
+
+**No parallel write path.** 0213 widens the guard on `submit_waiver_claim` and
+`add_free_agent` to admit the worker for a seat nobody holds, rather than
+forking their validation. Two conditions must both hold: `auth.uid() IS NULL`
+(service role only — every signed-in user has a uid) and `agent_wire_seat`,
+which JOINS league_membership rather than trusting the seat_agent row, so a
+stale mapping can never let the worker transact over a real manager's roster.
+
+Decision logic is pure (`engine/seatWaivers.ts`), so the policy is asserted
+without a database: 29 assertions in `check:seatwire`. The authorization
+boundary is asserted in SQL where it actually lives: `agent-wire-probes.sql`,
+suite 60.
+
+Two things found on the way: the marginal value of an add is measured against
+the WEAKEST STARTER DISPLACED, not the same-position starter (a 9.5 RB added to
+RB 10 / RB 8 / FLEX 5 gains 4.5, not 1.5) — `lineupValue` gets this right by
+re-solving the assignment, a hand-rolled same-position check would not. And
+no_add flags are enforced by a TRIGGER THAT RAISES, so a flagged add would abort
+the whole sweep; the worker filters them itself, because the engine's flag cache
+is never installed worker-side (the gap lock.js documents for no_start).
+
 ### v0.337.2 — the web's live screens stop reading a 2025 fallback
 
 The app's boards have installed the league pool's own slug meta since 0200.1;
