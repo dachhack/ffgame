@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.3 — the box score reads like a box score
+
+Founder: "sort the box score by offense vs defense, then by position then by
+yards (highest at the top)."
+
+It was one flat involvement ranking (`weigh`: yards + TDs + defensive stats),
+so a 6-tackle linebacker outranked a 46-yard receiver and every position was
+interleaved. You could not scan it for "how did the backs do", which is most of
+what a box score is for.
+
+Now side → position → yards → weight → slug. Two judgement calls worth knowing:
+
+  • YARDS is the full total, passing at face value — not `weigh`'s 0.4 passing
+    discount. That discount exists to compare a QB against a RB; inside a group
+    of QBs it only distorts the answer, and the groups are the point now.
+  • WEIGHT survives as the tiebreak and earns its place: every defender has
+    zero yards, so within LB or DB it does the entire ordering — tackles, sacks
+    and picks, the only sensible reading of "highest at the top" for someone
+    who gains none.
+
+K, P and RET sit on the OFFENSIVE half, where a box-score reader looks for
+them. Not reusing `matchupBoard`'s POS_ORDER, the closest existing list: it
+ranks FB after DB, so it encodes no offense/defense split at all.
+
+New `check:boxorder` suite (11 assertions) on the now-exported comparator —
+`gameBoxScore` reads a week's plays from module globals, so asserting through
+it would pin the plumbing rather than the judgement. The file's own comment had
+claimed a test asserted this ordering; none existed until now.
+
 ### v0.338.2 — ALL GAMES means all games
 
 Founder: "it looks like the games in the field view are just the ones with
