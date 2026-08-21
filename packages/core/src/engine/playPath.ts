@@ -115,3 +115,53 @@ export function arcControlY(x1: number, x2: number, midY: number, top: number): 
   const depth = Math.min(maxDepth, Math.max(minDepth, dist * 0.7));
   return midY - depth;
 }
+
+// ── WHICH SIDE OF THE FIELD THE PLAY WENT (v0.335.0) ──────────────────────
+//
+// Founder: "If the play says right or left can we have the play draw on that
+// side of the field?"
+//
+// ESPN's play text says so in every case that has a side: "pass short right to
+// D.Laube", "pass deep left", "rush up the middle", "left tackle". The field
+// drew every play down the centre line, so a checkdown to the right flat and a
+// deep out to the left were the same picture.
+//
+// ── THE WORD BOUNDARY IS THE WHOLE PARSER ──────────────────────────────────
+// Play text is full of NAMES, and the names collide with the direction words:
+// Wright, Leftwich, Rightmire. `\b` handles them — "Wright" has no boundary
+// before its "right" — and that is precisely the thing to have a test for
+// rather than a hope about, because the failure is a play drawn on the wrong
+// side, which looks exactly as plausible as the right one.
+//
+// FIRST MATCH WINS, because ESPN puts the direction in the action phrase
+// ("pass short right to …") and any later occurrence is a tackler's surname or
+// a penalty note.
+
+export type PlaySide = 'left' | 'right' | 'middle';
+
+/** The side named in a play's text, or null when it names none. */
+export function playSide(txt?: string | null): PlaySide | null {
+  const m = /\b(left|right|middle)\b/i.exec(String(txt ?? ''));
+  return m ? (m[1].toLowerCase() as PlaySide) : null;
+}
+
+/** How far off the centre line to draw a play, in field units.
+ *
+ *  SIGN COMES FROM THE ATTACK DIRECTION, not from the word. "Right" is the
+ *  OFFENSE's right, and on an overhead field an offense moving right on screen
+ *  has its right hand toward the bottom — so the same word points opposite ways
+ *  depending on which way the team is going, and mirrors again when the viewer
+ *  flips the field. Getting this backwards draws every play on the wrong side
+ *  while looking entirely reasonable, which is why it is a tested function and
+ *  not an inline ternary.
+ *
+ *  @param attacksRightOnScreen the direction the offense moves AS DRAWN
+ *         (i.e. after any flip has been applied).
+ *  @param lane how far a left/right play sits from the centre line. */
+export function playSideDy(
+  side: PlaySide | null, attacksRightOnScreen: boolean, lane: number,
+): number {
+  if (side == null || side === 'middle') return 0;
+  const toward = side === 'right' ? 1 : -1;      // +1 = down the screen
+  return toward * (attacksRightOnScreen ? 1 : -1) * lane;
+}

@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.335.0 — the play draws on the side its text says it went
+
+Founder: "If the play says right or left can we have the play draw on that side
+of the field?"
+
+ESPN's play text has said so all along — "pass short right to D.Laube", "pass
+deep left", "rush up the middle", "left tackle" — and the field drew every play
+down the centre line, so a checkdown to the right flat and a deep out to the
+left were the same picture.
+
+The SNAP stays on the centre line (the ball starts between the hashes whatever
+happens next) and the far end moves to the named side, so the arc leans out and
+comes down over there. Middle, and anything with no side named, is unchanged.
+
+── THE TWO THINGS THAT NEEDED TESTS RATHER THAN CONFIDENCE ────────────────
+
+1. THE WORD BOUNDARY. Play text is full of names that contain the direction
+   words — Wright, Leftwich, Rightmire — and a play drawn on the wrong side
+   looks exactly as plausible as one drawn on the right side, so it would never
+   be noticed. `\b` handles it ("Wright" has no boundary before its "right"),
+   and the assertions name the real cases. First match wins, because ESPN puts
+   the direction in the action phrase and any later occurrence is a tackler.
+
+2. THE SIGN. "Right" is the OFFENSE'S right, which is the bottom of the screen
+   only while they are moving right — the same word points opposite ways for the
+   two teams in the same game, and mirrors AGAIN when the viewer flips the
+   field. That is why it is `playSideDy`, a tested function, and not an inline
+   ternary. Rendered all five combinations and checked them one by one:
+   HOU attacking ◀ puts "right" ABOVE the centre line, LV attacking ▶ puts the
+   same word BELOW it, and "middle" sits on the line for both.
+
+The native port needed `pathLen` widened to take the endpoints — it measures the
+arc to drive a length-based draw animation, and a length computed against a flat
+centred arc comes up short and leaves the stroke drawn part way. That is the
+second time this file's animation has needed the measurement kept in step with
+the path (v0.333.0 was the first), so the two now share every input.
+
+18 new parity assertions (701 total). Both platforms.
+
+
 ### v0.334.0 — a backup's empty half was making a claim about the opponent
 
 Founder, on a locked TNF window before kickoff: "hmm game hasn't started yet and

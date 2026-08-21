@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
-import { playPath, arcControlY } from '@drip/core/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile } from './ui';
 
@@ -304,6 +304,20 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
    *  note at the arc. Small enough to read as the same play, big enough that a
    *  runback never lies on top of the kick that produced it. */
   const CARRY_DY = 4;
+  // ── THE PLAY GOES WHERE THE TEXT SAYS IT WENT (v0.335.0) ────────────────
+  // Founder: "if the play says right or left can we have the play draw on that
+  // side of the field?" It does now. The SNAP stays on the centre line — the
+  // ball starts between the hashes whatever happens next — and the far end
+  // moves to the named side, so the arc leans out and comes down over there.
+  //
+  // The sign is `playSideDy`'s job because it is the part that gets drawn
+  // backwards: "right" is the OFFENSE's right, which is the bottom of the
+  // screen only while they are moving right, and mirrors again when the viewer
+  // flips the field. `attacksRight` is already the pre-flip direction, so the
+  // on-screen one is the same expression the ▶/◀ marker uses.
+  const SIDE_LANE = (BOT - TOP) * 0.22;
+  const sideDy = playSideDy(playSide(cur?.txt), flip ? !attacksRight : attacksRight, SIDE_LANE);
+  const endY = midY + sideDy;
   // ── THE LANE IS FOR DOUBLING BACK, NOT FOR EVERY CARRY (v0.333.0) ────────
   // v0.332.0 put EVERY carried phase on its own lane, which was an
   // over-application of a fix aimed at kick returns. For a pass the run-after
@@ -311,7 +325,7 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
   // continuous motion — and dropping it to a second lane split that motion into
   // "a line on the ground and an arch above", which is exactly what the founder
   // then reported. `overlaps` already knew the difference; now it decides.
-  const carryY = overlaps ? midY + CARRY_DY : midY;
+  const carryY = (overlaps ? midY + CARRY_DY : midY) + sideDy;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -412,14 +426,14 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
           {arc && (
             <g key={cur!.pid ?? cur!.c}>
               <path d={isPassy
-                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, midY, TOP)} ${catchX ?? arc.x2} ${midY}`
-                : `M ${arc.x1} ${midY} L ${arc.x2} ${midY}`}
+                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, (midY + endY) / 2, TOP)} ${catchX ?? arc.x2} ${endY}`
+                : `M ${arc.x1} ${midY} L ${arc.x2} ${endY}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
                 pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
               {carrying && (
                 <path d={overlaps
-                  ? `M ${catchX} ${midY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
-                  : `M ${catchX} ${midY} L ${arc.x2} ${midY}`}
+                  ? `M ${catchX} ${endY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
+                  : `M ${catchX} ${endY} L ${arc.x2} ${endY}`}
                   fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                   pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .35s ease .5s both' }} />
               )}
@@ -429,8 +443,8 @@ function Field({ feed, clock, pidSide }: { feed: TeamGameFeed; clock: number; pi
               {/* The ball ends where the PLAY ended — on the carry lane when the
                   play was carried, or it would float above the runback. */}
               {incomplete
-                ? <text x={arc.x2} y={midY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
-                : <text x={arc.x2} y={(carrying ? carryY : midY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
+                ? <text x={arc.x2} y={endY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
+                : <text x={arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
             </g>
           )}
           {/* line of scrimmage + ball marker (transitions to each new spot) */}

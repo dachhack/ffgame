@@ -25,7 +25,7 @@ import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { teamLogo } from '@drip/core/data/media';
-import { playPath, arcControlY } from '@drip/core/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix } from '../theme.native';
@@ -56,17 +56,18 @@ const AnimatedG = Animated.createAnimatedComponent(G);
  *  to zero. The web sets `pathLength={1}` and lets the browser normalise;
  *  react-native-svg doesn't implement pathLength, so the length is measured
  *  here — sampled for the quadratic, exact for the straight line. */
-function pathLen(x1: number, x2: number, curved: boolean): number {
-  if (!curved) return Math.abs(x2 - x1);
-  // The SAME control point the path uses (v0.333.0) — it scales with the
-  // throw now, and a length measured against the old fixed apex would overrun
-  // a short arc and leave it drawn only part way.
-  const cx = (x1 + x2) / 2, cy = arcControlY(x1, x2, MID, TOP);
-  let len = 0, px = x1, py = MID;
+function pathLen(x1: number, x2: number, curved: boolean, y1: number = MID, y2: number = MID): number {
+  if (!curved) return Math.hypot(x2 - x1, y2 - y1);
+  // The SAME control point AND the same endpoints the path uses (v0.333.0,
+  // v0.335.0). The apex scales with the throw and the far end now sits on the
+  // side the play text named, so a length measured against a flat centred arc
+  // would come up short and leave the stroke drawn only part way.
+  const cx = (x1 + x2) / 2, cy = arcControlY(x1, x2, (y1 + y2) / 2, TOP);
+  let len = 0, px = x1, py = y1;
   for (let i = 1; i <= 16; i++) {
     const t = i / 16, u = 1 - t;
     const x = u * u * x1 + 2 * u * t * cx + t * t * x2;
-    const y = u * u * MID + 2 * u * t * cy + t * t * MID;
+    const y = u * u * y1 + 2 * u * t * cy + t * t * y2;
     len += Math.hypot(x - px, y - py); px = x; py = y;
   }
   return len;
@@ -135,10 +136,15 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
    *  shared geometry: 41.8px on a punt, 87.0px on a kickoff. See the web's
    *  FieldView for the full note — this is a port and must not drift from it. */
   const CARRY_DY = 4;
+  // The play draws on the side its text names (v0.335.0) — see the web view.
+  // The snap stays on the centre line; the far end moves to the named side.
+  const SIDE_LANE = (BOT - TOP) * 0.22;
+  const sideDy = playSideDy(playSide(cur?.txt), flip ? !attacksRight : attacksRight, SIDE_LANE);
+  const endY = MID + sideDy;
   // The lane is for a carry that DOUBLES BACK over its own flight, not for
   // every carry — see the web view. A pass's run-after continues the same way
   // and belongs in line with the arc.
-  const carryY = overlaps ? MID + CARRY_DY : MID;
+  const carryY = (overlaps ? MID + CARRY_DY : MID) + sideDy;
 
   const situation = over ? 'FINAL'
     : !cur ? 'AWAITING KICKOFF'
@@ -156,10 +162,10 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
   const drawKey = cur ? String(cur.pid ?? cur.c) : '';
   const air = useRef(new Animated.Value(0)).current;
   const run = useRef(new Animated.Value(0)).current;
-  const airLen = arc ? pathLen(arc.x1, catchX ?? arc.x2, isPassy) : 0;
+  const airLen = arc ? pathLen(arc.x1, catchX ?? arc.x2, isPassy, MID, endY) : 0;
   // + the drop into the carry lane, or the stroke animation runs out before the
   // runback is fully drawn and the line stops mid-field.
-  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false) + (overlaps ? CARRY_DY : 0) : 0;
+  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false, endY, endY) + (overlaps ? CARRY_DY : 0) : 0;
   useEffect(() => {
     if (!arc) return;
     air.setValue(0); run.setValue(0);
@@ -241,8 +247,8 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
           <G>
             <AnimatedPath
               d={isPassy
-                ? `M ${arc.x1} ${MID} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, MID, TOP)} ${catchX ?? arc.x2} ${MID}`
-                : `M ${arc.x1} ${MID} L ${arc.x2} ${MID}`}
+                ? `M ${arc.x1} ${MID} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, (MID + endY) / 2, TOP)} ${catchX ?? arc.x2} ${endY}`
+                : `M ${arc.x1} ${MID} L ${arc.x2} ${endY}`}
               fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
               strokeDasharray={`${airLen}`}
               strokeDashoffset={air.interpolate({ inputRange: [0, 1], outputRange: [airLen, 0] }) as unknown as number}
@@ -250,8 +256,8 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
             {carrying && (
               <AnimatedPath
                 d={overlaps
-                  ? `M ${catchX} ${MID} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
-                  : `M ${catchX} ${MID} L ${arc.x2} ${MID}`}
+                  ? `M ${catchX} ${endY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
+                  : `M ${catchX} ${endY} L ${arc.x2} ${endY}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                 strokeDasharray={`${runLen}`}
                 strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runLen, 0] }) as unknown as number}
@@ -261,8 +267,8 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
               ? <SvgImage href={{ uri: teamLogo(cur.tm)! }} x={arc.x1 - 5.5} y={MID - 5.5} width={11} height={11} />
               : <Circle cx={arc.x1} cy={MID} r={3} fill={arc.color} />}
             {incomplete
-              ? <SvgText x={arc.x2} y={MID + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
-              : <SvgText x={arc.x2} y={(carrying ? carryY : MID) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
+              ? <SvgText x={arc.x2} y={endY + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
+              : <SvgText x={arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
           </G>
         )}
 

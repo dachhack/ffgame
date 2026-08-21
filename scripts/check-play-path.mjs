@@ -10,7 +10,7 @@
 // In check:parity because the geometry is shared by two platforms that each
 // used to own a copy, and because "do these two strokes lie on top of each
 // other" is exactly the kind of thing you cannot see in a diff.
-import { playPath, arcControlY } from '../packages/core/src/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy } from '../packages/core/src/engine/playPath';
 import { unopposedCopy, claimsOpponentAbsent } from '../packages/core/src/data/slotLabels';
 
 let fails = 0;
@@ -118,6 +118,55 @@ const run = (cur) => {
   // The chip sits in a fixed-width strip beside the row.
   ok('the chips stay short enough for the strip',
     starter.chip.length <= 8 && backup.chip.length <= 8, [starter.chip, backup.chip]);
+}
+
+// ── WHICH SIDE THE PLAY WENT (v0.335.0) ───────────────────────────────────
+// Founder: "If the play says right or left can we have the play draw on that
+// side of the field?" ESPN's text says so; the field drew everything down the
+// centre line.
+{
+  // Real ESPN strings, including the one from the founder's screenshot.
+  ok('a short right pass is right',
+    playSide("(Shotgun) A.O'Connell pass short right to D.Laube to HST 4 for 14 yards (J.Reed).") === 'right');
+  ok('a deep left pass is left', playSide('J.Allen pass deep left to S.Diggs for 34 yards') === 'left');
+  ok('up the middle is middle', playSide('D.Henry rush up the middle for 3 yards') === 'middle');
+  ok('a run direction counts too', playSide('S.Barkley rush left tackle for 8 yards') === 'left');
+  ok('no direction is null', playSide('D.Henry rush for no gain') === null);
+  ok('empty and null never throw', playSide('') === null && playSide(null) === null && playSide(undefined) === null);
+
+  // THE CASE THE WORD BOUNDARY EXISTS FOR. Play text is full of names, and a
+  // play drawn on the wrong side looks exactly as plausible as the right one.
+  ok('a receiver called Wright is not a direction',
+    playSide('J.Goff pass short middle to J.Wright for 9 yards') === 'middle');
+  ok('…and Wright alone names no side', playSide('J.Goff pass to J.Wright for 9 yards') === null);
+  ok('a tackler called Leftwich is not a direction',
+    playSide('D.Henry rush for 3 yards (B.Leftwich)') === null);
+  ok('the FIRST direction wins — later ones are surnames',
+    playSide('A.Rodgers pass short right to C.Left for 5 yards') === 'right');
+  ok('case does not matter', playSide('PASS DEEP LEFT') === 'left');
+}
+
+// ── THE SIGN IS THE PART THAT GETS DRAWN BACKWARDS ────────────────────────
+// "Right" is the OFFENSE's right. An offense moving right on screen has its
+// right hand toward the bottom; moving left, toward the top. Same word, opposite
+// pixels — and a flipped field mirrors it again.
+{
+  const LANE = 22;
+  ok('attacking right, a right-side play draws DOWN the screen',
+    playSideDy('right', true, LANE) === LANE);
+  ok('attacking right, a left-side play draws UP',
+    playSideDy('left', true, LANE) === -LANE);
+  ok('attacking LEFT, the same word draws the other way',
+    playSideDy('right', false, LANE) === -LANE && playSideDy('left', false, LANE) === LANE);
+  ok('middle is dead centre whichever way they attack',
+    playSideDy('middle', true, LANE) === 0 && playSideDy('middle', false, LANE) === 0);
+  ok('an unnamed side is centre, not a guess',
+    playSideDy(null, true, LANE) === 0 && playSideDy(null, false, LANE) === 0);
+  ok('left and right are always opposite each other',
+    playSideDy('left', true, LANE) === -playSideDy('right', true, LANE)
+    && playSideDy('left', false, LANE) === -playSideDy('right', false, LANE));
+  ok('the offset scales with the lane it is given',
+    playSideDy('right', true, 10) === 10 && playSideDy('right', true, 0) === 0);
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
