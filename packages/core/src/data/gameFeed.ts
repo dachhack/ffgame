@@ -104,6 +104,25 @@ export function loadGameFeedWeek(week: number): Promise<void> {
 
 /** A team's game feed for a loaded week, or null (not loaded / bye / unknown).
  *  The live overlay wins and is exclusive (a live week ignores baked data). */
+/** EVERY game in the week's feed, live overlay first then the bake.
+ *
+ *  `gameFeedFor` answers "which game is this player in", which is the question
+ *  a slot asks. The ▦ ALL GAMES board asks the opposite one — "what is on
+ *  tonight" — and before this it could only answer it by looking up the teams
+ *  of players somebody had slotted, so a game nobody in your matchup was
+ *  playing in did not exist as far as that screen was concerned (v0.338.2).
+ *
+ *  Order is the feed's own insertion order, which is the schedule order the
+ *  worker ingests in — so the board reads like the day's card. */
+export function allGameFeeds(week: number): TeamGameFeed[] {
+  const wk = liveFeeds.get(week) ?? cache.get(week);
+  if (!wk) return [];
+  return Object.entries(wk.games).map(([key, plays]) => {
+    const [away, home] = key.split('@');
+    return { key, away, home, plays: plays ?? [], st: wk.states?.[key] ?? null };
+  });
+}
+
 export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | null {
   if (!team) return null;
   const wk = liveFeeds.get(week) ?? cache.get(week);

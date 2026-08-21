@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.2 — ALL GAMES means all games
+
+Founder: "it looks like the games in the field view are just the ones with
+match up players in them? Should be all games."
+
+Correct, and the code said so out loud — `FieldView.tsx` described itself as
+"every NFL game WITH A SLOTTED PLAYER", and `Matchup.tsx` built its entries as
+"one entry per slotted player". The board's map was keyed off those entries, so
+a game nobody in your matchup was playing in did not exist as far as that
+screen was concerned. On a two-game preseason Friday that reads as a broken
+feed rather than a filter, which is how it was reported.
+
+New `allGameFeeds(week)` in gameFeed.ts — the feed could only ever answer
+"which game is this player in", and this screen asks the opposite question. The
+board seeds from the whole slate first, then overlays entries for tinting and
+clock.
+
+Two things preserved deliberately. A game an entry landed on keeps its SLOT
+clock, so the field still mirrors exactly what the slot rows show — the seeded
+Infinity must never survive there, and an assertion pins it. And games your
+matchup is in sort to the front, so a full 16-game slate doesn't bury the two
+you care about; the rest keep the feed's schedule order.
+
+New `check:fieldboard` suite (18 assertions), wired into `check:parity`.
+
 ### v0.338.1 — agent seats check the wire hourly, and stop re-asking
 
 Founder, after asking when agents actually act: "Let's also just make
