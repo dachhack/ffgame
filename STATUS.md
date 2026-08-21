@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.338.4 — return yards don't make you a receiver
+
+Founder: "let's not include return yards in the yards when we determine
+sorting."
+
+v0.338.3's sort key was scrimmage PLUS return yards, so Jacob Cowing — 14
+receiving, 86 on kick returns — sorted as the best receiver in the SF box
+score. He wasn't, and that inversion is precisely what a box score is read to
+avoid.
+
+`scrimmageYards` is now passing + rushing + receiving only, and exported so the
+exclusion is assertable rather than a claim in a comment. Return yards still
+count in `weigh`, which is the TIEBREAK — so a pure returner still ranks ahead
+of someone who did nothing at all, he just no longer outranks a real receiver.
+
+Five new assertions in `check:boxorder`, including the exact line from the
+screenshot that prompted it.
+
 ### v0.338.3 — the box score reads like a box score
 
 Founder: "sort the box score by offense vs defense, then by position then by
