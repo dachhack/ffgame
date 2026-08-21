@@ -14,7 +14,7 @@
 // which reads a week's play table out of module globals — testing a sort by
 // installing a play-by-play week would pin the plumbing and not the judgement.
 // Run: npx tsx scripts/check-box-order.mjs
-import { boxRowOrder } from '../packages/core/src/engine/boxScore.ts';
+import { boxRowOrder, scrimmageYards } from '../packages/core/src/engine/boxScore.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -106,6 +106,31 @@ const sorted = (rows) => [...rows].sort(boxRowOrder).map((r) => r.slug);
   ]);
   ok(out.join(',') === 'qb1,rb1,rb2,wr1,wr2,te1,dst,lb-tackles',
     'a full line reads offense-first, by position, by yards — and note rb1 > rb2 and wr1 > wr2 on YARDS, not weight');
+}
+
+// ── 10. RETURN YARDS DO NOT COUNT TOWARD THE SORT (v0.338.4) ──────────────
+// Founder's call, and the case that prompted it is in the screenshot that
+// started this: a receiver with 14 receiving and 86 on kick returns was
+// sorting as the best receiver in the game. He is not, and a box score is
+// read precisely to avoid believing he is.
+{
+  const line = (o) => ({
+    passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0,
+    targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0,
+    fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0, ...o,
+  });
+  ok(scrimmageYards(line({ recYds: 14, retYds: 86 })) === 14,
+    'THE POINT: 14 receiving + 86 on returns counts as 14, not 100');
+  ok(scrimmageYards(line({ retYds: 200 })) === 0,
+    'a pure returner has ZERO box-score yards');
+  ok(scrimmageYards(line({ passYds: 300, rushYds: 20, recYds: 5 })) === 325,
+    'passing, rushing and receiving all count at full value');
+  ok(scrimmageYards(line({ passYds: 100 })) === 100,
+    'passing is NOT discounted the way weigh discounts it');
+  // And the ordering that falls out of it, which is the visible symptom.
+  const out = sorted([row('returner', 'WR', scrimmageYards(line({ recYds: 14, retYds: 86 })), 100),
+    row('real-wr', 'WR', scrimmageYards(line({ recYds: 46 })), 46)]);
+  ok(out[0] === 'real-wr', 'the 46-yard receiver now outranks the 14-yard kick returner');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL BOX-ORDER ASSERTIONS PASSED');

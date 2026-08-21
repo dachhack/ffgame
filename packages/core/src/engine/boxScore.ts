@@ -38,10 +38,16 @@ export interface BoxRow {
    *  measure of anything. Exposed so the assertions can pin the ordering
    *  rather than infer it. */
   weight: number;
-  /** Total yards — scrimmage plus return, passing at FULL value. The sort key
-   *  within a position group. Deliberately not `weigh`'s discounted passing:
-   *  that discount exists to compare a QB against a RB, and inside a group of
-   *  QBs it only distorts the answer. */
+  /** SCRIMMAGE yards — passing, rushing and receiving, at full value. The sort
+   *  key within a position group.
+   *
+   *  Two deliberate exclusions. Not `weigh`'s discounted passing: that discount
+   *  exists to compare a QB against a RB, and inside a group of QBs it only
+   *  distorts the answer. And NOT RETURN YARDS (v0.338.4, founder's call) —
+   *  a receiver with 14 receiving and 86 on kick returns is not the best
+   *  receiver in the game, and ranking him as one is exactly what a box score
+   *  is being read to avoid. Returns still count in `weigh`, so they break
+   *  ties and still rank a pure returner ahead of someone who did nothing. */
   yards: number;
   /** Which half of the box score this row belongs to. */
   side: 'off' | 'def';
@@ -64,7 +70,9 @@ const POS_RANK: Record<string, number> = {
   DEF: 0, DL: 1, LB: 2, DB: 3,
 };
 
-const totalYards = (s: StatLine): number => s.passYds + s.rushYds + s.recYds + s.retYds;
+/** The box score's yards, exported so the exclusion is assertable rather than
+ *  a claim in a comment. */
+export const scrimmageYards = (s: StatLine): number => s.passYds + s.rushYds + s.recYds;
 
 export interface GameBox {
   home: BoxRow[];
@@ -108,7 +116,7 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     const pos = (meta.pos ?? 'WR') as Pos;
     (team === H ? out.home : out.away).push({
       slug, pos, team, line, weight: weigh(line), stat: fmtStat(pos, line),
-      yards: totalYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',
+      yards: scrimmageYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',
     });
   }
   out.home.sort(boxRowOrder); out.away.sort(boxRowOrder);
