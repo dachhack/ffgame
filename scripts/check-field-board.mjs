@@ -104,6 +104,33 @@ const ENTRIES = [
   ok(a === b, 'the grouping is order-independent (max clock, not last-write)');
 }
 
+// ── 7. FINISHED GAMES SINK (v0.342.0) ─────────────────────────────────────
+// Founder, over a board where two finals sat above six live games: "erase the
+// final play... and move it to the bottom so the active games are always at
+// the top." The band order is: active yours, active others, finished yours,
+// finished others — and only the feed SAYING 'post' buries a game; a missing
+// state is a live unknown, never a burial.
+{
+  clearLiveGameFeeds();
+  setLiveGameFeed(WEEK, feedRowsToWeek([
+    { key: 'LV@HOU', away: 'LV', home: 'HOU', plays: [play(100, 1)], state: 'post' },   // YOUR game, over
+    { key: 'SF@LAC', away: 'SF', home: 'LAC', plays: [play(150, 3)], state: 'in' },     // your game, live
+    { key: 'NYJ@PIT', away: 'NYJ', home: 'PIT', plays: [play(120, 4)], state: 'post' }, // nobody's, over
+    { key: 'CAR@JAX', away: 'CAR', home: 'JAX', plays: [play(90, 5)], state: 'in' },    // nobody's, live
+    { key: 'GB@DEN', away: 'GB', home: 'DEN', plays: [play(80, 6)] },                   // nobody's, NO state
+  ]));
+  const g = group(WEEK, [
+    { playerId: 'a', team: 'LV', side: 'you', clock: 100, pids: [1] },
+    { playerId: 'c', team: 'SF', side: 'you', clock: 150, pids: [3] },
+  ]).map((x) => x.feed.key);
+  ok(g.join(',') === 'SF@LAC,CAR@JAX,GB@DEN,LV@HOU,NYJ@PIT',
+    `THE POINT: live yours → live others → finished yours → finished others (got ${g.join(',')})`);
+  ok(g.indexOf('LV@HOU') > g.indexOf('CAR@JAX'),
+    'even YOUR OWN finished game sits below a stranger game that is still live');
+  ok(g.indexOf('GB@DEN') < g.indexOf('LV@HOU'),
+    'a game with NO state is treated as live — an absent flag never buries a game');
+}
+
 clearLiveGameFeeds();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL FIELD-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
