@@ -13,6 +13,7 @@
 // window, commissioner flags) binds the agent for free, and anything this file
 // gets wrong is REFUSED rather than written.
 import { db } from './supabase.js';
+import { ruledOutSlugs } from './injuries.js';
 import { leagueSlotDefs, leagueBestball, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
 import { seatWirePlan } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
@@ -162,9 +163,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // Built per seat, not per league: `slateAwareProj` closes over the
         // slate and the outs, and reads the league catalog at CALL time — which
         // is now, after the installs above.
-        const { data: injRows } = await db().from('injury_status')
-          .select('player_slug').in('status', ['O', 'IR']);
-        const outs = new Set((injRows ?? []).map((r) => r.player_slug));
+        const outs = await ruledOutSlugs();
         const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
 
         const plan = seatWirePlan(slots, roster, available.filter((p) => !pendingAdds.has(p.id)), valueOf, {

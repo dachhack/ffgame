@@ -31,6 +31,7 @@ import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
+import { ruledOutSlugs } from './injuries.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -312,6 +313,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // human's sealed picks if set. The auto-lineup is rebuilt with exactly the
   // owned unlocks + purchased extra slots in applied_state (written by the
   // lock-time budget pass), so it matches the materialized board picks.
+  const outsForAi = await ruledOutSlugs();
   const aiSide = async (rosterId, mem) => {
     const load = mem?.app_user_id ? await loadout(matchup.id, mem.app_user_id, ctx) : {};
     const owned = new Set(Array.isArray(load.unlocks) ? load.unlocks : []);
@@ -320,7 +322,9 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       // Permanent AI seats (pods, fake leagues) get the NUKER persona draw —
       // measured drama at zero balance cost (findings §21); human autofill and
       // empty seats stay vanilla, matching lock.js.
-      picks: autoLineup(await lineupSlugs(matchup, rosterId, ctx), matchup.week, owned, extra,
+      // Ruled-out players never enter the computed lineup (v0.341.2) — the
+      // same O/IR bar the classic resolve and the lock-time fill apply.
+      picks: autoLineup((await lineupSlugs(matchup, rosterId, ctx)).filter((s) => !outsForAi.has(s)), matchup.week, owned, extra,
         mem?.controller === 'ai' ? `${matchup.league_id}:${rosterId}` : undefined),
       buffs: Array.isArray(load.buffs) ? load.buffs : [],
       // The AI's lock-time budget pass places targeted battle plays (rivalry /
@@ -491,9 +495,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       // An unmanaged seat's computed lineup should bench a player ruled OUT —
       // the one correction no manager exists to make (v0.252.0). injury_status
       // is the worker's own ESPN poll; O/IR only, same bar as the auto-slot.
-      const { data: injRows } = await db().from('injury_status')
-        .select('player_slug').in('status', ['O', 'IR']);
-      ruledOut = new Set((injRows ?? []).map((r) => r.player_slug));
+      ruledOut = await ruledOutSlugs();
     }
     const hasRows = (picks, rosterId) => picks != null
       || storedBy.has(byRoster.get(rosterId)?.app_user_id);

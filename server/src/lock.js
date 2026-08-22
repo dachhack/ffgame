@@ -18,6 +18,7 @@ import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
+import { ruledOutSlugs } from './injuries.js';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -291,9 +292,7 @@ export async function autoSlotClassicLineups(week, slate = null) {
   // proves byes; injury_status (the worker's own ESPN poll) proves ruled-out.
   // Only O and IR — questionable and doubtful players play often enough that
   // benching them automatically would overrule real decisions.
-  const { data: injRows } = await db().from('injury_status')
-    .select('player_slug').in('status', ['O', 'IR']);
-  const outs = new Set((injRows ?? []).map((r) => r.player_slug));
+  const outs = await ruledOutSlugs();
   const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
   const { data: lgs } = await db().from('league')
     .select('id,settings_json,lineup_policy').in('id', [...new Set(ms.map((m) => m.league_id))]);
@@ -598,6 +597,12 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
   // rather than per matchup — a twelve-team week is six matchups over one
   // league, and this used to be the query that wasn't there at all.
   const agents = await seatAgentsFor([...new Set((ms ?? []).map((m) => m.league_id))]);
+  // NEVER AUTO-START A PLAYER RULED OUT (v0.341.2). The classic auto-slot has
+  // excluded O/IR since v0.252.0; this DRIP fill — missed humans, partial
+  // fills, agent seats, AI seats — never did, and could hand a seat a player
+  // who is guaranteed to score zero. Same bar as everywhere: O/IR only, Q and
+  // D play. The audit that found this is docs/next-session-prompt.md item 3.
+  const ruledOut = await ruledOutSlugs();
   let n = 0;
   for (const m of ms ?? []) {
     const { data: lg } = await db().from('league').select('lineup_policy,settings_json').eq('id', m.league_id).maybeSingle();
@@ -678,6 +683,7 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // MINUS the fielded players (a full AI rewrite keeps it all).
       const slugs = starters.map((s) => s.player_slug).filter(Boolean)
         .filter((slug) => !noStart.has(slug))
+        .filter((slug) => !ruledOut.has(slug))
         .filter((slug) => fullRewrite || !fieldedSlugs.has(slug));
       let owned, extra;
       if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, seatUid, starters, seed)); }

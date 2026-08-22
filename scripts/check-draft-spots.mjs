@@ -691,16 +691,20 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // Real slugs, so the ranking is the real PROJ_2026 the resolver will use.
   const R = (id, pos, extra = {}) => ({ id, name: id, full: id, pos, team: 'KC', stats: {}, ...extra });
   const roster = [
-    R('jonathan-taylor', 'RB'),   // 24.6
+    R('jonathan-taylor', 'RB'),   // 24.7 (2026-08-22 bake)
     R('josh-allen', 'QB'),        // 20.4
     R('puka-nacua', 'WR'),        // 18.4
-    R('trevor-lawrence', 'QB'),   // 18.2
+    R('trevor-lawrence', 'QB'),   // 18.0
   ];
   const s = spots({ pos: ['QB'] }, { pos: ['RB', 'WR', 'TE'] });
   const seatedOf = (picks) => Object.fromEntries(picks.map((p) => [p.slot, p.player.id]));
 
   ok('the projections these assertions lean on are still the baked ones',
-    PROJ_2026.get('josh-allen') === 20.4 && PROJ_2026.get('trevor-lawrence') === 18.2
+    // Re-pinned at the 2026-08-22 rebake (Lawrence 18.2 → 18.0). What the
+    // downstream assertions actually lean on is the ORDER — Allen above
+    // Lawrence at QB, Taylor the board's best — which held; the exact pins
+    // exist so the NEXT rebake forces this same deliberate check.
+    PROJ_2026.get('josh-allen') === 20.4 && PROJ_2026.get('trevor-lawrence') === 18
       && PROJ_2026.get('puka-nacua') === 18.4,
     [PROJ_2026.get('josh-allen'), PROJ_2026.get('trevor-lawrence'), PROJ_2026.get('puka-nacua')]);
 
