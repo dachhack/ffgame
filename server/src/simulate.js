@@ -20,6 +20,7 @@
 //   npm run cli -- simulate --dry [--week=1] [--speed=900]
 import { readFileSync } from 'node:fs';
 import { injectWeek, rowsToPbp, resolveWindow, makePlayer } from './engine.js';
+import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
 import { WINDOWS } from '../../packages/core/src/data/metrics.ts';
 import { DEFAULT_AI_METRIC } from '../../packages/core/src/data/aiLineup.ts';
 
@@ -274,6 +275,12 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
       return { week, game_id: `SIM:${key}`, key, away, home, plays: plays.filter((p) => p.c <= clk), updated_at: new Date().toISOString() };
     }).filter((r) => r.plays.length);
     if (rows.length) await db().from('game_feed').upsert(rows, { onConflict: 'week,game_id' });
+    // Install the released feed in THIS process too (v0.339.5): the sim resolves
+    // matchups itself, and the engine gates drips on possession derived from the
+    // game-feed store — the same install the worker tick does in injectWeekPlays.
+    // Without it the sim's drips run ungated while the worker's are gated, and
+    // the sim exists precisely to preview what the worker will publish.
+    setLiveGameFeed(week, feedRowsToWeek(rows));
   };
 
   let i = 0;

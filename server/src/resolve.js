@@ -30,6 +30,7 @@ import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/l
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
+import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -74,7 +75,31 @@ export async function injectWeekPlays(week) {
   const rows = await weekPlayRows(week);
   const by = rowsToPbp(rows);
   injectWeek(week, by);
-  console.log(new Date().toISOString(), 'inject wk', week, rows.length, 'plays,', Object.keys(by).length, 'players');
+
+  // THE POSSESSION GATE (v0.339.5). A drip accrues per minute of OFFENSE:
+  // sim.offSecs gates it on possession intervals from realPossFor — which
+  // reads the baked week cache only the client's HTTP fetch ever fills —
+  // falling back (v0.339.2) to feedPossFor, which reads the game-feed store.
+  // This worker filled NEITHER: it injected plays and nothing else, so offSecs
+  // hit its unknown-data fallback (`return t1 - t0`) and every drip this
+  // worker EVER RESOLVED accrued on every game minute. That over-credit is
+  // the 11.7 the app published for a 32-yard receiver the web's own engine
+  // settled at 5.5 — roughly 2× on a ~50% possession split — and since these
+  // rows decide window battles, it flipped a window from LOST to WON.
+  //
+  // Same table, same shape the web installs (weekGameFeeds → feedRowsToWeek);
+  // the `tm` on each play is what possFromPlays derives possession from.
+  // An empty week installs an empty feed and drips stay ungated — "unknown"
+  // degrades soft by design (offSecs), so a feed outage over-credits rather
+  // than zeroing every drip. On a query ERROR, install nothing: the process
+  // may still hold last tick's feed, and stale possession beats none.
+  const { data: feeds, error: feedErr } = await db().from('game_feed')
+    .select('key, away, home, plays, state').eq('week', week);
+  if (feedErr) console.error(new Date().toISOString(), 'inject wk', week, 'game_feed read failed (drips run ungated):', feedErr.message);
+  else setLiveGameFeed(week, feedRowsToWeek(feeds ?? []));
+
+  console.log(new Date().toISOString(), 'inject wk', week, rows.length, 'plays,', Object.keys(by).length, 'players,',
+    feedErr ? 'feed ERR' : `${(feeds ?? []).length} game feeds`);
 }
 
 // The per-matchup gatherers below take an optional `ctx` (from prefetchTick). When
