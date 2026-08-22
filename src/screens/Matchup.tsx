@@ -17,6 +17,7 @@ import { consumeShopOnBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
+import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { openPlayerCard } from '../app/playerCard';
 import { ScoreDiffPanel } from '../app/scoreDiff';
@@ -244,6 +245,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!row) return { you: null, them: null };
     const home = liveCtx.rosterId === srvHomeRoster;
     return { you: Number(home ? row.home_score : row.away_score), them: Number(home ? row.away_score : row.home_score) };
+  };
+  /** This window's resolver PER-SLOT rows, already read as you/them, serialized.
+   *
+   *  A STRING and not an array on purpose. `WindowSection`'s memo comparator
+   *  (below) compares every prop with `Object.is`, so a fresh array out of
+   *  `.find()`/`.map()` is never equal to the last one and would re-render
+   *  every window section on every 15s poll — the same trap v0.339.3 avoided
+   *  by passing the window totals as two plain numbers. A string compares by
+   *  value, so an unchanged poll is genuinely unchanged.
+   *
+   *  Both keys ride along: `k` is the roster slot (the web's slot index, which
+   *  is exactly what `savePicks` writes as `roster_slot`) and `g` the slug —
+   *  the same pair the app's `rowOf` matches on, so a row whose slot numbering
+   *  ever drifts still lands on the right card. '' means no server rows for
+   *  this window, and the card keeps the local sim. */
+  const srvSlotsFor = (winId: string): string => {
+    if (!liveCtx || srvHomeRoster == null) return '';
+    return encodeSrvSlots(srvStates.find((x) => x.game_window === winId)?.slot_scores,
+      liveCtx.rosterId === srvHomeRoster);
   };
   const wallClock = clockMode !== 'game';   // real wall-clock reveal (each game its own pace)
   const realResolve = clockMode === 'real'; // resolve cross-game effects by real time
@@ -792,8 +812,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   //   3. WINDOW WIN BONUS — the server bakes +5 into every contested window's
   //      leader continuously; mirror it so live totals track the official.
   const { youTotal, themTotal } = useMemo(() => {
-    if (phase === 'final') return { youTotal: resolved.youFinal, themTotal: resolved.theirFinal };
     if (phase === 'setup') return { youTotal: 0, themTotal: 0 };
+    // THE SERVER'S NUMBER WINS ON THE LIVE BOARD (v0.339.4).
+    //
+    // Sum the resolver's per-window rows, which is EXACTLY what the app's
+    // `totals` does (LivePicks.tsx). Those rows already carry the contested
+    // window's +5 and everything liveResolve settles — they sum to the totals
+    // the worker writes as home_final/away_final — so this is one rule for the
+    // whole board: bar, card and headline all read the same published number
+    // instead of three re-simulations at this client's clock.
+    const srvTot = liveCtx && srvHomeRoster != null
+      ? srvBoardTotals(srvStates, liveCtx.rosterId === srvHomeRoster) : null;
+    if (srvTot) return { youTotal: srvTot.you, themTotal: srvTot.them };
+    if (phase === 'final') return { youTotal: resolved.youFinal, themTotal: resolved.theirFinal };
     const SETTLE = 100_000; // clock far past any event → the slot's settled bank
     let y = 0; let t = 0;
     for (const rw of resolved.windows) {
@@ -827,7 +858,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     for (const b of resolved.bonuses ?? []) y += b.points; // armed-buff payouts
     return { youTotal: Math.round(y * 10) / 10, themTotal: Math.round(t * 10) / 10 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolved, winClocks, phase, wallClock, week, liveCtx, liveWinState, winMax]);
+  }, [resolved, winClocks, phase, wallClock, week, liveCtx, liveWinState, winMax, srvStates, srvHomeRoster]);
 
   // Every window has played out to its own end — the board is effectively final.
   const allWindowsDone = useMemo(() => {
@@ -1219,6 +1250,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <WindowSection
                 rw={demoWin} week={week} hydrated={heroHydrated} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
                 srvYou={srvTotals(demoWin.window.id).you} srvThem={srvTotals(demoWin.window.id).them}
+                srvSlots={srvSlotsFor(demoWin.window.id)}
                 wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
                 onTogglePlay={() => {}} onReplay={() => {}}
                 canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} rivalryQty={0} rivalryArmed={false} onApplyRivalry={() => {}} onRemoveRivalry={() => {}} onArmClutch={onArmClutch} onAssignBackup={() => {}}
@@ -1274,6 +1306,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <WindowSection
               rw={demoWin}
                 srvYou={srvTotals(demoWin.window.id).you} srvThem={srvTotals(demoWin.window.id).them}
+                srvSlots={srvSlotsFor(demoWin.window.id)}
               week={week} hydrated={heroHydrated}
               phase={phase}
               clock={dClock}
@@ -1660,6 +1693,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 key={rw.window.id}
                 rw={rw}
                 srvYou={srvTotals(rw.window.id).you} srvThem={srvTotals(rw.window.id).them}
+                srvSlots={srvSlotsFor(rw.window.id)}
                 week={week} hydrated={heroHydrated}
                 potMatchupId={liveCtx?.matchupId ?? null}
                 phase={winPhaseFor(rw.window.id)}
@@ -2326,6 +2360,10 @@ function WindowSectionInner(props: {
    *  the clock is genuinely scrubbable. */
   srvYou?: number | null;
   srvThem?: number | null;
+  /** The RESOLVER's per-slot scores for this window, read as you/them and
+   *  SERIALIZED (see `srvSlotsFor`) — a string so the memo below still
+   *  short-circuits idle windows. '' off the live board. */
+  srvSlots?: string;
   clock: number;
   maxClock: number;
   wallClock: boolean;
@@ -2377,6 +2415,11 @@ function WindowSectionInner(props: {
 }) {
   const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
+  // The resolver's per-slot scores, parsed ONCE per distinct payload. Keyed
+  // both ways — `y#3` / `t#3` by roster slot and `y@josh-allen` by slug — so a
+  // card can ask by whichever it knows.
+  const srvSlots = useMemo(() => decodeSrvSlots(props.srvSlots), [props.srvSlots]);
+  const srvScore = (side: 'y' | 't', idx: number, slug?: string | null) => srvSlotScore(srvSlots, side, idx, slug);
   // Null unless this is a LIVE matchup in a league with the pot flag on. Every
   // window's chip shares one poll (the store in WindowPot.tsx).
   const pot = usePot(potMatchupId ?? null);
@@ -2635,7 +2678,7 @@ function WindowSectionInner(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} kicked={kicked} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} kicked={kicked} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -2800,12 +2843,9 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
   // where the clock is genuinely scrubbable — `effWinClock` returns the manual
   // playback position off the live board and `winMax` on it, so the live board
   // never had a scrub position to preserve in the first place.
-  const yTot = done && battle ? battle.youTotal
-    : srvYou != null && Number.isFinite(srvYou) ? Math.round(srvYou * 10) / 10
-    : Math.round(liveYou * 10) / 10;
-  const tTot = done && battle ? battle.theirTotal
-    : srvThem != null && Number.isFinite(srvThem) ? Math.round(srvThem * 10) / 10
-    : Math.round(liveTheir * 10) / 10;
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const yTot = r1(shownScore({ final: !!(done && battle), settled: battle?.youTotal, srv: srvYou, bank: liveYou }));
+  const tTot = r1(shownScore({ final: !!(done && battle), settled: battle?.theirTotal, srv: srvThem, bank: liveTheir }));
   const total = yTot + tTot;
   const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
   const even = Math.abs(yTot - tTot) < 0.05;
@@ -2895,9 +2935,14 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards, kicked = true }: {
+function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards, kicked = true }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
-  week: number; youClock: number; theirClock: number; open: boolean; onToggle: () => void; phase: Phase; done: boolean;
+  week: number; youClock: number; theirClock: number;
+  /** The RESOLVER's score for this slot, per side — what the app's card shows
+   *  and what decides the week. Null off the live board (and on a slot the
+   *  server hasn't published), where the local bank is the right number. */
+  srvYou?: number | null; srvTheir?: number | null;
+  open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
   realClock: boolean; kickoffSec: number; youTwin?: boolean; cards?: boolean;
@@ -2956,7 +3001,15 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     const wouldBe = slot.backupScore ?? 0;           // full would-be score
     // Live: running points. Final: its would-be score — shown struck (0 counted)
     // when it didn't sub in, plain when it subbed in for full value.
-    const liveBackup = !done ? (mineBackup ? live.you : live.their) : wouldBe;
+    // Live, the resolver's row for this slot if it has published one — the
+    // same rule the head-to-head card takes below. An UNOPPOSED slot is exactly
+    // where the two hosts were most visibly apart, since it is the whole card.
+    const liveBackup = shownScore({
+      final: done,
+      settled: wouldBe,
+      srv: mineBackup ? srvYou : srvTheir,
+      bank: mineBackup ? live.you : live.their,
+    });
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
     const chip = canSub ? (mineBackup ? 'BACKUP' : 'OPP BACKUP') : (mineBackup ? 'UNOPPOSED' : 'OPP UNOPP');
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
@@ -3079,13 +3132,25 @@ function ScoreRow({ slot, week, youClock, theirClock, open, onToggle, phase, don
     if (final && side === 'their' && slot.theirNegated) return 0;
     if (final && side === 'you' && slot.youHalvedFrom != null) return slot.youFinal;
     if (final && side === 'their' && slot.theirHalvedFrom != null) return slot.theirFinal;
-    // At FINAL, the engine's settled slot value — which banks the drip TAIL
+    // AT FINAL the engine's settled slot value — which banks the drip TAIL
     // (accrual between the last play and the end of the game) that the
     // last-play playback ceiling cut. This is the number the worker publishes
     // (0200.3): Wheeler read 8.5 here vs the official 9.3 for exactly that
-    // tail. Live windows keep the running bank.
-    if (final) return side === 'you' ? (slot.youFinal ?? banks.you) : (slot.theirFinal ?? banks.their);
-    return side === 'you' ? banks.you : banks.their;
+    // tail.
+    //
+    // LIVE, THE SERVER'S NUMBER WINS (v0.339.4) — the same rule the window bar
+    // took in v0.339.3, now at the card, because a bar that matches the app
+    // while the cards under it do not is a worse split than the one it fixed.
+    // `banks` is a local re-simulation at THIS client's clock; a drip's value
+    // IS a function of the clock, so two clocks give two honest answers and
+    // only the resolver's decides the week. A slot the server hasn't published
+    // falls through to the local bank rather than painting a 0 nobody sent.
+    return shownScore({
+      final,
+      settled: side === 'you' ? slot.youFinal : slot.theirFinal,
+      srv: side === 'you' ? srvYou : srvTheir,
+      bank: side === 'you' ? banks.you : banks.their,
+    });
   };
   const youShown = shownFor('you');
   const theirShown = shownFor('their');
