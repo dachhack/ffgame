@@ -183,19 +183,24 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    the new league on both hosts, run the draft, confirm the traded slot lands
    on the acquirer's clock. The probes cover the SQL end to end; **no
    production league has ever rolled over.** Needs the founder.
-2. **Rebake `proj2026.ts` + `adp2026.ts` through August** — both are as of
-   **2026-08-19**, and ADP moves all summer, so they want a weekly pull right
+2. **Rebake `proj2026.ts` + `adp2026.ts` weekly through Sep 9** — last pulled
+   **2026-08-22** (v0.341.2; `projStats2026.ts` rides the SAME get_projections
+   call — all three or none, the proj-scoring suite fails on a split pull, and
+   check-draft-spots pins three values so a rebake forces its fixtures to be
+   revisited). ADP moves all summer, so keep the weekly pull going right
    up to the Sep 9 lock. Auto-slot, seat agents, previews and keeper defaults
    all rank by these numbers, so a stale bake mis-ranks every one of them.
    Each file's header carries its own `get_projections` / `get_adp` call and
    the join convention; `proj2026.ts` additionally documents why the stored
    number is `ppg * games / 17` and not StatHead's `ppg` — read that before
    changing the shape of the bake.
-3. **Audit server-side `injuryFor` callers** — with no live install and no
-   season set it serves the BAKED 2025 report. Note the shape of the fix that
-   landed for the sibling bug in v0.337.2 (below): the client-side half of this
-   family is already handled, so check what the WORKER resolves, not the
-   screens.
+3. ~~Audit server-side `injuryFor` callers~~ — DONE (v0.341.2). No worker path
+   calls core `injuryFor` (correct: it would serve the baked 2025 report).
+   Three paths read `injury_status` directly and excluded O/IR; the two DRIP
+   paths — the lock-time fill and resolve's aiSide rebuild — excluded nothing
+   and could start a ruled-out player. All five now ask ONE helper
+   (`server/src/injuries.js` ruledOutSlugs, 60s cache, stale-beats-empty on a
+   failed read).
 4. **Nobody is told when someone lands in a league's waiting room.** Offered,
    not built (v0.326.0 added the commissioner's "League Full" close).
 5. **Reply to StatHead** about their "unknown fields are named" message not

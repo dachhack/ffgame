@@ -13,209 +13,209 @@
 // directory (and baked 2025 PBP where it exists) automatically.
 import { normName } from './players';
 
-/** Blend freshness: FantasyPros 2026-08-14 · Sleeper 2026-08-19 · FFC 2026-08-18. */
-export const ADP_AS_OF = '2026-08-19';
+/** Blend freshness: FantasyPros 2026-08-21 · Sleeper 2026-08-22 · FFC 2026-08-21. */
+export const ADP_AS_OF = '2026-08-22';
 
-const ADP_CSV = `Jahmyr Gibbs,RB,DET,2.20
-Bijan Robinson,RB,ATL,2.50
-Ja'Marr Chase,WR,CIN,2.90
-Puka Nacua,WR,LA,3.40
+const ADP_CSV = `Jahmyr Gibbs,RB,DET,2
+Bijan Robinson,RB,ATL,2.70
+Ja'Marr Chase,WR,CIN,3
+Puka Nacua,WR,LA,3.60
 Jaxon Smith-Njigba,WR,SEA,5.40
 Amon-Ra St. Brown,WR,DET,6.60
-Christian McCaffrey,RB,SF,7.20
-Jonathan Taylor,RB,IND,8.90
-CeeDee Lamb,WR,DAL,9.70
-Justin Jefferson,WR,MIN,11.30
-Drake London,WR,ATL,12.50
+Christian McCaffrey,RB,SF,7.60
+Jonathan Taylor,RB,IND,9
+CeeDee Lamb,WR,DAL,9.60
+Justin Jefferson,WR,MIN,10.60
+Drake London,WR,ATL,12.40
 James Cook III,RB,BUF,13.90
-De'Von Achane,RB,MIA,14.40
-Ashton Jeanty,RB,LVR,15.70
+De'Von Achane,RB,MIA,15.10
+Ashton Jeanty,RB,LVR,15.30
 Chase Brown,RB,CIN,16.10
-A.J. Brown,WR,NE,16.70
-Saquon Barkley,RB,PHI,20.20
+A.J. Brown,WR,NE,16.60
+Saquon Barkley,RB,PHI,20.30
 George Pickens,WR,DAL,20.70
-Rashee Rice,WR,KC,20.80
 Nico Collins,WR,HOU,20.90
-Omarion Hampton,RB,LAC,21.10
-Trey McBride,TE,ARI,23.80
-Chris Olave,WR,NO,23.90
-Kenneth Walker III,RB,KC,24.40
-Derrick Henry,RB,BAL,25.60
-Josh Allen,QB,BUF,27.20
-Brock Bowers,TE,LVR,27.30
-Malik Nabers,WR,NYG,28.10
-DeVonta Smith,WR,PHI,29.20
+Rashee Rice,WR,KC,20.90
+Omarion Hampton,RB,LAC,21.90
+Chris Olave,WR,NO,22.60
+Trey McBride,TE,ARI,23.60
+Kenneth Walker III,RB,KC,23.80
+Brock Bowers,TE,LVR,25.60
+Derrick Henry,RB,BAL,25.90
+Malik Nabers,WR,NYG,26.60
+Josh Allen,QB,BUF,28.30
+DeVonta Smith,WR,PHI,29.50
 Zay Flowers,WR,BAL,31
-Jeremiyah Love,RB,ARI,31.50
-Garrett Wilson,WR,NYJ,33.40
-Breece Hall,RB,NYJ,33.90
-Tetairoa McMillan,WR,CAR,34.10
-Kyren Williams,RB,LA,34.80
-Tee Higgins,WR,CIN,35.20
-Josh Jacobs,RB,GB,35.60
-Ladd McConkey,WR,LAC,37.60
-Emeka Egbuka,WR,TB,37.90
-Javonte Williams,RB,DAL,40.10
-Lamar Jackson,QB,BAL,41.60
-Jaylen Waddle,WR,DEN,43.50
-Cam Skattebo,RB,NYG,44.20
+Jeremiyah Love,RB,ARI,32.40
+Garrett Wilson,WR,NYJ,32.80
+Tetairoa McMillan,WR,CAR,34
+Kyren Williams,RB,LA,34.90
+Tee Higgins,WR,CIN,35.70
+Breece Hall,RB,NYJ,36
+Josh Jacobs,RB,GB,36.40
+Ladd McConkey,WR,LAC,37.30
+Emeka Egbuka,WR,TB,38.90
+Javonte Williams,RB,DAL,39.60
+Lamar Jackson,QB,BAL,42.10
+Jaylen Waddle,WR,DEN,42.90
+Travis Etienne Jr.,RB,NO,45.10
+Cam Skattebo,RB,NYG,45.20
+Colston Loveland,TE,CHI,45.80
 Drake Maye,QB,NE,45.80
-Travis Etienne Jr.,RB,NO,45.80
-Colston Loveland,TE,CHI,46.30
-Davante Adams,WR,LA,47
-Terry McLaurin,WR,WAS,48.20
-Bucky Irving,RB,TB,48.20
-Joe Burrow,QB,CIN,51.90
-Luther Burden III,WR,CHI,51.90
-Jameson Williams,WR,DET,51.90
-DJ Moore,WR,BUF,53.20
-D'Andre Swift,RB,CHI,53.40
-Mike Evans,WR,SF,55.30
-Tyler Warren,TE,IND,55.60
-Quinshon Judkins,RB,CLE,55.60
-Rome Odunze,WR,CHI,57.20
-David Montgomery,RB,HOU,58
-TreVeyon Henderson,RB,NE,59.50
-Bhayshul Tuten,RB,JAX,61.60
-Jayden Daniels,QB,WAS,61.80
-Christian Watson,WR,GB,62.10
-Jalen Hurts,QB,PHI,67.40
-Carnell Tate,WR,TEN,68.10
-Marvin Harrison Jr.,WR,ARI,69.80
-Jaylen Warren,RB,PIT,70.50
-Parker Washington,WR,JAX,70.60
-DK Metcalf,WR,PIT,72
-Brian Thomas Jr.,WR,JAX,74.10
-Courtland Sutton,WR,DEN,74.60
+Davante Adams,WR,LA,46.70
+Terry McLaurin,WR,WAS,48.80
+Bucky Irving,RB,TB,48.90
+Jameson Williams,WR,DET,51.60
+Joe Burrow,QB,CIN,52.50
+D'Andre Swift,RB,CHI,52.60
+Luther Burden III,WR,CHI,52.90
+DJ Moore,WR,BUF,53.10
+Mike Evans,WR,SF,55.20
+Quinshon Judkins,RB,CLE,55.70
+Tyler Warren,TE,IND,56
+Rome Odunze,WR,CHI,56.90
+David Montgomery,RB,HOU,57.50
+TreVeyon Henderson,RB,NE,60.80
+Christian Watson,WR,GB,61
+Bhayshul Tuten,RB,JAX,61
+Jayden Daniels,QB,WAS,63.40
+Jalen Hurts,QB,PHI,67.70
+Parker Washington,WR,JAX,68.70
+Carnell Tate,WR,TEN,68.90
+Marvin Harrison Jr.,WR,ARI,69.60
+Jaylen Warren,RB,PIT,69.60
+DK Metcalf,WR,PIT,72.90
+Brian Thomas Jr.,WR,JAX,73.50
+Harold Fannin Jr.,TE,CLE,74.30
+Courtland Sutton,WR,DEN,74.30
 Dak Prescott,QB,DAL,74.90
-Harold Fannin Jr.,TE,CLE,75
-Jadarian Price,RB,SEA,76.50
-Kyle Pitts Sr.,TE,ATL,76.70
-Tony Pollard,RB,TEN,77.70
-Caleb Williams,QB,CHI,78
-Sam LaPorta,TE,DET,78
-Rhamondre Stevenson,RB,NE,78.80
-Chuba Hubbard,RB,CAR,79.70
-Alec Pierce,WR,IND,80.60
-Tucker Kraft,TE,GB,82.10
-Rico Dowdle,RB,PIT,83.20
-Michael Wilson,WR,ARI,84.20
-Michael Pittman Jr.,WR,PIT,85.40
-RJ Harvey,RB,DEN,85.80
-Chris Godwin Jr.,WR,TB,85.90
-Jordyn Tyson,WR,NO,86.90
-Justin Herbert,QB,LAC,87.40
-Trevor Lawrence,QB,JAX,89.90
-Josh Downs,WR,IND,91.40
-Wan'Dale Robinson,WR,TEN,92.10
-Matthew Stafford,QB,LA,93.80
-Jakobi Meyers,WR,JAX,96.10
-J.K. Dobbins,RB,DEN,98.10
-Jaxson Dart,QB,NYG,98.80
-Brock Purdy,QB,SF,99.40
-Kenny Gainwell,RB,TB,99.80
-Quentin Johnston,WR,LAC,100.20
-Travis Kelce,TE,KC,100.60
-Makai Lemon,WR,PHI,101.60
-Patrick Mahomes II,QB,KC,101.90
-Jordan Addison,WR,MIN,104.30
-Jayden Reed,WR,GB,104.60
-George Kittle,TE,SF,105.30
-Kyle Monangai,RB,CHI,106
-Stefon Diggs,WR,WAS,106
-Aaron Jones Sr.,RB,MIN,110.60
-Jonathon Brooks,RB,CAR,111.80
-Bo Nix,QB,DEN,112.10
-Jared Goff,QB,DET,113
-Rachaad White,RB,WAS,113.10
-Blake Corum,RB,LA,114.10
-Jacory Croskey-Merritt,RB,WAS,116.30
-Jake Ferguson,TE,DAL,117.30
-Khalil Shakir,WR,BUF,117.80
-Dallas Goedert,TE,PHI,120.70
-Dalton Kincaid,TE,BUF,122
-Jordan Mason,RB,MIN,122
-Romeo Doubs,WR,NE,122
-Xavier Worthy,WR,KC,122.70
-Isaiah Likely,TE,NYG,123.30
-Matthew Golden,WR,GB,125
-KC Concepcion,WR,CLE,128.50
-Deebo Samuel Sr.,WR,SF,128.80
-Baker Mayfield,QB,TB,129
-Jayden Higgins,WR,HOU,129.50
-Jalen Coker,WR,CAR,129.60
-Mark Andrews,TE,BAL,129.90
-Kyler Murray,QB,MIN,134.50
-Jordan Love,QB,GB,135.70
-Tyler Shough,QB,NO,140.20
-Zach Charbonnet,RB,SEA,141.10
-Rashid Shaheed,WR,SEA,142.70
-Tyrone Tracy Jr.,RB,NYG,146.80
-Tyjae Spears,RB,TEN,147.80
-Oronde Gadsden II,TE,LAC,150
-Alvin Kamara,RB,NO,150.20
-Tyler Allgeier,RB,ARI,150.80
-Woody Marks,RB,HOU,151.20
-Sam Darnold,QB,SEA,151.70
-Chris Rodriguez Jr.,RB,JAX,152.80
-Hunter Henry,TE,NE,153.50
-Denzel Boston,WR,CLE,153.90
-Brenton Strange,TE,JAX,157.70
-Juwan Johnson,TE,NO,158.10
-Jerry Jeudy,WR,CLE,158.40
-Malik Willis,QB,MIA,158.70
-C.J. Stroud,QB,HOU,160.60
-Brian Robinson Jr.,RB,ATL,160.60
-Chig Okonkwo,TE,WAS,161
-Jauan Jennings,WR,MIN,161.60
-Isiah Pacheco,RB,DET,162
-De'Zhaun Stribling,WR,SF,165
-Dylan Sampson,RB,CLE,165.20
-Jalen McMillan,WR,TB,165.40
-Jonah Coleman,RB,DEN,165.50
-Keaton Mitchell,RB,LAC,166
-Travis Hunter,WR,JAX,166.50
-Tre Tucker,WR,LVR,166.60
-Omar Cooper Jr.,WR,NYJ,166.90
-Daniel Jones,QB,IND,170.60
-Tank Bigsby,RB,PHI,171
-T.J. Hockenson,TE,MIN,174.40
-Cam Ward,QB,TEN,174.60
+Kyle Pitts Sr.,TE,ATL,75.20
+Jadarian Price,RB,SEA,75.60
+Caleb Williams,QB,CHI,76.20
+Rhamondre Stevenson,RB,NE,78
+Tony Pollard,RB,TEN,78.80
+Sam LaPorta,TE,DET,79.70
+Michael Wilson,WR,ARI,82.30
+Rico Dowdle,RB,PIT,83.40
+Chuba Hubbard,RB,CAR,83.70
+Chris Godwin Jr.,WR,TB,83.80
+Tucker Kraft,TE,GB,83.90
+Alec Pierce,WR,IND,83.90
+Michael Pittman Jr.,WR,PIT,84.50
+RJ Harvey,RB,DEN,86
+Justin Herbert,QB,LAC,87.10
+Trevor Lawrence,QB,JAX,88.30
+Josh Downs,WR,IND,90.70
+Wan'Dale Robinson,WR,TEN,92.50
+Matthew Stafford,QB,LA,93.10
+J.K. Dobbins,RB,DEN,96.90
+Jakobi Meyers,WR,JAX,97.90
+Kenny Gainwell,RB,TB,99.60
+Quentin Johnston,WR,LAC,99.70
+Brock Purdy,QB,SF,100.10
+Stefon Diggs,WR,WAS,101.10
+Travis Kelce,TE,KC,101.40
+Jaxson Dart,QB,NYG,101.50
+Patrick Mahomes II,QB,KC,102.50
+Jordan Addison,WR,MIN,102.90
+Jayden Reed,WR,GB,104.10
+Makai Lemon,WR,PHI,104.20
+George Kittle,TE,SF,104.60
+Jonathon Brooks,RB,CAR,105.10
+Jordyn Tyson,WR,NO,106
+Kyle Monangai,RB,CHI,108
+Bo Nix,QB,DEN,111.10
+Aaron Jones Sr.,RB,MIN,111.30
+Jared Goff,QB,DET,111.60
+Blake Corum,RB,LA,112.40
+Rachaad White,RB,WAS,113.20
+Jacory Croskey-Merritt,RB,WAS,116.10
+Dallas Goedert,TE,PHI,117
+Jake Ferguson,TE,DAL,117.80
+Khalil Shakir,WR,BUF,118.10
+Jordan Mason,RB,MIN,119.60
+Dalton Kincaid,TE,BUF,121.40
+Matthew Golden,WR,GB,121.80
+KC Concepcion,WR,CLE,122.80
+Xavier Worthy,WR,KC,123.20
+Isaiah Likely,TE,NYG,124.40
+Romeo Doubs,WR,NE,124.60
+Jalen Coker,WR,CAR,128
+Baker Mayfield,QB,TB,128.30
+Deebo Samuel Sr.,WR,SF,129.50
+Mark Andrews,TE,BAL,130
+Kyler Murray,QB,MIN,132.60
+Jordan Love,QB,GB,136.20
+Jayden Higgins,WR,HOU,137.10
+Tyler Shough,QB,NO,139.90
+Zach Charbonnet,RB,SEA,142
+Rashid Shaheed,WR,SEA,144.50
+Tyjae Spears,RB,TEN,144.90
+Chris Rodriguez Jr.,RB,JAX,147.20
+Tyler Allgeier,RB,ARI,147.30
+Woody Marks,RB,HOU,148.90
+De'Zhaun Stribling,WR,SF,149.10
+Tyrone Tracy Jr.,RB,NYG,149.30
+Denzel Boston,WR,CLE,150.90
+Juwan Johnson,TE,NO,151.30
+Sam Darnold,QB,SEA,151.40
+Alvin Kamara,RB,NO,151.80
+Hunter Henry,TE,NE,153.60
+Oronde Gadsden II,TE,LAC,157.90
+Jerry Jeudy,WR,CLE,158.30
+Brenton Strange,TE,JAX,158.50
+Malik Willis,QB,MIA,159.50
+Jonah Coleman,RB,DEN,160.50
+Chig Okonkwo,TE,WAS,162.10
+Dylan Sampson,RB,CLE,162.40
+Brian Robinson Jr.,RB,ATL,163.40
+Keaton Mitchell,RB,LAC,164
+Jalen McMillan,WR,TB,164.80
+Jauan Jennings,WR,MIN,165.10
+Isiah Pacheco,RB,DET,165.60
+C.J. Stroud,QB,HOU,165.90
+Tre Tucker,WR,LVR,167.10
+Travis Hunter,WR,JAX,168.10
+Tank Bigsby,RB,PHI,169.50
+Daniel Jones,QB,IND,169.60
 Jalen Nailor,WR,LVR,174.70
-Dalton Schultz,TE,HOU,179.30
-Adonai Mitchell,WR,NYJ,180.90
-Malik Washington,WR,MIA,181.20
-Kenyon Sadiq,TE,NYJ,181.70
-Tank Dell,WR,HOU,182.50
-Braelon Allen,RB,NYJ,183.70
-Bryce Young,QB,CAR,187.60
-Tre' Harris,WR,LAC,188.90
-Dontayvion Wicks,WR,PHI,192.60
-Kayshon Boutte,WR,NE,192.60
-Calvin Ridley,WR,TEN,193.30
-AJ Barner,TE,SEA,193.90
-Mike Washington Jr.,RB,LVR,193.90
-James Conner,RB,ARI,195.20
-Cooper Kupp,WR,SEA,197.40
-Emmett Johnson,RB,KC,198
-Rashod Bateman,WR,BAL,198.50
-Ja'Kobi Lane,WR,BAL,199.20
-Ryan Flournoy,WR,DAL,200
-Ricky Pearsall,WR,SF,200.40
-Greg Dulcich,TE,MIA,203.10
-Ray Davis,RB,BUF,204.60
-Jacoby Brissett,QB,ARI,204.60
-Isaac TeSlaa,WR,DET,204.70
-Nicholas Singleton,RB,TEN,207.30
-Jaylin Noel,WR,HOU,207.80
-MarShawn Lloyd,RB,GB,208.20
-Pat Bryant,WR,DEN,208.30
-Zachariah Branch,WR,ATL,208.30
-Kimani Vidal,RB,LAC,208.40
-Fernando Mendoza,QB,LVR,209.30
-Aaron Rodgers,QB,PIT,214.10
-Antonio Williams,WR,WAS,214.40
-Cyrus Allen,WR,KC,216.30`;
+Omar Cooper Jr.,WR,NYJ,175.10
+Dalton Schultz,TE,HOU,176.10
+T.J. Hockenson,TE,MIN,176.20
+Cam Ward,QB,TEN,176.70
+Malik Washington,WR,MIA,177.80
+Braelon Allen,RB,NYJ,178
+Tank Dell,WR,HOU,180.20
+Kenyon Sadiq,TE,NYJ,182.50
+Adonai Mitchell,WR,NYJ,184.50
+Mike Washington Jr.,RB,LVR,185.50
+Keenan Allen,WR,IND,187.90
+Tre' Harris,WR,LAC,188.30
+Dontayvion Wicks,WR,PHI,189.10
+Bryce Young,QB,CAR,189.90
+MarShawn Lloyd,RB,GB,190
+AJ Barner,TE,SEA,193.20
+Emmett Johnson,RB,KC,194.10
+Ryan Flournoy,WR,DAL,195.10
+Ja'Kobi Lane,WR,BAL,195.60
+Calvin Ridley,WR,TEN,196
+Rashod Bateman,WR,BAL,196.70
+James Conner,RB,ARI,197
+Cyrus Allen,WR,KC,197.10
+Kayshon Boutte,WR,NE,198.40
+Cooper Kupp,WR,SEA,198.50
+Nicholas Singleton,RB,TEN,201.80
+Jacoby Brissett,QB,ARI,202.60
+Jaylin Noel,WR,HOU,203.50
+Ray Davis,RB,BUF,203.80
+Pat Bryant,WR,DEN,204.10
+Greg Dulcich,TE,MIA,205.60
+Isaac TeSlaa,WR,DET,205.70
+Zachariah Branch,WR,ATL,210
+Caleb Douglas,WR,MIA,210
+Aaron Rodgers,QB,PIT,210.30
+Germie Bernard,WR,PIT,212.30
+Fernando Mendoza,QB,LVR,212.50`;
 
 /** Engine slug → consensus ADP (lower = earlier pick). */
 export const ADP_2026: Map<string, number> = (() => {

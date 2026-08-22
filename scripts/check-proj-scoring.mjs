@@ -545,13 +545,23 @@ ok('the bake and the stat lines both loaded (else every case below is vacuous)',
     poolSortValue('proj', { slug: TE.id, pos: 'TE' }) === `${projFor(TE.id, 'TE').toFixed(1)}/g`,
     poolSortValue('proj', { slug: TE.id, pos: 'TE' }));
 
-  // A league that pays nothing per catch reorders the backs by carries.
-  setLeagueProjScoring({ ppr: 0 });
-  ok('zero PPR flips the two best backs on catch volume',
-    topN(2)[0] === 'jahmyr-gibbs' && topN(2)[1] === 'christian-mccaffrey', topN(2));
+  // A league that pays nothing per catch reorders catch-heavy backs below
+  // volume runners. Re-fixtured at the 2026-08-22 rebake: the original pair
+  // (McCaffrey over Gibbs) no longer flips — the bake moved — so the pair is
+  // now Achane (65 catches) vs Henry (25), verified to flip under TODAY'S
+  // lines. The next rebake may need a new pair again; that is this assertion
+  // doing its job, not a reason to loosen it.
   clearLeagueProjScoring();
-  ok('and the standard pool puts them back',
-    topN(2)[0] === 'christian-mccaffrey' && topN(2)[1] === 'jahmyr-gibbs', topN(2));
+  ok('standard pool: the catch-heavy back out-projects the volume runner',
+    projFor('devon-achane', 'RB') > projFor('derrick-henry', 'RB'),
+    [projFor('devon-achane', 'RB'), projFor('derrick-henry', 'RB')]);
+  setLeagueProjScoring({ ppr: 0 });
+  ok('zero PPR flips them — catches were the difference and now pay nothing',
+    projFor('derrick-henry', 'RB') > projFor('devon-achane', 'RB'),
+    [projFor('derrick-henry', 'RB'), projFor('devon-achane', 'RB')]);
+  clearLeagueProjScoring();
+  ok('and the standard pool restores the catch-heavy back',
+    projFor('devon-achane', 'RB') > projFor('derrick-henry', 'RB'));
 
   ok('rank order never consults the projection at all',
     sortPool(rows, 'rank')[0].rank === 1);
