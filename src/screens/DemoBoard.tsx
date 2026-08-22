@@ -181,7 +181,7 @@ export function DemoBoard() {
     // an RB against a QB (a read-as-blowout to any fantasy player); the armed
     // power-up's final-5-minute ×2 is what keeps the fight close, and the
     // preview exists to SHOW that.
-    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, { 'garbage-time': true }, { autoBackups: true });
+    return buildMatchup(youId, oppId, DEMO_WEEK, autoFill({}), oppPicks, {}, {}, {}, { 'garbage-time': true }, {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- autoFill is a stable function of `defaults`
   }, [ready, oppId, youId, oppPicks, defaults, phase]);
   const previewSlot = useMemo(() => {
@@ -339,7 +339,7 @@ export function DemoBoard() {
     const buffs = chosenBuff === 'emp' ? {} : { [chosenBuff]: true };
     // The demo has no backup-assign UI, so your unopposed backups auto-sub into
     // your weakest starters at FINAL (the AI side always does this).
-    const extras = { autoBackups: true, ...(chosenBuff === 'emp' && empWin ? { emp: { [empWin]: EMP_AT } } : {}) };
+    const extras = chosenBuff === 'emp' && empWin ? { emp: { [empWin]: EMP_AT } } : {};
     return buildMatchup(youId, oppId, DEMO_WEEK, runPicks, oppPicks, {}, {}, {}, buffs, extras);
   }, [ready, oppId, youId, runPicks, chosenBuff, empWin, oppPicks]);
 
