@@ -21,10 +21,10 @@
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, Text, View, StyleSheet } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
-import { gameBoxScore } from '@drip/core/engine/boxScore';
+import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
@@ -349,33 +349,60 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   const t = useTheme();
   const box = useMemo(() => (visible ? gameBoxScore(week, home, away, clock) : { home: [], away: [] }),
     [visible, week, home, away, clock]);
-  const col = (label: string, rows: typeof box.home) => (
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
-        {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 14, height: 14, borderRadius: 2 }} />}
-        <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
-      </View>
-      {rows.length === 0
-        ? <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}>— nothing yet —</Text>
-        : rows.map((r) => (
-          <View key={r.slug} style={{ paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-              <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+  // OFFENSE / DEFENSE tabs (v0.343.2, founder): the single list ran past the
+  // sheet's cap and clipped — see the ScrollView note below — and even scrolled,
+  // "how did the defense do" meant paging past every receiver. Membership is
+  // core's boxTabRows: stat-driven, so a two-way player (the Travis Hunter
+  // case) appears on BOTH tabs, phrased through each side's lens.
+  const [tab, setTab] = useState<'off' | 'def'>('off');
+  useEffect(() => { if (visible) setTab('off'); }, [visible]);
+  const col = (label: string, rows: typeof box.home) => {
+    const shown = boxTabRows(rows, tab);
+    return (
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+          {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 14, height: 14, borderRadius: 2 }} />}
+          <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
+        </View>
+        {shown.length === 0
+          ? <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}>— nothing yet —</Text>
+          : shown.map((r) => (
+            <View key={r.slug} style={{ paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+              </View>
+              <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dimstrong, lineHeight: fs(8.5) * 1.35 }}>{r.stat}</Text>
             </View>
-            <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dimstrong, lineHeight: fs(8.5) * 1.35 }}>{r.stat}</Text>
-          </View>
-        ))}
-    </View>
+          ))}
+      </View>
+    );
+  };
+  const tabBtn = (id: 'off' | 'def', label: string) => (
+    <Pressable onPress={() => setTab(id)}
+      style={{ flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 4, backgroundColor: tab === id ? t.bd : 'transparent' }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', letterSpacing: 1, color: tab === id ? t.text : t.dim }}>{label}</Text>
+    </Pressable>
   );
   return (
     <Overlay visible={visible} title={`▤ ${away} @ ${home}`} onClose={onClose}>
-      <View style={{ flexDirection: 'row', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</View>
-      {/* Said plainly: an empty column is a player who has not touched the
-          ball, not a player the box score forgot. */}
-      <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 10, lineHeight: fs(8) * 1.5 }}>
-        everyone with a stat in this game · offense then defence, by position, by yards · follows the log's clock
-      </Text>
+      {/* The tab bar stays put; only the list scrolls. */}
+      <View style={{ flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
+        {tabBtn('off', 'OFFENSE')}
+        {tabBtn('def', 'DEFENSE')}
+      </View>
+      {/* A ScrollView, not a View (v0.343.2): the sheet body clips at the
+          sheet's height cap, and a full game's list is taller than any phone —
+          the founder's screenshot ended mid-linebacker with no way to reach
+          the rest. The Overlay's flexShrink body needs the scroll INSIDE. */}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</View>
+        {/* Said plainly: an empty column is a player who has not touched the
+            ball, not a player the box score forgot. */}
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 10, lineHeight: fs(8) * 1.5 }}>
+          everyone with a stat on this side of the ball · by position, by yards · two-way players appear on both tabs · follows the log's clock
+        </Text>
+      </ScrollView>
     </Overlay>
   );
 }

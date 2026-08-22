@@ -22,7 +22,7 @@
 
 import { statlineFrom, realRawPlays, fmtStat, type StatLine } from './sim';
 import { realPbpSlugs } from '../data/realPbp';
-import { slugMeta } from '../data/slugMeta';
+import { slugMeta, normTeam } from '../data/slugMeta';
 import type { Pos } from '../theme';
 
 export interface BoxRow {
@@ -102,12 +102,18 @@ export function hasStats(s: StatLine): boolean {
  *  scrubbing the log scrubs the box score with it rather than always reporting
  *  the present. */
 export function gameBoxScore(week: number, home: string, away: string, clock: number): GameBox {
-  const H = (home ?? '').toUpperCase(), A = (away ?? '').toUpperCase();
+  // BOTH VOCABULARIES, ONE CODE (v0.343.2). `home`/`away` arrive in the FEED's
+  // vocabulary (ESPN's: LAR, WSH, JAC) while slugMeta answers in the SLATE's
+  // (LA, WAS, JAX) — so a raw compare silently dropped every Rams player from
+  // a NO@LAR box score while the Saints column filled normally (the founder's
+  // "weird that only saints have stats?" screenshot). normTeam on both sides
+  // is the whole fix; an unrecognised code still just never matches.
+  const H = normTeam(home ?? ''), A = normTeam(away ?? '');
   const out: GameBox = { home: [], away: [] };
   if (!H || !A) return out;
   for (const slug of realPbpSlugs(week)) {
     const meta = slugMeta(slug);
-    const team = (meta.team ?? '').toUpperCase();
+    const team = normTeam(meta.team ?? '');
     if (team !== H && team !== A) continue;
     const plays = realRawPlays(slug, week);
     if (!plays || !plays.length) continue;
@@ -145,3 +151,53 @@ export const boxRowOrder = (a: BoxRow, b: BoxRow): number =>
     || (b.yards - a.yards)
     || (b.weight - a.weight)
     || a.slug.localeCompare(b.slug);
+
+// ── THE TAB SPLIT (v0.343.2) ───────────────────────────────────────────────
+// Founder: "the box score gets cut off. Let's have a tab for offense and a tab
+// for defense. if a player has multiple designations (Travis Hunter) put them
+// in both positions."
+//
+// Membership is decided by the STAT LINE, not the roster tag: a tab shows
+// everyone who DID something on that side of the ball. That is what makes the
+// two-way case fall out for free — a player with catches and tackles simply
+// qualifies for both tabs — and it keeps a tab from padding itself with
+// zero lines (a WR whose only stat is a tackle after an interception appears
+// under DEFENSE, where his stat is, not under OFFENSE with an 0/0 line).
+
+/** Any offensive, kicking or return involvement. Yardage compares ≠ 0, not
+ *  > 0 — a back with three carries for −4 yards is still in the game. */
+export const offInvolved = (s: StatLine): boolean =>
+  s.carries > 0 || s.targets > 0 || s.rec > 0 || s.fg > 0 || s.xp > 0
+  || s.passYds !== 0 || s.rushYds !== 0 || s.recYds !== 0
+  || s.passTds > 0 || s.rushTds > 0 || s.recTds > 0
+  || s.retYds !== 0 || s.retTds > 0;
+
+/** Any defensive splash. */
+export const defInvolved = (s: StatLine): boolean =>
+  s.tackles > 0 || s.sacks > 0 || s.ints > 0 || s.fumrec > 0
+  || s.dtd > 0 || s.safety > 0;
+
+/** One tab of a team's column: every row involved on that side of the ball.
+ *
+ *  A row crossing onto the tab OPPOSITE its listed position (the two-way case)
+ *  is re-phrased through that side's lens — the defense tab shows the tackles,
+ *  not a second copy of the receiving line — and sorts AFTER the tab's native
+ *  rows, by involvement: the natives keep `boxRowOrder`'s position-then-yards
+ *  reading, and the visitors line up behind them where a reader expects the
+ *  odd case to be. Rows are copies; the underlying box is never mutated. */
+export function boxTabRows(rows: BoxRow[], tab: 'off' | 'def'): BoxRow[] {
+  const involved = tab === 'off' ? offInvolved : defInvolved;
+  const native: BoxRow[] = [], visiting: BoxRow[] = [];
+  for (const r of rows) {
+    // The fallback keeps a row whose line somehow satisfies neither predicate
+    // (hasStats admits freak zero-sum yardage lines) on its own side's tab
+    // rather than dropping it from both.
+    if (!(involved(r.line) || (r.side === tab && !offInvolved(r.line) && !defInvolved(r.line)))) continue;
+    if (r.side === tab) { native.push(r); continue; }
+    const lens: Pos = tab === 'def' ? 'DB'
+      : r.line.carries > 0 && r.line.rec === 0 ? 'RB' : 'WR';
+    visiting.push({ ...r, stat: fmtStat(lens, r.line) });
+  }
+  visiting.sort((a, b) => (b.weight - a.weight) || a.slug.localeCompare(b.slug));
+  return [...native, ...visiting];
+}
