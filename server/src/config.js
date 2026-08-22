@@ -2,6 +2,7 @@
 // credentials are missing (the worker can't do anything without them), but leaves
 // the rest with sane defaults so a dev can run a single poll/sync easily.
 import 'dotenv/config';
+import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 
 function required(name) {
   const v = process.env[name];
@@ -30,7 +31,7 @@ export const config = {
   // Lineups lock this long BEFORE kickoff (matchup lock_at = first kickoff − lead;
   // the 0102 enforce_window_lock trigger applies the same lead per window). Must
   // stay in lockstep with the client's LOCK_LEAD_MS (Matchup.tsx) and the trigger.
-  lockLeadMs: 3_600_000,
+  lockLeadMs: LOCK_LEAD_MS, // ONE source for the hour (core nflSlate; the DB's 0178 interval mirrors it)
   leagueIds: (process.env.PILOT_LEAGUE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
   // Premium paywall enforcement at resolve (docs/premium-model.md). OFF for the
   // 2026 pilot — the tier is built but deliberately not turned on until 2027.

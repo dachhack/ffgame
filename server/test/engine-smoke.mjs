@@ -79,5 +79,25 @@ ok(gated < ungated, 'THE POINT: the same catch banks less when possession is kno
 clearLiveGameFeeds();
 ok(dripFinal() === 23.6, 'clearing the feed returns to the honest unknown-data fallback (soft degradation, not zero)');
 
+// ── THE SEAL-AT-LOCK BOUNDARY (v0.341.1) ───────────────────────────────────
+// `locked` is BOTH the edit-final flag and the RLS reveal flag. The DB's
+// enforce_window_lock refuses edits from kickoff − 1h; the worker's sweep
+// used to seal at kickoff — a blind hour where neither side could edit OR see,
+// and the board read a fully-set, merely-hidden opponent as "NOT MATCHED UP".
+// dueWindows now flips at the same instant as the DB. To the millisecond,
+// because this boundary is when the reveal happens.
+import { dueWindows } from '../src/lock.js';
+import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
+{
+  const K = 1_000_000_000_000;
+  const wk = { sat: K, mnf: K + 7_200_000 };
+  const at = (ms) => [...(dueWindows(wk, new Date(ms)) ?? [])].sort().join(',');
+  ok(at(K - LOCK_LEAD_MS - 1) === '', 'one ms before the lock lead: nothing seals (still editable)');
+  ok(at(K - LOCK_LEAD_MS) === 'sat', 'AT kickoff − 1h: the window seals — the same instant the DB stops edits');
+  ok(at(K) === 'sat', 'at kickoff it is still (only) sat — sealing did not creep to later windows');
+  ok(at(K + 7_200_000 - LOCK_LEAD_MS) === 'mnf,sat', 'the later window seals at ITS OWN lock, not the first one');
+  ok(dueWindows(null, new Date(K)) === null, 'no kickoff map → null (callers treat unknown as seal-everything, pre-0058 behavior)');
+}
+
 if (fails) { console.error(`\n${fails} PROBE FAIL(s)`); process.exit(1); }
 console.log('\nOK — the real engine resolved live-injected plays in Node, and drips gate on possession.');
