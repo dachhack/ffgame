@@ -1637,9 +1637,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                         (the wall clock drives it, no ▶/speed to hang it off).
                         The founder went looking for it mid-slate; it belongs
                         here, beside the other live-board tools. */}
+                    {/* Icon-only (v0.342.2, founder): with ACTIVE, APPLY, the
+                        coin, SHOP and chat all in this row, the FIELDS label
+                        was the straw that wrapped it on a phone. The ▦ glyph
+                        carries it, like the chat chip beside it. */}
                     {liveCtx && hasGameFeed(week) && (
-                      <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px' }}>
-                        ▦ FIELDS
+                      <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" aria-label="All games field board" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px' }}>
+                        ▦
                       </button>
                     )}
                     {/* chat (0147): league channel + DMs, right beside the other board tools */}
