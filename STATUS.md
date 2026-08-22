@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.339.3 — the web reads the score the engine wrote
+
+Founder: "I need these to match."
+
+The web's window bar rendered `banksAtClock(s.events, clock)` — a local
+re-simulation at this client's clock — while the app rendered the resolver's
+own `getMatchupState` rows. Both were right about their own inputs and
+disagreed on screen: a FLAT metric matched (clock-independent once the plays are
+in) and a DRIP metric did not, because its value IS a function of the clock and
+two clocks give two answers. Humphrey 6.5 vs 1.8; Nix 7.0 both sides.
+
+The resolver decides the week, so it is the number to show. The live board now
+fetches `getMatchupState` on the SAME 15s beat as the plays — a separate poll
+would guarantee they were briefly inconsistent with each other — and the bar
+prefers it whenever it exists.
+
+WHY THE LOCAL SIM STAYS: `effWinClock` returns the manual playback position off
+the live board and `winMax` on it, so the live board never had a scrub position
+to preserve — but the SIM and DEMO boards do, and there is no server row there
+at all. The sim is correct in exactly the place it is still used.
+
+Two details that would have bitten:
+  • totals are passed as NUMBERS, not the row. `WindowSection` is memoized on a
+    key-by-key `Object.is`, and a fresh object from `.find()` is never equal —
+    it would have re-rendered every section on every poll;
+  • the bar falls back to the sim until the home seat is known, rather than
+    guessing a side and showing the opponent's score as yours for one tick.
+
 ### v0.339.2 — a drip accrues per offensive minute, not per game minute
 
 Founder: "Drip should be per minute of offense."
@@ -45,7 +73,7 @@ New `check:poss` (18 assertions), including the end-to-end arithmetic: a
 14-yard receiver whose team held the ball half the game banks 1.4 gated and 4.2
 ungated.
 
-STILL OPEN: the two hosts read different sources — the app renders the server's
+(FIXED in v0.339.3) the two hosts read different sources — the app renders the server's
 `getMatchupState` rows, the web simulates locally at its own clock — so they can
 still disagree even with the gating fixed.
 
