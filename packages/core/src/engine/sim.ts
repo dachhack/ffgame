@@ -4,6 +4,7 @@ import { leagueScoring, scopedAdjustFor } from './leagueScoring';
 import { flagRulesFor } from '../data/commish';
 import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlay, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
+import { feedPossFor } from '../data/gameFeed';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Real-data resolution. Every player's week is driven by baked real 2025
@@ -677,8 +678,23 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const dripYou = youDripKind !== null;
   const dripTheir = theirDripKind !== null;
   // Projection mode has no real possession data — accrue drips over full game time.
-  const youPoss = dripYou && !proj ? realPossFor(week, you.player.team) : [];
-  const theirPoss = dripTheir && !proj ? realPossFor(week, their.player.team) : [];
+  //
+  // BAKED FIRST, THEN THE LIVE FEED (v0.339.2). `realPossFor` reads the baked
+  // week cache, which only genRealPbp.mjs writes — so in a LIVE game it came
+  // back empty and `offSecs` fell through to `return t1 - t0`, accruing every
+  // drip on every GAME minute instead of every OFFENSIVE minute. A drip metric
+  // says "while your team has the ball" and in-season it meant nothing at all.
+  //
+  // The feed carries possession per play, so the intervals are derived from it
+  // when the bake has none. Baked still wins where it exists: it is generated
+  // from the full nflverse play stream and is the more complete source, and a
+  // replayed baked week must keep scoring exactly as it always has.
+  const possFor = (team?: string | null): number[][] => {
+    const baked = realPossFor(week, team ?? '');
+    return baked.length ? baked : feedPossFor(week, team);
+  };
+  const youPoss = dripYou && !proj ? possFor(you.player.team) : [];
+  const theirPoss = dripTheir && !proj ? possFor(their.player.team) : [];
 
   // FIELD DEFENSE drip: a DST on `earn` scores its flat splash points AND its
   // splash production feeds a drip rate (splash weight × DST_DRIP_RATE per play)

@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.339.2 — a drip accrues per offensive minute, not per game minute
+
+Founder: "Drip should be per minute of offense."
+
+It wasn't, in any live game. `sim.offSecs` gates a drip on possession intervals
+from `realPossFor`, which reads the baked week cache — written ONLY by
+scripts/pbp/genRealPbp.mjs. No live path ever filled it, so live intervals came
+back empty and `offSecs` took its `if (!intervals.length) return t1 - t0`
+fallback: every drip accrued on every GAME minute. A metric defined as
+"accrues while your team has the ball" meant nothing at all in-season, and it
+over-credited by roughly the inverse of a team's time of possession — about 2×.
+
+The feed already knows possession (`GamePlay.tm`), so the intervals are derived
+rather than plumbed through a new column: `possFromPlays` in gameFeed.ts, with
+`feedPossFor` as the per-team lookup. BAKED STILL WINS where it exists — it
+comes from the full nflverse stream and a replayed baked week must score
+exactly as it always has. Parity's baked-week suites passing is the proof.
+
+The rule is keyed off the NEXT play's `tm`, not this play's `tm2`: tm2 only
+appears when possession flips, so a feed omitting it on a turnover would credit
+a whole drive to the wrong side. An assertion pins that the answer does not
+depend on tm2 being present at all.
+
+New `check:poss` (18 assertions), including the end-to-end arithmetic: a
+14-yard receiver whose team held the ball half the game banks 1.4 gated and 4.2
+ungated.
+
+STILL OPEN: the two hosts read different sources — the app renders the server's
+`getMatchupState` rows, the web simulates locally at its own clock — so they can
+still disagree even with the gating fixed.
+
 ### v0.339.1 — the box score reaches the app's field
 
 Founder: "can we get the box score on the field visual in the app as well."
@@ -28,7 +59,7 @@ disagree about a number — which is the only reason a second implementation of
 this screen is acceptable. Everything with judgement in it (who is listed, in
 what order, how a line reads) stays in core; only the sheet is native.
 
-## OPEN — live DRIP metrics are ungated, and it is not a client bug
+## (FIXED in v0.339.2) live DRIP metrics were ungated
 
 Founder, on the app/web scoring split: "does the app drip every game minute,
 not every team offense minute?" Yes, and worse than app-only:

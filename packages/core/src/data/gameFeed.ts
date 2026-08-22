@@ -123,6 +123,57 @@ export function allGameFeeds(week: number): TeamGameFeed[] {
   });
 }
 
+/** OFFENSIVE POSSESSION INTERVALS, DERIVED FROM THE FEED (v0.339.2).
+ *
+ *  A drip metric is defined as accruing "while your team has the ball", and
+ *  `sim.offSecs` gates it on intervals from `realPossFor` — which reads the
+ *  BAKED week cache, written only by scripts/pbp/genRealPbp.mjs. No live path
+ *  ever filled it, so in a live game the intervals came back empty and
+ *  `offSecs` took its `if (!intervals.length) return t1 - t0` fallback: every
+ *  drip accrued on every GAME minute rather than every offensive minute.
+ *  That fallback was written for genuinely unknown data and had quietly become
+ *  the normal case in-season, over-crediting every drip in every live window.
+ *
+ *  The feed already knows possession — `tm` on each play — so the intervals can
+ *  be derived rather than plumbed through a new column.
+ *
+ *  THE RULE: the span between play i and play i+1 belongs to whoever runs play
+ *  i+1. Deliberately keyed off the NEXT play's `tm` rather than this play's
+ *  `tm2`: `tm2` is only present when possession flips, so a feed that omits it
+ *  on a turnover would silently credit the wrong side for a whole drive, while
+ *  the next play's `tm` is always populated and is the same fact stated
+ *  positively. The tail after the last play is credited to nobody — the game
+ *  has not been played past it yet, which is the live case.
+ *
+ *  Pure and exported for its own sake: this is a scoring rule, and it is
+ *  asserted directly (scripts/check-poss.mjs). */
+export function possFromPlays(plays: GamePlay[]): Record<string, number[][]> {
+  const out: Record<string, number[][]> = {};
+  if (!plays?.length) return out;
+  const ord = [...plays].sort((a, b) => a.c - b.c);
+  for (let i = 0; i + 1 < ord.length; i++) {
+    const team = ord[i + 1].tm;
+    const a = ord[i].c, b = ord[i + 1].c;
+    if (!team || !(b > a)) continue;
+    const arr = (out[team] ||= []);
+    const last = arr[arr.length - 1];
+    // Merge a span that continues the same team's drive rather than emitting
+    // one interval per play — offSecs walks these per game-minute, and a
+    // hundred adjacent one-play slivers is the same answer done slowly.
+    if (last && last[1] === a) last[1] = b;
+    else arr.push([a, b]);
+  }
+  return out;
+}
+
+/** This team's derived offensive intervals for the week's loaded feed, or []
+ *  when there is no feed (which is what `offSecs` treats as "unknown"). */
+export function feedPossFor(week: number, team?: string | null): number[][] {
+  const f = gameFeedFor(week, team);
+  if (!f || !team) return [];
+  return possFromPlays(f.plays)[team] ?? [];
+}
+
 export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | null {
   if (!team) return null;
   const wk = liveFeeds.get(week) ?? cache.get(week);
