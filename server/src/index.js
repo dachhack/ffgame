@@ -18,6 +18,7 @@ import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
+import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
@@ -400,12 +401,18 @@ async function tickContext(ctx, season) {
     await injectWeekPlays(week);
     const rctx = await prefetchTick(live, week);
     const nowMs = Date.now();
+    // TWO clocks on purpose (v0.341.1): the fill/seal set runs on LOCK time
+    // (kickoff − 1h, matching enforce_window_lock and the reveal), so fills
+    // land already sealed and the opponent appears the moment editing ends;
+    // startedWins stays on KICKOFF for the resolver, so matchup_state never
+    // publishes rows for a window that hasn't actually started.
     const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
+    const lockedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] - LOCK_LEAD_MS <= nowMs)) : null;
     // Fill-only auto-lineups (0170.8): later windows of an ALREADY-live week
     // come due long after the scheduled→live pass ran, so empty slots (a
     // partial human, an AI seat's later windows) fill here as the week runs.
     // Idempotent — a seat with no empty slots writes nothing.
-    try { await materializeAutoLineups(live.map((m) => m.id), new Date(nowMs).toISOString(), startedWins, true); }
+    try { await materializeAutoLineups(live.map((m) => m.id), new Date(nowMs).toISOString(), lockedWins, true); }
     catch (e) { log(`[${ctx.tag}] window fill`, e.message); }
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {

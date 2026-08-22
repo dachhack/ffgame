@@ -17,6 +17,7 @@ import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
+import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -154,10 +155,21 @@ export async function backfillLockAt(week, kickoffMs) {
 /** Windows whose first kickoff has passed, from a {win → kickoffMs} map. Returns
  *  null when the map is unknown (no slate) — callers then fall back to sealing
  *  everything, the safe pre-0058 behavior. */
-function dueWindows(winKicks, now) {
+export function dueWindows(winKicks, now) {
   if (!winKicks) return null;
+  // A window is DUE at its LOCK — kickoff minus the shared LOCK_LEAD_MS hour —
+  // not at kickoff (v0.341.1). The DB's enforce_window_lock (0178, the same
+  // hour as an SQL interval) refuses every edit from that moment, and `locked`
+  // is ALSO the reveal flag (sealed_select RLS), so sealing an hour later
+  // than the edit cutoff created a blind hour: neither side could edit,
+  // neither side could SEE, and the board filled the vacuum with
+  // "NOT MATCHED UP" over an opponent who was fully set and merely hidden —
+  // which the founder read, reasonably, as yet another unopposed bug. Sealing
+  // at the true lock closes the gap: the auto-fill lands already sealed, the
+  // reveal happens the moment editing ends, and a locked window shows the
+  // real matchup.
   const t = now.getTime();
-  return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] <= t));
+  return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] - LOCK_LEAD_MS <= t));
   // NOTE: 'wk' is deliberately NOT added here any more (0178). A classic
   // league's weekly lineup used to seal wholesale the instant ANY window came
   // due — so a Thursday night game froze your Sunday backs, which is not how
@@ -484,9 +496,10 @@ export async function lockDueMatchups(now = new Date(), winKicks = null, week = 
 }
 
 /** Per-window lock sweep: on this week's already-live (or final) matchups, seal
- *  any still-unlocked picks whose window has kicked off — the moment a window's
- *  picks become final AND readable by the opponent. Runs every tick; a no-op
- *  when nothing is newly due. Returns count of picks sealed. */
+ *  any still-unlocked picks whose window has LOCKED (kickoff − 1h, matching
+ *  the DB's enforce_window_lock) — the moment a window's picks become final
+ *  AND readable by the opponent. Runs every tick; a no-op when nothing is
+ *  newly due. Returns count of picks sealed. */
 /** ── AUTO-PICK A METRIC (v0.337.0) ─────────────────────────────────────────
  *
  *  Founder: "we should auto pick a metric if there is none just like we auto
