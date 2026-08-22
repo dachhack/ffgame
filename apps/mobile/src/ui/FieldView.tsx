@@ -246,7 +246,7 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
         {!over && fdX != null && <Line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke={t.warn} strokeWidth={1.4} opacity={0.9} />}
 
         {/* last-play arc */}
-        {arc && (
+        {arc && !over && (
           <G>
             <AnimatedPath
               d={isPassy
@@ -288,15 +288,28 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
           </AnimatedG>
         )}
       </Svg>
+      {/* ── FINAL banner (v0.342.0, web parity) ────────────────────────────
+          A finished game's field is a clean pitch — no arc, no ball spot, no
+          lingering kneel-down — with the verdict stamped over it. */}
+      {over && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 14, paddingVertical: 3, backgroundColor: mix(t.surface, 85, 'rgba(0, 0, 0, 0)') }}>
+            <Text style={{ fontFamily: MONO, fontSize: 18, fontWeight: '800', letterSpacing: 5, color: t.text }}>FINAL</Text>
+          </View>
+        </View>
+      )}
       </View>
 
-      {/* situation chip + play text */}
-      <View style={{ alignItems: 'center', marginTop: 4 }}>
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: t.surface }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{situation}</Text>
+      {/* situation chip + play text — the FINAL banner carries the verdict on
+          a finished game, and a kneel-down sentence under it is noise */}
+      {!over && (
+        <View style={{ alignItems: 'center', marginTop: 4 }}>
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: t.surface }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{situation}</Text>
+          </View>
         </View>
-      </View>
-      {!!cur && (
+      )}
+      {!!cur && !over && (
         <Text style={{ fontSize: 10.5, lineHeight: 14, color: t.text, textAlign: 'center', marginTop: 4 }}>
           {accent ? <Text style={{ color: accent }}>● </Text> : null}{cur.txt}
         </Text>

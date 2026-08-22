@@ -416,7 +416,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
               out and get run back over the same grass. It is a mistake to draw
               two phases of a play on one line and expect the reader to know
               which is which. */}
-          {arc && (
+          {arc && !over && (
             <g key={cur!.pid ?? cur!.c}>
               <path d={isPassy
                 ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, (midY + endY) / 2, TOP)} ${catchX ?? arc.x2} ${endY}`
@@ -457,7 +457,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
           )}
         </svg>
         {/* scoring-play takeover — pops over the field, holds, fades (pure CSS) */}
-        {takeover && (() => {
+        {takeover && !over && (() => {
           const tAccent = pidSide ? (() => {
             const s = pidSide(takeover.pid);
             return s === 'you' ? 'var(--you)' : s === 'their' ? 'var(--opp)' : s === 'both' ? 'var(--warn)' : null;
@@ -473,12 +473,27 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
             </div>
           );
         })()}
+        {/* ── FINAL banner (v0.342.0) ─────────────────────────────────────
+            Founder: "erase the final play from the visual and put a Final
+            banner over the game." A finished game's field is a clean pitch —
+            no arc, no ball spot, no lingering kneel-down — with the verdict
+            stamped across it. The score stays in the strip above; the box
+            score below is the post-game artifact worth keeping. */}
+        {over && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', background: 'color-mix(in srgb, var(--bg) 35%, transparent)' }}>
+            <span className="mono" style={{ fontSize: 'clamp(16px, 5vw, 26px)', fontWeight: 800, letterSpacing: '0.3em', paddingLeft: '0.3em', color: 'var(--text)', textShadow: '0 2px 12px rgba(0,0,0,.55)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 14px 3px calc(14px + 0.3em)', background: 'color-mix(in srgb, var(--surface) 82%, transparent)' }}>
+              FINAL
+            </span>
+          </div>
+        )}
       </div>
       {/* situation chip + play text */}
-      <div style={{ textAlign: 'center', marginTop: 4 }}>
-        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: accent ?? (cur?.sc ? 'var(--warn)' : 'var(--you)'), border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 7px', background: 'var(--surface)' }}>{situation}</span>
-      </div>
-      {cur && (
+      {!over && (
+        <div style={{ textAlign: 'center', marginTop: 4 }}>
+          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: accent ?? (cur?.sc ? 'var(--warn)' : 'var(--you)'), border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 7px', background: 'var(--surface)' }}>{situation}</span>
+        </div>
+      )}
+      {cur && !over && (
         <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)', textAlign: 'center', marginTop: 4, overflowWrap: 'anywhere' }} key={cur.pid ?? cur.c} className="fv-txt">
           {accent && <span style={{ color: accent }}>● </span>}{cur.txt}
         </div>

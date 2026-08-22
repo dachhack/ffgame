@@ -182,8 +182,11 @@ export interface FieldBoardGame { feed: TeamGameFeed; clock: number; you: Set<nu
  *  filtered to your matchup reads as a broken feed). An entry game is sampled
  *  at its FURTHEST slot clock so the field mirrors what the slot rows show; a
  *  game with no slot to mirror shows everything ingested (Infinity against
- *  the `p.c <= clock` visibility test). Your games first, then the rest in
- *  the feed's own schedule order.
+ *  the `p.c <= clock` visibility test). ACTIVE games first, finished games
+ *  sink to the bottom (founder's call, v0.342.0: "the active games are always
+ *  at the top"); within each band your games lead, then the rest in the
+ *  feed's own schedule order. A game is finished only when the feed SAYS so
+ *  (state 'post') — a missing state is a live unknown, never a burial.
  *
  *  Lived in the web's FieldBoard useMemo until v0.340.1, with the app running
  *  a DIFFERENT (slotted-only) rule and check-field-board pinning a
@@ -209,7 +212,13 @@ export function groupFieldGames(week: number, entries: FieldBoardEntry[]): Field
     for (const pid of e.pids ?? []) pids.add(pid);
   }
   const all = [...m.values()];
-  return [...all.filter((g) => g.mine), ...all.filter((g) => !g.mine)];
+  const doneOf = (g: FieldBoardGame) => g.feed.st === 'post';
+  const band = (g: FieldBoardGame) => (doneOf(g) ? 2 : 0) + (g.mine ? 0 : 1);
+  // Stable by construction: sort only on the band, so within a band the
+  // feed's own order (and mine-insertion order) is preserved.
+  return all.map((g, i) => [g, i] as const)
+    .sort((a, b) => band(a[0]) - band(b[0]) || a[1] - b[1])
+    .map(([g]) => g);
 }
 
 export function feedPossFor(week: number, team?: string | null): number[][] {
