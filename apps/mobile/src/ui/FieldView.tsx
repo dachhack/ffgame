@@ -21,14 +21,16 @@
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
+import { Animated, Image, Pressable, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
+import { gameBoxScore } from '@drip/core/engine/boxScore';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
-import { useTheme, MONO, alpha, mix } from '../theme.native';
+import { useTheme, MONO, alpha, mix, fs } from '../theme.native';
+import { Overlay } from './Overlay';
 
 // Geometry (SVG user units) — identical to the web's.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -78,15 +80,16 @@ export function FieldView({ week, team, clock, side }: {
 }) {
   const feed = gameFeedFor(week, team);
   if (!feed) return null;
-  return <Field feed={feed} clock={clock} side={side ?? null} />;
+  return <Field feed={feed} clock={clock} side={side ?? null} week={week} />;
 }
 
-function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side: PlaySide | null }) {
+function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number }) {
   const t = useTheme();
   const { away, home, plays } = feed;
 
   // ↔ mirrors the field to match the viewer's broadcast. Remembered per game,
   // through the platform shim rather than localStorage.
+  const [boxOpen, setBoxOpen] = useState(false);
   const [flip, setFlip] = useState(() => storeGet(`fvflip:${feed.key}`) === '1');
   const toggleFlip = () => setFlip((f) => { const n = !f; storeSet(`fvflip:${feed.key}`, n ? '1' : '0'); return n; });
   const mx = (x: number) => (flip ? W - x : x);
@@ -298,6 +301,73 @@ function Field({ feed, clock, side }: { feed: TeamGameFeed; clock: number; side:
           {accent ? <Text style={{ color: accent }}>● </Text> : null}{cur.txt}
         </Text>
       )}
+
+      {/* ▤ BOX SCORE (v0.339.1) — the web has had this under its field since
+          v0.336.0 and the app never did. Founder: "can we get the box score on
+          the field visual in the app as well."
+
+          It reads the SAME `gameBoxScore` the web's does, over the same clock
+          this field is drawn at, so the two hosts cannot disagree about a
+          number — which is the only reason a second implementation of this
+          screen is acceptable at all. Everything with judgement in it (who is
+          listed, in what order, how a line is phrased) lives in core; what is
+          native here is the sheet. */}
+      <View style={{ alignItems: 'center', marginTop: 6 }}>
+        <Pressable onPress={() => setBoxOpen(true)}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: t.surface }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 1, color: t.dim }}>▤ BOX SCORE</Text>
+        </Pressable>
+      </View>
+      <BoxScoreSheet visible={boxOpen} onClose={() => setBoxOpen(false)}
+        week={week} home={home} away={away} clock={clock} />
     </View>
   );
+}
+
+/** Everyone with a stat in this game, by team, at the field's clock.
+ *
+ *  Deliberately thin: `gameBoxScore` decides who appears, in what order and how
+ *  each line reads, so this file holds only the sheet. A native re-derivation of
+ *  any of that would be a second opinion, and the first argument it lost would
+ *  be about whether the app or the web was lying. */
+function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
+  visible: boolean; week: number; home: string; away: string; clock: number; onClose: () => void;
+}) {
+  const t = useTheme();
+  const box = useMemo(() => (visible ? gameBoxScore(week, home, away, clock) : { home: [], away: [] }),
+    [visible, week, home, away, clock]);
+  const col = (label: string, rows: typeof box.home) => (
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+        {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 14, height: 14, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
+      </View>
+      {rows.length === 0
+        ? <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}>— nothing yet —</Text>
+        : rows.map((r) => (
+          <View key={r.slug} style={{ paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+              <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+            </View>
+            <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dimstrong, lineHeight: fs(8.5) * 1.35 }}>{r.stat}</Text>
+          </View>
+        ))}
+    </View>
+  );
+  return (
+    <Overlay visible={visible} title={`▤ ${away} @ ${home}`} onClose={onClose}>
+      <View style={{ flexDirection: 'row', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</View>
+      {/* Said plainly: an empty column is a player who has not touched the
+          ball, not a player the box score forgot. */}
+      <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 10, lineHeight: fs(8) * 1.5 }}>
+        everyone with a stat in this game · offense then defence, by position, by yards · follows the log's clock
+      </Text>
+    </Overlay>
+  );
+}
+
+/** A slug as a readable name — the app's copy of the web's `boxName`. */
+function boxName(slug: string): string {
+  return slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 }

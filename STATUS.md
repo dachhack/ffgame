@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.339.1 — the box score reaches the app's field
+
+Founder: "can we get the box score on the field visual in the app as well."
+
+The web has had it under its field since v0.336.0; the app never did. Same
+`gameBoxScore`, same clock the field is drawn at, so the two hosts cannot
+disagree about a number — which is the only reason a second implementation of
+this screen is acceptable. Everything with judgement in it (who is listed, in
+what order, how a line reads) stays in core; only the sheet is native.
+
+## OPEN — live DRIP metrics are ungated, and it is not a client bug
+
+Founder, on the app/web scoring split: "does the app drip every game minute,
+not every team offense minute?" Yes, and worse than app-only:
+
+  • `sim.ts` `offSecs` ends with `if (!intervals.length) return t1 - t0` —
+    "no intervals (unknown) → full elapsed (drip ungated rather than dead)";
+  • `realPossFor` reads `cache.get(week)?.poss`, and `poss` is written ONLY by
+    `scripts/pbp/genRealPbp.mjs`, the BAKED generator. No live path fills it.
+
+So in any LIVE game every drip metric accrues on every game minute instead of
+only while its team has the ball. "Accrues while your team has the ball" is not
+being honoured live at all — the fallback was meant for unknown data and has
+become the normal case in-season.
+
+Separately, the two hosts read different sources, which is why they disagree
+numerically: the app renders the SERVER's `getMatchupState` window rows, while
+the web's Matchup.tsx never calls it and simulates locally with
+`banksAtClock(s.events, clock)` at its own clock. FLAT metrics agree (Nix 7.0
+both sides) because they are clock-independent; DRIP metrics diverge (Humphrey
+6.5 vs 1.8). Fixing the gating does not fix the two-sources split, and vice
+versa.
+
 ### v0.339.0 — seat agents cover drip leagues, not just classic
 
 Founder, after the diagnostic came back: "yes, let's extend seat agents to drip
