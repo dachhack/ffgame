@@ -8,7 +8,7 @@
 // it was worth lifting out instead of inlining.
 import { useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowKickoffMs } from '@drip/core/data/nflSlate';
+import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowPhase } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { srvSlotRow } from '@drip/core/engine/liveScore';
 import { teamLogo } from '@drip/core/data/media';
@@ -146,8 +146,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  not a secret still to reveal. Before kickoff, absence and secrecy look
    *  identical on purpose and the sealed back covers both. */
   const winKicked = (win: string) => {
-    const k = windowKickoffMs(week, win as never);
-    return k != null && Date.now() >= k;
+    const p = windowPhase(week, win as never, Date.now());
+    return p === 'live' || p === 'final';
   };
 
   /** A slot's live row — what the card becomes once the window is scoring.

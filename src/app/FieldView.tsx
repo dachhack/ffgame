@@ -10,7 +10,7 @@
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { allGameFeeds, gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
+import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames } from '@drip/core/data/gameFeed';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
@@ -125,45 +125,12 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
   const lastTarget = useRef<string | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null); // brief highlight on the followed card
 
-  // EVERY game on the feed, not just the ones a slotted player is in
-  // (v0.338.2). This screen is called ALL GAMES and was showing the games your
-  // matchup touched — on a preseason Friday that was two cards out of a full
-  // slate, and the label made it read as a broken feed rather than a filter.
-  // The board is seeded from the week's whole feed FIRST, then the entries are
-  // overlaid for tinting and clock; a game nobody slotted still gets a card.
-  //
-  // CLOCK. An entry game is sampled at its slot's clock, so the field mirrors
-  // exactly what the slot rows show — that is the whole point of the entry
-  // clock and it is preserved. A game with no slotted player has no slot to
-  // mirror, so it shows everything ingested (Infinity, against the `p.c <=
-  // clock` visibility test) — which for a live game is "up to now".
-  //
-  // ORDER. Games your matchup is in come first, then the rest in the feed's own
-  // schedule order. With a full slate the alternative buries the two games you
-  // actually care about somewhere in a grid of sixteen.
-  const games = useMemo(() => {
-    const m = new Map<string, { feed: TeamGameFeed; clock: number; you: Set<number>; their: Set<number>; mine: boolean }>();
-    for (const feed of allGameFeeds(week)) {
-      m.set(feed.key, { feed, clock: Infinity, you: new Set(), their: new Set(), mine: false });
-    }
-    for (const e of entries) {
-      const feed = gameFeedFor(week, e.team);
-      if (!feed) continue;
-      let g = m.get(feed.key);
-      // Belt and braces: a feed reachable by TEAM but absent from the games map
-      // would otherwise drop a game the old code showed. Never seen, but the
-      // old path built the map purely from entries and must not regress.
-      if (!g) { g = { feed, clock: 0, you: new Set(), their: new Set(), mine: false }; m.set(feed.key, g); }
-      // First entry for this game replaces the seeded Infinity with a real slot
-      // clock; later entries take the furthest, as before.
-      g.clock = g.mine ? Math.max(g.clock, e.clock) : e.clock;
-      g.mine = true;
-      const pids = e.side === 'you' ? g.you : g.their;
-      for (const pid of e.pids ?? []) pids.add(pid);
-    }
-    const all = [...m.values()];
-    return [...all.filter((g) => g.mine), ...all.filter((g) => !g.mine)];
-  }, [entries, week, feedLoaded]);
+  // THE GROUPING RULE LIVES IN CORE (v0.340.1): every game on the feed gets a
+  // card, entry games are overlaid for tint + slot clock, yours sort first —
+  // groupFieldGames carries the full story (and check-field-board pins it
+  // directly instead of pinning a reimplementation). feedLoaded is a real
+  // dependency: the memo must recompute when the week's feed arrives.
+  const games = useMemo(() => groupFieldGames(week, entries), [entries, week, feedLoaded]);
 
   // Detect a play landing: per game, count the plays at/under its clock; when
   // that count grows, the newest of those plays just became visible. Scroll to

@@ -426,6 +426,43 @@ export function windowKickoffMs(week: number, win: WindowId): number | null {
   return min;
 }
 
+/** A game window reads "in progress" for this long after kickoff, then FINAL.
+ *  Both hosts carried their own literal `4 * 3_600_000` until v0.340.1. */
+export const GAME_WINDOW_MS = 4 * 3_600_000;
+
+export type WindowPhase = 'setup' | 'locked' | 'live' | 'final';
+
+/** THE WINDOW STATE MACHINE — one implementation of the timeline every board
+ *  renders: SETUP until the lock lead (1h, compressed in live-test mode),
+ *  LOCKED until kickoff, LIVE for GAME_WINDOW_MS, then FINAL.
+ *
+ *  Until v0.340.1 the web derived this in Matchup.tsx, the app derived FINAL
+ *  in its own lambda (with its own copy of the 4h literal) and kicked-ness in
+ *  a third place — three hand-synced machines, the same shape the scoring
+ *  rules were in before scoringRules.ts.
+ *
+ *  `held` — an admin lock-hold: the SERVER is accepting edits, so every
+ *  window reads SETUP; a board showing 🔒 over an open database is lying.
+ *  `matchupFinal` — the worker settled the whole week (matchup.status
+ *  'final'): every window reads FINAL whatever the clock says.
+ *  An UNKNOWN kickoff reads SETUP here (the web's long-standing behavior).
+ *  The app's lock gating additionally fails safe — no known kickoff once the
+ *  week has started counts as locked — off SERVER-sent kickoff times; that
+ *  policy and data source are deliberately its own (see LivePicks.winLockMs),
+ *  because the DB's enforce_window_lock is the actual authority there. */
+export function windowPhase(week: number, win: WindowId, nowMs: number, opts?: { held?: boolean; matchupFinal?: boolean }): WindowPhase {
+  if (opts?.matchupFinal) return 'final';
+  if (opts?.held) return 'setup';
+  const k = windowKickoffMs(week, win);
+  if (k == null) return 'setup';
+  const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
+  const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
+  if (nowMs >= k + gameDur) return 'final';
+  if (nowMs >= k) return 'live';
+  if (nowMs >= k - lockLead) return 'locked';
+  return 'setup';
+}
+
 /** The instant a window's picks stop being editable (epoch ms), or null when the
  *  week's kickoffs aren't known yet.
  *
