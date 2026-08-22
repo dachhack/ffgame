@@ -581,6 +581,10 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
   // The season starting balance, authoritative from the DB so the AI seeds the
   // same amount a human's ensure_wallet does.
   const seed = Number((await db().rpc('wallet_seed')).data ?? 150);
+  // SEAT AGENTS FOR EVERY MODE (v0.339.0). Fetched once for the whole batch
+  // rather than per matchup — a twelve-team week is six matchups over one
+  // league, and this used to be the query that wasn't there at all.
+  const agents = await seatAgentsFor([...new Set((ms ?? []).map((m) => m.league_id))]);
   let n = 0;
   for (const m of ms ?? []) {
     const { data: lg } = await db().from('league').select('lineup_policy,settings_json').eq('id', m.league_id).maybeSingle();
@@ -608,7 +612,22 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     const startersByRoster = new Map((lineups ?? []).map((r) => [r.roster_id, r.starters_json]));
     for (const rosterId of [m.home_roster_id, m.away_roster_id]) {
       const mem = (mems ?? []).find((x) => x.sleeper_roster_id === rosterId);
-      if (!mem?.app_user_id) continue; // empty seat → resolver auto-backup (can't store picks)
+      // AN UNCLAIMED SEAT NOW WRITES AS ITS AGENT (v0.339.0). It used to be
+      // skipped outright — `sealed_pick.app_user_id` is NOT NULL, so a seat
+      // with no account had nowhere to put a lineup and fell back to a rebuild
+      // at resolve. That fallback is why a full league still showed unopposed
+      // windows: nothing was ever STORED, so nothing sealed, and a week with no
+      // `sleeper_lineup` row had nothing to rebuild from either.
+      //
+      // An AI seat keeps the old path deliberately. Its lineup comes from
+      // `aiSide` at resolve, and that is where its persona draw and its bought
+      // buffs live; writing rows here would send `sideLineup` down its
+      // sealed-first branch and silently strip both.
+      const isAi = mem?.controller === 'ai';
+      const agentUid = agents.get(`${m.league_id}:${rosterId}`) ?? null;
+      const seatUid = mem?.app_user_id ?? (isAi ? null : agentUid);
+      if (!seatUid) continue;   // AI seat, or an agent the tick has yet to mint
+      const isAgent = !mem?.app_user_id;
       // PER SLOT, not per matchup or even per window (founder's rule, refined
       // twice on live fire): any empty card spot with an eligible player
       // available gets the optimal fill at lock — human seats included. First
@@ -617,25 +636,29 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // with 2 of 3 slots set kept its empty slot). A slot counts as set only
       // if it holds a pick; the fill below targets exactly the empty ones.
       const { data: existing } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug')
-        .eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id).not('player_slug', 'is', null);
+        .eq('matchup_id', m.id).eq('app_user_id', seatUid).not('player_slug', 'is', null);
       const setSlots = new Set((existing ?? []).map((r) => `${r.game_window}#${r.roster_slot}`));
       const fieldedSlugs = new Set((existing ?? []).map((r) => r.player_slug));
       const hasPicks = setSlots.size > 0;
-      const isAi = mem.controller === 'ai';
       // The 8/16 ruling: every claimed seat gets its empty slots filled if
       // possible — enrolled or not, actively managed or not. (Unclaimed seats
       // have no app_user to key sealed rows under; the resolve-time fallback
       // still covers them.) The 'empty' lineup policy remains the commissioner's
       // explicit opt-out: a missed side scores its honest zero there.
-      const missed = !!mem.app_user_id && !hasPicks;
-      const partial = !!mem.app_user_id && hasPicks && !isAi; // some slots set, fill the rest
+      // An agent seat is ALWAYS a missed seat: nobody is coming to set it.
+      const missed = !hasPicks;
+      const partial = hasPicks && !isAi;   // some slots set, fill the rest
       if (!(isAi || ((missed || partial) && policy !== 'empty'))) continue;
       // The other half of the ruling: the AI SPENDS only when AI control is on
       // (controller === 'ai'). A missed manager — under ANY policy, 'ai'
       // included — gets auto-filled with whatever they already own; their coin
       // is never spent for them and no power-ups appear they didn't buy.
-      const aiDriven = !fillOnly && isAi;
-      const fullRewrite = !fillOnly && isAi;
+      // `isAgent` can never be aiDriven — an agent holds no wallet and buys
+      // nothing — but it is spelled out rather than left to follow from isAi,
+      // because the two are independent flags and a future controller value
+      // that is neither must not start spending an agent's coin.
+      const aiDriven = !fillOnly && isAi && !isAgent;
+      const fullRewrite = !fillOnly && isAi && !isAgent;
       const starters = (startersByRoster.get(rosterId)) ?? [];
       // The fill must never duplicate a player the manager already fielded:
       // autoLineup builds blind from the pool it's given, so give it the pool
@@ -644,12 +667,12 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
         .filter((slug) => !noStart.has(slug))
         .filter((slug) => fullRewrite || !fieldedSlugs.has(slug));
       let owned, extra;
-      if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, mem.app_user_id, starters, seed)); }
-      else { const l = await ownedLoadout(m.id, mem.app_user_id); owned = l.unlocks; extra = l.extra; }
+      if (aiDriven) { ({ owned, extra } = await aiBudgetPass(m, rosterId, seatUid, starters, seed)); }
+      else { const l = await ownedLoadout(m.id, seatUid); owned = l.unlocks; extra = l.extra; }
       // Arm-before-write: applied_state (owned unlocks + the extra-slot count) is
       // upserted by the budget pass BEFORE these rows, so a `combodrip` pick
       // clears enforce_locked_metric and the extra 'x' rows clear enforce_slot_cap.
-      if (fullRewrite && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', mem.app_user_id);
+      if (fullRewrite && hasPicks) await db().from('sealed_pick').delete().eq('matchup_id', m.id).eq('app_user_id', seatUid);
       // Persona key ONLY for permanent AI seats: some weeks their TE hides an
       // 8-PT NUKE (EV-neutral drama, see aiPersonaNuker). A missed human's
       // autofill — even one flipped to AI policy for the week — stays vanilla.
@@ -662,7 +685,7 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
         .map((p) => {
         const sealNow = !dueWins || dueWins.has(p.win);
         return {
-          matchup_id: m.id, app_user_id: mem.app_user_id, game_window: p.win, roster_slot: p.slot,
+          matchup_id: m.id, app_user_id: seatUid, game_window: p.win, roster_slot: p.slot,
           player_slug: p.slug, metric_id: p.metric, locked: sealNow, revealed_at: sealNow ? iso : null,
         };
       });
