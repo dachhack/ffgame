@@ -41,6 +41,8 @@ export interface RawPlay {
   t?: number;       // real wall-clock time of the play, in seconds since the
                     // game's first snap (from MCP time_of_day). Absent on
                     // synthesized/return plays → callers fall back to `clock`.
+  pid?: number;     // the source play id (nflverse/ESPN, stable per game) —
+                    // the box score's game-membership evidence (v0.344.1).
   kind: RealPlayKind;
   yards: number;
   td: boolean;
@@ -266,7 +268,7 @@ export function realRawPlays(playerId: string, week: number): RawPlay[] | null {
 export function rawPlaysFrom(ps: RealPlay[]): RawPlay[] {
   return ps
     .map((p) => ({
-      clock: p.c, t: p.t, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
+      clock: p.c, t: p.t, pid: p.pid, kind: p.k, yards: p.y, td: !!p.td, catch: !!p.ca, target: !!p.tg, turnover: !!p.to,
       ...(p.fd ? { fd: true } : {}), ...(p.cp ? { cmp: true } : {}), ...(p.ic ? { inc: true } : {}),
       ...(p.sk ? { skd: true } : {}), ...(p.rk === 'kr' || p.rk === 'pr' ? { rk: p.rk as 'kr' | 'pr' } : {}),
       ...(p.tt === 's' || p.tt === 'a' ? { tt: p.tt as 's' | 'a' } : {}), ...(p.hf ? { hf: true } : {}),

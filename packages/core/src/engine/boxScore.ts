@@ -22,6 +22,7 @@
 
 import { statlineFrom, realRawPlays, fmtStat, type StatLine } from './sim';
 import { realPbpSlugs } from '../data/realPbp';
+import { gameFeedFor } from '../data/gameFeed';
 import { slugMeta, normTeam } from '../data/slugMeta';
 import type { Pos } from '../theme';
 
@@ -111,17 +112,51 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
   const H = normTeam(home ?? ''), A = normTeam(away ?? '');
   const out: GameBox = { home: [], away: [] };
   if (!H || !A) return out;
+
+  // THE GAME'S OWN PLAYS DECIDE MEMBERSHIP (v0.344.1). Team filtering alone
+  // trusted slugMeta — the BAKED 2025 tags for anyone no league rosters — so a
+  // player who changed teams over the offseason haunted his old team's box
+  // score with stats from whatever game he actually played: the founder's
+  // NYG@MIA sheet listed 2025 Dolphins ("Zach Wilson and Waddle are not on the
+  // dolphins this year") carrying lines from their real 2026 games elsewhere.
+  // The game feed carries every play's id, and live plays carry theirs — so a
+  // player is in THIS game iff his plays are. The team tag then only picks the
+  // COLUMN, and when it names neither team (stale the other way: a new arrival
+  // the bake still files elsewhere) the column is derived from the feed too:
+  // offensive players appear in their own team's plays, defenders in the
+  // opponent's. Data baked before play ids (pid-less) keeps the old team rule.
+  const feed = gameFeedFor(week, H);
+  const pidTm = new Map<number, string>();
+  for (const p of feed?.plays ?? []) if (p.pid != null) pidTm.set(p.pid, normTeam(p.tm ?? ''));
+
   for (const slug of realPbpSlugs(week)) {
     const meta = slugMeta(slug);
     const team = normTeam(meta.team ?? '');
-    if (team !== H && team !== A) continue;
     const plays = realRawPlays(slug, week);
     if (!plays || !plays.length) continue;
+    const pids = plays.map((p) => p.pid).filter((id): id is number => id != null);
+    // true = his plays are in this game; false = provably elsewhere; null = no
+    // pid data on one side or the other, membership unknowable → team rule.
+    const inGame = pidTm.size && pids.length ? pids.some((id) => pidTm.has(id)) : null;
+    if (inGame === false) continue;
+    if (inGame === null && team !== H && team !== A) continue;
+    const pos = (meta.pos ?? 'WR') as Pos;
+    let col = team === H ? H : team === A ? A : null;
+    if (!col) {
+      // In the game, but the tag names neither team: majority offense of his
+      // plays, flipped for defenders (their plays are the opponent's snaps).
+      const n = new Map<string, number>();
+      for (const id of pids) { const tm = pidTm.get(id); if (tm) n.set(tm, (n.get(tm) ?? 0) + 1); }
+      const top = [...n.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+      if (!top) continue;
+      const mine = DEF_POS.has(pos) ? (top === H ? A : top === A ? H : '') : top;
+      col = mine === H ? H : mine === A ? A : null;
+      if (!col) continue;
+    }
     const line = statlineFrom(plays, clock);
     if (!hasStats(line)) continue;
-    const pos = (meta.pos ?? 'WR') as Pos;
-    (team === H ? out.home : out.away).push({
-      slug, pos, team, line, weight: weigh(line), stat: fmtStat(pos, line),
+    (col === H ? out.home : out.away).push({
+      slug, pos, team: col, line, weight: weigh(line), stat: fmtStat(pos, line),
       yards: scrimmageYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',
     });
   }
