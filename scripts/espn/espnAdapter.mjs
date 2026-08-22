@@ -32,9 +32,22 @@ export function normName(raw) {
 /** normName, hyphen-joined — the form used as the pbp/crosswalk slug key. */
 export const slugOf = (raw) => normName(raw).replace(/\s+/g, '-');
 
-// ESPN team abbreviation → nflverse abbreviation (used in K/DST slugs + teams).
-// Only the genuine mismatches; everything else is identical.
-const TEAM_FIX = { WSH: 'WAS', LAR: 'LAR', JAX: 'JAX', LV: 'LV' };
+// ESPN team abbreviation → the SLATE's codes (v0.344.0). This is the same
+// table as slugMeta.normTeam and scoreboard.js's TEAM_FIX, and the three MUST
+// agree: every team string this adapter emits — game_feed away/home/key, the
+// teams index, each play's `tm`, and the K/DST slugs in live_play — is compared
+// somewhere against a slate/slugMeta code ('LA', 'WAS', 'JAX').
+//
+// The old map kept LAR as LAR ("nflverse abbreviation"), which put the whole
+// live feed in a different vocabulary from everything it meets: gameFeedFor
+// lookups by a player's slugMeta team missed every Rams game (no per-player
+// field, possession gating fell to its ungated fallback), the box score's team
+// filter dropped the entire LAR column ("weird that only saints have stats?"),
+// window-pot settlement's game_feed.home = nfl_slate.home compare (0117) never
+// matched a Rams game, and the adapter's 'lar-k' never matched the picks'
+// 'la-k'. One vocabulary now; the client additionally accepts the old codes
+// (gameFeed widenTeams) for the baked 2025 docs and rows written before this.
+const TEAM_FIX = { LAR: 'LA', WSH: 'WAS', JAC: 'JAX', OAK: 'LV', SD: 'LAC', STL: 'LA', AZ: 'ARI' };
 export const fixTeam = (t) => TEAM_FIX[t] ?? t;
 
 // ── game clock (game-elapsed seconds), identical to scripts/pbp/genRealPbp.mjs ──

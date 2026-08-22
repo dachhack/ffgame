@@ -5,6 +5,7 @@
 // Baked by scripts/pbp/genGameFeed.mjs into public/gamefeed/wN.json and fetched
 // lazily per week, so it costs nothing until a field is actually opened.
 import { REAL_WEEKS } from './realWeeks';
+import { normTeam } from './slugMeta';
 import { platform } from '../platform';
 
 export interface GamePlay {
@@ -44,6 +45,21 @@ const inflight = new Map<number, Promise<void>>();
 // leak into a 2026 board that shares the same week number.
 const liveFeeds = new Map<number, WeekGameFeed>();
 
+/** BOTH VOCABULARIES RESOLVE (v0.344.0). The feed's own team codes are the
+ *  source's — the baked 2025 docs and any pre-v0.344.0 worker row say `LAR`
+ *  while every caller holding a player's team holds the SLATE's `LA` — so the
+ *  index answers to both: each game is filed under its raw code AND its
+ *  normTeam code. Widening the index (rather than normalizing lookups alone)
+ *  keeps a doc's internal consistency intact — plays still compare their `tm`
+ *  against the doc's own away/home, whatever vocabulary the doc speaks. */
+function widenTeams(wk: WeekGameFeed): WeekGameFeed {
+  for (const [tm, key] of Object.entries({ ...wk.teams })) {
+    const n = normTeam(tm);
+    if (n && !(n in wk.teams)) wk.teams[n] = key;
+  }
+  return wk;
+}
+
 /** game_feed DB rows → a week's {games, teams} (mirrors the baker's shape). */
 export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null }[]): WeekGameFeed {
   const games: Record<string, GamePlay[]> = {};
@@ -54,10 +70,10 @@ export function feedRowsToWeek(rows: { key: string; away: string; home: string; 
     teams[r.away] = r.key; teams[r.home] = r.key;
     if (r.state) states[r.key] = r.state;
   }
-  return { games, teams, states };
+  return widenTeams({ games, teams, states });
 }
 /** Install the week's live game feeds; makes that week resolve live-only. */
-export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, feed); }
+export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, widenTeams(feed)); }
 /** Drop all live game feeds (back to baked resolution). */
 export function clearLiveGameFeeds(): void { liveFeeds.clear(); }
 
@@ -82,7 +98,7 @@ export function installGameFeedWeek(week: number, feed: WeekGameFeed): void {
   if (!feed || typeof feed !== 'object' || !feed.games || !feed.teams) {
     throw new Error(`installGameFeedWeek(${week}): expected a WeekGameFeed with games + teams`);
   }
-  cache.set(week, feed);
+  cache.set(week, widenTeams(feed));
 }
 
 /** Fetch + cache a week's game feeds (no-op for non-real weeks / already loaded).
@@ -94,7 +110,7 @@ export function loadGameFeedWeek(week: number): Promise<void> {
     const url = platform().assetUrl(`gamefeed/w${week}.json`);
     p = fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`gamefeed w${week}: HTTP ${r.status}`))))
-      .then((data: WeekGameFeed) => { cache.set(week, data); })
+      .then((data: WeekGameFeed) => { cache.set(week, widenTeams(data)); })
       .catch((e) => { console.error('[gameFeed] load failed', e); /* leave uncached → no field */ })
       .finally(() => { inflight.delete(week); });
     inflight.set(week, p);
@@ -152,7 +168,11 @@ export function possFromPlays(plays: GamePlay[]): Record<string, number[][]> {
   if (!plays?.length) return out;
   const ord = [...plays].sort((a, b) => a.c - b.c);
   for (let i = 0; i + 1 < ord.length; i++) {
-    const team = ord[i + 1].tm;
+    // Intervals key on the SLATE's code (v0.344.0): the callers asking "when
+    // did this player's team have the ball" hold slugMeta teams, and a baked
+    // doc's plays say LAR where slugMeta says LA. normTeam is a no-op for
+    // every code the two vocabularies agree on.
+    const team = normTeam(ord[i + 1].tm ?? '');
     const a = ord[i].c, b = ord[i + 1].c;
     if (!team || !(b > a)) continue;
     const arr = (out[team] ||= []);
@@ -224,13 +244,15 @@ export function groupFieldGames(week: number, entries: FieldBoardEntry[]): Field
 export function feedPossFor(week: number, team?: string | null): number[][] {
   const f = gameFeedFor(week, team);
   if (!f || !team) return [];
-  return possFromPlays(f.plays)[team] ?? [];
+  return possFromPlays(f.plays)[normTeam(team)] ?? [];
 }
 
 export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | null {
   if (!team) return null;
   const wk = liveFeeds.get(week) ?? cache.get(week);
-  const key = wk?.teams[team];
+  // The widened index answers to both vocabularies; normTeam here is the belt
+  // for a caller handing in a THIRD spelling (WSH, JAC) the index never saw.
+  const key = wk?.teams[team] ?? wk?.teams[normTeam(team)];
   const plays = key ? wk?.games[key] : undefined;
   if (!key || !plays) return null;
   const [away, home] = key.split('@');
