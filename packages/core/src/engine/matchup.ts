@@ -5,9 +5,10 @@ import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
 import {
   WEEKLY_STIPEND, UNOPPOSED_COIN, SUPPRESS_COIN, TURNOVER_COIN, WINDOW_WIN_BONUS, WINDOW_MVP_COIN_PER_SLOT,
-  metricCoin, coinRisk, threwTrickTd, battleVerdict, bestBallBackups, suppressHalving, bankerCredit,
-  coinBreakdown, BUFF_AWARDS, type SideLens,
+  metricCoin, coinRisk, threwTrickTd, battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
 } from './scoringRules';
+import { applyPostSlotPipeline, RIVALRY_SIPHON, LEAD_CHANGE_BONUS, GRUDGE_MARGIN, GRUDGE_SWING } from './orchestrate';
+export { RIVALRY_SIPHON, LEAD_CHANGE_BONUS, GRUDGE_MARGIN, GRUDGE_SWING };
 // THE RULES LIVE IN scoringRules.ts (v0.340.0) — this engine and liveResolve
 // both call the same functions now. Re-exported here because the web and the
 // app have always imported the tuned numbers from this module.
@@ -215,13 +216,7 @@ export function aiLineup(aiTeamId: string, humanTeamId: string, week: number, ex
  *  (you earned the edge by rostering the bye stud). */
 export const BYE_STEAL_CAP = 16;
 
-/** Rivalry siphon fraction: the cut of a mirrored opponent slot's final score
- *  taken at window's end — one constant for BOTH engines. RETUNED by the
- *  playtester sweep (findings §19): at the original 50% the "bet" measured
- *  64.1% / 2.80 pts per ◎10 vs the honest field — position mirrors are so
- *  common the whiff risk barely existed. At 30% it lands 59.0% / 1.70 per
- *  ◎10 — a spicy-but-fair battle play in the Double-or-Nothing neighborhood. */
-export const RIVALRY_SIPHON = 0.3;
+// RIVALRY_SIPHON lives in engine/orchestrate.ts (re-exported below).
 
 /** Extra-slot powerups: per-window count of bonus slots applied this week. */
 export type ExtraSlots = Partial<Record<WindowId, number>>;
@@ -341,16 +336,16 @@ export interface ResolvedMatchup {
   theirFinal: number;
   real: boolean;
   maxClock: number;
-  bonuses?: { id: string; label: string; points: number }[]; // armed-buff payouts that hit
+  /** DISPLAY RECORD of the staked plays and armed awards that fired (labels +
+   *  the delta each contributed). Their points are ALREADY inside the slot
+   *  finals (the canonical pipeline bakes every stake and award into its slot
+   *  before the window battles, v0.341.0) — never add these to a total. */
+  bonuses?: { id: string; label: string; points: number }[];
   youWindowsWon: number;   // windows whose head-to-head you won
   theirWindowsWon: number;
 }
 
-/** Lead Change: points banked each time you seize the lead in an armed slot. */
-export const LEAD_CHANGE_BONUS = 2;
-/** Grudge Match: win the staked slot by GRUDGE_MARGIN+ → +GRUDGE_SWING; lose it → −GRUDGE_SWING. */
-export const GRUDGE_MARGIN = 10;
-export const GRUDGE_SWING = 25;
+// LEAD_CHANGE_BONUS / GRUDGE_* live in engine/orchestrate.ts (re-exported below).
 
 /** Compute the head-to-head battle for one resolved window from its slots'
  *  final scores (call after backups + suppress so the tested scores are final).
@@ -600,89 +595,83 @@ export function buildMatchup(
     windows.push({ window: w, slots });
   }
 
-  // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
-  // in its own slot, but its highest score can replace your lowest starter's
-  // score when it beats it. Applied per side, before suppress/sum.
-  applyBackups(windows, 'you', backupAssign); // manual assignments win; unassigned auto-maximize
-  applyBackups(windows, 'their', {});         // opponent: pure auto-maximize
-
-  // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
-  // window) that scored at or below its threshold; their DST does the same to
-  // your slots. Applied once per slot, after all in-slot scoring resolves.
-  {
-    const all = windows.flatMap((w) => w.slots);
-    suppressHalving(all, sideLens('you'), theirSuppress, (s, from) => { s.youHalvedFrom = from; });
-    suppressHalving(all, sideLens('their'), youSuppress, (s, from) => { s.theirHalvedFrom = from; });
-  }
-
-  // RIVALRY power-up (blind, window-targeted): for every slot in an armed window
-  // where the opponent fielded the SAME position as you, siphon a RIVALRY_SIPHON cut of their slot
-  // score to you at window's end — whiffs entirely if they didn't mirror your
-  // position (the risk). Only the human side arms it in the demo. Applied after
-  // backups + suppress (on final scores), before the window battle settles.
-  if (extras.rivalry?.length) {
-    const armed = new Set(extras.rivalry);
-    for (const w of windows) {
-      if (!armed.has(w.window.id)) continue;
-      for (const s of w.slots) {
-        if (!s.you || !s.their || s.theirFinal <= 0) continue;
-        if (s.you.player.pos !== s.their.player.pos) continue; // needs a same-position mirror
-        const take = Math.round(s.theirFinal * RIVALRY_SIPHON * 10) / 10;
-        s.theirFinal = Math.round((s.theirFinal - take) * 10) / 10;
-        s.youFinal = Math.round((s.youFinal + take) * 10) / 10;
-        s.youRivalry = Math.round(((s.youRivalry ?? 0) + take) * 10) / 10;
+  // ── THE CANONICAL POST-SLOT PIPELINE (engine/orchestrate.ts) ─────────────
+  // backups → suppress → banker → DoN → clutch DoN → awards → rivalry →
+  // red herring → lead change → grudge — shared verbatim with the live
+  // resolver, so the board can no longer run these in its own order or leave
+  // a stake outside the window battles (which is exactly what it did until
+  // v0.341.0: DoN, the clutch stake, Grudge and the flat awards were
+  // post-battle bonuses[] deltas here while the official resolver baked them
+  // into the slot — grand totals agreed, window outcomes did not). The
+  // bonuses[] list survives as the DISPLAY RECORD of what fired; its points
+  // are already in the slot finals and are never re-added.
+  const all = windows.flatMap((w) => w.slots);
+  const bonuses: { id: string; label: string; points: number }[] = [];
+  const awardsFor = (side: 'you' | 'their', buffSet: Set<string>): { key: string; pts: number }[] => {
+    const out: { key: string; pts: number }[] = [];
+    for (const a of BUFF_AWARDS) {
+      if (!buffSet.has(a.id)) continue;
+      const slot = all.find((sl) => {
+        const p = side === 'you' ? sl.you : sl.their;
+        return p && a.hit(p.player, week);
+      });
+      if (!slot) continue;
+      out.push({ key: slotKey(slot.win, slot.slotIndex), pts: a.pts });
+      if (side === 'you') {
+        const p = (slot.you)!.player;
+        bonuses.push({ id: a.id, points: a.pts, label: a.label(p.name) });
       }
     }
-  }
-
-  // RED HERRING power-up: for each of your armed decoy slots, drag EVERY opposing
-  // player of the same position anywhere in that decoy's window down to the decoy's
-  // own total (capped — never raises them). A low decoy caps their studs at that
-  // position; whiffs if they field nobody there.
-  if (extras.redHerring?.length) {
-    const decoyKeys = new Set(extras.redHerring);
-    const flat = windows.flatMap((w) => w.slots);
-    for (const decoy of flat) {
-      if (!decoy.you || !decoyKeys.has(slotKey(decoy.win, decoy.slotIndex))) continue;
-      const pos = decoy.you.player.pos, cap = decoy.youFinal;
-      for (const s of windows.find((w) => w.window.id === decoy.win)!.slots) {
-        if (!s.their || s.their.player.pos !== pos) continue;
-        if (s.theirFinal > cap) { s.theirRedHerringFrom = s.theirFinal; s.theirFinal = cap; }
-      }
-    }
-  }
-
-  // LEAD CHANGE power-up: for each of your armed slots, +2 every time you SEIZED
-  // the lead (overtook the opponent after trailing) in that slot's timeline.
-  if (extras.leadChange?.length) {
-    const armed = new Set(extras.leadChange);
-    for (const w of windows) for (const s of w.slots) {
-      if (!s.you || !s.their || !armed.has(slotKey(s.win, s.slotIndex))) continue;
-      const evs = [...s.events].sort((a, b) => a.clock - b.clock);
-      let prev: 'you' | 'their' | 'tie' = 'tie', seizes = 0;
-      for (const e of evs) {
-        const lead: 'you' | 'their' | 'tie' = e.youBank > e.theirBank ? 'you' : e.theirBank > e.youBank ? 'their' : 'tie';
-        if (lead === 'you' && prev === 'their') seizes++; // a genuine flip: overtook from behind
-        if (lead !== 'tie') prev = lead;
-      }
-      if (seizes > 0) { const bonus = seizes * LEAD_CHANGE_BONUS; s.youLeadChange = bonus; s.youFinal = Math.round((s.youFinal + bonus) * 10) / 10; }
-    }
-  }
-
-  // K BANKER (XP BONUS): +1 per banker XP to each of your TDs scored under a
-  // TD-counting metric — BAKED INTO THE BANKER K'S OWN SLOT, before the window
-  // battles settle, exactly as the live resolver has always done it ("so
-  // per-window scores still sum to the grand total"). Until v0.339.6 this was
-  // added to the GRAND total after the battles instead, which meant the banker
-  // bonus could not tip its window's +5 here while it did officially — the
-  // engine-parity check caught it flipping not just a window but the whole
-  // MATCH (board 68.3–69.3 against, published 73.3–64.3 for, one lineup).
-  // With several banker Ks, the first one's slot carries it (liveResolve rule).
-  {
-    const all = windows.flatMap((w) => w.slots);
-    bankerCredit(all, sideLens('you'), youBankerXp * youTds);
-    bankerCredit(all, sideLens('their'), theirBankerXp * theirTds);
-  }
+    return out;
+  };
+  applyPostSlotPipeline(all, {
+    week,
+    a: {
+      lens: sideLens('you'), evSide: 'you',
+      backups: backupAssign,
+      suppress: youSuppress, banker: youBankerXp * youTds,
+      don: extras.doubleOrNothing, clutchDon: extras.clutchDon,
+      awards: awardsFor('you', youBuffSet),
+      rivalry: extras.rivalry, redHerring: extras.redHerring,
+      leadChange: extras.leadChange, grudge: extras.grudge,
+      hooks: {
+        backupZeroed: (b, wouldBe) => { b.backup = true; b.backupScore = wouldBe; },
+        backupSubbed: (b, st, score, from) => { st.youSub = { name: b.you!.player.name, score, from }; b.backupUsed = true; },
+        suppressHalved: (sl, from) => { sl.youHalvedFrom = from; },
+        staked: (sl, id, won, from) => {
+          if (id === 'double-or-nothing') sl.youStake = won ? 'won' : 'lost';
+          else sl.youClutchStake = won ? 'won' : 'lost';
+          const nm = sl.you!.player.name;
+          bonuses.push(id === 'double-or-nothing'
+            ? { id, points: won ? from : -from, label: won ? `Double or Nothing — ${nm} WON ×2` : `Double or Nothing — ${nm} LOST → 0` }
+            : { id, points: won ? from : -from, label: won ? `Clutch Double — ${nm} WON ×2` : `Clutch Double — ${nm} LOST → 0` });
+        },
+        rivalryTook: (sl, take) => { sl.youRivalry = Math.round(((sl.youRivalry ?? 0) + take) * 10) / 10; },
+        herringCapped: (sl, from) => { sl.theirRedHerringFrom = from; },
+        leadChanged: (sl, bonus) => { sl.youLeadChange = bonus; },
+        grudged: (sl, verdict, diff) => {
+          sl.youGrudge = verdict; sl.youGrudgePts = verdict === 'won' ? GRUDGE_SWING : verdict === 'lost' ? -GRUDGE_SWING : 0;
+          if (verdict === 'push') return;
+          const nm = sl.you!.player.name;
+          bonuses.push(verdict === 'won'
+            ? { id: 'grudge', points: GRUDGE_SWING, label: `Grudge Match — ${nm} WON by ${diff.toFixed(1)} → +${GRUDGE_SWING}` }
+            : { id: 'grudge', points: -GRUDGE_SWING, label: `Grudge Match — ${nm} LOST → −${GRUDGE_SWING}` });
+        },
+      },
+    },
+    b: {
+      lens: sideLens('their'), evSide: 'their',
+      backups: {},
+      suppress: theirSuppress, banker: theirBankerXp * theirTds,
+      awards: awardsFor('their', theirBuffSet),
+      hooks: {
+        backupZeroed: (b, wouldBe) => { b.backup = true; b.backupScore = wouldBe; },
+        backupSubbed: (b, st, score, from) => { st.theirSub = { name: b.their!.player.name, score, from }; b.backupUsed = true; },
+        suppressHalved: (sl, from) => { sl.theirHalvedFrom = from; },
+      },
+    },
+    eventsOf: (sl) => sl.events,
+  });
 
   // WINDOW BATTLE: settle each window's head-to-head on its final slot scores.
   // The winner banks a flat bonus and the window MVP is tagged (coin only). Done
@@ -703,57 +692,11 @@ export function buildMatchup(
   youFinal += youWindowBonus;
   theirFinal += theirWindowBonus;
 
-  // Armed pre-match team buffs: flat payouts when their condition hits among
-  // your starting spots. Each scans your filled slots for a triggering player.
-  const myPlayers = windows.flatMap((w) => w.slots).filter((s) => s.you).map((s) => s.you!.player);
-  // The award table (amount + trigger + label) is shared with the live
-  // resolver — an amount can no longer drift between this bonus list and the
-  // worker's slot credit.
-  const bonuses: { id: string; label: string; points: number }[] = [];
-  for (const a of BUFF_AWARDS) {
-    if (!buffs[a.id]) continue;
-    const p = myPlayers.find((pl) => a.hit(pl, week));
-    if (p) bonuses.push({ id: a.id, points: a.pts, label: a.label(p.name) });
-  }
-
-  // Double or Nothing: a staked head-to-head slot scores double if it wins, 0 if
-  // it loses. Applied as a delta on top of the slot's own (already-summed) score.
-  if (extras.doubleOrNothing) {
-    for (const w of windows) for (const s of w.slots) {
-      if (slotKey(s.win, s.slotIndex) !== extras.doubleOrNothing || !s.you || !s.their) continue;
-      const won = s.youFinal > s.theirFinal;
-      s.youStake = won ? 'won' : 'lost';
-      bonuses.push({ id: 'double-or-nothing', points: won ? s.youFinal : -s.youFinal, label: won ? `Double or Nothing — ${s.you.player.name} WON ×2` : `Double or Nothing — ${s.you.player.name} LOST → 0` });
-    }
-  }
-  // Grudge Match: a staked slot pays +GRUDGE_SWING if you win its head-to-head by
-  // GRUDGE_MARGIN+, costs −GRUDGE_SWING if you lose it, nothing in between. A side
-  // wager on a decisive win — applied as a delta like Double or Nothing.
-  if (extras.grudge?.length) {
-    const staked = new Set(extras.grudge);
-    for (const w of windows) for (const s of w.slots) {
-      if (!s.you || !s.their || !staked.has(slotKey(s.win, s.slotIndex))) continue;
-      const diff = s.youFinal - s.theirFinal;
-      if (diff >= GRUDGE_MARGIN) { s.youGrudge = 'won'; s.youGrudgePts = GRUDGE_SWING; bonuses.push({ id: 'grudge', points: GRUDGE_SWING, label: `Grudge Match — ${s.you.player.name} WON by ${diff.toFixed(1)} → +${GRUDGE_SWING}` }); }
-      else if (diff < 0) { s.youGrudge = 'lost'; s.youGrudgePts = -GRUDGE_SWING; bonuses.push({ id: 'grudge', points: -GRUDGE_SWING, label: `Grudge Match — ${s.you.player.name} LOST → −${GRUDGE_SWING}` }); }
-      else { s.youGrudge = 'push'; s.youGrudgePts = 0; }
-    }
-  }
-
-  // CLUTCH Double or Nothing (unlocked by a halftime lead): scores ×2 if the slot
-  // wins its head-to-head, 0 if it loses — same as Double or Nothing, armed
-  // conditionally mid-game.
-  if (extras.clutchDon?.length) {
-    const staked = new Set(extras.clutchDon);
-    for (const w of windows) for (const s of w.slots) {
-      if (!s.you || !s.their || !staked.has(slotKey(s.win, s.slotIndex))) continue;
-      const won = s.youFinal > s.theirFinal;
-      s.youClutchStake = won ? 'won' : 'lost';
-      bonuses.push({ id: 'clutch-don', points: won ? s.youFinal : -s.youFinal, label: won ? `Clutch Double — ${s.you.player.name} WON ×2` : `Clutch Double — ${s.you.player.name} LOST → 0` });
-    }
-  }
-
-  for (const b of bonuses) youFinal += b.points;
+  // bonuses[] (built by the pipeline hooks above) is the display record of
+  // the staked plays and awards that fired — their points are ALREADY in the
+  // slot finals the sums above counted, so nothing is re-added here. Until
+  // v0.341.0 this loop added them on top of the battles' totals, which kept
+  // the deltas out of every window and out of the published rows.
 
   return {
     windows,
@@ -862,20 +805,6 @@ function sideLens(side: 'you' | 'their'): SideLens<ResolvedSlot> {
   };
 }
 
-function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>): void {
-  // The RULE (manual-first, then greedy auto-maximize, all-or-nothing) is the
-  // shared bestBallBackups; what stays here is this board's display
-  // bookkeeping — the struck-through would-be score and the sub chip.
-  const lens = sideLens(side);
-  bestBallBackups(windows.flatMap((w) => w.slots), lens, assign, {
-    zeroed: (b, wouldBe) => { b.backup = true; b.backupScore = wouldBe; },
-    subbed: (b, st, score, from) => {
-      const info = { name: lens.player(b)!.name, score, from };
-      if (side === 'you') st.youSub = info; else st.theirSub = info;
-      b.backupUsed = true;
-    },
-  });
-}
 
 /** Running banks at a given clock (live phase) for one slot's event feed. The live
  *  totals recompute this for every slot on every ~700ms tick; it's a pure O(events)

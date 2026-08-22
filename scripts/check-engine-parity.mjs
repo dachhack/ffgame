@@ -32,6 +32,7 @@ import { setSyntheticWeeks } from '../packages/core/src/data/realPbp.ts';
 import { setActiveLeague } from '../packages/core/src/data/league.ts';
 import { buildMatchup, slotKey, weekEarnings, WINDOW_WIN_BONUS } from '../packages/core/src/engine/matchup.ts';
 import { resolveLiveMatchup } from '../packages/core/src/engine/liveResolve.ts';
+import { projectedPoints } from '../packages/core/src/engine/sim.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -63,6 +64,7 @@ mk('rb2-opp', 'RB', 'SF'); mk('qb2-opp', 'QB', 'BAL'); mk('wr2-opp', 'WR', 'CLE'
 mk('tie-you', 'QB', 'DEN'); mk('tie-opp', 'QB', 'GB');
 mk('fum-you', 'RB', 'PHI'); mk('fum-opp', 'RB', 'DAL');
 mk('k-you', 'K', 'BUF'); mk('te2-opp', 'TE', 'SEA');
+mk('trick-rb-50', 'RB', 'KC'); mk('nuke-rb-opp', 'RB', 'DAL');
 
 // ── The plays both engines read (identical injection path) ────────────────
 setSyntheticWeeks([{ week: WEEK, pbp: {
@@ -88,6 +90,13 @@ setSyntheticWeeks([{ week: WEEK, pbp: {
   'k-you': [{ c: 800, k: 'xp', y: 0 }, { c: 2200, k: 'xp', y: 0 }],
   'dst-you': [{ c: 500, k: 'sack', y: 0 }, { c: 1300, k: 'int', y: 0 }],
   'te2-opp': [{ c: 900, k: 'rec', y: 12, tg: 1 }, { c: 1700, k: 'rec', y: 6, td: 1, tg: 1 }],
+  // trick-rb-50: the slug the Trick Play hash fires for at week 900 (found by
+  // scanning — the trigger is deterministic pseudo-charting, so the fixture
+  // must use a slug that actually rolls under 6%).
+  'trick-rb-50': [{ c: 650, k: 'rush', y: 35, ca: 1 }],
+  // A nuking RB for the clutch counter-wipe scenario: its TD at 2000 wipes the
+  // matched opponent's bank unless countered at that clock.
+  'nuke-rb-opp': [{ c: 600, k: 'rush', y: 45, ca: 1 }, { c: 2000, k: 'rush', y: 3, td: 1, ca: 1 }],
 }, points: {} }, {
   // Week 1 plays for the stipend rule: setSyntheticWeeks REPLACES the store
   // (the 0199.3 trap), so both weeks install in this one call.
@@ -100,8 +109,8 @@ setActiveLeague({
   league: {
     id: 'parity', name: 'Engine Parity', format: '2-team probe', season: 2025,
     teams: [
-      { id: 't1', name: 'You', owner: 'You', ownerId: 't1', seed: 0, wins: 0, losses: 0, pf: 0, pa: 0, roster: roster(['qb-you', 'wr-you', 'rb-you', 'te-you', 'wr2-you', 'dst-you', 'tie-you', 'fum-you', 'k-you']) },
-      { id: 't2', name: 'Opp', owner: 'Opp', ownerId: 't2', seed: 0, wins: 0, losses: 0, pf: 0, pa: 0, roster: roster(['qb-opp', 'wr-opp', 'rb-opp', 'rb2-opp', 'qb2-opp', 'wr2-opp', 'tie-opp', 'fum-opp', 'te2-opp']) },
+      { id: 't1', name: 'You', owner: 'You', ownerId: 't1', seed: 0, wins: 0, losses: 0, pf: 0, pa: 0, roster: roster(['qb-you', 'wr-you', 'rb-you', 'te-you', 'wr2-you', 'dst-you', 'tie-you', 'fum-you', 'k-you', 'trick-rb-50']) },
+      { id: 't2', name: 'Opp', owner: 'Opp', ownerId: 't2', seed: 0, wins: 0, losses: 0, pf: 0, pa: 0, roster: roster(['qb-opp', 'wr-opp', 'rb-opp', 'rb2-opp', 'qb2-opp', 'wr2-opp', 'tie-opp', 'fum-opp', 'te2-opp', 'nuke-rb-opp']) },
     ],
     schedule: [],
   },
@@ -120,13 +129,27 @@ const toLive = (rows) => rows.map(([w, i, pid, m]) => ({ win: w, slot: String(i)
 // The web live board's exact call shape: your buffs {}, opponent's REVEALED
 // buffs [] (not the AI default draw — passing undefined would hand the demo
 // opponent three free amplifiers the worker never grants).
-const runBoth = (youRows, oppRows, { buffs = {}, oppBuffs = [], extras = {} } = {}) => {
-  const m = buildMatchup('t1', 't2', WEEK, toPicks(youRows), toPicks(oppRows), {}, {}, {}, buffs, { ...extras }, false, oppBuffs);
+// `extras` is buildMatchup's YOU-side shape (slotKey `win#idx` keys); `hx` is
+// the live resolver's home-side LiveExtras (`win|idx` keys). Every scenario
+// arms the SAME intent through both shapes — the mapping between them is the
+// live pilot's own (Matchup.tsx liveTargeted → applied_state → resolve.js).
+const runBoth = (youRows, oppRows, { buffs = {}, oppBuffs = [], extras = {}, swaps = {}, hx = {} } = {}) => {
+  const m = buildMatchup('t1', 't2', WEEK, toPicks(youRows), toPicks(oppRows), {}, swaps, {}, buffs, { ...extras }, false, oppBuffs);
   const r = resolveLiveMatchup(toLive(youRows), toLive(oppRows), WEEK, {
     homeBuffs: new Set(Object.keys(buffs).filter((k) => buffs[k])),
     awayBuffs: new Set(oppBuffs),
-  });
+  }, { home: hx });
   return { m, r };
+};
+const assertParity = (tag, m, r, wins) => {
+  for (const w of wins) {
+    const b = boardWin(m, w), st = stateOf(r, w);
+    ok(b.home === r1(st.home) && b.away === r1(st.away),
+      `${tag} window ${w}: board ${b.home}–${b.away} == published ${r1(st.home)}–${r1(st.away)}`);
+  }
+  const mTot = r1(m.youFinal), rTot = r1(r.home);
+  ok(mTot === rTot && r1(m.theirFinal) === r1(r.away),
+    `${tag} totals: board ${mTot}–${r1(m.theirFinal)} == published ${rTot}–${r1(r.away)}`);
 };
 
 const stateOf = (r, win) => r.states.find((s) => s.window === win) ?? { home: 0, away: 0 };
@@ -322,6 +345,135 @@ const liveSlot = (r, win, idx, side) => {
   ok(Math.round(weekEarnings(m, 'you', WEEK).total) === Math.round(r.coin.home)
     && Math.round(weekEarnings(m, 'their', WEEK).total) === Math.round(r.coin.away),
     's6 and the coin books balance under the full stack');
+}
+
+// ── 7. EVERY SLOT-TARGETED EFFECT, armed through both input shapes ─────────
+// These are the effects a live manager actually fires mid-game. Until this
+// scenario, NONE of the targeted-effect wiring had parity coverage — the
+// check pinned the layers and left the extras plumbing (different key
+// shapes, different sidedness) unmeasured.
+{
+  const you = [
+    ['tnf', 0, 'qb-you', 'pass'],
+    ['early', 0, 'wr-you', 'recyd'], ['early', 1, 'rb-you', 'rush'],
+    ['late', 0, 'te-you', 'recyd'],
+  ];
+  const opp = [
+    ['tnf', 0, 'qb-opp', 'pass'],
+    ['early', 0, 'wr-opp', 'recyd'], ['early', 1, 'rb-opp', 'rush'],
+    ['late', 0, 'rb2-opp', 'rush'],
+  ];
+  const armed = {
+    extras: {
+      emp: { early: 600 },                 // freeze THEIR early drips 10 min
+      jinx: ['early#1'],                   // rb-opp's TD at 2000 gets negated
+      surge: { 'early#0': 500 },           // boost your wr drip 10 min
+      coldSnap: { 'early#1': 700 },        // freeze rb-opp 10 min
+      napalm: { 'late#0': 800 },           // burn rb2-opp's drip
+      bunker: { 'early#0': 900 },          // shield your wr from then on
+      clutchEncore: { 'early#1': 1000 },   // rb-you's TD at 2200 banks +12
+      rivalry: ['early'],                  // siphon same-position mirrors
+      redHerring: ['late#0'],              // cap rb2-opp at te-you's total? (pos differs — whiffs, still must agree)
+      leadChange: ['early#0'],
+      ghost: ['snf#0'],                    // phantom fills an empty window
+    },
+    hx: {
+      emp: { early: 600 },
+      jinx: ['early|1'],
+      surge: { 'early|0': 500 },
+      coldSnap: { 'early|1': 700 },
+      napalm: { 'late|0': 800 },
+      bunker: { 'early|0': 900 },
+      clutchEncore: { 'early|1': 1000 },
+      rivalry: ['early'],
+      redHerring: ['late|0'],
+      leadChange: ['early|0'],
+      ghost: ['snf|0'],
+    },
+  };
+  const { m, r } = runBoth(you, opp, armed);
+  assertParity('s7', m, r, ['tnf', 'early', 'late', 'snf']);
+  ok(liveSlot(r, 'snf', 0, 'home') != null, 's7 the ghost actually fielded (published a row)');
+  ok(slotFinal(m, 'early', 1, 'away') === liveSlot(r, 'early', 1, 'away'),
+    `s7 the jinxed slot agrees: board ${slotFinal(m, 'early', 1, 'away')} == published ${liveSlot(r, 'early', 1, 'away')}`);
+}
+
+// A real-time metric swap, cut over mid-game — the same split in both engines.
+{
+  const you = [['early', 0, 'wr-you', 'recyd']];
+  const opp = [['early', 0, 'wr-opp', 'recyd']];
+  const { m, r } = runBoth(you, opp, {
+    swaps: { 'early#0': { toMetricId: 'rec', atClock: 900 } },
+    hx: { swaps: { 'early|0': { toMetricId: 'rec', atClock: 900 } } },
+  });
+  assertParity('s7-swap', m, r, ['early']);
+}
+
+// The bye steal: the board computes the projection; the live pilot passes the
+// SAME number through (resolve.js computes it identically) — the parity here
+// is that a given pts value fills and clamps the same way.
+{
+  const you = [['early', 0, 'wr-you', 'recyd']];
+  const opp = [['early', 0, 'wr-opp', 'recyd'], ['mnf', 0, 'wr2-opp', 'recyd']];
+  const proj = projectedPoints(P['tie-you'], WEEK);
+  const { m, r } = runBoth(you, opp, {
+    extras: { byeSteal: { slotKey: 'mnf#0', playerId: 'tie-you' } },
+    hx: { byeSteal: { win: 'mnf', slot: '0', player: P['tie-you'], pts: proj } },
+  });
+  assertParity('s7-bye', m, r, ['early', 'mnf']);
+}
+
+// ── 8. THE STAKED DELTAS: DoN, clutch DoN, grudge, and the flat awards ─────
+// liveResolve bakes every one of these into its SLOT before the window
+// battles; buildMatchup applied them as post-battle bonuses[] deltas — so the
+// grand totals agreed while the window outcomes did not. The banker bug
+// (v0.339.6) three more times. As of v0.341.0 the board bakes them into the
+// slot too (bonuses[] remains as the display record) and the canonical
+// pipeline order lives in engine/orchestrate.ts.
+{
+  const you = [['tnf', 0, 'qb-you', 'pass'], ['early', 0, 'wr-you', 'recyd'], ['early', 1, 'rb-you', 'rush']];
+  const opp = [['tnf', 0, 'qb-opp', 'pass'], ['early', 0, 'wr-opp', 'recyd'], ['early', 1, 'rb-opp', 'rush']];
+  const { m, r } = runBoth(you, opp, {
+    extras: { doubleOrNothing: 'early#0', grudge: ['tnf#0'] },
+    hx: { don: { win: 'early', slot: '0' }, grudge: ['tnf|0'] },
+  });
+  assertParity('s8-stakes', m, r, ['tnf', 'early']);
+  ok(slotFinal(m, 'early', 0, 'home') === liveSlot(r, 'early', 0, 'home'),
+    `s8 the doubled slot agrees AT THE SLOT: board ${slotFinal(m, 'early', 0, 'home')} == published ${liveSlot(r, 'early', 0, 'home')}`);
+}
+
+// Clutch DoN (Halftime Gamble) — the conditional stake, same shape.
+{
+  const you = [['early', 0, 'wr-you', 'recyd'], ['early', 1, 'rb-you', 'rush']];
+  const opp = [['early', 0, 'wr-opp', 'recyd'], ['early', 1, 'rb-opp', 'rush']];
+  const { m, r } = runBoth(you, opp, {
+    extras: { clutchDon: ['early#1'] },
+    hx: { clutchDon: ['early|1'] },
+  });
+  assertParity('s8-clutch', m, r, ['early']);
+}
+
+// The Trick Play award: +50 credited to the triggering slot officially — and
+// now on the board too, where it used to hover outside every window.
+{
+  const you = [['early', 0, 'trick-rb-50', 'rush'], ['early', 1, 'rb-you', 'rush']];
+  const opp = [['early', 0, 'wr-opp', 'recyd'], ['early', 1, 'rb-opp', 'rush']];
+  const { m, r } = runBoth(you, opp, { buffs: { 'trick-play': true } });
+  assertParity('s8-award', m, r, ['early']);
+  ok((m.bonuses ?? []).some((b) => b.id === 'trick-play'),
+    's8 the award fired at all (the fixture slug really rolls under the 6%)');
+}
+
+// Clutch counter-wipe: negate the opponent nuke at its recorded clock.
+{
+  const you = [['early', 0, 'rb-you', 'rush']];
+  const opp = [['early', 0, 'nuke-rb-opp', 'td']];
+  const armed = { extras: { clutchCounter: { 'early#0': 2000 } }, hx: { clutchCounter: { 'early|0': 2000 } } };
+  const { m, r } = runBoth(you, opp, armed);
+  assertParity('s8-counter', m, r, ['early']);
+  const bare = runBoth(you, opp);
+  ok(r1(r.home) > r1(bare.r.home),
+    `s8 the counter actually saved points (${r1(bare.r.home)} nuked → ${r1(r.home)} countered)`);
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL ENGINE-PARITY ASSERTIONS PASSED');

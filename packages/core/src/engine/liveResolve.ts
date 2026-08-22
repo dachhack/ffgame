@@ -34,8 +34,9 @@ import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressSco
 import { banksAtClock, slotsFor } from './matchup';
 import {
   WINDOW_MVP_COIN_PER_SLOT, TURNOVER_COIN, TURNOVER_COIN_BOOSTED,
-  battleVerdict, bestBallBackups, suppressHalving, bankerCredit, coinBreakdown, BUFF_AWARDS, type SideLens,
+  battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
 } from './scoringRules';
+import { applyPostSlotPipeline, type PipelineSide } from './orchestrate';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
@@ -93,9 +94,6 @@ function sideLens(side: 'home' | 'away'): SideLens<SlotRes> {
   };
 }
 
-function applyBackups(slots: SlotRes[], side: 'home' | 'away', assign: Record<string, string> = {}): void {
-  bestBallBackups(slots, sideLens(side), assign);
-}
 
 // This is the number resolve.js banks into the wallet at FINAL. It sums the
 // SAME coinBreakdown the web's earnings modal itemizes (weekEarnings) — one
@@ -192,7 +190,7 @@ export interface LiveExtras {
 export interface LiveExtrasBySide { home?: LiveExtras; away?: LiveExtras; }
 
 const EMP_SECONDS = 600;
-import { BYE_STEAL_CAP, RIVALRY_SIPHON } from './matchup'; // tuned constants — ONE source for both engines
+import { BYE_STEAL_CAP } from './matchup'; // tuned constants — ONE source for both engines
 export { BYE_STEAL_CAP };
 
 // Armed flat-award buffs (mirrors buildMatchup's award()): scans a side's fielded
@@ -424,62 +422,33 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     }
   }
 
-  applyBackups(slots, 'home', hx.backups ?? {});
-  applyBackups(slots, 'away', ax.backups ?? {});
-
-  // DEF SUPPRESS (HALVING): apply after backups so a subbed-in starter score is
-  // the one tested. Each side's threshold halves every OPPOSING slot (any
-  // window) that scored above 0 and at or below it.
-  suppressHalving(slots, sideLens('home'), awaySuppress);
-  suppressHalving(slots, sideLens('away'), homeSuppress);
-
-  // K BANKER (XP BONUS): bake the +XP·TDs into the banker K's window so the
-  // grand total stays the sum of per-window states. If a side has multiple
-  // banker Ks, the first one's window carries the bonus.
-  // Shared rule; the credit lands on the FIRST banker-K slot in slot order
-  // (formerly this scanned pick order — same slot for every 1-banker lineup,
-  // and slot order is what the board uses, so multi-banker edge cases agree).
-  bankerCredit(slots, sideLens('home'), homeBankerXp * homeTds);
-  bankerCredit(slots, sideLens('away'), awayBankerXp * awayTds);
-
-  // Double or Nothing: the staked slot (both sides fielded) scores ×2 if it wins
-  // its head-to-head, 0 if it loses — on the post-backup/suppress score, before
-  // flat awards (mirrors buildMatchup, which stakes the slot's own final).
-  const donFor = (x: LiveExtras, side: 'home' | 'away') => {
-    if (!x.don) return;
-    const s = slots.find((t) => t.win === x.don!.win && t.slot === x.don!.slot);
-    if (!s || !s.homeP || !s.awayP) return; // unopposed/empty slots can't be staked
-    if (side === 'home') { const won = s.home > s.away; s.home = won ? round(s.home * 2) : 0; }
-    else { const won = s.away > s.home; s.away = won ? round(s.away * 2) : 0; }
-  };
-  donFor(hx, 'home');
-  donFor(ax, 'away');
-
-  // CLUTCH Double or Nothing (Halftime Gamble): same ×2/0 stake as don, armed
-  // conditionally mid-game — a LIST of this side's slots (parity with
-  // buildMatchup's clutchDon bonuses; baked into the slot like live don).
-  const clutchDonFor = (x: LiveExtras, side: 'home' | 'away') => {
-    for (const kk of x.clutchDon ?? []) {
-      const [win, slot] = kk.split('|');
-      const s = slots.find((t) => t.win === win && t.slot === slot);
-      if (!s || !s.homeP || !s.awayP) continue; // unopposed/empty slots can't be staked
-      if (side === 'home') { const won = s.home > s.away; s.home = won ? round(s.home * 2) : 0; }
-      else { const won = s.away > s.home; s.away = won ? round(s.away * 2) : 0; }
-    }
-  };
-  clutchDonFor(hx, 'home');
-  clutchDonFor(ax, 'away');
-
-  // Trick Play / Pick Six / Hail Mary: armed flat awards, credited to the
-  // triggering player's slot so per-window sums still equal the totals.
-  for (const a of awardFor(homeBuffs, homePicks, week)) {
-    const s = slots.find((t) => t.win === a.pick.win && t.slot === a.pick.slot);
-    if (s) s.home = round(s.home + a.pts);
-  }
-  for (const a of awardFor(awayBuffs, awayPicks, week)) {
-    const s = slots.find((t) => t.win === a.pick.win && t.slot === a.pick.slot);
-    if (s) s.away = round(s.away + a.pts);
-  }
+  // ── THE CANONICAL POST-SLOT PIPELINE (engine/orchestrate.ts) ─────────────
+  // backups → suppress → banker → DoN → clutch DoN → awards → rivalry →
+  // red herring → lead change → grudge, side-generic, shared verbatim with
+  // buildMatchup. This resolver's job is reduced to the input mapping: its
+  // `win|slot` keys become the canonical `win#slot`, its award picks become
+  // slot credits, and the per-window aggregates computed above become the
+  // side configs. No display hooks — the published row is just the number.
+  const canon = (k: string) => k.replace('|', '#');
+  const pipeSide = (side: 'home' | 'away', x: LiveExtras, picks: LivePick[], buffsSet: Set<string>, suppress: number, banker: number): PipelineSide<SlotRes> => ({
+    lens: sideLens(side),
+    evSide: side === 'home' ? 'you' : 'their',
+    backups: x.backups ?? {},
+    suppress, banker,
+    don: x.don ? `${x.don.win}#${x.don.slot}` : undefined,
+    clutchDon: x.clutchDon?.map(canon),
+    awards: awardFor(buffsSet, picks, week).map((a) => ({ key: `${a.pick.win}#${a.pick.slot}`, pts: a.pts })),
+    rivalry: x.rivalry,
+    redHerring: x.redHerring?.map(canon),
+    leadChange: x.leadChange?.map(canon),
+    grudge: x.grudge?.map(canon),
+  });
+  applyPostSlotPipeline(slots, {
+    week,
+    a: pipeSide('home', hx, homePicks, homeBuffs, homeSuppress, homeBankerXp * homeTds),
+    b: pipeSide('away', ax, awayPicks, awayBuffs, awaySuppress, awayBankerXp * awayTds),
+    eventsOf: (s) => s.events,
+  });
 
   // Per-side event flags for the card board. Event `side` is 'you' = home /
   // 'their' = away (the resolveSlot pairing above). Attribution differs by shape:
@@ -502,78 +471,6 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
 
-  // RIVALRY (parity with buildMatchup): for each armed window, siphon a RIVALRY_SIPHON cut of a
-  // same-position opponent's slot score to the arming side, at window-end. Home
-  // then away (each on the running scores).
-  const applyRivalry = (wins: string[] | undefined, side: 'home' | 'away') => {
-    if (!wins?.length) return;
-    const armed = new Set(wins);
-    for (const s of slots) {
-      if (!armed.has(s.win) || !s.homeP || !s.awayP || s.homeP.pos !== s.awayP.pos) continue;
-      if (side === 'home' && s.away > 0) { const take = round(s.away * RIVALRY_SIPHON); s.away = round(s.away - take); s.home = round(s.home + take); }
-      else if (side === 'away' && s.home > 0) { const take = round(s.home * RIVALRY_SIPHON); s.home = round(s.home - take); s.away = round(s.away + take); }
-    }
-  };
-  applyRivalry(hx.rivalry, 'home');
-  applyRivalry(ax.rivalry, 'away');
-
-  // RED HERRING: for each armed decoy slot, cap every opposing same-position
-  // player in that decoy's window to the decoy's own total.
-  const applyRedHerring = (keys: string[] | undefined, side: 'home' | 'away') => {
-    if (!keys?.length) return;
-    const armed = new Set(keys);
-    const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
-    const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
-    const meF = (s: SlotRes) => (side === 'home' ? s.home : s.away);
-    for (const decoy of slots) {
-      const dp = meP(decoy);
-      if (!dp || !armed.has(`${decoy.win}|${decoy.slot}`)) continue;
-      const cap = meF(decoy);
-      for (const s of slots) {
-        if (s.win !== decoy.win) continue;
-        const op = opP(s);
-        if (!op || op.pos !== dp.pos) continue;
-        if (side === 'home' && s.away > cap) s.away = cap;
-        else if (side === 'away' && s.home > cap) s.home = cap;
-      }
-    }
-  };
-  applyRedHerring(hx.redHerring, 'home');
-  applyRedHerring(ax.redHerring, 'away');
-
-  // LEAD CHANGE: +2 each time this side seized the lead in an armed slot.
-  const applyLeadChange = (keys: string[] | undefined, side: 'home' | 'away') => {
-    if (!keys?.length) return;
-    const armed = new Set(keys);
-    for (const s of slots) {
-      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
-      const evs = [...s.events].sort((a, b) => a.clock - b.clock);
-      const me = side === 'home' ? 'you' : 'their';
-      let prev: 'you' | 'their' | 'tie' = 'tie', seizes = 0;
-      for (const e of evs) {
-        const lead: 'you' | 'their' | 'tie' = e.youBank > e.theirBank ? 'you' : e.theirBank > e.youBank ? 'their' : 'tie';
-        if (lead === me && prev !== 'tie' && prev !== me) seizes++;
-        if (lead !== 'tie') prev = lead;
-      }
-      if (seizes > 0) { if (side === 'home') s.home = round(s.home + seizes * 2); else s.away = round(s.away + seizes * 2); }
-    }
-  };
-  applyLeadChange(hx.leadChange, 'home');
-  applyLeadChange(ax.leadChange, 'away');
-
-  // GRUDGE MATCH: win a staked slot by 10+ → +25, lose it → −25.
-  const applyGrudge = (keys: string[] | undefined, side: 'home' | 'away') => {
-    if (!keys?.length) return;
-    const armed = new Set(keys);
-    for (const s of slots) {
-      if (!s.homeP || !s.awayP || !armed.has(`${s.win}|${s.slot}`)) continue;
-      const diff = side === 'home' ? s.home - s.away : s.away - s.home;
-      const delta = diff >= 10 ? 25 : diff < 0 ? -25 : 0;
-      if (side === 'home') s.home = round(s.home + delta); else s.away = round(s.away + delta);
-    }
-  };
-  applyGrudge(hx.grudge, 'home');
-  applyGrudge(ax.grudge, 'away');
 
   const byWin: Record<string, { home: number; away: number }> = {};
   let home = 0, away = 0;
