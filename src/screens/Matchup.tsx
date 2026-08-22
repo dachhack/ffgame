@@ -127,7 +127,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
+  // autoBackups (v0.339.6): the worker's resolver ALWAYS auto-maximizes
+  // unassigned best-ball backups; this board's buildMatchup only does so under
+  // this flag, so an unassigned backup scored 0 on screen while subbing in
+  // officially. Manual assignments (backupAssign) still take precedence — the
+  // flag only auto-fills what the manager left unassigned, exactly like the
+  // worker. Caught by scripts/check-engine-parity.mjs.
+  const extras = demo ? {} : { autoBackups: true, doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   useEffect(() => {
     if (demo) { setClassicMode(false); return; }

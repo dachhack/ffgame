@@ -81,6 +81,20 @@ export function srvSlotScore(map: Map<string, number>, side: 'y' | 't', slotInde
   return null;
 }
 
+/** The resolver row for one slot, matched the ONE way both hosts must agree
+ *  on: by roster slot first (it is what savePicks wrote), by slug as the
+ *  fallback (survives slot renumbering). This returns the whole row — the app
+ *  reads hot/nuked flags off it, not just the score — where decodeSrvSlots
+ *  above is the memo-safe two-number form the web's WindowSection needs.
+ *  Same precedence in both; if the rule ever needs to change, it changes here
+ *  for everyone or the two hosts pin different rows to the same card. */
+export function srvSlotRow<T extends SrvSlotScore>(rows: T[] | null | undefined, side: 'home' | 'away', slot: string | number, slug?: string | null): T | undefined {
+  if (!rows?.length) return undefined;
+  const bySlot = rows.find((r) => r.side === side && r.slot != null && String(r.slot) === String(slot));
+  if (bySlot) return bySlot;
+  return slug ? rows.find((r) => r.side === side && r.slug === slug) : undefined;
+}
+
 /** The board headline: the sum of the resolver's per-window rows, read as
  *  you/them. EXACTLY what the app's own totals do.
  *

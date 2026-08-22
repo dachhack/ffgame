@@ -24,7 +24,7 @@
 //
 // Run: npx tsx scripts/check-live-score.mjs
 import {
-  encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore,
+  encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvSlotRow, srvBoardTotals, shownScore,
 } from '../packages/core/src/engine/liveScore.ts';
 
 let fails = 0;
@@ -139,6 +139,31 @@ const rows = [
   }
   ok(encodeSrvSlots([], true) === '' && encodeSrvSlots(null, true) === '',
     'an empty window encodes to \'\' — the memo-stable "nothing published"');
+}
+
+// ── 8. THE APP'S ROW LOOKUP RUNS THE SAME RULE (v0.339.6) ─────────────────
+// Duel.tsx used to hand-roll its match (either key, array order); the web
+// decodes slot-first-then-slug. Same rule now, from one function — because a
+// row carrying flags (hot/nuked) has to be matched WHOLE on the app, the rule
+// itself is what's shared, not just the score.
+{
+  const rows = [
+    { side: 'home', slot: '0', slug: 'stale-slug', score: 3, hot: true },
+    { side: 'home', slot: '9', slug: 'josh-allen', score: 7, nuked: true },
+    { side: 'away', slot: '0', slug: 'ceedee-lamb', score: 5 },
+  ];
+  ok(srvSlotRow(rows, 'home', '0', 'josh-allen')?.score === 3,
+    'THE PRECEDENCE: the slot match wins even when another row matches the slug');
+  ok(srvSlotRow(rows, 'home', '4', 'josh-allen')?.score === 7,
+    'no slot match → the slug row, flags and all');
+  ok(srvSlotRow(rows, 'home', '4', 'josh-allen')?.nuked === true,
+    'the WHOLE row comes back — the app reads hot/nuked off it');
+  ok(srvSlotRow(rows, 'away', '0')?.score === 5, 'sides never cross');
+  ok(srvSlotRow(rows, 'home', 0, 'x') === rows[0],
+    'a numeric slot index and a string one are the same key');
+  ok(srvSlotRow(rows, 'home', '4') === undefined && srvSlotRow([], 'home', '0') === undefined
+    && srvSlotRow(null, 'home', '0') === undefined,
+    'no match, empty, and null all yield undefined rather than throwing');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-SCORE ASSERTIONS PASSED');
