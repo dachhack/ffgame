@@ -14,6 +14,7 @@
 // Run: npx tsx scripts/check-field-board.mjs
 import {
   allGameFeeds, groupFieldGames, setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek,
+  gameFeedFor, feedPossFor,
 } from '../packages/core/src/data/gameFeed.ts';
 
 let fails = 0;
@@ -129,6 +130,34 @@ const ENTRIES = [
     'even YOUR OWN finished game sits below a stranger game that is still live');
   ok(g.indexOf('GB@DEN') < g.indexOf('LV@HOU'),
     'a game with NO state is treated as live — an absent flag never buries a game');
+}
+
+// ── 8. BOTH TEAM VOCABULARIES RESOLVE (v0.344.0) ──────────────────────────
+// The feed's codes are the source's (baked 2025 docs and pre-v0.344.0 worker
+// rows say LAR) while every caller holding a player's team holds the slate's
+// LA — the mismatch that emptied the Rams column of a NO@LAR box score and
+// sent Rams possession gating to its ungated fallback. The teams index is
+// widened at install, so both spellings find the game.
+{
+  clearLiveGameFeeds();
+  setLiveGameFeed(WEEK, feedRowsToWeek([
+    { key: 'NO@LAR', away: 'NO', home: 'LAR', plays: [
+      { ...play(0, 10), tm: 'NO' }, { ...play(60, 11), tm: 'LAR' }, { ...play(120, 12), tm: 'LAR' },
+    ], state: 'in' },
+  ]));
+  const bySlate = gameFeedFor(WEEK, 'LA');
+  const byFeed = gameFeedFor(WEEK, 'LAR');
+  ok(!!bySlate && bySlate.key === 'NO@LAR',
+    "THE POINT: a slugMeta team ('LA') finds the game a feed filed under 'LAR'");
+  ok(!!byFeed && byFeed.key === 'NO@LAR', "the feed's own spelling still resolves too");
+  ok(gameFeedFor(WEEK, 'WSH') === null, 'an absent team still misses cleanly — widening invents no games');
+  // The span before each play belongs to whoever RUNS it (possFromPlays'
+  // next-play rule), so LAR owns 0–60 (they ran the play at 60) and 60–120.
+  const poss = feedPossFor(WEEK, 'LA');
+  ok(poss.length === 1 && poss[0][0] === 0 && poss[0][1] === 120,
+    `possession intervals answer to the slate code even when the plays say LAR (got ${JSON.stringify(poss)})`);
+  ok(JSON.stringify(feedPossFor(WEEK, 'LAR')) === JSON.stringify(poss),
+    'and to the feed code — one answer, twice addressable');
 }
 
 clearLiveGameFeeds();
