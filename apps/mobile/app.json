@@ -16,7 +16,7 @@
       "package": "com.dripfantasy.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0D1F22"
+        "backgroundColor": "#163138"
       }
     },
     "extra": {
@@ -30,7 +30,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#0D1F22"
+          "backgroundColor": "#163138"
         }
       ],
       "@react-native-google-signin/google-signin",
