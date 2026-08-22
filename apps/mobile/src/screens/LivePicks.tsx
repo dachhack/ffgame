@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState, useRef} from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
-import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowKickoffMs } from '@drip/core/data/nflSlate';
+import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { srvBoardTotals } from '@drip/core/engine/liveScore';
 import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
@@ -33,7 +33,7 @@ import {
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
-import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver } from '@drip/core/engine/sim';
 import { Ev, track } from '@drip/core/analytics';
@@ -460,23 +460,26 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  board's windows — the ▦ FIELDS overlay's list. Sources: revealed picks
    *  (both sides, kicked windows) plus YOUR own picks (all windows — the
    *  opponent's unkicked picks are sealed and stay out by design). */
+  // THE SHARED ALL-GAMES RULE (core groupFieldGames, v0.340.1). This used to
+  // list only games with a SLOTTED player — the exact filter the founder
+  // struck from the web board in v0.338.2 ("should be all games"), still
+  // alive here until now. Every feed game gets a card; the games your picks
+  // touch sort first, the rest follow in schedule order — one rule on both
+  // hosts, pinned by check-field-board.
   const fieldGames = (() => {
-    if (!gameFeeds.length) return [] as { key: string; away: string; home: string; team: string; win: string }[];
+    if (!gameFeeds.length) return [] as { key: string; away: string; home: string; team: string; win: string; mine: boolean }[];
+    const entries: { team: string; side: 'you'; clock: number }[] = [];
     const slugs = new Set<string>();
     for (const rp of revealed) if (rp.player_slug) slugs.add(rp.player_slug);
     for (const v of Object.values(picks)) if (v.player_slug) slugs.add(v.player_slug);
-    const seen = new Set<string>();
-    const out: { key: string; away: string; home: string; team: string; win: string }[] = [];
     for (const sl of slugs) {
       const tm = duelPool[sl]?.team || pool.find((p) => p.slug === sl)?.team || slugMeta(sl).team;
-      if (!tm) continue;
-      const f = gameFeedFor(week, tm);
-      if (!f || seen.has(f.key)) continue;
-      seen.add(f.key);
-      out.push({ key: f.key, away: f.away, home: f.home, team: tm, win: String(windowForTeam(week, tm)) });
+      if (tm) entries.push({ team: tm, side: 'you', clock: Number.MAX_SAFE_INTEGER });
     }
-    const order = (w: string) => { const i = wins.findIndex((x) => String(x.id) === w); return i < 0 ? 99 : i; };
-    return out.sort((a, b) => order(a.win) - order(b.win));
+    return groupFieldGames(week, entries).map((g) => ({
+      key: g.feed.key, away: g.feed.away, home: g.feed.home,
+      team: g.feed.home, win: String(windowForTeam(week, g.feed.home)), mine: g.mine,
+    }));
   })();
 
   const gateOn = hasSlate(week);
@@ -974,11 +977,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               // games kicked ~4h ago is done, even though the WEEK's matchup
               // row stays 'live' until its last game — without this every past
               // window of a Thu–Sun preseason week wears ● LIVE for days.
-              winStatus={(id) => {
-                if (matchup!.status === 'final') return 'FINAL';
-                const k = windowKickoffMs(week, id as never);
-                return k != null && nowTs - k > 4 * 3_600_000 ? 'FINAL' : null;
-              }}
+              // FINAL detection is core's windowPhase — the SAME machine the
+              // web board runs, so a window can't read LIVE on one host and
+              // FINAL on the other. (This lambda carried its own copy of the
+              // 4-hour literal until v0.340.1.) null = let Duel derive
+              // SEALED/LIVE from kickoff + reveal state as before.
+              winStatus={(id) => windowPhase(week, id as never, nowTs, { matchupFinal: matchup!.status === 'final' }) === 'final' ? 'FINAL' : null}
               slotDetail={slotDetail}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
@@ -1089,12 +1093,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       <Overlay
         visible={fieldsOpen}
         title="All fields"
-        subtitle="EVERY GAME WITH A SLOTTED PLAYER · LIVE DRIVES"
+        subtitle="EVERY GAME THIS WEEK · YOURS FIRST · LIVE DRIVES"
         onClose={() => setFieldsOpen(false)}
       >
         <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}>
           {fieldGames.length === 0 && (
-            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No live games with slotted players yet.</Mono>
+            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>
           )}
           {fieldGames.map((g) => (
             <View key={g.key} style={{ gap: 4 }}>

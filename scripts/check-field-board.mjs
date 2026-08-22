@@ -6,14 +6,14 @@
 // concerned. On a two-game preseason Friday that is indistinguishable from a
 // broken feed, which is exactly how the founder read it.
 //
-// The grouping itself lives in a React useMemo, so what is asserted here is the
-// accessor it now seeds from (`allGameFeeds`) plus a faithful reimplementation
-// of the grouping rule. That is a deliberate compromise: the rule is four lines
-// and pinning it here is worth more than leaving it unpinned because the real
-// one is inside a component. If the component's version changes, this must.
+// The grouping rule is `groupFieldGames` in core (v0.340.1) — asserted
+// DIRECTLY. This file used to pin a "faithful reimplementation" because the
+// real rule lived inside a React useMemo; that compromise and its drift risk
+// are gone: the web board, the app's all-fields overlay, and these assertions
+// all call the same function.
 // Run: npx tsx scripts/check-field-board.mjs
 import {
-  allGameFeeds, gameFeedFor, setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek,
+  allGameFeeds, groupFieldGames, setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek,
 } from '../packages/core/src/data/gameFeed.ts';
 
 let fails = 0;
@@ -46,25 +46,8 @@ setLiveGameFeed(WEEK, feedRowsToWeek([
   ok(allGameFeeds(999).length === 0, 'a week with no feed yields no games rather than throwing');
 }
 
-// The grouping rule as FieldBoard now runs it.
-const group = (week, entries) => {
-  const m = new Map();
-  for (const feed of allGameFeeds(week)) {
-    m.set(feed.key, { feed, clock: Infinity, you: new Set(), their: new Set(), mine: false });
-  }
-  for (const e of entries) {
-    const feed = gameFeedFor(week, e.team);
-    if (!feed) continue;
-    let g = m.get(feed.key);
-    if (!g) { g = { feed, clock: 0, you: new Set(), their: new Set(), mine: false }; m.set(feed.key, g); }
-    g.clock = g.mine ? Math.max(g.clock, e.clock) : e.clock;
-    g.mine = true;
-    const pids = e.side === 'you' ? g.you : g.their;
-    for (const pid of e.pids ?? []) pids.add(pid);
-  }
-  const all = [...m.values()];
-  return [...all.filter((g) => g.mine), ...all.filter((g) => !g.mine)];
-};
+// The REAL rule, not a copy of it.
+const group = groupFieldGames;
 
 const ENTRIES = [
   { playerId: 'a', team: 'LV', side: 'you', clock: 100, pids: [1] },

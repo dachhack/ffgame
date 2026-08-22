@@ -168,6 +168,50 @@ export function possFromPlays(plays: GamePlay[]): Record<string, number[][]> {
 
 /** This team's derived offensive intervals for the week's loaded feed, or []
  *  when there is no feed (which is what `offSecs` treats as "unknown"). */
+/** One slotted player's contribution to the ALL GAMES board: which game it
+ *  tints (via team), which side, the slot clock the game's field should
+ *  mirror, and the play ids it banked. */
+export interface FieldBoardEntry { team?: string | null; side: 'you' | 'their'; clock: number; pids?: number[] }
+export interface FieldBoardGame { feed: TeamGameFeed; clock: number; you: Set<number>; their: Set<number>; mine: boolean }
+
+/** THE ALL GAMES GROUPING RULE (v0.338.2, lifted to core in v0.340.1).
+ *
+ *  Seed a card for EVERY game on the week's feed first, then overlay the
+ *  slotted entries for tinting and clock — a game nobody slotted still gets a
+ *  card (the founder's ruling: the screen is called ALL GAMES, and a slate
+ *  filtered to your matchup reads as a broken feed). An entry game is sampled
+ *  at its FURTHEST slot clock so the field mirrors what the slot rows show; a
+ *  game with no slot to mirror shows everything ingested (Infinity against
+ *  the `p.c <= clock` visibility test). Your games first, then the rest in
+ *  the feed's own schedule order.
+ *
+ *  Lived in the web's FieldBoard useMemo until v0.340.1, with the app running
+ *  a DIFFERENT (slotted-only) rule and check-field-board pinning a
+ *  reimplementation — now all three call this. */
+export function groupFieldGames(week: number, entries: FieldBoardEntry[]): FieldBoardGame[] {
+  const m = new Map<string, FieldBoardGame>();
+  for (const feed of allGameFeeds(week)) {
+    m.set(feed.key, { feed, clock: Infinity, you: new Set(), their: new Set(), mine: false });
+  }
+  for (const e of entries) {
+    const feed = gameFeedFor(week, e.team);
+    if (!feed) continue;
+    let g = m.get(feed.key);
+    // Belt and braces: a feed reachable by TEAM but absent from the games map
+    // would otherwise drop a game the entries-only rule showed. Never seen,
+    // but that path must not regress.
+    if (!g) { g = { feed, clock: 0, you: new Set(), their: new Set(), mine: false }; m.set(feed.key, g); }
+    // First entry for this game replaces the seeded Infinity with a real slot
+    // clock; later entries take the furthest.
+    g.clock = g.mine ? Math.max(g.clock, e.clock) : e.clock;
+    g.mine = true;
+    const pids = e.side === 'you' ? g.you : g.their;
+    for (const pid of e.pids ?? []) pids.add(pid);
+  }
+  const all = [...m.values()];
+  return [...all.filter((g) => g.mine), ...all.filter((g) => !g.mine)];
+}
+
 export function feedPossFor(week: number, team?: string | null): number[][] {
   const f = gameFeedFor(week, team);
   if (!f || !team) return [];

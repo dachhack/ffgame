@@ -8,7 +8,7 @@ import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, TEST_GAME_MS, isPreseasonWeek, weekLabel, LOCK_LEAD_MS, windowLockMs } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
@@ -628,7 +628,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // elapsed. The play-by-play log fills in from the worker feed — which only
   // carries plays that have already happened — so a LIVE window simply reveals
   // everything ingested so far. No manual LOCK IN / ▶: the wall clock drives it.
-  const GAME_WINDOW_MS = 4 * 3_600_000;  // a game reads "in progress" for ~4h after kickoff
   type WinState = 'setup' | 'locked' | 'live' | 'final';
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -651,23 +650,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return () => { alive = false; clearInterval(t); };
   }, [liveCtx]);
   const liveWinState = useMemo(() => {
-    // Live-test mode compresses both the lock lead and the live duration so the
-    // whole flow plays out in minutes (windowKickoffMs already returns the
-    // compressed anchor-relative kickoff).
-    const lockLead = testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS;
-    const gameDur = testTimelineOn() ? TEST_GAME_MS : GAME_WINDOW_MS;
+    // THE machine is core's windowPhase (v0.340.1) — the app's FINAL detection
+    // runs the same one, so a window can't read LIVE here and FINAL there.
+    // Live-test compression and the admin hold ride through it.
     const out: Record<string, WinState> = {};
     const held = !!liveCtx && heldPairs.has(`${liveCtx.leagueId}:${week}`);
-    for (const w of windowsForWeek(week)) {
-      const k = windowKickoffMs(week, w.id);
-      let s: WinState = 'setup';
-      if (k != null && !held) {
-        if (nowMs >= k + gameDur) s = 'final';
-        else if (nowMs >= k) s = 'live';
-        else if (nowMs >= k - lockLead) s = 'locked';
-      }
-      out[w.id] = s;
-    }
+    for (const w of windowsForWeek(week)) out[w.id] = windowPhase(week, w.id, nowMs, { held });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week, nowMs, livePbpVer, testAnchor, heldPairs]);
