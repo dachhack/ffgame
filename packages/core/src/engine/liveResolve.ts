@@ -6,7 +6,10 @@
 //
 // It layers the cross-slot niceties that per-slot resolveSlot can't see, the
 // way the demo's buildMatchup does, but driven by injected Sleeper players
-// rather than the static demo league:
+// rather than the static demo league. THE LAYERED RULES THEMSELVES live once
+// in engine/scoringRules.ts and both resolvers call them (v0.340.0) — what is
+// this file's own is the orchestration and the SlotRes lens, and
+// scripts/check-engine-parity.mjs holds it equal to buildMatchup's:
 //   • Cross-window Field General — a QB on the `fg` metric builds a window-wide
 //     multiplier on its own side's other slots in that window (scores 0 itself).
 //   • Best-ball backups — an unopposed player doesn't score in place; the biggest
@@ -23,13 +26,16 @@
 //     scores still sum to the grand total.
 //   • Drip-coin economy — weekly stipend + unopposed bounty + per-event-of-note
 //     coin, returned per side. (No DB sink yet; surfaced for a future column.)
-import type { Player, PbpEvent, Pos } from '../types';
-import { metricById } from '../data/metrics';
+import type { Player, PbpEvent } from '../types';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { flagRulesFor } from '../data/commish';
-import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
-import { banksAtClock, threwTrickTd, slotsFor, TURNOVER_COIN } from './matchup';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
+import { banksAtClock, slotsFor } from './matchup';
+import {
+  WINDOW_MVP_COIN_PER_SLOT, TURNOVER_COIN, TURNOVER_COIN_BOOSTED,
+  battleVerdict, bestBallBackups, suppressHalving, bankerCredit, coinBreakdown, BUFF_AWARDS, type SideLens,
+} from './scoringRules';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
@@ -54,19 +60,10 @@ export interface SlotEvents { win: string; slot: string; events: PbpEvent[] }
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
-// ── Drip-coin economy (mirrors src/engine/matchup.ts; kept in sync by hand) ──
-const WEEKLY_STIPEND = 50, UNOPPOSED_COIN = 15, SUPPRESS_COIN = 10;
-// Window Battle (mirrors matchup.ts WINDOW_WIN_BONUS / WINDOW_MVP_COIN_PER_SLOT).
-const WINDOW_WIN_BONUS = 5, WINDOW_MVP_COIN_PER_SLOT = 5;
-function metricCoin(pos: Pos, metricId: string | null | undefined): number {
-  const m = metricById(pos, metricId);
-  if (!m) return 0;
-  if (metricId === 'suppress') return SUPPRESS_COIN;
-  if (metricId === 'neg') return 50;
-  if (m.fx === 'nuke') return 10;
-  if (metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush')) return 5;
-  return 0;
-}
+// ── Drip-coin economy and window battle: THE RULES LIVE IN scoringRules.ts ──
+// (v0.340.0 — this used to redeclare the constants and metricCoin verbatim
+// under a "kept in sync by hand" comment; the parity check measured that
+// promise and found it broken, so the copies are gone.)
 
 interface SlotRes {
   win: string; slot: string;
@@ -82,75 +79,36 @@ interface SlotRes {
  *  Manual assignments (0137, "win#slot" → "win#slot") are honored FIRST and
  *  win over the auto pass; an assigned backup that doesn't beat its chosen
  *  target is left unused — the explicit choice is respected, not overridden. */
-function applyBackups(slots: SlotRes[], side: 'home' | 'away', assign: Record<string, string> = {}): void {
-  const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
-  const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
-  const getF = (s: SlotRes) => (side === 'home' ? s.home : s.away);
-  const setF = (s: SlotRes, v: number) => { if (side === 'home') s.home = v; else s.away = v; };
-  const keyOf = (s: SlotRes) => `${s.win}#${s.slot}`;
-
-  const backups = slots.filter((s) => meP(s) && !opP(s));
-  if (!backups.length) return;
-  // A backup doesn't score on its own — record its would-be score, zero it out.
-  const score = new Map<SlotRes, number>();
-  for (const b of backups) { score.set(b, getF(b)); setF(b, 0); }
-
-  const starters = slots.filter((s) => meP(s) && opP(s));
-  const used = new Set<SlotRes>();
-
-  // 1) Manual assignments — same semantics as the client engine (matchup.ts).
-  const autoBackups: SlotRes[] = [];
-  for (const b of backups) {
-    const targetKey = assign[keyOf(b)];
-    const st = targetKey ? starters.find((s) => keyOf(s) === targetKey) : undefined;
-    if (st && !used.has(st) && score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); used.add(st); }
-    else if (!targetKey) autoBackups.push(b);
-  }
-
-  // 2) Auto-maximize the unassigned rest: biggest backups into the lowest
-  //    beatable remaining starters.
-  const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
-  const ranked = autoBackups.sort((a, b) => (score.get(b)! - score.get(a)!));
-  let si = 0;
-  for (const b of ranked) {
-    if (si >= remStarters.length) break;
-    const st = remStarters[si];
-    if (score.get(b)! > getF(st)) { setF(st, round(score.get(b)!)); si++; } else break;
-  }
-  // All-or-nothing: backups that didn't sub in stay 0 (zeroed above).
+/** This resolver's SideLens over SlotRes — how the shared rules in
+ *  scoringRules.ts read one side of the published rows. */
+function sideLens(side: 'home' | 'away'): SideLens<SlotRes> {
+  return {
+    key: (s) => `${s.win}#${s.slot}`,
+    win: (s) => s.win,
+    player: (s) => (side === 'home' ? s.homeP : s.awayP),
+    metric: (s) => (side === 'home' ? s.homeMetric : s.awayMetric),
+    opp: (s) => (side === 'home' ? s.awayP : s.homeP),
+    get: (s) => (side === 'home' ? s.home : s.away),
+    set: (s, v) => { if (side === 'home') s.home = v; else s.away = v; },
+  };
 }
 
-// This is the number resolve.js banks into the wallet at FINAL, and
-// weekEarnings (matchup.ts) is the number the web's earnings modal SHOWS —
-// two hand-synced copies of one economy, and the engine-parity check
-// (scripts/check-engine-parity.mjs) found the sync broken twice the day it
-// was written: this banked a week-1 stipend the modal deliberately zeroes,
-// and it never banked the turnover swing the modal has always displayed.
-// Every rule here mirrors weekEarnings term for term; change them TOGETHER
-// or the wallet stops matching its own receipt.
+function applyBackups(slots: SlotRes[], side: 'home' | 'away', assign: Record<string, string> = {}): void {
+  bestBallBackups(slots, sideLens(side), assign);
+}
+
+// This is the number resolve.js banks into the wallet at FINAL. It sums the
+// SAME coinBreakdown the web's earnings modal itemizes (weekEarnings) — one
+// economy by construction, not by hand-sync: the parity check caught the
+// hand-synced copies apart twice (a phantom week-1 stipend, a turnover swing
+// the wallet never paid) before v0.340.0 deleted them.
 function coinFor(slots: SlotRes[], side: 'home' | 'away', week: number, turnoverCoin: number): number {
-  const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
-  const meM = (s: SlotRes) => (side === 'home' ? s.homeMetric : s.awayMetric);
-  const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
-  const evSide = side === 'home' ? 'you' : 'their';
-  // No stipend in Week 1 — the season opens on the commissioner's seed budget
-  // only (weekEarnings' rule, verbatim).
-  let c = week <= 1 ? 0 : WEEKLY_STIPEND;
-  for (const s of slots) {
-    const p = meP(s);
-    if (p) {
-      if (!opP(s)) c += UNOPPOSED_COIN;
-      if (meM(s) === 'suppress') c += SUPPRESS_COIN;
-      const rate = metricCoin(p.pos, meM(s));
-      for (const e of s.events) if (e.side === evSide && e.coin) c += e.coinAmt ?? rate;
-      c -= turnoverCoin * turnoversCommitted(p, week); // your giveaway → you lose
-    }
-    // Independent of fielding anyone opposite: their giveaway pays you either
-    // way (weekEarnings checks `me` and `opp` separately).
-    const o = opP(s);
-    if (o) c += turnoverCoin * turnoversCommitted(o, week);
-  }
-  return Math.round(c);
+  const lens = sideLens(side);
+  const b = coinBreakdown(slots.map((s) => ({
+    player: lens.player(s), metricId: lens.metric(s), opp: lens.opp(s),
+    events: s.events, evSide: (side === 'home' ? 'you' : 'their') as 'you' | 'their',
+  })), week, turnoverCoin);
+  return Math.round(b.subtotal);
 }
 
 /** Pre-match team buffs each side has armed (overtime / ot-shield / momentum /
@@ -240,15 +198,14 @@ export { BYE_STEAL_CAP };
 // Armed flat-award buffs (mirrors buildMatchup's award()): scans a side's fielded
 // players for a trigger and returns the payout, credited to the triggering slot.
 function awardFor(buffs: Set<string>, picks: LivePick[], week: number): { pick: LivePick; pts: number }[] {
+  // The award table (amount + trigger) is scoringRules.BUFF_AWARDS — shared
+  // with the board's bonus list, so an amount can never drift between them.
   const out: { pick: LivePick; pts: number }[] = [];
-  const hit = (id: string, pts: number, test: (p: Player) => boolean) => {
-    if (!buffs.has(id)) return;
-    const pk = picks.find((x) => test(x.player));
-    if (pk) out.push({ pick: pk, pts });
-  };
-  hit('trick-play', 50, (p) => p.pos !== 'QB' && threwTrickTd(p.id, week));
-  hit('pick-six', 25, (p) => p.pos === 'DEF' && hadDefTd(p, week));
-  hit('hail-mary', 15, (p) => p.pos === 'QB' && hadLongPassTd(p, week));
+  for (const a of BUFF_AWARDS) {
+    if (!buffs.has(a.id)) continue;
+    const pk = picks.find((x) => a.hit(x.player, week));
+    if (pk) out.push({ pick: pk, pts: a.pts });
+  }
   return out;
 }
 
@@ -473,25 +430,17 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   // DEF SUPPRESS (HALVING): apply after backups so a subbed-in starter score is
   // the one tested. Each side's threshold halves every OPPOSING slot (any
   // window) that scored above 0 and at or below it.
-  if (homeSuppress > 0 || awaySuppress > 0) {
-    for (const s of slots) {
-      if (awaySuppress > 0 && s.home > 0 && s.home <= awaySuppress) s.home = round(s.home * 0.5);
-      if (homeSuppress > 0 && s.away > 0 && s.away <= homeSuppress) s.away = round(s.away * 0.5);
-    }
-  }
+  suppressHalving(slots, sideLens('home'), awaySuppress);
+  suppressHalving(slots, sideLens('away'), homeSuppress);
 
   // K BANKER (XP BONUS): bake the +XP·TDs into the banker K's window so the
   // grand total stays the sum of per-window states. If a side has multiple
   // banker Ks, the first one's window carries the bonus.
-  const bonusSlot = (picks: LivePick[]): SlotRes | undefined => {
-    const banker = picks.find((p) => p.player.pos === 'K' && p.metricId === 'banker');
-    if (!banker) return undefined;
-    return slots.find((s) => s.win === banker.win && s.slot === banker.slot);
-  };
-  const homeBonus = homeBankerXp * homeTds;
-  const awayBonus = awayBankerXp * awayTds;
-  if (homeBonus > 0) { const sl = bonusSlot(homePicks); if (sl) sl.home = round(sl.home + homeBonus); }
-  if (awayBonus > 0) { const sl = bonusSlot(awayPicks); if (sl) sl.away = round(sl.away + awayBonus); }
+  // Shared rule; the credit lands on the FIRST banker-K slot in slot order
+  // (formerly this scanned pick order — same slot for every 1-banker lineup,
+  // and slot order is what the board uses, so multi-banker edge cases agree).
+  bankerCredit(slots, sideLens('home'), homeBankerXp * homeTds);
+  bankerCredit(slots, sideLens('away'), awayBankerXp * awayTds);
 
   // Double or Nothing: the staked slot (both sides fielded) scores ×2 if it wins
   // its head-to-head, 0 if it loses — on the post-backup/suppress score, before
@@ -645,10 +594,9 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   for (const [wid, v] of Object.entries(byWin)) {
     const anyHome = slots.some((s) => s.win === wid && s.homeP);
     const anyAway = slots.some((s) => s.win === wid && s.awayP);
-    if (anyHome && anyAway && Math.abs(v.home - v.away) >= 0.1) {
-      if (v.home > v.away) { v.home += WINDOW_WIN_BONUS; home += WINDOW_WIN_BONUS; }
-      else { v.away += WINDOW_WIN_BONUS; away += WINDOW_WIN_BONUS; }
-    }
+    const verdict = battleVerdict(v.home, v.away, anyHome && anyAway);
+    if (verdict.winner === 'a') { v.home += verdict.bonus; home += verdict.bonus; }
+    else if (verdict.winner === 'b') { v.away += verdict.bonus; away += verdict.bonus; }
     let mvpScore = 0, mvpSide: 'home' | 'away' | null = null;
     let slotCount = 0;
     for (const s of slots) {
@@ -670,8 +618,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   const result: LiveResult = { states, slots: slotScores, home: round(home), away: round(away), coin: {
     // Turnover swing at each side's own rate: 25 with its Turnover Boost armed,
     // else the flat 10 — exactly the turnoverCoin the web passes weekEarnings.
-    home: coinFor(slots, 'home', week, homeBuffs.has('turnover-boost') ? 25 : TURNOVER_COIN) + mvpHome,
-    away: coinFor(slots, 'away', week, awayBuffs.has('turnover-boost') ? 25 : TURNOVER_COIN) + mvpAway,
+    home: coinFor(slots, 'home', week, homeBuffs.has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpHome,
+    away: coinFor(slots, 'away', week, awayBuffs.has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpAway,
   } };
   if (buffs.captureEvents) result.slotEvents = slots.map((s) => ({ win: s.win, slot: s.slot, events: s.events }));
   return result;

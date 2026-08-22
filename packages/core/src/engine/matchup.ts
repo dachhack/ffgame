@@ -1,8 +1,17 @@
-import type { Player, WindowId, GameWindow, Pick, PbpEvent, Pos, BuffFx } from '../types';
-import { METRICS, metricById } from '../data/metrics';
+import type { Player, WindowId, GameWindow, Pick, PbpEvent, BuffFx } from '../types';
+import { METRICS } from '../data/metrics';
 import { capAmplifiers, isAmplifier } from '../data/powerups';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
+import {
+  WEEKLY_STIPEND, UNOPPOSED_COIN, SUPPRESS_COIN, TURNOVER_COIN, WINDOW_WIN_BONUS, WINDOW_MVP_COIN_PER_SLOT,
+  metricCoin, coinRisk, threwTrickTd, battleVerdict, bestBallBackups, suppressHalving, bankerCredit,
+  coinBreakdown, BUFF_AWARDS, type SideLens,
+} from './scoringRules';
+// THE RULES LIVE IN scoringRules.ts (v0.340.0) — this engine and liveResolve
+// both call the same functions now. Re-exported here because the web and the
+// app have always imported the tuned numbers from this module.
+export { WEEKLY_STIPEND, UNOPPOSED_COIN, SUPPRESS_COIN, TURNOVER_COIN, WINDOW_WIN_BONUS, WINDOW_MVP_COIN_PER_SLOT, metricCoin, coinRisk, threwTrickTd };
 
 /** A real-time swap on a slot (Player/Metric Swap/Mulligan). It takes effect
  *  from `atRt` — the REAL wall-clock time of activation (seconds from the
@@ -12,7 +21,7 @@ import { hashStr } from '../data/players';
  *  no real timestamps baked. */
 export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string; toPlayerId?: string; }
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
-import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
+import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
 import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
 import { injuryFor } from '../data/injuries';
@@ -337,17 +346,11 @@ export interface ResolvedMatchup {
   theirWindowsWon: number;
 }
 
-/** Points awarded to the winner of a window's head-to-head battle. */
-export const WINDOW_WIN_BONUS = 5;
 /** Lead Change: points banked each time you seize the lead in an armed slot. */
 export const LEAD_CHANGE_BONUS = 2;
 /** Grudge Match: win the staked slot by GRUDGE_MARGIN+ → +GRUDGE_SWING; lose it → −GRUDGE_SWING. */
 export const GRUDGE_MARGIN = 10;
 export const GRUDGE_SWING = 25;
-/** Drip coin the window MVP (single highest-scoring slot in a window) earns,
- *  PER SLOT in that window — so bigger windows carry a bigger bounty (a 3-slot
- *  Sunday-early MVP = 15, a lone TNF MVP = 5). */
-export const WINDOW_MVP_COIN_PER_SLOT = 5;
 
 /** Compute the head-to-head battle for one resolved window from its slots'
  *  final scores (call after backups + suppress so the tested scores are final).
@@ -365,13 +368,10 @@ export function computeWindowBattle(w: ResolvedWindow): WindowBattle {
     if (s.you && s.youFinal > mvpScore) { mvpScore = s.youFinal; mvpSide = 'you'; mvpIdx = s.slotIndex; mvpName = s.you.player.name; }
     if (s.their && s.theirFinal > mvpScore) { mvpScore = s.theirFinal; mvpSide = 'their'; mvpIdx = s.slotIndex; mvpName = s.their.player.name; }
   }
-  const contested = anyYou && anyTheir;
-  let winner: 'you' | 'their' | 'push' = 'push';
-  let bonus = 0;
-  if (contested && Math.abs(youTotal - theirTotal) >= 0.1) {
-    winner = youTotal > theirTotal ? 'you' : 'their';
-    bonus = WINDOW_WIN_BONUS;
-  }
+  // The verdict rule (margin, bonus) is shared with the live resolver.
+  const v = battleVerdict(youTotal, theirTotal, anyYou && anyTheir);
+  const winner: 'you' | 'their' | 'push' = v.winner === 'a' ? 'you' : v.winner === 'b' ? 'their' : 'push';
+  const bonus = v.bonus;
   return {
     youTotal: Math.round(youTotal * 10) / 10,
     theirTotal: Math.round(theirTotal * 10) / 10,
@@ -380,10 +380,6 @@ export function computeWindowBattle(w: ResolvedWindow): WindowBattle {
   };
 }
 
-/** Deterministic ~6%/player-week chance a non-QB threw a TD pass (Trick Play). */
-export function threwTrickTd(playerId: string, week: number): boolean {
-  return hashStr(`${playerId}|trickpass|${week}`) % 100 < 6;
-}
 
 function lookup(pools: Record<WindowId, Player[]>, picks: Record<string, Pick>, key: string): { player: Player; metricId: string } | null {
   const pk = picks[key];
@@ -431,7 +427,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; autoBackups?: boolean } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -607,17 +603,16 @@ export function buildMatchup(
   // Unopposed players are BACKUPS (best-ball insurance): a backup doesn't score
   // in its own slot, but its highest score can replace your lowest starter's
   // score when it beats it. Applied per side, before suppress/sum.
-  applyBackups(windows, 'you', backupAssign, !!extras.autoBackups); // your backups: manual (auto in the demo, which has no assign UI)
-  applyBackups(windows, 'their', {}, true);                         // opponent: auto-maximize
+  applyBackups(windows, 'you', backupAssign); // manual assignments win; unassigned auto-maximize
+  applyBackups(windows, 'their', {});         // opponent: pure auto-maximize
 
   // DEF SUPPRESS (HALVING): your suppress DST halves every opposing slot (any
   // window) that scored at or below its threshold; their DST does the same to
   // your slots. Applied once per slot, after all in-slot scoring resolves.
-  if (youSuppress > 0 || theirSuppress > 0) {
-    for (const w of windows) for (const s of w.slots) {
-      if (theirSuppress > 0 && s.youFinal > 0 && s.youFinal <= theirSuppress) { s.youHalvedFrom = s.youFinal; s.youFinal = Math.round(s.youFinal * 0.5 * 10) / 10; }
-      if (youSuppress > 0 && s.theirFinal > 0 && s.theirFinal <= youSuppress) { s.theirHalvedFrom = s.theirFinal; s.theirFinal = Math.round(s.theirFinal * 0.5 * 10) / 10; }
-    }
+  {
+    const all = windows.flatMap((w) => w.slots);
+    suppressHalving(all, sideLens('you'), theirSuppress, (s, from) => { s.youHalvedFrom = from; });
+    suppressHalving(all, sideLens('their'), youSuppress, (s, from) => { s.theirHalvedFrom = from; });
   }
 
   // RIVALRY power-up (blind, window-targeted): for every slot in an armed window
@@ -683,14 +678,11 @@ export function buildMatchup(
   // engine-parity check caught it flipping not just a window but the whole
   // MATCH (board 68.3–69.3 against, published 73.3–64.3 for, one lineup).
   // With several banker Ks, the first one's slot carries it (liveResolve rule).
-  const bankerSlot = (side: 'you' | 'their'): ResolvedSlot | undefined =>
-    windows.flatMap((w) => w.slots).find((s) => {
-      const p = side === 'you' ? s.you : s.their;
-      return p?.player.pos === 'K' && p.metricId === 'banker';
-    });
-  const youBankerBonus = youBankerXp * youTds, theirBankerBonus = theirBankerXp * theirTds;
-  if (youBankerBonus > 0) { const sl = bankerSlot('you'); if (sl) sl.youFinal = Math.round((sl.youFinal + youBankerBonus) * 10) / 10; }
-  if (theirBankerBonus > 0) { const sl = bankerSlot('their'); if (sl) sl.theirFinal = Math.round((sl.theirFinal + theirBankerBonus) * 10) / 10; }
+  {
+    const all = windows.flatMap((w) => w.slots);
+    bankerCredit(all, sideLens('you'), youBankerXp * youTds);
+    bankerCredit(all, sideLens('their'), theirBankerXp * theirTds);
+  }
 
   // WINDOW BATTLE: settle each window's head-to-head on its final slot scores.
   // The winner banks a flat bonus and the window MVP is tagged (coin only). Done
@@ -714,15 +706,15 @@ export function buildMatchup(
   // Armed pre-match team buffs: flat payouts when their condition hits among
   // your starting spots. Each scans your filled slots for a triggering player.
   const myPlayers = windows.flatMap((w) => w.slots).filter((s) => s.you).map((s) => s.you!.player);
+  // The award table (amount + trigger + label) is shared with the live
+  // resolver — an amount can no longer drift between this bonus list and the
+  // worker's slot credit.
   const bonuses: { id: string; label: string; points: number }[] = [];
-  const award = (id: string, points: number, label: (name: string) => string, hit: (p: Player) => boolean) => {
-    if (!buffs[id]) return;
-    const p = myPlayers.find(hit);
-    if (p) bonuses.push({ id, points, label: label(p.name) });
-  };
-  award('trick-play', 50, (n) => `Trick Play — ${n} threw a TD pass`, (p) => p.pos !== 'QB' && threwTrickTd(p.id, week));
-  award('pick-six', 25, (n) => `Pick Six — ${n} returned a TD`, (p) => p.pos === 'DEF' && hadDefTd(p, week));
-  award('hail-mary', 15, (n) => `Hail Mary — ${n} hit a 40+ yd TD`, (p) => p.pos === 'QB' && hadLongPassTd(p, week));
+  for (const a of BUFF_AWARDS) {
+    if (!buffs[a.id]) continue;
+    const p = myPlayers.find((pl) => a.hit(pl, week));
+    if (p) bonuses.push({ id: a.id, points: a.pts, label: a.label(p.name) });
+  }
 
   // Double or Nothing: a staked head-to-head slot scores double if it wins, 0 if
   // it loses. Applied as a delta on top of the slot's own (already-summed) score.
@@ -801,29 +793,7 @@ export function clutchOffers(slot: ResolvedSlot, week: number): ClutchOffer[] {
   return out;
 }
 
-// ── Drip-coin economy ────────────────────────────────────────────────────────
-export const WEEKLY_STIPEND = 50;     // flat, just for playing the week
-export const UNOPPOSED_COIN = 15;     // per unopposed player you field
-export const SUPPRESS_COIN = 10;      // a DST's suppress firing (field-wide halving)
-export const TURNOVER_COIN = 10;      // coin moved per turnover committed (25 with the powerup)
-/**
- * Coin a metric earns PER EVENT OF NOTE (not per routine play). Only big-swing
- * metrics produce these — everything else earns 0 from signatures (the weekly
- * stipend + unopposed bounty carry the baseline).
- */
-export function metricCoin(pos: Pos, metricId: string | null | undefined): number {
-  const m = metricById(pos, metricId);
-  if (!m) return 0;
-  if (metricId === 'suppress') return SUPPRESS_COIN;                  // suppress firing
-  if (metricId === 'neg') return 50;                                 // K SHUTDOWN — the big one
-  if (m.fx === 'nuke') return 10;                                    // TD nuke
-  // Accumulation drips earn when they go HOT (RB Rush, WR/TE Receiving, Combo).
-  if (metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush')) return 5;
-  return 0;                                                          // routine play — no coin
-}
-export function coinRisk(n: number): 'HIGH' | 'MED' | 'NONE' {
-  return n >= 10 ? 'HIGH' : n > 0 ? 'MED' : 'NONE';
-}
+// ── Drip-coin economy — the rules live in scoringRules.ts ────────────────────
 
 export interface WeekEarnings { stipend: number; unopposed: number; signature: number; mvp: number; turnover: number; total: number; }
 /**
@@ -834,29 +804,20 @@ export interface WeekEarnings { stipend: number; unopposed: number; signature: n
  * per-player turnovers — see turnoversCommitted.)
  */
 export function weekEarnings(m: ResolvedMatchup, side: 'you' | 'their', week: number, turnoverCoin = TURNOVER_COIN): WeekEarnings {
-  // No flat stipend in Week 1 — the season opens with the commissioner's seed
-  // budget only, so the board doesn't hand out a phantom +50 before any play.
-  const stipend = week <= 1 ? 0 : WEEKLY_STIPEND;
-  let unopposed = 0, signature = 0, mvp = 0, turnover = 0;
-  for (const w of m.windows) {
-    // Window MVP bounty (coin only): the single highest-scoring slot in the window.
-    if (w.battle?.mvp && w.battle.mvp.side === side) mvp += w.battle.mvp.coin;
-    for (const s of w.slots) {
-      const me = side === 'you' ? s.you : s.their;
-      const opp = side === 'you' ? s.their : s.you;
-      if (me) {
-        if (!opp) unopposed += UNOPPOSED_COIN;
-        if (me.metricId === 'suppress') signature += SUPPRESS_COIN;
-        // Coin per event of note: the carry-wipe plus-up carries its own bounty
-        // (e.coinAmt); everything else pays the primary metric's per-note rate.
-        const rate = metricCoin(me.player.pos, me.metricId);
-        for (const e of s.events) if (e.side === side && e.coin) signature += e.coinAmt ?? rate;
-        turnover -= turnoverCoin * turnoversCommitted(me.player, week); // your giveaway → you lose
-      }
-      if (opp) turnover += turnoverCoin * turnoversCommitted(opp.player, week); // their giveaway → you gain
-    }
-  }
-  return { stipend, unopposed, signature, mvp, turnover, total: stipend + unopposed + signature + mvp + turnover };
+  // The itemized economy is the SHARED rule (scoringRules.coinBreakdown) — the
+  // worker banks the same breakdown's total, so what this modal promises is
+  // what the wallet receives by construction, not by hand-sync.
+  const b = coinBreakdown(m.windows.flatMap((w) => w.slots).map((s) => ({
+    player: (side === 'you' ? s.you : s.their)?.player,
+    metricId: (side === 'you' ? s.you : s.their)?.metricId,
+    opp: (side === 'you' ? s.their : s.you)?.player,
+    events: s.events,
+    evSide: side,
+  })), week, turnoverCoin);
+  // Window MVP bounty (coin only): the single highest-scoring slot per window.
+  let mvp = 0;
+  for (const w of m.windows) if (w.battle?.mvp && w.battle.mvp.side === side) mvp += w.battle.mvp.coin;
+  return { stipend: b.stipend, unopposed: b.unopposed, signature: b.signature, mvp, turnover: b.turnover, total: b.subtotal + mvp };
 }
 
 /**
@@ -887,56 +848,33 @@ export function slotCoin(slot: ResolvedSlot, side: 'you' | 'their', week: number
  * starter score when it beats it — greedily pairing the biggest backups with
  * the smallest beatable starters to maximize the side's total.
  */
-function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>, auto: boolean): void {
-  const all = windows.flatMap((w) => w.slots);
-  const keyOf = (s: ResolvedSlot) => slotKey(s.win, s.slotIndex);
-  const mine = (s: ResolvedSlot) => (side === 'you' ? s.you : s.their);
-  const opp = (s: ResolvedSlot) => (side === 'you' ? s.their : s.you);
-  const getF = (s: ResolvedSlot) => (side === 'you' ? s.youFinal : s.theirFinal);
-  const setF = (s: ResolvedSlot, v: number) => { if (side === 'you') s.youFinal = v; else s.theirFinal = v; };
-  const sub = (b: ResolvedSlot, st: ResolvedSlot) => {
-    const info = { name: mine(b)!.player.name, score: b.backupScore ?? 0, from: getF(st) };
-    if (side === 'you') st.youSub = info; else st.theirSub = info;
-    setF(st, b.backupScore ?? 0); b.backupUsed = true;
+/** This engine's SideLens over ResolvedSlot — how the shared rules in
+ *  scoringRules.ts read one side of the board's rows. */
+function sideLens(side: 'you' | 'their'): SideLens<ResolvedSlot> {
+  return {
+    key: (s) => slotKey(s.win, s.slotIndex),
+    win: (s) => s.win,
+    player: (s) => (side === 'you' ? s.you : s.their)?.player,
+    metric: (s) => (side === 'you' ? s.you : s.their)?.metricId ?? null,
+    opp: (s) => (side === 'you' ? s.their : s.you)?.player,
+    get: (s) => (side === 'you' ? s.youFinal : s.theirFinal),
+    set: (s, v) => { if (side === 'you') s.youFinal = v; else s.theirFinal = v; },
   };
+}
 
-  const backups = all.filter((s) => mine(s) && !opp(s));
-  if (!backups.length) return;
-  // A backup doesn't score on its own — record its would-be score, zero it out.
-  for (const b of backups) { b.backup = true; b.backupScore = getF(b); setF(b, 0); }
-
-  // All-or-nothing: a backup either subs in for full value (below) or scores 0
-  // (already zeroed above) — no partial/half credit.
-  const starters = all.filter((s) => mine(s) && opp(s));
-  const used = new Set<ResolvedSlot>();
-
-  // 1) Honor manual assignments (only valid when the backup outscores the target).
-  const autoBackups: ResolvedSlot[] = [];
-  for (const b of backups) {
-    const targetKey = assign[keyOf(b)];
-    const st = targetKey ? starters.find((s) => keyOf(s) === targetKey) : undefined;
-    if (st && !used.has(st) && (b.backupScore ?? 0) > getF(st)) { sub(b, st); used.add(st); }
-    else if (!targetKey) autoBackups.push(b); // unassigned → auto
-    // an assigned-but-invalid backup is left unused (respect the explicit choice)
-  }
-
-  // 2) Auto-maximize the rest — EVERYONE now, not just the AI. The founder's
-  // ruling on the mechanic: auto at lock (the system subs the best backup and
-  // says so), manual reassignment on top. Humans' backups used to stay benched
-  // until assigned, but the worker's authoritative resolver always auto-subbed,
-  // so "benched until you choose" was a client-side fiction that scored 0 on
-  // screen while the real score maximized — the two now agree. A manual
-  // assignment (step 1) still wins over the auto pass.
-  void auto; // kept in the signature for call-site compatibility; no longer gates
-  const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => getF(a) - getF(b));
-  autoBackups.sort((a, b) => (b.backupScore ?? 0) - (a.backupScore ?? 0));
-  let si = 0;
-  for (const b of autoBackups) {
-    if (si >= remStarters.length) break;
-    const st = remStarters[si];
-    if ((b.backupScore ?? 0) > getF(st)) { sub(b, st); si++; }
-    else break;
-  }
+function applyBackups(windows: ResolvedWindow[], side: 'you' | 'their', assign: Record<string, string>): void {
+  // The RULE (manual-first, then greedy auto-maximize, all-or-nothing) is the
+  // shared bestBallBackups; what stays here is this board's display
+  // bookkeeping — the struck-through would-be score and the sub chip.
+  const lens = sideLens(side);
+  bestBallBackups(windows.flatMap((w) => w.slots), lens, assign, {
+    zeroed: (b, wouldBe) => { b.backup = true; b.backupScore = wouldBe; },
+    subbed: (b, st, score, from) => {
+      const info = { name: lens.player(b)!.name, score, from };
+      if (side === 'you') st.youSub = info; else st.theirSub = info;
+      b.backupUsed = true;
+    },
+  });
 }
 
 /** Running banks at a given clock (live phase) for one slot's event feed. The live

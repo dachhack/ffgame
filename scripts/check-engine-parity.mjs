@@ -9,15 +9,16 @@
 //     matchup_state (and the admin force-resolve previews), i.e. the numbers
 //     that officially decide the week.
 //
-// Both layer the same cross-slot effects — Field General, best-ball backups,
-// TE-TD nuke, DEF suppress, K banker, the window battle, the coin economy —
-// in SEPARATE code. liveResolve's own header says "mirrors src/engine/
-// matchup.ts; kept in sync by hand". Hand-sync is a promise, and until this
-// file nothing checked it: a divergence shows the founder one number at FINAL
-// and banks another, which is exactly the shape of the possession bug
-// (v0.339.5), one level up. Writing this check found three real ones on day
-// one — the week-1 stipend, the turnover coin swing, and the web board not
-// auto-subbing backups — so the risk is not hypothetical.
+// Since v0.340.0 the layered RULES themselves (backups, suppress, banker,
+// battle verdict, coin, awards) live once in engine/scoringRules.ts and both
+// engines call them — the hand-synced copies this check was written against
+// are gone. It found four real divergences in those copies on day one (the
+// banker placement that flipped a match outcome, the unpaid turnover swing,
+// the phantom week-1 stipend, the MVP-coin denominators), which is why they
+// are gone. What can still drift, and what this file therefore guards now,
+// is each engine's ORCHESTRATION: the pipeline order the shared rules run
+// in, the SideLens glue mapping each engine's rows into them, and the input
+// pairing from picks to slots. Same assertions, new failure surface.
 //
 // The fixture drives both engines from ONE lineup description through each
 // side's real glue (slotKey'd picks for buildMatchup, (win,slot)-keyed
@@ -120,7 +121,7 @@ const toLive = (rows) => rows.map(([w, i, pid, m]) => ({ win: w, slot: String(i)
 // buffs [] (not the AI default draw — passing undefined would hand the demo
 // opponent three free amplifiers the worker never grants).
 const runBoth = (youRows, oppRows, { buffs = {}, oppBuffs = [], extras = {} } = {}) => {
-  const m = buildMatchup('t1', 't2', WEEK, toPicks(youRows), toPicks(oppRows), {}, {}, {}, buffs, { autoBackups: true, ...extras }, false, oppBuffs);
+  const m = buildMatchup('t1', 't2', WEEK, toPicks(youRows), toPicks(oppRows), {}, {}, {}, buffs, { ...extras }, false, oppBuffs);
   const r = resolveLiveMatchup(toLive(youRows), toLive(oppRows), WEEK, {
     homeBuffs: new Set(Object.keys(buffs).filter((k) => buffs[k])),
     awayBuffs: new Set(oppBuffs),
