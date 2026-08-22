@@ -33,4 +33,51 @@ const solo = resolveWindow({ player: makePlayer('saquon-barkley', 'RB', 'PHI'), 
   { player: EMPTY, metricId: '' }, WEEK, 'unopposed');
 console.log(`\nunopposed saquon-barkley: ${solo.youFinal}`);
 
-console.log('\nOK — the real engine resolved live-injected plays in Node.');
+// ── THE POSSESSION GATE, through the worker's own seam (v0.339.5) ──────────
+// A drip accrues per minute of OFFENSE. In this process the engine's possession
+// comes from the game-feed store (realPossFor reads a baked cache only the
+// client's HTTP fetch fills — the worker NEVER has it), so if injectWeekPlays'
+// feed install ever disappears, drips silently revert to accruing on every
+// game minute. That regression produced an 11.7 on a 32-yard receiver the
+// engine settles at 5.5, and flipped a window battle. These assertions fail
+// loudly instead. Exact values, because offSecs is exact interval overlap.
+import { setLiveGameFeed, feedRowsToWeek, clearLiveGameFeeds } from '../../packages/core/src/data/gameFeed.ts';
+
+let fails = 0;
+const ok = (cond, label) => {
+  console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`);
+  if (!cond) fails++;
+};
+
+const PW = 900; // a week with no baked data — exactly the worker's live shape
+// One 40-yard catch at 1:00 → drip rate 0.4 pts/min from c=60 to the whistle.
+injectWeek(PW, { 'poss-wr': [{ c: 60, k: 'rec', y: 40, td: 0, ca: 0, tg: 1 }] });
+const dripFinal = () => resolveWindow(
+  { player: makePlayer('poss-wr', 'WR', 'DEN'), metricId: 'recyd' },
+  { player: EMPTY, metricId: '' }, PW, 'poss gate').youFinal;
+
+// NO feed installed: offSecs treats possession as unknown and the drip runs
+// ungated — 59 min × 0.4 = 23.6. This is the worker's ENTIRE history pre-fix.
+const ungated = dripFinal();
+ok(ungated === 23.6, `no feed → ungated 23.6 (got ${ungated}) — every minute credited`);
+
+// The feed the worker now installs: DEN@GB, GB on offense the first half and
+// DEN the second. possFromPlays credits each span to whoever runs the NEXT
+// play (the team a span leads INTO — check-poss §3), so the play at 1800
+// being GB's gives GB [0,1800], and the play at 3600 being DEN's gives DEN
+// [1800,3600]. The first fixture of this probe credited the halves backwards
+// and DEN owned the whole game — 23.6 "gated", indistinguishable from the
+// gate not running. Which is the argument for asserting exact numbers.
+const fp = (c, tm) => ({ c, tm, drv: 0, dn: 1, dist: 10, yl: 50, yl2: 50, ty: 'Pass', txt: '', hs: 0, as: 0 });
+setLiveGameFeed(PW, feedRowsToWeek([
+  { key: 'DEN@GB', away: 'DEN', home: 'GB', plays: [fp(0, 'DEN'), fp(1800, 'GB'), fp(3600, 'DEN')], state: 'post' },
+]));
+const gated = dripFinal();
+ok(gated === 12, `feed installed → gated 12.0 (got ${gated}) — 30 DEN-offense minutes × 0.4`);
+ok(gated < ungated, 'THE POINT: the same catch banks less when possession is known — the worker now matches the web');
+
+clearLiveGameFeeds();
+ok(dripFinal() === 23.6, 'clearing the feed returns to the honest unknown-data fallback (soft degradation, not zero)');
+
+if (fails) { console.error(`\n${fails} PROBE FAIL(s)`); process.exit(1); }
+console.log('\nOK — the real engine resolved live-injected plays in Node, and drips gate on possession.');
