@@ -17,13 +17,19 @@
 --
 -- THE TWO THINGS THAT MAKE A DRIP SEAT FIELD NOTHING, both visible below:
 --
---   1. NO ACCOUNT ON THE SEAT. `sealed_pick.app_user_id` is NOT NULL, so an
---      unclaimed seat has nowhere to store a lineup and materializeAutoLineups
---      skips it outright (lock.js: "empty seat → resolver auto-backup"). It
---      then depends entirely on the resolve-time rebuild. Seat agents (0180)
---      solve this — but ONLY for classic leagues; a drip league's unclaimed
---      seat has no agent, so `has_account = false` here means every lineup it
---      ever fields is recomputed at resolve rather than stored.
+--   1. NO ACCOUNT **AND NO AGENT**. `sealed_pick.app_user_id` is NOT NULL, so
+--      such a seat has nowhere to store a lineup at all and the lock-time fill
+--      skips it, leaving it on the resolve-time rebuild.
+--
+--      As of v0.339.0 seat agents cover EVERY mode, not just classic — so a
+--      seat showing `has_account = f` AND `has_agent = f` today is one the
+--      worker has not minted an agent for yet (it runs each tick), or an AI
+--      seat, which is excluded on purpose: an AI seat's lineup comes from
+--      `aiSide` at resolve, and that is where its persona and bought buffs
+--      live. `has_agent = t` means the seat stores its lineup like any other.
+--
+--      Before v0.339.0 this was the whole story for drip: eight of twenty-four
+--      seats across the two live drip leagues were in exactly this state.
 --
 --   2. NO POOL FOR THAT WEEK. Both the lock-time fill and the resolve-time
 --      rebuild draw their players from `sleeper_lineup.starters_json` for that

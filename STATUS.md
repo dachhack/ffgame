@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.339.0 — seat agents cover drip leagues, not just classic
+
+Founder, after the diagnostic came back: "yes, let's extend seat agents to drip
+leagues."
+
+`diag-backup-windows.sql` measured the cost of 0180 stopping at classic: EIGHT
+of twenty-four seats across the two live preseason drip leagues had no account,
+so — `sealed_pick.app_user_id` being NOT NULL — they could not store a lineup at
+ALL. Five of Gridiron Gang's twelve. Every week the lock-time fill skipped them
+and they fell back to a rebuild at resolve. That is what an "unopposed" window
+in a full league actually was.
+
+NO MIGRATION. Nothing durable was classic-only: `seat_agent` has no mode
+column, `transfer_agent_lineups` fires on any membership claim, and 0213's
+`agent_wire_seat` never asked. Only two JS gates were — `ensureSeatAgents`
+filtering to classic, and `materializeAutoLineups` skipping any seat without an
+account. Both lifted.
+
+AI SEATS ARE EXCLUDED ON PURPOSE, and this is the trap: an AI seat's lineup
+comes from `aiSide` at RESOLVE, which is where its persona draw and its bought
+buffs live. Give it an agent and the fill writes rows, `sideLineup` takes its
+sealed-first branch instead, and the seat silently loses both. Those seats are
+not missing a manager — they are the manager.
+
+New `drip-agent-probes.sql` (suite 61): a drip agent can author a lineup, the
+membership row STAYS NULL so open-seat counts are untouched (0180's load-bearing
+invariant), the claim transfers the rows and retires the mapping, and the
+open-seat count moves by exactly one. Verified to FAIL without the mapping.
+
+Coverage honesty: the probes cover the durable half. The worker half — writing
+as the agent — is the same code path a human seat takes with a different uid,
+and has no test harness beyond module load. First tick after deploy is the
+real check.
+
 ### v0.338.4 — return yards don't make you a receiver
 
 Founder: "let's not include return yards in the yards when we determine

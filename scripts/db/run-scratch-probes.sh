@@ -137,3 +137,4 @@ $RUN -f scripts/db/reception-scoring-probes.sql | grep -E "PROBE FAIL|ALL RECEPT
 $RUN -f scripts/db/chat-reaction-probes.sql | grep -E "PROBE FAIL|ALL CHAT-REACTION PROBES" || { echo "CHAT-REACTION PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/metricless-audit-probes.sql | grep -E "PROBE FAIL|ALL METRICLESS-AUDIT PROBES" || { echo "METRICLESS-AUDIT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/agent-wire-probes.sql | grep -E "PROBE FAIL|ALL AGENT-WIRE PROBES" || { echo "AGENT-WIRE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/drip-agent-probes.sql | grep -E "PROBE FAIL|ALL DRIP-AGENT PROBES" || { echo "DRIP-AGENT PROBES FAILED"; exit 1; }

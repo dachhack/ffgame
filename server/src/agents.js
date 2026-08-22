@@ -1,4 +1,4 @@
-// SEAT AGENTS (0180): one synthetic user per unclaimed classic seat, so the
+// SEAT AGENTS (0180): one synthetic user per unclaimed seat, so the
 // worker's auto-slot can write real sealed_pick rows for it — frozen by the
 // per-player kickoff seal, rendered and scored like any manager's, and kept
 // as history rather than recomputed. The mapping lives in seat_agent;
@@ -15,23 +15,40 @@ import { db } from './supabase.js';
 
 const agentEmail = (leagueId, rosterId) => `agent-${String(leagueId).slice(0, 8)}-r${rosterId}@agents.dripfantasy.com`;
 
-/** Ensure every unclaimed seat of every classic league has an agent.
+/** Ensure every unclaimed seat has an agent — DRIP LEAGUES INCLUDED (v0.339.0).
+ *
+ *  0180 built this for classic and stopped there, and the cost of stopping was
+ *  invisible until it was measured: in the two live preseason drip leagues,
+ *  EIGHT of twenty-four seats had no account and therefore no way to store a
+ *  lineup at all. `sealed_pick.app_user_id` is NOT NULL, so those seats were
+ *  skipped by the lock-time fill every single week and fell back to a lineup
+ *  recomputed at resolve — which is what an "unopposed" window on a full
+ *  league actually is. Five of Gridiron Gang's twelve seats were in that state.
+ *
+ *  Nothing about the DURABLE half was classic-only: the seat_agent table has no
+ *  mode column, `transfer_agent_lineups` fires on any membership claim, and
+ *  0213's `agent_wire_seat` never asked either. Only this provisioning filter
+ *  and the fill's skip were.
+ *
+ *  AI SEATS ARE DELIBERATELY EXCLUDED. A seat whose controller is 'ai' is
+ *  rebuilt at resolve by `aiSide`, which is where its persona draw and its
+ *  bought buffs come from. Give it an agent and the lock-time fill writes rows,
+ *  `sideLineup` takes its sealed-first branch instead, and the seat quietly
+ *  loses both. Those seats are not missing a manager — they ARE the manager.
+ *
  *  Returns the number of agents newly provisioned. */
 export async function ensureSeatAgents() {
-  const { data: lgs } = await db().from('league').select('id,settings_json');
-  const classic = (lgs ?? [])
-    .filter((l) => (l.settings_json?.game_mode ?? 'drip') === 'classic')
-    .map((l) => l.id);
-  if (!classic.length) return 0;
   const { data: seats } = await db().from('league_membership')
-    .select('league_id,sleeper_roster_id').in('league_id', classic).is('app_user_id', null);
-  if (!seats?.length) return 0;
+    .select('league_id,sleeper_roster_id,controller').is('app_user_id', null);
+  const want = (seats ?? []).filter((s) => (s.controller ?? 'human') !== 'ai');
+  if (!want.length) return 0;
+  const leagueIds = [...new Set(want.map((s) => s.league_id))];
   const { data: have } = await db().from('seat_agent')
-    .select('league_id,roster_id').in('league_id', classic);
+    .select('league_id,roster_id').in('league_id', leagueIds);
   const mapped = new Set((have ?? []).map((r) => `${r.league_id}:${r.roster_id}`));
 
   let made = 0;
-  for (const s of seats) {
+  for (const s of want) {
     if (mapped.has(`${s.league_id}:${s.sleeper_roster_id}`)) continue;
     const email = agentEmail(s.league_id, s.sleeper_roster_id);
     // createUser fails on a duplicate address — which is exactly the
