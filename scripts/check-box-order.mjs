@@ -14,7 +14,7 @@
 // which reads a week's play table out of module globals — testing a sort by
 // installing a play-by-play week would pin the plumbing and not the judgement.
 // Run: npx tsx scripts/check-box-order.mjs
-import { boxRowOrder, scrimmageYards } from '../packages/core/src/engine/boxScore.ts';
+import { boxRowOrder, scrimmageYards, boxTabRows, offInvolved, defInvolved } from '../packages/core/src/engine/boxScore.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -131,6 +131,50 @@ const sorted = (rows) => [...rows].sort(boxRowOrder).map((r) => r.slug);
   const out = sorted([row('returner', 'WR', scrimmageYards(line({ recYds: 14, retYds: 86 })), 100),
     row('real-wr', 'WR', scrimmageYards(line({ recYds: 46 })), 46)]);
   ok(out[0] === 'real-wr', 'the 46-yard receiver now outranks the 14-yard kick returner');
+}
+
+// ── 11. THE OFFENSE / DEFENSE TABS (v0.343.2) ─────────────────────────────
+// Founder: "have a tab for offense and a tab for defense. if a player has
+// multiple designations (Travis Hunter) put them in both positions."
+// Membership is the STAT LINE, so the two-way case needs no roster knowledge.
+{
+  const line = (o) => ({
+    passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0,
+    targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0,
+    fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0, ...o,
+  });
+  const full = (slug, pos, l, weight = 1) => ({
+    slug, pos, team: 'JAX', stat: 'orig', line: l, weight,
+    yards: scrimmageYards(l),
+    side: ['DEF', 'DL', 'LB', 'DB'].includes(pos) ? 'def' : 'off',
+  });
+  const hunter = full('travis-hunter', 'WR', line({ rec: 4, targets: 6, recYds: 52, tackles: 3, ints: 1 }), 90);
+  const wr = full('pure-wr', 'WR', line({ rec: 2, targets: 3, recYds: 30 }), 30);
+  const lb = full('pure-lb', 'LB', line({ tackles: 6 }), 12);
+  const tacklingWr = full('int-tackler', 'WR', line({ tackles: 1 }), 2);
+  const rows = [hunter, wr, lb, tacklingWr];
+
+  const off = boxTabRows(rows, 'off').map((r) => r.slug);
+  const def = boxTabRows(rows, 'def').map((r) => r.slug);
+  ok(off.includes('travis-hunter') && def.includes('travis-hunter'),
+    'THE POINT: a two-way line (catches AND tackles) appears on BOTH tabs');
+  ok(off.includes('pure-wr') && !def.includes('pure-wr'),
+    'a pure receiver stays off the defense tab');
+  ok(def.includes('pure-lb') && !off.includes('pure-lb'),
+    'a pure linebacker stays off the offense tab');
+  ok(!off.includes('int-tackler') && def.includes('int-tackler'),
+    'a WR whose ONLY stat is a tackle lists under DEFENSE — where his stat is — not as an 0/0 line on offense');
+  ok(def.indexOf('pure-lb') < def.indexOf('travis-hunter'),
+    'on the defense tab, native defenders come first; the two-way visitor follows');
+  const hunterDef = boxTabRows(rows, 'def').find((r) => r.slug === 'travis-hunter');
+  ok(hunterDef.stat.includes('tkl') && hunterDef.stat.includes('INT') && !hunterDef.stat.includes('rec'),
+    "the visitor's line is re-phrased through the defensive lens (tackles + INT, no receiving)");
+  const hunterOff = boxTabRows(rows, 'off').find((r) => r.slug === 'travis-hunter');
+  ok(hunterOff.stat === 'orig', "on his own side's tab the original phrasing survives untouched");
+  ok(rows.every((r) => r.stat === 'orig' || r.stat !== undefined) && hunter.stat === 'orig',
+    'the underlying rows are never mutated');
+  ok(offInvolved(line({ rushYds: -4, carries: 3 })) && !defInvolved(line({ rushYds: -4, carries: 3 })),
+    'negative rushing yards still count as offensive involvement');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL BOX-ORDER ASSERTIONS PASSED');

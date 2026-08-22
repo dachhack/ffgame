@@ -18,7 +18,7 @@ import { useTheme, MONO } from '../theme.native';
  *  token: the native splash colour is baked into the APK at build time and
  *  cannot follow a theme, so following one here would introduce the seam this
  *  screen exists to avoid. */
-export const SPLASH_BG = '#0D1F22';
+export const SPLASH_BG = '#163138';
 
 export function BrandLoading({ label }: { label?: string }) {
   const t = useTheme();
