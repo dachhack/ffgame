@@ -24,7 +24,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -228,6 +228,23 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // real-time reveal but scoring still resolves on game clock; 'real' = real-time
   // reveal AND cross-game effects (TE-TD drip nuke) resolve in real-time order.
   const [clockMode, setClockMode] = useState<'game' | 'feed' | 'real'>('game');
+  /** The RESOLVER's per-window scores for the live matchup — what the app
+   *  renders and what actually decides the week. Empty off the live board. */
+  const [srvStates, setSrvStates] = useState<WindowScore[]>([]);
+  /** The live matchup's home seat, so the resolver's home/away rows can be read
+   *  as you/them. Null until the first poll answers — until then the bar falls
+   *  back to the local sim rather than guessing a side. */
+  const [srvHomeRoster, setSrvHomeRoster] = useState<number | null>(null);
+  /** This window's resolver totals as you/them, or nulls when there is no live
+   *  server row yet — the bar then falls back to the local sim rather than
+   *  guessing a side or showing a zero it has not been told. */
+  const srvTotals = (winId: string): { you: number | null; them: number | null } => {
+    if (!liveCtx || srvHomeRoster == null) return { you: null, them: null };
+    const row = srvStates.find((x) => x.game_window === winId);
+    if (!row) return { you: null, them: null };
+    const home = liveCtx.rosterId === srvHomeRoster;
+    return { you: Number(home ? row.home_score : row.away_score), them: Number(home ? row.away_score : row.home_score) };
+  };
   const wallClock = clockMode !== 'game';   // real wall-clock reveal (each game its own pace)
   const realResolve = clockMode === 'real'; // resolve cross-game effects by real time
   const [openPBP, setOpenPBP] = useState<Record<string, boolean>>({});
@@ -362,10 +379,24 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const load = async () => {
       if (document.hidden) return; // don't refetch the week's plays in a background tab
       try {
-        const [rows, feeds] = await Promise.all([weekLivePlays(liveCtx.week), weekGameFeeds(liveCtx.week)]);
+        // THE SERVER'S OWN WINDOW SCORES RIDE ALONG (v0.339.3). This board used
+        // to render a number it computed itself while the app rendered these
+        // rows, so the two hosts disagreed on every DRIP metric — see the
+        // comment on `srvWin` below. Fetched on the same 15s beat as the plays
+        // because they answer the same question at the same moment; a separate
+        // poll would guarantee they were briefly inconsistent with each other.
+        const [rows, feeds, states, mrow] = await Promise.all([
+          weekLivePlays(liveCtx.week), weekGameFeeds(liveCtx.week),
+          getMatchupState(liveCtx.matchupId).catch(() => [] as WindowScore[]),
+          getMatchup(liveCtx.matchupId).catch(() => null),
+        ]);
         setLivePlays(liveCtx.week, liveRowsToPbp(rows));
         setLiveGameFeed(liveCtx.week, feedRowsToWeek(feeds));
-        if (alive) setLivePbpVer((v) => v + 1);
+        if (alive) {
+          setSrvStates(states);
+          if (mrow?.home_roster_id != null) setSrvHomeRoster(Number(mrow.home_roster_id));
+          setLivePbpVer((v) => v + 1);
+        }
       } catch { /* keep prior */ }
     };
     load();
@@ -1187,6 +1218,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
               <WindowSection
                 rw={demoWin} week={week} hydrated={heroHydrated} phase="setup" clock={0} maxClock={winTarget[fid] ?? GAME_SECONDS}
+                srvYou={srvTotals(demoWin.window.id).you} srvThem={srvTotals(demoWin.window.id).them}
                 wallClock={wallClock} realClock={realResolve} wallSeconds={0} playing={false}
                 onTogglePlay={() => {}} onReplay={() => {}}
                 canApplyExtra={false} extraSlotQty={0} onApplyExtra={() => {}} onRemoveExtra={() => {}} rivalryQty={0} rivalryArmed={false} onApplyRivalry={() => {}} onRemoveRivalry={() => {}} onArmClutch={onArmClutch} onAssignBackup={() => {}}
@@ -1241,6 +1273,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             </div>
             <WindowSection
               rw={demoWin}
+                srvYou={srvTotals(demoWin.window.id).you} srvThem={srvTotals(demoWin.window.id).them}
               week={week} hydrated={heroHydrated}
               phase={phase}
               clock={dClock}
@@ -1626,6 +1659,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <WindowSection
                 key={rw.window.id}
                 rw={rw}
+                srvYou={srvTotals(rw.window.id).you} srvThem={srvTotals(rw.window.id).them}
                 week={week} hydrated={heroHydrated}
                 potMatchupId={liveCtx?.matchupId ?? null}
                 phase={winPhaseFor(rw.window.id)}
@@ -2287,6 +2321,11 @@ function WindowSectionInner(props: {
    *  SetupRow, which must not mistake picks ARRIVING for picks being placed. */
   hydrated?: boolean;
   realtime?: 'setup' | 'locked' | 'live' | 'final' | null; // live board: real-clock window state (no manual playback)
+  /** The RESOLVER's totals for this window, read as you/them — the numbers the
+   *  app renders. Null off the live board, where the local sim is correct and
+   *  the clock is genuinely scrubbable. */
+  srvYou?: number | null;
+  srvThem?: number | null;
   clock: number;
   maxClock: number;
   wallClock: boolean;
@@ -2560,6 +2599,7 @@ function WindowSectionInner(props: {
 
       {phase !== 'setup' && (
         <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done}
+          srvYou={props.srvYou} srvThem={props.srvThem}
           potMatchupId={potMatchupId} />
       )}
 
@@ -2719,9 +2759,15 @@ function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
 // aggregate (who's winning the window) as a battle meter; at FINAL it locks to
 // the settled result — WON/LOST, the +bonus points, and the window MVP (the
 // single top-scoring slot, which earns a drip-coin bounty).
-function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId }: {
+function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYou, srvThem }: {
   rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
   potMatchupId?: string | null;
+  /** The RESOLVER's totals for THIS window, already read as you/them. Numbers
+   *  rather than the row so `WindowSection`'s memo comparator keeps working —
+   *  a fresh object from `.find()` is never `Object.is`-equal and would
+   *  re-render the whole section on every poll. */
+  srvYou?: number | null;
+  srvThem?: number | null;
 }) {
   const battle = rw.battle;
   // Window Pot: the CLOSED pot, rendered next to the window's own equation. The
@@ -2740,8 +2786,26 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId }: {
     if (s.you) liveYou += banksAtClock(s.events, yc).you;
     if (s.their) liveTheir += banksAtClock(s.events, tc).their;
   }
-  const yTot = done && battle ? battle.youTotal : Math.round(liveYou * 10) / 10;
-  const tTot = done && battle ? battle.theirTotal : Math.round(liveTheir * 10) / 10;
+  // THE SERVER'S NUMBER WINS ON THE LIVE BOARD (v0.339.3).
+  //
+  // This bar used to render `liveYou`/`liveTheir` — a local re-simulation at
+  // this client's clock — while the app rendered the resolver's own rows. Both
+  // were "right" about their own inputs and they disagreed on screen, which is
+  // the founder's report: a FLAT metric matched (clock-independent once the
+  // plays are in) and a DRIP metric did not (its value IS a function of the
+  // clock, so two clocks give two answers).
+  //
+  // The resolver is what decides the week, so it is the number to show. The
+  // local sim stays for the SIM/DEMO board, where there is no server row and
+  // where the clock is genuinely scrubbable — `effWinClock` returns the manual
+  // playback position off the live board and `winMax` on it, so the live board
+  // never had a scrub position to preserve in the first place.
+  const yTot = done && battle ? battle.youTotal
+    : srvYou != null && Number.isFinite(srvYou) ? Math.round(srvYou * 10) / 10
+    : Math.round(liveYou * 10) / 10;
+  const tTot = done && battle ? battle.theirTotal
+    : srvThem != null && Number.isFinite(srvThem) ? Math.round(srvThem * 10) / 10
+    : Math.round(liveTheir * 10) / 10;
   const total = yTot + tTot;
   const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
   const even = Math.abs(yTot - tTot) < 0.05;
