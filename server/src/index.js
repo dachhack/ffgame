@@ -300,6 +300,28 @@ async function manualSyncTick() {
 async function tickContext(ctx, season) {
   const week = ctx.espnWeek + ctx.offset;
   const games = await getGames(season, ctx.espnWeek, ctx.seasonType);
+
+  // FINAL STATES OUTLIVE THE POLL SET (v0.342.1). gamesToPollFrom drops a game
+  // the moment the SCOREBOARD reports it post+completed — but game_feed.state
+  // is written by pollGame from the SUMMARY, so a row keeps whatever state its
+  // last poll happened to see. ESPN flips both feeds within the same tick often
+  // enough that the 2026 preseason week-3 Friday slate ended with all five
+  // finals stuck at 'in': the ALL GAMES board never sank or bannered them
+  // (v0.342.0 keys on 'post'), and window-pot settlement's primary signal
+  // (0117) never fired. The scoreboard in hand is the authority on OVER, so
+  // sweep it onto the rows directly. Runs BEFORE the completed-week early
+  // return below — the week's LAST game is exactly the one whose post flip
+  // lands after every game reads completed — and the or-filter also catches a
+  // pre-0103 null state, which .neq alone would skip past. Once every row says
+  // 'post' the filter matches nothing and the sweep is a no-op.
+  const ended = games.filter((g) => g.state === 'post').map((g) => g.eventId);
+  if (ended.length) {
+    const { error: stErr } = await db().from('game_feed')
+      .update({ state: 'post' }).eq('week', week).in('game_id', ended)
+      .or('state.neq.post,state.is.null');
+    if (stErr) log(`[${ctx.tag}] feed final sweep`, stErr.message);
+  }
+
   // A context whose week is over contributes nothing and is skipped rather than
   // switched off: once the last preseason game finishes, preseason simply stops
   // doing work, and it resumes by itself if ESPN rolls to another week.
