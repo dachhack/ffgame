@@ -28,8 +28,8 @@ import { metricById } from '../data/metrics';
 import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { flagRulesFor } from '../data/commish';
-import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
-import { banksAtClock, threwTrickTd } from './matchup';
+import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, hadDefTd, hadLongPassTd, turnoversCommitted, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
+import { banksAtClock, threwTrickTd, slotsFor, TURNOVER_COIN } from './matchup';
 
 export interface LivePick { win: string; slot: string; player: Player; metricId: string; }
 export interface LiveWindowScore { window: string; home: number; away: number; }
@@ -120,19 +120,35 @@ function applyBackups(slots: SlotRes[], side: 'home' | 'away', assign: Record<st
   // All-or-nothing: backups that didn't sub in stay 0 (zeroed above).
 }
 
-function coinFor(slots: SlotRes[], side: 'home' | 'away'): number {
+// This is the number resolve.js banks into the wallet at FINAL, and
+// weekEarnings (matchup.ts) is the number the web's earnings modal SHOWS —
+// two hand-synced copies of one economy, and the engine-parity check
+// (scripts/check-engine-parity.mjs) found the sync broken twice the day it
+// was written: this banked a week-1 stipend the modal deliberately zeroes,
+// and it never banked the turnover swing the modal has always displayed.
+// Every rule here mirrors weekEarnings term for term; change them TOGETHER
+// or the wallet stops matching its own receipt.
+function coinFor(slots: SlotRes[], side: 'home' | 'away', week: number, turnoverCoin: number): number {
   const meP = (s: SlotRes) => (side === 'home' ? s.homeP : s.awayP);
   const meM = (s: SlotRes) => (side === 'home' ? s.homeMetric : s.awayMetric);
   const opP = (s: SlotRes) => (side === 'home' ? s.awayP : s.homeP);
   const evSide = side === 'home' ? 'you' : 'their';
-  let c = WEEKLY_STIPEND;
+  // No stipend in Week 1 — the season opens on the commissioner's seed budget
+  // only (weekEarnings' rule, verbatim).
+  let c = week <= 1 ? 0 : WEEKLY_STIPEND;
   for (const s of slots) {
     const p = meP(s);
-    if (!p) continue;
-    if (!opP(s)) c += UNOPPOSED_COIN;
-    if (meM(s) === 'suppress') c += SUPPRESS_COIN;
-    const rate = metricCoin(p.pos, meM(s));
-    for (const e of s.events) if (e.side === evSide && e.coin) c += e.coinAmt ?? rate;
+    if (p) {
+      if (!opP(s)) c += UNOPPOSED_COIN;
+      if (meM(s) === 'suppress') c += SUPPRESS_COIN;
+      const rate = metricCoin(p.pos, meM(s));
+      for (const e of s.events) if (e.side === evSide && e.coin) c += e.coinAmt ?? rate;
+      c -= turnoverCoin * turnoversCommitted(p, week); // your giveaway → you lose
+    }
+    // Independent of fielding anyone opposite: their giveaway pays you either
+    // way (weekEarnings checks `me` and `opp` separately).
+    const o = opP(s);
+    if (o) c += turnoverCoin * turnoversCommitted(o, week);
   }
   return Math.round(c);
 }
@@ -641,13 +657,22 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       if (s.homeP && s.home > mvpScore) { mvpScore = s.home; mvpSide = 'home'; }
       if (s.awayP && s.away > mvpScore) { mvpScore = s.away; mvpSide = 'away'; }
     }
-    const mvpCoin = WINDOW_MVP_COIN_PER_SLOT * slotCount; // 5 coin per slot in the window
+    // 5 coin per slot in the window — where "slots in the window" is the
+    // window's CAPACITY (matchup.ts prices battle.mvp.coin off w.slots.length,
+    // which includes unfilled rows), not just the rows filed. The max() keeps
+    // bought extra slots counting when a side filed past the base capacity.
+    const mvpCoin = WINDOW_MVP_COIN_PER_SLOT * Math.max(slotCount, slotsFor(wid, week));
     if (mvpScore > 0 && mvpSide === 'home') mvpHome += mvpCoin;
     if (mvpScore > 0 && mvpSide === 'away') mvpAway += mvpCoin;
   }
 
   const states = Object.entries(byWin).map(([window, v]) => ({ window, home: round(v.home), away: round(v.away) }));
-  const result: LiveResult = { states, slots: slotScores, home: round(home), away: round(away), coin: { home: coinFor(slots, 'home') + mvpHome, away: coinFor(slots, 'away') + mvpAway } };
+  const result: LiveResult = { states, slots: slotScores, home: round(home), away: round(away), coin: {
+    // Turnover swing at each side's own rate: 25 with its Turnover Boost armed,
+    // else the flat 10 — exactly the turnoverCoin the web passes weekEarnings.
+    home: coinFor(slots, 'home', week, homeBuffs.has('turnover-boost') ? 25 : TURNOVER_COIN) + mvpHome,
+    away: coinFor(slots, 'away', week, awayBuffs.has('turnover-boost') ? 25 : TURNOVER_COIN) + mvpAway,
+  } };
   if (buffs.captureEvents) result.slotEvents = slots.map((s) => ({ win: s.win, slot: s.slot, events: s.events }));
   return result;
 }

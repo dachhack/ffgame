@@ -674,9 +674,28 @@ export function buildMatchup(
     }
   }
 
+  // K BANKER (XP BONUS): +1 per banker XP to each of your TDs scored under a
+  // TD-counting metric — BAKED INTO THE BANKER K'S OWN SLOT, before the window
+  // battles settle, exactly as the live resolver has always done it ("so
+  // per-window scores still sum to the grand total"). Until v0.339.6 this was
+  // added to the GRAND total after the battles instead, which meant the banker
+  // bonus could not tip its window's +5 here while it did officially — the
+  // engine-parity check caught it flipping not just a window but the whole
+  // MATCH (board 68.3–69.3 against, published 73.3–64.3 for, one lineup).
+  // With several banker Ks, the first one's slot carries it (liveResolve rule).
+  const bankerSlot = (side: 'you' | 'their'): ResolvedSlot | undefined =>
+    windows.flatMap((w) => w.slots).find((s) => {
+      const p = side === 'you' ? s.you : s.their;
+      return p?.player.pos === 'K' && p.metricId === 'banker';
+    });
+  const youBankerBonus = youBankerXp * youTds, theirBankerBonus = theirBankerXp * theirTds;
+  if (youBankerBonus > 0) { const sl = bankerSlot('you'); if (sl) sl.youFinal = Math.round((sl.youFinal + youBankerBonus) * 10) / 10; }
+  if (theirBankerBonus > 0) { const sl = bankerSlot('their'); if (sl) sl.theirFinal = Math.round((sl.theirFinal + theirBankerBonus) * 10) / 10; }
+
   // WINDOW BATTLE: settle each window's head-to-head on its final slot scores.
   // The winner banks a flat bonus and the window MVP is tagged (coin only). Done
-  // after backups + suppress so the tested per-slot scores are final.
+  // after backups + suppress (and the banker credit) so the tested per-slot
+  // scores are final.
   let youWindowsWon = 0, theirWindowsWon = 0, youWindowBonus = 0, theirWindowBonus = 0;
   for (const w of windows) {
     const b = computeWindowBattle(w);
@@ -691,11 +710,6 @@ export function buildMatchup(
   // Window-battle bonuses layer on top of the raw slot totals (both sides).
   youFinal += youWindowBonus;
   theirFinal += theirWindowBonus;
-
-  // K banker (XP BONUS): +1 per banker XP to each of your TDs that was scored
-  // under a TD-counting metric (yardage metrics don't qualify).
-  youFinal += youBankerXp * youTds;
-  theirFinal += theirBankerXp * theirTds;
 
   // Armed pre-match team buffs: flat payouts when their condition hits among
   // your starting spots. Each scans your filled slots for a triggering player.

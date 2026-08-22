@@ -15,6 +15,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
+import { srvBoardTotals } from '@drip/core/engine/liveScore';
 import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById, POWERUPS, isAmplifier, ampCapacity } from '@drip/core/data/powerups';
@@ -421,11 +422,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     );
   };
 
-  const totals = useMemo(() => {
-    const home = scores.reduce((n, s) => n + Number(s.home_score), 0);
-    const away = scores.reduce((n, s) => n + Number(s.away_score), 0);
-    return { you: youAreHome ? home : away, them: youAreHome ? away : home };
-  }, [scores, youAreHome]);
+  // The shared headline rule (engine/liveScore): the sum of the resolver's
+  // per-window rows read as you/them — the same function the web board uses,
+  // so the two hosts round and sum the SAME way (v0.339.6; was a hand-rolled
+  // reduce). Null only when nothing is published yet, hence the 0/0 fallback
+  // this screen has always shown pre-kick.
+  const totals = useMemo(() => srvBoardTotals(scores, youAreHome) ?? { you: 0, them: 0 }, [scores, youAreHome]);
 
   useEffect(() => {
     const id = setInterval(() => setNowTs(Date.now()), 30_000);

@@ -10,6 +10,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowKickoffMs } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
+import { srvSlotRow } from '@drip/core/engine/liveScore';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById, isMetricSet } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -133,9 +134,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
     return true;
   };
 
+  // The shared matching rule (engine/liveScore): roster slot first, slug as
+  // the fallback — the SAME precedence the web's card lookup decodes, so the
+  // two hosts can never pin different rows to the same card. This used to be
+  // a hand-rolled find with either-key matching in array order (v0.339.6).
   const rowOf = (p: RevealedPick, side: 'home' | 'away') =>
-    scores.find((x) => x.game_window === p.game_window)?.slot_scores
-      ?.find((r) => r.side === side && (r.slot === p.roster_slot || (!!p.player_slug && r.slug === p.player_slug)));
+    srvSlotRow(scores.find((x) => x.game_window === p.game_window)?.slot_scores, side, p.roster_slot, p.player_slug);
 
   /** True once the window's first game has kicked — from then on the opponent's
    *  picks are face-up by rule, so an empty half is a FACT (nobody fielded),
