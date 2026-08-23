@@ -28,7 +28,7 @@
 // the source can't separate stay in the order the league already agreed on.
 
 import { ADP_2026 } from './adp2026';
-import { dynFor } from './dyn2026';
+import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
 
@@ -46,7 +46,7 @@ export const POOL_SORTS: { id: PoolSort; label: string; hint: string }[] = [
   { id: 'dyn', label: 'DYN', hint: 'dynasty trade value — long-horizon worth, highest first' },
 ];
 
-export { dynFor };
+export { dynFor, setDynFormat };
 
 // THE LIVE MARKET OVERLAY (v0.306.1, founder: "let's do 1" — the live ESPN
 // feed over the baked consensus). Same shape as every other per-league engine

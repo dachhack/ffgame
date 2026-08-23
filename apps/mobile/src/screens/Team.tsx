@@ -22,8 +22,8 @@ import {
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
+import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -342,7 +342,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // years_exp by slug — the tenure filter's data. A failed read leaves the
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
     keeperState(leagueId).then((k) => {
       if (!k.ok) return;
       setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0));

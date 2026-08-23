@@ -22,12 +22,12 @@ import {
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -160,6 +160,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     leagueGameMode(leagueId).then((g) => {
       if (!alive || !g.ok) return;
       setGm(g);
+      // Which dynasty market this league reads (v0.351.1): superflex lineups
+      // price QBs on a different curve, and the value column should say what
+      // THIS room pays, not what some other format would.
+      setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb');
       // The league's own catalog on the projection side (v0.310.0). Set here
       // rather than at each read: every pool on this screen sorts and displays
       // through `projFor`, which reads this module global, so a screen that
