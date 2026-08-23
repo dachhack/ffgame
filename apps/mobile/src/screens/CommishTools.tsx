@@ -44,6 +44,7 @@ import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
+import { LabelInfo } from '../ui/InfoChip';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
@@ -875,7 +876,8 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>💰 FAAB WALLETS</Mono>
+      <LabelInfo label="💰 FAAB WALLETS"
+        info={'Grants are additive — a claw-back is a negative, and a balance never drops below $0 (the claim resolver assumes a bid can always be paid).\n\nChanging the waiver mode or the season budget resets every balance to the default.\n\nFAAB buys players; it is NOT drip coin, which buys power-ups. The two never trade against each other.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!w ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
         : !w.ok ? <Mono size={10} tone="opp" style={{ marginTop: 8 }}>{friendlyError(w.error ?? 'could not load wallets')}</Mono> : (
@@ -923,9 +925,6 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
                 </Pressable>
               ))}
             </View>
-            <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-              Grants are additive — a claw-back is a negative, and a balance never drops below $0 (the claim resolver assumes a bid can always be paid). Changing the waiver mode or the season budget resets every balance to the default. FAAB buys players; it is NOT drip coin, which buys power-ups.
-            </Mono>
           </>
         )}
       <GrantSheet visible={!!target} busy={busy} unit="FAAB" grantLabel="GRANT" dockLabel="CLAW BACK"
@@ -1005,7 +1004,8 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
   const deals = st?.deals ?? [];
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>📜 CONTRACTS & SALARY CAP</Mono>
+      <LabelInfo label="📜 CONTRACTS & SALARY CAP"
+        info={'With the cap on, every acquisition signs a contract:\n\n· an auction win signs at its exact winning bid\n· a waiver win signs at its FAAB bid\n· a free-agent add signs at the $1 minimum\n· startup picks sign at the rookie scale ($12/$6/$3/$1 by round; rookie drafts deal 3-year scale contracts)\n\nManagers pick each deal\'s length while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused whole.\n\nMulti-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched in RFA.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!st ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono> : (
         <>
@@ -1031,7 +1031,8 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
           {/* ── THE RULEBOOK (0219/0220): every salary option in one place ── */}
           {on && (
             <View style={{ marginTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
-              <Mono size={9} tone="faint" weight="700" track={0.12}>SALARY RULES</Mono>
+              <LabelInfo label="SALARY RULES"
+                info={'DEAD MONEY % — cut a multi-year deal and this share of it stays on your books for the deal\'s remaining life. 0 turns the penalty off.\n\nTAG RAISE % — the franchise tag (one per team, offseason) re-signs an expiring deal for one year at whichever is higher: the top-5 positional market average, or last salary plus this raise.\n\nEXT. DISCOUNT % — offseason extensions re-sign expiring deals for 1–3 years at this share of the league\'s own market value.\n\n⇄ RETENTION — a trader may keep eating part of a traded salary ($1 up to salary−1); the ghost stays on their cap for the deal\'s life.\n\n💵 CAP TRADING — raw cap dollars move in trades like a pick. Many leagues ban this; it defaults off.\n\n🏥 IR RELIEF — an IR\'d player\'s salary comes off the books until he\'s activated.\n\n🪧 RFA — owners may tender expiring players to the market: rivals bid salary and years, and the owner matches or lets him walk with the re-priced deal.'} />
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
                 {([['DEAD MONEY %', deadDraft, setDeadDraft, 'cut a multi-year deal, eat this % of it'],
                    ['TAG RAISE %', tagDraft, setTagDraft, 'franchise tag floor over last salary'],
@@ -1051,9 +1052,6 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
                 <Chip label="🏥 IR RELIEF" on={irRelief} onPress={() => { tap(); setIrRelief((v) => !v); }} />
                 <Chip label="🪧 RFA" on={rfa} onPress={() => { tap(); setRfa((v) => !v); }} />
               </View>
-              <Mono size={8} tone="faint" style={{ marginTop: 6, lineHeight: fs(12) }}>
-                Retention lets a trader keep eating part of a traded salary. Cap trading moves raw cap dollars in trades (many leagues ban it — off by default). IR relief takes an IR'd player's salary off the books. RFA lets owners tender expiring players for match-or-walk offers in the offseason.
-              </Mono>
               <View style={{ marginTop: 8 }}>
                 <PrimaryButton label={busy ? '…' : '✓ SAVE SALARY RULES'} disabled={busy} onPress={() => void saveRules()} />
               </View>
@@ -1078,9 +1076,6 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
               })}
             </View>
           )}
-          <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(13) }}>
-            With the cap on, an auction win signs at its bid, a waiver win at its FAAB bid, and a free-agent add at the $1 minimum. Managers pick each deal’s length (1–{yearsDraft}yr) while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused. Extensions, franchise tags and dead money arrive with the offseason pack.
-          </Mono>
         </>
       )}
     </Card>
@@ -1124,7 +1119,8 @@ function FormatCard({ leagueId }: { leagueId: string }) {
   if (fmt == null) return <Card><Mono size={10} tone="faint">Loading…</Mono></Card>;
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>🎭 LEAGUE FORMAT</Mono>
+      <LabelInfo label="🎭 LEAGUE FORMAT"
+        info={'How the season is WON.\n\nHEAD-TO-HEAD — the standard game: weekly matchups, standings, playoffs.\n\n🔪 GUILLOTINE — each week the lowest-scoring surviving team is eliminated and its whole roster is released to a FAAB frenzy; the last team standing wins. Pick it BEFORE the draft (it changes how the season scores); it presets FAAB waivers with a $1000 budget. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one seat lives off wins alone: no waivers or free agents, but when it wins a matchup it steals a player from the loser\'s active roster, giving one of its own back.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <Chip label="HEAD-TO-HEAD" on={fmt === 'standard'} disabled={busy}
@@ -1134,12 +1130,10 @@ function FormatCard({ leagueId }: { leagueId: string }) {
         <Chip label="🧛 VAMPIRE" on={fmt === 'vampire'} disabled={busy}
           onPress={() => void act(() => setLeagueFormat(leagueId, 'vampire'), '✓ vampire — now appoint the seat below')} />
       </View>
-      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
-        Guillotine: each week the lowest-scoring team is eliminated and its roster hits the FAAB frenzy — pick it BEFORE the draft. Vampire: one seat lives off wins alone, stealing a player from each beaten opponent.
-      </Mono>
       {fmt === 'vampire' && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
-          <Mono size={9} tone="faint" weight="700" track={0.12}>THE VAMPIRE'S SEAT</Mono>
+          <LabelInfo label="THE VAMPIRE'S SEAT"
+            info={'Pick which team is the Vampire. That seat can\'t sign free agents or claim waivers — its whole game is winning matchups and stealing.\n\nSTEAL APPROVAL is your hand on it: with approval on, each declared steal parks as PENDING and you approve or veto it from the 🧛 card in the Standings sheet. Either ruling prints in the league register.'} />
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
             {seats.map((m) => (
               <Chip key={m.roster_id} label={m.team ?? `Team ${m.roster_id}`} on={vamp?.seat === m.roster_id} disabled={busy}
@@ -1151,9 +1145,6 @@ function FormatCard({ leagueId }: { leagueId: string }) {
               disabled={busy || vamp?.seat == null}
               onPress={() => { if (vamp?.seat != null) void act(() => setVampire(leagueId, vamp.seat!, !vamp.steal_review), vamp.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling'); }} />
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
-            With approval on, each steal parks as PENDING — you approve or veto it from the 🧛 card in the Standings sheet, and the ruling prints in the league register.
-          </Mono>
         </View>
       )}
     </Card>
@@ -1673,7 +1664,8 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
 
   return (
     <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
-      <Mono size={8.5} tone="faint" weight="700" track={0.12}>NEXT SEASON · CONTINUITY</Mono>
+      <LabelInfo label="NEXT SEASON · CONTINUITY"
+        info={'What carries into next season:\n\nREDRAFT — every season starts fresh. Full draft, nothing carries over.\n\n★ KEEPER — each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen; undeclared seats keep their best-ranked.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year. Every team\'s picks for the NEXT THREE SEASONS are dealt as tradeable assets — see them in 🔁 NEXT SEASON.\n\n📜 CONTRACT — a salary-cap league: auction bids become salaries and the cap turns on at the auction budget. Tune it under MONEY → 📜 SALARY.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign 3-year scale deals, plus the rookie rounds and the pick horizon.\n\nSwitching to a plain type turns contracts off — the selector owns contract-ness.'} />
       <View style={{ flexDirection: 'row', gap: 5, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
         <Chip on={cmode === 'redraft'} label="REDRAFT" disabled={busy || rolled} onPress={() => pick('redraft')} />
         <Chip on={cmode === 'keeper'} label="★ KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
@@ -1693,19 +1685,12 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
           <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.dim }}>SAVE</Text>
         </Pressable>
       </View>
-      <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-        {rolled
-          ? 'This season already rolled over — continuity is set on the new league.'
-          : cmode === 'redraft'
-            ? 'Every season starts fresh — a full draft, nothing carries over.'
-            : cmode === 'keeper'
-              ? 'Each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen.'
-              : cmode === 'contract'
-                ? 'A salary-cap league: auction bids become salaries and the cap turns on at the auction budget — tune it under MONEY → 📜 CONTRACTS & CAP. Switching to a plain type turns contracts off.'
-                : cmode === 'contract_dynasty'
-                  ? 'Contracts AND dynasty: bids become salaries and the cap turns on, plus rookie rounds each season (rookies sign 3-year scale deals) and the three-season pick horizon.'
-                  : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
-      </Mono>
+      {/* only STATE prints inline now — the five-way explainer lives in the ⓘ */}
+      {rolled && (
+        <Mono size={8} tone="faint" style={{ marginTop: 5 }}>
+          This season already rolled over — continuity is set on the new league.
+        </Mono>
+      )}
       {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
     </View>
   );
@@ -1984,10 +1969,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       {view === 'mode' && (<>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Mono size={9.5} weight="700" track={0.12} tone="faint">🎮 GAME MODE</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
-            DRIP is the full game. CLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.
-          </Mono>
+          <LabelInfo label="🎮 GAME MODE"
+            info={'DRIP is the full game: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.\n\nCLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups.\n\nThe mode locks once the draft starts: it decides what the league drafts FOR, so it can\'t be a decide-later.'} />
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <Pill on={mode === 'drip'} label="DRIP" onPress={() => void set('drip')} />
@@ -2006,10 +1989,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Mono size={9.5} weight="700" track={0.12} tone="faint">⛳ GOLF MODE</Mono>
-              <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
-                The LOWEST weekly total wins — standings, tiebreaks and playoffs all read the other way. Scoring itself is untouched. Pairs with the ⛳ zero-fill on each starting spot. Locks at the draft.
-              </Mono>
+              <LabelInfo label="⛳ GOLF MODE"
+                info={'The LOWEST weekly total wins — standings, tiebreaks and playoffs all read the other way.\n\nScoring itself is untouched: a touchdown is still worth what the catalog says. Golf changes which end of the leaderboard you aim at, and pairs with the ⛳ zero-fill on each starting spot (an empty spot scores 0, which in golf is perfect).\n\nLocks at the draft — you draft a golf league inside out.'} />
             </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <Pill on={golf === false} label="HIGH" onPress={() => void saveGolf(false)} />
@@ -2026,11 +2007,13 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           it points at the web console rather than pretending to fit. */}
       {kdst && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
-          <Mono size={8.5} tone="faint" weight="700" track={0.12}>K / D-ST FILL</Mono>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(12) }}>
+          <LabelInfo label="K / D-ST FILL"
+            info={'When a league doesn\'t roster kickers or defenses, filling them keeps the Banker / Suppress metrics playable.\n\nRANDOM WEEKLY deals every team a not-on-bye K and D-ST each week. MANUAL lets each team be assigned specific ones (the per-team picker is on the web console). Changes take effect on the next sync.'} />
+          {/* the STATUS stays inline — state is not explanation */}
+          <Mono size={8.5} tone={kdst.needs_k || kdst.needs_def ? 'dim' : 'faint'} style={{ marginTop: 4 }}>
             {kdst.needs_k || kdst.needs_def
-              ? `This league doesn't roster ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} — fill them so the Banker / Suppress metrics are playable. Takes effect on the next sync.`
-              : 'This league rosters both K and DEF — no fill needed.'}
+              ? `no ${[kdst.needs_k && 'kickers', kdst.needs_def && 'defenses'].filter(Boolean).join(' or ')} rostered here`
+              : 'this league rosters both K and DEF — no fill needed'}
           </Mono>
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
             {(['off', 'random', 'manual'] as KdstMode[]).map((m) => (

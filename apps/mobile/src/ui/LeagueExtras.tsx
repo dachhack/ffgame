@@ -15,6 +15,7 @@ import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PosPill, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
+import { LabelInfo } from './InfoChip';
 
 // ── Standings: wins, points, differential ────────────────────────────────────
 type StandSort = 'record' | 'pf' | 'diff';
@@ -154,7 +155,8 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
   const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>📜 CAP SHEET</Mono>
+      <LabelInfo label="📜 CAP SHEET"
+        info={'How deals are born: auction wins sign at the exact bid, waiver wins at their FAAB bid, free agents at the $1 minimum, startup picks at the rookie scale. A move that would land a team over the cap is refused whole.\n\nWhile the draft room is open, tap your own deals to set each length; after it closes only the commissioner can change one (rookie-scale lengths are always fixed).\n\n"$X ghost" is salary a team retained on a player it traded away. Red lines are dead money from cuts, charged for the deal\'s remaining life. "mkt $N" is the league\'s own market price — the top-5 positional salary average.\n\nIn the OFFSEASON your expiring deals grow 🏷 TAG (one per team, at the market or a raise), ⤴ EXTEND (1–3yr at a discount of market), and 🪧 TENDER (RFA: rivals bid, you match or let him walk). Multi-year deals carry into next season at a year less; expiring deals walk unless kept one of those ways.'} />
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
         ${st.salary_cap} cap · deals up to {st.years_max}yr · {deals.length} signed
         {offseason ? ' · OFFSEASON — tags, extensions & RFA are live' : ''}
@@ -309,12 +311,12 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
           })}
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-        Auction wins sign at the bid, waiver wins at the FAAB bid, free agents at the $1 minimum. A move that would land a team over the cap is refused.
-        {canAssign ? ' The draft room is open — set each of your deals’ lengths above before it closes.' : ''}
-        {rules ? ` Cuts on multi-year deals leave ${rules.dead_pct}% dead money for the deal's remaining life.` : ''}
-        {offseason ? ' Multi-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched.' : ''}
-      </Mono>
+      {/* only live STATE prints here — the rules live in the ⓘ */}
+      {canAssign && (
+        <Mono size={8.5} tone="dim" style={{ marginTop: 8 }}>
+          The draft room is open — set each of your deals’ lengths above before it closes.
+        </Mono>
+      )}
     </Card>
   );
 }
@@ -339,7 +341,8 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
   const frenzy = st.frenzy ?? [];
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>🔪 THE CUTLINE</Mono>
+      <LabelInfo label="🔪 THE CUTLINE"
+        info={'Guillotine rules: each week, the lowest-scoring team still alive is ELIMINATED — its whole roster is released to waivers (the frenzy), where the big FAAB budget decides who lands the spoils.\n\nThere are no head-to-head stakes; the only standing that matters is staying off the floor. A tie at the bottom dies by the weaker season. The last team standing wins.\n\nEliminated teams keep their seat at the table — chat, the pots — but can never add a player again.'} />
       {st.champion != null ? (
         <Mono size={11} weight="700" tone="you" style={{ marginTop: 6 }}>
           🏆 {alive[0]?.team ?? `Roster ${st.champion}`} — the last one standing
@@ -421,7 +424,8 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
   const pending = (st.steals ?? []).filter((s) => s.status === 'pending');
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>🧛 THE VAMPIRE</Mono>
+      <LabelInfo label="🧛 THE VAMPIRE"
+        info={'Vampire rules: one seat lives off wins alone. The vampire can\'t sign free agents or claim waivers — but when it WINS a matchup, it steals one player from the beaten team\'s active roster, giving one of its own back.\n\nOne steal per win, and only while the win is fresh (the latest completed week). When the commissioner has steal approval on, each steal parks as PENDING until they rule.\n\nEvery bite prints in the league register.'} />
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
         {st.seat == null ? 'No vampire appointed yet — the commissioner picks the seat in ⚑ COMMISH.'
           : `Seat ${st.seat} feeds on wins${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
