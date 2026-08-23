@@ -41,7 +41,7 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
-import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, type TabDef, type NavGroup } from './adminUi';
+import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -3350,7 +3350,8 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
-        <div style={subhead}>SALARY CAP</div>
+        <LabelInfo label="SALARY CAP" style={{ marginBottom: 7 }}
+          info={'With the cap on, every acquisition signs a contract: an auction win at its exact bid, a waiver win at its FAAB bid, a free-agent add at the $1 minimum, startup picks at the rookie scale ($12/$6/$3/$1 by round \u2014 rookie drafts deal 3-year scale contracts).\n\nManagers pick each deal\u2019s length while the draft room is open; after that only the commissioner can change one. A move that would land a team over its cap is refused whole.\n\nWhile an auction room is open the cap must cover the auction budget; once the draft completes it can be tightened. MAX LENGTH bounds every deal (default 4yr).'} />
         <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', marginBottom: 8 }}>
           {on ? `ON \u2014 $${st.salary_cap} cap \u00b7 deals up to ${st.years_max}yr \u00b7 ${(st.deals ?? []).length} signed`
               : 'OFF \u2014 this league plays without contracts. Set a cap to turn them on (or pick a \ud83d\udcdc CONTRACT league type in \ud83c\udfae MODE & SEASON, which presets everything).'}
@@ -3366,7 +3367,7 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
                 color: years === y ? 'var(--on-accent)' : 'var(--dim)', background: years === y ? 'var(--you)' : 'var(--bg)',
                 border: `1px solid ${years === y ? 'var(--you)' : 'var(--bd)'}` }}>{y}YR</button>
           ))}
-          <button onClick={saveCap} disabled={busy || !parseInt(cap, 10)} className="mono" style={{ ...btn, fontSize: 11.5 }}>
+          <button onClick={saveCap} disabled={busy || !parseInt(cap, 10)} className="mono" style={{ ...btn(true), fontSize: 11.5 }}>
             {on ? 'update' : 'turn contracts on'}
           </button>
           {on && <button onClick={() => void act(() => setContractRules(leagueId, null), '\u2713 contracts off')} disabled={busy}
@@ -3375,11 +3376,17 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
       </div>
       {on && (
         <div>
-          <div style={subhead}>SALARY RULES</div>
+          <LabelInfo label="SALARY RULES" style={{ marginBottom: 7 }}
+            info={'The optional mechanics, each behind its own switch. Every one of these prints in the league register when it happens.'} />
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-            {([['DEAD MONEY %', dead, setDead], ['TAG RAISE %', tagPct, setTagPct], ['EXT. DISCOUNT %', extPct, setExtPct]] as const).map(([lbl, v, set]) => (
+            {([
+              ['DEAD MONEY %', dead, setDead, 'Cut a player on a multi-year deal and this share of your part of his salary stays on your books for the deal\u2019s remaining life \u2014 the roster-paralysis risk that makes long deals a real bet. Expiring (1-year) deals cut free. 0 turns the penalty off.'],
+              ['TAG RAISE %', tagPct, setTagPct, 'The franchise tag: one per team per offseason, re-signing an EXPIRING deal for one more year at whichever is higher \u2014 the league\u2019s top-5 positional salary average, or last salary plus this raise.'],
+              ['EXT. DISCOUNT %', extPct, setExtPct, 'Offseason extensions re-sign an expiring deal for 1\u20133 years at this share of the league\u2019s own market value (the top-5 positional salary average). The loyalty discount \u2014 cheaper than fighting the market for him.'],
+            ] as const).map(([lbl, v, set, info]) => (
               <span key={lbl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>{lbl}</span>
+                <InfoChip title={lbl} info={info} />
                 <input value={v} inputMode="numeric" maxLength={3} onChange={(e) => set(e.target.value.replace(/\D/g, ''))}
                   style={{ ...inp, width: 52, textAlign: 'center' }} disabled={busy} />
               </span>
@@ -3387,19 +3394,21 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             {toggleBtn('\u21c4 RETENTION', retention, setRetention)}
+            <InfoChip title={'\u21c4 RETENTION'} info={'In a trade, the sender may keep eating part of a traded salary ($1 up to salary\u22121). The receiver pays the net; the retained \u201cghost\u201d stays on the sender\u2019s cap for the deal\u2019s life \u2014 and hardens into dead money if the deal is later cut. This is what makes salary dumps and contender discounts work.'} />
             {toggleBtn('\ud83d\udcb5 CAP TRADING', capTrading, setCapTrading)}
+            <InfoChip title={'\ud83d\udcb5 CAP TRADING'} info={'Raw cap dollars move in trades like a draft pick \u2014 \u201cI\u2019ll take your bad contract for $15 of your cap.\u201d Plenty of leagues ban cash trading, so it defaults OFF.'} />
             {toggleBtn('\ud83c\udfe5 IR RELIEF', irRelief, setIrRelief)}
+            <InfoChip title={'\ud83c\udfe5 IR RELIEF'} info={'A player parked on IR comes off his team\u2019s books until he\u2019s activated \u2014 temporary cap space to sign a replacement, the way the real league does it.'} />
             {toggleBtn('\ud83e\udea7 RFA', rfa, setRfa)}
-            <button onClick={saveRules} disabled={busy} className="mono" style={{ ...btn, fontSize: 11.5 }}>save rules</button>
-          </div>
-          <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginTop: 8, lineHeight: 1.6 }}>
-            Dead money: cut a multi-year deal, eat this % for its remaining life. Retention: a trader keeps eating part of a traded salary. Cap trading: raw cap dollars move in trades (off by default). IR relief: an IR\u2019d salary comes off the books. RFA: offseason tenders with match-or-walk. Tags re-sign one expiring deal per team at max(top-5 positional market, salary + raise%); extensions re-sign at the discount % of market.
+            <InfoChip title={'\ud83e\udea7 RFA'} info={'Restricted free agency, in the offseason: an owner TENDERS an expiring player to the market, rivals bid salary and years (their cap is checked at bid time), and the owner MATCHES the best offer to keep him at that price \u2014 or lets him walk with the re-priced deal. Unresolved tenders lapse at rollover.'} />
+            <button onClick={saveRules} disabled={busy} className="mono" style={{ ...btn(true), fontSize: 11.5 }}>save rules</button>
           </div>
         </div>
       )}
       {on && (st.payrolls ?? []).length > 0 && (
         <div>
-          <div style={subhead}>PAYROLLS</div>
+          <LabelInfo label="PAYROLLS" style={{ marginBottom: 7 }}
+            info={'Each team\u2019s committed salary against its own cap: deals held (minus salary retained by former teams, minus IR\u2019d salary when relief is on) + retained ghosts + dead money. \u201ccap +$N by trade\u201d marks room moved through cap trading. Over-cap teams show red \u2014 they can\u2019t add anyone until they\u2019re back under.'} />
           {(st.payrolls ?? []).map((p) => {
             const teamCap = p.cap ?? st.salary_cap ?? 0;
             const room = teamCap - p.payroll;
