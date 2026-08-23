@@ -270,7 +270,7 @@ begin
     'commissioner only', 'pk14 member refused');
   perform probe_as('f');
   perform assert_err(set_league_continuity((select id from league where name = 'Dyn Check'), 'bestball', 2),
-    'redraft, keeper or dynasty', 'pk14a unknown mode');
+    'redraft, keeper, dynasty, contract or contract_dynasty', 'pk14a unknown mode');
   r := set_league_continuity((select id from league where name = 'Dyn Check'), 'keeper', 4);
   perform assert_ok(r, 'pk14b dynasty → keeper');
   perform assert_true((select count(*) from pick_asset

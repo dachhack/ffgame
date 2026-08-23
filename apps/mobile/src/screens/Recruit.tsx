@@ -17,7 +17,7 @@ import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share,
 import { crestInitial } from '@drip/core/data/crest';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
-  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity,
+  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
@@ -86,6 +86,17 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
+  // Contract types (0218) preset the room: bids become salaries, so the
+  // startup can only be an auction — picking one forces the mode.
+  const contractType = continuity === 'contract' || continuity === 'contract_dynasty';
+  const pickContinuity = (c: LeagueContinuity) => {
+    setContinuity(c);
+    if (c === 'contract' || c === 'contract_dynasty') setDraftMode('auction');
+  };
+  const contLabel = continuity === 'contract_dynasty' ? '📜 CONTRACT DYNASTY '
+    : continuity === 'contract' ? '📜 CONTRACT '
+    : continuity === 'dynasty' ? '🏰 DYNASTY '
+    : continuity === 'keeper' ? '★ KEEPER ' : '';
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
@@ -209,7 +220,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
     if (!nm || busy || !game) return;
     // The busy note NAMES the game — the last chance to notice a wrong tap
     // before it freezes at the draft.
-    setBusy(true); setErr(null); setMakeNote(`Creating your ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       // Same defaults the web derives from the game type (v0.221.0): drip
@@ -218,7 +229,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       const rounds = game === 'classic' ? 15 : 12;
       const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
-        continuity, continuity === 'keeper' ? keepN : continuity === 'dynasty' ? rookieN : null);
+        continuity, continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
@@ -229,7 +240,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       commit();
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
-      setJoined(`${nm}, a ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
+      setJoined(`${nm}, a ${contLabel}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
       setMakeOpen(false); setNameDraft('');
       // Into the new league, on its roster settings. The `finally` below still
       // reloads the list behind this screen for the way back.
@@ -318,11 +329,13 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                     any time in 🎮 MODE. */}
                 <Mono size={8.5} tone="faint" track={0.1} style={{ marginTop: 10 }}>NEXT SEASON</Mono>
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); setContinuity('redraft'); }} />
-                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); setContinuity('keeper'); }} />
-                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); setContinuity('dynasty'); }} />
+                  <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
+                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
+                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
+                  <Chip label="📜 CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
+                  <Chip label="📜🏰 CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
                 </View>
-                {continuity !== 'redraft' && (
+                {(continuity === 'keeper' || isDynastyContinuity(continuity)) && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                     <Mono size={9} tone="dim">{continuity === 'keeper' ? 'each team keeps' : 'rookie draft runs'}</Mono>
                     <Pressable hitSlop={6} onPress={() => { tap(); (continuity === 'keeper' ? setKeepN : setRookieN)((v) => Math.max(1, v - 1)); }}>
@@ -342,7 +355,11 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                     ? 'Every season starts fresh — full draft, nothing carries over.'
                     : continuity === 'keeper'
                       ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
-                      : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
+                      : continuity === 'contract'
+                        ? 'A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary — you assign deal lengths during the draft, and the cap holds all season.'
+                        : continuity === 'contract_dynasty'
+                          ? `Contracts AND dynasty: bids become salaries, plus a ${rookieN}-round rookie draft each season (rookies sign 3-year scale deals) and three seasons of tradeable picks from day one.`
+                          : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
                 </Mono>
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
@@ -358,8 +375,9 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                   <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                 </Pressable>
                 <View style={{ flex: 1 }} />
-                <Chip label="SNAKE" on={draftMode === 'snake'} onPress={() => { tap(); setDraftMode('snake'); }} />
-                <Chip label="AUCTION" on={draftMode === 'auction'} onPress={() => { tap(); setDraftMode('auction'); }} />
+                {/* a contract type already decided the room — auction only */}
+                {!contractType && <Chip label="SNAKE" on={draftMode === 'snake'} onPress={() => { tap(); setDraftMode('snake'); }} />}
+                <Chip label="AUCTION" on={draftMode === 'auction'} onPress={() => { if (!contractType) { tap(); setDraftMode('auction'); } }} />
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Mono size={8.5} tone="faint" track={0.1}>PACE</Mono>

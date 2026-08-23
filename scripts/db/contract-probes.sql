@@ -190,4 +190,46 @@ begin
     'ct9j round 2 signs at $6 — the scale follows the round');
 end $$;
 
+-- ── 10. contract LEAGUE TYPES (0218): the selection presets the rest ─────────
+do $$
+declare lid uuid; r jsonb;
+begin
+  perform probe_as('a');
+  -- 'contract': mode is FORCED to auction (snake requested, auction dealt),
+  -- cap lands at the auction budget, axis reads back
+  r := create_native_league('Deal Flow', '2026', 2, 5, 60, 'snake', 25, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct10a create with continuity=contract');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((r ->> 'contracts')::boolean and not (r ->> 'dynasty')::boolean, 'ct10b says contracts on, not dynasty');
+  perform assert_true((select mode from draft where league_id = lid) = 'auction',
+    'ct10c THE PRESET: snake was asked for, the contract type dealt an auction');
+  perform assert_true(contracts_on(lid) and league_salary_cap(lid) = 25 and contract_years_max(lid) = 4,
+    'ct10d cap on at the auction budget, 4-year max');
+  perform assert_true(league_continuity(lid) = 'contract' and not league_is_dynasty(lid), 'ct10e axis reads contract');
+  perform assert_true(not coalesce((league_contracts(lid) ->> 'locked')::boolean, true),
+    'ct10f cap sheet: lengths not locked while the room is open');
+  -- switching to a plain mode turns contracts OFF — the axis owns contract-ness
+  perform assert_ok(set_league_continuity(lid, 'redraft'), 'ct10g switch to plain redraft');
+  perform assert_true(not contracts_on(lid) and league_continuity(lid) = 'redraft', 'ct10h contracts off with it');
+  -- and back on through the axis
+  perform assert_ok(set_league_continuity(lid, 'contract'), 'ct10i back to contract');
+  perform assert_true(contracts_on(lid) and league_salary_cap(lid) = 25, 'ct10j cap re-lands at the budget');
+
+  -- 'contract_dynasty': the dynasty machinery AND the cap
+  r := create_native_league('Deal Horizon', '2026', 2, 6, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract_dynasty', 2);
+  perform assert_ok(r, 'ct10k create with continuity=contract_dynasty');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((r ->> 'contracts')::boolean and (r ->> 'dynasty')::boolean, 'ct10l both flags fly');
+  perform assert_true((select mode from draft where league_id = lid) = 'auction', 'ct10m auction preset here too');
+  perform assert_true(contracts_on(lid) and league_salary_cap(lid) = 30, 'ct10n cap at the budget');
+  perform assert_true(league_continuity(lid) = 'contract_dynasty' and league_is_dynasty(lid),
+    'ct10o contract_dynasty IS a dynasty to the machinery');
+  perform assert_true((select count(distinct season) from pick_asset where league_id = lid) = 3,
+    'ct10p the three-year pick horizon dealt');
+  perform assert_true((select (settings_json ->> 'rookie_rounds')::int from league where id = lid) = 2,
+    'ct10q rookie rounds stored');
+  perform assert_err(create_native_league('Bad Axis', '2026', 2, 5, 60, 'snake', 200, 15, 1, null, null, null, 'drip', 'contracts', null),
+    'continuity must be', 'ct10r a typo''d axis value refuses');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import {
   advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
-  leagueContracts,
+  leagueContracts, setContractYears,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -104,27 +104,44 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
 // ── Cap sheet (0217): every member's read of a contract league ───────────────
 // Renders NOTHING when the league plays without contracts, so it can mount
 // unconditionally next to Standings. Payroll + room per team; tap a team to
-// unfold its deals ($salary · years · how it was signed).
+// unfold its deals ($salary · years · how it was signed). While the draft room
+// is open, YOUR deals carry a length picker (0218) — the founder's "the winner
+// assigns the length", one tap per year. After the room closes the server
+// locks lengths (commissioner-only), so the picker folds away.
 export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const t = useTheme();
   const [st, setSt] = useState<LeagueContracts | null>(null);
   const [names, setNames] = useState<Record<string, LeaguePoolPlayer>>({});
   const [open, setOpen] = useState<number | null>(myRoster);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
-    leagueContracts(leagueId).then((r) => {
-      setSt(r);
-      if (r.contracts) {
-        leaguePool(leagueId)
-          .then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p]))))
-          .catch(() => {});
-      }
-    }).catch(() => setSt({ contracts: false }));
-  }, [leagueId]);
+  const load = () => leagueContracts(leagueId).then((r) => {
+    setSt(r);
+    if (r.contracts) {
+      leaguePool(leagueId)
+        .then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p]))))
+        .catch(() => {});
+    }
+  }).catch(() => setSt({ contracts: false }));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const setYears = async (slug: string, years: number) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContractYears(leagueId, slug, years);
+      if (r.ok) { commit(); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
 
   if (!st?.contracts) return null;
   const cap = st.salary_cap ?? 0;
   const deals = st.deals ?? [];
+  const yearsMax = st.years_max ?? 4;
+  const canAssign = !st.locked;
   const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <Card>
@@ -132,6 +149,7 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
         ${cap} cap · deals up to {st.years_max}yr · {deals.length} signed
       </Mono>
+      {!!note && <Mono size={9} tone="opp" style={{ marginTop: 4 }}>{note}</Mono>}
       <View style={{ marginTop: 8 }}>
         {(st.payrolls ?? []).map((p) => {
           const room = cap - p.payroll;
@@ -151,15 +169,30 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
                 </Mono>
                 <Mono size={9} tone="faint">{unfolded ? '▾' : '▸'}</Mono>
               </Pressable>
-              {unfolded && team.map((d) => (
-                <View key={d.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingLeft: 10 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>
-                    {names[d.slug]?.full_name ?? d.slug}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
-                  </Text>
-                  <Mono size={9} weight="700">${d.salary}·{d.years}yr</Mono>
-                  <Mono size={8} tone="faint" style={{ width: 74, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</Mono>
-                </View>
-              ))}
+              {unfolded && team.map((d) => {
+                // rookie-scale lengths are the scale's, never the manager's
+                const pickable = canAssign && mine && d.acquired !== 'rookie';
+                return (
+                  <View key={d.slug} style={{ paddingVertical: 3, paddingLeft: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>
+                        {names[d.slug]?.full_name ?? d.slug}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
+                      </Text>
+                      <Mono size={9} weight="700">${d.salary}·{d.years}yr</Mono>
+                      <Mono size={8} tone="faint" style={{ width: 74, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</Mono>
+                    </View>
+                    {pickable && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2 }}>
+                        <Mono size={8} tone="faint">LENGTH</Mono>
+                        {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
+                          <Chip key={y} label={`${y}YR`} on={d.years === y} disabled={busy}
+                            onPress={() => { tap(); void setYears(d.slug, y); }} />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
               {unfolded && team.length === 0 && (
                 <Mono size={8.5} tone="faint" style={{ paddingLeft: 10, paddingBottom: 5 }}>no deals on the books</Mono>
               )}
@@ -169,6 +202,7 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
       </View>
       <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         Auction wins sign at the bid, waiver wins at the FAAB bid, free agents at the $1 minimum. A move that would land a team over the cap is refused.
+        {canAssign ? ' The draft room is open — set each of your deals’ lengths above before it closes.' : ' Lengths are locked for the season; your commissioner can correct one.'}
       </Mono>
     </Card>
   );

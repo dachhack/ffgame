@@ -17,7 +17,7 @@ import {
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
-  keeperState, setKeepers, type KeeperState,
+  keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
@@ -85,7 +85,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
   // derived — roster − rookie rounds — so the count is nonzero and this card
   // used to draw, asking a manager to DECLARE what carries when the answer is
   // "all of it". Declaring is a KEEPER-league act.
-  if (!st || st.keeper_count === 0 || st.continuity === 'dynasty') return null;
+  if (!st || st.keeper_count === 0 || isDynastyContinuity(st.continuity)) return null;
 
   const rolled = !!st.rolled_league_id;
   const carried = st.teams.find((x) => x.roster_id === myRoster)?.keep ?? [];
@@ -343,7 +343,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
-    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(k.continuity === 'dynasty' ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
+    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the tap rather than on the next poll.

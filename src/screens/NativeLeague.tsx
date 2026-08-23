@@ -33,7 +33,7 @@ import {
   rosterRules, injuryTags,
   leagueMarket,
   keeperState, setKeepers, type KeeperState,
-  pickAssets, type PickAssetRow, type LeagueContinuity,
+  pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
@@ -140,6 +140,18 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [continuity, setContinuity] = useState<LeagueContinuity>('redraft');
   const [keepN, setKeepN] = useState(4);      // keeper: how many each team keeps
   const [rookieN, setRookieN] = useState(3);  // dynasty: rookie-draft rounds
+  // Contract types (0218) PRESET the room: picking one forces the auction —
+  // bids become salaries, so there is nothing else the draft could be.
+  const contractType = continuity === 'contract' || continuity === 'contract_dynasty';
+  const dynastyType = continuity === 'dynasty' || continuity === 'contract_dynasty';
+  const pickContinuity = (c: LeagueContinuity) => {
+    setContinuity(c);
+    if (c === 'contract' || c === 'contract_dynasty') setMode('auction');
+  };
+  const contLabel = continuity === 'contract_dynasty' ? '📜 CONTRACT DYNASTY '
+    : continuity === 'contract' ? '📜 CONTRACT '
+    : continuity === 'dynasty' ? '🏰 DYNASTY '
+    : continuity === 'keeper' ? '★ KEEPER ' : '';
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -203,10 +215,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // The busy note NAMES the game, so the moment of creation says what is
       // being created — the last chance to notice a wrong tap before it
       // freezes at the draft.
-      setNote(`Creating your ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+      setNote(`Creating your ${contLabel}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
         mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame,
-        continuity, continuity === 'keeper' ? keepN : continuity === 'dynasty' ? rookieN : null);
+        continuity, continuity === 'keeper' ? keepN : dynastyType ? rookieN : null);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
@@ -276,9 +288,11 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ height: 14 }} />
             <div className="mono" style={label}>NEXT SEASON</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
-              <Chip on={continuity === 'redraft'} onClick={() => setContinuity('redraft')}>REDRAFT</Chip>
-              <Chip on={continuity === 'keeper'} onClick={() => setContinuity('keeper')}>★ KEEPER</Chip>
-              <Chip on={continuity === 'dynasty'} onClick={() => setContinuity('dynasty')}>🏰 DYNASTY</Chip>
+              <Chip on={continuity === 'redraft'} onClick={() => pickContinuity('redraft')}>REDRAFT</Chip>
+              <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>★ KEEPER</Chip>
+              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>🏰 DYNASTY</Chip>
+              <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>📜 CONTRACT</Chip>
+              <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>📜🏰 CONTRACT DYNASTY</Chip>
             </div>
             {continuity === 'keeper' && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
@@ -287,7 +301,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>of {rounds} into next season</span>
               </div>
             )}
-            {continuity === 'dynasty' && (
+            {dynastyType && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>rookie draft runs</span>
                 {num(rookieN, setRookieN, 1, Math.min(5, rounds - 1), 1)}
@@ -299,7 +313,11 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                 ? 'Every season starts fresh — full draft, nothing carries over.'
                 : continuity === 'keeper'
                   ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
-                  : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
+                  : continuity === 'contract'
+                    ? 'A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary. You assign each deal’s length (1–4 years) during the draft; waivers sign at their FAAB bid, free agents at $1, and the cap holds all season.'
+                    : continuity === 'contract_dynasty'
+                      ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing 3-year scale deals — and three seasons of tradeable picks dealt from day one.`
+                      : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
             </div>
             <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
@@ -313,11 +331,20 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
             <div className="mono" style={label}>DRAFT TYPE</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-              <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
-              <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
-              <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
-            </div>
+            {/* A contract type already DECIDED this: bids become salaries, so
+                the room is an auction and the other chips would be a lie. */}
+            {contractType && kind === 'league' ? (
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+                <Chip on onClick={() => {}}>AUCTION</Chip>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>set by the contract league type</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+                <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
+                <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
+              </div>
+            )}
           </div>
           <div>
             <div className="mono" style={label}>PACE</div>
@@ -360,7 +387,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? '🤖 START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
-            : `CREATE ${continuity === 'dynasty' ? '🏰 DYNASTY ' : continuity === 'keeper' ? '★ KEEPER ' : ''}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
+            : `CREATE ${contLabel}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
@@ -1506,7 +1533,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
   // keeper_count is derived — roster − rookie rounds — so the count is nonzero
   // and this card used to draw, asking a manager to DECLARE what carries when
   // the answer is "all of it". Declaring is a KEEPER-league act.
-  if (!st || st.keeper_count === 0 || st.continuity === 'dynasty') return null;
+  if (!st || st.keeper_count === 0 || isDynastyContinuity(st.continuity)) return null;
 
   const rolled = !!st.rolled_league_id;
   const carried = st.teams.find((t) => t.roster_id === myRoster)?.keep ?? [];
@@ -1779,7 +1806,7 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
-    keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(k.continuity === 'dynasty' ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
+    keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the click rather than on the next poll.
