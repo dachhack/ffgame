@@ -87,7 +87,7 @@ function Chip({ on, children, onClick, title }: { on?: boolean; children: React.
 // ★ sort/filter over a player list, driven by the account's favorite stars
 // (0139 — the same stars the player card sets). 'first' floats starred players
 // to the top of whatever order the list already has; 'only' hides everyone
-// else. Distinct from the draft queue's ☆ (a per-draft ranked wishlist):
+// else. Distinct from the draft queue's Q (a per-draft ranked wishlist):
 // favorites follow the ACCOUNT across every league and both hosts.
 type StarMode = 'off' | 'first' | 'only';
 function starApply<T>(list: T[], mode: StarMode, favs: Set<string>, slugOf: (x: T) => string): T[] {
@@ -424,7 +424,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
           ADP: consensus {ADP_AS_OF} · projections: StatHead {PROJ_AS_OF} · 2025 line: real season totals
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {onQueue && <button onClick={onQueue} className="mono" style={{ ...ghostBtn, flex: 1 }}>{queued ? '★ QUEUED — REMOVE' : '☆ ADD TO QUEUE'}</button>}
+          {onQueue && <button onClick={onQueue} className="mono" style={{ ...ghostBtn, flex: 1 }}>{queued ? 'Q · QUEUED — REMOVE' : 'Q · ADD TO QUEUE'}</button>}
           {action && <button onClick={action.run} className="mono" style={{ ...btn, flex: 1 }}>{action.label}</button>}
         </div>
       </div>
@@ -1260,7 +1260,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabChip('players', `PLAYERS (${avail.length})`)}
         {tabChip('teams', 'TEAMS')}
-        {tabChip('queue', `☆ QUEUE (${queue.length})`)}
+        {tabChip('queue', `QUEUE (${queue.length})`)}
       </div>
 
       {/* PLAYERS — available list with ADP + projections */}
@@ -1326,8 +1326,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 38, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}
                     title="share of this platform's drafted leagues rostering him">{own ? `${own[p.slug] ?? 0}%` : '—'}</span>
+                  {/* Q, not a star (v0.345.2, founder): the row already carries a
+                      GOLD ★ for favorites, and a second star meaning "queued"
+                      made the two systems read as one. Q says which one this is. */}
                   <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: inQ ? 'var(--warn)' : 'var(--faint)', padding: '0 2px', flexShrink: 0 }}>{inQ ? '★' : '☆'}</button>
+                    style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, minWidth: 22, padding: '2px 5px', borderRadius: 4, flexShrink: 0, background: inQ ? 'var(--warn)' : 'none', border: `1px solid ${inQ ? 'var(--warn)' : 'var(--bd)'}`, color: inQ ? 'var(--on-accent)' : 'var(--faint)' }}>Q</button>
                 </div>
               );
             })}
@@ -1415,7 +1418,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               </Chip>
             )}
           </div>
-          {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap ☆ on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
+          {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap Q on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
