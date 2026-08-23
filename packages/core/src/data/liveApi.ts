@@ -1678,6 +1678,9 @@ export interface TradePick { season: string; round: number; orig: number; }
 export interface TradeRow {
   id: string; from_roster: number; to_roster: number; give: string[]; get: string[];
   give_picks?: TradePick[]; get_picks?: TradePick[];
+  /** Contract leagues (0219): retained-salary terms and traded cap dollars. */
+  retain?: { slug: string; amount: number; roster: number }[] | null;
+  cap_dollars?: number | null;
   status: 'pending' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'vetoed';
   note: string | null; created_at: string; resolved_at: string | null;
 }
@@ -1687,11 +1690,17 @@ export const proposeTrade = (
   leagueId: string, fromRoster: number, toRoster: number, give: string[], get: string[], note?: string,
   /** season omitted = next season; multi-year futures name theirs (0185). */
   givePicks?: { season?: string; round: number; orig: number }[], getPicks?: { season?: string; round: number; orig: number }[],
+  /** Contract leagues (0219): salary the current owner keeps eating on a
+   *  traded player ($1..salary−1), and raw cap dollars moved as an asset
+   *  (positive = the proposer sends cap room). */
+  retain?: { slug: string; amount: number }[], capDollars?: number,
 ) =>
   tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
     p_give: give, p_get: get, p_note: note ?? null,
     p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
+    p_retain: retain && retain.length > 0 ? retain : null,
+    p_cap_dollars: capDollars ?? null,
   }), Ev.tradeProposed, { players: give.length + get.length, picks: (givePicks?.length ?? 0) + (getPicks?.length ?? 0) });
 export const respondTrade = (tradeId: string, accept: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept }),
@@ -1909,10 +1918,15 @@ export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
 export const setTeamDivision = (leagueId: string, rosterId: number, division: string | null) =>
   rpc<{ ok: boolean; error?: string; division?: string | null }>('set_team_division', { p_league_id: leagueId, p_roster_id: rosterId, p_division: division });
 
-// ── Contracts + salary cap (0217) ─────────────────────────────────────────────
+// ── Contracts + salary cap (0217–0220) ────────────────────────────────────────
 /** One player's deal: the auction bid (or FAAB bid, rookie-scale figure, $1
- *  street minimum) as salary, the manager-assigned length, and how it began. */
-export interface ContractDeal { slug: string; roster_id: number; salary: number; years: number; acquired: 'auction' | 'rookie' | 'draft' | 'waiver' | 'fa' | 'commish'; }
+ *  street minimum) as salary, the manager-assigned length, and how it began.
+ *  `retained` is what former teams still eat; `mkt` the league's own market
+ *  price (top-5 positional average). */
+export interface ContractDeal { slug: string; roster_id: number; salary: number; years: number; acquired: 'auction' | 'rookie' | 'draft' | 'waiver' | 'fa' | 'commish'; tagged?: boolean; mkt?: number; retained?: number; }
+/** The 📜 SALARY rulebook (0219) — every knob the commissioner can turn. */
+export interface SalaryRules { dead_pct: number; retention: boolean; cap_trading: boolean; ir_relief: boolean; tag_raise_pct: number; ext_discount_pct: number; rfa: boolean; }
+export interface RfaTenderRow { slug: string; roster_id: number; status: 'open' | 'matched' | 'walked'; offer_roster: number | null; offer_salary: number | null; offer_years: number | null; }
 export interface LeagueContracts {
   error?: string;
   /** False = the league doesn't play with contracts; everything else absent. */
@@ -1920,8 +1934,17 @@ export interface LeagueContracts {
   salary_cap?: number; years_max?: number;
   /** True once the draft room closes — lengths become commissioner-only. */
   locked?: boolean;
+  /** The offseason window is open (Super Bowl gate, or admin) — tags,
+   *  extensions and RFA are live. */
+  offseason?: boolean;
+  rules?: SalaryRules;
   deals?: ContractDeal[];
-  payrolls?: { roster_id: number; team: string | null; payroll: number }[];
+  /** Ghost lines: salary a team retained on players it traded away. */
+  retentions?: { roster_id: number; slug: string; amount: number }[];
+  /** Dead cap from cuts, charged this season and years_left−1 more. */
+  dead?: { roster_id: number; slug: string; amount: number; years_left: number; note: string | null }[];
+  tenders?: RfaTenderRow[];
+  payrolls?: { roster_id: number; team: string | null; payroll: number; cap?: number; cap_adjust?: number }[];
 }
 /** The cap sheet — rules, every deal, per-team payrolls (any member). */
 export const leagueContracts = (leagueId: string) => rpc<LeagueContracts>('league_contracts', { p_league_id: leagueId });
@@ -1935,6 +1958,35 @@ export const setContractRules = (leagueId: string, cap: number | null, yearsMax:
  *  closes this is commissioner-only, and rookie-scale lengths always are. */
 export const setContractYears = (leagueId: string, slug: string, years: number) =>
   rpc<{ ok: boolean; error?: string; years?: number }>('set_contract_years', { p_league_id: leagueId, p_slug: slug, p_years: years });
+/** Commissioner (0219): the 📜 SALARY rulebook — nulls leave a knob alone. */
+export const setSalaryRules = (leagueId: string, r: {
+  deadPct?: number | null; retention?: boolean | null; capTrading?: boolean | null;
+  irRelief?: boolean | null; tagRaisePct?: number | null; extDiscountPct?: number | null; rfa?: boolean | null;
+}) =>
+  rpc<{ ok: boolean; error?: string } & Partial<SalaryRules>>('set_salary_rules', {
+    p_league_id: leagueId,
+    p_dead_pct: r.deadPct ?? null, p_retention: r.retention ?? null,
+    p_cap_trading: r.capTrading ?? null, p_ir_relief: r.irRelief ?? null,
+    p_tag_raise_pct: r.tagRaisePct ?? null, p_ext_discount_pct: r.extDiscountPct ?? null,
+    p_rfa: r.rfa ?? null,
+  });
+/** Offseason (0220): one per team — an expiring deal re-signs for a year at
+ *  max(top-5 positional market, salary + raise%). */
+export const franchiseTag = (leagueId: string, slug: string) =>
+  rpc<{ ok: boolean; error?: string; salary?: number }>('franchise_tag', { p_league_id: leagueId, p_slug: slug });
+/** Offseason: an expiring deal re-signs 1–3 years at discount% of market. */
+export const extendContract = (leagueId: string, slug: string, years: number) =>
+  rpc<{ ok: boolean; error?: string; salary?: number; years?: number }>('extend_contract', { p_league_id: leagueId, p_slug: slug, p_years: years });
+/** Offseason: tender an expiring player to the RFA market. */
+export const rfaTender = (leagueId: string, slug: string) =>
+  rpc<{ ok: boolean; error?: string }>('rfa_tender', { p_league_id: leagueId, p_slug: slug });
+/** Offseason: outbid the standing offer (your cap is checked at bid time). */
+export const rfaBid = (leagueId: string, rosterId: number, slug: string, salary: number, years: number) =>
+  rpc<{ ok: boolean; error?: string }>('rfa_bid', { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_salary: salary, p_years: years });
+/** Offseason: the tendering owner answers — match keeps him at the offer,
+ *  walk sends him (and the re-priced deal) to the bidder. */
+export const rfaResolve = (leagueId: string, slug: string, match: boolean) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('rfa_resolve', { p_league_id: leagueId, p_slug: slug, p_match: match });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */

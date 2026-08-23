@@ -14,8 +14,8 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
-  tradeSignals, setTradeSignal, pickAssets,
-  type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow,
+  tradeSignals, setTradeSignal, pickAssets, leagueContracts,
+  type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -47,10 +47,18 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Contract leagues (0219): the salary terms an offer can carry. `retain` is
+  // per traded slug — how much the CURRENT owner keeps eating; capDraft/capDir
+  // move raw cap dollars (+ = I send room, − = I ask for room).
+  const [contracts, setContracts] = useState<LeagueContracts | null>(null);
+  const [retain, setRetain] = useState<Record<string, number>>({});
+  const [capDraft, setCapDraft] = useState('');
+  const [capDir, setCapDir] = useState<1 | -1>(1);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
+    leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -120,17 +128,23 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     finally { setBusy(false); }
   };
 
+  const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
   const propose = async () => {
     if (busy || myRoster == null || partner == null
-        || give.length + get.length + givePicks.length + getPicks.length === 0) return;
+        || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0) return;
     setBusy(true); setErr(null);
     try {
+      const retainTerms = [...give, ...get]
+        .filter((s) => (retain[s] ?? 0) > 0)
+        .map((s) => ({ slug: s, amount: retain[s] }));
       const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
         givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
-        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })));
+        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
+        retainTerms, capDollars || undefined);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       commit();
       setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
+      setRetain({}); setCapDraft(''); setCapDir(1);
       await load();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -236,6 +250,17 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             </Text>
             {statusChip(x)}
           </View>
+          {/* salary terms ride the row so the accepting side SEES the money */}
+          {(x.retain ?? []).length > 0 && (
+            <Mono size={8.5} tone="warn" style={{ marginTop: 3 }}>
+              {(x.retain ?? []).map((r) => `💸 ${teamName(r.roster)} retains $${r.amount} on ${pname(r.slug)}`).join(' · ')}
+            </Mono>
+          )}
+          {!!x.cap_dollars && (
+            <Mono size={8.5} tone="warn" style={{ marginTop: 3 }}>
+              💵 {teamName(x.cap_dollars > 0 ? x.from_roster : x.to_roster)} sends ${Math.abs(x.cap_dollars)} of cap room
+            </Mono>
+          )}
           {!!x.note && <Mono size={8.5} tone="faint" style={{ marginTop: 3 }}>“{x.note}”</Mono>}
           {(x.status === 'pending' || x.status === 'accepted') && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
@@ -368,13 +393,51 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             </View>
           </View>
         )}
+        {/* ── SALARY TERMS (0219, contract leagues): retention steppers on the
+            traded deals, and raw cap dollars when the commissioner allows. ── */}
+        {contracts?.rules?.retention && [...give, ...get].some((s) => (contracts.deals ?? []).some((d) => d.slug === s && d.salary > 1)) && (
+          <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 6 }}>
+            <Mono size={7.5} tone="faint" track={0.1}>💸 RETAINED SALARY — the sender keeps eating this much</Mono>
+            {[...give, ...get].map((s) => {
+              const d = (contracts.deals ?? []).find((x) => x.slug === s);
+              if (!d || d.salary <= 1) return null;
+              const maxR = d.salary - 1 - (d.retained ?? 0);
+              if (maxR < 1) return null;
+              const cur = retain[s] ?? 0;
+              return (
+                <View key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.text }}>
+                    {pname(s)} <Text style={{ color: t.dim, fontSize: fs(9.5) }}>${d.salary}·{d.years}yr</Text>
+                  </Text>
+                  <Pressable hitSlop={6} disabled={cur <= 0} onPress={() => { tap(); setRetain((r) => ({ ...r, [s]: Math.max(0, cur - 1) })); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(15), color: t.dim }}>−</Text>
+                  </Pressable>
+                  <Mono size={10} weight="700" tone={cur > 0 ? 'warn' : 'faint'} style={{ minWidth: 30, textAlign: 'center' }}>${cur}</Mono>
+                  <Pressable hitSlop={6} disabled={cur >= maxR} onPress={() => { tap(); setRetain((r) => ({ ...r, [s]: Math.min(maxR, cur + 1) })); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(15), color: t.dim }}>＋</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {contracts?.rules?.cap_trading && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <Mono size={7.5} tone="faint" track={0.1}>💵 CAP DOLLARS</Mono>
+            <Chip label="I SEND" on={capDir === 1} onPress={() => { tap(); setCapDir(1); }} />
+            <Chip label="I ASK" on={capDir === -1} onPress={() => { tap(); setCapDir(-1); }} />
+            <TextInput value={capDraft} keyboardType="number-pad" maxLength={5} placeholder="0" placeholderTextColor={t.faint}
+              onChangeText={(v) => setCapDraft(v.replace(/[^0-9]/g, ''))}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
+          </View>
+        )}
         <TextInput value={note} maxLength={140} placeholder="Add a note (optional)…" placeholderTextColor={t.faint}
           onChangeText={setNote}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
         {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '⇄ SEND THE OFFER'}
-            disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length === 0}
+            disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0}
             onPress={() => void propose()} />
         </View>
       </Overlay>
