@@ -23,7 +23,10 @@ export async function pollGame(eventId, week, playerIndex) {
   // game, so a namesake elsewhere in the league can never absorb these plays.
   // Players Sleeper carries without an espn_id (real ones exist — e.g. a
   // starting kicker) fall back to the ranked name index, same as before.
-  const resolveSlug = (name, espnId) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name);
+  // The team is the fallback's disambiguator (v0.345.0) — buildRoster knows
+  // which club each boxscore athlete appeared for, and for the 2026 rookie
+  // class (no espn_id in Sleeper's directory) the name path is the only path.
+  const resolveSlug = (name, espnId, team) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name, team);
   const pbp = gameToRealPlays(sum, resolveSlug);
 
   const rows = [];

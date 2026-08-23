@@ -88,7 +88,11 @@ export function buildRoster(summary, resolveSlug = slugOf) {
         // The ESPN athlete id rides along (0200): an id-aware resolver matches
         // by id FIRST — the athlete in THIS game, not whoever shares the name —
         // and one-arg resolvers (slugOf, the validators) just ignore it.
-        if (!byAbbrev.has(abbr)) byAbbrev.set(abbr, { name: dn, team, slug: resolveSlug(dn, a?.athlete?.id ?? null) || slugOf(dn) });
+        // The TEAM rides along too (v0.345.0), for the case the id cannot
+        // answer: 646 of the 647 players in Sleeper's 2026 rookie class carry
+        // no espn_id, so the whole class resolves by name — and a name is only
+        // ambiguous until you know which club it just played for.
+        if (!byAbbrev.has(abbr)) byAbbrev.set(abbr, { name: dn, team, slug: resolveSlug(dn, a?.athlete?.id ?? null, team) || slugOf(dn) });
       }
     }
   }

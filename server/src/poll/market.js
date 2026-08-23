@@ -36,6 +36,7 @@
 // Team D/ST entries never resolve and are expected not to: the pool carries
 // defences through its own K/DST path, not through the player directory.
 import { db } from '../supabase.js';
+import { espnProTeam } from '../../../packages/core/src/data/espn.ts';
 
 const ENDPOINT = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons'
   + '/{SEASON}/segments/0/leaguedefaults/3?view=kona_player_info';
@@ -81,7 +82,9 @@ export async function pollMarket(playerIndex, season) {
     // ADP of 0 is ESPN's "undrafted", not the first pick of the draft.
     const hasAdp = Number.isFinite(adp) && adp > 0;
     if (!hasPct && !hasAdp) continue;
-    const slug = playerIndex.slugForEspnId(p.id) ?? playerIndex.slugForName(p.fullName ?? '');
+    // proTeamId is how this feed names a club (v0.345.0) — the name fallback's
+    // disambiguator, so an ADP cannot land on a retired namesake.
+    const slug = playerIndex.slugForEspnId(p.id) ?? playerIndex.slugForName(p.fullName ?? '', espnProTeam(p.proTeamId));
     if (!slug) { unresolved++; continue; }
     if (seenSlugs.has(slug)) continue;      // first (best-ranked) entry wins
     seenSlugs.add(slug);
