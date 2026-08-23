@@ -80,6 +80,7 @@ echo "all migrations applied"
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/auction-engine-probes.sql | grep -E "PROBE FAIL|ALL AUCTION-ENGINE PROBES" || { echo "AUCTION-ENGINE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/division-probes.sql | grep -E "PROBE FAIL|ALL DIVISION PROBES" || { echo "DIVISION PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/contract-probes.sql | grep -E "PROBE FAIL|ALL CONTRACT PROBES" || { echo "CONTRACT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/preseason-practice-probes.sql | grep -E "PROBE FAIL|PROBES PASS" || { echo "PRESEASON PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/window-pot-probes.sql | grep -E "PROBE FAIL|ALL POT PROBES" || { echo "POT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-board-probes.sql | grep -E "PROBE FAIL|ALL BOARD PROBES" || { echo "BOARD PROBES FAILED"; exit 1; }

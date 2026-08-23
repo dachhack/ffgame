@@ -1900,6 +1900,31 @@ export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
  *  Divisions activate once every seat is labeled and ≥2 labels exist. */
 export const setTeamDivision = (leagueId: string, rosterId: number, division: string | null) =>
   rpc<{ ok: boolean; error?: string; division?: string | null }>('set_team_division', { p_league_id: leagueId, p_roster_id: rosterId, p_division: division });
+
+// ── Contracts + salary cap (0217) ─────────────────────────────────────────────
+/** One player's deal: the auction bid (or FAAB bid, rookie-scale figure, $1
+ *  street minimum) as salary, the manager-assigned length, and how it began. */
+export interface ContractDeal { slug: string; roster_id: number; salary: number; years: number; acquired: 'auction' | 'rookie' | 'draft' | 'waiver' | 'fa' | 'commish'; }
+export interface LeagueContracts {
+  error?: string;
+  /** False = the league doesn't play with contracts; everything else absent. */
+  contracts: boolean;
+  salary_cap?: number; years_max?: number;
+  deals?: ContractDeal[];
+  payrolls?: { roster_id: number; team: string | null; payroll: number }[];
+}
+/** The cap sheet — rules, every deal, per-team payrolls (any member). */
+export const leagueContracts = (leagueId: string) => rpc<LeagueContracts>('league_contracts', { p_league_id: leagueId });
+/** Commissioner: switch the cap on at $cap (with an optional max length,
+ *  default 4), or off with cap=null. While an auction room is open the cap
+ *  must cover the startup budget. */
+export const setContractRules = (leagueId: string, cap: number | null, yearsMax: number | null = null) =>
+  rpc<{ ok: boolean; error?: string; contracts?: boolean; salary_cap?: number; contract_years_max?: number }>(
+    'set_contract_rules', { p_league_id: leagueId, p_cap: cap, p_years_max: yearsMax });
+/** The owner assigns a length (1..max) while the draft room is open; after it
+ *  closes this is commissioner-only, and rookie-scale lengths always are. */
+export const setContractYears = (leagueId: string, slug: string, years: number) =>
+  rpc<{ ok: boolean; error?: string; years?: number }>('set_contract_years', { p_league_id: leagueId, p_slug: slug, p_years: years });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
