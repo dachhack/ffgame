@@ -925,7 +925,7 @@ export interface AdminUser { id: string; email: string | null; sleeper_username:
  *  only, and never set for hand-assigned seats (those carry claim_email and are
  *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
  *  clears the seat on its own. */
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; /** Division label (0215). */ division?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -1839,7 +1839,7 @@ export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: numb
   }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
-export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; }
 export interface PlayoffMatchup {
   id: string; week: number; round: number; pos: number; label: string | null; status: string;
   /** Consolation-ladder game (never blocks bracket advancement). */
@@ -1896,6 +1896,10 @@ export const nativeJoin = (code: string, teamName?: string) =>
     'native_join', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
 export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
   rpc<{ ok: boolean; error?: string; team_name?: string }>('set_team_name', { p_league_id: leagueId, p_roster_id: rosterId, p_name: name });
+/** Name (or clear, with null/'') a seat's division — commissioner only (0215).
+ *  Divisions activate once every seat is labeled and ≥2 labels exist. */
+export const setTeamDivision = (leagueId: string, rosterId: number, division: string | null) =>
+  rpc<{ ok: boolean; error?: string; division?: string | null }>('set_team_division', { p_league_id: leagueId, p_roster_id: rosterId, p_division: division });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */

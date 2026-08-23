@@ -34,6 +34,20 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
     return rs;
   }, [rows, sort]);
 
+  // DIVISIONS (0215): active when every seat is labeled and ≥2 labels exist —
+  // the same rule the server seeds playoffs by. The RECORD view groups by
+  // division (each group already in the server's race order, so the top row of
+  // a group IS its current winner); POINTS / DIFF stay one flat table, because
+  // those sorts are cross-league questions.
+  const divisions = useMemo(() => {
+    const rs = rows ?? [];
+    if (sort !== 'record' || rs.length === 0 || rs.some((r) => !r.division)) return null;
+    const names = [...new Set(rs.map((r) => r.division as string))];
+    if (names.length < 2) return null;
+    return names.sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ name, teams: rs.filter((r) => r.division === name) }));
+  }, [rows, sort]);
+
   if (rows === null) return <Card><ActivityIndicator color={t.you} /></Card>;
   if (rows.length === 0) return null;
   return (
@@ -52,25 +66,36 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
         <Mono size={7.5} tone="faint" track={0.1} style={{ width: 48, textAlign: 'right' }}>PF</Mono>
         <Mono size={7.5} tone="faint" track={0.1} style={{ width: 48, textAlign: 'right' }}>DIFF</Mono>
       </View>
-      {sorted.map((r, i) => {
-        const d = Math.round((r.pf - r.pa) * 10) / 10;
-        const me = r.roster_id === myRoster;
-        return (
-          <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-            <Mono size={9} tone="faint" style={{ width: 18 }}>{i + 1}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
-              {r.team ?? `Roster ${r.roster_id}`}
-            </Text>
-            <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
-              {r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}
-            </Mono>
-            <Mono size={9.5} style={{ width: 48, textAlign: 'right' }}>{Math.round(r.pf * 10) / 10}</Mono>
-            <Mono size={9.5} tone={d > 0 ? 'you' : d < 0 ? 'opp' : 'dim'} style={{ width: 48, textAlign: 'right' }}>
-              {d > 0 ? '+' : ''}{d}
-            </Mono>
+      {(() => {
+        const rowFor = (r: StandingsRow, label: string, leader: boolean) => {
+          const d = Math.round((r.pf - r.pa) * 10) / 10;
+          const me = r.roster_id === myRoster;
+          return (
+            <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Mono size={9} tone="faint" style={{ width: 18 }}>{label}</Mono>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
+                {r.team ?? `Roster ${r.roster_id}`}{leader ? ' ★' : ''}
+              </Text>
+              <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
+                {r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}
+              </Mono>
+              <Mono size={9.5} style={{ width: 48, textAlign: 'right' }}>{Math.round(r.pf * 10) / 10}</Mono>
+              <Mono size={9.5} tone={d > 0 ? 'you' : d < 0 ? 'opp' : 'dim'} style={{ width: 48, textAlign: 'right' }}>
+                {d > 0 ? '+' : ''}{d}
+              </Mono>
+            </View>
+          );
+        };
+        if (!divisions) return sorted.map((r, i) => rowFor(r, String(i + 1), false));
+        // Grouped: each division in the server's race order — the top row of a
+        // group is its current winner (★), the seed the playoffs will protect.
+        return divisions.map((g) => (
+          <View key={g.name}>
+            <Mono size={8} tone="dim" track={0.14} style={{ marginTop: 8, marginBottom: 2 }}>{g.name.toUpperCase()}</Mono>
+            {g.teams.map((r, i) => rowFor(r, String(i + 1), i === 0))}
           </View>
-        );
-      })}
+        ));
+      })()}
     </Card>
   );
 }

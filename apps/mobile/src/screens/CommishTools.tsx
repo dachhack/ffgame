@@ -18,7 +18,7 @@ import {
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
   commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError,
   leagueInvite, nativeTeamState,
-  setTeamAvatar, setTeamController, setTeamName, teamManagers,
+  setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
@@ -978,6 +978,10 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
   const [mgrDraft, setMgrDraft] = useState('');
   const [renameFor, setRenameFor] = useState<AdminMember | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  // Division assignment (0215): a per-seat label; blank clears it. Divisions
+  // activate once every seat is labeled and at least two labels exist.
+  const [divFor, setDivFor] = useState<AdminMember | null>(null);
+  const [divDraft, setDivDraft] = useState('');
   const [artFor, setArtFor] = useState<AdminMember | null>(null);     // avatar target
   const [seatPickFor, setSeatPickFor] = useState<LeagueJoiner | null>(null); // waitlist → seat
 
@@ -1084,6 +1088,10 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
               <Chip label="✎ NAME" onPress={() => { tap(); setRenameFor(m); setRenameDraft(m.team ?? ''); }} />
               <Chip label="🖼 ART" onPress={() => { tap(); setArtFor(m); }} />
               <Chip label="＋ CO-MGR" onPress={() => { tap(); setMgrFor(m); setMgrDraft(''); }} />
+              {/* the label doubles as the current value — the map is readable
+                  from the row you edit it on */}
+              <Chip label={m.division ? `⌸ ${m.division.toUpperCase()}` : '⌸ DIVISION'} on={!!m.division}
+                onPress={() => { tap(); setDivFor(m); setDivDraft(m.division ?? ''); }} />
             </View>
             {seatMgrs.map((g) => (
               <View key={g.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, paddingLeft: 12 }}>
@@ -1176,6 +1184,22 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
             onPress={() => {
               const m = renameFor; setRenameFor(null);
               if (m && renameDraft.trim()) void act(() => setTeamName(leagueId, m.roster_id, renameDraft), () => setNote('✓ renamed'));
+            }} />
+        </View>
+      </Overlay>
+
+      {/* division label, any seat (0215). Blank SAVES AS A CLEAR — the same
+          control draws the map and erases it, and the button says which. */}
+      <Overlay visible={!!divFor} title={divFor ? `Division for ${divFor.team ?? `roster ${divFor.roster_id}`}` : ''}
+        subtitle="Same label = same division. Divisions turn on once every team has one and at least two labels exist — winners take the top playoff seeds, and rematch weeks become rivalry weeks." onClose={() => setDivFor(null)}>
+        <TextInput value={divDraft} autoFocus maxLength={24} placeholder="East" placeholderTextColor={t.faint} onChangeText={setDivDraft}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
+        <View style={{ marginTop: 10 }}>
+          <PrimaryButton label={busy ? '…' : divDraft.trim() ? '✓ SET DIVISION' : '✕ CLEAR DIVISION'} disabled={busy}
+            onPress={() => {
+              const m = divFor; setDivFor(null);
+              if (m) void act(() => setTeamDivision(leagueId, m.roster_id, divDraft.trim() || null),
+                () => setNote(divDraft.trim() ? `✓ ${m.team ?? `roster ${m.roster_id}`} → ${divDraft.trim()}` : '✓ division cleared'));
             }} />
         </View>
       </Overlay>
