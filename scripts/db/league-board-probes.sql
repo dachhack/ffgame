@@ -187,4 +187,60 @@ begin
     'b41 never-posted league reads unlisted');
 end $$;
 
+-- ── 0223: the board tells the truth — identity, dues, and the full preview ───
+do $$
+declare lid uuid; r jsonb; row_ jsonb; pool jsonb := '[]'::jsonb; i int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Honest Ad', '2026', 4, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'bd1 a contract league to advertise');
+  lid := (r ->> 'league_id')::uuid;
+  for i in 1..8 loop pool := pool || jsonb_build_object('slug', 'ad-' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'bd2 seed');
+  perform assert_ok(post_league_listing(lid, 'Cap league, come manage money.', '$50 — Venmo before the draft'),
+    'bd3 posted WITH dues');
+
+  -- the board card carries the whole identity
+  perform probe_as('b');
+  select x into row_ from jsonb_array_elements(league_board()) x
+    where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(row_ is not null, 'bd4 on the board');
+  perform assert_true(row_ ->> 'dues' = '$50 — Venmo before the draft', 'bd5 THE DUES print on the card');
+  perform assert_true(row_ -> 'identity' ->> 'continuity' = 'contract'
+      and (row_ -> 'identity' ->> 'contracts')::boolean
+      and (row_ -> 'identity' ->> 'salary_cap')::int = 30
+      and row_ -> 'identity' ->> 'game_mode' = 'drip'
+      and row_ -> 'identity' ->> 'format' = 'standard',
+    'bd6 THE TYPE prints on the card: contract league, $30 cap, drip');
+
+  -- look before you join: a NON-MEMBER reads the whole league
+  r := league_preview(lid);
+  perform assert_ok(r, 'bd7 stranger previews without a seat');
+  perform assert_true(r ->> 'dues' = '$50 — Venmo before the draft', 'bd8 dues in the preview');
+  perform assert_true((r -> 'contract_rules' ->> 'salary_cap')::int = 30
+      and (r -> 'contract_rules' ->> 'dead_pct')::int = 30
+      and (r -> 'contract_rules' ->> 'retention')::boolean,
+    'bd9 the whole contract rulebook is readable pre-join');
+  perform assert_true(jsonb_array_length(r -> 'teams') = 4, 'bd10 the seat map too');
+  perform assert_true(not exists (select 1 from league_membership
+      where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000000b'),
+    'bd11 …and looking took no seat');
+
+  -- dues edit and clear semantics: null keeps, '' clears
+  perform probe_as('a');
+  perform assert_ok(post_league_listing(lid, null, null), 'bd12 re-post, both kept');
+  perform assert_true((select dues from league_listing where league_id = lid) = '$50 — Venmo before the draft',
+    'bd13 null kept the dues');
+  perform assert_ok(post_league_listing(lid, null, ''), 'bd14 empty clears');
+  perform assert_true((select dues from league_listing where league_id = lid) is null, 'bd15 cleared');
+
+  -- a guillotine league advertises its format
+  update draft set status = 'pending' where league_id = lid;
+  perform assert_ok(set_league_format(lid, 'guillotine'), 'bd16 format set');
+  perform probe_as('b');
+  select x into row_ from jsonb_array_elements(league_board()) x
+    where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(row_ -> 'identity' ->> 'format' = 'guillotine', 'bd17 the card says 🔪');
+end $$;
+
 select 'ALL BOARD PROBES PASSED' as result;

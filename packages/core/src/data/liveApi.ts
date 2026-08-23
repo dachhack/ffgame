@@ -1653,13 +1653,18 @@ export const setTransactionRules = (
  *  is already its own record. Any member may read it. */
 export interface RegisterRow {
   id: number; at: string;
-  kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish';
+  /** 0221/0222 grew the vocabulary: eliminations + releases (guillotine),
+   *  steals (vampire), and the front office (tag/extension/rfa/retained/cap). */
+  kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish'
+      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap';
   slug: string;
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
   from_roster: number | null; from_team: string | null;
   /** Waiver wins in a FAAB league. */
   bid: number | null;
+  /** Event detail (0221): "guillotine week 3", "franchise tagged — $18 for 1yr". */
+  note?: string | null;
 }
 export const leagueRegister = (leagueId: string, limit = 100) =>
   rpc<{ ok: boolean; error?: string; rows?: RegisterRow[] }>('league_register',
@@ -1987,6 +1992,54 @@ export const rfaBid = (leagueId: string, rosterId: number, slug: string, salary:
  *  walk sends him (and the re-priced deal) to the bidder. */
 export const rfaResolve = (leagueId: string, slug: string, match: boolean) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('rfa_resolve', { p_league_id: leagueId, p_slug: slug, p_match: match });
+
+// ── League formats (0221/0222): 🔪 guillotine and 🧛 vampire ─────────────────
+export type LeagueFormat = 'standard' | 'guillotine' | 'vampire';
+/** Commissioner: pick the format. Guillotine must be chosen pre-draft (it
+ *  changes how the season scores) and presets a $1000 FAAB market. */
+export const setLeagueFormat = (leagueId: string, format: LeagueFormat) =>
+  rpc<{ ok: boolean; error?: string; format?: LeagueFormat }>('set_league_format', { p_league_id: leagueId, p_format: format });
+/** The blade, poked from any member's league load (idempotent): eliminates
+ *  the floor of every completed week and releases the roster to the frenzy. */
+export const guillotineTick = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; eliminated?: number }>('guillotine_tick', { p_league_id: leagueId });
+export interface GuillotineState {
+  error?: string;
+  guillotine: boolean;
+  week?: number | null;
+  champion?: number | null;
+  alive?: { roster_id: number; team: string | null; pts: number }[];
+  fallen?: { roster_id: number; team: string | null; week: number }[];
+  /** The frenzy: released players still clearing waivers, best rank first. */
+  frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];
+}
+export const guillotineState = (leagueId: string) => rpc<GuillotineState>('guillotine_state', { p_league_id: leagueId });
+/** Commissioner: appoint the vampire seat (and flip steal review). */
+export const setVampire = (leagueId: string, rosterId: number, stealReview: boolean | null = null) =>
+  rpc<{ ok: boolean; error?: string; vampire?: number; steal_review?: boolean }>('set_vampire',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_steal_review: stealReview });
+/** The bite: on a fresh win, take from the beaten team's active roster and
+ *  give one back. Parks for the commissioner's ruling when steal review is on. */
+export const vampireSteal = (leagueId: string, takeSlug: string, giveSlug: string) =>
+  rpc<{ ok: boolean; error?: string; status?: string; week?: number }>('vampire_steal',
+    { p_league_id: leagueId, p_take_slug: takeSlug, p_give_slug: giveSlug });
+export const commishRuleSteal = (leagueId: string, stealId: number, approve: boolean) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_steal',
+    { p_league_id: leagueId, p_steal_id: stealId, p_approve: approve });
+export interface VampireState {
+  error?: string;
+  vampire: boolean;
+  seat?: number | null;
+  steal_review?: boolean;
+  week?: number | null;
+  /** The vampire won the latest completed week — the window is open. */
+  won?: boolean;
+  victim?: number | null;
+  /** This week's steal is already declared or executed. */
+  fed?: boolean;
+  steals?: { id: number; week: number; victim: number; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
+}
+export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
@@ -2390,9 +2443,23 @@ export const setLeagueAvatar = (leagueId: string, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_league_avatar', { p_league_id: leagueId, p_url: url });
 
 // ── The league board (0123): post a league that needs managers, browse, join ──
+/** What KIND of league a card advertises (0223) — game, continuity, format,
+ *  contracts, reception scoring, whether scoring was customized. */
+export interface LeagueIdentity {
+  game_mode: 'drip' | 'classic';
+  continuity: LeagueContinuity;
+  format: LeagueFormat;
+  contracts: boolean; salary_cap: number | null;
+  ppr: number; scoring_custom: boolean;
+  vampire_seat?: number | null;
+}
 export interface BoardListing {
   league_id: string; name: string; season: string; avatar_url: string | null;
   blurb: string; posted_at: string;
+  /** The commissioner's word on money ("$50 — Venmo before the draft"); the
+   *  platform prints it, it never collects it. */
+  dues?: string | null;
+  identity?: LeagueIdentity;
   seats_total: number; seats_open: number;
   draft_status: string; draft_mode: string;
   /** The caller is already enrolled here / commissions it. */
@@ -2406,9 +2473,10 @@ export async function leagueBoard(): Promise<BoardListing[]> {
   if (!Array.isArray(r)) throw new Error(r?.error ?? 'could not load the board');
   return r;
 }
-/** Post (or re-open / edit) the caller's league. Null blurb keeps the old one. */
-export const postLeagueListing = (leagueId: string, blurb?: string | null) =>
-  rpc<{ ok: boolean; error?: string }>('post_league_listing', { p_league_id: leagueId, p_blurb: blurb ?? null });
+/** Post (or re-open / edit) the caller's league. Null blurb/dues keeps the
+ *  old one; an empty-string dues clears it. */
+export const postLeagueListing = (leagueId: string, blurb?: string | null, dues?: string | null) =>
+  rpc<{ ok: boolean; error?: string }>('post_league_listing', { p_league_id: leagueId, p_blurb: blurb ?? null, p_dues: dues ?? null });
 export const closeLeagueListing = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('close_league_listing', { p_league_id: leagueId });
 /** Claim a seat in a posted league — native_join's seat rules, authorized by
@@ -2419,6 +2487,12 @@ export interface BoardPreview {
   ok: boolean; error?: string;
   name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
   game_mode?: 'drip' | 'classic'; ppr?: number; bestball?: string[]; roster?: Record<string, number>;
+  /** 0223: what kind of league, the dues, and (contract leagues) the rulebook. */
+  identity?: LeagueIdentity;
+  dues?: string | null;
+  contract_rules?: { salary_cap: number; years_max: number; dead_pct: number;
+    retention: boolean; cap_trading: boolean; ir_relief: boolean;
+    tag_raise_pct: number; ext_discount_pct: number; rfa: boolean } | null;
   seats_total?: number; seats_open?: number;
   draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
             budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
@@ -2441,7 +2515,7 @@ export const leagueInvite = (leagueId: string) =>
 /** The listing's true state, commish/admin only (0124). league_board() hides
  *  full leagues, so it cannot answer "is my league public?" — this can. */
 export const leagueListingState = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; seats_open?: number }>(
+  rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; dues?: string | null; seats_open?: number }>(
     'league_listing_state', { p_league_id: leagueId });
 
 // ── Co-managers + the waiting room (0125) ─────────────────────────────────────

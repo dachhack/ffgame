@@ -369,6 +369,15 @@ const KIND: Record<RegisterRow['kind'], { icon: string; verb: string }> = {
   waiver: { icon: '⚑', verb: 'claimed off waivers' },
   trade: { icon: '⇄', verb: 'traded for' },
   commish: { icon: '⚑', verb: 'was moved by the commissioner to' },
+  // the event vocabulary (0221/0222): formats and the front office
+  elimination: { icon: '🔪', verb: 'fell to the guillotine' },
+  release: { icon: '🔪', verb: 'released' },
+  steal: { icon: '🧛', verb: 'stole' },
+  tag: { icon: '🏷', verb: 'franchise tagged' },
+  extension: { icon: '⤴', verb: 'extended' },
+  rfa: { icon: '🪧', verb: 'answered the RFA on' },
+  retained: { icon: '💸', verb: 'retains salary on' },
+  cap: { icon: '💵', verb: 'received cap room' },
 };
 const when = (iso: string): string => {
   const d = new Date(iso);
@@ -407,8 +416,9 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
                 <Text style={{ fontWeight: '700' }}>{team}</Text>
                 {` ${k.verb} `}
                 <Text style={{ fontWeight: '700' }}>{prettySlug(r.slug)}</Text>
-                {r.kind === 'trade' && r.from_team ? <Text style={{ color: t.dim }}>{` from ${r.from_team}`}</Text> : null}
+                {(r.kind === 'trade' || r.kind === 'steal' || r.kind === 'cap') && r.from_team ? <Text style={{ color: t.dim }}>{` from ${r.from_team}`}</Text> : null}
                 {r.kind === 'waiver' && r.bid != null && r.bid > 0 ? <Text style={{ color: t.dim }}>{` for ${r.bid}`}</Text> : null}
+                {r.note ? <Text style={{ color: t.dim }}>{` · ${r.note}`}</Text> : null}
               </Text>
               <Mono size={8.5} tone="faint" style={{ marginTop: 1 }}>{when(r.at)}</Mono>
             </View>

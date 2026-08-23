@@ -11,7 +11,8 @@
 // seat, so only native leagues — the ones with seats we control — can list).
 import { useCallback, useEffect, useState } from 'react';
 import {
-  leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing,
+  leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing, leagueListingState,
+  type LeagueIdentity,
   commishOverview, friendlyError,
   type BoardListing, type BoardPreview, type AdminLeague,
 } from '@drip/core/data/liveApi';
@@ -30,6 +31,22 @@ const modeChip = (mode?: string | null) => mode == null ? null : (
   </span>
 );
 
+/** What kind of league the card advertises (0223), in one printed line. */
+const identityLine = (id?: LeagueIdentity): string => {
+  if (!id) return '';
+  const bits: string[] = [id.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'];
+  if (id.continuity === 'contract') bits.push(`📜 CONTRACT${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'contract_dynasty') bits.push(`📜🏰 CONTRACT DYNASTY${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'dynasty') bits.push('🏰 DYNASTY');
+  else if (id.continuity === 'keeper') bits.push('★ KEEPER');
+  else bits.push('REDRAFT');
+  if (id.format === 'guillotine') bits.push('🔪 GUILLOTINE');
+  if (id.format === 'vampire') bits.push('🧛 VAMPIRE');
+  if (id.game_mode === 'classic') bits.push(id.ppr === 0 ? 'STANDARD (0 PPR)' : id.ppr === 0.5 ? '½ PPR' : id.ppr === 1 ? 'FULL PPR' : `${id.ppr} PPR`);
+  if (id.scoring_custom) bits.push('custom scoring');
+  return bits.join(' · ');
+};
+
 export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack: () => void }) {
   const [rows, setRows] = useState<BoardListing[] | null>(null);
   const [myLeagues, setMyLeagues] = useState<AdminLeague[]>([]);
@@ -41,6 +58,7 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
   const [joined, setJoined] = useState<string | null>(null);
   const [postFor, setPostFor] = useState<AdminLeague | null>(null);
   const [blurbDraft, setBlurbDraft] = useState('');
+  const [duesDraft, setDuesDraft] = useState('');
 
   const load = useCallback(async () => {
     setErr(null);
@@ -82,10 +100,12 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
     if (!postFor || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await postLeagueListing(postFor.league_id, blurbDraft.trim() || null);
+      // dues: blank posts '' which clears server-side — wiping the field is
+      // how a commissioner retracts a dues line
+      const r = await postLeagueListing(postFor.league_id, blurbDraft.trim() || null, duesDraft.trim());
       if (!r.ok) setErr(friendlyError(r.error ?? 'could not post'));
     } catch (e) { setErr(friendlyError(e)); }
-    finally { setBusy(false); setPostFor(null); setBlurbDraft(''); await load(); }
+    finally { setBusy(false); setPostFor(null); setBlurbDraft(''); setDuesDraft(''); await load(); }
   };
 
   const unlist = async (leagueId: string) => {
@@ -142,6 +162,9 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                     {r.mine ? 'JOINED' : 'LOOK INSIDE →'}
                   </button>}
             </div>
+            {/* the card tells the truth (0223): the league's type and the money */}
+            {r.identity && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 7 }}>{identityLine(r.identity)}</div>}
+            {r.dues && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)', marginTop: 4 }}>💵 DUES: {r.dues}</div>}
             {r.blurb && <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>{r.blurb}</div>}
           </div>
         ))}
@@ -164,7 +187,13 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                 </div>
                 {listed
                   ? <button onClick={() => void unlist(l.league_id)} className="mono" style={ghostBtn}>UNLIST</button>
-                  : <button onClick={() => { setPostFor(l); setBlurbDraft(''); }} className="mono" style={{ ...ghostBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 35%, var(--bd))' }} disabled={open <= 0} title={open <= 0 ? 'No open seats to offer' : undefined}>POST</button>}
+                  : <button onClick={() => {
+                      setPostFor(l); setBlurbDraft(''); setDuesDraft('');
+                      // prefill so a re-post doesn't silently clear the standing dues
+                      void leagueListingState(l.league_id).then((s) => {
+                        if (s.ok) { setBlurbDraft(s.blurb ?? ''); setDuesDraft(s.dues ?? ''); }
+                      }).catch(() => {});
+                    }} className="mono" style={{ ...ghostBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 35%, var(--bd))' }} disabled={open <= 0} title={open <= 0 ? 'No open seats to offer' : undefined}>POST</button>}
               </div>
             );
           })}
@@ -186,6 +215,18 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
             {!preview && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Loading the details…</div>}
             {preview?.ok && (
               <>
+                {preview.identity && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 10 }}>{identityLine(preview.identity)}</div>}
+                {preview.dues && <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', marginTop: 5 }}>💵 DUES: {preview.dues}</div>}
+                {preview.contract_rules && (
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.7, border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 9px' }}>
+                    <b>📜 CONTRACTS:</b> ${preview.contract_rules.salary_cap} cap · up to {preview.contract_rules.years_max}yr deals · {preview.contract_rules.dead_pct}% dead money on cuts<br />
+                    {[preview.contract_rules.retention ? 'salary retention' : null,
+                      preview.contract_rules.cap_trading ? 'cap trading' : null,
+                      preview.contract_rules.ir_relief ? 'IR cap relief' : null,
+                      preview.contract_rules.rfa ? 'RFA tenders' : null].filter(Boolean).join(' · ') || 'no optional mechanics on'}
+                    {' '}· tags +{preview.contract_rules.tag_raise_pct}% · extensions {preview.contract_rules.ext_discount_pct}% of market
+                  </div>
+                )}
                 <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 12, lineHeight: 1.8 }}>
                   {preview.seats_open} of {preview.seats_total} seats open<br />
                   {preview.draft && <>draft: {preview.draft.status} · {preview.draft.mode} · {preview.draft.rounds} rounds{preview.draft.budget ? ` · $${preview.draft.budget}` : ''}<br /></>}
@@ -228,6 +269,10 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
             <div className="mono" style={{ ...label, marginTop: 12 }}>BLURB (OPTIONAL)</div>
             <textarea value={blurbDraft} maxLength={200} rows={3} onChange={(e) => setBlurbDraft(e.target.value)}
               placeholder="e.g. Friendly 8-teamer, drafting Thursday night, no trades after week 10." style={{ ...input, marginTop: 6, resize: 'vertical' }} />
+            {/* DUES (0223): free text — the platform prints it, never collects it */}
+            <div className="mono" style={{ ...label, marginTop: 12 }}>DUES (OPTIONAL)</div>
+            <input value={duesDraft} maxLength={120} onChange={(e) => setDuesDraft(e.target.value)}
+              placeholder="e.g. $50 — Venmo before the draft" style={{ ...input, marginTop: 6 }} />
             <button onClick={() => void doPost()} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>
               {busy ? 'POSTING…' : 'PUT IT ON THE BOARD →'}
             </button>

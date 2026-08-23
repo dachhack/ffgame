@@ -34,6 +34,7 @@ import {
   leagueMarket,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
+  setLeagueFormat, type LeagueFormat,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
@@ -152,6 +153,9 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     : continuity === 'contract' ? '📜 CONTRACT '
     : continuity === 'dynasty' ? '🏰 DYNASTY '
     : continuity === 'keeper' ? '★ KEEPER ' : '';
+  // FORMAT (0221/0222): how the season is WON. Guillotine presets a $1000
+  // FAAB market server-side; vampire gets its seat assigned in ⚑ COMMISH.
+  const [format, setFormat] = useState<LeagueFormat>('standard');
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -220,6 +224,11 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         mode === 'auction' ? maxLots : 1, null, null, caps, chosenGame,
         continuity, continuity === 'keeper' ? keepN : dynastyType ? rookieN : null);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
+      if (format !== 'standard') {
+        setNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
+        const fr = await setLeagueFormat(r.league_id, format);
+        if (!fr.ok) { setErr(friendlyError(fr.error ?? 'Could not set the format.')); setBusy(false); return; }
+      }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
@@ -319,6 +328,21 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                       ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing 3-year scale deals — and three seasons of tradeable picks dealt from day one.`
                       : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
             </div>
+            {/* FORMAT (0221/0222): how the season is won. */}
+            <div style={{ height: 14 }} />
+            <div className="mono" style={label}>FORMAT</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              <Chip on={format === 'standard'} onClick={() => setFormat('standard')}>HEAD-TO-HEAD</Chip>
+              <Chip on={format === 'guillotine'} onClick={() => setFormat('guillotine')}>🔪 GUILLOTINE</Chip>
+              <Chip on={format === 'vampire'} onClick={() => setFormat('vampire')}>🧛 VAMPIRE</Chip>
+            </div>
+            {format !== 'standard' && (
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+                {format === 'guillotine'
+                  ? 'Each week the lowest-scoring team is ELIMINATED and its whole roster hits waivers — a $1000 FAAB frenzy (preset). Last team standing wins. Bring extra teams: one falls per week.'
+                  : 'One team is the Vampire: no waivers, no free agents — when it wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the vampire seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'}
+              </div>
+            )}
             <div style={{ height: 16 }} />
             <label className="mono" style={label}>LEAGUE NAME</label>
             <input value={name} autoFocus maxLength={40} onChange={(e) => { setName(e.target.value); setErr(null); }}

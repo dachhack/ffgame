@@ -7,6 +7,8 @@ import {
   advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
   leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve,
+  guillotineTick, guillotineState, vampireState, vampireSteal, commishRuleSteal,
+  type GuillotineState, type VampireState,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -313,6 +315,163 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
         {rules ? ` Cuts on multi-year deals leave ${rules.dead_pct}% dead money for the deal's remaining life.` : ''}
         {offseason ? ' Multi-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched.' : ''}
       </Mono>
+    </Card>
+  );
+}
+
+// ── 🔪 Guillotine (0221): the cutline, the fallen, the frenzy ────────────────
+// Renders nothing outside guillotine leagues. Mounting POKES the blade — the
+// tick is idempotent and any member's league load may run it (the
+// autoGeneratePlayoffs pattern), so eliminations land without a cron.
+export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
+  const t = useTheme();
+  const [st, setSt] = useState<GuillotineState | null>(null);
+
+  useEffect(() => {
+    guillotineTick(leagueId).catch(() => {})
+      .then(() => guillotineState(leagueId)).then(setSt)
+      .catch(() => setSt({ guillotine: false }));
+  }, [leagueId]);
+
+  if (!st?.guillotine) return null;
+  const alive = st.alive ?? [];
+  const fallen = st.fallen ?? [];
+  const frenzy = st.frenzy ?? [];
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>🔪 THE CUTLINE</Mono>
+      {st.champion != null ? (
+        <Mono size={11} weight="700" tone="you" style={{ marginTop: 6 }}>
+          🏆 {alive[0]?.team ?? `Roster ${st.champion}`} — the last one standing
+        </Mono>
+      ) : (
+        <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
+          {alive.length} alive · week {st.week ?? '—'} · the lowest score falls
+        </Mono>
+      )}
+      <View style={{ marginTop: 8 }}>
+        {alive.map((a, i) => {
+          const doomed = st.champion == null && i === 0;
+          const mine = a.roster_id === myRoster;
+          return (
+            <View key={a.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Text style={{ fontSize: fs(12), width: 18, textAlign: 'center' }}>{doomed ? '🔪' : ''}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : doomed ? t.opp : t.text, fontWeight: mine || doomed ? '700' : '400' }}>
+                {a.team ?? `Roster ${a.roster_id}`}
+              </Text>
+              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : undefined}>{Math.round(a.pts * 10) / 10}</Mono>
+            </View>
+          );
+        })}
+      </View>
+      {frenzy.length > 0 && (
+        <View style={{ marginTop: 10 }}>
+          <Mono size={9} tone="warn" weight="700" track={0.12}>💰 THE FRENZY — released to waivers</Mono>
+          {frenzy.slice(0, 12).map((p) => (
+            <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.text }}>{p.full_name} · {p.pos}</Text>
+              <Mono size={8} tone="faint">#{p.rank}</Mono>
+            </View>
+          ))}
+          {frenzy.length > 12 && <Mono size={8.5} tone="faint">…and {frenzy.length - 12} more on the wire</Mono>}
+        </View>
+      )}
+      {fallen.length > 0 && (
+        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
+          Fallen: {fallen.map((f) => `${f.team ?? `Roster ${f.roster_id}`} (wk ${f.week})`).join(' · ')}
+        </Mono>
+      )}
+    </Card>
+  );
+}
+
+// ── 🧛 Vampire (0222): the steal window and the commissioner's ruling ────────
+export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: string; myRoster: number | null; isCommish: boolean }) {
+  const t = useTheme();
+  const [st, setSt] = useState<VampireState | null>(null);
+  const [names, setNames] = useState<Record<string, LeaguePoolPlayer>>({});
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string }[]>([]);
+  const [take, setTake] = useState<string | null>(null);
+  const [give, setGive] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = () => Promise.all([
+    vampireState(leagueId).then(setSt),
+    leaguePool(leagueId).then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p])))).catch(() => {}),
+    nativeRosters(leagueId).then((rs) => setRosters(rs.map((r) => ({ roster_id: r.roster_id, slug: r.slug })))).catch(() => {}),
+  ]).catch(() => setSt({ vampire: false }));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done?: string) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await fn();
+      if (r.ok) { commit(); if (done) setNote(done); setTake(null); setGive(null); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  if (!st?.vampire) return null;
+  const nameOf = (s: string) => names[s]?.full_name ?? s;
+  const iAmVampire = st.seat != null && st.seat === myRoster;
+  const windowOpen = !!st.won && !st.fed;
+  const pending = (st.steals ?? []).filter((s) => s.status === 'pending');
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>🧛 THE VAMPIRE</Mono>
+      <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
+        {st.seat == null ? 'No vampire appointed yet — the commissioner picks the seat in ⚑ COMMISH.'
+          : `Seat ${st.seat} feeds on wins${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
+      </Mono>
+      {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
+      {/* the bite: vampire won the latest completed week and hasn't fed */}
+      {iAmVampire && windowOpen && (
+        <View style={{ marginTop: 8 }}>
+          <Mono size={9.5} weight="700" tone="you">🩸 Fresh blood — you beat seat {st.victim} in week {st.week}. Pick your steal:</Mono>
+          <Mono size={8} tone="faint" style={{ marginTop: 5 }}>TAKE FROM THE BEATEN TEAM</Mono>
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+            {rosters.filter((r) => r.roster_id === st.victim).map((r) => (
+              <Chip key={r.slug} label={nameOf(r.slug)} on={take === r.slug} onPress={() => { tap(); setTake(r.slug); }} />
+            ))}
+          </View>
+          <Mono size={8} tone="faint" style={{ marginTop: 5 }}>GIVE BACK</Mono>
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+            {rosters.filter((r) => r.roster_id === st.seat).map((r) => (
+              <Chip key={r.slug} label={nameOf(r.slug)} on={give === r.slug} onPress={() => { tap(); setGive(r.slug); }} />
+            ))}
+          </View>
+          <View style={{ marginTop: 8 }}>
+            <PrimaryButton label={busy ? '…' : '🧛 SINK THE TEETH'} disabled={busy || !take || !give}
+              onPress={() => { if (take && give) void act(() => vampireSteal(leagueId, take, give), st.steal_review ? '✓ declared — awaiting the ruling' : '✓ the steal is done'); }} />
+          </View>
+        </View>
+      )}
+      {iAmVampire && !windowOpen && st.seat != null && (
+        <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>
+          {st.fed ? 'This week’s win is already fed on.' : st.week == null ? 'No completed week yet.' : 'No fresh blood — win your matchup to steal.'}
+        </Mono>
+      )}
+      {/* the commissioner's ruling (steal_review) */}
+      {isCommish && pending.map((s) => (
+        <View key={s.id} style={{ marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 6 }}>
+          <Mono size={9} tone="warn" weight="700">⚑ PENDING STEAL — week {s.week}</Mono>
+          <Mono size={9} tone="dim" style={{ marginTop: 2 }}>
+            takes {nameOf(s.take)} from seat {s.victim}, gives back {nameOf(s.give)}
+          </Mono>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 5 }}>
+            <Chip label="✓ APPROVE" on disabled={busy} onPress={() => { tap(); void act(() => commishRuleSteal(leagueId, s.id, true), '✓ approved'); }} />
+            <Chip label="✕ VETO" disabled={busy} onPress={() => { tap(); void act(() => commishRuleSteal(leagueId, s.id, false), '✓ vetoed'); }} />
+          </View>
+        </View>
+      ))}
+      {(st.steals ?? []).length > 0 && (
+        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
+          Feeding history: {(st.steals ?? []).map((s) => `wk${s.week} ${nameOf(s.take)} (${s.status})`).join(' · ')}
+        </Mono>
+      )}
     </Card>
   );
 }

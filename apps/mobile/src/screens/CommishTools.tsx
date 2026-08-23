@@ -27,6 +27,7 @@ import {
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   leagueContracts, setContractRules, setSalaryRules, type LeagueContracts,
+  setLeagueFormat, setVampire, guillotineState, vampireState, type LeagueFormat, type VampireState,
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
@@ -65,6 +66,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // the old ⚑ SETTINGS overlay, folded into the map (v0.264.0) — each slice
     // is its own destination, mirroring the web console's sections
     { id: 'waivers', label: '⇄ WAIVERS & TRADES', nativeOnly: true },
+    { id: 'format', label: '🎭 FORMAT', nativeOnly: true },
   ] },
   { title: 'RUN THE SEASON', items: [
     { id: 'seats', label: '👥 SEATS' },
@@ -387,6 +389,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             )}
             {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
             {section === 'contracts' && native && <ContractRulesCard leagueId={leagueId} />}
+            {section === 'format' && native && <FormatCard leagueId={leagueId} />}
             {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
@@ -1079,6 +1082,79 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
             With the cap on, an auction win signs at its bid, a waiver win at its FAAB bid, and a free-agent add at the $1 minimum. Managers pick each deal’s length (1–{yearsDraft}yr) while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused. Extensions, franchise tags and dead money arrive with the offseason pack.
           </Mono>
         </>
+      )}
+    </Card>
+  );
+}
+
+/** ── 🎭 FORMAT (0221/0222) ───────────────────────────────────────────────────
+ *  How the season is WON: head-to-head, 🔪 guillotine (weekly elimination +
+ *  frenzy — pre-draft only, the server enforces it), or 🧛 vampire (a seat
+ *  that steals on wins). The vampire's controls live here too: appoint the
+ *  seat and flip steal review (the founder's "commish can option to approve
+ *  risky moves"). Pending steal rulings surface on the 🧛 card in Standings. */
+function FormatCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [fmt, setFmt] = useState<LeagueFormat | null>(null);
+  const [vamp, setVamp] = useState<VampireState | null>(null);
+  const [seats, setSeats] = useState<AdminMember[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = () => Promise.all([
+    guillotineState(leagueId).then((g) => {
+      if (g.guillotine) { setFmt('guillotine'); return null; }
+      return vampireState(leagueId).then((v) => { setVamp(v.vampire ? v : null); setFmt(v.vampire ? 'vampire' : 'standard'); });
+    }),
+    adminLeagueMembers(leagueId).then((m) => { if (Array.isArray(m)) setSeats(m); }).catch(() => {}),
+  ]).catch(() => setFmt('standard'));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await fn();
+      if (r.ok) { commit(); setNote(done); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  if (fmt == null) return <Card><Mono size={10} tone="faint">Loading…</Mono></Card>;
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>🎭 LEAGUE FORMAT</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <Chip label="HEAD-TO-HEAD" on={fmt === 'standard'} disabled={busy}
+          onPress={() => void act(() => setLeagueFormat(leagueId, 'standard'), '✓ head-to-head')} />
+        <Chip label="🔪 GUILLOTINE" on={fmt === 'guillotine'} disabled={busy}
+          onPress={() => void act(() => setLeagueFormat(leagueId, 'guillotine'), '✓ guillotine — $1000 FAAB market preset')} />
+        <Chip label="🧛 VAMPIRE" on={fmt === 'vampire'} disabled={busy}
+          onPress={() => void act(() => setLeagueFormat(leagueId, 'vampire'), '✓ vampire — now appoint the seat below')} />
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
+        Guillotine: each week the lowest-scoring team is eliminated and its roster hits the FAAB frenzy — pick it BEFORE the draft. Vampire: one seat lives off wins alone, stealing a player from each beaten opponent.
+      </Mono>
+      {fmt === 'vampire' && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+          <Mono size={9} tone="faint" weight="700" track={0.12}>THE VAMPIRE'S SEAT</Mono>
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+            {seats.map((m) => (
+              <Chip key={m.roster_id} label={m.team ?? `Team ${m.roster_id}`} on={vamp?.seat === m.roster_id} disabled={busy}
+                onPress={() => void act(() => setVampire(leagueId, m.roster_id), `✓ ${m.team ?? `team ${m.roster_id}`} is the vampire`)} />
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <Chip label={vamp?.steal_review ? '⚑ STEALS NEED YOUR APPROVAL' : '⚡ STEALS EXECUTE INSTANTLY'} on={!!vamp?.steal_review}
+              disabled={busy || vamp?.seat == null}
+              onPress={() => { if (vamp?.seat != null) void act(() => setVampire(leagueId, vamp.seat!, !vamp.steal_review), vamp.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling'); }} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
+            With approval on, each steal parks as PENDING — you approve or veto it from the 🧛 card in the Standings sheet, and the ruling prints in the league register.
+          </Mono>
+        </View>
       )}
     </Card>
   );

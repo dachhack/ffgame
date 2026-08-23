@@ -16,8 +16,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
 import {
-  closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
+  closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, leagueListingState,
+  type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity,
+  setLeagueFormat, type LeagueFormat,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
@@ -63,6 +65,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   const [teamDraft, setTeamDraft] = useState('');
   const [postFor, setPostFor] = useState<AdminLeague | null>(null);
   const [blurbDraft, setBlurbDraft] = useState('');
+  const [duesDraft, setDuesDraft] = useState('');
   const [joined, setJoined] = useState<string | null>(null); // league name, for the success note
   const [commishDraft, setCommishDraft] = useState('');      // commish-code redemption
   const [inviteDraft, setInviteDraft] = useState('');        // invite-code join (native_join)
@@ -97,6 +100,8 @@ export function Recruit({ onBack, onJoined, onCreated }: {
     : continuity === 'contract' ? '📜 CONTRACT '
     : continuity === 'dynasty' ? '🏰 DYNASTY '
     : continuity === 'keeper' ? '★ KEEPER ' : '';
+  // FORMAT (0221/0222): how the season is WON.
+  const [format, setFormat] = useState<LeagueFormat>('standard');
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
@@ -143,10 +148,12 @@ export function Recruit({ onBack, onJoined, onCreated }: {
     if (!postFor || busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await postLeagueListing(postFor.league_id, blurbDraft.trim() || null);
+      // dues: trimmed text posts, blank posts as '' which CLEARS server-side —
+      // wiping the field is how a commissioner retracts a dues line
+      const r = await postLeagueListing(postFor.league_id, blurbDraft.trim() || null, duesDraft.trim());
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'could not post')); } else commit();
     } catch (e) { warn(); setErr(friendlyError(e)); }
-    finally { setBusy(false); setPostFor(null); setBlurbDraft(''); await load(); }
+    finally { setBusy(false); setPostFor(null); setBlurbDraft(''); setDuesDraft(''); await load(); }
   };
 
   const unlist = async (leagueId: string) => {
@@ -231,6 +238,11 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
         continuity, continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
+      if (format !== 'standard') {
+        setMakeNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
+        const fr = await setLeagueFormat(r.league_id, format);
+        if (!fr.ok) { warn(); setErr(friendlyError(fr.error ?? 'could not set the format')); return; }
+      }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
@@ -362,6 +374,21 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                           : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
                 </Mono>
               </View>
+              <View>
+                <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
+                  <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
+                  <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                </View>
+                {format !== 'standard' && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+                    {format === 'guillotine'
+                      ? 'Each week the lowest-scoring team is ELIMINATED and its roster hits a $1000 FAAB frenzy (preset). Last team standing wins — bring extra teams, one falls per week.'
+                      : 'One team is the Vampire: no waivers or free agents — win a matchup, STEAL a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH, where you can also require approval per steal.'}
+                  </Mono>
+                )}
+              </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
                 onChangeText={(v) => { setNameDraft(v); setErr(null); }}
                 style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
@@ -424,7 +451,14 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                 <Chip label="⇪ SHARE CODE" onPress={() => void share(l.league_id)} />
                 {listed
                   ? <Chip label="UNLIST" onPress={() => { tap(); void unlist(l.league_id); }} />
-                  : <Chip label="POST" on onPress={() => { tap(); setPostFor(l); setBlurbDraft(''); }} />}
+                  : <Chip label="POST" on onPress={() => {
+                      tap(); setPostFor(l); setBlurbDraft(''); setDuesDraft('');
+                      // prefill from the standing listing so a re-post doesn't
+                      // silently blank the blurb or clear the dues
+                      void leagueListingState(l.league_id).then((s) => {
+                        if (s.ok) { setBlurbDraft(s.blurb ?? ''); setDuesDraft(s.dues ?? ''); }
+                      }).catch(() => {});
+                    }} />}
               </View>
             );
           })}
@@ -455,6 +489,9 @@ export function Recruit({ onBack, onJoined, onCreated }: {
               <Mono size={7.5} tone="faint" track={0.08}>OF {r.seats_total} OPEN</Mono>
             </View>
           </View>
+          {/* the card tells the truth (0223): what KIND of league, and the money */}
+          {!!r.identity && <Mono size={8.5} tone="dim" style={{ marginTop: 6 }}>{identityLine(r.identity)}</Mono>}
+          {!!r.dues && <Mono size={9} tone="warn" weight="700" style={{ marginTop: 3 }}>💵 DUES: {r.dues}</Mono>}
           {!!r.blurb && <Mono size={10} style={{ marginTop: 8, lineHeight: 15 }}>{r.blurb}</Mono>}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
             {r.mine ? (
@@ -522,7 +559,27 @@ export function Recruit({ onBack, onJoined, onCreated }: {
           {preview !== null && !preview.ok && <Mono size={10} tone="opp">⚠ {friendlyError(preview.error ?? 'could not load')}</Mono>}
           {preview?.ok && (
             <>
+              {/* the truth block first (0223): type, money, then the pitch */}
+              {!!preview.identity && (
+                <Mono size={9} tone="dim" style={{ lineHeight: 14 }}>{identityLine(preview.identity)}</Mono>
+              )}
+              {!!preview.dues && <Mono size={10} tone="warn" weight="700">💵 DUES: {preview.dues}</Mono>}
               {!!preview.blurb && <Mono size={10.5} style={{ lineHeight: 16 }}>{preview.blurb}</Mono>}
+              {preview.contract_rules && (
+                <View>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">📜 CONTRACTS & CAP</Mono>
+                  <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
+                    ${preview.contract_rules.salary_cap} cap · deals up to {preview.contract_rules.years_max}yr · {preview.contract_rules.dead_pct}% dead money on cuts
+                    {'\n'}{[
+                      preview.contract_rules.retention ? 'salary retention' : null,
+                      preview.contract_rules.cap_trading ? 'cap trading' : null,
+                      preview.contract_rules.ir_relief ? 'IR cap relief' : null,
+                      preview.contract_rules.rfa ? 'RFA tenders' : null,
+                    ].filter(Boolean).join(' · ') || 'no optional mechanics on'}
+                    {'\n'}tags at +{preview.contract_rules.tag_raise_pct}% · extensions at {preview.contract_rules.ext_discount_pct}% of market
+                  </Mono>
+                </View>
+              )}
               {preview.draft && (
                 <View>
                   <Mono size={8.5} weight="700" track={0.12} tone="faint">⛏ DRAFT</Mono>
@@ -590,17 +647,41 @@ export function Recruit({ onBack, onJoined, onCreated }: {
         <TextInput value={blurbDraft} autoFocus maxLength={280} multiline placeholder="Two seats open, auction draft Sunday 8pm ET…" placeholderTextColor={t.faint}
           onChangeText={setBlurbDraft}
           style={{ minHeight: 70, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+        {/* DUES (0223): free text, printed on the card and the preview. The
+            platform never touches the money — this is the commissioner's word,
+            put where joiners decide. */}
+        <Mono size={8.5} tone="faint" track={0.1} style={{ marginTop: 10 }}>DUES (OPTIONAL)</Mono>
+        <TextInput value={duesDraft} maxLength={120} placeholder="e.g. $50 — Venmo before the draft" placeholderTextColor={t.faint}
+          onChangeText={setDuesDraft}
+          style={{ marginTop: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '⇪ PUT IT ON THE BOARD'} disabled={busy} onPress={() => void doPost()} />
         </View>
         <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 14 }}>
-          Anyone signed in can browse the board and take a seat. The listing comes down when you unlist it or the seats fill.
+          Anyone signed in can browse the board and take a seat. The card carries the league's type, scoring and dues automatically. The listing comes down when you unlist it or the seats fill.
         </Mono>
       </Overlay>
     </ScrollView>
   );
 }
 
+
+/** What kind of league the card advertises (0223), in one printed line:
+ *  "◈ DRIP · 📜 CONTRACT ($30 cap) · 🔪 GUILLOTINE · ½ PPR · custom scoring". */
+const identityLine = (id?: LeagueIdentity): string => {
+  if (!id) return '';
+  const bits: string[] = [id.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'];
+  if (id.continuity === 'contract') bits.push(`📜 CONTRACT${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'contract_dynasty') bits.push(`📜🏰 CONTRACT DYNASTY${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'dynasty') bits.push('🏰 DYNASTY');
+  else if (id.continuity === 'keeper') bits.push('★ KEEPER');
+  else bits.push('REDRAFT');
+  if (id.format === 'guillotine') bits.push('🔪 GUILLOTINE');
+  if (id.format === 'vampire') bits.push('🧛 VAMPIRE');
+  if (id.game_mode === 'classic') bits.push(id.ppr === 0 ? 'STANDARD (0 PPR)' : id.ppr === 0.5 ? '½ PPR' : id.ppr === 1 ? 'FULL PPR' : `${id.ppr} PPR`);
+  if (id.scoring_custom) bits.push('custom scoring');
+  return bits.join(' · ');
+};
 
 /** "10p" / "9a" from minutes-since-midnight ET — the preview's night label. */
 const fmtNightHour = (m: number) => {
