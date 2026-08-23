@@ -16,7 +16,7 @@ import {
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
+  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
@@ -24,6 +24,7 @@ import {
 import { inviteMessage } from '@drip/core/data/invite';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -342,6 +343,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // years_exp by slug — the tenure filter's data. A failed read leaves the
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
+    // slug → Sleeper id (0205) for the DYN column's ID-FIRST join (v0.351.3)
+    // — the wire prices players off Stathead's board, whose names drift from
+    // our slugs; ids don't. Name fallback stays if the read fails.
+    leaguePoolIds(leagueId).then((r) => setSlugSleeperIds(r?.ids ?? {})).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
     keeperState(leagueId).then((k) => {
       if (!k.ok) return;

@@ -19,7 +19,7 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  leaguePoolExp, friendlyError,
+  leaguePoolExp, leaguePoolIds, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
@@ -28,6 +28,7 @@ import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
 import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -151,6 +152,12 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     void refresh();
     loadAutos();
     leaguePool(leagueId).then(setPool).catch(() => {});
+    // The pool's slug → Sleeper id map (0205): the DYN column's ID-FIRST join
+    // reads it (v0.351.3 — Stathead's board names "Kenneth Gainwell", our slug
+    // says kenny-gainwell; the id agrees where the names never will), and the
+    // projection join sharpens the same way. A failed read just leaves the
+    // name fallback, never an empty column.
+    leaguePoolIds(leagueId).then((r) => setSlugSleeperIds(r?.ids ?? {})).catch(() => {});
     myFavorites().then(setFavs).catch(() => {});
     void loadTeamOverrides();
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
