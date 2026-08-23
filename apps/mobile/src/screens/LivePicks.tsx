@@ -746,15 +746,6 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       <LinkButton label="‹" onPress={() => canStep(-1) && stepWeek(-1)} />
       <Mono size={10} weight="700" track={0.06}>{weekLabel(curWeek)}</Mono>
       <LinkButton label="›" onPress={() => canStep(1) && stepWeek(1)} />
-      {/* WHICH GAME (v0.256.0, HANDOFF #4) — the web chip, ported: the mode is
-          stated where the game is played. Classic renders its own board with
-          its own header, so in practice this reads ◈ DRIP — but it follows the
-          state, not the assumption. */}
-      {gameMode && (
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}>
-          <Mono size={8} weight="700" tone="dim" track={0.08}>{gameMode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'}</Mono>
-        </View>
-      )}
     </View>
   );
 
