@@ -164,7 +164,7 @@ TE,BUF,Dalton Kincaid,1722,1887
 WR,LAC,Quentin Johnston,1714,1666
 TE,DAL,Jake Ferguson,1713,1863
 WR,BUF,Skyler Bell,1685,1744
-RB,TBB,Kenneth Gainwell,1636,1499
+RB,TBB,Kenny Gainwell,1636,1499
 WR,DEN,Courtland Sutton,1611,1579
 WR,NEP,Romeo Doubs,1597,1631
 TE,LAC,Oronde Gadsden,1595,1702
