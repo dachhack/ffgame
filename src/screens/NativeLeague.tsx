@@ -28,7 +28,7 @@ import {
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, type PushTokenRow,
   nominate, placeBid, setLotProxy,
-  leagueTrades, proposeTrade, respondTrade, cancelTrade,
+  leagueTrades, proposeTrade, respondTrade, cancelTrade, leagueContracts, type LeagueContracts,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
   leagueMarket,
@@ -2422,10 +2422,17 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Contract leagues (0219): salary terms an offer can carry — retention per
+  // traded slug, and cap dollars (+ = I send room, − = I ask for room).
+  const [contracts, setContracts] = useState<LeagueContracts | null>(null);
+  const [retain, setRetain] = useState<Record<string, number>>({});
+  const [capDraft, setCapDraft] = useState('');
+  const [capDir, setCapDir] = useState<1 | -1>(1);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
+    leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -2488,16 +2495,22 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
+  const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
   const propose = async () => {
     if (busy || myRoster == null || partner == null
-        || give.length + get.length + givePicks.length + getPicks.length === 0) return;
+        || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0) return;
     setBusy(true); setErr(null);
     try {
+      const retainTerms = [...give, ...get]
+        .filter((s) => (retain[s] ?? 0) > 0)
+        .map((s) => ({ slug: s, amount: retain[s] }));
       const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
         givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
-        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })));
+        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
+        retainTerms, capDollars || undefined);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
+      setRetain({}); setCapDraft(''); setCapDir(1);
       await load();
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -2583,6 +2596,17 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             </span>
             {statusChip(t)}
           </div>
+          {/* salary terms ride the row so the accepting side SEES the money */}
+          {(t.retain ?? []).length > 0 && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 3 }}>
+              {(t.retain ?? []).map((r) => `💸 ${teamName(r.roster)} retains $${r.amount} on ${pname(r.slug)}`).join(' · ')}
+            </div>
+          )}
+          {!!t.cap_dollars && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 3 }}>
+              💵 {teamName(t.cap_dollars > 0 ? t.from_roster : t.to_roster)} sends ${Math.abs(t.cap_dollars)} of cap room
+            </div>
+          )}
           {t.note && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3 }}>“{t.note}”</div>}
           {(t.status === 'pending' || t.status === 'accepted') && (
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -2708,11 +2732,44 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                 </div>
               </div>
             )}
+            {/* ── SALARY TERMS (0219, contract leagues) ── */}
+            {contracts?.rules?.retention && [...give, ...get].some((s) => (contracts.deals ?? []).some((d) => d.slug === s && d.salary > 1)) && (
+              <div style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>💸 RETAINED SALARY — the sender keeps eating this much</div>
+                {[...give, ...get].map((s) => {
+                  const d = (contracts.deals ?? []).find((x) => x.slug === s);
+                  if (!d || d.salary <= 1) return null;
+                  const maxR = d.salary - 1 - (d.retained ?? 0);
+                  if (maxR < 1) return null;
+                  const cur = retain[s] ?? 0;
+                  return (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                      <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text)' }}>
+                        {pname(s)} <span style={{ color: 'var(--dim)', fontSize: 10 }}>${d.salary}·{d.years}yr</span>
+                      </span>
+                      <button onClick={() => setRetain((r) => ({ ...r, [s]: Math.max(0, cur - 1) }))} disabled={cur <= 0} className="mono" style={{ ...ghostBtn, padding: '2px 8px' }}>−</button>
+                      <span className="mono" style={{ fontSize: 11, fontWeight: 700, minWidth: 30, textAlign: 'center', color: cur > 0 ? 'var(--warn)' : 'var(--faint)' }}>${cur}</span>
+                      <button onClick={() => setRetain((r) => ({ ...r, [s]: Math.min(maxR, cur + 1) }))} disabled={cur >= maxR} className="mono" style={{ ...ghostBtn, padding: '2px 8px' }}>＋</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {contracts?.rules?.cap_trading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>💵 CAP DOLLARS</span>
+                <Chip on={capDir === 1} onClick={() => setCapDir(1)}>I SEND</Chip>
+                <Chip on={capDir === -1} onClick={() => setCapDir(-1)}>I ASK</Chip>
+                <input value={capDraft} maxLength={5} inputMode="numeric" placeholder="0"
+                  onChange={(e) => setCapDraft(e.target.value.replace(/[^0-9]/g, ''))}
+                  style={{ ...input, width: 64, marginTop: 0 }} />
+              </div>
+            )}
             <input value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)…" style={{ ...input, marginTop: 12 }} />
             {err && <div className="mono" style={errStyle}>{err}</div>}
             <button onClick={propose}
-              disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length === 0}
-              className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy || partner == null || give.length + get.length + givePicks.length + getPicks.length === 0 ? 0.5 : 1 }}>
+              disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0}
+              className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy || partner == null || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0 ? 0.5 : 1 }}>
               ⇄ SEND THE OFFER{tradeReview === 'commish' ? ' (commish must approve)' : ''}
             </button>
             <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={() => setOpen(false)} className="mono" style={linkBtn}>cancel</button></div>

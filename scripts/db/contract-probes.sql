@@ -232,4 +232,228 @@ begin
     'continuity must be', 'ct10r a typo''d axis value refuses');
 end $$;
 
+-- ── 11 + 12. SALARY MECHANICS (0219): retention, cap trading, IR relief,
+-- the rules surface — then the cut that writes the ledger (0220) ─────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text; msg text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Salary Lab', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 's11a create contract league (cap $30)');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Retains'), 's11b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'sl-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 's11c seed');
+  update draft set status = 'complete' where league_id = lid;
+
+  -- the rules surface
+  perform probe_as('b');
+  perform assert_err(set_salary_rules(lid, 50), 'commissioner', 's11d members do not write the rulebook');
+  perform probe_as('a');
+  r := set_salary_rules(lid, 50, null, true, true, null, null, null);
+  perform assert_ok(r, 's11e dead 50% + cap trading + IR relief on');
+  perform assert_true((r ->> 'dead_pct')::int = 50 and (r ->> 'cap_trading')::boolean
+      and (r ->> 'ir_relief')::boolean and (r ->> 'retention')::boolean,
+    's11f the rules read back (retention defaults on)');
+
+  -- build the books: A holds a $10 three-year deal, B two street deals
+  perform assert_ok(add_free_agent(lid, 1, 'sl-p1', null), 's11g A signs p1');
+  perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'sl-p2', null), 's11h B signs p2');
+  perform assert_ok(add_free_agent(lid, 2, 'sl-p3', null), 's11i B signs p3');
+  update contract set salary = 10, years = 3 where league_id = lid and slug = 'sl-p1';
+
+  -- ── retention: A eats $4 sending the $10 deal to B ─────────────────────────
+  perform probe_as('a');
+  r := propose_trade(lid, 1, 2, '["sl-p1"]'::jsonb, '[]'::jsonb, null, null, null,
+                     '[{"slug":"sl-p1","amount":4}]'::jsonb, null);
+  perform assert_ok(r, 's11j retention offer stands');
+  perform probe_as('b');
+  perform assert_ok(respond_trade((r ->> 'trade_id')::uuid, true), 's11k B accepts');
+  perform assert_true((select (roster_id, amount) = (1, 4) from salary_retention
+      where league_id = lid and slug = 'sl-p1'),
+    's11l THE GHOST: A retains $4 on the player A no longer holds');
+  perform assert_true(team_payroll(lid, 1) = 4, 's11m A''s payroll IS the ghost');
+  perform assert_true(team_payroll(lid, 2) = 8, 's11n B pays the net: $6 + two $1 deals');
+
+  -- over-retention refuses: $4 already eaten, salary 10 → at most $5 more
+  r := propose_trade(lid, 2, 1, '["sl-p1"]'::jsonb, '[]'::jsonb, null, null, null,
+                     '[{"slug":"sl-p1","amount":6}]'::jsonb, null);
+  perform assert_err(r, 'retention on', 's11o the receiver always pays at least $1');
+
+  -- ── cap dollars move like a pick ───────────────────────────────────────────
+  perform probe_as('a');
+  r := propose_trade(lid, 1, 2, '[]'::jsonb, '[]'::jsonb, null, null, null, null, 5);
+  perform assert_ok(r, 's11p a pure cash offer stands');
+  perform probe_as('b');
+  perform assert_ok(respond_trade((r ->> 'trade_id')::uuid, true), 's11q accepted');
+  perform assert_true(team_cap(lid, 1) = 25 and team_cap(lid, 2) = 35,
+    's11r THE POINT: cap room moved — $25 / $35');
+  -- a cash deal that would sink the sender is refused whole
+  perform probe_as('a');
+  r := propose_trade(lid, 1, 2, '[]'::jsonb, '[]'::jsonb, null, null, null, null, 22);
+  perform assert_ok(r, 's11s the doomed offer stands (judged at accept)');
+  perform probe_as('b');
+  begin
+    perform respond_trade((r ->> 'trade_id')::uuid, true);
+    raise exception 'PROBE FAIL s11t an over-cap cash deal went through';
+  exception when others then
+    msg := sqlerrm;
+    if position('salary cap exceeded' in msg) = 0 then raise; end if;
+  end;
+  perform assert_true(team_cap(lid, 1) = 25, 's11u the refused cash deal rolled back');
+
+  -- ── IR relief: the stashed deal comes off the books ────────────────────────
+  update native_roster set spot = 'ir' where league_id = lid and slug = 'sl-p1';
+  perform assert_true(team_payroll(lid, 2) = 2, 's11v B''s $6 net parked on IR');
+  perform probe_as('a');
+  perform assert_ok(set_salary_rules(lid, null, null, null, false, null, null, null), 's11w relief off');
+  perform assert_true(team_payroll(lid, 2) = 8, 's11x …and the salary is back');
+  update native_roster set spot = 'active' where league_id = lid and slug = 'sl-p1';
+
+  -- retention can be switched off
+  perform assert_ok(set_salary_rules(lid, null, false, null, null, null, null, null), 's11y retention off');
+  perform probe_as('b');
+  r := propose_trade(lid, 2, 1, '["sl-p1"]'::jsonb, '[]'::jsonb, null, null, null,
+                     '[{"slug":"sl-p1","amount":2}]'::jsonb, null);
+  perform assert_err(r, 'retention turned off', 's11z the switch holds');
+
+  -- ── 12. the cut writes the ledger ──────────────────────────────────────────
+  -- B cuts the $10 deal (3yr, $4 retained by A): A's ghost hardens into dead
+  -- money, B eats 50% of their $6 share, both for the deal's remaining life.
+  delete from native_roster where league_id = lid and slug = 'sl-p1';
+  perform assert_true(not exists (select 1 from contract where league_id = lid and slug = 'sl-p1')
+    and not exists (select 1 from salary_retention where league_id = lid and slug = 'sl-p1'),
+    's12a deal and retention released');
+  perform assert_true((select (amount, years_left) = (4, 3) from dead_money
+      where league_id = lid and roster_id = 1 and slug = 'sl-p1'),
+    's12b THE TRAP: A''s retained $4 is dead for 3 years');
+  perform assert_true((select (amount, years_left) = (3, 3) from dead_money
+      where league_id = lid and roster_id = 2 and slug = 'sl-p1'),
+    's12c B''s penalty: 50% of the $6 share, 3 years');
+  perform assert_true(team_payroll(lid, 1) = 4 and team_payroll(lid, 2) = 5,
+    's12d the ledger sums: A $4 dead, B $2 live + $3 dead');
+end $$;
+
+-- ── 13 + 14. THE OFFSEASON (0220): tag, extend, RFA — then the rollover
+-- carries every live deal and decrements the ledger ──────────────────────────
+do $$
+declare lid uuid; nlid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+        mkt int; extsal int; tagsal int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Carry On', '2026', 2, 5, 60, 'snake', 25, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 's13a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Carries'), 's13b B joins');
+  perform probe_as('a');
+  -- 25 deep: next season's room re-checks pool ≥ picks AFTER the carriage
+  -- takes its five off the board
+  for i in 1..25 loop pool := pool || jsonb_build_object('slug', 'co-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 's13c seed');
+  update draft set status = 'complete' where league_id = lid;
+  -- age the league so the Super Bowl gate is GENUINELY open — the offseason
+  -- tools are member actions, not admin ones, and must work as plain seats
+  update league set season = '2020' where id = lid;
+
+  -- the books: A holds an $8 3yr deal and an expiring $5; B a $6 2yr, an
+  -- expiring $4 (to tag), an expiring $1 (to extend), an expiring $1 (RFA)
+  perform assert_ok(add_free_agent(lid, 1, 'co-p1', null), 's13d');
+  perform assert_ok(add_free_agent(lid, 1, 'co-p2', null), 's13e');
+  perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'co-p3', null), 's13f');
+  perform assert_ok(add_free_agent(lid, 2, 'co-p4', null), 's13g');
+  perform assert_ok(add_free_agent(lid, 2, 'co-p5', null), 's13h');
+  perform assert_ok(add_free_agent(lid, 2, 'co-p6', null), 's13i');
+  update contract set salary = 8, years = 3 where league_id = lid and slug = 'co-p1';
+  update contract set salary = 5, years = 1 where league_id = lid and slug = 'co-p2';
+  update contract set salary = 6, years = 2 where league_id = lid and slug = 'co-p3';
+  update contract set salary = 4, years = 1 where league_id = lid and slug = 'co-p4';
+  -- A retains $2 on B's co-p3 (as if traded earlier) and carries $3 dead, 2yr
+  insert into salary_retention (league_id, slug, roster_id, amount) values (lid, 'co-p3', 1, 2);
+  insert into dead_money (league_id, roster_id, slug, amount, years_left, note) values (lid, 1, 'co-p0', 3, 2, 'probe');
+  update league_membership set cap_adjust = 7 where league_id = lid and sleeper_roster_id = 1;
+
+  -- ── 14a. the franchise tag ─────────────────────────────────────────────────
+  perform probe_as('a');              -- the commish may tag any seat's player
+  mkt := contract_market_value(lid, 'co-p4');
+  tagsal := greatest(mkt, ceil(4 * 1.20)::int);
+  r := franchise_tag(lid, 'co-p4');
+  perform assert_ok(r, 's14a tag lands');
+  perform assert_true((select (salary, years, tagged) = (tagsal, 1, true) from contract
+      where league_id = lid and slug = 'co-p4'),
+    's14b tag price: max(top-5 positional market, salary + 20%)');
+  perform assert_err(franchise_tag(lid, 'co-p5'), 'one tag per team', 's14c one tag per team');
+  perform assert_err(franchise_tag(lid, 'co-p1'), 'years left', 's14d tags are for expiring deals');
+
+  -- ── 14b. the extension ─────────────────────────────────────────────────────
+  mkt := contract_market_value(lid, 'co-p5');
+  extsal := greatest(1, ceil(mkt * 0.85)::int);
+  r := extend_contract(lid, 'co-p5', 2);
+  perform assert_ok(r, 's14e extension signs');
+  perform assert_true((select (salary, years) = (extsal, 3) from contract
+      where league_id = lid and slug = 'co-p5'),
+    's14f 85% of market, stored 2+1 so the rollover lands it at 2');
+  perform assert_err(extend_contract(lid, 'co-p3', 2), 'years left', 's14g extensions are for expiring deals');
+  perform assert_err(extend_contract(lid, 'co-p4', 1), 'tag year', 's14h no extension on a tag');
+
+  -- ── 14c. RFA: tender, bid, walk ────────────────────────────────────────────
+  perform probe_as('b');
+  perform assert_ok(rfa_tender(lid, 'co-p6'), 's14i B tenders the expiring $1');
+  perform probe_as('a');
+  perform assert_err(rfa_bid(lid, 1, 'co-p6', 0, 1), 'at least', 's14j a $0 bid is not a bid');
+  perform assert_ok(rfa_bid(lid, 1, 'co-p6', 7, 2), 's14k A offers $7 for 2yr');
+  perform assert_err(rfa_bid(lid, 1, 'co-p6', 6, 2), 'beat the standing offer', 's14l bids must climb');
+  perform probe_as('b');
+  r := rfa_resolve(lid, 'co-p6', false);   -- let him walk
+  perform assert_ok(r, 's14m B lets him walk');
+  perform assert_true((select (roster_id, salary, years) = (1, 7, 3) from contract
+      where league_id = lid and slug = 'co-p6'),
+    's14n the deal moved to the bidder at the offer, stored 2+1');
+  perform assert_true(exists (select 1 from native_roster
+      where league_id = lid and roster_id = 1 and slug = 'co-p6'), 's14o the player moved with it');
+
+  -- ── 13z. THE ROLLOVER carries the book ─────────────────────────────────────
+  perform probe_as('a');
+  r := rollover_league(lid, 14, false);
+  perform assert_ok(r, 's13j rollover runs (admin bypasses the Super Bowl gate)');
+  nlid := (r ->> 'league_id')::uuid;
+  perform assert_true((select (roster_id, salary, years) = (1, 8, 2) from contract
+      where league_id = nlid and slug = 'co-p1'),
+    's13k THE KEYSTONE: the 3-year deal carries at years−1');
+  perform assert_true(not exists (select 1 from native_roster where league_id = nlid and slug = 'co-p2'),
+    's13l the expiring deal walked to the pool');
+  perform assert_true((select (roster_id, salary, years) = (2, 6, 1) from contract
+      where league_id = nlid and slug = 'co-p3'),
+    's13m the 2-year deal enters its final year');
+  perform assert_true((select (salary, years, tagged) = (tagsal, 1, false) from contract
+      where league_id = nlid and slug = 'co-p4'),
+    's13n the tag buys exactly one more season');
+  perform assert_true((select years = 2 from contract where league_id = nlid and slug = 'co-p5'),
+    's13o the 2-year extension lands at 2');
+  perform assert_true((select (roster_id, years) = (1, 2) from contract where league_id = nlid and slug = 'co-p6'),
+    's13p the walked RFA deal carries to its new team');
+  perform assert_true((select (amount, years_left) = (3, 1) from dead_money
+      where league_id = nlid and roster_id = 1),
+    's13q dead money follows at years_left−1');
+  perform assert_true((select (roster_id, amount) = (1, 2) from salary_retention
+      where league_id = nlid and slug = 'co-p3'),
+    's13r the retained-salary ghost follows its contract');
+  perform assert_true((select cap_adjust from league_membership
+      where league_id = nlid and sleeper_roster_id = 1) = 0,
+    's13s traded cap room does NOT carry — fresh season, fresh money');
+
+  -- the next room opens pre-docked: seat budgets are budget − carried payroll
+  perform assert_ok(start_draft(nlid, '[1,2]'::jsonb), 's13t next season''s room opens');
+  perform assert_true((select draft_budget from league_membership
+      where league_id = nlid and sleeper_roster_id = 1)
+      = greatest(1, 25 - team_payroll(nlid, 1)),
+    's13u the carried payroll already spent part of seat 1''s money');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

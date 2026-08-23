@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import {
   advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
-  leagueContracts, setContractYears,
+  leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -101,13 +101,14 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
   );
 }
 
-// ── Cap sheet (0217): every member's read of a contract league ───────────────
+// ── Cap sheet (0217–0220): every member's read of a contract league ──────────
 // Renders NOTHING when the league plays without contracts, so it can mount
 // unconditionally next to Standings. Payroll + room per team; tap a team to
-// unfold its deals ($salary · years · how it was signed). While the draft room
-// is open, YOUR deals carry a length picker (0218) — the founder's "the winner
-// assigns the length", one tap per year. After the room closes the server
-// locks lengths (commissioner-only), so the picker folds away.
+// unfold its deals ($salary · years · how it was signed · the league's own
+// market read), its retained-salary ghosts and its dead money. While the
+// draft room is open, YOUR deals carry a length picker; in the OFFSEASON your
+// expiring deals grow the front-office row — 🏷 TAG, ⤴ EXTEND, 🪧 TENDER —
+// and open RFA tenders take rival bids and the owner's match-or-walk.
 export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const t = useTheme();
   const [st, setSt] = useState<LeagueContracts | null>(null);
@@ -115,6 +116,9 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
   const [open, setOpen] = useState<number | null>(myRoster);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [bidFor, setBidFor] = useState<string | null>(null);   // open bid form, by slug
+  const [bidSalary, setBidSalary] = useState('');
+  const [bidYears, setBidYears] = useState(1);
 
   const load = () => leagueContracts(leagueId).then((r) => {
     setSt(r);
@@ -126,45 +130,56 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
   }).catch(() => setSt({ contracts: false }));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
-  const setYears = async (slug: string, years: number) => {
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done?: string) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setContractYears(leagueId, slug, years);
-      if (r.ok) { commit(); await load(); }
+      const r = await fn();
+      if (r.ok) { commit(); if (done) setNote(done); await load(); }
       else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
     finally { setBusy(false); }
   };
 
   if (!st?.contracts) return null;
-  const cap = st.salary_cap ?? 0;
   const deals = st.deals ?? [];
   const yearsMax = st.years_max ?? 4;
   const canAssign = !st.locked;
+  const offseason = !!st.offseason;
+  const rules = st.rules;
+  const tenders = st.tenders ?? [];
+  const nameOf = (s: string) => names[s]?.full_name ?? s;
   const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <Card>
       <Mono size={9} tone="faint" track={0.12}>📜 CAP SHEET</Mono>
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
-        ${cap} cap · deals up to {st.years_max}yr · {deals.length} signed
+        ${st.salary_cap} cap · deals up to {st.years_max}yr · {deals.length} signed
+        {offseason ? ' · OFFSEASON — tags, extensions & RFA are live' : ''}
       </Mono>
-      {!!note && <Mono size={9} tone="opp" style={{ marginTop: 4 }}>{note}</Mono>}
+      {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
       <View style={{ marginTop: 8 }}>
         {(st.payrolls ?? []).map((p) => {
+          const cap = p.cap ?? st.salary_cap ?? 0;
           const room = cap - p.payroll;
           const mine = p.roster_id === myRoster;
           const unfolded = open === p.roster_id;
           const team = deals.filter((d) => d.roster_id === p.roster_id);
+          const ghosts = (st.retentions ?? []).filter((r) => r.roster_id === p.roster_id);
+          const dead = (st.dead ?? []).filter((r) => r.roster_id === p.roster_id);
+          const myTagUsed = team.some((d) => d.tagged);
           return (
             <View key={p.roster_id} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
               <Pressable onPress={() => { tap(); setOpen(unfolded ? null : p.roster_id); }}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : t.text, fontWeight: mine ? '700' : '400' }}>
-                  {p.team ?? `Roster ${p.roster_id}`}
-                </Text>
-                <Mono size={9.5} weight="700" tone={room < 0 ? 'opp' : undefined} style={{ width: 44, textAlign: 'right' }}>${p.payroll}</Mono>
-                <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'} style={{ width: 64, textAlign: 'right' }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: fs(12), color: mine ? t.you : t.text, fontWeight: mine ? '700' : '400' }}>
+                    {p.team ?? `Roster ${p.roster_id}`}
+                  </Text>
+                  {!!p.cap_adjust && <Mono size={7.5} tone="faint">cap {p.cap_adjust > 0 ? '+' : ''}${p.cap_adjust} by trade</Mono>}
+                </View>
+                <Mono size={9.5} weight="700" tone={room < 0 ? 'opp' : undefined} style={{ textAlign: 'right' }}>${p.payroll}/${cap}</Mono>
+                <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'} style={{ width: 58, textAlign: 'right' }}>
                   {room < 0 ? `$${-room} over` : `$${room} room`}
                 </Mono>
                 <Mono size={9} tone="faint">{unfolded ? '▾' : '▸'}</Mono>
@@ -172,37 +187,131 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
               {unfolded && team.map((d) => {
                 // rookie-scale lengths are the scale's, never the manager's
                 const pickable = canAssign && mine && d.acquired !== 'rookie';
+                const net = d.salary - (d.retained ?? 0);
+                // the front office works EXPIRING deals in the offseason
+                const frontOffice = offseason && mine && d.years === 1 && !d.tagged;
+                const tendered = tenders.some((x) => x.slug === d.slug && x.status === 'open');
+                const bargain = (d.mkt ?? 0) > d.salary;
                 return (
                   <View key={d.slug} style={{ paddingVertical: 3, paddingLeft: 10 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>
-                        {names[d.slug]?.full_name ?? d.slug}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
+                        {d.tagged ? '🏷 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
                       </Text>
-                      <Mono size={9} weight="700">${d.salary}·{d.years}yr</Mono>
-                      <Mono size={8} tone="faint" style={{ width: 74, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</Mono>
+                      <Mono size={9} weight="700">${net}·{d.years}yr</Mono>
+                      {/* the value read: the league's own market vs the deal */}
+                      {d.mkt != null && <Mono size={7.5} tone={bargain ? 'you' : 'faint'}>mkt ${d.mkt}</Mono>}
+                      <Mono size={8} tone="faint" style={{ width: 64, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</Mono>
                     </View>
+                    {!!d.retained && (
+                      <Mono size={7.5} tone="faint">${d.retained} of ${d.salary} retained by a former team</Mono>
+                    )}
                     {pickable && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2 }}>
                         <Mono size={8} tone="faint">LENGTH</Mono>
                         {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
                           <Chip key={y} label={`${y}YR`} on={d.years === y} disabled={busy}
-                            onPress={() => { tap(); void setYears(d.slug, y); }} />
+                            onPress={() => { tap(); void act(() => setContractYears(leagueId, d.slug, y)); }} />
                         ))}
+                      </View>
+                    )}
+                    {frontOffice && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2, flexWrap: 'wrap' }}>
+                        {!myTagUsed && (
+                          <Chip label="🏷 TAG" disabled={busy}
+                            onPress={() => { tap(); void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }} />
+                        )}
+                        {!tendered && [1, 2, 3].map((y) => (
+                          <Chip key={y} label={`⤴ EXT ${y}YR`} disabled={busy}
+                            onPress={() => { tap(); void act(() => extendContract(leagueId, d.slug, y), `✓ extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }} />
+                        ))}
+                        {rules?.rfa && !tendered && (
+                          <Chip label="🪧 TENDER" disabled={busy}
+                            onPress={() => { tap(); void act(() => rfaTender(leagueId, d.slug), `✓ ${nameOf(d.slug)} tendered to RFA`); }} />
+                        )}
                       </View>
                     )}
                   </View>
                 );
               })}
-              {unfolded && team.length === 0 && (
+              {unfolded && ghosts.map((g) => (
+                <View key={`g-${g.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2, paddingLeft: 10 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(10.5), color: t.faint, fontStyle: 'italic' }}>
+                    {nameOf(g.slug)} — retained on the way out
+                  </Text>
+                  <Mono size={8.5} tone="faint">${g.amount} ghost</Mono>
+                </View>
+              ))}
+              {unfolded && dead.map((dm, i) => (
+                <View key={`d-${dm.slug}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2, paddingLeft: 10 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(10.5), color: t.opp, fontStyle: 'italic' }}>
+                    {nameOf(dm.slug)} — dead money{dm.note ? ` (${dm.note})` : ''}
+                  </Text>
+                  <Mono size={8.5} tone="opp">${dm.amount}·{dm.years_left}yr</Mono>
+                </View>
+              ))}
+              {unfolded && team.length === 0 && ghosts.length === 0 && dead.length === 0 && (
                 <Mono size={8.5} tone="faint" style={{ paddingLeft: 10, paddingBottom: 5 }}>no deals on the books</Mono>
               )}
             </View>
           );
         })}
       </View>
+      {/* ── The RFA board (0220): open tenders take bids; owners answer ── */}
+      {offseason && tenders.filter((x) => x.status === 'open').length > 0 && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+          <Mono size={9} tone="faint" weight="700" track={0.12}>🪧 RFA BOARD</Mono>
+          {tenders.filter((x) => x.status === 'open').map((x) => {
+            const ownerIsMe = x.roster_id === myRoster;
+            const bidding = bidFor === x.slug;
+            return (
+              <View key={x.slug} style={{ paddingVertical: 5 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
+                    {nameOf(x.slug)}
+                  </Text>
+                  <Mono size={8.5} tone={x.offer_salary ? 'warn' : 'faint'}>
+                    {x.offer_salary ? `best offer $${x.offer_salary}·${x.offer_years}yr` : 'no offers yet'}
+                  </Mono>
+                </View>
+                {!ownerIsMe && myRoster != null && !bidding && (
+                  <Chip label="💰 MAKE AN OFFER" disabled={busy}
+                    onPress={() => { tap(); setBidFor(x.slug); setBidSalary(String((x.offer_salary ?? 0) + 1)); setBidYears(x.offer_years ?? 1); }} />
+                )}
+                {!ownerIsMe && bidding && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    <Mono size={8} tone="faint">$</Mono>
+                    <TextInput value={bidSalary} keyboardType="number-pad" maxLength={5}
+                      onChangeText={(v) => setBidSalary(v.replace(/[^0-9]/g, ''))}
+                      style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
+                    {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
+                      <Chip key={y} label={`${y}YR`} on={bidYears === y} onPress={() => { tap(); setBidYears(y); }} />
+                    ))}
+                    <Chip label="✓ BID" disabled={busy || !parseInt(bidSalary, 10)}
+                      onPress={() => {
+                        tap(); setBidFor(null);
+                        void act(() => rfaBid(leagueId, myRoster!, x.slug, parseInt(bidSalary, 10), bidYears), '✓ offer in');
+                      }} />
+                  </View>
+                )}
+                {ownerIsMe && x.offer_salary != null && (
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                    <Chip label="✓ MATCH" disabled={busy}
+                      onPress={() => { tap(); void act(() => rfaResolve(leagueId, x.slug, true), `✓ matched — ${nameOf(x.slug)} stays`); }} />
+                    <Chip label="👋 LET WALK" disabled={busy}
+                      onPress={() => { tap(); void act(() => rfaResolve(leagueId, x.slug, false), `✓ walked — the deal moved with him`); }} />
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
       <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         Auction wins sign at the bid, waiver wins at the FAAB bid, free agents at the $1 minimum. A move that would land a team over the cap is refused.
-        {canAssign ? ' The draft room is open — set each of your deals’ lengths above before it closes.' : ' Lengths are locked for the season; your commissioner can correct one.'}
+        {canAssign ? ' The draft room is open — set each of your deals’ lengths above before it closes.' : ''}
+        {rules ? ` Cuts on multi-year deals leave ${rules.dead_pct}% dead money for the deal's remaining life.` : ''}
+        {offseason ? ' Multi-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched.' : ''}
       </Mono>
     </Card>
   );

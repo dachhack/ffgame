@@ -26,7 +26,7 @@ import {
   setTaxiRules, setIrRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
-  leagueContracts, setContractRules, type LeagueContracts,
+  leagueContracts, setContractRules, setSalaryRules, type LeagueContracts,
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
@@ -88,7 +88,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'MONEY', items: [
     { id: 'coin', label: '◈ DRIP COIN', dripOnly: true },
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
-    { id: 'contracts', label: '📜 CONTRACTS & CAP', nativeOnly: true },
+    { id: 'contracts', label: '📜 SALARY', nativeOnly: true },
   ] },
   // Its own group, at the bottom, with nothing else in it (0188). Deleting a
   // league is the only commissioner action that cannot be undone by another
@@ -948,10 +948,26 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
   const [note, setNote] = useState<string | null>(null);
   const [capDraft, setCapDraft] = useState('');
   const [yearsDraft, setYearsDraft] = useState(4);
+  // the 0219 rulebook, drafted locally and saved in one tap
+  const [deadDraft, setDeadDraft] = useState('30');
+  const [tagDraft, setTagDraft] = useState('20');
+  const [extDraft, setExtDraft] = useState('85');
+  const [retention, setRetention] = useState(true);
+  const [capTrading, setCapTrading] = useState(false);
+  const [irRelief, setIrRelief] = useState(false);
+  const [rfa, setRfa] = useState(true);
 
   const load = () => leagueContracts(leagueId).then((r) => {
     setSt(r);
-    if (r.contracts) { setCapDraft(String(r.salary_cap ?? '')); setYearsDraft(r.years_max ?? 4); }
+    if (r.contracts) {
+      setCapDraft(String(r.salary_cap ?? '')); setYearsDraft(r.years_max ?? 4);
+      if (r.rules) {
+        setDeadDraft(String(r.rules.dead_pct)); setTagDraft(String(r.rules.tag_raise_pct));
+        setExtDraft(String(r.rules.ext_discount_pct));
+        setRetention(r.rules.retention); setCapTrading(r.rules.cap_trading);
+        setIrRelief(r.rules.ir_relief); setRfa(r.rules.rfa);
+      }
+    }
   }).catch((e) => setNote(friendlyError(e)));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
@@ -961,6 +977,21 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
     try {
       const r = await setContractRules(leagueId, cap, cap == null ? null : yearsDraft);
       if (r.ok) { commit(); setNote(cap == null ? '✓ contracts off' : `✓ cap set — $${cap}, deals up to ${yearsDraft}yr`); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveRules = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setSalaryRules(leagueId, {
+        deadPct: parseInt(deadDraft, 10), tagRaisePct: parseInt(tagDraft, 10),
+        extDiscountPct: parseInt(extDraft, 10),
+        retention, capTrading, irRelief, rfa,
+      });
+      if (r.ok) { commit(); setNote('✓ salary rules saved'); await load(); }
       else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -989,22 +1020,55 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
             ))}
           </View>
           <View style={{ marginTop: 10, gap: 8 }}>
-            <PrimaryButton label={busy ? '…' : on ? '✓ UPDATE RULES' : '📜 TURN CONTRACTS ON'}
+            <PrimaryButton label={busy ? '…' : on ? '✓ UPDATE CAP & LENGTH' : '📜 TURN CONTRACTS ON'}
               disabled={busy || !Number.isFinite(capNum) || capNum < 1}
               onPress={() => void save(capNum)} />
             {on && <LinkButton label="✕ TURN CONTRACTS OFF" onPress={() => void save(null)} />}
           </View>
+          {/* ── THE RULEBOOK (0219/0220): every salary option in one place ── */}
+          {on && (
+            <View style={{ marginTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+              <Mono size={9} tone="faint" weight="700" track={0.12}>SALARY RULES</Mono>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                {([['DEAD MONEY %', deadDraft, setDeadDraft, 'cut a multi-year deal, eat this % of it'],
+                   ['TAG RAISE %', tagDraft, setTagDraft, 'franchise tag floor over last salary'],
+                   ['EXT. DISCOUNT %', extDraft, setExtDraft, 'extensions sign at this % of market']] as const
+                ).map(([lbl, val, set]) => (
+                  <View key={lbl} style={{ minWidth: 96 }}>
+                    <Mono size={8} tone="faint">{lbl}</Mono>
+                    <TextInput value={val} keyboardType="number-pad" maxLength={3}
+                      onChangeText={(v) => set(v.replace(/[^0-9]/g, ''))}
+                      style={{ marginTop: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: fs(13), color: t.text, backgroundColor: t.bg, width: 72 }} />
+                  </View>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                <Chip label="⇄ RETENTION" on={retention} onPress={() => { tap(); setRetention((v) => !v); }} />
+                <Chip label="💵 CAP TRADING" on={capTrading} onPress={() => { tap(); setCapTrading((v) => !v); }} />
+                <Chip label="🏥 IR RELIEF" on={irRelief} onPress={() => { tap(); setIrRelief((v) => !v); }} />
+                <Chip label="🪧 RFA" on={rfa} onPress={() => { tap(); setRfa((v) => !v); }} />
+              </View>
+              <Mono size={8} tone="faint" style={{ marginTop: 6, lineHeight: fs(12) }}>
+                Retention lets a trader keep eating part of a traded salary. Cap trading moves raw cap dollars in trades (many leagues ban it — off by default). IR relief takes an IR'd player's salary off the books. RFA lets owners tender expiring players for match-or-walk offers in the offseason.
+              </Mono>
+              <View style={{ marginTop: 8 }}>
+                <PrimaryButton label={busy ? '…' : '✓ SAVE SALARY RULES'} disabled={busy} onPress={() => void saveRules()} />
+              </View>
+            </View>
+          )}
           {on && (st.payrolls ?? []).length > 0 && (
             <View style={{ marginTop: 12, gap: 1 }}>
               <Mono size={9} tone="faint" track={0.12}>PAYROLLS</Mono>
               {(st.payrolls ?? []).map((p) => {
-                const room = (st.salary_cap ?? 0) - p.payroll;
+                const cap = p.cap ?? st.salary_cap ?? 0;
+                const room = cap - p.payroll;
                 return (
                   <View key={p.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3, marginTop: 4 }}>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text numberOfLines={1} style={{ fontSize: fs(13), fontWeight: '600', color: t.text }}>{p.team || `Roster ${p.roster_id}`}</Text>
+                      {!!p.cap_adjust && <Mono size={8} tone="faint">cap {p.cap_adjust > 0 ? '+' : ''}${p.cap_adjust} by trade</Mono>}
                     </View>
-                    <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: room < 0 ? t.opp : t.text }}>${p.payroll}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: room < 0 ? t.opp : t.text }}>${p.payroll} / ${cap}</Text>
                     <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'}>{room < 0 ? `$${-room} OVER` : `$${room} room`}</Mono>
                   </View>
                 );
