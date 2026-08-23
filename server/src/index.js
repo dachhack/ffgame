@@ -343,7 +343,7 @@ async function tickContext(ctx, season) {
   if (ctx.offset && slate.length) {
     try {
       await db().from('nfl_slate').upsert(
-        slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff })),
+        slate.map((g) => ({ season, week, home: g.home, away: g.away, win: g.win, kickoff: g.kickoff, game_id: g.gameId ?? null })),
         { onConflict: 'season,week,home' },
       );
     } catch (e) { log(`[${ctx.tag}] slate upsert`, e.message); }

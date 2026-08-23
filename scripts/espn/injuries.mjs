@@ -42,9 +42,11 @@ export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace
       if (!status) continue; // skip Active
       const name = item?.athlete?.displayName;
       if (!name) continue;
-      // Athlete id first where the resolver understands it (0200); one-arg
-      // resolvers ignore the extra argument.
-      const slug = resolveSlug(name, item?.athlete?.id ?? null);
+      // Athlete id first where the resolver understands it (0200), then the
+      // TEAM whose section of the report this is (v0.345.0) — for a player
+      // Sleeper carries no espn_id for, that is what keeps a designation off a
+      // retired namesake. One- and two-arg resolvers ignore the extras.
+      const slug = resolveSlug(name, item?.athlete?.id ?? null, abbr);
       if (!slug) continue; // not a league player we track
       const prev = out[slug];
       const date = item?.date || null;

@@ -29,6 +29,14 @@ const TEAM: Record<number, string> = {
   28: 'WSH', 29: 'CAR', 30: 'JAX', 33: 'BAL', 34: 'HOU',
 };
 
+/** ESPN proTeamId → NFL abbreviation, for the feeds that identify a club by
+ *  number rather than name (the fantasy players endpoint). Exported so the
+ *  worker's market poll shares THIS table rather than keeping a second copy —
+ *  a duplicated team table is the drift v0.344.0 spent a release ending. */
+export function espnProTeam(id?: number | null): string {
+  return (id != null ? TEAM[id] : '') ?? '';
+}
+
 interface EspnStat { scoringPeriodId?: number; statSourceId?: number; appliedTotal?: number; }
 interface EspnPlayer { id: number; fullName?: string; defaultPositionId?: number; proTeamId?: number; stats?: EspnStat[]; }
 interface EspnEntry { playerId?: number; playerPoolEntry?: { player?: EspnPlayer; appliedStatTotal?: number }; appliedStatTotal?: number; }

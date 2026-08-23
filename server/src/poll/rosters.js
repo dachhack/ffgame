@@ -77,7 +77,10 @@ export async function pollRosters(playerIndex) {
     for (const g of d.athletes ?? []) {
       for (const a of g.items ?? []) {
         athletes++;
-        const slug = playerIndex.slugForEspnId(a.id) ?? playerIndex.slugForName(a.fullName ?? '');
+        // `abbr` is the club whose roster page this is, so the name fallback
+        // cannot hand a live player's team to a retired namesake (v0.345.0) —
+        // which is how a stale entry could have been handed a 2026 team.
+        const slug = playerIndex.slugForEspnId(a.id) ?? playerIndex.slugForName(a.fullName ?? '', abbr);
         // First team wins: a player listed twice across groups (active and
         // practice squad both appear) is on that club either way.
         if (slug && !live.has(slug)) live.set(slug, abbr);

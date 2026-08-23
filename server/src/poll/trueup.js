@@ -102,7 +102,10 @@ export function creditsToRows(credits, resolve) {
     if (!cr.gsis) {
       if (cr.defteam) slug = `${cr.defteam.toLowerCase()}-dst`;
     } else {
-      slug = resolve(cr.gsis, cr.name);
+      // These are DEFENSIVE credits (qb hits, pass defenses), so `defteam` is
+      // the crediting player's own club — the name fallback's disambiguator
+      // (v0.345.0), and IDP names are exactly where namesakes bite.
+      slug = resolve(cr.gsis, cr.name, cr.defteam);
       if (!slug) { dropped++; continue; }
     }
     if (!slug) continue;
@@ -124,8 +127,8 @@ export async function trueupTick(season, weeks, playerIndex) {
   if (!res.ok) throw new Error(`nflverse pbp fetch ${res.status}`);
   const text = gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8');
   const credits = extractCredits(text).filter((c) => wanted.has(c.week));
-  const resolve = (gsis, name) =>
-    playerIndex.slugForGsis(gsis) ?? (name ? playerIndex.slugForNflAbbr(name) : null);
+  const resolve = (gsis, name, team) =>
+    playerIndex.slugForGsis(gsis) ?? (name ? playerIndex.slugForNflAbbr(name, team) : null);
   const { rows, dropped } = creditsToRows(credits, resolve);
   // De-dupe on the conflict key (paranoia — nflverse rows are unique already).
   const byKey = new Map();

@@ -4,8 +4,8 @@
 // storage: sealed_pick rows under the 'wk' pseudo-window, sealed at the
 // week's first kickoff (matchup.lock_at), scored by core's classicPoints off
 // the same live play stream, refreshed every 60s.
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, PanResponder } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
@@ -479,6 +479,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // The opponent's lineup + roster + the week's live plays. Since 0178 a
   // classic league's lineups are OPEN — sealed_pick's policy hands them over
   // sealed or not — so this runs from the moment the screen opens.
+  // PULL TO REFRESH (v0.345.1) — the drip board got this in v0.344.4 and the
+  // classic board had the identical gap: no RefreshControl, so the gesture
+  // only bounced the list while the 60s poll decided when you saw fresh
+  // numbers. Reaches the CURRENT load via ref so a pull refreshes in place
+  // instead of remounting the board; a failed pull keeps what's on screen.
+  const loadRef = useRef<(() => Promise<void>) | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadRef.current?.(); } catch { /* keep prior */ }
+    setRefreshing(false);
+  }, []);
+
   useEffect(() => {
     if (!matchup) return;
     let stop = false;
@@ -514,8 +527,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       } catch { /* transient — next tick retries */ }
     };
     void load();
+    loadRef.current = load;
     const id = setInterval(() => { void load(); }, 60_000);
-    return () => { stop = true; clearInterval(id); };
+    return () => { stop = true; clearInterval(id); loadRef.current = null; };
   }, [matchup, userId, leagueId, rosterId]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
@@ -894,7 +908,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   return (
     <View style={{ flex: 1 }} {...swipe.panHandlers}>
-    <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}>
+    <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 48, gap: 10 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
         {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line: the game
             mode and the PPR setting are league settings you read on the league

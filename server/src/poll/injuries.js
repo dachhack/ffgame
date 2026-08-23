@@ -9,7 +9,7 @@ export async function pollInjuries(playerIndex) {
   const feed = await fetchInjuries();
   // ID-FIRST (0200) — same contract as the play poller: the report's athlete id
   // wins where Sleeper maps it, ranked name fallback otherwise.
-  const rows = normalizeInjuries(feed, (name, espnId) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name));
+  const rows = normalizeInjuries(feed, (name, espnId, team) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name, team));
   const now = new Date().toISOString();
   const records = Object.entries(rows).map(([slug, r]) => ({
     player_slug: slug, status: r.status,
