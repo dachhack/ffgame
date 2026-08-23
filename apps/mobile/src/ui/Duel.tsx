@@ -218,7 +218,17 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
           ?? (status === 'final' ? 'FINAL'
             : sealedBacks > 0 && !hasRows && !winKicked(win) ? 'SEALED'
             : status === 'live' ? '● LIVE' : winKicked(win) ? '● LIVE' : 'SEALED');
-        const pairs = Math.max(my.length, th.length, sealedBacks);
+        // PAIR BY ROSTER SLOT, NOT ARRAY POSITION (v0.344.2). `revealed`
+        // arrives in query-row order, and zipping my[i] against th[i] crossed
+        // duels whenever the two sides' rows sorted differently — the
+        // founder's app paired Fields against C.Williams while the web (and
+        // the resolver's slot_scores, which decide the actual battles) paired
+        // him against Maye. The slot is the key the engine scores by, so it is
+        // the key the cards pair by. A window with nothing but a score (or
+        // nothing but sealed backs) still renders one pair.
+        const slotKeys = [...new Set([...my, ...th].map((p) => String(p.roster_slot)))]
+          .sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
+        if (!slotKeys.length && (sealedBacks > 0 || s)) slotKeys.push('0');
         // Done window (founder's call, 0182.2): the field + play log collapse
         // once the window is decided — they're the story of a game that's
         // over, one tap away instead of a screen of dead weight.
@@ -311,14 +321,11 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                 overhang their panels by 12 — without the clearance adjacent
                 duels overlap and the felt clips the top and bottom rows. */}
             <View style={{ gap: 22, paddingHorizontal: 4, paddingVertical: 18 }}>
-              {Array.from({ length: pairs }, (_, i) => {
-                // The slot this pair belongs to. Taken from the picks rather
-                // than the loop index: `mine`/`theirs` are already filtered to
-                // this window and a window's filled slots can be sparse, so the
-                // position in the array is not the roster slot.
-                const slot = my[i]?.roster_slot ?? th[i]?.roster_slot ?? String(i);
+              {slotKeys.map((slot, i) => {
+                const mp = my.find((p) => String(p.roster_slot) === slot);
+                const tp = th.find((p) => String(p.roster_slot) === slot);
                 return (
-                  <View key={i} style={{ gap: 8 }}>
+                  <View key={slot} style={{ gap: 8 }}>
                     {/* Two portrait cards until the window has scored, then the
                         compact live rows — the web's switch, and the reveal
                         flip depends on it. At kickoff the opponent's card is
@@ -328,16 +335,16 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                         entirely, which is how the moment gets lost. */}
                     {hasRows ? (
                       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                        {liveFor(my[i], youSide, 'you', win, slot, i)}
-                        {liveFor(th[i], oppSide, 'their', win, slot, i)}
+                        {liveFor(mp, youSide, 'you', win, slot, i)}
+                        {liveFor(tp, oppSide, 'their', win, slot, i)}
                       </View>
                     ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                      {my[i] ? faceFor(my[i], youSide, t.you, i) : <CardBack label="—" idx={i} />}
+                      {mp ? faceFor(mp, youSide, t.you, i) : <CardBack label="—" idx={i} />}
                       {/* Post-kick, an empty opposing half is a fact: NO PICK,
                           not a SEALED back promising a flip that never comes
                           (the founder watched one promise all night). */}
-                      {th[i] ? faceFor(th[i], oppSide, t.opp, i) : <CardBack label={winKicked(win) ? 'NO PICK' : 'SEALED'} idx={i} />}
+                      {tp ? faceFor(tp, oppSide, t.opp, i) : <CardBack label={winKicked(win) ? 'NO PICK' : 'SEALED'} idx={i} />}
                     </View>
                     )}
                     {/* The duel's game(s) and play log, directly under the pair
