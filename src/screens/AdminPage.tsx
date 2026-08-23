@@ -18,6 +18,7 @@ import {
   keeperState, rolloverLeague, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
+  leagueContracts, setContractRules, setSalaryRules, type LeagueContracts,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -283,7 +284,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // the commissioner's settings panels (injected by CommishDash) are first-class
 // destinations rather than cards stacked below the card.
 export type LeagueTab =
-  | 'overview' | 'waivers' | 'admin'
+  | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs' | 'delete';
@@ -1233,6 +1234,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         ...(has('lineup') || native ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
         ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
         ...(native ? [{ id: 'waivers', label: 'WAIVERS & TRADES' } as TabDef<LeagueTab>] : []),
+        // 📜 SALARY (0217–0220): the contract rulebook. Native only — and the
+        // panel says how to make this a contract league when it isn't one yet.
+        ...(native ? [{ id: 'salary', label: '📜 SALARY' } as TabDef<LeagueTab>] : []),
       ],
     },
     {
@@ -1361,6 +1365,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {/* dynasty (0182): keepers + the rollover into next season */}
       {tab === 'dynasty' && l.provider === 'native' && <DynastyPanel leagueId={l.league_id} leagueName={l.name} />}
+
+      {/* 📜 SALARY (0217–0220): cap, lengths, and the whole salary rulebook */}
+      {tab === 'salary' && l.provider === 'native' && <SalaryPanel leagueId={l.league_id} />}
 
       {tab === 'overview' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -3280,6 +3287,137 @@ function KdstSelect({ suffix, value, taken, onChange }: { suffix: 'k' | 'dst'; v
 // One selection; the number it needs appears beside it. Keeper takes a keeper
 // count; dynasty takes rookie-draft rounds (keepers implied: everyone else)
 // and deals every team's picks for the NEXT THREE SEASONS as tradeable assets.
+// ── 📜 SALARY (0217–0220): the contract rulebook, web console ───────────────
+// The same surface the app's MONEY → 📜 SALARY section drives: cap + max
+// length (set_contract_rules), the seven-knob rulebook (set_salary_rules),
+// and live payrolls against each team's own cap.
+function SalaryPanel({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<LeagueContracts | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [cap, setCap] = useState('');
+  const [years, setYears] = useState(4);
+  const [dead, setDead] = useState('30');
+  const [tagPct, setTagPct] = useState('20');
+  const [extPct, setExtPct] = useState('85');
+  const [retention, setRetention] = useState(true);
+  const [capTrading, setCapTrading] = useState(false);
+  const [irRelief, setIrRelief] = useState(false);
+  const [rfa, setRfa] = useState(true);
+
+  const load = async () => {
+    const r = await leagueContracts(leagueId);
+    setSt(r);
+    if (r.contracts) {
+      setCap(String(r.salary_cap ?? '')); setYears(r.years_max ?? 4);
+      if (r.rules) {
+        setDead(String(r.rules.dead_pct)); setTagPct(String(r.rules.tag_raise_pct)); setExtPct(String(r.rules.ext_discount_pct));
+        setRetention(r.rules.retention); setCapTrading(r.rules.cap_trading);
+        setIrRelief(r.rules.ir_relief); setRfa(r.rules.rfa);
+      }
+    }
+  };
+  useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fn();
+      setMsg(r.ok ? done : (r.error ?? 'that didn\u2019t work'));
+      await load();
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const saveCap = () => {
+    const n = parseInt(cap, 10);
+    if (!Number.isFinite(n) || n < 1) return;
+    void act(() => setContractRules(leagueId, n, years), '\u2713 cap saved');
+  };
+  const saveRules = () => void act(() => setSalaryRules(leagueId, {
+    deadPct: parseInt(dead, 10), tagRaisePct: parseInt(tagPct, 10), extDiscountPct: parseInt(extPct, 10),
+    retention, capTrading, irRelief, rfa,
+  }), '\u2713 salary rules saved');
+
+  if (!st) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading\u2026'}</div>;
+  const on = !!st.contracts;
+  const toggleBtn = (label: string, val: boolean, set: (v: boolean) => void) => (
+    <button onClick={() => set(!val)} disabled={busy} className="mono"
+      style={{ ...mono, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '5px 11px', borderRadius: RADIUS,
+        color: val ? 'var(--on-accent)' : 'var(--dim)', background: val ? 'var(--you)' : 'var(--bg)',
+        border: `1px solid ${val ? 'var(--you)' : 'var(--bd)'}` }}>{label}</button>
+  );
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <div style={subhead}>SALARY CAP</div>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', marginBottom: 8 }}>
+          {on ? `ON \u2014 $${st.salary_cap} cap \u00b7 deals up to ${st.years_max}yr \u00b7 ${(st.deals ?? []).length} signed`
+              : 'OFF \u2014 this league plays without contracts. Set a cap to turn them on (or pick a \ud83d\udcdc CONTRACT league type in \ud83c\udfae MODE & SEASON, which presets everything).'}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>CAP $</span>
+          <input value={cap} inputMode="numeric" onChange={(e) => setCap(e.target.value.replace(/\D/g, ''))}
+            style={{ ...inp, width: 76, textAlign: 'center' }} disabled={busy} />
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>MAX LENGTH</span>
+          {[1, 2, 3, 4, 5, 6].map((y) => (
+            <button key={y} onClick={() => setYears(y)} disabled={busy} className="mono"
+              style={{ ...mono, fontSize: 10.5, fontWeight: 700, cursor: 'pointer', padding: '4px 9px', borderRadius: RADIUS,
+                color: years === y ? 'var(--on-accent)' : 'var(--dim)', background: years === y ? 'var(--you)' : 'var(--bg)',
+                border: `1px solid ${years === y ? 'var(--you)' : 'var(--bd)'}` }}>{y}YR</button>
+          ))}
+          <button onClick={saveCap} disabled={busy || !parseInt(cap, 10)} className="mono" style={{ ...btn, fontSize: 11.5 }}>
+            {on ? 'update' : 'turn contracts on'}
+          </button>
+          {on && <button onClick={() => void act(() => setContractRules(leagueId, null), '\u2713 contracts off')} disabled={busy}
+            className="mono" style={{ ...linkBtn, fontSize: 11.5, color: 'var(--opp)' }}>turn off</button>}
+        </div>
+      </div>
+      {on && (
+        <div>
+          <div style={subhead}>SALARY RULES</div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            {([['DEAD MONEY %', dead, setDead], ['TAG RAISE %', tagPct, setTagPct], ['EXT. DISCOUNT %', extPct, setExtPct]] as const).map(([lbl, v, set]) => (
+              <span key={lbl} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>{lbl}</span>
+                <input value={v} inputMode="numeric" maxLength={3} onChange={(e) => set(e.target.value.replace(/\D/g, ''))}
+                  style={{ ...inp, width: 52, textAlign: 'center' }} disabled={busy} />
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {toggleBtn('\u21c4 RETENTION', retention, setRetention)}
+            {toggleBtn('\ud83d\udcb5 CAP TRADING', capTrading, setCapTrading)}
+            {toggleBtn('\ud83c\udfe5 IR RELIEF', irRelief, setIrRelief)}
+            {toggleBtn('\ud83e\udea7 RFA', rfa, setRfa)}
+            <button onClick={saveRules} disabled={busy} className="mono" style={{ ...btn, fontSize: 11.5 }}>save rules</button>
+          </div>
+          <div className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)', marginTop: 8, lineHeight: 1.6 }}>
+            Dead money: cut a multi-year deal, eat this % for its remaining life. Retention: a trader keeps eating part of a traded salary. Cap trading: raw cap dollars move in trades (off by default). IR relief: an IR\u2019d salary comes off the books. RFA: offseason tenders with match-or-walk. Tags re-sign one expiring deal per team at max(top-5 positional market, salary + raise%); extensions re-sign at the discount % of market.
+          </div>
+        </div>
+      )}
+      {on && (st.payrolls ?? []).length > 0 && (
+        <div>
+          <div style={subhead}>PAYROLLS</div>
+          {(st.payrolls ?? []).map((p) => {
+            const teamCap = p.cap ?? st.salary_cap ?? 0;
+            const room = teamCap - p.payroll;
+            return (
+              <div key={p.roster_id} className="mono" style={{ ...mono, fontSize: 11.5, display: 'flex', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+                <span style={{ flex: 1, color: 'var(--text)' }}>{p.team ?? `Roster ${p.roster_id}`}{p.cap_adjust ? ` (cap ${p.cap_adjust > 0 ? '+' : ''}$${p.cap_adjust} by trade)` : ''}</span>
+                <span style={{ fontWeight: 700, color: room < 0 ? 'var(--opp)' : 'var(--text)' }}>${p.payroll} / ${teamCap}</span>
+                <span style={{ color: room < 0 ? 'var(--opp)' : 'var(--faint)', width: 84, textAlign: 'right' }}>{room < 0 ? `$${-room} OVER` : `$${room} room`}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('\u2713') ? 'var(--you)' : 'var(--warn)' }}>{msg}</div>}
+    </div>
+  );
+}
+
 function ContinuityEditor({ leagueId }: { leagueId: string }) {
   const [st, setSt] = useState<KeeperState | null>(null);
   const [mode, setMode] = useState<LeagueContinuity>('redraft');

@@ -29,6 +29,7 @@ import { useTheme, MONO } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
+import { LabelInfo } from '../ui/InfoChip';
 
 /** League crest with an initial fallback (same reasoning as Leagues.Crest). */
 function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | null; size?: number }) {
@@ -324,22 +325,22 @@ export function Recruit({ onBack, onJoined, onCreated }: {
               {/* Same first question as the web (0175): the one choice that
                   changes what you're playing rather than how it's set up. */}
               <View>
-                <Mono size={8.5} tone="faint" track={0.1}>WHICH GAME?</Mono>
+                <LabelInfo label="WHICH GAME?"
+                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\n◈ DRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\n🏈 NORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
                   <Chip label="◈ DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
                   <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
                 </View>
-                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-                  {game === null
-                    ? 'Pick one — this is the choice that decides what your league plays, and it locks in at the draft.'
-                    : game === 'drip'
-                      ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
-                      : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
-                </Mono>
+                {game === null && (
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
+                )}
                 {/* CONTINUITY (0185): redraft / keeper / dynasty. One
                     selection; the number it needs appears with it. Editable
                     any time in 🎮 MODE. */}
-                <Mono size={8.5} tone="faint" track={0.1} style={{ marginTop: 10 }}>NEXT SEASON</Mono>
+                <View style={{ marginTop: 10 }}>
+                  <LabelInfo label="NEXT SEASON"
+                    info={'What carries into next season:\n\nREDRAFT — every season starts fresh; full draft, nothing carries.\n\n★ KEEPER — each team carries the chosen number of players and redrafts the rest.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year, with three seasons of tradeable picks dealt from day one.\n\n📜 CONTRACT — a salary-cap league: the startup is an auction and every winning bid becomes that player\'s salary; you assign deal lengths during the draft, and the cap holds all season.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign 3-year scale deals, plus the rookie rounds and the pick horizon.'} />
+                </View>
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
                   <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
@@ -362,32 +363,18 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                     <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>
                   </View>
                 )}
-                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-                  {continuity === 'redraft'
-                    ? 'Every season starts fresh — full draft, nothing carries over.'
-                    : continuity === 'keeper'
-                      ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
-                      : continuity === 'contract'
-                        ? 'A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary — you assign deal lengths during the draft, and the cap holds all season.'
-                        : continuity === 'contract_dynasty'
-                          ? `Contracts AND dynasty: bids become salaries, plus a ${rookieN}-round rookie draft each season (rookies sign 3-year scale deals) and three seasons of tradeable picks from day one.`
-                          : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
-                </Mono>
+                {contractType && (
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>auction preset — bids become salaries, cap on at the budget</Mono>
+                )}
               </View>
               <View>
-                <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
+                <LabelInfo label="FORMAT"
+                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\n🔪 GUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
                   <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
                   <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
                 </View>
-                {format !== 'standard' && (
-                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
-                    {format === 'guillotine'
-                      ? 'Each week the lowest-scoring team is ELIMINATED and its roster hits a $1000 FAAB frenzy (preset). Last team standing wins — bring extra teams, one falls per week.'
-                      : 'One team is the Vampire: no waivers or free agents — win a matchup, STEAL a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH, where you can also require approval per steal.'}
-                  </Mono>
-                )}
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
                 onChangeText={(v) => { setNameDraft(v); setErr(null); }}

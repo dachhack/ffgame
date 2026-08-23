@@ -217,7 +217,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
           <Standings leagueId={leagueId} myRoster={rosterId} />
           {/* Contract leagues only — the card renders nothing when the cap is off. */}
-          <CapSheet leagueId={leagueId} myRoster={rosterId} />
+          <CapSheet leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
           <Playoffs leagueId={leagueId} />
         </ScrollView>
       </Overlay>
