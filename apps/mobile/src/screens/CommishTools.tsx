@@ -40,11 +40,29 @@ import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
+
+// ── PRE-BAKED SPOTS (v0.351.0, founder's list) ───────────────────────────────
+// One tap adds a fully-configured exotic spot — the 0172 filters and the
+// best-ball flag were always expressive enough for these; what was missing
+// was not having to hand-assemble them. Conference lists use the pool's own
+// team vocabulary (normTeam: LA, WAS, JAX, LV…).
+const AFC_TEAMS = 'BUF, MIA, NE, NYJ, BAL, CIN, CLE, PIT, HOU, IND, JAX, TEN, DEN, KC, LV, LAC';
+const NFC_TEAMS = 'DAL, NYG, PHI, WAS, CHI, DET, GB, MIN, ATL, CAR, NO, TB, ARI, LA, SEA, SF';
+const SPOT_PRESETS: { chip: string; pos: string[]; label: string; bb?: boolean; fMin?: string; fMax?: string; fTeams?: string }[] = [
+  { chip: '🎯 ROOKIE SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'Rookie Superflex', bb: true, fMax: '0' },
+  { chip: '🎯 ROOKIE FLEX', pos: ['RB', 'WR', 'TE'], label: 'Rookie Flex', bb: true, fMax: '0' },
+  { chip: '🎯 BB KICKER', pos: ['K'], label: 'Best-ball K', bb: true },
+  { chip: '🎯 BB D/ST', pos: ['DEF'], label: 'Best-ball D/ST', bb: true },
+  { chip: 'NFC SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'NFC Superflex', fTeams: NFC_TEAMS },
+  { chip: 'AFC SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'AFC Superflex', fTeams: AFC_TEAMS },
+  { chip: 'VET 8+ SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'Vet 8+ Superflex', fMin: '8' },
+  { chip: 'VET 8+ FLEX', pos: ['RB', 'WR', 'TE'], label: 'Vet 8+ Flex', fMin: '8' },
+];
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
-import { LabelInfo } from '../ui/InfoChip';
+import { InfoChip, LabelInfo } from '../ui/InfoChip';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
@@ -1721,6 +1739,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  // The review-before-save sheet (v0.351.0, founder: "a confirmation that
+  // details all the roster decisions and rules and asks for confirmation or
+  // go back") — SAVE LINEUP opens it; only ✓ CONFIRM actually writes.
+  const [reviewOpen, setReviewOpen] = useState(false);
   // The league's flag vocabulary (v0.300.0) — the labels a spot filter may
   // require. Empty in a league that has flagged nobody, and the row hides.
   const [flagLabels, setFlagLabels] = useState<string[]>([]);
@@ -2059,7 +2081,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               starting spot — its own eligible positions + best-ball flag. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Mono size={8.5} tone="faint" weight="700">🧩 ROSTER BUILDER · {spots.length} STARTING SPOTS</Mono>
-            {spotsDirty && <Pill on label="SAVE LINEUP" onPress={() => void saveSpots()} />}
+            {spotsDirty && <Pill on label="SAVE LINEUP" onPress={() => setReviewOpen(true)} />}
           </View>
           <View style={{ gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => {
@@ -2121,6 +2143,70 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [], zero: '' }]); setSpotsDirty(true); } }} />
             <Mono size={7.5} tone="faint">⠿ drag to reorder · 🎯 best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
           </View>
+          {/* PRE-BAKED SPOTS (v0.351.0): one tap, fully configured. */}
+          <View style={{ marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Mono size={8} tone="faint" weight="700" track={0.1}>PRESET SPOTS</Mono>
+              <InfoChip title="Preset spots">
+                {'One tap adds a fully-configured spot:\n\n🎯 ROOKIE SFLX / FLEX — best-ball spots only a rookie (0 years experience) may fill.\n\n🎯 BB KICKER / D/ST — best-ball K and D/ST: the spot picks its own best scorer each week.\n\nNFC / AFC SFLX — a superflex only that conference\'s players may fill.\n\nVET 8+ — spots reserved for players with 8+ years of NFL experience.\n\nEvery preset is editable after adding (✏️) — they are ordinary spots, just pre-assembled. Tenure- and conference-limited spots need the pool seeded with experience data (re-seed if tenure shows blank).'}
+              </InfoChip>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+              {SPOT_PRESETS.map((pr) => (
+                <Pill key={pr.chip} on={false} label={pr.chip} onPress={() => {
+                  if (spots.length >= 20) return;
+                  setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: [...pr.pos], bb: pr.bb, label: pr.label, fTeams: pr.fTeams ?? '', fMin: pr.fMin ?? '', fMax: pr.fMax ?? '', fFlags: [], zero: '' }]);
+                  setSpotsDirty(true);
+                }} />
+              ))}
+            </View>
+          </View>
+
+          {/* ── REVIEW & CONFIRM (v0.351.0) ─────────────────────────────────
+              Every roster decision, read back in full before it's written:
+              each spot with its eligibility, best-ball flag, filters and
+              zero-fill; then the bench/taxi/IR shape. ✓ CONFIRM saves;
+              ← GO BACK returns to the builder untouched. */}
+          <Overlay visible={reviewOpen} title="Review the roster"
+            subtitle="This is exactly what the league will play with. Confirm, or go back and adjust."
+            onClose={() => setReviewOpen(false)}>
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 24 }}>
+              <Mono size={9} tone="faint" weight="700" track={0.12}>STARTING SPOTS ({spots.length})</Mono>
+              {spots.map((sp, i) => {
+                const rules: string[] = [];
+                if (sp.bb) rules.push('🎯 best-ball — fills itself');
+                if (sp.fMax === '0') rules.push('rookies only');
+                else {
+                  if (sp.fMin) rules.push(`${sp.fMin}+ yrs experience`);
+                  if (sp.fMax && sp.fMax !== '0') rules.push(`≤${sp.fMax} yrs experience`);
+                }
+                if (sp.fTeams.trim()) rules.push(`teams: ${sp.fTeams.trim()}`);
+                if (sp.fFlags.length) rules.push(`⚑ ${sp.fFlags.join(', ')} only`);
+                if (sp.zero.trim()) rules.push(`⛳ zero-fill ${sp.zero.trim()}pts`);
+                return (
+                  <View key={sp.k} style={{ paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                    <Text style={{ fontSize: fs(12.5), fontWeight: '700', color: t.text }}>
+                      {i + 1}. {sp.label.trim() || sp.pos.join('/')}
+                      {sp.label.trim() ? <Text style={{ color: t.dim, fontWeight: '400' }}>  ({sp.pos.join('/')})</Text> : null}
+                    </Text>
+                    {rules.length > 0 && <Mono size={8.5} tone="dim" style={{ marginTop: 2 }}>{rules.join(' · ')}</Mono>}
+                  </View>
+                );
+              })}
+              <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 12 }}>THE SHAPE</Mono>
+              <Mono size={10} style={{ marginTop: 4, lineHeight: fs(15) }}>
+                {spots.length} starters · {shape.bench} bench{shape.taxi ? ` · ${shape.taxi} taxi` : ''}{shape.ir ? ` · ${shape.ir} IR` : ''} — {spots.length + shape.bench} draftable spots per team
+              </Mono>
+              <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
+                Positions the league can roster: {[...new Set(spots.flatMap((s) => s.pos))].join(', ')}. Everything here is editable until the draft starts; it freezes the moment the room opens.
+              </Mono>
+              <View style={{ marginTop: 12, gap: 8 }}>
+                <PrimaryButton label={busy ? '…' : '✓ CONFIRM & SAVE'} disabled={busy}
+                  onPress={() => { tap(); setReviewOpen(false); void saveSpots(); }} />
+                <LinkButton label="← GO BACK & ADJUST" onPress={() => { tap(); setReviewOpen(false); }} />
+              </View>
+            </ScrollView>
+          </Overlay>
 
           {/* ── The SPOT EDITOR sheet (v0.267.0): the founder's "button to pop
               up a position label editor". Label front and center; the 0172

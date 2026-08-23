@@ -313,7 +313,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             {dynastyType && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>rookie draft runs</span>
-                {num(rookieN, setRookieN, 1, Math.min(5, rounds - 1), 1)}
+                {num(rookieN, setRookieN, 1, Math.min(9, rounds - 1), 1)}
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>rounds each season</span>
               </div>
             )}
@@ -764,7 +764,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [queue, setQueue] = useState<string[]>([]);
-  const [tab, setTab] = useState<DraftTab>('players');
+  // The commissioner's console embed (v0.351.0, founder: "in the commish
+  // draft area, we don't need the players, just the settings") opens on
+  // TEAMS and never offers the personal tabs — the room itself is where
+  // drafting happens; the console is for running it.
+  const [tab, setTab] = useState<DraftTab>(embedded ? 'teams' : 'players');
   const [teamView, setTeamView] = useState<number | null>(null);
   // Classic leagues show picks against the ROSTER SPOTS they'll fill; a drip
   // league has no starting spec to map onto, so it keeps the R1..Rn list.
@@ -1311,13 +1315,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
       <div style={{ flex: '1 1 400px', minWidth: 320 }}>
       {/* tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        {tabChip('players', `PLAYERS (${avail.length})`)}
+        {!embedded && tabChip('players', `PLAYERS (${avail.length})`)}
         {tabChip('teams', 'TEAMS')}
-        {tabChip('queue', `QUEUE (${queue.length})`)}
+        {!embedded && tabChip('queue', `QUEUE (${queue.length})`)}
       </div>
 
-      {/* PLAYERS — available list with ADP + projections */}
-      {tab === 'players' && (
+      {/* PLAYERS — available list with ADP + projections. Not in the console
+          embed: settings and teams only there. */}
+      {tab === 'players' && !embedded && (
         <div style={card}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}

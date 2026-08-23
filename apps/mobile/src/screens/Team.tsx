@@ -16,14 +16,15 @@ import {
   friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
-  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp,
+  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
+import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -342,8 +343,19 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // years_exp by slug — the tenure filter's data. A failed read leaves the
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
-    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
+    // slug → Sleeper id (0205) for the DYN column's ID-FIRST join (v0.351.3)
+    // — the wire prices players off Stathead's board, whose names drift from
+    // our slugs; ids don't. Name fallback stays if the read fails.
+    leaguePoolIds(leagueId).then((r) => setSlugSleeperIds(r?.ids ?? {})).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
+    keeperState(leagueId).then((k) => {
+      if (!k.ok) return;
+      setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0));
+      // Dynasty league → the wire defaults to the DYN order (v0.351.0,
+      // founder: dynasty values "in the draft and waivers in dynasty
+      // leagues"). A manual sort tap always wins afterward.
+      if (isDynastyContinuity(k.continuity)) setSortBy((s) => (s === 'rank' ? 'dyn' : s));
+    }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the tap rather than on the next poll.

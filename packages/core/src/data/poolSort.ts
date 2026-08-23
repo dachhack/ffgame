@@ -28,17 +28,25 @@
 // the source can't separate stay in the order the league already agreed on.
 
 import { ADP_2026 } from './adp2026';
+import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
 
-export type PoolSort = 'rank' | 'adp' | 'proj' | 'own';
+export type PoolSort = 'rank' | 'adp' | 'proj' | 'own' | 'dyn';
 
 export const POOL_SORTS: { id: PoolSort; label: string; hint: string }[] = [
   { id: 'rank', label: 'RANK', hint: "the pool's own order — what autopick follows" },
   { id: 'adp', label: 'ADP', hint: 'consensus average draft position, earliest first' },
   { id: 'proj', label: 'PROJ', hint: 'projected PPR points per game, highest first' },
   { id: 'own', label: 'OWN %', hint: 'share of drafted leagues rostering him' },
+  // DYN (v0.351.0, founder: "pull dynasty values from stathead for the draft
+  // room and player list in the draft and waivers in dynasty leagues") — the
+  // Stathead dynasty market, baked like ADP. Highest first: long-horizon
+  // worth, which is the question a dynasty draft is actually asking.
+  { id: 'dyn', label: 'DYN', hint: 'dynasty trade value — long-horizon worth, highest first' },
 ];
+
+export { dynFor, setDynFormat };
 
 // THE LIVE MARKET OVERLAY (v0.306.1, founder: "let's do 1" — the live ESPN
 // feed over the baked consensus). Same shape as every other per-league engine
@@ -98,6 +106,7 @@ export function poolSortValue(by: PoolSort, row: PoolRow, own?: Record<string, n
   if (by === 'rank') return row.rank != null ? `#${row.rank}` : '—';
   if (by === 'adp') { const v = adpFor(row.slug); return v != null ? v.toFixed(1) : '—'; }
   if (by === 'proj') { const v = projFor(row.slug, row.pos); return v != null ? `${v.toFixed(1)}/g` : '—'; }
+  if (by === 'dyn') { const v = dynFor(row.slug); return v != null ? String(v) : '—'; }
   const o = own?.[row.slug];
   return o != null ? `${o}%` : '0%';
 }
@@ -117,6 +126,7 @@ export function sortPool<T extends PoolRow>(
   const key = (r: T): number => {
     if (by === 'adp') return adpFor(r.slug) ?? Number.MAX_SAFE_INTEGER;
     if (by === 'proj') { const v = projFor(r.slug, r.pos); return v == null ? Number.MAX_SAFE_INTEGER : -v; }
+    if (by === 'dyn') { const v = dynFor(r.slug); return v == null ? Number.MAX_SAFE_INTEGER : -v; }
     const o = own?.[r.slug];
     return o == null ? Number.MAX_SAFE_INTEGER : -o;
   };

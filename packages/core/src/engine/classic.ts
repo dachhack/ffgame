@@ -139,6 +139,17 @@ export function leagueSlotDefs(mode?: { roster?: ClassicRoster | null; slots?: S
 
 /** The league's best-ball slot names: per-spot flags for a builder league,
  *  else the 0159 name array. */
+/** Does this league price QBs like a superflex market? True when any starting
+ *  spot accepts QB alongside another position (SFLX), or when two or more
+ *  spots can start a QB (2QB). Drip leagues (no lineup spec) are 8-flex
+ *  where any position starts — a QB-rich format, so they read SF too. */
+export function leagueSuperflex(mode?: { roster?: ClassicRoster | null; slots?: SlotSpec[] | null } | null): boolean {
+  const defs = leagueSlotDefs(mode);
+  if (!mode || (!mode.roster && !mode.slots)) return true;
+  const qbSpots = defs.filter((d) => (d.pos as string[]).includes('QB'));
+  return qbSpots.length >= 2 || qbSpots.some((d) => d.pos.length > 1);
+}
+
 export function leagueBestball(mode?: { bestball?: string[] | null; slots?: SlotSpec[] | null } | null): string[] {
   const fromSpec = (mode?.slots ?? []).flatMap((s, i) => (s?.bb ? [`S${i + 1}`] : []));
   if (Array.isArray(mode?.slots) && mode.slots.length) return fromSpec; // builder league: spec is authoritative (even all-off)
