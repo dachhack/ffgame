@@ -17,7 +17,7 @@ import {
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   keeperState, rolloverLeague, type KeeperState,
   pickAssets, type PickAssetRow,
-  setLeagueContinuity, type LeagueContinuity,
+  setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -3292,7 +3292,7 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
     setSt(s);
     const m = s.continuity ?? 'redraft';
     setMode(m);
-    setN(m === 'keeper' ? String(s.keeper_count) : m === 'dynasty' ? String(s.rookie_rounds ?? 3) : '');
+    setN(m === 'keeper' ? String(s.keeper_count) : isDynastyContinuity(m) ? String(s.rookie_rounds ?? 3) : '');
   };
   useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
   if (!st) return null;
@@ -3302,15 +3302,17 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
     if (busy || rolled) return;
     setMode(m); setMsg(null);
     setN(m === 'keeper' ? String(st.keeper_count || Math.min(4, st.roster_size - 1))
-       : m === 'dynasty' ? String(st.rookie_rounds || 3) : '');
+       : isDynastyContinuity(m) ? String(st.rookie_rounds || 3) : '');
   };
   const save = async () => {
     if (busy || rolled) return;
     const num = parseInt(n, 10);
-    if (mode !== 'redraft' && Number.isNaN(num)) return;
+    const needsN = mode === 'keeper' || isDynastyContinuity(mode);
+    if (needsN && Number.isNaN(num)) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await setLeagueContinuity(leagueId, mode, mode === 'redraft' ? null : num);
+      const r = await setLeagueContinuity(leagueId, mode,
+        mode === 'keeper' || isDynastyContinuity(mode) ? num : null);
       setMsg(r.ok ? '✓ saved' : (r.error ?? 'that didn’t work'));
       await load();
     } catch (e) { setMsg(errMsg(e, 'failed')); }
@@ -3331,12 +3333,14 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
         {chipBtn('redraft', 'REDRAFT')}
         {chipBtn('keeper', '★ KEEPER')}
         {chipBtn('dynasty', '🏰 DYNASTY')}
+        {chipBtn('contract', '📜 CONTRACT')}
+        {chipBtn('contract_dynasty', '📜🏰 CONTRACT DYNASTY')}
         {mode === 'keeper' && <>
           <input value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
             disabled={busy || rolled} style={{ ...inp, width: 48, textAlign: 'center' }} />
           <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>keepers of {st.roster_size}</span>
         </>}
-        {mode === 'dynasty' && <>
+        {isDynastyContinuity(mode) && <>
           <input value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
             disabled={busy || rolled} style={{ ...inp, width: 48, textAlign: 'center' }} />
           <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>rookie rounds / season</span>
@@ -3350,7 +3354,11 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
             ? 'Every season starts fresh — a full draft, nothing carries over.'
             : mode === 'keeper'
               ? 'Each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen; undeclared seats keep their best-ranked.'
-              : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
+              : mode === 'contract'
+                ? 'A salary-cap league: auction bids become salaries and the cap turns on at the auction budget (tune it in 📜 CONTRACTS & CAP). Switching to a plain type turns contracts off.'
+                : mode === 'contract_dynasty'
+                  ? 'Contracts AND dynasty: bids become salaries, the cap turns on, rookies sign 3-year scale deals — plus the rookie rounds and the three-season pick horizon below.'
+                  : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn)', marginTop: 6 }}>{msg}</div>}
     </div>
@@ -3375,7 +3383,7 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
     setSt(s);
     // a dynasty league's rollover IS the rookie draft — default the toggle on,
     // once, leaving the commissioner's own flips alone afterward
-    if (!seeded.current) { seeded.current = true; setRookieOnly(s.continuity === 'dynasty'); }
+    if (!seeded.current) { seeded.current = true; setRookieOnly(isDynastyContinuity(s.continuity)); }
     const a = await pickAssets(leagueId).catch(() => null);
     if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); }
   };
@@ -3395,7 +3403,9 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
   const playerName = (s: string) => names[s] ?? s;
   const teamNameOf = (rid: number) => st.teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
   const futurePicks = futureSeason == null ? [] : picks.filter((p) => p.season >= futureSeason);
-  const contName = st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
+  const contName = st.continuity === 'contract_dynasty' ? '📜🏰 CONTRACT DYNASTY'
+    : st.continuity === 'contract' ? '📜 CONTRACT'
+    : st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
   const roll = async () => {
     if (busy || !st.next_season) return;
     const keeps = st.keeper_count > 0 ? `every team keeps its ${st.keeper_count} (declared first, best-ranked fill the rest), and the draft runs ${st.roster_size - st.keeper_count} rounds` : 'every roster redrafts in full';

@@ -30,7 +30,7 @@ import {
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
-  setLeagueContinuity, type LeagueContinuity,
+  setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
@@ -678,7 +678,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
     setSt(s);
     // a dynasty league's rollover IS the rookie draft — default the toggle on,
     // once, leaving the commissioner's own flips alone afterward
-    if (!seeded.current) { seeded.current = true; setRookieOnly(s.continuity === 'dynasty'); }
+    if (!seeded.current) { seeded.current = true; setRookieOnly(isDynastyContinuity(s.continuity)); }
     const a = await pickAssets(leagueId).catch(() => null);
     if (a?.ok) { setPicks(a.picks); setFutureSeason(a.future_season); }
   };
@@ -696,7 +696,9 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   const drafted = st.draft_status === 'complete';
   // the Super Bowl gate (0185): the rollover appears when the season is over
   const canRoll = !!st.season_over || !!st.admin;
-  const contName = st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
+  const contName = st.continuity === 'contract_dynasty' ? '📜🏰 CONTRACT DYNASTY'
+    : st.continuity === 'contract' ? '📜 CONTRACT'
+    : st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
   const nameOf = (s: string) => names[s] ?? s;
   const futurePicks = futureSeason == null ? [] : picks.filter((p) => p.season >= futureSeason);
 
@@ -1503,7 +1505,7 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
     setSt(s);
     const m = s.continuity ?? 'redraft';
     setCmode(m);
-    setN(m === 'keeper' ? String(s.keeper_count) : m === 'dynasty' ? String(s.rookie_rounds ?? 3) : '');
+    setN(m === 'keeper' ? String(s.keeper_count) : isDynastyContinuity(m) ? String(s.rookie_rounds ?? 3) : '');
   };
   useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
   if (!st) return null;
@@ -1513,15 +1515,16 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
     if (busy || rolled) return;
     tap(); setCmode(m); setNote(null);
     setN(m === 'keeper' ? String(st.keeper_count || Math.min(4, st.roster_size - 1))
-       : m === 'dynasty' ? String(st.rookie_rounds || 3) : '');
+       : isDynastyContinuity(m) ? String(st.rookie_rounds || 3) : '');
   };
+  const needsN = cmode === 'keeper' || isDynastyContinuity(cmode);
   const save = async () => {
     if (busy || rolled) return;
     const num = parseInt(n, 10);
-    if (cmode !== 'redraft' && Number.isNaN(num)) return;
+    if (needsN && Number.isNaN(num)) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueContinuity(leagueId, cmode, cmode === 'redraft' ? null : num);
+      const r = await setLeagueContinuity(leagueId, cmode, needsN ? num : null);
       if (r.ok) { commit(); setNote('✓ saved'); await load(); }
       else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
@@ -1535,12 +1538,14 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
         <Chip on={cmode === 'redraft'} label="REDRAFT" disabled={busy || rolled} onPress={() => pick('redraft')} />
         <Chip on={cmode === 'keeper'} label="★ KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
         <Chip on={cmode === 'dynasty'} label="🏰 DYNASTY" disabled={busy || rolled} onPress={() => pick('dynasty')} />
-        {cmode !== 'redraft' && (
+        <Chip on={cmode === 'contract'} label="📜 CONTRACT" disabled={busy || rolled} onPress={() => pick('contract')} />
+        <Chip on={cmode === 'contract_dynasty'} label="📜🏰 CONTRACT DYNASTY" disabled={busy || rolled} onPress={() => pick('contract_dynasty')} />
+        {needsN && (
           <TextInput value={n} onChangeText={(v) => setN(v.replace(/\D/g, ''))} keyboardType="number-pad"
             editable={!busy && !rolled}
             style={{ fontFamily: MONO, fontSize: fs(12), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, minWidth: 42, textAlign: 'center' }} />
         )}
-        {cmode !== 'redraft' && (
+        {needsN && (
           <Mono size={9} tone="faint">{cmode === 'keeper' ? `keepers of ${st.roster_size}` : 'rookie rounds'}</Mono>
         )}
         <Pressable disabled={busy || rolled} onPress={() => { tap(); void save(); }}
@@ -1555,7 +1560,11 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
             ? 'Every season starts fresh — a full draft, nothing carries over.'
             : cmode === 'keeper'
               ? 'Each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen.'
-              : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
+              : cmode === 'contract'
+                ? 'A salary-cap league: auction bids become salaries and the cap turns on at the auction budget — tune it under MONEY → 📜 CONTRACTS & CAP. Switching to a plain type turns contracts off.'
+                : cmode === 'contract_dynasty'
+                  ? 'Contracts AND dynasty: bids become salaries and the cap turns on, plus rookie rounds each season (rookies sign 3-year scale deals) and the three-season pick horizon.'
+                  : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
       </Mono>
       {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
     </View>

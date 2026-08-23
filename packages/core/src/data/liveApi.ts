@@ -1505,7 +1505,15 @@ export const adminRegenCode = (leagueId: string, which: 'invite' | 'commish') =>
 
 // ── Native leagues (migration 0064): created in-app, rosters built by draft ─────
 /** The league-continuity axis (0185): what carries into next season. */
-export type LeagueContinuity = 'redraft' | 'keeper' | 'dynasty';
+/** The league-type axis (0185, 0218). The contract types preset the rest:
+ *  an auction startup room and the salary cap on at the budget. */
+export type LeagueContinuity = 'redraft' | 'keeper' | 'dynasty' | 'contract' | 'contract_dynasty';
+/** contract_dynasty runs the full dynasty machinery (rookie rounds, pick
+ *  horizon, rollover) — ask this, not `=== 'dynasty'`, when branching. */
+export const isDynastyContinuity = (c: LeagueContinuity | string | null | undefined) =>
+  c === 'dynasty' || c === 'contract_dynasty';
+export const isContractContinuity = (c: LeagueContinuity | string | null | undefined) =>
+  c === 'contract' || c === 'contract_dynasty';
 export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; game_mode?: 'drip' | 'classic'; dynasty?: boolean; continuity?: LeagueContinuity; }
 /** Per-position roster limits (0071). null = uncapped. Absent blob = legacy
  *  defaults (QB 3, TE 3, K 1, D/ST 1, RB/WR uncapped). Enforced server-side
@@ -1910,6 +1918,8 @@ export interface LeagueContracts {
   /** False = the league doesn't play with contracts; everything else absent. */
   contracts: boolean;
   salary_cap?: number; years_max?: number;
+  /** True once the draft room closes — lengths become commissioner-only. */
+  locked?: boolean;
   deals?: ContractDeal[];
   payrolls?: { roster_id: number; team: string | null; payroll: number }[];
 }
