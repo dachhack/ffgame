@@ -1396,4 +1396,35 @@ begin
   perform assert_true((r ->> 'champion_team') is not null, '28v champ named');
 end $$;
 
+-- ── 29. linear drafts (0216): the snake without the fold ─────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int;
+begin
+  perform probe_as('a');
+  perform assert_err(create_native_league('Bad Mode', '2026', 2, 5, 60, 'serpentine'), 'linear',
+    '29a the mode gate names all three modes now');
+  r := create_native_league('Straight Line', '2026', 3, 5, 60, 'linear');
+  perform assert_ok(r, '29b create linear');
+  lid := (r ->> 'league_id')::uuid;
+  for i in 1..18 loop pool := pool || jsonb_build_object('slug', 'l-rb' || i, 'full', 'RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), '29c seed');
+  perform assert_ok(start_draft(lid, '[2,3,1]'::jsonb), '29d start with an explicit order');
+  -- Round 1: 2, 3, 1. Round 2 must be 2, 3, 1 AGAIN — that is the feature.
+  perform assert_true((draft_state(lid) ->> 'on_clock')::int = 2, '29e pick 1 → seat 2');
+  update draft set current_overall = 4 where league_id = lid;   -- first pick of round 2
+  perform assert_true((draft_state(lid) ->> 'on_clock')::int = 2,
+    '29f THE POINT: round 2 opens with the SAME seat — no fold');
+  update draft set current_overall = 6 where league_id = lid;   -- last pick of round 2
+  perform assert_true((draft_state(lid) ->> 'on_clock')::int = 1, '29g and closes with the same tail');
+  -- A snake league from the same order folds — pin the contrast so a
+  -- regression in either direction has a failing name.
+  update draft set mode = 'snake' where league_id = lid;
+  update draft set current_overall = 4 where league_id = lid;
+  perform assert_true((draft_state(lid) ->> 'on_clock')::int = 1,
+    '29h the same position under snake is the FOLDED seat — the two modes are really different');
+  -- setup RPC accepts linear too (pending drafts only — this one is live, so
+  -- the gate message is the assertion)
+  perform assert_err(set_draft_setup(lid, null, 'linear'), 'locks once', '29i setup lock still holds');
+end $$;
+
 select 'ALL PROBES PASSED' as result;

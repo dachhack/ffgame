@@ -1514,7 +1514,7 @@ export type PosCaps = { QB: number | null; RB: number | null; WR: number | null;
 export const POS_CAP_KEYS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 export const createNativeLeague = (
   name: string, season: string, teams: number, rounds: number, pickSeconds: number,
-  mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+  mode: 'snake' | 'linear' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   nightStartMin: number | null = null, nightEndMin: number | null = null,
   posCaps: PosCaps | null = null,
   /** Which game the league plays (0175). 'classic' also self-flags the league
@@ -1879,7 +1879,7 @@ export const advancePlayoffs = (leagueId: string) =>
  *  parallel lots); no schedule, no season, deletable any time. */
 export const createMockDraft = (
   teams: number, rounds: number, pickSeconds: number,
-  mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+  mode: 'snake' | 'linear' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   posCaps: PosCaps | null = null,
 ) =>
   rpc<NativeCreateResult>('create_mock_draft', {
@@ -2036,7 +2036,7 @@ export const startDraft = (leagueId: string, order?: number[]) =>
   rpc<{ ok: boolean; error?: string; order?: number[] }>('start_draft', { p_league_id: leagueId, p_order: order ?? null });
 export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; price?: number | null; }
 export interface DraftState {
-  error?: string; status: 'pending' | 'live' | 'complete'; mode: 'snake' | 'auction'; rounds: number; pick_seconds: number;
+  error?: string; status: 'pending' | 'live' | 'complete'; mode: 'snake' | 'linear' | 'auction'; rounds: number; pick_seconds: number;
   paused: boolean;
   order: number[] | null; current_overall: number;
   /** Snake: the seat on the clock. Auction: the seat whose turn it is to nominate. */
@@ -2094,12 +2094,12 @@ export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
 export const setDraftSetup = (
   leagueId: string,
   pickSeconds: number | null = null,
-  mode: 'snake' | 'auction' | null = null,
+  mode: 'snake' | 'linear' | 'auction' | null = null,
   budget: number | null = null,
   lotSeconds: number | null = null,
   maxLots: number | null = null,
 ) =>
-  tracked(rpc<{ ok: boolean; error?: string; pick_seconds?: number; mode?: 'snake' | 'auction';
+  tracked(rpc<{ ok: boolean; error?: string; pick_seconds?: number; mode?: 'snake' | 'linear' | 'auction';
                 budget?: number; lot_seconds?: number; max_lots?: number }>(
     'set_draft_setup', {
       p_league_id: leagueId, p_pick_seconds: pickSeconds, p_mode: mode,
