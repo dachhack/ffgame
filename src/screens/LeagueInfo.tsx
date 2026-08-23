@@ -355,6 +355,15 @@ const KIND: Record<RegisterRow['kind'], { icon: string; verb: string }> = {
   waiver: { icon: '⚑', verb: 'claimed off waivers' },
   trade: { icon: '⇄', verb: 'traded for' },
   commish: { icon: '⚑', verb: 'was moved by the commissioner to' },
+  // the event vocabulary (0221/0222): formats and the front office
+  elimination: { icon: '🔪', verb: 'fell to the guillotine' },
+  release: { icon: '🔪', verb: 'released' },
+  steal: { icon: '🧛', verb: 'stole' },
+  tag: { icon: '🏷', verb: 'franchise tagged' },
+  extension: { icon: '⤴', verb: 'extended' },
+  rfa: { icon: '🪧', verb: 'answered the RFA on' },
+  retained: { icon: '💸', verb: 'retains salary on' },
+  cap: { icon: '💵', verb: 'received cap room' },
 };
 const when = (iso: string): string => {
   const d = new Date(iso);
@@ -392,7 +401,8 @@ export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boo
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text)' }}>
                 <b>{team}</b>{` ${k.verb} `}<b>{prettySlug(r.slug)}</b>
-                {r.kind === 'trade' && r.from_team ? <span style={{ color: 'var(--dim)' }}>{` from ${r.from_team}`}</span> : null}
+                {(r.kind === 'trade' || r.kind === 'steal' || r.kind === 'cap') && r.from_team ? <span style={{ color: 'var(--dim)' }}>{` from ${r.from_team}`}</span> : null}
+                {r.note ? <span style={{ color: 'var(--dim)' }}>{` · ${r.note}`}</span> : null}
                 {r.kind === 'waiver' && r.bid != null && r.bid > 0 ? <span style={{ color: 'var(--dim)' }}>{` for ${r.bid}`}</span> : null}
               </div>
               <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 1 }}>{when(r.at)}</div>

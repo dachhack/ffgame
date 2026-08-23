@@ -18,6 +18,7 @@ import { crestInitial } from '@drip/core/data/crest';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, type BoardPreview,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity,
+  setLeagueFormat, type LeagueFormat,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
@@ -97,6 +98,8 @@ export function Recruit({ onBack, onJoined, onCreated }: {
     : continuity === 'contract' ? '📜 CONTRACT '
     : continuity === 'dynasty' ? '🏰 DYNASTY '
     : continuity === 'keeper' ? '★ KEEPER ' : '';
+  // FORMAT (0221/0222): how the season is WON.
+  const [format, setFormat] = useState<LeagueFormat>('standard');
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
@@ -231,6 +234,11 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
         continuity, continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
+      if (format !== 'standard') {
+        setMakeNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
+        const fr = await setLeagueFormat(r.league_id, format);
+        if (!fr.ok) { warn(); setErr(friendlyError(fr.error ?? 'could not set the format')); return; }
+      }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
@@ -361,6 +369,21 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                           ? `Contracts AND dynasty: bids become salaries, plus a ${rookieN}-round rookie draft each season (rookies sign 3-year scale deals) and three seasons of tradeable picks from day one.`
                           : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
                 </Mono>
+              </View>
+              <View>
+                <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
+                  <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
+                  <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                </View>
+                {format !== 'standard' && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
+                    {format === 'guillotine'
+                      ? 'Each week the lowest-scoring team is ELIMINATED and its roster hits a $1000 FAAB frenzy (preset). Last team standing wins — bring extra teams, one falls per week.'
+                      : 'One team is the Vampire: no waivers or free agents — win a matchup, STEAL a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH, where you can also require approval per steal.'}
+                  </Mono>
+                )}
               </View>
               <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
                 onChangeText={(v) => { setNameDraft(v); setErr(null); }}

@@ -1653,13 +1653,18 @@ export const setTransactionRules = (
  *  is already its own record. Any member may read it. */
 export interface RegisterRow {
   id: number; at: string;
-  kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish';
+  /** 0221/0222 grew the vocabulary: eliminations + releases (guillotine),
+   *  steals (vampire), and the front office (tag/extension/rfa/retained/cap). */
+  kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish'
+      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap';
   slug: string;
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
   from_roster: number | null; from_team: string | null;
   /** Waiver wins in a FAAB league. */
   bid: number | null;
+  /** Event detail (0221): "guillotine week 3", "franchise tagged — $18 for 1yr". */
+  note?: string | null;
 }
 export const leagueRegister = (leagueId: string, limit = 100) =>
   rpc<{ ok: boolean; error?: string; rows?: RegisterRow[] }>('league_register',
@@ -1987,6 +1992,54 @@ export const rfaBid = (leagueId: string, rosterId: number, slug: string, salary:
  *  walk sends him (and the re-priced deal) to the bidder. */
 export const rfaResolve = (leagueId: string, slug: string, match: boolean) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('rfa_resolve', { p_league_id: leagueId, p_slug: slug, p_match: match });
+
+// ── League formats (0221/0222): 🔪 guillotine and 🧛 vampire ─────────────────
+export type LeagueFormat = 'standard' | 'guillotine' | 'vampire';
+/** Commissioner: pick the format. Guillotine must be chosen pre-draft (it
+ *  changes how the season scores) and presets a $1000 FAAB market. */
+export const setLeagueFormat = (leagueId: string, format: LeagueFormat) =>
+  rpc<{ ok: boolean; error?: string; format?: LeagueFormat }>('set_league_format', { p_league_id: leagueId, p_format: format });
+/** The blade, poked from any member's league load (idempotent): eliminates
+ *  the floor of every completed week and releases the roster to the frenzy. */
+export const guillotineTick = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; eliminated?: number }>('guillotine_tick', { p_league_id: leagueId });
+export interface GuillotineState {
+  error?: string;
+  guillotine: boolean;
+  week?: number | null;
+  champion?: number | null;
+  alive?: { roster_id: number; team: string | null; pts: number }[];
+  fallen?: { roster_id: number; team: string | null; week: number }[];
+  /** The frenzy: released players still clearing waivers, best rank first. */
+  frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];
+}
+export const guillotineState = (leagueId: string) => rpc<GuillotineState>('guillotine_state', { p_league_id: leagueId });
+/** Commissioner: appoint the vampire seat (and flip steal review). */
+export const setVampire = (leagueId: string, rosterId: number, stealReview: boolean | null = null) =>
+  rpc<{ ok: boolean; error?: string; vampire?: number; steal_review?: boolean }>('set_vampire',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_steal_review: stealReview });
+/** The bite: on a fresh win, take from the beaten team's active roster and
+ *  give one back. Parks for the commissioner's ruling when steal review is on. */
+export const vampireSteal = (leagueId: string, takeSlug: string, giveSlug: string) =>
+  rpc<{ ok: boolean; error?: string; status?: string; week?: number }>('vampire_steal',
+    { p_league_id: leagueId, p_take_slug: takeSlug, p_give_slug: giveSlug });
+export const commishRuleSteal = (leagueId: string, stealId: number, approve: boolean) =>
+  rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_steal',
+    { p_league_id: leagueId, p_steal_id: stealId, p_approve: approve });
+export interface VampireState {
+  error?: string;
+  vampire: boolean;
+  seat?: number | null;
+  steal_review?: boolean;
+  week?: number | null;
+  /** The vampire won the latest completed week — the window is open. */
+  won?: boolean;
+  victim?: number | null;
+  /** This week's steal is already declared or executed. */
+  fed?: boolean;
+  steals?: { id: number; week: number; victim: number; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
+}
+export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
