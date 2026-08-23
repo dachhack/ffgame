@@ -10,8 +10,8 @@
 // gating, lock rules, pick shape and power-up prices all come from @drip/core,
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
-import { useEffect, useMemo, useState, useRef} from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState, useRef} from 'react';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
@@ -144,6 +144,21 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
+  // PULL TO REFRESH (v0.344.4, founder: "swipe down to refresh your matchup").
+  // The board had no RefreshControl at all — the gesture just bounced the list,
+  // so the pull looked broken and the reflex was to leave and come back in.
+  // `refreshLive` is defined inside the loader effect (it closes over the
+  // matchup it loaded); a ref is how the gesture reaches the CURRENT one
+  // without re-running the whole load and flashing the spinner.
+  const refreshLiveRef = useRef<(() => Promise<void>) | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // A failed pull keeps what is on screen — the live board is a poor place
+    // to blank out on a subway blip. The realtime channel is still attached.
+    try { await refreshLiveRef.current?.(); } catch { /* keep prior */ }
+    setRefreshing(false);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   /** True once the server's saved picks are in `picks`. Gates the autosave so
@@ -333,6 +348,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         };
         await refreshLive().catch(() => {});
         if (!alive) return;
+        refreshLiveRef.current = refreshLive;
         unsub = subscribeMatchup(m.id, () => { refreshLive().catch(() => {}); });
 
         setState('ready');
@@ -341,7 +357,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
-    return () => { alive = false; unsub(); };
+    return () => { alive = false; unsub(); refreshLiveRef.current = null; };
   }, [userId, leagueId, rosterId, weekSel, attempt]);
 
   const locked = !!matchup && (matchup.status !== 'scheduled' || (!!matchup.lock_at && new Date(matchup.lock_at) <= new Date()));
@@ -746,15 +762,6 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       <LinkButton label="‹" onPress={() => canStep(-1) && stepWeek(-1)} />
       <Mono size={10} weight="700" track={0.06}>{weekLabel(curWeek)}</Mono>
       <LinkButton label="›" onPress={() => canStep(1) && stepWeek(1)} />
-      {/* WHICH GAME (v0.256.0, HANDOFF #4) — the web chip, ported: the mode is
-          stated where the game is played. Classic renders its own board with
-          its own header, so in practice this reads ◈ DRIP — but it follows the
-          state, not the assumption. */}
-      {gameMode && (
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}>
-          <Mono size={8} weight="700" tone="dim" track={0.08}>{gameMode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'}</Mono>
-        </View>
-      )}
     </View>
   );
 
@@ -818,6 +825,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // ask for it, and reserving a card's height for something that isn't
       // there was 170pt of a phone screen spent on nothing.
       contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? HAND_TAB_H + 24 : 40 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}
     >
       {/* Week + score on ONE line — the web's slim strip. This was a full card
           headed THIS WEEK with two 38px numerals, which is a lot of screen for
