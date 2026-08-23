@@ -357,7 +357,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                     <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 24, textAlign: 'center' }}>
                       {continuity === 'keeper' ? keepN : rookieN}
                     </Text>
-                    <Pressable hitSlop={6} onPress={() => { tap(); continuity === 'keeper' ? setKeepN((v) => Math.min(11, v + 1)) : setRookieN((v) => Math.min(5, v + 1)); }}>
+                    <Pressable hitSlop={6} onPress={() => { tap(); continuity === 'keeper' ? setKeepN((v) => Math.min(11, v + 1)) : setRookieN((v) => Math.min(9, v + 1)); }}>
                       <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                     </Pressable>
                     <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>

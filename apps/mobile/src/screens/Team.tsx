@@ -343,7 +343,14 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     // map empty, so every band except ANY comes back empty rather than wrong.
     leaguePoolExp(leagueId).then(setExpMap).catch(() => {});
     leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
-    keeperState(leagueId).then((k) => { if (k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
+    keeperState(leagueId).then((k) => {
+      if (!k.ok) return;
+      setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0));
+      // Dynasty league → the wire defaults to the DYN order (v0.351.0,
+      // founder: dynasty values "in the draft and waivers in dynasty
+      // leagues"). A manual sort tap always wins afterward.
+      if (isDynastyContinuity(k.continuity)) setSortBy((s) => (s === 'rank' ? 'dyn' : s));
+    }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
     // so the roster updates on the tap rather than on the next poll.

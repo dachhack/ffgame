@@ -170,4 +170,26 @@ begin
   perform assert_true(r -> 'order' = '[3,2,1]'::jsonb, 'ds11d the call''s order wins');
 end $$;
 
+-- ── 0224: setup history in the register ─────────────────────────────────────
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Setup Ledger', '2026', 2, 5, 60, 'snake');
+  perform assert_ok(r, 'sl1 create');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_ok(set_draft_setup(lid, 120, 'auction', 250, 20, 2), 'sl2 settings changed');
+  perform assert_true(exists (select 1 from league_txn where league_id = lid
+      and kind = 'commish' and note like 'draft settings changed — auction%$250%'),
+    'sl3 THE LEDGER: the settings change prints, numbers included');
+  perform assert_ok(set_draft_order(lid, '[2,1]'::jsonb), 'sl4 order set');
+  perform assert_true(exists (select 1 from league_txn where league_id = lid
+      and kind = 'commish' and note = 'draft order set — 2, 1'),
+    'sl5 the order prints, seats named');
+  perform assert_ok(set_draft_order(lid), 'sl6 randomized');
+  perform assert_true(exists (select 1 from league_txn where league_id = lid
+      and kind = 'commish' and note = 'draft order randomized'),
+    'sl7 a randomize prints as one');
+end $$;
+
 select 'ALL DRAFT-SETUP PROBES PASSED' as status;

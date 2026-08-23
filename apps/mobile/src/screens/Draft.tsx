@@ -22,12 +22,13 @@ import {
   leaguePoolExp, friendlyError,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, type SpotPlayer } from '@drip/core/engine/classic';
+import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, projFor, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, type PoolSort } from '@drip/core/data/poolSort';
+import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { FlagChip } from '../ui/rosterGroup';
@@ -85,6 +86,19 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   // caps at ZERO (0195 — no starting spot accepts it) isn't offered at all.
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
+  // Show already-drafted players in the list (v0.351.0, founder: "add a
+  // filter to show already drafted players") — struck through, no button.
+  const [showTaken, setShowTaken] = useState(false);
+  // Dynasty league → the board defaults to the DYN order (founder: "sort by
+  // dynasty value in dynasty drafts"). One read at mount; a manual sort tap
+  // always wins afterward.
+  const [dynasty, setDynasty] = useState(false);
+  useEffect(() => {
+    keeperState(leagueId).then((k) => {
+      if (k.ok && isDynastyContinuity(k.continuity)) { setDynasty(true); setSortBy((s) => (s === 'rank' ? 'dyn' : s)); }
+    }).catch(() => {});
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leagueId]);
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
@@ -234,16 +248,20 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
    *  is neither offered nor listed — "no kickers if there is no kicker spot",
    *  answered off the server's own number. */
   const bannedPos = (p: string) => st?.pos_caps?.[p as keyof PosCaps] === 0;
+  // v0.351.0 (founder: "we don't need filters in the draft for positions not
+  // in the league roster"): the lineup spec's eligible-position set trims the
+  // chips too — a builder league with no K spot shows no K filter.
+  const eligPos = useMemo(() => leagueEligiblePos(gm), [gm]);
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p)),
-    [st?.pos_caps]);
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p) && (!eligPos || eligPos.has(p))),
+    [st?.pos_caps, eligPos]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => !taken.has(p.slug)
-      && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
+    const base = pool.filter((p) => (showTaken || !taken.has(p.slug))
+      && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
+  }, [pool, taken, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -546,6 +564,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             })}
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
+            <Chip label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />
           </View>
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ already
@@ -565,37 +584,49 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           )}
           {avail.slice(0, 60).map((p) => {
             const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
+            const dyn = dynasty ? dynFor(p.slug) : null;
             const inQ = queue.includes(p.slug);
             const capped = atCap(p.pos);
-            const can = assigning ? !busy : (myTurn && !busy && !capped);
+            const gone = taken.has(p.slug);
+            const can = !gone && (assigning ? !busy : (myTurn && !busy && !capped));
             return (
-              <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-                <Pressable disabled={!can} onPress={() => { tap(); act(p.slug); }}
-                  style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 7, width: 56, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
-                    {assigning ? 'ASSIGN' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
-                  </Text>
-                </Pressable>
+              <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: gone ? 0.5 : 1 }}>
+                {!gone && (
+                  <Pressable disabled={!can} onPress={() => { tap(); act(p.slug); }}
+                    style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 7, width: 50, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                      {assigning ? 'ASSIGN' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                    </Text>
+                  </Pressable>
+                )}
+                {gone && (
+                  <View style={{ width: 50, alignItems: 'center' }}>
+                    <Mono size={8} tone="opp" weight="700">TAKEN</Mono>
+                  </View>
+                )}
                 <Face slug={p.slug} pos={p.pos} />
                 {/* Draft night is the moment a card is worth most — the name
-                    opens it, the DRAFT button stays the button (founder). */}
+                    opens it, the DRAFT button stays the button (founder). The
+                    stats live on the SECOND LINE now (v0.351.0, founder: "most
+                    of the names are cut off… more room for names") — the row
+                    has no right-hand column to squeeze the name against. */}
                 <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
                   onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>
+                  <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>
                     {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     <PosPill pos={p.pos} size={8} />
-                    <Mono size={8.5} tone="faint">{p.team} · #{p.rank}</Mono>
+                    <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
+                      {p.team} · #{p.rank}
+                      {dyn != null ? ` · DYN ${dyn}` : ''}
+                      {adp != null ? ` · ADP ${adp.toFixed(0)}` : ''}
+                      {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
+                      {own ? ` · ${own[p.slug] ?? 0}%` : ''}
+                    </Mono>
                     <FlagChip slug={p.slug} size={7.5} />
                   </View>
                 </Pressable>
-                <View style={{ alignItems: 'flex-end', width: 56 }}>
-                  <Mono size={9}>{adp != null ? `ADP ${adp.toFixed(0)}` : '—'}</Mono>
-                  <Mono size={9} tone="faint">
-                    {proj != null ? `${proj.toFixed(1)}p` : ''}{own ? `${proj != null ? ' · ' : ''}${own[p.slug] ?? 0}%` : ''}
-                  </Mono>
-                </View>
                 {/* Q, not a star (v0.345.2, founder): the row already carries a
                     GOLD ★ for favorites, and a second star meaning "queued"
                     made the two systems read as one. Q says which one this is. */}
