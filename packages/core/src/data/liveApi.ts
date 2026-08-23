@@ -925,7 +925,7 @@ export interface AdminUser { id: string; email: string | null; sleeper_username:
  *  only, and never set for hand-assigned seats (those carry claim_email and are
  *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
  *  clears the seat on its own. */
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; /** Division label (0215). */ division?: string | null; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -1514,7 +1514,7 @@ export type PosCaps = { QB: number | null; RB: number | null; WR: number | null;
 export const POS_CAP_KEYS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 export const createNativeLeague = (
   name: string, season: string, teams: number, rounds: number, pickSeconds: number,
-  mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+  mode: 'snake' | 'linear' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   nightStartMin: number | null = null, nightEndMin: number | null = null,
   posCaps: PosCaps | null = null,
   /** Which game the league plays (0175). 'classic' also self-flags the league
@@ -1839,7 +1839,7 @@ export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: numb
   }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
-export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; }
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; }
 export interface PlayoffMatchup {
   id: string; week: number; round: number; pos: number; label: string | null; status: string;
   /** Consolation-ladder game (never blocks bracket advancement). */
@@ -1879,7 +1879,7 @@ export const advancePlayoffs = (leagueId: string) =>
  *  parallel lots); no schedule, no season, deletable any time. */
 export const createMockDraft = (
   teams: number, rounds: number, pickSeconds: number,
-  mode: 'snake' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
+  mode: 'snake' | 'linear' | 'auction' = 'snake', budget = 200, lotSeconds = 15, maxLots = 1,
   posCaps: PosCaps | null = null,
 ) =>
   rpc<NativeCreateResult>('create_mock_draft', {
@@ -1896,6 +1896,35 @@ export const nativeJoin = (code: string, teamName?: string) =>
     'native_join', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
 export const setTeamName = (leagueId: string, rosterId: number, name: string) =>
   rpc<{ ok: boolean; error?: string; team_name?: string }>('set_team_name', { p_league_id: leagueId, p_roster_id: rosterId, p_name: name });
+/** Name (or clear, with null/'') a seat's division — commissioner only (0215).
+ *  Divisions activate once every seat is labeled and ≥2 labels exist. */
+export const setTeamDivision = (leagueId: string, rosterId: number, division: string | null) =>
+  rpc<{ ok: boolean; error?: string; division?: string | null }>('set_team_division', { p_league_id: leagueId, p_roster_id: rosterId, p_division: division });
+
+// ── Contracts + salary cap (0217) ─────────────────────────────────────────────
+/** One player's deal: the auction bid (or FAAB bid, rookie-scale figure, $1
+ *  street minimum) as salary, the manager-assigned length, and how it began. */
+export interface ContractDeal { slug: string; roster_id: number; salary: number; years: number; acquired: 'auction' | 'rookie' | 'draft' | 'waiver' | 'fa' | 'commish'; }
+export interface LeagueContracts {
+  error?: string;
+  /** False = the league doesn't play with contracts; everything else absent. */
+  contracts: boolean;
+  salary_cap?: number; years_max?: number;
+  deals?: ContractDeal[];
+  payrolls?: { roster_id: number; team: string | null; payroll: number }[];
+}
+/** The cap sheet — rules, every deal, per-team payrolls (any member). */
+export const leagueContracts = (leagueId: string) => rpc<LeagueContracts>('league_contracts', { p_league_id: leagueId });
+/** Commissioner: switch the cap on at $cap (with an optional max length,
+ *  default 4), or off with cap=null. While an auction room is open the cap
+ *  must cover the startup budget. */
+export const setContractRules = (leagueId: string, cap: number | null, yearsMax: number | null = null) =>
+  rpc<{ ok: boolean; error?: string; contracts?: boolean; salary_cap?: number; contract_years_max?: number }>(
+    'set_contract_rules', { p_league_id: leagueId, p_cap: cap, p_years_max: yearsMax });
+/** The owner assigns a length (1..max) while the draft room is open; after it
+ *  closes this is commissioner-only, and rookie-scale lengths always are. */
+export const setContractYears = (leagueId: string, slug: string, years: number) =>
+  rpc<{ ok: boolean; error?: string; years?: number }>('set_contract_years', { p_league_id: leagueId, p_slug: slug, p_years: years });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
@@ -2032,7 +2061,7 @@ export const startDraft = (leagueId: string, order?: number[]) =>
   rpc<{ ok: boolean; error?: string; order?: number[] }>('start_draft', { p_league_id: leagueId, p_order: order ?? null });
 export interface DraftPickRow { overall: number; round: number; roster_id: number; slug: string; auto: boolean; price?: number | null; }
 export interface DraftState {
-  error?: string; status: 'pending' | 'live' | 'complete'; mode: 'snake' | 'auction'; rounds: number; pick_seconds: number;
+  error?: string; status: 'pending' | 'live' | 'complete'; mode: 'snake' | 'linear' | 'auction'; rounds: number; pick_seconds: number;
   paused: boolean;
   order: number[] | null; current_overall: number;
   /** Snake: the seat on the clock. Auction: the seat whose turn it is to nominate. */
@@ -2090,12 +2119,12 @@ export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
 export const setDraftSetup = (
   leagueId: string,
   pickSeconds: number | null = null,
-  mode: 'snake' | 'auction' | null = null,
+  mode: 'snake' | 'linear' | 'auction' | null = null,
   budget: number | null = null,
   lotSeconds: number | null = null,
   maxLots: number | null = null,
 ) =>
-  tracked(rpc<{ ok: boolean; error?: string; pick_seconds?: number; mode?: 'snake' | 'auction';
+  tracked(rpc<{ ok: boolean; error?: string; pick_seconds?: number; mode?: 'snake' | 'linear' | 'auction';
                 budget?: number; lot_seconds?: number; max_lots?: number }>(
     'set_draft_setup', {
       p_league_id: leagueId, p_pick_seconds: pickSeconds, p_mode: mode,

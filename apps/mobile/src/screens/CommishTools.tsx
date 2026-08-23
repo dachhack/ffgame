@@ -18,7 +18,7 @@ import {
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
   commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError,
   leagueInvite, nativeTeamState,
-  setTeamAvatar, setTeamController, setTeamName, teamManagers,
+  setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
@@ -26,6 +26,7 @@ import {
   setTaxiRules, setIrRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
+  leagueContracts, setContractRules, type LeagueContracts,
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
@@ -87,6 +88,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'MONEY', items: [
     { id: 'coin', label: '◈ DRIP COIN', dripOnly: true },
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
+    { id: 'contracts', label: '📜 CONTRACTS & CAP', nativeOnly: true },
   ] },
   // Its own group, at the bottom, with nothing else in it (0188). Deleting a
   // league is the only commissioner action that cannot be undone by another
@@ -384,6 +386,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
               </>
             )}
             {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
+            {section === 'contracts' && native && <ContractRulesCard leagueId={leagueId} />}
             {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
@@ -931,6 +934,90 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
   );
 }
 
+/** ── 📜 CONTRACTS & CAP (0217) ───────────────────────────────────────────────
+ *  The commissioner's switch for contract leagues: cap on at $N (auction bids
+ *  become salaries, waiver wins sign at their FAAB bid, FA adds at the $1
+ *  minimum), max contract length, and the live payroll sheet. Cap off = the
+ *  league plays without contracts, exactly as before. */
+function ContractRulesCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<LeagueContracts | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [capDraft, setCapDraft] = useState('');
+  const [yearsDraft, setYearsDraft] = useState(4);
+
+  const load = () => leagueContracts(leagueId).then((r) => {
+    setSt(r);
+    if (r.contracts) { setCapDraft(String(r.salary_cap ?? '')); setYearsDraft(r.years_max ?? 4); }
+  }).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+
+  const save = async (cap: number | null) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContractRules(leagueId, cap, cap == null ? null : yearsDraft);
+      if (r.ok) { commit(); setNote(cap == null ? '✓ contracts off' : `✓ cap set — $${cap}, deals up to ${yearsDraft}yr`); await load(); }
+      else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+    } catch (e) { warn(); setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const on = !!st?.contracts;
+  const capNum = parseInt(capDraft, 10);
+  const deals = st?.deals ?? [];
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>📜 CONTRACTS & SALARY CAP</Mono>
+      {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      {!st ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono> : (
+        <>
+          <Mono size={9} tone="dim" style={{ marginTop: 6, lineHeight: fs(13) }}>
+            {on ? `ON — $${st.salary_cap} cap · deals up to ${st.years_max}yr · ${deals.length} signed` : 'OFF — this league plays without contracts'}
+          </Mono>
+          <Mono size={9} tone="faint" style={{ marginTop: 8 }}>SALARY CAP ($)</Mono>
+          <TextInput value={capDraft} keyboardType="number-pad" maxLength={6} placeholder="200" placeholderTextColor={t.faint}
+            onChangeText={(v) => setCapDraft(v.replace(/[^0-9]/g, ''))}
+            style={{ marginTop: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
+          <Mono size={9} tone="faint" style={{ marginTop: 8 }}>MAX CONTRACT LENGTH</Mono>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+            {[1, 2, 3, 4, 5, 6].map((y) => (
+              <Chip key={y} label={`${y}YR`} on={yearsDraft === y} onPress={() => { tap(); setYearsDraft(y); }} />
+            ))}
+          </View>
+          <View style={{ marginTop: 10, gap: 8 }}>
+            <PrimaryButton label={busy ? '…' : on ? '✓ UPDATE RULES' : '📜 TURN CONTRACTS ON'}
+              disabled={busy || !Number.isFinite(capNum) || capNum < 1}
+              onPress={() => void save(capNum)} />
+            {on && <LinkButton label="✕ TURN CONTRACTS OFF" onPress={() => void save(null)} />}
+          </View>
+          {on && (st.payrolls ?? []).length > 0 && (
+            <View style={{ marginTop: 12, gap: 1 }}>
+              <Mono size={9} tone="faint" track={0.12}>PAYROLLS</Mono>
+              {(st.payrolls ?? []).map((p) => {
+                const room = (st.salary_cap ?? 0) - p.payroll;
+                return (
+                  <View key={p.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 8, backgroundColor: t.bg, borderRadius: 3, marginTop: 4 }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: fs(13), fontWeight: '600', color: t.text }}>{p.team || `Roster ${p.roster_id}`}</Text>
+                    </View>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: room < 0 ? t.opp : t.text }}>${p.payroll}</Text>
+                    <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'}>{room < 0 ? `$${-room} OVER` : `$${room} room`}</Mono>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(13) }}>
+            With the cap on, an auction win signs at its bid, a waiver win at its FAAB bid, and a free-agent add at the $1 minimum. Managers pick each deal’s length (1–{yearsDraft}yr) while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused. Extensions, franchise tags and dead money arrive with the offseason pack.
+          </Mono>
+        </>
+      )}
+    </Card>
+  );
+}
+
 /** Seat management, for the commissioner: assign a user to a team by email,
  *  unassign (kick) one, take an open seat yourself, or vacate your own —
  *  including the seat you were given at creation, which is how a playing
@@ -978,6 +1065,10 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
   const [mgrDraft, setMgrDraft] = useState('');
   const [renameFor, setRenameFor] = useState<AdminMember | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  // Division assignment (0215): a per-seat label; blank clears it. Divisions
+  // activate once every seat is labeled and at least two labels exist.
+  const [divFor, setDivFor] = useState<AdminMember | null>(null);
+  const [divDraft, setDivDraft] = useState('');
   const [artFor, setArtFor] = useState<AdminMember | null>(null);     // avatar target
   const [seatPickFor, setSeatPickFor] = useState<LeagueJoiner | null>(null); // waitlist → seat
 
@@ -1084,6 +1175,10 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
               <Chip label="✎ NAME" onPress={() => { tap(); setRenameFor(m); setRenameDraft(m.team ?? ''); }} />
               <Chip label="🖼 ART" onPress={() => { tap(); setArtFor(m); }} />
               <Chip label="＋ CO-MGR" onPress={() => { tap(); setMgrFor(m); setMgrDraft(''); }} />
+              {/* the label doubles as the current value — the map is readable
+                  from the row you edit it on */}
+              <Chip label={m.division ? `⌸ ${m.division.toUpperCase()}` : '⌸ DIVISION'} on={!!m.division}
+                onPress={() => { tap(); setDivFor(m); setDivDraft(m.division ?? ''); }} />
             </View>
             {seatMgrs.map((g) => (
               <View key={g.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, paddingLeft: 12 }}>
@@ -1176,6 +1271,22 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
             onPress={() => {
               const m = renameFor; setRenameFor(null);
               if (m && renameDraft.trim()) void act(() => setTeamName(leagueId, m.roster_id, renameDraft), () => setNote('✓ renamed'));
+            }} />
+        </View>
+      </Overlay>
+
+      {/* division label, any seat (0215). Blank SAVES AS A CLEAR — the same
+          control draws the map and erases it, and the button says which. */}
+      <Overlay visible={!!divFor} title={divFor ? `Division for ${divFor.team ?? `roster ${divFor.roster_id}`}` : ''}
+        subtitle="Same label = same division. Divisions turn on once every team has one and at least two labels exist — winners take the top playoff seeds, and rematch weeks become rivalry weeks." onClose={() => setDivFor(null)}>
+        <TextInput value={divDraft} autoFocus maxLength={24} placeholder="East" placeholderTextColor={t.faint} onChangeText={setDivDraft}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
+        <View style={{ marginTop: 10 }}>
+          <PrimaryButton label={busy ? '…' : divDraft.trim() ? '✓ SET DIVISION' : '✕ CLEAR DIVISION'} disabled={busy}
+            onPress={() => {
+              const m = divFor; setDivFor(null);
+              if (m) void act(() => setTeamDivision(leagueId, m.roster_id, divDraft.trim() || null),
+                () => setNote(divDraft.trim() ? `✓ ${m.team ?? `roster ${m.roster_id}`} → ${divDraft.trim()}` : '✓ division cleared'));
             }} />
         </View>
       </Overlay>

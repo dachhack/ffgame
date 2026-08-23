@@ -6,7 +6,8 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import {
   advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
-  type LeaguePoolPlayer, type PlayoffState, type StandingsRow,
+  leagueContracts,
+  type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -34,6 +35,20 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
     return rs;
   }, [rows, sort]);
 
+  // DIVISIONS (0215): active when every seat is labeled and ≥2 labels exist —
+  // the same rule the server seeds playoffs by. The RECORD view groups by
+  // division (each group already in the server's race order, so the top row of
+  // a group IS its current winner); POINTS / DIFF stay one flat table, because
+  // those sorts are cross-league questions.
+  const divisions = useMemo(() => {
+    const rs = rows ?? [];
+    if (sort !== 'record' || rs.length === 0 || rs.some((r) => !r.division)) return null;
+    const names = [...new Set(rs.map((r) => r.division as string))];
+    if (names.length < 2) return null;
+    return names.sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ name, teams: rs.filter((r) => r.division === name) }));
+  }, [rows, sort]);
+
   if (rows === null) return <Card><ActivityIndicator color={t.you} /></Card>;
   if (rows.length === 0) return null;
   return (
@@ -52,25 +67,109 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
         <Mono size={7.5} tone="faint" track={0.1} style={{ width: 48, textAlign: 'right' }}>PF</Mono>
         <Mono size={7.5} tone="faint" track={0.1} style={{ width: 48, textAlign: 'right' }}>DIFF</Mono>
       </View>
-      {sorted.map((r, i) => {
-        const d = Math.round((r.pf - r.pa) * 10) / 10;
-        const me = r.roster_id === myRoster;
-        return (
-          <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-            <Mono size={9} tone="faint" style={{ width: 18 }}>{i + 1}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
-              {r.team ?? `Roster ${r.roster_id}`}
-            </Text>
-            <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
-              {r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}
-            </Mono>
-            <Mono size={9.5} style={{ width: 48, textAlign: 'right' }}>{Math.round(r.pf * 10) / 10}</Mono>
-            <Mono size={9.5} tone={d > 0 ? 'you' : d < 0 ? 'opp' : 'dim'} style={{ width: 48, textAlign: 'right' }}>
-              {d > 0 ? '+' : ''}{d}
-            </Mono>
+      {(() => {
+        const rowFor = (r: StandingsRow, label: string, leader: boolean) => {
+          const d = Math.round((r.pf - r.pa) * 10) / 10;
+          const me = r.roster_id === myRoster;
+          return (
+            <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Mono size={9} tone="faint" style={{ width: 18 }}>{label}</Mono>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
+                {r.team ?? `Roster ${r.roster_id}`}{leader ? ' ★' : ''}
+              </Text>
+              <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
+                {r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}
+              </Mono>
+              <Mono size={9.5} style={{ width: 48, textAlign: 'right' }}>{Math.round(r.pf * 10) / 10}</Mono>
+              <Mono size={9.5} tone={d > 0 ? 'you' : d < 0 ? 'opp' : 'dim'} style={{ width: 48, textAlign: 'right' }}>
+                {d > 0 ? '+' : ''}{d}
+              </Mono>
+            </View>
+          );
+        };
+        if (!divisions) return sorted.map((r, i) => rowFor(r, String(i + 1), false));
+        // Grouped: each division in the server's race order — the top row of a
+        // group is its current winner (★), the seed the playoffs will protect.
+        return divisions.map((g) => (
+          <View key={g.name}>
+            <Mono size={8} tone="dim" track={0.14} style={{ marginTop: 8, marginBottom: 2 }}>{g.name.toUpperCase()}</Mono>
+            {g.teams.map((r, i) => rowFor(r, String(i + 1), i === 0))}
           </View>
-        );
-      })}
+        ));
+      })()}
+    </Card>
+  );
+}
+
+// ── Cap sheet (0217): every member's read of a contract league ───────────────
+// Renders NOTHING when the league plays without contracts, so it can mount
+// unconditionally next to Standings. Payroll + room per team; tap a team to
+// unfold its deals ($salary · years · how it was signed).
+export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
+  const t = useTheme();
+  const [st, setSt] = useState<LeagueContracts | null>(null);
+  const [names, setNames] = useState<Record<string, LeaguePoolPlayer>>({});
+  const [open, setOpen] = useState<number | null>(myRoster);
+
+  useEffect(() => {
+    leagueContracts(leagueId).then((r) => {
+      setSt(r);
+      if (r.contracts) {
+        leaguePool(leagueId)
+          .then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p]))))
+          .catch(() => {});
+      }
+    }).catch(() => setSt({ contracts: false }));
+  }, [leagueId]);
+
+  if (!st?.contracts) return null;
+  const cap = st.salary_cap ?? 0;
+  const deals = st.deals ?? [];
+  const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
+  return (
+    <Card>
+      <Mono size={9} tone="faint" track={0.12}>📜 CAP SHEET</Mono>
+      <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
+        ${cap} cap · deals up to {st.years_max}yr · {deals.length} signed
+      </Mono>
+      <View style={{ marginTop: 8 }}>
+        {(st.payrolls ?? []).map((p) => {
+          const room = cap - p.payroll;
+          const mine = p.roster_id === myRoster;
+          const unfolded = open === p.roster_id;
+          const team = deals.filter((d) => d.roster_id === p.roster_id);
+          return (
+            <View key={p.roster_id} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Pressable onPress={() => { tap(); setOpen(unfolded ? null : p.roster_id); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : t.text, fontWeight: mine ? '700' : '400' }}>
+                  {p.team ?? `Roster ${p.roster_id}`}
+                </Text>
+                <Mono size={9.5} weight="700" tone={room < 0 ? 'opp' : undefined} style={{ width: 44, textAlign: 'right' }}>${p.payroll}</Mono>
+                <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'} style={{ width: 64, textAlign: 'right' }}>
+                  {room < 0 ? `$${-room} over` : `$${room} room`}
+                </Mono>
+                <Mono size={9} tone="faint">{unfolded ? '▾' : '▸'}</Mono>
+              </Pressable>
+              {unfolded && team.map((d) => (
+                <View key={d.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, paddingLeft: 10 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>
+                    {names[d.slug]?.full_name ?? d.slug}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
+                  </Text>
+                  <Mono size={9} weight="700">${d.salary}·{d.years}yr</Mono>
+                  <Mono size={8} tone="faint" style={{ width: 74, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</Mono>
+                </View>
+              ))}
+              {unfolded && team.length === 0 && (
+                <Mono size={8.5} tone="faint" style={{ paddingLeft: 10, paddingBottom: 5 }}>no deals on the books</Mono>
+              )}
+            </View>
+          );
+        })}
+      </View>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
+        Auction wins sign at the bid, waiver wins at the FAAB bid, free agents at the $1 minimum. A move that would land a team over the cap is refused.
+      </Mono>
     </Card>
   );
 }

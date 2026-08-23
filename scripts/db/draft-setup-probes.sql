@@ -81,7 +81,7 @@ begin
   -- ds4: validation mirrors create
   perform assert_err(set_draft_setup(lid, 5), 'pick clock', 'ds4 clock floor');
   perform assert_err(set_draft_setup(lid, 200000), 'pick clock', 'ds4a clock ceiling');
-  perform assert_err(set_draft_setup(lid, null, 'lottery'), 'snake or auction', 'ds4b unknown mode');
+  perform assert_err(set_draft_setup(lid, null, 'lottery'), 'snake, linear or auction', 'ds4b unknown mode');
   perform assert_true((select pick_seconds from draft where league_id = lid) = 120,
     'ds4c a refused call changed nothing');
 

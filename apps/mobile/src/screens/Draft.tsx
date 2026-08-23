@@ -507,7 +507,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
             Rosters are live and weekly lineup pools are built. Waivers and free agency are open — manage your team from the MY TEAM tab.
           </Mono>
-          {isCommish && st.mode === 'snake' && (
+          {isCommish && st.mode !== 'auction' && (
             <View style={{ marginTop: 10, gap: 8 }}>
               {ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
               {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
@@ -902,7 +902,7 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'snake' | 'auction'>(st.mode);
+  const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>(st.mode);
   const slow = st.pick_seconds >= 3600;
   const [clock, setClock] = useState(String(slow ? Math.round(st.pick_seconds / 3600) : st.pick_seconds));
   const [hrs, setHrs] = useState(slow);
@@ -968,6 +968,7 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
             <Chip label="SNAKE" on={mode === 'snake'} onPress={() => { tap(); setMode('snake'); }} />
+            <Chip label="LINEAR" on={mode === 'linear'} onPress={() => { tap(); setMode('linear'); }} />
             <Chip label="AUCTION" on={mode === 'auction'} onPress={() => { tap(); setMode('auction'); }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

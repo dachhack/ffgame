@@ -13,7 +13,7 @@ import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
-import { Standings, Playoffs } from '../ui/LeagueExtras';
+import { Standings, Playoffs, CapSheet } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
@@ -212,6 +212,8 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       <Overlay visible={sheet === 'standings'} title="🏆 Standings" subtitle="THE TABLE · PLAYOFF BRACKET" onClose={() => setSheet(null)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 12 }}>
           <Standings leagueId={leagueId} myRoster={rosterId} />
+          {/* Contract leagues only — the card renders nothing when the cap is off. */}
+          <CapSheet leagueId={leagueId} myRoster={rosterId} />
           <Playoffs leagueId={leagueId} />
         </ScrollView>
       </Overlay>

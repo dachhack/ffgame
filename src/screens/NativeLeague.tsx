@@ -143,7 +143,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
-  const [mode, setMode] = useState<'snake' | 'auction'>('snake');
+  const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>('snake');
   const [budget, setBudget] = useState(200);
   // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
   // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
@@ -315,6 +315,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div className="mono" style={label}>DRAFT TYPE</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+              <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
               <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
             </div>
           </div>
@@ -457,7 +458,7 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
   teamName: (rid: number) => string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'snake' | 'auction'>(st.mode);
+  const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>(st.mode);
   // Slow drafts are hour-scale; showing 172800 in a seconds box helps nobody,
   // so the unit follows the value the same way the create screen's pace does.
   const slow = st.pick_seconds >= 3600;
@@ -533,6 +534,7 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
           <div className="mono" style={label}>DRAFT TYPE</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
             <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+              <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
             <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -1172,7 +1174,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             : !embedded
               ? <button onClick={onTeam} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⇄ MANAGE MY TEAM</button>
               : null}
-          {isCommish && st.mode === 'snake' && (
+          {isCommish && st.mode !== 'auction' && (
             <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
           )}
           {isCommish && !st.is_mock && (
@@ -2924,7 +2926,7 @@ function CommishDraftControls({ leagueId, st, busy, teamName, autos, assign, onA
   const [confirm, setConfirm] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
   const order = st.order ?? [];
-  const snake = st.mode === 'snake';
+  const snake = st.mode !== 'auction';  // 'pick-based': linear shares every control but the fold
   const live = st.status === 'live';
   const canMove = snake && st.status !== 'complete' && order.length > 1;
   const armed = confirm.trim().toLowerCase() === 'reset';
