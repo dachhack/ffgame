@@ -525,7 +525,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         <Chip label={`PLAYERS (${avail.length})`} on={tab === 'players'} onPress={() => { tap(); setTab('players'); }} />
         <Chip label="BOARD" on={tab === 'board'} onPress={() => { tap(); setTab('board'); }} />
         <Chip label="TEAMS" on={tab === 'teams'} onPress={() => { tap(); setTab('teams'); }} />
-        <Chip label={`☆ QUEUE (${queue.length})`} on={tab === 'queue'} onPress={() => { tap(); setTab('queue'); }} />
+        <Chip label={`QUEUE (${queue.length})`} on={tab === 'queue'} onPress={() => { tap(); setTab('queue'); }} />
       </View>
 
       {/* PLAYERS — available list with ADP + projections */}
@@ -596,8 +596,12 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     {proj != null ? `${proj.toFixed(1)}p` : ''}{own ? `${proj != null ? ' · ' : ''}${own[p.slug] ?? 0}%` : ''}
                   </Mono>
                 </View>
-                <Pressable hitSlop={8} onPress={() => toggleQueue(p.slug)}>
-                  <Text style={{ fontSize: 15, color: inQ ? t.warn : t.faint }}>{inQ ? '★' : '☆'}</Text>
+                {/* Q, not a star (v0.345.2, founder): the row already carries a
+                    GOLD ★ for favorites, and a second star meaning "queued"
+                    made the two systems read as one. Q says which one this is. */}
+                <Pressable hitSlop={8} onPress={() => toggleQueue(p.slug)}
+                  style={{ minWidth: 26, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: inQ ? t.warn : t.bd, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: inQ ? t.warn : 'transparent' }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: inQ ? t.onAccent : t.faint }}>Q</Text>
                 </Pressable>
               </View>
             );
@@ -764,7 +768,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           </View>
           {queue.length === 0 && (
             <Mono size={10} tone="faint" style={{ lineHeight: 16 }}>
-              Empty — tap ☆ on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.
+              Empty — tap Q on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.
             </Mono>
           )}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
