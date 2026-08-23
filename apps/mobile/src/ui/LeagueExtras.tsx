@@ -112,7 +112,7 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
 // draft room is open, YOUR deals carry a length picker; in the OFFSEASON your
 // expiring deals grow the front-office row — 🏷 TAG, ⤴ EXTEND, 🪧 TENDER —
 // and open RFA tenders take rival bids and the owner's match-or-walk.
-export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
+export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: string; myRoster: number | null; isCommish?: boolean }) {
   const t = useTheme();
   const [st, setSt] = useState<LeagueContracts | null>(null);
   const [names, setNames] = useState<Record<string, LeaguePoolPlayer>>({});
@@ -189,8 +189,10 @@ export function CapSheet({ leagueId, myRoster }: { leagueId: string; myRoster: n
                 <Mono size={9} tone="faint">{unfolded ? '▾' : '▸'}</Mono>
               </Pressable>
               {unfolded && team.map((d) => {
-                // rookie-scale lengths are the scale's, never the manager's
-                const pickable = canAssign && mine && d.acquired !== 'rookie';
+                // rookie-scale lengths are the scale's, never the manager's —
+                // but the COMMISSIONER may correct any deal, any time (the
+                // server has always allowed it; now the chips show for them)
+                const pickable = (canAssign && mine && d.acquired !== 'rookie') || isCommish;
                 const net = d.salary - (d.retained ?? 0);
                 // the front office works EXPIRING deals in the offseason
                 const frontOffice = offseason && mine && d.years === 1 && !d.tagged;
