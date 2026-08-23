@@ -696,4 +696,43 @@ begin
     '13d no wallet ever goes negative — no debt, anywhere');
 end $$;
 
+-- ── 14. THE ID-FIRST SETTLE JOIN (0214) ─────────────────────────────────────
+-- pot_window_final joins slate↔feed on game_id where the slate row carries one,
+-- and only falls back to the home-team compare where it doesn't (every probe
+-- above — their slate rows predate the column, which is production's legacy
+-- shape). Two assertions: the id join settles a game whose TEAM SPELLINGS
+-- DISAGREE (the LAR/LA case that broke the string join), and a matching team
+-- with a NON-matching id no longer settles anything — the id governs.
+do $$
+declare mid uuid; wk int;
+begin
+  mid := pot_fixture('idjoin', 100, 100, 10, -6, 2);  -- w1 kicked 6h ago
+  select week into wk from matchup where id = mid;
+
+  -- w1's slate row learns its id; its feed row arrives under a DIFFERENT home
+  -- spelling (the vocabulary case) but the same id, final.
+  update nfl_slate set game_id = 'EV-1' where season = 'potprobe' and week = wk and win = 'w1';
+  insert into game_feed (week, game_id, key, away, home, state)
+    values (wk, 'EV-1', 'A1@LAX', 'A1', 'LAX', 'post');
+  perform assert_true(pot_window_final(mid, 'w1'),
+    '14a id join settles a final game even when the two sides spell the team differently');
+
+  -- w2's slate row carries an id the feed never confirms; a post row under the
+  -- MATCHING home but a different game_id must not settle it (pre-0214 it
+  -- would have), and with a feed row present the elapsed-time fallback stays
+  -- out of it — an id-bearing row is final when ITS game is, not its stadium.
+  update nfl_slate set game_id = 'EV-2', kickoff = now() + interval '2 hours'
+    where season = 'potprobe' and week = wk and win = 'w2';
+  insert into game_feed (week, game_id, key, away, home, state)
+    values (wk, 'EV-OTHER', 'A2@H2', 'A2', 'H2', 'post');
+  perform assert_true(not pot_window_final(mid, 'w2'),
+    '14b a matching team with a non-matching id settles NOTHING — the id governs');
+
+  -- And the moment the id itself reports post, w2 settles.
+  insert into game_feed (week, game_id, key, away, home, state)
+    values (wk, 'EV-2', 'A2@H2', 'A2', 'H2', 'post');
+  perform assert_true(pot_window_final(mid, 'w2'),
+    '14c the id reporting post is what settles an id-bearing row');
+end $$;
+
 select 'ALL POT PROBES PASSED' as result;

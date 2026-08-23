@@ -98,7 +98,11 @@ export function slateFromGames(games) {
   const gs = (games ?? []).filter((g) => g.home && g.away && g.date);
   const kicks = gs.map((g) => Date.parse(g.date));
   const ids = gs.length && kicks.every(Number.isFinite) ? windowIdsFromKickoffs(kicks) : null;
-  return gs.map((g, i) => ({ away: fixTeam(g.away), home: fixTeam(g.home), win: ids ? ids[i] : windowFromKickoff(g.date), kickoff: g.date }));
+  // gameId rides along (v0.345.1): the ESPN event id is the SAME key game_feed
+  // and live_play are already stored under, and dropping it here is what forced
+  // pot settlement's SQL to join slate↔feed on a team-code string — the join
+  // the LAR/LA vocabulary split silently broke (join-audit finding 1).
+  return gs.map((g, i) => ({ away: fixTeam(g.away), home: fixTeam(g.home), win: ids ? ids[i] : windowFromKickoff(g.date), kickoff: g.date, gameId: g.eventId }));
 }
 
 /** The live slate for a season-week from ESPN (fetches the scoreboard). */
