@@ -2443,9 +2443,23 @@ export const setLeagueAvatar = (leagueId: string, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_league_avatar', { p_league_id: leagueId, p_url: url });
 
 // ── The league board (0123): post a league that needs managers, browse, join ──
+/** What KIND of league a card advertises (0223) — game, continuity, format,
+ *  contracts, reception scoring, whether scoring was customized. */
+export interface LeagueIdentity {
+  game_mode: 'drip' | 'classic';
+  continuity: LeagueContinuity;
+  format: LeagueFormat;
+  contracts: boolean; salary_cap: number | null;
+  ppr: number; scoring_custom: boolean;
+  vampire_seat?: number | null;
+}
 export interface BoardListing {
   league_id: string; name: string; season: string; avatar_url: string | null;
   blurb: string; posted_at: string;
+  /** The commissioner's word on money ("$50 — Venmo before the draft"); the
+   *  platform prints it, it never collects it. */
+  dues?: string | null;
+  identity?: LeagueIdentity;
   seats_total: number; seats_open: number;
   draft_status: string; draft_mode: string;
   /** The caller is already enrolled here / commissions it. */
@@ -2459,9 +2473,10 @@ export async function leagueBoard(): Promise<BoardListing[]> {
   if (!Array.isArray(r)) throw new Error(r?.error ?? 'could not load the board');
   return r;
 }
-/** Post (or re-open / edit) the caller's league. Null blurb keeps the old one. */
-export const postLeagueListing = (leagueId: string, blurb?: string | null) =>
-  rpc<{ ok: boolean; error?: string }>('post_league_listing', { p_league_id: leagueId, p_blurb: blurb ?? null });
+/** Post (or re-open / edit) the caller's league. Null blurb/dues keeps the
+ *  old one; an empty-string dues clears it. */
+export const postLeagueListing = (leagueId: string, blurb?: string | null, dues?: string | null) =>
+  rpc<{ ok: boolean; error?: string }>('post_league_listing', { p_league_id: leagueId, p_blurb: blurb ?? null, p_dues: dues ?? null });
 export const closeLeagueListing = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('close_league_listing', { p_league_id: leagueId });
 /** Claim a seat in a posted league — native_join's seat rules, authorized by
@@ -2472,6 +2487,12 @@ export interface BoardPreview {
   ok: boolean; error?: string;
   name?: string; season?: string; avatar_url?: string | null; blurb?: string | null;
   game_mode?: 'drip' | 'classic'; ppr?: number; bestball?: string[]; roster?: Record<string, number>;
+  /** 0223: what kind of league, the dues, and (contract leagues) the rulebook. */
+  identity?: LeagueIdentity;
+  dues?: string | null;
+  contract_rules?: { salary_cap: number; years_max: number; dead_pct: number;
+    retention: boolean; cap_trading: boolean; ir_relief: boolean;
+    tag_raise_pct: number; ext_discount_pct: number; rfa: boolean } | null;
   seats_total?: number; seats_open?: number;
   draft?: { status: string; mode: string; rounds: number; pick_seconds: number;
             budget?: number | null; night?: { start_min: number; end_min: number } | null } | null;
@@ -2494,7 +2515,7 @@ export const leagueInvite = (leagueId: string) =>
 /** The listing's true state, commish/admin only (0124). league_board() hides
  *  full leagues, so it cannot answer "is my league public?" — this can. */
 export const leagueListingState = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; seats_open?: number }>(
+  rpc<{ ok: boolean; error?: string; listed?: boolean; blurb?: string; dues?: string | null; seats_open?: number }>(
     'league_listing_state', { p_league_id: leagueId });
 
 // ── Co-managers + the waiting room (0125) ─────────────────────────────────────
