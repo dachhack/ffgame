@@ -6,7 +6,7 @@
 // be shipping a native library nothing imported; bring it back when there is a
 // real stack (a tab bar, deep links into a screen, a back gesture that has to
 // feel native) rather than to model one push.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -87,6 +87,9 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<OpenLeague | null>(null);
+  /** Whose session `open` belongs to — see the onAuth handler. A ref, not
+   *  state: it guards an event handler and must never schedule a render. */
+  const authUser = useRef<string | null>(null);
   // A one-shot destination for ⚑ COMMISSIONER: creating a league lands on
   // 🧩 ROSTER (v0.296.6). Cleared on the way out so the next visit gets the
   // map, which is where a commissioner who did NOT just create a league wants
@@ -124,9 +127,26 @@ export function App() {
 
   useEffect(() => {
     if (!liveConfigured()) { setReady(true); return; }
-    getSession().then((s) => { setSession(s); setReady(true); }).catch(() => setReady(true));
+    getSession().then((s) => { authUser.current = s?.user.id ?? null; setSession(s); setReady(true); }).catch(() => setReady(true));
     // Covers sign-out, token refresh and the sign-in this app performs.
-    const un = onAuth((s) => { setSession(s); if (!s) setOpen(null); });
+    //
+    // ONLY A REAL SIGN-OUT CLOSES THE LEAGUE (v0.344.4). This used to clear
+    // `open` on ANY null session, and the SDK hands one over for reasons that
+    // are not a sign-out — an INITIAL_SESSION before storage has answered, a
+    // token refresh that momentarily has nothing to hand back. The session
+    // itself was always restored a frame later, so the app stayed signed in
+    // and the only lasting effect was the cleared league: you were reading
+    // your matchup and the board became the leagues list, which is exactly
+    // what the founder hit reaching for pull-to-refresh. The event name says
+    // which of those it was, and `onAuth` has always passed it.
+    const un = onAuth((s, event) => {
+      // A DIFFERENT account signing in must not inherit the open league — that
+      // is the one case the old null check was quietly covering.
+      if (s && authUser.current && s.user.id !== authUser.current) setOpen(null);
+      if (s) authUser.current = s.user.id;
+      setSession(s);
+      if (event === 'SIGNED_OUT') { authUser.current = null; setOpen(null); }
+    });
     return () => { un?.(); };
   }, []);
 
