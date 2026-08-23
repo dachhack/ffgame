@@ -196,3 +196,40 @@ export function TabBar<T extends string>({ tabs, active, onSelect, style, wrap =
     </div>
   );
 }
+
+// ── ⓘ — the explainer, folded away (v0.350.4) ────────────────────────────────
+// Web twin of the app's ui/InfoChip: a control gets its LABEL and one ⓘ; the
+// paragraph lives in a modal that opens on demand. Dynamic STATE stays inline.
+export function InfoChip({ title, info }: { title: string; info: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} aria-label={`About ${title}`} className="mono"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: 12, fontWeight: 700, color: 'var(--dim)', lineHeight: 1 }}>
+        ⓘ
+      </button>
+      {open && (
+        <div onClick={() => setOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(440px, 100%)', maxHeight: '80vh', overflowY: 'auto', marginBottom: 0 }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text)', marginTop: 10, whiteSpace: 'pre-line' }}>{info}</div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button onClick={() => setOpen(false)} className="mono" style={linkBtn}>close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** A section label with its ⓘ — the common arrangement, in one line. */
+export function LabelInfo({ label, title, info, style }: { label: string; title?: string; info: string; style?: CSSProperties }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, ...style }}>
+      <span className="mono" style={subhead && { ...subhead, marginBottom: 0 }}>{label}</span>
+      <InfoChip title={title ?? label} info={info} />
+    </div>
+  );
+}
