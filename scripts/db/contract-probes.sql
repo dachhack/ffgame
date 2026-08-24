@@ -519,8 +519,10 @@ begin
   update contract set years = 3 where league_id = lid and slug = 'se-p1';
   perform assert_true((select salary from contract where league_id = lid and slug = 'se-p1') = 12,
     'ct16d the bid became the salary');
-  -- a post-draft signing that must SURVIVE the reset
+  -- a signing from the draft's ERA (0235: it unwinds with the trash — the
+  -- Mendoza scar) and a queued standing max (0235: dead drafts don't bid)
   perform assert_ok(add_free_agent(lid, 1, 'se-p3', null), 'ct16e A signs a street deal');
+  insert into draft_queue (league_id, roster_id, slug, pos, max_bid) values (lid, 1, 'se-p4', 1, 9);
 
   select count(*) into before_n from league_txn where league_id = lid;
   r := commish_reset_draft(lid, 'RESET');
@@ -531,13 +533,17 @@ begin
     'ct16h THE POINT: unwinding a 3-year deal is not a cut — no dead money');
   perform assert_true(not exists (select 1 from contract where league_id = lid and slug in ('se-p1', 'se-p2')),
     'ct16i the drafted deals dissolved');
-  perform assert_true((select (salary, years) = (1, 1) from contract where league_id = lid and slug = 'se-p3'),
-    'ct16j the street deal signed after the draft survives untouched');
-  perform assert_true((select count(*) from native_roster where league_id = lid) = 1,
-    'ct16k only the street signing still holds a roster spot');
+  perform assert_true(not exists (select 1 from contract where league_id = lid and slug = 'se-p3')
+      and not exists (select 1 from native_roster where league_id = lid and slug = 'se-p3'),
+    'ct16j 0235: the era''s street signing unwinds with the trash');
+  perform assert_true((r ->> 'signings_unwound')::int = 1, 'ct16j2 ...and the reset says so');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 0,
+    'ct16k the slate is clean');
+  perform assert_true(not exists (select 1 from draft_queue where league_id = lid),
+    'ct16k2 0235: the queues (and their standing maxes) died with the draft');
   perform assert_true((select count(*) from league_txn where league_id = lid) = before_n + 1,
     'ct16l the register grew by exactly ONE row, not a wall of drops');
-  perform assert_true((select (kind, note) = ('commish', 'draft reset — 2 picks cleared')
+  perform assert_true((select (kind, note) = ('commish', 'draft reset — 2 picks cleared · 1 signing unwound')
       from league_txn where league_id = lid order by id desc limit 1),
     'ct16m and that row says what actually happened');
   perform assert_true((select status from draft where league_id = lid) = 'pending',
@@ -731,6 +737,62 @@ begin
   lid := (r ->> 'league_id')::uuid;
   perform assert_ok(set_draft_setup(lid, null, 'snake'), 'ct20i a plain league still switches to snake');
   perform assert_true((select mode from draft where league_id = lid) = 'snake', 'ct20j stored');
+end $$;
+
+-- ── §21. the wire can't make a rookie a veteran (0235) ───────────────────────
+-- The Mendoza case: an exp-0 player signed off the wire filed as a $1 veteran
+-- street deal with an adjustable length. Now every acquisition path reads the
+-- pool's exp: FA and waiver signings of a rookie file as rookie deals — the
+-- signing sets the price, the rule sets the term. Unknown exp stays veteran.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Wire Scouts', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct21a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Streets'), 'ct21b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'ws-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct21c seed');
+  update league_pool set exp = 0 where league_id = lid and slug in ('ws-p1', 'ws-p2');
+  update league_pool set exp = 5 where league_id = lid and slug = 'ws-p3';
+  update draft set status = 'complete', started_at = now() where league_id = lid;
+
+  -- FA path: a $1 flier on a rookie is still a rookie deal
+  perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'ws-p1', null), 'ct21d B signs the rookie off the street');
+  perform assert_true((select (salary, years, acquired) = (1, 4, 'rookie') from contract
+      where league_id = lid and slug = 'ws-p1'),
+    'ct21e THE POINT: $1 street price, rookie term, filed as a rookie deal');
+  perform assert_err(set_contract_years(lid, 'ws-p1', 2), 'rookie term',
+    'ct21f and his length is the rule''s, not his owner''s');
+
+  -- waiver path: the FAAB bid prices him, the rule still holds him
+  perform probe_as('a');
+  perform assert_ok(set_transaction_rules(lid, 'faab', 100, null), 'ct21g FAAB on');
+  update league_pool set waived_until = now() + interval '1 day' where league_id = lid and slug = 'ws-p2';
+  perform probe_as('b');
+  perform assert_ok(submit_waiver_claim(lid, 2, 'ws-p2', null, 7), 'ct21h claim the rookie at $7');
+  update league_pool set waived_until = now() - interval '1 second' where league_id = lid and slug = 'ws-p2';
+  perform probe_as('a');
+  r := process_waivers(lid);
+  perform assert_true((r ->> 'won')::int = 1, 'ct21i claim won');
+  perform assert_true((select (salary, years, acquired) = (7, 4, 'rookie') from contract
+      where league_id = lid and slug = 'ws-p2'),
+    'ct21j the waiver bid is the salary — on the rookie term');
+
+  -- evidence bar: a veteran and an unknown both stay street deals
+  perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'ws-p3', null), 'ct21k B signs a vet');
+  perform assert_ok(add_free_agent(lid, 2, 'ws-p4', null), 'ct21l B signs an unknown');
+  perform assert_true((select (salary, years, acquired) = (1, 1, 'fa') from contract
+      where league_id = lid and slug = 'ws-p3')
+    and (select (salary, years, acquired) = (1, 1, 'fa') from contract
+      where league_id = lid and slug = 'ws-p4'),
+    'ct21m exp 5 and exp unknown both file as $1 veteran street deals');
 end $$;
 
 select 'ALL CONTRACT PROBES PASSED' as result;
