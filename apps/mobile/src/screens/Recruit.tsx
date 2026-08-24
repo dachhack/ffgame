@@ -18,7 +18,7 @@ import { crestInitial } from '@drip/core/data/crest';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, leagueListingState,
   type BoardPreview, type LeagueIdentity,
-  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity,
+  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
 } from '@drip/core/data/liveApi';
@@ -234,7 +234,10 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       // Same defaults the web derives from the game type (v0.221.0): drip
       // keeps the pre-0071 position limits, classic takes none because its
       // shape is the starting-lineup spec.
-      const rounds = game === 'classic' ? 15 : 12;
+      // Contract types draft DEEP (v0.352.0): the roster covers everyone the
+      // AI market prices above the $1 floor, so startable players can't fall
+      // through to free street deals.
+      const rounds = contractType ? contractRosterDepth(teamCount, 200) : game === 'classic' ? 15 : 12;
       const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
         continuity, continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null);
@@ -364,7 +367,9 @@ export function Recruit({ onBack, onJoined, onCreated }: {
                   </View>
                 )}
                 {contractType && (
-                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>auction preset — bids become salaries, cap on at the budget</Mono>
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>
+                    preset — auction (bids become salaries, cap at the budget) · FAAB waivers (bids sign the contract) · deep roster, so everyone worth over $1 gets drafted
+                  </Mono>
                 )}
               </View>
               <View>
