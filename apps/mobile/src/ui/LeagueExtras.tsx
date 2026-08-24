@@ -224,7 +224,10 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 // rookie-scale lengths are the scale's, never the manager's —
                 // but the COMMISSIONER may correct any deal, any time (the
                 // server has always allowed it; now the chips show for them)
-                const pickable = (canAssign && mine && d.acquired !== 'rookie') || isCommish;
+                // 0233: rookie deals and LOCKED seats never show chips — the
+                // commissioner's pen works only on unlocked veteran deals.
+                const seatLocked = !!(st.locks ?? []).find((lk) => lk.roster_id === p.roster_id)?.locked;
+                const pickable = d.acquired !== 'rookie' && !seatLocked && (mine ? canAssign : isCommish);
                 const net = d.salary - (d.retained ?? 0);
                 // the front office works EXPIRING deals in the offseason
                 const frontOffice = offseason && mine && d.years === 1 && !d.tagged;

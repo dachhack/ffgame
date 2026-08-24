@@ -1330,10 +1330,63 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
       {/* Desktop: board + player panel side by side; phones: stacked (the
           flex bases make the columns collapse under ~900px). */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
-      {/* THE BOARD — always on screen (Sleeper-style): one column per team,
-          cells colored by position, snake direction arrows on open cells, and
-          the view follows the on-clock pick. */}
-      {teams > 0 && (
+      {/* THE BOARD — always on screen for SNAKE (Sleeper-style): one column
+          per team, the view follows the on-clock pick. An AUCTION pins YOUR
+          TEAM here instead (v0.354.15, founder: "We don't really need to see
+          the draft board pinned on the auction draft. We do need the player's
+          team they are building though.") — the board's award-order columns
+          stay a TEAMS-tab read. */}
+      {auction && myRoster != null && (
+        <div style={{ ...card, padding: 12, flex: '1 1 320px', minWidth: 280, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+            <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>🧢 MY TEAM</div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>
+              {pickRowsFor(myRoster).length}/{st.rounds} spots{myBudget ? ` · $${myBudget.budget} left` : ''}
+            </div>
+          </div>
+          {(() => {
+            const rows = pickRowsFor(myRoster);
+            const pickOf = new Map(rows.map((pk) => [pk.slug, pk]));
+            const mrow = (key: string | number, tag: string, slug: string) => {
+              const pl = poolBySlug.get(slug);
+              const pk = pickOf.get(slug);
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+                  <span className="mono" title={tag} style={{ fontSize: 8.5, color: 'var(--faint)', width: 72, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>
+                  <PlayerImg playerId={slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={22} />
+                  <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl?.full_name ?? slug}</span>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${pk?.price ?? 1}</span>
+                </div>
+              );
+            };
+            const fill = spotsFor(myRoster);
+            if (!fill) {
+              return rows.length === 0
+                ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No wins yet — your players land here as the bells ring.</div>
+                : rows.map((pk) => mrow(pk.overall, `$${pk.price ?? 1}`, pk.slug));
+            }
+            return (
+              <>
+                {fill.spots.map((sp, si) => (sp.player
+                  ? mrow(sp.def.slot, spotNames[si], sp.player.id)
+                  : (
+                    <div key={sp.def.slot} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 0', borderTop: '1px solid var(--bd)', opacity: 0.5 }}>
+                      <span className="mono" title={spotNames[si]} style={{ fontSize: 8.5, color: 'var(--faint)', width: 72, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spotNames[si]}</span>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>— empty</span>
+                    </div>
+                  )))}
+                {fill.bench.length > 0 && (
+                  <>
+                    <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.14em', color: 'var(--faint)', padding: '8px 0 2px' }}>BENCH · {fill.bench.length}</div>
+                    {fill.bench.map((bp) => mrow(bp.id, 'BN', bp.id))}
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+      {teams > 0 && !auction && (
         <div style={{ ...card, padding: 8, flex: '1.3 1 460px', minWidth: 320, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
             {(st.order ?? []).map((rid) => (
@@ -1951,7 +2004,10 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{unfolded ? '▾' : '▸'}</span>
               </div>
               {unfolded && team.map((d) => {
-                const pickable = (canAssign && mine && d.acquired !== 'rookie') || isCommish;
+                // 0233: rookie deals and LOCKED seats never show chips — the
+                // commissioner's pen works only on unlocked veteran deals.
+                const seatLocked = !!(st.locks ?? []).find((lk) => lk.roster_id === p.roster_id)?.locked;
+                const pickable = d.acquired !== 'rookie' && !seatLocked && (mine ? canAssign : isCommish);
                 const net = d.salary - (d.retained ?? 0);
                 const frontOffice = offseason && mine && d.years === 1 && !d.tagged;
                 const tendered = tenders.some((x) => x.slug === d.slug && x.status === 'open');

@@ -91,7 +91,8 @@ begin
   perform assert_ok(lock_contracts(lid, 2), 'ct3e2 B locks');
   perform assert_err(set_contract_years(lid, 'ct-rb1', 4), 'locked', 'ct3e3 the LOCK is what ends it');
   perform probe_as('a');
-  perform assert_ok(set_contract_years(lid, 'ct-rb1', 3), 'ct3f …but the commissioner may still correct a deal');
+  perform assert_err(set_contract_years(lid, 'ct-rb1', 3), 'lock is final',
+    'ct3f 0233: not even the commissioner — a lock is final');
 
   -- ── 4 + 5. FA minimum and the FAAB-bid waiver salary ───────────────────────
   perform probe_as('b');
@@ -135,9 +136,9 @@ begin
   perform assert_ok(r, 'ct7a B offers the $8 deal to A');
   perform probe_as('a');
   perform assert_ok(respond_trade((r ->> 'trade_id')::uuid, true), 'ct7b A accepts');
-  perform assert_true((select (roster_id, salary, years) = (1, 8, 3) from contract
+  perform assert_true((select (roster_id, salary, years) = (1, 8, 2) from contract
       where league_id = lid and slug = 'ct-rb1'),
-    'ct7c the contract moved seats with its terms intact');
+    'ct7c the contract moved seats with its terms intact (2yr — ct3f can no longer touch it)');
   -- Send it back with the cap at $10: A fits ($8 → $0), B does not ($7 + $8).
   perform assert_ok(set_contract_rules(lid, 10), 'ct7d cap tightens to $10');
   r := propose_trade(lid, 1, 2, '["ct-rb1"]'::jsonb, '[]'::jsonb, null, null, null);
@@ -586,11 +587,12 @@ begin
     'ct17j B''s wire is still shut — the lock is per seat');
   perform probe_as('a');
 
-  -- the lock ending the OWNER's pen is §3's ct3e3 (a non-commish owner);
-  -- seat 1 here is owner AND commissioner, and the commissioner's pen never
-  -- goes down — locked deal, own deal, anyone's deal.
-  perform assert_ok(set_contract_years(lid, 'lk-p1', 2), 'ct17k a commissioner corrects even their own locked deal');
-  perform assert_ok(set_contract_years(lid, 'lk-p2', 2), 'ct17l ...and anyone else''s');
+  -- 0233 flipped this law: a lock is final for EVERYONE. Seat 1 (owner AND
+  -- commissioner) locked — its deals are done; seat 2 hasn't locked, so the
+  -- commissioner's pen still works there.
+  perform assert_err(set_contract_years(lid, 'lk-p1', 2), 'lock is final',
+    'ct17k a locked seat refuses even its commissioner-owner');
+  perform assert_ok(set_contract_years(lid, 'lk-p2', 2), 'ct17l ...while an UNLOCKED seat still takes the commissioner''s pen');
   perform assert_true(coalesce((league_contracts(lid) ->> 'my_locked')::boolean, false),
     'ct17m the cap sheet reports my lock');
 
@@ -598,7 +600,7 @@ begin
   update draft set completed_at = now() - interval '73 hours' where league_id = lid;
   perform probe_as('b');
   perform assert_ok(add_free_agent(lid, 2, 'lk-p4', null), 'ct17n past the deadline the gate lifts itself');
-  perform assert_err(set_contract_years(lid, 'lk-p2', 3), 'lengths are locked',
+  perform assert_err(set_contract_years(lid, 'lk-p2', 3), 'lock is final',
     'ct17o ...and the unset lengths are final (1yr default stood)');
   perform probe_as('a');
 
