@@ -17,7 +17,7 @@ import { Img, Sheet } from '../app/ui';
 import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts,
   leaveLeague, friendlyError,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
@@ -396,8 +396,18 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
   const [groups, setGroups] = useState<TeamGroup[] | null>(null);
   const [err, setErr] = useState(false);
   const [openRid, setOpenRid] = useState<number | null>(null);
+  // A contract league's roster IS its payroll (v0.355.9, founder: "teams and
+  // rosters page ... should see the contracts"): every player carries his
+  // deal, every team header its total. Both maps stay empty without contracts.
+  const [deals, setDeals] = useState<Map<string, string>>(new Map());
+  const [pay, setPay] = useState<Map<number, string>>(new Map());
   useEffect(() => {
     let dead = false;
+    leagueContracts(leagueId).then((c) => {
+      if (dead || !c.contracts) return;
+      setDeals(new Map((c.deals ?? []).map((d) => [d.slug, `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}`])));
+      setPay(new Map((c.payrolls ?? []).map((p) => [p.roster_id, `$${p.payroll}${p.cap != null ? ` of $${p.cap}` : ''}`])));
+    }).catch(() => {});
     (async () => {
       try {
         const [rows, pool] = await Promise.all([nativeRosters(leagueId), leaguePool(leagueId)]);
@@ -431,7 +441,7 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
             <span style={{ fontSize: 12.5, fontWeight: 700, color: g.mine ? 'var(--you)' : 'var(--text)', flex: 1 }}>
               {g.name}{g.mine ? ' (you)' : ''}
             </span>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</span>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{pay.get(g.rid) ? `${pay.get(g.rid)} · ` : ''}{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</span>
           </button>
           {openRid === g.rid && (
             <div style={{ paddingBottom: 10 }}>
@@ -439,6 +449,7 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
                   <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', width: 28 }}>{p.pos}</span>
                   <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{p.name}</span>
+                  {deals.get(p.slug) != null && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>{deals.get(p.slug)}</span>}
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team}</span>
                 </div>
               ))}
