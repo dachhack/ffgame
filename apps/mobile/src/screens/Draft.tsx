@@ -527,18 +527,42 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               )}
             </View>
           )}
+          {/* THE ROOM'S WALLETS (v0.355.5, founder: "need an easy way to have
+              the remaining budgets of all other teams handy") — every rival's
+              remaining money under my own strip, in seat order so nothing
+              moves; a warn −$n marks money they have riding on open lots. */}
+          {auction && (st.budgets ?? []).length > 1 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, paddingBottom: 10, marginBottom: 10 }}>
+              {(st.order ?? []).map((rid) => {
+                const b = (st.budgets ?? []).find((x) => x.roster_id === rid);
+                if (!b || rid === myRoster) return null;
+                return (
+                  <Pressable key={rid} hitSlop={4} onPress={() => { tap(); setTab('teams'); setTeamView(rid); }}
+                    style={{ flexDirection: 'row', gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim, maxWidth: 110 }}>{teamName(rid) ?? `Team ${rid}`}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.text, fontVariant: ['tabular-nums'] }}>${b.budget}</Text>
+                    {b.committed > 0 && (
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn, fontVariant: ['tabular-nums'] }}>−${b.committed}</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
           {/* auction lots — up to max_lots in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
             const left = lotSecsLeft(lot);
             const iHold = lot.roster_id === myRoster;
             const canBidLot = myRoster != null && !iHold && (lot.my_max ?? 0) > lot.bid && !st.paused;
-            const quick = canBidLot
-              ? [lot.bid + 1, lot.bid + 5, lot.bid + 10].filter((a, i, arr) => a <= (lot.my_max ?? 0) && arr.indexOf(a) === i)
-              : [];
+            // The three raises hold their POSITIONS (v0.355.3, founder: "not
+            // have the bids change positions") — a step past your max or on a
+            // lot you already hold ghosts instead of vanishing, so a button
+            // never moves out from under a reaching thumb mid-auction.
+            const steps = myRoster != null ? [lot.bid + 1, lot.bid + 5, lot.bid + 10] : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
-              <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, borderLeftWidth: iHold ? 3 : 0, borderLeftColor: t.you, paddingLeft: iHold ? 8 : 0 }}>
+              <View key={lot.id} style={{ minHeight: 92, borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, borderLeftWidth: iHold ? 3 : 0, borderLeftColor: t.you, paddingLeft: iHold ? 8 : 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Face slug={lot.slug} pos={lp?.pos ?? '?'} size={40} />
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -562,15 +586,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   </View>
                 )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {quick.map((a) => (
-                    <Pressable key={a} disabled={busy}
-                      onPress={() => { tap(); myRoster != null && void run(() => placeBid(leagueId, myRoster, a, lot.id)); }}
-                      style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent }}>BID ${a}</Text>
-                    </Pressable>
-                  ))}
+                  {steps.map((a) => {
+                    const can = canBidLot && a <= (lot.my_max ?? 0) && !busy;
+                    return (
+                      <Pressable key={a} disabled={!can}
+                        onPress={() => { tap(); myRoster != null && void run(() => placeBid(leagueId, myRoster, a, lot.id)); }}
+                        style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, minWidth: 84, alignItems: 'center', opacity: can ? 1 : 0.35 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent, fontVariant: ['tabular-nums'] }}>BID ${a}</Text>
+                      </Pressable>
+                    );
+                  })}
                   {iHold && (
-                    <View style={{ backgroundColor: t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <View style={{ backgroundColor: t.warn, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent, letterSpacing: 0.6 }}>🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}</Text>
                     </View>
                   )}
@@ -603,15 +630,27 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             );
           })}
 
-          {/* nomination / pick banner */}
-          {(!auction || st.on_clock != null) && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: auction && (st.lots ?? []).length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: auction && (st.lots ?? []).length > 0 ? 10 : 0, marginTop: auction && (st.lots ?? []).length > 0 ? 10 : 0 }}>
+          {/* empty lot slots hold their SPACE (v0.355.4, founder: "the screen
+              will refocus and mess up your click") — a sale used to collapse
+              the sold row and reflow everything below it mid-tap, so the room
+              keeps max_lots slots on screen and an open one just waits. */}
+          {auction && Array.from({ length: Math.max(0, st.max_lots - (st.lots ?? []).length) }, (_, gi) => (
+            <View key={`ghost-${gi}`} style={{ minHeight: 92, justifyContent: 'center', borderTopWidth: gi + (st.lots ?? []).length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: gi + (st.lots ?? []).length > 0 ? 10 : 0, marginTop: gi + (st.lots ?? []).length > 0 ? 10 : 0 }}>
+              <Mono size={9.5} tone="faint" track={0.1}>⛏ LOT OPEN — waiting on a nomination</Mono>
+            </View>
+          ))}
+          {/* nomination / pick banner. In an auction it stays MOUNTED even
+              while every lot is on the block (on_clock null) — appearing and
+              vanishing was the other half of the mid-tap reflow. */}
+          {(!auction || st.status === 'live') && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: auction ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: auction ? 10 : 0, marginTop: auction ? 10 : 0 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
                 <Mono size={9} tone="faint" track={0.12}>
                   {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                 </Mono>
-                <Text numberOfLines={2} style={{ fontSize: 15.5, fontWeight: '700', color: myTurn ? t.you : t.text, marginTop: 3 }}>
-                  {myTurn ? (auction ? 'YOUR NOMINATION — pick below' : 'YOUR PICK')
+                <Text numberOfLines={2} style={{ fontSize: 15.5, fontWeight: '700', color: myTurn ? t.you : st.on_clock == null ? t.faint : t.text, marginTop: 3 }}>
+                  {st.on_clock == null ? 'Every lot is on the block — the next nomination opens when one sells'
+                    : myTurn ? (auction ? 'YOUR NOMINATION — pick below' : 'YOUR PICK')
                     : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                 </Text>
               </View>

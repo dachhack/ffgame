@@ -1194,18 +1194,39 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>{(st.lots ?? []).length}/{st.max_lots} lots open</div>
             </div>
           )}
+          {/* THE ROOM'S WALLETS (v0.355.5, founder: "need an easy way to have
+              the remaining budgets of all other teams handy") — every rival's
+              remaining money under my own strip, in seat order so nothing
+              moves. Hover a chip for their max bid and open spots. */}
+          {auction && (st.budgets ?? []).length > 1 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: 10, marginBottom: 10 }}>
+              {(st.order ?? []).map((rid) => {
+                const b = (st.budgets ?? []).find((x) => x.roster_id === rid);
+                if (!b || rid === myRoster) return null;
+                return (
+                  <span key={rid} className="mono" title={`max bid $${b.max_bid} · ${b.spots_left} spot${b.spots_left === 1 ? '' : 's'} open`}
+                    style={{ fontSize: 10, border: '1px solid var(--bd)', borderRadius: 5, padding: '4px 8px', color: 'var(--dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {teamName(rid) ?? `Team ${rid}`} <b style={{ color: 'var(--text)' }}>${b.budget}</b>
+                    {b.committed > 0 && <span style={{ color: 'var(--warn)' }}> −${b.committed}</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {/* auction lots — up to max_lots run in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
             const left = lotSecsLeft(lot);
             const iHold = lot.roster_id === myRoster;
             const canBidLot = myRoster != null && !iHold && (lot.my_max ?? 0) > lot.bid && !st.paused;
-            const quick = canBidLot
-              ? [lot.bid + 1, lot.bid + 5, lot.bid + 10].filter((a, i, arr) => a <= (lot.my_max ?? 0) && arr.indexOf(a) === i)
-              : [];
+            // The three raises hold their POSITIONS (v0.355.3, founder: "not
+            // have the bids change positions") — a step past your max or on a
+            // lot you already hold ghosts instead of vanishing, so a button
+            // never moves out from under a hovering cursor mid-auction.
+            const steps = myRoster != null ? [lot.bid + 1, lot.bid + 5, lot.bid + 10] : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
-              <div key={lot.id} style={{ borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, boxShadow: iHold ? 'inset 4px 0 0 var(--you)' : 'none', paddingLeft: iHold ? 10 : 0, borderRadius: iHold ? 4 : 0 }}>
+              <div key={lot.id} style={{ minHeight: 96, borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, boxShadow: iHold ? 'inset 4px 0 0 var(--you)' : 'none', paddingLeft: iHold ? 10 : 0, borderRadius: iHold ? 4 : 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <PlayerImg playerId={lot.slug} espnId={lp?.espn_id} team={lp?.team} pos={(lp?.pos ?? 'WR') as Pos} size={44} />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -1230,12 +1251,15 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {quick.map((a) => (
-                    <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={busy}
-                      className="mono" style={{ ...btn, padding: '7px 12px' }}>BID ${a}</button>
-                  ))}
+                  {steps.map((a) => {
+                    const can = canBidLot && a <= (lot.my_max ?? 0) && !busy;
+                    return (
+                      <button key={a} onClick={() => can && myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={!can}
+                        className="mono" style={{ ...btn, padding: '7px 12px', minWidth: 92, fontVariantNumeric: 'tabular-nums', opacity: can ? 1 : 0.35, cursor: can ? 'pointer' : 'default' }}>BID ${a}</button>
+                    );
+                  })}
                   {iHold && (
-                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--bg)', background: 'var(--you)', borderRadius: 5, padding: '4px 9px', letterSpacing: '0.08em' }}>
+                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--warn)', borderRadius: 5, padding: '4px 9px', letterSpacing: '0.08em' }}>
                       🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}
                     </span>
                   )}
@@ -1265,10 +1289,20 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             );
           })}
 
-          {/* nomination / pick banner (auction shows it only when the room has
-              lot capacity — on_clock is the next nominator then) */}
-          {(!auction || st.on_clock != null) && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', borderTop: auction && (st.lots ?? []).length > 0 ? '1px solid var(--bd)' : 'none', paddingTop: auction && (st.lots ?? []).length > 0 ? 10 : 0, marginTop: auction && (st.lots ?? []).length > 0 ? 10 : 0 }}>
+          {/* empty lot slots hold their SPACE (v0.355.4, founder: "the screen
+              will refocus and mess up your click") — a sale used to collapse
+              the sold row and reflow the whole player list mid-click, so the
+              room keeps max_lots slots on screen and an open one just waits. */}
+          {auction && Array.from({ length: Math.max(0, st.max_lots - (st.lots ?? []).length) }, (_, gi) => (
+            <div key={`ghost-${gi}`} style={{ minHeight: 96, display: 'flex', alignItems: 'center', borderTop: gi + (st.lots ?? []).length > 0 ? '1px solid var(--bd)' : 'none', paddingTop: gi + (st.lots ?? []).length > 0 ? 10 : 0, marginTop: gi + (st.lots ?? []).length > 0 ? 10 : 0 }}>
+              <span className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--faint)' }}>⛏ LOT OPEN — waiting on a nomination</span>
+            </div>
+          ))}
+          {/* nomination / pick banner. In an auction it stays MOUNTED even
+              while every lot is on the block (on_clock null) — appearing and
+              vanishing was the other half of the mid-click reflow. */}
+          {(!auction || st.status === 'live') && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', borderTop: auction ? '1px solid var(--bd)' : 'none', paddingTop: auction ? 10 : 0, marginTop: auction ? 10 : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 {st.on_clock != null && (
                   <Avatar name={teamName(st.on_clock) ?? `Team ${st.on_clock}`} src={byRoster[st.on_clock]?.avatar} size={38} />
@@ -1277,8 +1311,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                     {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                   </div>
-                  <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : 'var(--text)', marginTop: 4 }}>
-                    {myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
+                  <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : st.on_clock == null ? 'var(--faint)' : 'var(--text)', marginTop: 4 }}>
+                    {st.on_clock == null ? 'Every lot is on the block — the next nomination opens when one sells'
+                      : myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
                       : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                   </div>
                 </div>
