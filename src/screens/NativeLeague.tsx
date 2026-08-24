@@ -977,11 +977,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     [st?.pos_caps]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => !taken.has(p.slug)
+    // A player on an OPEN LOT is not in picks, so the taken filter missed him
+    // and the list still offered NOM (v0.354.14, founder: "The players I am
+    // trying to nom are already up for bid") — the lots at the top are where
+    // he lives until the bell.
+    const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
+    const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;

@@ -286,11 +286,16 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     [st?.pos_caps, eligPos]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => (showTaken || !taken.has(p.slug))
+    // A player on an OPEN LOT is not in picks, so the taken filter missed him
+    // and the list still offered NOM (v0.354.14, founder: "The players I am
+    // trying to nom are already up for bid") — the lots at the top are where
+    // he lives until the bell.
+    const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
+    const base = pool.filter((p) => (showTaken || !taken.has(p.slug)) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
 
   useEffect(() => {
     if (!auction || myRoster == null || !st) return;
