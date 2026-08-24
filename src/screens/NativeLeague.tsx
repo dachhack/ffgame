@@ -515,6 +515,11 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>(st.mode);
+  // A contract league's format was decided at creation (0218): bids are the
+  // salaries, so the room is an auction and the server refuses anything else
+  // (0234). Chips that only earn that refusal don't render.
+  const [contractRoom, setContractRoom] = useState(false);
+  useEffect(() => { leagueContracts(leagueId).then((c) => setContractRoom(!!c.contracts)).catch(() => {}); }, [leagueId]);
   // Slow drafts are hour-scale; showing 172800 in a seconds box helps nobody,
   // so the unit follows the value the same way the create screen's pace does.
   const slow = st.pick_seconds >= 3600;
@@ -588,11 +593,18 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
       {open && (
         <div style={{ marginTop: 10 }}>
           <div className="mono" style={label}>DRAFT TYPE</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-            <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+          {contractRoom ? (
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+              <Chip on onClick={() => {}}>AUCTION</Chip>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>set by the contract league type</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
               <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
-            <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
-          </div>
+              <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
               <div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION CLOCK' : 'PICK CLOCK'}</div>
@@ -972,9 +984,17 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
    *  kicker spot on the roster", answered off the server's own number rather
    *  than a second derivation that could disagree with it. */
   const bannedPos = (p: string) => st?.pos_caps?.[p as keyof PosCaps] === 0;
+  // v0.355.1 (founder: "Let's have only the positions in the league in the
+  // draft filters") — the app's v0.351.0 trim, ported: the lineup spec's
+  // eligible-position set gates the chips AND the list, so a league with no
+  // DL spot shows no DL filter. Null (drip / mode read outstanding) trims
+  // nothing.
+  const eligPos = useMemo(
+    () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null } as GameModeInfo),
+    [gm]);
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p)),
-    [st?.pos_caps]);
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p) && (!eligPos || eligPos.has(p))),
+    [st?.pos_caps, eligPos]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     // A player on an OPEN LOT is not in picks, so the taken filter missed him
@@ -983,10 +1003,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     // he lives until the bell.
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
-      && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
+      && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
