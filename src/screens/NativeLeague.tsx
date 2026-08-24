@@ -972,9 +972,17 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
    *  kicker spot on the roster", answered off the server's own number rather
    *  than a second derivation that could disagree with it. */
   const bannedPos = (p: string) => st?.pos_caps?.[p as keyof PosCaps] === 0;
+  // v0.355.1 (founder: "Let's have only the positions in the league in the
+  // draft filters") — the app's v0.351.0 trim, ported: the lineup spec's
+  // eligible-position set gates the chips AND the list, so a league with no
+  // DL spot shows no DL filter. Null (drip / mode read outstanding) trims
+  // nothing.
+  const eligPos = useMemo(
+    () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null } as GameModeInfo),
+    [gm]);
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p)),
-    [st?.pos_caps]);
+    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p) && (!eligPos || eligPos.has(p))),
+    [st?.pos_caps, eligPos]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     // A player on an OPEN LOT is not in picks, so the taken filter missed him
@@ -983,10 +991,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     // he lives until the bell.
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
-      && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
+      && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
