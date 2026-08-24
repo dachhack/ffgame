@@ -485,4 +485,57 @@ begin
     'ct15h ...while the cap still lands');
 end $$;
 
+-- ── §16. trashing a contract draft leaves no scars (0227) ────────────────────
+-- The reset's roster deletes fire _contract_release per row; before 0227 each
+-- one was a CUT — multi-year deals left dead money for a draft that no longer
+-- existed, and the register got a wall of drops. Now the deals dissolve and
+-- the register gets one summary row; a signing made AFTER the draft survives
+-- with its contract.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text; before_n int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Scorched Earth', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct16a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Rebuilds'), 'ct16b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'se-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct16c seed');
+  update draft set status = 'complete', started_at = now() where league_id = lid;
+
+  -- the "auction results": two picks with prices, one on a 3-year deal
+  insert into draft_pick (league_id, overall, round, roster_id, slug, price)
+  values (lid, 1, 1, 1, 'se-p1', 12), (lid, 2, 1, 2, 'se-p2', 8);
+  insert into native_roster (league_id, roster_id, slug) values (lid, 1, 'se-p1'), (lid, 2, 'se-p2');
+  update contract set years = 3 where league_id = lid and slug = 'se-p1';
+  perform assert_true((select salary from contract where league_id = lid and slug = 'se-p1') = 12,
+    'ct16d the bid became the salary');
+  -- a post-draft signing that must SURVIVE the reset
+  perform assert_ok(add_free_agent(lid, 1, 'se-p3', null), 'ct16e A signs a street deal');
+
+  select count(*) into before_n from league_txn where league_id = lid;
+  r := commish_reset_draft(lid, 'RESET');
+  perform assert_ok(r, 'ct16f the reset runs');
+  perform assert_true((r ->> 'picks_cleared')::int = 2, 'ct16g both picks cleared');
+
+  perform assert_true(not exists (select 1 from dead_money where league_id = lid),
+    'ct16h THE POINT: unwinding a 3-year deal is not a cut — no dead money');
+  perform assert_true(not exists (select 1 from contract where league_id = lid and slug in ('se-p1', 'se-p2')),
+    'ct16i the drafted deals dissolved');
+  perform assert_true((select (salary, years) = (1, 1) from contract where league_id = lid and slug = 'se-p3'),
+    'ct16j the street deal signed after the draft survives untouched');
+  perform assert_true((select count(*) from native_roster where league_id = lid) = 1,
+    'ct16k only the street signing still holds a roster spot');
+  perform assert_true((select count(*) from league_txn where league_id = lid) = before_n + 1,
+    'ct16l the register grew by exactly ONE row, not a wall of drops');
+  perform assert_true((select (kind, note) = ('commish', 'draft reset — 2 picks cleared')
+      from league_txn where league_id = lid order by id desc limit 1),
+    'ct16m and that row says what actually happened');
+  perform assert_true((select status from draft where league_id = lid) = 'pending',
+    'ct16n the room is back to pending');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

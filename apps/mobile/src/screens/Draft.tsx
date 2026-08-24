@@ -600,9 +600,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           <Mono size={10} style={{ marginTop: 8, lineHeight: 16 }}>
             Rosters are live and weekly lineup pools are built. Waivers and free agency are open — manage your team from the MY TEAM tab.
           </Mono>
-          {isCommish && st.mode !== 'auction' && (
+          {/* UNDO is snake-only (an auction can't un-sell one lot) — but the
+              CONTROLS door must open for EVERY mode: TRASH THE DRAFT lives
+              inside, and gating both on mode left a completed auction with
+              no way to start over (v0.352.2, founder: "how do I trash the
+              draft?"). */}
+          {isCommish && (
             <View style={{ marginTop: 10, gap: 8 }}>
-              {ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
+              {st.mode !== 'auction' && ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
               {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
           )}
