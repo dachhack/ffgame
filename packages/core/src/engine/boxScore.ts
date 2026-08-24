@@ -125,6 +125,15 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
   // the bake still files elsewhere) the column is derived from the feed too:
   // offensive players appear in their own team's plays, defenders in the
   // opponent's. Data baked before play ids (pid-less) keeps the old team rule.
+  //
+  // MOST of his plays, not ANY (v0.352.3). `pid` is only unique WITHIN a game
+  // — ESPN's live ids happen to be globally unique, but the baked nflverse ids
+  // restart every game, so on a baked/sim week "any pid matches" admitted
+  // nearly the whole pool (the founder's SEA@TEN sheet listing seventeen QBs a
+  // side, Jordan Love among them). A player actually in the game matches ~all
+  // of his ids against the feed; a stranger's numeric collisions are a few
+  // percent — so the test is a strict majority, decisive on both data shapes
+  // without depending on how the ids were minted.
   const feed = gameFeedFor(week, H);
   const pidTm = new Map<number, string>();
   for (const p of feed?.plays ?? []) if (p.pid != null) pidTm.set(p.pid, normTeam(p.tm ?? ''));
@@ -137,7 +146,8 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     const pids = plays.map((p) => p.pid).filter((id): id is number => id != null);
     // true = his plays are in this game; false = provably elsewhere; null = no
     // pid data on one side or the other, membership unknowable → team rule.
-    const inGame = pidTm.size && pids.length ? pids.some((id) => pidTm.has(id)) : null;
+    const matched = pids.filter((id) => pidTm.has(id)).length;
+    const inGame = pidTm.size && pids.length ? matched * 2 > pids.length : null;
     if (inGame === false) continue;
     if (inGame === null && team !== H && team !== A) continue;
     const pos = (meta.pos ?? 'WR') as Pos;

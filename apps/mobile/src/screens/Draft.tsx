@@ -19,7 +19,7 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  leaguePoolExp, leaguePoolIds, friendlyError,
+  leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
@@ -142,6 +142,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   // doesn't celebrate an hour-old win.
   const [won, setWon] = useState<{ slug: string; price: number } | null>(null);
   const wonMark = useRef<number | null>(null);
+  // ── STANDING MAXES (0228, founder: "let's do proxy bidding with the queue
+  // as well") — a queued player can carry a ceiling that becomes his lot's
+  // hidden proxy the moment the lot opens, whoever nominates him. slug → $.
+  const [qMax, setQMax] = useState<Record<string, number>>({});
+  const [qMaxDraft, setQMaxDraft] = useState<Record<string, string>>({});
 
   /** Who is on autodraft, by seat — draft_state carries only my own flag and
    *  the commissioner's per-team switch needs everyone's. */
@@ -193,7 +198,10 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     }).catch(() => {});
     nativeTeamState(leagueId).then((tm) => {
       setTeam(tm);
-      if (tm.my_roster_id != null) myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
+      if (tm.my_roster_id != null) {
+        myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
+        myQueueMaxes(leagueId, tm.my_roster_id).then((m) => { if (alive) setQMax(m); }).catch(() => {});
+      }
     }).catch(() => {});
     const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
@@ -884,6 +892,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               Empty — tap Q on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.
             </Mono>
           )}
+          {auction && queue.length > 0 && (
+            <Mono size={8.5} tone="faint" style={{ lineHeight: 13, paddingBottom: 4 }}>
+              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max.
+            </Mono>
+          )}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
@@ -900,6 +913,33 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 {p && <Face slug={p.slug} pos={p.pos} size={22} />}
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</Text>
                 {gone && <Mono size={8.5} tone="opp">TAKEN</Mono>}
+                {auction && !gone && myRoster != null && (
+                  qMax[slug] != null ? (
+                    <Pressable hitSlop={6}
+                      onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
+                      style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>🕶 ${qMax[slug]} ✕</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <TextInput value={qMaxDraft[slug] ?? ''} keyboardType="number-pad" placeholder="max" placeholderTextColor={t.faint}
+                        onChangeText={(v) => setQMaxDraft({ ...qMaxDraft, [slug]: v.replace(/\D/g, '') })}
+                        style={{ width: 44, paddingHorizontal: 5, paddingVertical: 3, fontFamily: MONO, fontSize: 10, color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, backgroundColor: t.bg }} />
+                      {!!qMaxDraft[slug] && (
+                        <Pressable hitSlop={6} onPress={() => {
+                          const v = parseInt(qMaxDraft[slug], 10);
+                          if (!v) return;
+                          tap();
+                          void setQueueMax(leagueId, myRoster, slug, v).then((r) => {
+                            if (r.ok) { setQMax((m) => ({ ...m, [slug]: v })); setQMaxDraft((d) => ({ ...d, [slug]: '' })); }
+                          }).catch(() => {});
+                        }}>
+                          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>SET</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )
+                )}
                 <Pressable hitSlop={6} onPress={() => moveQueue(i, -1)}><Text style={{ color: t.dim, fontSize: 14 }}>↑</Text></Pressable>
                 <Pressable hitSlop={6} onPress={() => moveQueue(i, 1)}><Text style={{ color: t.dim, fontSize: 14 }}>↓</Text></Pressable>
                 <Pressable hitSlop={6} onPress={() => toggleQueue(slug)}><Text style={{ color: t.opp, fontSize: 13 }}>✕</Text></Pressable>

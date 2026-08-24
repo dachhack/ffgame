@@ -23,7 +23,7 @@ import {
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
-  setDraftQueue, myDraftQueue, setAutodraft,
+  setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, type PushTokenRow,
@@ -862,7 +862,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     }).catch(() => {});
     nativeTeamState(leagueId).then((t) => {
       setTeam(t);
-      if (t.my_roster_id != null) myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
+      if (t.my_roster_id != null) {
+        myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
+        myQueueMaxes(leagueId, t.my_roster_id).then(setQMax).catch(() => {});
+      }
     }).catch(() => {});
     const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
@@ -910,6 +913,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const myRoster = team?.my_roster_id ?? null;
   const isCommish = !!team?.is_commish;
   const auction = st?.mode === 'auction';
+  // Standing maxes (0228): a queued player's ceiling becomes his lot's hidden
+  // proxy the moment the lot opens — the queue bids for an absent manager.
+  const [qMax, setQMax] = useState<Record<string, number>>({});
+  const [qMaxDraft, setQMaxDraft] = useState<Record<string, string>>({});
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
   const myBudget = auction ? st?.budgets?.find((b) => b.roster_id === myRoster) : null;
   /** Assign mode is only meaningful with a snake seat actually on the clock. */
@@ -1480,6 +1487,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             )}
           </div>
           {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap Q on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
+          {auction && queue.length > 0 && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 6 }}>
+              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max.
+            </div>
+          )}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
@@ -1496,6 +1508,29 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
+                {auction && !gone && myRoster != null && (qMax[slug] != null ? (
+                  <button className="mono" title="clear the standing max"
+                    onClick={() => { void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
+                    style={{ ...linkBtn, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '2px 6px', fontSize: 9.5, fontWeight: 700 }}>
+                    {'\ud83d\udd76 $'}{qMax[slug]} ✕
+                  </button>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <input value={qMaxDraft[slug] ?? ''} placeholder="max" className="mono"
+                      onChange={(ev) => setQMaxDraft({ ...qMaxDraft, [slug]: ev.target.value.replace(/\D/g, '') })}
+                      style={{ width: 44, padding: '3px 5px', fontSize: 10, borderRadius: 5, border: '1px solid var(--bd)', background: 'var(--bg)', color: 'var(--text)' }} />
+                    {!!qMaxDraft[slug] && (
+                      <button className="mono" style={{ ...linkBtn, color: 'var(--you)', fontWeight: 700, padding: '0 3px', fontSize: 9.5 }}
+                        onClick={() => {
+                          const v = parseInt(qMaxDraft[slug], 10);
+                          if (!v) return;
+                          void setQueueMax(leagueId, myRoster, slug, v).then((r) => {
+                            if (r.ok) { setQMax((m) => ({ ...m, [slug]: v })); setQMaxDraft((dd) => ({ ...dd, [slug]: '' })); }
+                          }).catch(() => {});
+                        }}>SET</button>
+                    )}
+                  </span>
+                ))}
                 <button onClick={() => moveQueue(i, -1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↑</button>
                 <button onClick={() => moveQueue(i, 1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↓</button>
                 <button onClick={() => toggleQueue(slug)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '0 3px' }}>✕</button>

@@ -36,6 +36,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 import { TradeCenter } from '../ui/TradeCenter';
+import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -275,7 +276,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts'>('roster');
   // KEEPERS is a fourth tab (v0.296.5, founder) instead of a card under the
   // roster, and only in a league that keeps anyone: no count, no tab. The card
   // hides itself the same way, but a tab that opens onto nothing is worse than
@@ -641,6 +642,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ['roster', '🧢 ROSTER'],
           ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
           ['trades', '⇄ TRADES'],
+          // Contract leagues get their front office ON the team screen
+          // (v0.353.1, founder: "wouldn't it make sense to have contract
+          // tools and info in 'my team?'") — the cap sheet had been living
+          // inside the league page's Standings overlay, where nobody looks.
+          ...(deals ? [['contracts', '📜 CONTRACTS'] as const] : []),
           ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
         ] as const).map(([id, label]) => (
           <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
@@ -673,7 +679,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           const spend = mine.reduce((s, p) => s + (deals.get(p.slug)?.salary ?? 0), 0);
           return (
             <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>
-              📜 contracts ${spend}{salaryCap != null ? ` of $${salaryCap} cap` : ''} · full cap sheet on the league page
+              📜 contracts ${spend}{salaryCap != null ? ` of $${salaryCap} cap` : ''} · deals, tags & cap on the 📜 CONTRACTS tab
             </Mono>
           );
         })()}
@@ -864,6 +870,13 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
 
       {/* The standings + bracket moved to the league menu (v0.274.0): the
           table is the LEAGUE's, not this team's. */}
+
+      {/* contracts — the front office, on the team screen: lengths while the
+          room is open, tags/extensions/RFA in the offseason, every team's
+          payroll. The same CapSheet the standings sheet shows. */}
+      {tab === 'contracts' && (
+        <CapSheet leagueId={leagueId} myRoster={myRoster} isCommish={!!team.is_commish} />
+      )}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
       {tab === 'trades' && (
