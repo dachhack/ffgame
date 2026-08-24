@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -250,6 +250,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {tab === 'system' && (
         <>
           <HealthPanel />
+          <MarketPanel />
           {/* The audit sits under health because it answers the same kind of
               question — "is anything quietly wrong right now" — but on demand. */}
           <MetriclessPanel />
@@ -3051,6 +3052,80 @@ const ago = (iso: string | null): string => {
  *  ON DEMAND, NOT ON A POLL. Unlike SYSTEM HEALTH next to it, this is a
  *  full-table scan across every league; running it every 10 seconds to answer a
  *  question nobody asked is how a diagnostic becomes a load problem. */
+/** 📈 MARKET — the weekly market-refresh history (0237, founder: "a report
+ *  ... that details success of the run and significant changes"). Each row is
+ *  one _market_refresh_apply run: when it landed, how many players the board
+ *  carries, who entered, who fell off, and the 15-spot movers in the top 200.
+ *  A missing Monday shows up as a stale top date. */
+function MarketPanel() {
+  const [r, setR] = useState<MarketReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [openRun, setOpenRun] = useState<number | null>(null);
+  useEffect(() => { adminMarketReport().then(setR).catch((e) => setErr(errMsg(e, 'report failed'))); }, []);
+  const staleDays = r?.runs?.[0] ? Math.floor((Date.now() - Date.parse(r.runs[0].applied_at)) / 86_400_000) : null;
+  return (
+    <div style={card}>
+      <div style={h}>📈 MARKET · refresh runs</div>
+      <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        The contract market (mkt · extension base) reads a board refreshed weekly from
+        Stathead's dynasty values — 1QB and superflex ranks, picked per league. Each row
+        is one refresh: its market date, and what changed.
+      </div>
+      {err && <Muted text={err} />}
+      {r && !r.ok && <Muted text={r.error ?? 'forbidden'} />}
+      {r?.ok && (
+        <>
+          <div className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, marginBottom: 8, color: staleDays != null && staleDays > 9 ? 'var(--warn)' : 'var(--you)' }}>
+            {r.board_size} players on the board
+            {staleDays != null && ` · last run ${staleDays === 0 ? 'today' : `${staleDays}d ago`}`}
+            {staleDays != null && staleDays > 9 && ' — the weekly pull has missed'}
+          </div>
+          {(r.runs ?? []).length === 0 && <Muted text="No refresh runs logged yet." />}
+          {(r.runs ?? []).map((run) => {
+            const changes = run.entered.length + run.dropped.length + run.movers.length;
+            const open = openRun === run.id;
+            return (
+              <div key={run.id} style={{ borderTop: '1px solid var(--bd)', padding: '5px 0' }}>
+                <button onClick={() => setOpenRun(open ? null : run.id)} className="mono"
+                  style={{ ...linkBtn, display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8, fontSize: 12 }}>
+                  <span style={{ color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {open ? '▾' : '▸'} market {run.as_of} · {run.players} players
+                    {changes > 0
+                      ? <span style={{ color: 'var(--you)' }}> · {run.movers.length} moved · {run.entered.length} in · {run.dropped.length} out</span>
+                      : <span style={{ color: 'var(--faint)' }}> · no significant changes</span>}
+                    {run.note && <span style={{ color: 'var(--faint)' }}> · {run.note}</span>}
+                  </span>
+                  <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: 11 }}>{new Date(run.applied_at).toLocaleDateString()}</span>
+                </button>
+                {open && (
+                  <div style={{ padding: '4px 0 2px 14px' }}>
+                    {run.movers.map((m) => (
+                      <div key={m.slug} className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', padding: '2px 0' }}>
+                        {m.slug} <b style={{ color: m.to < m.from ? 'var(--you)' : 'var(--opp)' }}>{m.from} → {m.to}</b>
+                      </div>
+                    ))}
+                    {run.entered.length > 0 && (
+                      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--you)', padding: '2px 0' }}>
+                        in: {run.entered.map((e) => `${e.slug} (#${e.rank})`).join(', ')}
+                      </div>
+                    )}
+                    {run.dropped.length > 0 && (
+                      <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--opp)', padding: '2px 0' }}>
+                        out: {run.dropped.map((d) => `${d.slug} (was #${d.rank})`).join(', ')}
+                      </div>
+                    )}
+                    {changes === 0 && <Muted text="Ranks held — nothing entered, dropped, or moved 15+ spots." />}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 function MetriclessPanel() {
   const [a, setA] = useState<MetriclessAudit | null>(null);
   const [busy, setBusy] = useState(false);

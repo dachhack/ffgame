@@ -657,6 +657,63 @@ begin
   delete from market_board where slug = 'fp-p150';
   perform assert_true(player_market_value(lid, 'fp-p150') <= 2,
     'ct18k the fallback returns when the board row goes');
+
+  -- 0237: the market reads the room. A drip league is superflex (QBs start
+  -- anywhere in an 8-flex), so a board row with a strong SF rank and a weak
+  -- 1QB rank prices at the SF end; force the league to a 1-QB classic
+  -- lineup and the same row prices at the 1QB end.
+  perform assert_true(league_is_superflex(lid), 'ct18l a drip league prices QBs superflex');
+  insert into market_board (slug, rank, sf_rank) values ('fp-p150', 200, 1);
+  perform assert_true(player_market_value(lid, 'fp-p150') between 12 and 14,
+    'ct18m THE POINT: the SF league reads his SF rank — top of the board');
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || jsonb_build_object('game_mode', 'classic', 'roster_classic', jsonb_build_object('QB', 1, 'RB', 2))
+    where id = lid;
+  perform assert_true(not league_is_superflex(lid), 'ct18n one QB spot, no SFLX — a 1QB market');
+  perform assert_true(player_market_value(lid, 'fp-p150') = 1,
+    'ct18o the 1QB league reads his 1QB rank — a deep afterthought');
+  update league set settings_json = settings_json
+    || jsonb_build_object('roster_classic', jsonb_build_object('QB', 1, 'SFLX', 1))
+    where id = lid;
+  perform assert_true(league_is_superflex(lid), 'ct18p a SFLX spot makes the market superflex');
+  update league set settings_json = settings_json - 'game_mode' - 'roster_classic' where id = lid;
+  delete from market_board where slug = 'fp-p150';
+end $$;
+
+-- ── §22. every refresh files a report (0237) ─────────────────────────────────
+-- _market_refresh_apply is the one door: it diffs the new board against the
+-- old, applies it, and logs who entered, dropped, and moved — the super-admin
+-- 📈 MARKET report reads that log, and only an admin can read it.
+do $$
+declare r jsonb; before_runs int;
+begin
+  perform probe_as('a');
+  select count(*) into before_runs from market_refresh_log;
+  r := _market_refresh_apply('[{"slug":"mr-a","rank":1,"sf_rank":2},{"slug":"mr-b","rank":2,"sf_rank":1},{"slug":"mr-c","rank":30,"sf_rank":30}]'::jsonb, 'probe-1');
+  perform assert_ok(r, 'ct22a first refresh applies');
+  r := _market_refresh_apply('[{"slug":"mr-a","rank":40,"sf_rank":40},{"slug":"mr-b","rank":2,"sf_rank":1},{"slug":"mr-d","rank":3,"sf_rank":3}]'::jsonb, 'probe-2');
+  perform assert_ok(r, 'ct22b second refresh applies');
+  perform assert_true((r ->> 'entered')::int = 1 and (r ->> 'dropped')::int = 1 and (r ->> 'movers')::int = 1,
+    'ct22c the diff: mr-d entered, mr-c dropped, mr-a moved 1→40');
+  perform assert_true((select rank from market_board where slug = 'mr-a') = 40
+    and not exists (select 1 from market_board where slug = 'mr-c'),
+    'ct22d the board applied — mover moved, dropout gone');
+  perform assert_true((select movers -> 0 ->> 'slug' from market_refresh_log order by id desc limit 1) = 'mr-a',
+    'ct22e the log row names the mover');
+
+  r := admin_market_report();
+  perform assert_ok(r, 'ct22f the admin reads the report');
+  perform assert_true(jsonb_array_length(r -> 'runs') >= 2
+    and (r -> 'runs' -> 0 ->> 'as_of') = 'probe-2',
+    'ct22g newest run first, with its as-of date');
+  perform probe_as('b');
+  perform assert_err(admin_market_report(), 'forbidden', 'ct22h members do not read the market log');
+  perform assert_err(_market_refresh_apply('[{"slug":"mr-x","rank":1}]'::jsonb, 'probe-3'), 'forbidden',
+    'ct22i ...or apply refreshes');
+  perform probe_as('a');
+  delete from market_board where slug in ('mr-a', 'mr-b', 'mr-d');
+  delete from market_refresh_log where as_of in ('probe-1', 'probe-2');
+  perform assert_true((select count(*) from market_refresh_log) = before_runs, 'ct22j probe rows cleaned');
 end $$;
 
 -- ── §19. rookie deals run the league's own term (0231) ───────────────────────
