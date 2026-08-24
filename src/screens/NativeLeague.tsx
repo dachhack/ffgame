@@ -1514,7 +1514,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   <button className="mono" title="clear the standing max"
                     onClick={() => { void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
                     style={{ ...linkBtn, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '2px 6px', fontSize: 9.5, fontWeight: 700 }}>
-                    {'\ud83d\udd76 $'}{qMax[slug]} ✕
+                    {'🕶 $'}{qMax[slug]} ✕
                   </button>
                 ) : (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1775,7 +1775,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
     try {
       const r = await fn();
       if (r.ok) { if (done) setNote(done); await load(); }
-      else setNote(friendlyError(r.error ?? 'that didn\u2019t work'));
+      else setNote(friendlyError(r.error ?? 'that didn’t work'));
     } catch (x) { setNote(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -1791,21 +1791,21 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
   const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <div style={{ ...card, marginBottom: 12 }}>
-      <LabelInfo label="\ud83d\udcdc CAP SHEET"
-        info={'How deals are born: auction wins sign at the exact bid, waiver wins at their FAAB bid, free agents at the $1 minimum, startup picks at the rookie scale. A move that would land a team over the cap is refused whole.\n\nWhile the draft room is open, set each of your own deals\u2019 lengths; after it closes only the commissioner can change one (rookie-scale lengths are always fixed).\n\n"$X ghost" is salary a team retained on a player it traded away. Red lines are dead money from cuts, charged for the deal\u2019s remaining life. "mkt $N" is the league\u2019s own market price \u2014 the top-5 positional salary average.\n\nIn the OFFSEASON your expiring deals grow \ud83c\udff7 TAG (one per team, at the market or a raise), \u2934 EXTEND (1\u20133yr at a discount of market), and \ud83e\udea7 TENDER (RFA: rivals bid, you match or let him walk). Multi-year deals carry into next season at a year less; expiring deals walk unless kept one of those ways.'} />
+      <LabelInfo label="📜 CAP SHEET"
+        info={'How deals are born: auction wins sign at the exact bid, waiver wins at their FAAB bid, free agents at the $1 minimum, startup picks at the rookie scale. A move that would land a team over the cap is refused whole.\n\nWhile the draft room is open, set each of your own deals’ lengths; after it closes only the commissioner can change one (rookie-scale lengths are always fixed).\n\n"$X ghost" is salary a team retained on a player it traded away. Red lines are dead money from cuts, charged for the deal’s remaining life. "mkt $N" is the league’s own market price — the top-5 positional salary average.\n\nIn the OFFSEASON your expiring deals grow 🏷 TAG (one per team, at the market or a raise), ⤴ EXTEND (1–3yr at a discount of market), and 🪧 TENDER (RFA: rivals bid, you match or let him walk). Multi-year deals carry into next season at a year less; expiring deals walk unless kept one of those ways.'} />
       <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5 }}>
-        ${st.salary_cap} cap \u00b7 deals up to {st.years_max}yr \u00b7 {deals.length} signed
-        {offseason ? ' \u00b7 OFFSEASON \u2014 tags, extensions & RFA are live' : ''}
+        ${st.salary_cap} cap · deals up to {st.years_max}yr · {deals.length} signed
+        {offseason ? ' · OFFSEASON — tags, extensions & RFA are live' : ''}
       </div>
-      {!!note && <div className="mono" style={{ fontSize: 10, color: note.startsWith('\u2713') ? 'var(--you)' : 'var(--opp)', marginTop: 4 }}>{note}</div>}
+      {!!note && <div className="mono" style={{ fontSize: 10, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 4 }}>{note}</div>}
       {myRoster != null && !st.my_locked && st.lock_deadline != null && Date.parse(st.lock_deadline) > Date.now() && (
         <div style={{ marginTop: 8, border: '1px solid var(--warn)', borderRadius: 7, padding: 10 }}>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', lineHeight: 1.5, marginBottom: 8 }}>
-            \ud83d\udd12 Waivers & free agency are closed for your team until you lock your contract lengths. Set each deal below, then lock. Unset deals stay 1 year \u2014 everything auto-locks {new Date(st.lock_deadline).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+            🔒 Waivers & free agency are closed for your team until you lock your contract lengths. Set each deal below, then lock. Unset deals stay 1 year — everything auto-locks {new Date(st.lock_deadline).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
           </div>
           <button className="mono" disabled={busy}
-            onClick={() => { void act(() => lockContracts(leagueId, myRoster), '\u2713 locked \u2014 your wire is open'); }}
-            style={{ ...btn, padding: '8px 12px', fontSize: 10, fontWeight: 700 }}>\ud83d\udd12 LOCK MY CONTRACTS</button>
+            onClick={() => { void act(() => lockContracts(leagueId, myRoster), '✓ locked — your wire is open'); }}
+            style={{ ...btn, padding: '8px 12px', fontSize: 10, fontWeight: 700 }}>🔒 LOCK MY CONTRACTS</button>
         </div>
       )}
       <div style={{ marginTop: 8 }}>
@@ -1829,13 +1829,13 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                   {!!p.cap_adjust && <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>cap {p.cap_adjust > 0 ? '+' : ''}${p.cap_adjust} by trade</div>}
                 </div>
                 {(st.locks ?? []).some((l) => l.roster_id === p.roster_id && !l.locked) && (
-                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }}>\ud83d\udd13</span>
+                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }}>🔓</span>
                 )}
                 <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: room < 0 ? 'var(--opp)' : 'var(--text)' }}>${p.payroll}/${cap}</span>
                 <span className="mono" style={{ fontSize: 9, color: room < 0 ? 'var(--opp)' : 'var(--faint)', width: 62, textAlign: 'right' }}>
                   {room < 0 ? `$${-room} over` : `$${room} room`}
                 </span>
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{unfolded ? '\u25be' : '\u25b8'}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{unfolded ? '▾' : '▸'}</span>
               </div>
               {unfolded && team.map((d) => {
                 const pickable = (canAssign && mine && d.acquired !== 'rookie') || isCommish;
@@ -1847,9 +1847,9 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                   <div key={d.slug} style={{ padding: '3px 0 3px 10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {d.tagged ? '\ud83c\udff7 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` \u00b7 ${names[d.slug].pos}` : ''}
+                        {d.tagged ? '🏷 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
                       </span>
-                      <span className="mono" style={{ fontSize: 9.5, fontWeight: 700 }}>${net}\u00b7{d.years}yr</span>
+                      <span className="mono" style={{ fontSize: 9.5, fontWeight: 700 }}>${net}·{d.years}yr</span>
                       {d.mkt != null && <span className="mono" style={{ fontSize: 8, color: bargain ? 'var(--you)' : 'var(--faint)' }}>mkt ${d.mkt}</span>}
                       <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', width: 70, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</span>
                     </div>
@@ -1867,13 +1867,13 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                     {frontOffice && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '3px 0 2px', flexWrap: 'wrap' }}>
                         {!myTagUsed && (
-                          <Chip onClick={() => { if (!busy) void act(() => franchiseTag(leagueId, d.slug), `\u2713 ${nameOf(d.slug)} tagged`); }}>\ud83c\udff7 TAG</Chip>
+                          <Chip onClick={() => { if (!busy) void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }}>🏷 TAG</Chip>
                         )}
                         {!tendered && [1, 2, 3].map((y) => (
-                          <Chip key={y} onClick={() => { if (!busy) void act(() => extendContract(leagueId, d.slug, y), `\u2713 extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }}>\u2934 EXT {y}YR</Chip>
+                          <Chip key={y} onClick={() => { if (!busy) void act(() => extendContract(leagueId, d.slug, y), `✓ extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }}>⤴ EXT {y}YR</Chip>
                         ))}
                         {rules?.rfa && !tendered && (
-                          <Chip onClick={() => { if (!busy) void act(() => rfaTender(leagueId, d.slug), `\u2713 ${nameOf(d.slug)} tendered to RFA`); }}>\ud83e\udea7 TENDER</Chip>
+                          <Chip onClick={() => { if (!busy) void act(() => rfaTender(leagueId, d.slug), `✓ ${nameOf(d.slug)} tendered to RFA`); }}>🪧 TENDER</Chip>
                         )}
                       </div>
                     )}
@@ -1882,14 +1882,14 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
               })}
               {unfolded && ghosts.map((g2) => (
                 <div key={`g-${g2.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0 2px 10px' }}>
-                  <span style={{ flex: 1, fontSize: 10.5, color: 'var(--faint)', fontStyle: 'italic' }}>{nameOf(g2.slug)} \u2014 retained on the way out</span>
+                  <span style={{ flex: 1, fontSize: 10.5, color: 'var(--faint)', fontStyle: 'italic' }}>{nameOf(g2.slug)} — retained on the way out</span>
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>${g2.amount} ghost</span>
                 </div>
               ))}
               {unfolded && dead.map((dm, i) => (
                 <div key={`d-${dm.slug}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0 2px 10px' }}>
-                  <span style={{ flex: 1, fontSize: 10.5, color: 'var(--opp)', fontStyle: 'italic' }}>{nameOf(dm.slug)} \u2014 dead money{dm.note ? ` (${dm.note})` : ''}</span>
-                  <span className="mono" style={{ fontSize: 9, color: 'var(--opp)' }}>${dm.amount}\u00b7{dm.years_left}yr</span>
+                  <span style={{ flex: 1, fontSize: 10.5, color: 'var(--opp)', fontStyle: 'italic' }}>{nameOf(dm.slug)} — dead money{dm.note ? ` (${dm.note})` : ''}</span>
+                  <span className="mono" style={{ fontSize: 9, color: 'var(--opp)' }}>${dm.amount}·{dm.years_left}yr</span>
                 </div>
               ))}
               {unfolded && team.length === 0 && ghosts.length === 0 && dead.length === 0 && (
@@ -1901,7 +1901,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
       </div>
       {offseason && tenders.filter((x) => x.status === 'open').length > 0 && (
         <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', fontWeight: 700, letterSpacing: '0.12em' }}>\ud83e\udea7 RFA BOARD</div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', fontWeight: 700, letterSpacing: '0.12em' }}>🪧 RFA BOARD</div>
           {tenders.filter((x) => x.status === 'open').map((x) => {
             const ownerIsMe = x.roster_id === myRoster;
             const bidding = bidFor === x.slug;
@@ -1910,11 +1910,11 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text)' }}>{nameOf(x.slug)}</span>
                   <span className="mono" style={{ fontSize: 9, color: x.offer_salary ? 'var(--warn)' : 'var(--faint)' }}>
-                    {x.offer_salary ? `best offer $${x.offer_salary}\u00b7${x.offer_years}yr` : 'no offers yet'}
+                    {x.offer_salary ? `best offer $${x.offer_salary}·${x.offer_years}yr` : 'no offers yet'}
                   </span>
                 </div>
                 {!ownerIsMe && myRoster != null && !bidding && (
-                  <Chip onClick={() => { setBidFor(x.slug); setBidSalary(String((x.offer_salary ?? 0) + 1)); setBidYears(x.offer_years ?? 1); }}>\ud83d\udcb0 MAKE AN OFFER</Chip>
+                  <Chip onClick={() => { setBidFor(x.slug); setBidSalary(String((x.offer_salary ?? 0) + 1)); setBidYears(x.offer_years ?? 1); }}>💰 MAKE AN OFFER</Chip>
                 )}
                 {!ownerIsMe && bidding && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -1928,14 +1928,14 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                     <Chip onClick={() => {
                       if (busy || !parseInt(bidSalary, 10)) return;
                       setBidFor(null);
-                      void act(() => rfaBid(leagueId, myRoster!, x.slug, parseInt(bidSalary, 10), bidYears), '\u2713 offer in');
-                    }}>\u2713 BID</Chip>
+                      void act(() => rfaBid(leagueId, myRoster!, x.slug, parseInt(bidSalary, 10), bidYears), '✓ offer in');
+                    }}>✓ BID</Chip>
                   </div>
                 )}
                 {ownerIsMe && x.offer_salary != null && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, true), `\u2713 matched \u2014 ${nameOf(x.slug)} stays`); }}>\u2713 MATCH</Chip>
-                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, false), '\u2713 walked \u2014 the deal moved with him'); }}>\ud83d\udc4b LET WALK</Chip>
+                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, true), `✓ matched — ${nameOf(x.slug)} stays`); }}>✓ MATCH</Chip>
+                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, false), '✓ walked — the deal moved with him'); }}>👋 LET WALK</Chip>
                   </div>
                 )}
               </div>
@@ -1945,7 +1945,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
       )}
       {canAssign && (
         <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 8 }}>
-          The draft room is open \u2014 set each of your deals\u2019 lengths above before it closes.
+          The draft room is open — set each of your deals’ lengths above before it closes.
         </div>
       )}
     </div>
