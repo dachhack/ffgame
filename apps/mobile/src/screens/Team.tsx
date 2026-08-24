@@ -345,10 +345,16 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // said so. slug → deal, null until the league says it plays with contracts.
   const [deals, setDeals] = useState<Map<string, ContractDeal> | null>(null);
   const [salaryCap, setSalaryCap] = useState<number | null>(null);
+  // 0229 lock-to-play: the wire is shut for my team until I lock my lengths
+  // (or the deadline passes). Captured here so the WAIVERS tab can say WHY
+  // a claim would bounce, before the server has to.
+  const [wireGate, setWireGate] = useState<string | null>(null);
   const loadDeals = () => {
     leagueContracts(leagueId).then((r) => {
       setDeals(r.contracts ? new Map((r.deals ?? []).map((d) => [d.slug, d])) : null);
       setSalaryCap(r.contracts ? r.salary_cap ?? null : null);
+      setWireGate(r.contracts && !r.my_locked && r.lock_deadline != null && Date.parse(r.lock_deadline) > Date.now()
+        ? r.lock_deadline : null);
     }).catch(() => {});
   };
 
@@ -754,6 +760,16 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
 
       {tab === 'waivers' && (<>
+      {wireGate && (
+        <Card style={{ borderLeftWidth: 3, borderLeftColor: t.warn }}>
+          <Mono size={9.5} tone="warn" style={{ lineHeight: fs(15) }}>
+            🔒 Adds & claims open when you lock your contract lengths — set them on the 📜 CONTRACTS tab. Unset deals stay 1 year; everything auto-locks {new Date(wireGate).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+          </Mono>
+          <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+            <Chip label="📜 TO MY CONTRACTS" onPress={() => { tap(); setTab('contracts'); }} />
+          </View>
+        </Card>
+      )}
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
         <Card>

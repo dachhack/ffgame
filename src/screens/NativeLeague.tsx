@@ -29,7 +29,7 @@ import {
   myPushTokens, setPushPrefs, type PushTokenRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade, leagueContracts, type LeagueContracts,
-  setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve,
+  setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
   leagueMarket,
@@ -1798,6 +1798,16 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
         {offseason ? ' \u00b7 OFFSEASON \u2014 tags, extensions & RFA are live' : ''}
       </div>
       {!!note && <div className="mono" style={{ fontSize: 10, color: note.startsWith('\u2713') ? 'var(--you)' : 'var(--opp)', marginTop: 4 }}>{note}</div>}
+      {myRoster != null && !st.my_locked && st.lock_deadline != null && Date.parse(st.lock_deadline) > Date.now() && (
+        <div style={{ marginTop: 8, border: '1px solid var(--warn)', borderRadius: 7, padding: 10 }}>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', lineHeight: 1.5, marginBottom: 8 }}>
+            \ud83d\udd12 Waivers & free agency are closed for your team until you lock your contract lengths. Set each deal below, then lock. Unset deals stay 1 year \u2014 everything auto-locks {new Date(st.lock_deadline).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+          </div>
+          <button className="mono" disabled={busy}
+            onClick={() => { void act(() => lockContracts(leagueId, myRoster), '\u2713 locked \u2014 your wire is open'); }}
+            style={{ ...btn, padding: '8px 12px', fontSize: 10, fontWeight: 700 }}>\ud83d\udd12 LOCK MY CONTRACTS</button>
+        </div>
+      )}
       <div style={{ marginTop: 8 }}>
         {(st.payrolls ?? []).map((p) => {
           const cap = p.cap ?? st.salary_cap ?? 0;
@@ -1818,6 +1828,9 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                   </div>
                   {!!p.cap_adjust && <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>cap {p.cap_adjust > 0 ? '+' : ''}${p.cap_adjust} by trade</div>}
                 </div>
+                {(st.locks ?? []).some((l) => l.roster_id === p.roster_id && !l.locked) && (
+                  <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }}>\ud83d\udd13</span>
+                )}
                 <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: room < 0 ? 'var(--opp)' : 'var(--text)' }}>${p.payroll}/${cap}</span>
                 <span className="mono" style={{ fontSize: 9, color: room < 0 ? 'var(--opp)' : 'var(--faint)', width: 62, textAlign: 'right' }}>
                   {room < 0 ? `$${-room} over` : `$${room} room`}

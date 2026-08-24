@@ -85,7 +85,11 @@ begin
   perform assert_true((select years from contract where league_id = lid and slug = 'ct-rb1') = 4, 'ct3d stored');
   update draft set status = 'complete', deadline_at = null where league_id = lid;
   delete from auction_lot where league_id = lid;
-  perform assert_err(set_contract_years(lid, 'ct-rb1', 2), 'lock', 'ct3e lengths lock when the room closes');
+  -- 0229 changed this law: the room closing no longer freezes the pen — the
+  -- owner's own 🔒 lock does (the full lifecycle is §17's).
+  perform assert_ok(set_contract_years(lid, 'ct-rb1', 2), 'ct3e the room closing no longer ends the owner''s window (0229)');
+  perform assert_ok(lock_contracts(lid, 2), 'ct3e2 B locks');
+  perform assert_err(set_contract_years(lid, 'ct-rb1', 4), 'locked', 'ct3e3 the LOCK is what ends it');
   perform probe_as('a');
   perform assert_ok(set_contract_years(lid, 'ct-rb1', 3), 'ct3f …but the commissioner may still correct a deal');
 
@@ -536,6 +540,72 @@ begin
     'ct16m and that row says what actually happened');
   perform assert_true((select status from draft where league_id = lid) = 'pending',
     'ct16n the room is back to pending');
+end $$;
+
+-- ── §17. lock-to-play (0229) ─────────────────────────────────────────────────
+-- The room closing no longer freezes lengths: a manager keeps assigning until
+-- they 🔒 LOCK — and the wire (adds + claims) stays shut for their team until
+-- they do. At the deadline unset deals stand at 1 year and the gate lifts on
+-- its own. Commissioners correct deals at any time; a reset clears the locks.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Pen Or Padlock', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct17a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Dawdles'), 'ct17b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'lk-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct17c seed');
+  update draft set status = 'complete', started_at = now(), completed_at = now() where league_id = lid;
+  insert into draft_pick (league_id, overall, round, roster_id, slug, price)
+  values (lid, 1, 1, 1, 'lk-p1', 12), (lid, 2, 1, 2, 'lk-p2', 8);
+  insert into native_roster (league_id, roster_id, slug) values (lid, 1, 'lk-p1'), (lid, 2, 'lk-p2');
+
+  -- the wire is shut until the seat locks
+  perform assert_err(add_free_agent(lid, 1, 'lk-p3', null), 'lock your contract lengths',
+    'ct17d THE MOTIVATOR: no adds before locking');
+  perform assert_err(submit_waiver_claim(lid, 1, 'lk-p3', null), 'lock your contract lengths',
+    'ct17e ...and no claims either');
+
+  -- the room being closed no longer freezes the owner's pen
+  perform assert_ok(set_contract_years(lid, 'lk-p1', 3), 'ct17f the owner assigns a length AFTER the room closed');
+  perform assert_true((select years from contract where league_id = lid and slug = 'lk-p1') = 3,
+    'ct17g and it lands');
+
+  -- locking opens the wire — for that seat alone
+  r := lock_contracts(lid, 1);
+  perform assert_ok(r, 'ct17h A locks');
+  perform assert_ok(add_free_agent(lid, 1, 'lk-p3', null), 'ct17i A''s wire is open');
+  perform probe_as('b');
+  perform assert_err(add_free_agent(lid, 2, 'lk-p4', null), 'lock your contract lengths',
+    'ct17j B''s wire is still shut — the lock is per seat');
+  perform probe_as('a');
+
+  -- the lock ending the OWNER's pen is §3's ct3e3 (a non-commish owner);
+  -- seat 1 here is owner AND commissioner, and the commissioner's pen never
+  -- goes down — locked deal, own deal, anyone's deal.
+  perform assert_ok(set_contract_years(lid, 'lk-p1', 2), 'ct17k a commissioner corrects even their own locked deal');
+  perform assert_ok(set_contract_years(lid, 'lk-p2', 2), 'ct17l ...and anyone else''s');
+  perform assert_true(coalesce((league_contracts(lid) ->> 'my_locked')::boolean, false),
+    'ct17m the cap sheet reports my lock');
+
+  -- the deadline lifts the gate for the dawdler — 1-year deals stand
+  update draft set completed_at = now() - interval '73 hours' where league_id = lid;
+  perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'lk-p4', null), 'ct17n past the deadline the gate lifts itself');
+  perform assert_err(set_contract_years(lid, 'lk-p2', 3), 'lengths are locked',
+    'ct17o ...and the unset lengths are final (1yr default stood)');
+  perform probe_as('a');
+
+  -- a reset clears the locks with everything else
+  r := commish_reset_draft(lid, 'RESET');
+  perform assert_ok(r, 'ct17p reset runs');
+  perform assert_true(not exists (select 1 from league_membership
+      where league_id = lid and contracts_locked), 'ct17q the locks reset with the room');
 end $$;
 
 select 'ALL CONTRACT PROBES PASSED' as result;
