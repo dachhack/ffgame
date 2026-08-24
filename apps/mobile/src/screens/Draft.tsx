@@ -523,7 +523,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
-              <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0 }}>
+              <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, borderLeftWidth: iHold ? 3 : 0, borderLeftColor: t.you, paddingLeft: iHold ? 8 : 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Face slug={lot.slug} pos={lp?.pos ?? '?'} size={40} />
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -554,7 +554,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                       <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent }}>BID ${a}</Text>
                     </Pressable>
                   ))}
-                  {iHold && <Mono size={9.5} tone="you">You're the high bidder.</Mono>}
+                  {iHold && (
+                    <View style={{ backgroundColor: t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent, letterSpacing: 0.6 }}>🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}</Text>
+                    </View>
+                  )}
                   {/* hidden max (proxy): answers rival bids second-price style
                       while you're away — nobody ever sees your ceiling */}
                   {myRoster != null && (lot.my_max ?? 0) > 0 && !iHold && (
