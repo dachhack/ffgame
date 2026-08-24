@@ -1943,7 +1943,7 @@ export const setTeamDivision = (leagueId: string, rosterId: number, division: st
  *  price (top-5 positional average). */
 export interface ContractDeal { slug: string; roster_id: number; salary: number; years: number; acquired: 'auction' | 'rookie' | 'draft' | 'waiver' | 'fa' | 'commish'; tagged?: boolean; mkt?: number; retained?: number; }
 /** The 📜 SALARY rulebook (0219) — every knob the commissioner can turn. */
-export interface SalaryRules { dead_pct: number; retention: boolean; cap_trading: boolean; ir_relief: boolean; tag_raise_pct: number; ext_discount_pct: number; rfa: boolean; }
+export interface SalaryRules { dead_pct: number; retention: boolean; cap_trading: boolean; ir_relief: boolean; tag_raise_pct: number; ext_discount_pct: number; rfa: boolean; rookie_years?: number; }
 export interface RfaTenderRow { slug: string; roster_id: number; status: 'open' | 'matched' | 'walked'; offer_roster: number | null; offer_salary: number | null; offer_years: number | null; }
 export interface LeagueContracts {
   error?: string;
@@ -1986,6 +1986,11 @@ export const setContractRules = (leagueId: string, cap: number | null, yearsMax:
  *  closes this is commissioner-only, and rookie-scale lengths always are. */
 export const setContractYears = (leagueId: string, slug: string, years: number) =>
   rpc<{ ok: boolean; error?: string; years?: number }>('set_contract_years', { p_league_id: leagueId, p_slug: slug, p_years: years });
+/** Commissioner (0231): how many years a rookie-scale deal signs for —
+ *  default 4 (the NFL's own rookie term), clamped to the league max. */
+export const setRookieYears = (leagueId: string, years: number) =>
+  rpc<{ ok: boolean; error?: string; rookie_years?: number }>('set_rookie_years',
+    { p_league_id: leagueId, p_years: years });
 /** Commissioner (0219): the 📜 SALARY rulebook — nulls leave a knob alone. */
 export const setSalaryRules = (leagueId: string, r: {
   deadPct?: number | null; retention?: boolean | null; capTrading?: boolean | null;

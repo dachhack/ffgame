@@ -18,7 +18,7 @@ import {
   keeperState, rolloverLeague, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
-  leagueContracts, setContractRules, setSalaryRules, type LeagueContracts,
+  leagueContracts, setContractRules, setSalaryRules, setRookieYears, type LeagueContracts,
   type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
@@ -3351,7 +3351,7 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <LabelInfo label="SALARY CAP" style={{ marginBottom: 7 }}
-          info={'With the cap on, every acquisition signs a contract: an auction win at its exact bid, a waiver win at its FAAB bid, a free-agent add at the $1 minimum, startup picks at the rookie scale ($12/$6/$3/$1 by round \u2014 rookie drafts deal 3-year scale contracts).\n\nManagers pick each deal\u2019s length while the draft room is open; after that only the commissioner can change one. A move that would land a team over its cap is refused whole.\n\nWhile an auction room is open the cap must cover the auction budget; once the draft completes it can be tightened. MAX LENGTH bounds every deal (default 4yr).'} />
+          info={'With the cap on, every acquisition signs a contract: an auction win at its exact bid, a waiver win at its FAAB bid, a free-agent add at the $1 minimum, startup picks at the rookie scale ($12/$6/$3/$1 by round \u2014 rookie drafts deal scale contracts at the ROOKIE DEALS term below, default 4yr).\n\nManagers pick each deal\u2019s length while the draft room is open; after that only the commissioner can change one. A move that would land a team over its cap is refused whole.\n\nWhile an auction room is open the cap must cover the auction budget; once the draft completes it can be tightened. MAX LENGTH bounds every deal (default 4yr).'} />
         <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', marginBottom: 8 }}>
           {on ? `ON \u2014 $${st.salary_cap} cap \u00b7 deals up to ${st.years_max}yr \u00b7 ${(st.deals ?? []).length} signed`
               : 'OFF \u2014 this league plays without contracts. Set a cap to turn them on (or pick a \ud83d\udcdc CONTRACT league type in \ud83c\udfae MODE & SEASON, which presets everything).'}
@@ -3390,6 +3390,15 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
                 <input value={v} inputMode="numeric" maxLength={3} onChange={(e) => set(e.target.value.replace(/\D/g, ''))}
                   style={{ ...inp, width: 52, textAlign: 'center' }} disabled={busy} />
               </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ ...mono, fontSize: 10, color: 'var(--faint)' }}>ROOKIE DEALS</span>
+            <InfoChip title="ROOKIE DEALS" info={'Every rookie-draft pick signs a scale contract ($12/$6/$3/$1 by round) for this many years \u2014 default 4, the NFL\u2019s own rookie term. Managers never set rookie lengths; the scale does. Clamped to the league\u2019s max contract length; applies to picks made after the change.'} />
+            {Array.from({ length: st.years_max ?? 4 }, (_, i) => i + 1).map((y) => (
+              <button key={y} disabled={busy} className="mono"
+                onClick={() => void act(() => setRookieYears(leagueId, y), `\u2713 rookie deals sign for ${y}yr`)}
+                style={{ ...btn((st.rules?.rookie_years ?? 4) === y), fontSize: 11 }}>{y}YR</button>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
@@ -3504,7 +3513,7 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
               : mode === 'contract'
                 ? 'A salary-cap league: auction bids become salaries and the cap turns on at the auction budget (tune it in 📜 CONTRACTS & CAP). Switching to a plain type turns contracts off.'
                 : mode === 'contract_dynasty'
-                  ? 'Contracts AND dynasty: bids become salaries, the cap turns on, rookies sign 3-year scale deals — plus the rookie rounds and the three-season pick horizon below.'
+                  ? 'Contracts AND dynasty: bids become salaries, the cap turns on, rookies sign scale deals (4yr default \u2014 a \ud83d\udcdc SALARY setting) — plus the rookie rounds and the three-season pick horizon below.'
                   : 'Teams keep everyone except the rookie-draft spots and draft rookies each year. Saving deals every team’s picks for the NEXT THREE SEASONS as tradeable assets — see them in 🔁 NEXT SEASON.'}
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn)', marginTop: 6 }}>{msg}</div>}
