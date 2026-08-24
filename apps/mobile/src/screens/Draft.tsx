@@ -945,7 +945,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   return mkt != null && qMax[slug] !== mkt ? (
                     <Pressable hitSlop={6}
                       onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((d2) => ({ ...d2, [slug]: '' })); } }).catch(() => {}); }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>mkt ${mkt}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>${mkt}</Text>
                     </Pressable>
                   ) : null;
                 })()}

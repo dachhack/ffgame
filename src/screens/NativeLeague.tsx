@@ -1528,7 +1528,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   return mkt != null && qMax[slug] !== mkt ? (
                     <button className="mono" title="one click sets your standing max to his market price — the value curve at his pool rank"
                       onClick={() => { void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((dd) => ({ ...dd, [slug]: '' })); } }).catch(() => {}); }}
-                      style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '0 3px' }}>mkt ${mkt}</button>
+                      style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '0 3px' }}>${mkt}</button>
                   ) : null;
                 })()}
                 {auction && !gone && myRoster != null && (qMax[slug] != null ? (
