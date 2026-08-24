@@ -1860,20 +1860,27 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '3px 0 2px' }}>
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>LENGTH</span>
                         {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
-                          <Chip key={y} on={d.years === y} onClick={() => { if (!busy) void act(() => setContractYears(leagueId, d.slug, y)); }}>{y}YR</Chip>
+                          <Chip key={y} on={d.years === y}
+                            title={y === 1
+                              ? 'an expiring deal — after this season he walks unless tagged, extended or tendered; expiring deals cut free (no dead money)'
+                              : `a ${y}-year deal — carries into next season at a year less; cutting it early leaves ${rules?.dead_pct ?? 30}% of the salary as dead money for the deal's remaining life`}
+                            onClick={() => { if (!busy) void act(() => setContractYears(leagueId, d.slug, y)); }}>{y}YR</Chip>
                         ))}
                       </div>
                     )}
                     {frontOffice && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '3px 0 2px', flexWrap: 'wrap' }}>
                         {!myTagUsed && (
-                          <Chip onClick={() => { if (!busy) void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }}>🏷 TAG</Chip>
+                          <Chip title={`franchise tag — one per team, expiring deals only: keeps him one more year at the top-5 positional salary average or salary +${rules?.tag_raise_pct ?? 20}%, whichever is higher`}
+                            onClick={() => { if (!busy) void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }}>🏷 TAG</Chip>
                         )}
                         {!tendered && [1, 2, 3].map((y) => (
-                          <Chip key={y} onClick={() => { if (!busy) void act(() => extendContract(leagueId, d.slug, y), `✓ extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }}>⤴ EXT {y}YR</Chip>
+                          <Chip key={y} title={`extend ${y} more year${y === 1 ? '' : 's'} at ${rules?.ext_discount_pct ?? 85}% of HIS market — the value curve at his pool rank — locked in before he reaches the open market`}
+                            onClick={() => { if (!busy) void act(() => extendContract(leagueId, d.slug, y), `✓ extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }}>⤴ EXT {y}YR</Chip>
                         ))}
                         {rules?.rfa && !tendered && (
-                          <Chip onClick={() => { if (!busy) void act(() => rfaTender(leagueId, d.slug), `✓ ${nameOf(d.slug)} tendered to RFA`); }}>🪧 TENDER</Chip>
+                          <Chip title="restricted free agency — rivals bid a salary and length for him; you keep the right to match their best offer exactly, or let him walk with it"
+                            onClick={() => { if (!busy) void act(() => rfaTender(leagueId, d.slug), `✓ ${nameOf(d.slug)} tendered to RFA`); }}>🪧 TENDER</Chip>
                         )}
                       </div>
                     )}
@@ -1914,7 +1921,8 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                   </span>
                 </div>
                 {!ownerIsMe && myRoster != null && !bidding && (
-                  <Chip onClick={() => { setBidFor(x.slug); setBidSalary(String((x.offer_salary ?? 0) + 1)); setBidYears(x.offer_years ?? 1); }}>💰 MAKE AN OFFER</Chip>
+                  <Chip title="bid a salary and length for this tendered player — his owner can match your exact terms or let him walk to you"
+                    onClick={() => { setBidFor(x.slug); setBidSalary(String((x.offer_salary ?? 0) + 1)); setBidYears(x.offer_years ?? 1); }}>💰 MAKE AN OFFER</Chip>
                 )}
                 {!ownerIsMe && bidding && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -1934,8 +1942,10 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 )}
                 {ownerIsMe && x.offer_salary != null && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, true), `✓ matched — ${nameOf(x.slug)} stays`); }}>✓ MATCH</Chip>
-                    <Chip onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, false), '✓ walked — the deal moved with him'); }}>👋 LET WALK</Chip>
+                    <Chip title="keep him at the best offer's exact salary and years — your cap must fit it"
+                      onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, true), `✓ matched — ${nameOf(x.slug)} stays`); }}>✓ MATCH</Chip>
+                    <Chip title="he leaves at the best offer's terms — his new team carries the deal"
+                      onClick={() => { if (!busy) void act(() => rfaResolve(leagueId, x.slug, false), '✓ walked — the deal moved with him'); }}>👋 LET WALK</Chip>
                   </div>
                 )}
               </div>

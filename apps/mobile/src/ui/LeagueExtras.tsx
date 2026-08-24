@@ -229,7 +229,8 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                     )}
                     {pickable && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2 }}>
-                        <Mono size={8} tone="faint">LENGTH</Mono>
+                        <LabelInfo label="LENGTH" title="Contract length"
+                          info={'1YR is an expiring deal — after this season he walks unless tagged, extended or tendered. Expiring deals cut free: no dead money.\n\nA 2–4 year deal carries into next season at a year less, but cutting it early leaves part of the salary as dead money on your cap for the deal\u2019s remaining life (the % is a league setting).\n\nLonger deals are commitment: cheaper to keep, costlier to escape.'} />
                         {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
                           <Chip key={y} label={`${y}YR`} on={d.years === y} disabled={busy}
                             onPress={() => { tap(); void act(() => setContractYears(leagueId, d.slug, y)); }} />
@@ -238,6 +239,8 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                     )}
                     {frontOffice && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2, flexWrap: 'wrap' }}>
+                        <LabelInfo label="KEEP HIM" title="The front office"
+                          info={'Three ways to keep an expiring player, all offseason-only:\n\n\ud83c\udff7 TAG — one per team per season. Signs him for one more year at the top-5 positional salary average (the NFL\u2019s own tag formula) or your salary plus the league\u2019s raise %, whichever is higher. Star money for star players.\n\n\u2934 EXTEND — 1\u20133 more years at a discount of HIS market (the value curve at his pool rank). Locking a bargain in before he reaches the open market is the whole play.\n\n\ud83e\udea7 TENDER — restricted free agency: rivals bid a salary and length, and you keep the right to match their best offer exactly, or let him walk with it.'} />
                         {!myTagUsed && (
                           <Chip label="🏷 TAG" disabled={busy}
                             onPress={() => { tap(); void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }} />
@@ -281,7 +284,8 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
       {/* ── The RFA board (0220): open tenders take bids; owners answer ── */}
       {offseason && tenders.filter((x) => x.status === 'open').length > 0 && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
-          <Mono size={9} tone="faint" weight="700" track={0.12}>🪧 RFA BOARD</Mono>
+          <LabelInfo label="🪧 RFA BOARD" title="Restricted free agency"
+            info={'Tendered players take open bids: any rival offers a salary and a length. Bids must climb.\n\nWhen the owner answers, MATCH keeps the player at the best offer\u2019s exact terms (their cap must fit it) — LET WALK sends him to the bidder, deal and all.'} />
           {tenders.filter((x) => x.status === 'open').map((x) => {
             const ownerIsMe = x.roster_id === myRoster;
             const bidding = bidFor === x.slug;
