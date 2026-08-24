@@ -2004,7 +2004,10 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{unfolded ? '▾' : '▸'}</span>
               </div>
               {unfolded && team.map((d) => {
-                const pickable = (canAssign && mine && d.acquired !== 'rookie') || isCommish;
+                // 0233: rookie deals and LOCKED seats never show chips — the
+                // commissioner's pen works only on unlocked veteran deals.
+                const seatLocked = !!(st.locks ?? []).find((lk) => lk.roster_id === p.roster_id)?.locked;
+                const pickable = d.acquired !== 'rookie' && !seatLocked && (mine ? canAssign : isCommish);
                 const net = d.salary - (d.retained ?? 0);
                 const frontOffice = offseason && mine && d.years === 1 && !d.tagged;
                 const tendered = tenders.some((x) => x.slug === d.slug && x.status === 'open');
