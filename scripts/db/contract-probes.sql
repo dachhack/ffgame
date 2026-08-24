@@ -703,4 +703,34 @@ begin
     'ct19m and his owner cannot assign the length — the rule holds it');
 end $$;
 
+-- ── §20. a contract room stays an auction (0234) ─────────────────────────────
+-- Creation forces mode='auction' (0218); this section closes the OTHER door —
+-- set_draft_setup, the commissioner's post-creation knob, refuses to turn a
+-- salary market into a turn order. A plain league keeps its full menu.
+do $$
+declare lid uuid; r jsonb;
+begin
+  perform probe_as('a');
+  r := create_native_league('Auction Only', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct20a create contract league (asked for snake)');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((select mode from draft where league_id = lid) = 'auction',
+    'ct20b creation already forced the auction (0218)');
+  perform assert_err(set_draft_setup(lid, null, 'snake'), 'drafts by auction',
+    'ct20c THE POINT: the setter refuses snake — the bids are the salaries');
+  perform assert_err(set_draft_setup(lid, null, 'linear'), 'drafts by auction',
+    'ct20d ...and linear');
+  perform assert_true((select mode from draft where league_id = lid) = 'auction',
+    'ct20e the refusals changed nothing');
+  perform assert_ok(set_draft_setup(lid, null, null, 55), 'ct20f retuning the auction itself still works');
+  perform assert_true((select budget from draft where league_id = lid) = 55, 'ct20g budget landed');
+
+  -- non-regression: a league without contracts keeps the full menu
+  r := create_native_league('Free To Snake', '2026', 2, 5, 60, 'auction', 40);
+  perform assert_ok(r, 'ct20h create plain auction league');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_ok(set_draft_setup(lid, null, 'snake'), 'ct20i a plain league still switches to snake');
+  perform assert_true((select mode from draft where league_id = lid) = 'snake', 'ct20j stored');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

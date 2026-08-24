@@ -26,7 +26,7 @@ import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, league
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
-import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket } from '@drip/core/data/liveApi';
+import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
 import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
@@ -1149,6 +1149,11 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>(st.mode);
+  // A contract league's format was decided at creation (0218): bids are the
+  // salaries, so the room is an auction and the server refuses anything else
+  // (0234). Chips that only earn that refusal don't render.
+  const [contractRoom, setContractRoom] = useState(false);
+  useEffect(() => { leagueContracts(leagueId).then((c) => setContractRoom(!!c.contracts)).catch(() => {}); }, [leagueId]);
   const slow = st.pick_seconds >= 3600;
   const [clock, setClock] = useState(String(slow ? Math.round(st.pick_seconds / 3600) : st.pick_seconds));
   const [hrs, setHrs] = useState(slow);
@@ -1213,9 +1218,18 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
         <View style={{ marginTop: 10, gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Mono size={8.5} tone="faint" track={0.1}>FORMAT</Mono>
-            <Chip label="SNAKE" on={mode === 'snake'} onPress={() => { tap(); setMode('snake'); }} />
-            <Chip label="LINEAR" on={mode === 'linear'} onPress={() => { tap(); setMode('linear'); }} />
-            <Chip label="AUCTION" on={mode === 'auction'} onPress={() => { tap(); setMode('auction'); }} />
+            {contractRoom ? (
+              <>
+                <Chip label="AUCTION" on onPress={() => {}} />
+                <Mono size={8.5} tone="faint">set by the contract league type</Mono>
+              </>
+            ) : (
+              <>
+                <Chip label="SNAKE" on={mode === 'snake'} onPress={() => { tap(); setMode('snake'); }} />
+                <Chip label="LINEAR" on={mode === 'linear'} onPress={() => { tap(); setMode('linear'); }} />
+                <Chip label="AUCTION" on={mode === 'auction'} onPress={() => { tap(); setMode('auction'); }} />
+              </>
+            )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Mono size={8.5} tone="faint" track={0.1}>{mode === 'auction' ? 'NOMINATE' : 'PICK CLOCK'}</Mono>

@@ -515,6 +515,11 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>(st.mode);
+  // A contract league's format was decided at creation (0218): bids are the
+  // salaries, so the room is an auction and the server refuses anything else
+  // (0234). Chips that only earn that refusal don't render.
+  const [contractRoom, setContractRoom] = useState(false);
+  useEffect(() => { leagueContracts(leagueId).then((c) => setContractRoom(!!c.contracts)).catch(() => {}); }, [leagueId]);
   // Slow drafts are hour-scale; showing 172800 in a seconds box helps nobody,
   // so the unit follows the value the same way the create screen's pace does.
   const slow = st.pick_seconds >= 3600;
@@ -588,11 +593,18 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
       {open && (
         <div style={{ marginTop: 10 }}>
           <div className="mono" style={label}>DRAFT TYPE</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-            <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
+          {contractRoom ? (
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+              <Chip on onClick={() => {}}>AUCTION</Chip>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>set by the contract league type</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={mode === 'snake'} onClick={() => setMode('snake')}>SNAKE</Chip>
               <Chip on={mode === 'linear'} onClick={() => setMode('linear')}>LINEAR</Chip>
-            <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
-          </div>
+              <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
               <div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION CLOCK' : 'PICK CLOCK'}</div>
