@@ -533,9 +533,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             const left = lotSecsLeft(lot);
             const iHold = lot.roster_id === myRoster;
             const canBidLot = myRoster != null && !iHold && (lot.my_max ?? 0) > lot.bid && !st.paused;
-            const quick = canBidLot
-              ? [lot.bid + 1, lot.bid + 5, lot.bid + 10].filter((a, i, arr) => a <= (lot.my_max ?? 0) && arr.indexOf(a) === i)
-              : [];
+            // The three raises hold their POSITIONS (v0.355.3, founder: "not
+            // have the bids change positions") — a step past your max or on a
+            // lot you already hold ghosts instead of vanishing, so a button
+            // never moves out from under a reaching thumb mid-auction.
+            const steps = myRoster != null ? [lot.bid + 1, lot.bid + 5, lot.bid + 10] : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
               <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, borderLeftWidth: iHold ? 3 : 0, borderLeftColor: t.you, paddingLeft: iHold ? 8 : 0 }}>
@@ -562,15 +564,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   </View>
                 )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {quick.map((a) => (
-                    <Pressable key={a} disabled={busy}
-                      onPress={() => { tap(); myRoster != null && void run(() => placeBid(leagueId, myRoster, a, lot.id)); }}
-                      style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent }}>BID ${a}</Text>
-                    </Pressable>
-                  ))}
+                  {steps.map((a) => {
+                    const can = canBidLot && a <= (lot.my_max ?? 0) && !busy;
+                    return (
+                      <Pressable key={a} disabled={!can}
+                        onPress={() => { tap(); myRoster != null && void run(() => placeBid(leagueId, myRoster, a, lot.id)); }}
+                        style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7, minWidth: 84, alignItems: 'center', opacity: can ? 1 : 0.35 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent, fontVariant: ['tabular-nums'] }}>BID ${a}</Text>
+                      </Pressable>
+                    );
+                  })}
                   {iHold && (
-                    <View style={{ backgroundColor: t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <View style={{ backgroundColor: t.warn, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent, letterSpacing: 0.6 }}>🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}</Text>
                     </View>
                   )}

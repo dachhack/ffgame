@@ -1200,9 +1200,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             const left = lotSecsLeft(lot);
             const iHold = lot.roster_id === myRoster;
             const canBidLot = myRoster != null && !iHold && (lot.my_max ?? 0) > lot.bid && !st.paused;
-            const quick = canBidLot
-              ? [lot.bid + 1, lot.bid + 5, lot.bid + 10].filter((a, i, arr) => a <= (lot.my_max ?? 0) && arr.indexOf(a) === i)
-              : [];
+            // The three raises hold their POSITIONS (v0.355.3, founder: "not
+            // have the bids change positions") — a step past your max or on a
+            // lot you already hold ghosts instead of vanishing, so a button
+            // never moves out from under a hovering cursor mid-auction.
+            const steps = myRoster != null ? [lot.bid + 1, lot.bid + 5, lot.bid + 10] : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
               <div key={lot.id} style={{ borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, boxShadow: iHold ? 'inset 4px 0 0 var(--you)' : 'none', paddingLeft: iHold ? 10 : 0, borderRadius: iHold ? 4 : 0 }}>
@@ -1230,12 +1232,15 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {quick.map((a) => (
-                    <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={busy}
-                      className="mono" style={{ ...btn, padding: '7px 12px' }}>BID ${a}</button>
-                  ))}
+                  {steps.map((a) => {
+                    const can = canBidLot && a <= (lot.my_max ?? 0) && !busy;
+                    return (
+                      <button key={a} onClick={() => can && myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={!can}
+                        className="mono" style={{ ...btn, padding: '7px 12px', minWidth: 92, fontVariantNumeric: 'tabular-nums', opacity: can ? 1 : 0.35, cursor: can ? 'pointer' : 'default' }}>BID ${a}</button>
+                    );
+                  })}
                   {iHold && (
-                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--bg)', background: 'var(--you)', borderRadius: 5, padding: '4px 9px', letterSpacing: '0.08em' }}>
+                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--warn)', borderRadius: 5, padding: '4px 9px', letterSpacing: '0.08em' }}>
                       🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}
                     </span>
                   )}
