@@ -395,8 +395,9 @@ begin
   perform assert_err(franchise_tag(lid, 'co-p5'), 'one tag per team', 's14c one tag per team');
   perform assert_err(franchise_tag(lid, 'co-p1'), 'years left', 's14d tags are for expiring deals');
 
-  -- ── 14b. the extension ─────────────────────────────────────────────────────
-  mkt := contract_market_value(lid, 'co-p5');
+  -- ── 14b. the extension — 0230: the base is HIS market (the value curve at
+  -- his pool rank), not his position's top-5 elite ───────────────────────────
+  mkt := player_market_value(lid, 'co-p5');
   extsal := greatest(1, ceil(mkt * 0.85)::int);
   r := extend_contract(lid, 'co-p5', 2);
   perform assert_ok(r, 's14e extension signs');
@@ -606,6 +607,37 @@ begin
   perform assert_ok(r, 'ct17p reset runs');
   perform assert_true(not exists (select 1 from league_membership
       where league_id = lid and contracts_locked), 'ct17q the locks reset with the room');
+end $$;
+
+-- ── §18. two markets, two jobs (0230) ────────────────────────────────────────
+-- player_market_value prices the PLAYER: the value curve at his pool rank,
+-- scaled to the cap — top of the board ≈ a third of the cap, monotone down,
+-- $1 in the deeps — independent of what anyone overpaid at auction.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Fair Price', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct18a create ($40 cap)');
+  lid := (r ->> 'league_id')::uuid;
+  for i in 1..220 loop pool := pool || jsonb_build_object('slug', 'fp-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct18b seed 220 ranks');
+  perform assert_true(player_market_value(lid, 'fp-p1') between 12 and 14,
+    'ct18c the top of the board prices at about a third of the cap');
+  perform assert_true(player_market_value(lid, 'fp-p1') > player_market_value(lid, 'fp-p10')
+    and player_market_value(lid, 'fp-p10') > player_market_value(lid, 'fp-p40'),
+    'ct18d monotone down the board');
+  perform assert_true(player_market_value(lid, 'fp-p200') = 1,
+    'ct18e a deep-league afterthought prices at the $1 floor');
+  -- and the two markets genuinely diverge: an overpaid star inflates the
+  -- POSITIONAL top-5 (the tag price) but not a deep player's OWN market
+  update draft set status = 'complete' where league_id = lid;
+  perform assert_ok(add_free_agent(lid, 1, 'fp-p150', null), 'ct18f sign a deep flier');
+  update contract set salary = 39 where league_id = lid and slug = 'fp-p150';   -- someone overpaid wildly
+  perform assert_true(contract_market_value(lid, 'fp-p150') >= 39,
+    'ct18g the positional tag price inhales the overpay');
+  perform assert_true(player_market_value(lid, 'fp-p150') <= 2,
+    'ct18h ...while HIS market stays what his rank is worth');
 end $$;
 
 select 'ALL CONTRACT PROBES PASSED' as result;
