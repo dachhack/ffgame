@@ -26,7 +26,7 @@ import {
   setTaxiRules, setIrRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
-  leagueContracts, setContractRules, setSalaryRules, type LeagueContracts,
+  leagueContracts, setContractRules, setSalaryRules, setRookieYears, type LeagueContracts,
   setLeagueFormat, setVampire, guillotineState, vampireState, type LeagueFormat, type VampireState,
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
@@ -1023,7 +1023,7 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
   return (
     <Card>
       <LabelInfo label="📜 CONTRACTS & SALARY CAP"
-        info={'With the cap on, every acquisition signs a contract:\n\n· an auction win signs at its exact winning bid\n· a waiver win signs at its FAAB bid\n· a free-agent add signs at the $1 minimum\n· startup picks sign at the rookie scale ($12/$6/$3/$1 by round; rookie drafts deal 3-year scale contracts)\n\nManagers pick each deal\'s length while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused whole.\n\nMulti-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched in RFA.'} />
+        info={'With the cap on, every acquisition signs a contract:\n\n· an auction win signs at its exact winning bid\n· a waiver win signs at its FAAB bid\n· a free-agent add signs at the $1 minimum\n· startup picks sign at the rookie scale ($12/$6/$3/$1 by round; rookie drafts deal scale contracts at the ROOKIE DEALS term below — default 4yr)\n\nManagers pick each deal\'s length while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused whole.\n\nMulti-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched in RFA.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!st ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono> : (
         <>
@@ -1062,6 +1062,22 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
                       onChangeText={(v) => set(v.replace(/[^0-9]/g, ''))}
                       style={{ marginTop: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: fs(13), color: t.text, backgroundColor: t.bg, width: 72 }} />
                   </View>
+                ))}
+              </View>
+              {/* 0231: the rookie term applies on its own tap — it is one number,
+                  not part of the drafted rulebook batch */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+                <LabelInfo label="ROOKIE DEALS" title="Rookie contract length"
+                  info={'Every rookie-draft pick signs a scale contract ($12/$6/$3/$1 by round) for this many years — default 4, the NFL\u2019s own rookie term. Managers never set rookie lengths; the scale does.\n\nClamped to the league\u2019s max contract length. Applies to picks made after the change.'} />
+                {Array.from({ length: st.years_max ?? 4 }, (_, i) => i + 1).map((y) => (
+                  <Chip key={y} label={`${y}YR`} on={(st.rules?.rookie_years ?? 4) === y} disabled={busy}
+                    onPress={() => {
+                      tap();
+                      void setRookieYears(leagueId, y).then((r) => {
+                        if (r.ok) { commit(); setNote(`✓ rookie deals sign for ${y}yr`); void load(); }
+                        else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
+                      }).catch((e) => { warn(); setNote(friendlyError(e)); });
+                    }} />
                 ))}
               </View>
               <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>

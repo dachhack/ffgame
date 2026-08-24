@@ -330,7 +330,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   : continuity === 'contract'
                     ? `A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary. You assign each deal’s length (1–4 years) during the draft. Preset: FAAB waivers (the bid signs the contract), free agents at $1, and a deep ${contractRosterDepth(teams, budget)}-spot roster so everyone worth over $1 gets drafted.`
                     : continuity === 'contract_dynasty'
-                      ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing 3-year scale deals — and three seasons of tradeable picks dealt from day one.`
+                      ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing scale deals (4yr default — a 📜 SALARY setting) — and three seasons of tradeable picks dealt from day one.`
                       : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
             </div>
             {/* FORMAT (0221/0222): how the season is won. */}

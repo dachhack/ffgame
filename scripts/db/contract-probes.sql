@@ -640,4 +640,44 @@ begin
     'ct18h ...while HIS market stays what his rank is worth');
 end $$;
 
+-- ── §19. rookie deals run the league's own term (0231) ───────────────────────
+-- Default 4 (the NFL's real rookie length), commissioner-settable, clamped to
+-- the league max. The rookie branch fires on pick-owner drafts (pick_owners
+-- set, no auction price) — the fixture arranges exactly that.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Term Limits', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct19a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Scouts'), 'ct19b B joins');
+  perform probe_as('a');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'tl-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct19c seed');
+  update draft set status = 'complete', pick_owners = '[]'::jsonb where league_id = lid;
+
+  -- a "rookie draft" pick: pick_owners set, no price → the rookie branch
+  insert into draft_pick (league_id, overall, round, roster_id, slug) values (lid, 1, 1, 1, 'tl-p1');
+  insert into native_roster (league_id, roster_id, slug) values (lid, 1, 'tl-p1');
+  perform assert_true((select (salary, years, acquired) = (12, 4, 'rookie') from contract
+      where league_id = lid and slug = 'tl-p1'),
+    'ct19d THE DEFAULT: round-1 scale salary, FOUR years — the NFL''s own rookie term');
+
+  -- the knob
+  perform probe_as('b');
+  perform assert_err(set_rookie_years(lid, 2), 'commissioner', 'ct19e members do not set the term');
+  perform probe_as('a');
+  perform assert_err(set_rookie_years(lid, 9), '1–4', 'ct19f the term clamps to the league max');
+  perform assert_ok(set_rookie_years(lid, 2), 'ct19g commish sets 2-year rookie deals');
+  perform assert_true((league_contracts(lid) -> 'rules' ->> 'rookie_years')::int = 2,
+    'ct19h the rulebook reads it back');
+  insert into draft_pick (league_id, overall, round, roster_id, slug) values (lid, 2, 1, 2, 'tl-p2');
+  insert into native_roster (league_id, roster_id, slug) values (lid, 2, 'tl-p2');
+  perform assert_true((select years from contract where league_id = lid and slug = 'tl-p2') = 2,
+    'ct19i the next rookie signs at the new term');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;
