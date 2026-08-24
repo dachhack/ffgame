@@ -286,11 +286,16 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     [st?.pos_caps, eligPos]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => (showTaken || !taken.has(p.slug))
+    // A player on an OPEN LOT is not in picks, so the taken filter missed him
+    // and the list still offered NOM (v0.354.14, founder: "The players I am
+    // trying to nom are already up for bid") — the lots at the top are where
+    // he lives until the bell.
+    const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
+    const base = pool.filter((p) => (showTaken || !taken.has(p.slug)) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
 
   useEffect(() => {
     if (!auction || myRoster == null || !st) return;
@@ -363,8 +368,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     // Assign mode makes the pick FOR the seat on the clock (0067's force pick
     // has always taken a slug — until now nothing called it with one).
     if (assigning) { void run(() => commishForcePick(leagueId, slug)); return; }
-    if (!myTurn) return;  // auction: on_clock is null while the room is at lot capacity
-    void run(() => (auction ? nominate(leagueId, slug, 1) : makeDraftPick(leagueId, slug)));
+    // The auction gate used to be a silent return — a paused room or a full
+    // lot board made NOM a dead button (v0.354.13, founder: "Everytime I
+    // click nom, nothing happens"). Name the reason instead.
+    if (auction) {
+      if (st?.paused) { warn(); setErr('The draft is paused — nominations resume when the commissioner taps ▶ RESUME.'); return; }
+      if (st?.on_clock == null) { warn(); setErr(`All ${st?.max_lots ?? ''} lots are on the block — a new nomination opens at the next bell.`); return; }
+      if (st.on_clock !== myRoster) { warn(); setErr(`It's ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}'s nomination, not yours.`); return; }
+      void run(() => nominate(leagueId, slug, 1));
+      return;
+    }
+    if (!myTurn) return;  // snake: the clock banner already says whose pick it is
+    void run(() => makeDraftPick(leagueId, slug));
   };
 
   if (!st) {
@@ -523,7 +538,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
-              <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0 }}>
+              <View key={lot.id} style={{ borderTopWidth: li ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, borderLeftWidth: iHold ? 3 : 0, borderLeftColor: t.you, paddingLeft: iHold ? 8 : 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Face slug={lot.slug} pos={lp?.pos ?? '?'} size={40} />
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -554,7 +569,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                       <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.onAccent }}>BID ${a}</Text>
                     </Pressable>
                   ))}
-                  {iHold && <Mono size={9.5} tone="you">You're the high bidder.</Mono>}
+                  {iHold && (
+                    <View style={{ backgroundColor: t.you, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.onAccent, letterSpacing: 0.6 }}>🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}</Text>
+                    </View>
+                  )}
                   {/* hidden max (proxy): answers rival bids second-price style
                       while you're away — nobody ever sees your ceiling */}
                   {myRoster != null && (lot.my_max ?? 0) > 0 && !iHold && (

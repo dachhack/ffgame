@@ -915,6 +915,29 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const myRoster = team?.my_roster_id ?? null;
   const isCommish = !!team?.is_commish;
   const auction = st?.mode === 'auction';
+  // THE WIN MOMENT reaches the web (v0.354.11, founder: "there's still no
+  // visual when you win a player on web") — same watermark trick as the app:
+  // baseline my picks' top `overall` on entry so rejoining never celebrates
+  // an old win; a new one drops the SOLD banner.
+  const [won, setWon] = useState<{ slug: string; price: number } | null>(null);
+  const wonMark = useRef<number | null>(null);
+  useEffect(() => {
+    if (!auction || myRoster == null || !st) return;
+    const mine = (st.picks ?? []).filter((pk) => pk.roster_id === myRoster);
+    const top = mine.reduce((m, pk) => Math.max(m, pk.overall), 0);
+    if (wonMark.current == null) { wonMark.current = top; return; }
+    if (top > wonMark.current) {
+      wonMark.current = top;
+      const pk = mine.find((x) => x.overall === top);
+      if (pk && st.status === 'live') setWon({ slug: pk.slug, price: pk.price ?? 0 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st, myRoster, auction]);
+  useEffect(() => {
+    if (!won) return;
+    const id = setTimeout(() => setWon(null), 3500);
+    return () => clearTimeout(id);
+  }, [won]);
   // Standing maxes (0228): a queued player's ceiling becomes his lot's hidden
   // proxy the moment the lot opens — the queue bids for an absent manager.
   const [qMax, setQMax] = useState<Record<string, number>>({});
@@ -954,11 +977,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     [st?.pos_caps]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => !taken.has(p.slug)
+    // A player on an OPEN LOT is not in picks, so the taken filter missed him
+    // and the list still offered NOM (v0.354.14, founder: "The players I am
+    // trying to nom are already up for bid") — the lots at the top are where
+    // he lives until the bell.
+    const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
+    const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : !bannedPos(p.pos))
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, starMode, favs, sortBy, own]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
@@ -992,9 +1020,18 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     // Assign mode makes the pick FOR the seat on the clock (0067's force pick
     // has always taken a slug — until now nothing called it with one).
     if (assigning) { run(() => commishForcePick(leagueId, slug)); return; }
-    if (!myTurn) return;   // auction: on_clock is null while the room is at lot capacity
-    if (auction) run(() => nominate(leagueId, slug, 1));
-    else run(() => makeDraftPick(leagueId, slug));
+    // The auction gate used to be a silent return — a paused room or a full
+    // lot board made NOM a dead button (v0.354.13, founder: "Everytime I
+    // click nom, nothing happens"). Name the reason instead.
+    if (auction) {
+      if (st?.paused) { setErr('The draft is paused — nominations resume when the commissioner hits ▶ RESUME.'); return; }
+      if (st?.on_clock == null) { setErr(`All ${st?.max_lots ?? ''} lots are on the block — a new nomination opens at the next bell.`); return; }
+      if (st.on_clock !== myRoster) { setErr(`It's ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}'s nomination, not yours.`); return; }
+      run(() => nominate(leagueId, slug, 1));
+      return;
+    }
+    if (!myTurn) return;   // snake: the board's glowing cell already says whose pick it is
+    run(() => makeDraftPick(leagueId, slug));
   };
 
   // Mock rooms are disposable — delete leaves the room, so don't refresh a
@@ -1115,6 +1152,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 
       {st.status === 'live' && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
+          {/* MY WALLET, FIRST (v0.354.12, founder: "Budget needs to be more
+              visible") — the web's most-consulted number was a 9.5px footer;
+              now it leads the card at glance size, like the app. */}
+          {auction && myBudget && (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, borderBottom: '1px solid var(--bd)', paddingBottom: 10, marginBottom: 10 }}>
+              <div>
+                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>MY BUDGET</div>
+                <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>${myBudget.budget}</div>
+              </div>
+              <div>
+                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>MAX BID</div>
+                <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${myBudget.max_bid}</div>
+              </div>
+              {myBudget.committed > 0 && (
+                <div>
+                  <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>COMMITTED</div>
+                  <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>${myBudget.committed}</div>
+                </div>
+              )}
+              <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>{(st.lots ?? []).length}/{st.max_lots} lots open</div>
+            </div>
+          )}
           {/* auction lots — up to max_lots run in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
@@ -1126,7 +1185,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               : [];
             const pd = proxyDraft[lot.id] ?? '';
             return (
-              <div key={lot.id} style={{ borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0 }}>
+              <div key={lot.id} style={{ borderTop: li ? '1px solid var(--bd)' : 'none', paddingTop: li ? 10 : 0, marginTop: li ? 10 : 0, boxShadow: iHold ? 'inset 4px 0 0 var(--you)' : 'none', paddingLeft: iHold ? 10 : 0, borderRadius: iHold ? 4 : 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <PlayerImg playerId={lot.slug} espnId={lp?.espn_id} team={lp?.team} pos={(lp?.pos ?? 'WR') as Pos} size={44} />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -1155,7 +1214,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                     <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={busy}
                       className="mono" style={{ ...btn, padding: '7px 12px' }}>BID ${a}</button>
                   ))}
-                  {iHold && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>You're the high bidder.</span>}
+                  {iHold && (
+                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--bg)', background: 'var(--you)', borderRadius: 5, padding: '4px 9px', letterSpacing: '0.08em' }}>
+                      🔨 YOU'RE THE HIGH BIDDER — ${lot.bid}
+                    </span>
+                  )}
                   {!iHold && (lot.my_max ?? 0) > 0 && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>my max here ${lot.my_max}</span>}
                   {/* hidden max (proxy): answers rival bids second-price style
                       while you're away — nobody ever sees your ceiling */}
@@ -1205,11 +1268,6 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   {fmtCountdown(nomSecsLeft)}
                 </div>
               )}
-            </div>
-          )}
-          {auction && myBudget && (
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
-              my budget ${myBudget.budget}{myBudget.committed > 0 ? ` · committed $${myBudget.committed}` : ''} · max new bid ${myBudget.max_bid} · {(st.lots ?? []).length}/{st.max_lots} lots open
             </div>
           )}
           {/* commish controls */}
@@ -1279,7 +1337,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
         <div style={{ ...card, padding: 8, flex: '1.3 1 460px', minWidth: 320, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
             {(st.order ?? []).map((rid) => (
-              <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 2px 6px' }}>
+              <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: rid === myRoster ? 'color-mix(in srgb, var(--you) 14%, var(--surface))' : 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 4px 6px', borderRadius: 6, boxShadow: rid === myRoster ? 'inset 0 -2px 0 var(--you)' : 'none' }}>
                 <Avatar name={teamName(rid) ?? `Team ${rid}`} src={byRoster[rid]?.avatar} size={20} />
                 <div style={{ minWidth: 0 }}>
                   <div className="mono" style={{ fontSize: 8, fontWeight: 700, color: rid === myRoster ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 56 }}>{teamName(rid) ?? `Team ${rid}`}</div>
@@ -1309,8 +1367,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                     style={{
                     height: 50, borderRadius: 6, padding: '4px 6px', boxSizing: 'border-box', overflow: 'hidden',
                     cursor: canEdit ? 'pointer' : undefined,
-                    background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
-                    border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
+                    background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : rid === myRoster ? 'color-mix(in srgb, var(--you) 7%, var(--bg))' : 'var(--bg)',
+                    border: `1px solid ${overallHere ? 'var(--you)' : rid === myRoster ? 'color-mix(in srgb, var(--you) 45%, var(--bd))' : 'var(--bd)'}`,
                     boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
                   }}>
                     {cell ? (
@@ -1582,6 +1640,22 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
       )}
       </div>{/* /tab panel column */}
       </div>{/* /board + panel row */}
+
+      {/* the SOLD banner — fixed over the room, dismisses itself or on click */}
+      {won && (() => {
+        const wp = poolBySlug.get(won.slug);
+        return (
+          <div onClick={() => setWon(null)}
+            style={{ position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '2px solid var(--you)', borderRadius: 12, padding: '14px 18px', boxShadow: '0 8px 28px rgba(0,0,0,0.45)', cursor: 'pointer', minWidth: 320 }}>
+            <PlayerImg playerId={won.slug} espnId={wp?.espn_id} team={wp?.team} pos={(wp?.pos ?? 'WR') as Pos} size={46} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>🔨 SOLD — HE'S YOURS</div>
+              <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wp?.full_name ?? won.slug}</div>
+            </div>
+            <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums' }}>${won.price}</div>
+          </div>
+        );
+      })()}
 
       {cardFor && (
         <PlayerCard p={cardFor} onClose={() => setCardFor(null)}
