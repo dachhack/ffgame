@@ -2235,6 +2235,21 @@ export async function myDraftQueue(leagueId: string, rosterId: number): Promise<
   if (error) throw error;
   return ((data ?? []) as { slug: string }[]).map((r) => r.slug);
 }
+/** Standing maxes by slug (0228) — the auction queue's hidden ceilings. RLS
+ *  already scopes the table to the caller's own seat, same as the queue. */
+export async function myQueueMaxes(leagueId: string, rosterId: number): Promise<Record<string, number>> {
+  const { data, error } = await (await client()).from('draft_queue')
+    .select('slug, max_bid').eq('league_id', leagueId).eq('roster_id', rosterId).not('max_bid', 'is', null);
+  if (error) throw error;
+  const m: Record<string, number> = {};
+  for (const r of (data ?? []) as { slug: string; max_bid: number }[]) m[r.slug] = r.max_bid;
+  return m;
+}
+/** Set (or clear, with null) a queued player's standing max — it becomes his
+ *  lot's hidden proxy the moment the lot opens, even if you're asleep. */
+export const setQueueMax = (leagueId: string, rosterId: number, slug: string, max: number | null) =>
+  rpc<{ ok: boolean; error?: string; max_bid?: number | null }>('set_queue_max',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_max: max });
 export const setAutodraft = (leagueId: string, rosterId: number, on: boolean) =>
   rpc<{ ok: boolean; error?: string; autodraft?: boolean }>('set_autodraft', { p_league_id: leagueId, p_roster_id: rosterId, p_on: on });
 /** Commissioner sets/clears the draft's overnight quiet hours (0153). Both

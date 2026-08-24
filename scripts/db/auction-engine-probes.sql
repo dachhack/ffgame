@@ -254,4 +254,66 @@ begin
     'ae6j and the price is the SHRUNK willingness + 1, to the dollar');
 end $$;
 
+-- ── 7. the queue bids for you (0228) ─────────────────────────────────────────
+-- A standing max on a queued player becomes his lot's hidden proxy the moment
+-- the lot opens — whoever nominates him — and the existing second-price
+-- machinery does the rest. Explicit proxies outrank it; reordering the queue
+-- keeps it; the tick's auto-nomination installs it too.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text; lot uuid; lot2 uuid;
+begin
+  perform probe_as('a');
+  r := create_native_league('Sleeping Bidder', '2026', 2, 5, 60, 'auction', 200, 60, 3);
+  perform assert_ok(r, 'ae7a create — 3 parallel lots, human seat 2');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Sleeps'), 'ae7b B claims seat 2 (a live human, not the AI)');
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'q-rb' || i, 'full', 'RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform probe_as('a');
+  perform assert_ok(seed_league_pool(lid, pool), 'ae7c seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), 'ae7d start');
+
+  -- B queues rb1 with a $30 ceiling and rb3 with $20, then "goes to sleep".
+  perform probe_as('b');
+  perform assert_ok(set_draft_queue(lid, 2, '["q-rb1","q-rb3"]'::jsonb), 'ae7e B queues two players');
+  perform assert_ok(set_queue_max(lid, 2, 'q-rb1', 30), 'ae7f standing max $30 on rb1');
+  perform assert_ok(set_queue_max(lid, 2, 'q-rb3', 20), 'ae7g standing max $20 on rb3');
+  perform assert_err(set_queue_max(lid, 2, 'q-rb9', 10), 'queue him first', 'ae7h a max needs a queue entry to ride');
+
+  -- A nominates B's queued player: the standing max answers immediately.
+  perform probe_as('a');
+  perform assert_ok(nominate(lid, 'q-rb1', 1), 'ae7i A opens B''s guy at $1');
+  select id into lot from auction_lot where league_id = lid and slug = 'q-rb1';
+  perform assert_true((select (roster_id, bid) = (2, 2) from auction_lot where id = lot),
+    'ae7j THE POINT: the sleeping B counter-bids at second price — the queue is bidding for him');
+  -- A answers above B's ceiling: the lot comes back at exactly $31.
+  perform assert_ok(set_lot_proxy(lid, 1, 50, lot), 'ae7k A hides a $50 max');
+  perform resolve_lot_proxies(lid, lot);
+  perform assert_true((select (roster_id, bid) = (1, 31) from auction_lot where id = lot),
+    'ae7l the standing max is a CEILING: B folds at $30, A pays 30 + 1');
+
+  -- B's nomination turn (commish opens it for him): an EXPLICIT proxy on the
+  -- open lot outranks a queue max set afterwards.
+  perform assert_ok(nominate(lid, 'q-rb2', 1), 'ae7m commish nominates for B''s turn');
+  select id into lot2 from auction_lot where league_id = lid and slug = 'q-rb2';
+  perform probe_as('b');
+  perform assert_ok(set_lot_proxy(lid, 2, 40, lot2), 'ae7n B sets an explicit $40 on the open lot');
+  perform assert_ok(set_draft_queue(lid, 2, '["q-rb3","q-rb2"]'::jsonb), 'ae7o B reorders his queue');
+  perform assert_true((select max_bid from draft_queue where league_id = lid and roster_id = 2 and slug = 'q-rb3') = 20,
+    'ae7p reordering the queue keeps the standing max');
+  perform assert_ok(set_queue_max(lid, 2, 'q-rb2', 10), 'ae7q then queues rb2 with a $10 max');
+  perform assert_true((select max_amount from lot_proxy where lot_id = lot2 and roster_id = 2) = 40,
+    'ae7r the explicit proxy stands — a queue max never overwrites one');
+
+  -- A's turn again; his clock expires; the tick nominates from HIS queue —
+  -- and B's standing max on that player answers, asleep or not.
+  perform probe_as('a');
+  perform assert_ok(set_draft_queue(lid, 1, '["q-rb3"]'::jsonb), 'ae7s A queues rb3 for himself');
+  update draft set deadline_at = now() - interval '1 second' where league_id = lid;
+  perform draft_tick(lid);
+  perform assert_true((select (roster_id, bid) = (2, 2) from auction_lot where league_id = lid and slug = 'q-rb3'),
+    'ae7t the tick''s auto-nomination arms the standing max too — B holds his own target at $2');
+end $$;
+
 select 'ALL AUCTION-ENGINE PROBES PASSED' as result;
