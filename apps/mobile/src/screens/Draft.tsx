@@ -132,6 +132,16 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0);
   const ticking = useRef(false);
+  // ── THE WIN MOMENT (v0.352.0, founder: "We also need a quick UI
+  // interaction when you win a player as that's pretty quiet and brief.") —
+  // a lot closing in your favour was one poll-cycle of silence: the lot row
+  // vanished and the player was just… on your team. Now the room announces
+  // it: a banner drops in with the player and the price, haptics fire, and
+  // it clears itself. Detection is a watermark on my own picks' `overall` —
+  // the first state read sets the baseline so rejoining a room mid-draft
+  // doesn't celebrate an hour-old win.
+  const [won, setWon] = useState<{ slug: string; price: number } | null>(null);
+  const wonMark = useRef<number | null>(null);
 
   /** Who is on autodraft, by seat — draft_state carries only my own flag and
    *  the commissioner's per-team switch needs everyone's. */
@@ -274,6 +284,23 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
   }, [pool, taken, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
 
+  useEffect(() => {
+    if (!auction || myRoster == null || !st) return;
+    const mine = (st.picks ?? []).filter((p) => p.roster_id === myRoster);
+    const top = mine.reduce((m, p) => Math.max(m, p.overall), 0);
+    if (wonMark.current == null) { wonMark.current = top; return; }
+    if (top > wonMark.current) {
+      wonMark.current = top;
+      const pk = mine.find((p) => p.overall === top);
+      if (pk && st.status === 'live') { setWon({ slug: pk.slug, price: pk.price ?? 0 }); commit(); }
+    }
+  }, [st, myRoster, auction]);
+  useEffect(() => {
+    if (!won) return;
+    const id = setTimeout(() => setWon(null), 3500);
+    return () => clearTimeout(id);
+  }, [won]);
+
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;
     setBusy(true); setErr(null);
@@ -352,6 +379,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   );
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
       {/* header: mode + state chips */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -417,6 +445,42 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
 
       {st.status === 'live' && (
         <Card style={{ borderLeftWidth: 3, borderLeftColor: t.you }}>
+          {/* ── MY WALLET, FIRST (v0.352.0, founder: "In the auction UI also,
+              your team is not easy to see as is your remaining budget.") —
+              the room's most-consulted number was a 9pt footer. Now it leads
+              the card at glance size, with the door to my own roster beside
+              it: MY TEAM jumps straight to the TEAMS tab on my seat. */}
+          {auction && myBudget && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, borderBottomWidth: (st.lots ?? []).length > 0 || st.on_clock != null ? StyleSheet.hairlineWidth : 0, borderBottomColor: t.bd, paddingBottom: 10, marginBottom: 10 }}>
+              <View>
+                <Mono size={8} tone="faint" track={0.12}>MY BUDGET</Mono>
+                <Text style={{ fontFamily: MONO, fontSize: 24, fontWeight: '700', color: t.you, fontVariant: ['tabular-nums'] }}>
+                  ${myBudget.budget}
+                </Text>
+              </View>
+              <View>
+                <Mono size={8} tone="faint" track={0.12}>MAX BID</Mono>
+                <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, fontVariant: ['tabular-nums'], marginTop: 3 }}>
+                  ${myBudget.max_bid}
+                </Text>
+              </View>
+              {myBudget.committed > 0 && (
+                <View>
+                  <Mono size={8} tone="faint" track={0.12}>COMMITTED</Mono>
+                  <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.warn, fontVariant: ['tabular-nums'], marginTop: 3 }}>
+                    ${myBudget.committed}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flex: 1 }} />
+              {myRoster != null && (
+                <Pressable hitSlop={6} onPress={() => { tap(); setTab('teams'); setTeamView(myRoster); }}
+                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>MY TEAM →</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
           {/* auction lots — up to max_lots in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
@@ -500,9 +564,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               )}
             </View>
           )}
-          {auction && myBudget && (
+          {auction && (
             <Mono size={9} tone="faint" style={{ marginTop: 8 }}>
-              my budget ${myBudget.budget}{myBudget.committed > 0 ? ` · committed $${myBudget.committed}` : ''} · max new bid ${myBudget.max_bid} · {(st.lots ?? []).length}/{st.max_lots} lots open
+              {(st.lots ?? []).length}/{st.max_lots} lots open
             </Mono>
           )}
           {isCommish && (
@@ -720,9 +784,11 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
       {tab === 'teams' && (
         <Card>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            {(st.order ?? []).map((rid) => (
+            {/* my own seat wears a star and sorts first — "which one am I"
+                should never take a search (v0.352.0) */}
+            {[...(st.order ?? [])].sort((a, b) => (a === myRoster ? -1 : b === myRoster ? 1 : 0)).map((rid) => (
               <Chip key={rid} on={(teamView ?? myRoster) === rid} onPress={() => { tap(); setTeamView(rid); }}
-                label={`${teamName(rid) ?? `Team ${rid}`}${auction && st.budgets ? ` $${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}` : ''}`} />
+                label={`${rid === myRoster ? '★ ' : ''}${teamName(rid) ?? `Team ${rid}`}${auction && st.budgets ? ` $${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}` : ''}`} />
             ))}
           </View>
           {(() => {
@@ -838,6 +904,25 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         </Card>
       )}
     </ScrollView>
+
+    {/* the win banner — drops over everything, dismisses itself or on tap */}
+    {won && (() => {
+      const wp = poolBySlug.get(won.slug);
+      return (
+        <Pressable onPress={() => setWon(null)}
+          style={{ position: 'absolute', top: 16, left: 12, right: 12, backgroundColor: t.bg, borderWidth: 2, borderColor: t.you, borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 10 }}>
+          <Face slug={won.slug} pos={wp?.pos ?? '?'} size={46} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Mono size={9} tone="you" track={0.16} weight="700">🔨 SOLD — HE'S YOURS</Mono>
+            <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text, marginTop: 2 }}>{wp?.full_name ?? won.slug}</Text>
+          </View>
+          <Text style={{ fontFamily: MONO, fontSize: 22, fontWeight: '700', color: t.you, fontVariant: ['tabular-nums'] }}>
+            ${won.price}
+          </Text>
+        </Pressable>
+      );
+    })()}
+    </View>
   );
 }
 

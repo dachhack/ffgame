@@ -210,4 +210,48 @@ begin
     'ae5f no auction deadline can ever land inside the quiet hours');
 end $$;
 
+-- ── 6. pacing: the AI's appetite shrinks with its wallet (0225) ──────────────
+-- The founder's Contract Test auction ended with every seat at $0–6 and
+-- benches full of $1 players: the resolver handed ai_lot_willingness the
+-- league's STARTING budget, so a seat that had spent 80% still bid like it
+-- was flush. 0225 passes league_membership.draft_budget instead. Proved the
+-- same way §4 proves second price: the jitter is deterministic, so the probe
+-- asks the willingness function at BOTH wallet sizes and asserts the resolver
+-- settled at exactly the half-wallet number + 1 — not the full-wallet one.
+do $$
+declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; lot uuid; wfull int; whalf int;
+begin
+  perform probe_as('a');
+  r := create_native_league('Pace Yourself', '2026', 2, 5, 60, 'auction', 200);
+  perform assert_ok(r, 'ae6a create — seat 2 unclaimed, so it is the AI');
+  lid := (r ->> 'league_id')::uuid;
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'p-rb' || i, 'full', 'RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ae6b seed');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), 'ae6c start');
+
+  -- Halve the AI's wallet, as winning a star would have.
+  update league_membership set draft_budget = 100 where league_id = lid and sleeper_roster_id = 2;
+  wfull := ai_lot_willingness(lid, 2, 'p-rb1', 5, 200);
+  whalf := ai_lot_willingness(lid, 2, 'p-rb1', 5, 100);
+  perform assert_true(whalf < wfull, 'ae6d half the wallet, smaller appetite');
+
+  -- A opens at $1; the AI still counter-bids a bargain…
+  perform assert_ok(nominate(lid, 'p-rb1', 1), 'ae6e A opens at $1');
+  select id into lot from auction_lot where league_id = lid and slug = 'p-rb1';
+  perform resolve_lot_proxies(lid, lot);
+  perform assert_true((select roster_id from auction_lot where id = lot) = 2,
+    'ae6f a half-spent AI still fights for a bargain');
+
+  -- …but its ceiling is its WALLET's willingness. A's hidden max sits between
+  -- the two, and the lot must come back at whalf + 1 — the full-budget number
+  -- would have kept the lot with the AI entirely.
+  perform assert_true(whalf + 5 < wfull, 'ae6g the two ceilings are distinguishable');
+  perform assert_ok(set_lot_proxy(lid, 1, whalf + 5, lot), 'ae6h A bids between the ceilings');
+  perform resolve_lot_proxies(lid, lot);
+  perform assert_true((select roster_id from auction_lot where id = lot) = 1,
+    'ae6i THE POINT: the AI folds where its full-budget self would have kept bidding');
+  perform assert_true((select bid from auction_lot where id = lot) = whalf + 1,
+    'ae6j and the price is the SHRUNK willingness + 1, to the dollar');
+end $$;
+
 select 'ALL AUCTION-ENGINE PROBES PASSED' as result;

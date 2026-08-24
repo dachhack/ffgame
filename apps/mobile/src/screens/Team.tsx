@@ -18,6 +18,7 @@ import {
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
+  leagueContracts, type ContractDeal,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
@@ -202,7 +203,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
  *      player, two taps to confirm, and the same button wherever you found him.
  */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb }: {
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -214,6 +215,10 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb }: {
   onSlot?: () => void;
   /** What an empty one is offering — "TAXI SQUAD", "INJURED RESERVE". */
   slotVerb?: string;
+  /** Contract leagues (v0.352.0): the player's deal, shown on the row —
+   *  a roster in a cap league is a payroll, and hiding the money made a
+   *  waiver signing look free. */
+  deal?: ContractDeal;
 }) {
   const posC = badgePos ? t.pos[badgePos as keyof typeof t.pos] : undefined;
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
@@ -245,6 +250,14 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb }: {
               <FlagChip slug={p.slug} size={7.5} />
             </View>
           </Pressable>
+          {deal && (
+            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+              <Text style={{ fontFamily: MONO, fontSize: fs(10.5), fontWeight: '700', color: t.text, fontVariant: ['tabular-nums'] }}>
+                ${deal.salary}
+              </Text>
+              <Mono size={8} tone="faint">{deal.tagged ? '⭐ tag' : `${deal.years}yr`}</Mono>
+            </View>
+          )}
         </>
       ) : onSlot ? (
         <Pressable disabled={busy} onPress={onSlot} hitSlop={4} style={{ flex: 1, opacity: busy ? 0.5 : 1 }}>
@@ -324,6 +337,20 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   const skew = useRef(0);
 
+  // ── CONTRACTS ON THE ROSTER (v0.352.0, founder: "Rosters also don't show
+  // anything about contracts and I was able to pick up a player from waivers
+  // for free essentially without a contract.") — the deals EXISTED (a waiver
+  // win signs at the FAAB bid, $1 minimum, for a year) but no roster surface
+  // said so. slug → deal, null until the league says it plays with contracts.
+  const [deals, setDeals] = useState<Map<string, ContractDeal> | null>(null);
+  const [salaryCap, setSalaryCap] = useState<number | null>(null);
+  const loadDeals = () => {
+    leagueContracts(leagueId).then((r) => {
+      setDeals(r.contracts ? new Map((r.deals ?? []).map((d) => [d.slug, d])) : null);
+      setSalaryCap(r.contracts ? r.salary_cap ?? null : null);
+    }).catch(() => {});
+  };
+
   const refresh = async () => {
     try {
       // Clearing due waiver claims first keeps this screen self-driving even
@@ -333,6 +360,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       if (tm.error) { setErr(friendlyError(tm.error)); return; }
       skew.current = Date.parse(tm.server_now) - Date.now();
       setTeam(tm); setRosters(r); setPool(p); setErr(null);
+      // A pickup just signed a street deal — the row's chip should say so on
+      // this refresh, not the next visit.
+      loadDeals();
     } catch (x) { setErr(friendlyError(x)); }
   };
   useEffect(() => {
@@ -636,6 +666,17 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             {POS_CAP_KEYS.map((k) => `${k} ${mine.filter((p) => p.pos === k).length}/${team.pos_caps![k] ?? '∞'}`).join(' · ')}
           </Mono>
         )}
+        {/* Contract league: what this roster costs, right where the roster is.
+            Deal salaries only — dead money, retained ghosts and IR relief live
+            on the league page's full cap sheet, and this line says so. */}
+        {deals && mine.length > 0 && myRoster != null && (() => {
+          const spend = mine.reduce((s, p) => s + (deals.get(p.slug)?.salary ?? 0), 0);
+          return (
+            <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>
+              📜 contracts ${spend}{salaryCap != null ? ` of $${salaryCap} cap` : ''} · full cap sheet on the league page
+            </Mono>
+          );
+        })()}
         {mine.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No players yet.</Mono>}
 
         {/* ── STARTERS ─────────────────────────────────────────────────────
@@ -650,7 +691,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             <Mono size={8} tone="faint" style={{ flex: 1 }} numberOfLines={1}>how your roster fits — set the lineup on ▦ MATCHUP</Mono>
           </View>
           {bySpot.starters.map((row, i) => (
-            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} />
+            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} />
           ))}
         </>)}
 
@@ -658,7 +699,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         {bySpot.bench.length > 0 && (<>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>BENCH ({bySpot.bench.length})</Mono>
           {bySpot.bench.map((p) => (
-            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} />
+            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} />
           ))}
         </>)}
 
@@ -671,7 +712,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </Mono>
           {bySpot.ir.map((p) => (
-            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} onSlot={() => moveToSpot(p.slug, 'active')} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t}
@@ -685,7 +726,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </Mono>
           {bySpot.taxi.map((p) => (
-            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} onSlot={() => moveToSpot(p.slug, 'active')} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
@@ -739,6 +780,11 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           PLAYER POOL ({free.length}){team.waiver_mode === 'faab' && team.my_faab != null ? ` · 💰 $${team.my_faab}` : ''}
           {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
         </Mono>
+        {deals && (
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
+            📜 every pickup signs a 1-yr deal against your cap — waiver wins at the bid, instant adds at the $1 street minimum
+          </Mono>
+        )}
         <TextInput value={q} onChangeText={setQ} placeholder="Search players or teams…" placeholderTextColor={t.faint}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -865,6 +911,13 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
         <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(14) }}>
           Highest bid wins when waivers clear; only the winner pays. $0 is a legal bid.
         </Mono>
+        {/* v0.352.0: the deal was always signed — now the claim SAYS so before
+            the bid goes in, instead of a player materialising salary-free. */}
+        {deals && (
+          <Mono size={8.5} tone="you" style={{ marginTop: 6, lineHeight: fs(14) }}>
+            📜 Contract league: if you win, your bid becomes his salary — ${Math.max(1, parseInt(bidDraft || '0', 10) || 0)} · 1 yr against your cap ($1 minimum).
+          </Mono>
+        )}
       </Overlay>
 
       {/* roster full → choose a drop for the pending add */}
