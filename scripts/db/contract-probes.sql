@@ -678,6 +678,27 @@ begin
   insert into native_roster (league_id, roster_id, slug) values (lid, 2, 'tl-p2');
   perform assert_true((select years from contract where league_id = lid and slug = 'tl-p2') = 2,
     'ct19i the next rookie signs at the new term');
+
+  -- ── 0232: the startup AUCTION cannot age a rookie ──────────────────────────
+  -- tl-p3 is a rookie (exp 0), tl-p4 a vet (exp 5): both won at auction.
+  perform assert_ok(set_rookie_years(lid, 4), 'ct19j back to the 4yr default');
+  update league_pool set exp = 0 where league_id = lid and slug = 'tl-p3';
+  update league_pool set exp = 5 where league_id = lid and slug = 'tl-p4';
+  -- the rookie lands on seat 2 (B, not the commissioner): the owner-facing
+  -- refusal is the assertion — the commissioner's always-correct escape
+  -- hatch is deliberate and stays.
+  insert into draft_pick (league_id, overall, round, roster_id, slug, price)
+  values (lid, 3, 2, 2, 'tl-p3', 7), (lid, 4, 2, 1, 'tl-p4', 9);
+  insert into native_roster (league_id, roster_id, slug) values (lid, 2, 'tl-p3'), (lid, 1, 'tl-p4');
+  perform assert_true((select (salary, years, acquired) = (7, 4, 'rookie') from contract
+      where league_id = lid and slug = 'tl-p3'),
+    'ct19k THE POINT: an auction-won rookie signs at his BID, on the rookie TERM, as a rookie deal');
+  perform assert_true((select (salary, years, acquired) = (9, 1, 'auction') from contract
+      where league_id = lid and slug = 'tl-p4'),
+    'ct19l a veteran''s auction deal is untouched');
+  perform probe_as('b');
+  perform assert_err(set_contract_years(lid, 'tl-p3', 2), 'rookie term',
+    'ct19m and his owner cannot assign the length — the rule holds it');
 end $$;
 
 select 'ALL CONTRACT PROBES PASSED' as result;
