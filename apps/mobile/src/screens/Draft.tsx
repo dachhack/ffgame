@@ -19,7 +19,7 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax,
+  leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
@@ -894,7 +894,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           )}
           {auction && queue.length > 0 && (
             <Mono size={8.5} tone="faint" style={{ lineHeight: 13, paddingBottom: 4 }}>
-              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max.
+              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max. Tap a player's mkt price to set it as your max in one tap.
             </Mono>
           )}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
@@ -913,6 +913,15 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 {p && <Face slug={p.slug} pos={p.pos} size={22} />}
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</Text>
                 {gone && <Mono size={8.5} tone="opp">TAKEN</Mono>}
+                {auction && !gone && myRoster != null && (() => {
+                  const mkt = auctionMarketValue(p?.rank, st.budget);
+                  return mkt != null && qMax[slug] !== mkt ? (
+                    <Pressable hitSlop={6}
+                      onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((d2) => ({ ...d2, [slug]: '' })); } }).catch(() => {}); }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>mkt ${mkt}</Text>
+                    </Pressable>
+                  ) : null;
+                })()}
                 {auction && !gone && myRoster != null && (
                   qMax[slug] != null ? (
                     <Pressable hitSlop={6}

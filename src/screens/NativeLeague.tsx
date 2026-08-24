@@ -23,7 +23,7 @@ import {
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
-  setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax,
+  setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, type PushTokenRow,
@@ -1491,7 +1491,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           {queue.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>Empty — tap Q on any player. If your clock runs out (or autodraft is on), your queue picks for you, in order, before best-available.</div>}
           {auction && queue.length > 0 && (
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 6 }}>
-              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max.
+              🕶 MAX bids for you even while you're away: the moment his lot opens — your nomination or anyone's — it becomes your hidden ceiling, answering rivals second-price style. You pay their bid + $1, never your max. Click a player's mkt price to set it as your max in one click.
             </div>
           )}
           {/* 0191: a pause is time for PEOPLE. A seat that asked not to be
@@ -1510,6 +1510,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
+                {auction && !gone && myRoster != null && (() => {
+                  const mkt = auctionMarketValue(p?.rank, st.budget);
+                  return mkt != null && qMax[slug] !== mkt ? (
+                    <button className="mono" title="one click sets your standing max to his market price — the value curve at his pool rank"
+                      onClick={() => { void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((dd) => ({ ...dd, [slug]: '' })); } }).catch(() => {}); }}
+                      style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '0 3px' }}>mkt ${mkt}</button>
+                  ) : null;
+                })()}
                 {auction && !gone && myRoster != null && (qMax[slug] != null ? (
                   <button className="mono" title="clear the standing max"
                     onClick={() => { void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}

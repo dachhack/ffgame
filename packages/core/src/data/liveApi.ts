@@ -1523,6 +1523,12 @@ export const isContractContinuity = (c: LeagueContinuity | string | null | undef
  *  Never shallower than the 15-spot standard, capped at 25 so a tiny league
  *  doesn't draft half the NFL. A default for the creation forms — an
  *  explicitly chosen size always wins. */
+/** The auction market price for a pool rank (v0.354.7): the same value
+ *  curve the auction AI bids and player_market_value serves —
+ *  budget × 0.34 × e^(−rank/45), $1 floor. Client-side so the queue can
+ *  offer one-tap market maxes without a round trip. */
+export const auctionMarketValue = (rank: number | null | undefined, budget: number | null | undefined): number | null =>
+  rank == null || !budget ? null : Math.max(1, Math.round(budget * 0.34 * Math.exp(-rank / 45)));
 export const contractRosterDepth = (teams: number, budget = 200): number => {
   const priced = Math.max(0, Math.floor(45 * Math.log((0.34 * budget) / 1.5)));
   return Math.min(25, Math.max(15, Math.ceil(priced / Math.max(2, teams))));
