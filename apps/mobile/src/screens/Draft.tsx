@@ -12,7 +12,7 @@
 // the acting seat is auto. That's what lets a phone-only league draft with no
 // worker awake — the room advances as long as ANYONE has it open.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
@@ -329,12 +329,35 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     tap();
     saveQueue(queue.includes(slug) ? queue.filter((s) => s !== slug) : [...queue, slug]);
   };
-  const moveQueue = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= queue.length) return;
-    const next = queue.slice(); [next[i], next[j]] = [next[j], next[i]];
-    saveQueue(next);
-  };
+  // Drag to reorder (v0.354.8, founder: "Let's have drag to change order in
+  // the queue in all versions") — the ⠿ handle owns the gesture, the screen's
+  // scroll is suspended while a row is in the air, and the drop index is pure
+  // arithmetic on the fixed row height.
+  const QROW_H = 44;
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const dragFrom = useRef<number | null>(null);
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const dragPan = (i: number) => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderGrant: () => { tap(); dragFrom.current = i; setDragIdx(i); dragY.setValue(0); },
+    onPanResponderMove: (_, g) => dragY.setValue(g.dy),
+    onPanResponderRelease: (_, g) => {
+      const from = dragFrom.current;
+      dragFrom.current = null; setDragIdx(null); dragY.setValue(0);
+      if (from == null) return;
+      const q = queueRef.current;
+      const to = Math.max(0, Math.min(q.length - 1, from + Math.round(g.dy / QROW_H)));
+      if (to === from) return;
+      const next = q.slice();
+      const [m] = next.splice(from, 1);
+      next.splice(to, 0, m);
+      saveQueue(next);
+    },
+    onPanResponderTerminate: () => { dragFrom.current = null; setDragIdx(null); dragY.setValue(0); },
+  });
 
   const act = (slug: string) => {
     // Assign mode makes the pick FOR the seat on the clock (0067's force pick
@@ -388,7 +411,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
 
   return (
     <View style={{ flex: 1 }}>
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} scrollEnabled={dragIdx == null} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
       {/* header: mode + state chips */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Display size={17}>⛏ Draft room</Display>
@@ -907,8 +930,12 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           {queue.map((slug, i) => {
             const p = poolBySlug.get(slug);
             const gone = taken.has(slug);
+            const lifted = dragIdx === i;
             return (
-              <View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: gone ? 0.45 : 1 }}>
+              <Animated.View key={slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: QROW_H, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: gone ? 0.45 : 1, transform: lifted ? [{ translateY: dragY }] : [], zIndex: lifted ? 10 : 0, elevation: lifted ? 6 : 0, backgroundColor: lifted ? t.bg : 'transparent' }}>
+                <View {...dragPan(i).panHandlers} hitSlop={8} style={{ width: 18, alignItems: 'center' }}>
+                  <Text style={{ color: lifted ? t.you : t.faint, fontSize: 13 }}>⠿</Text>
+                </View>
                 <Mono size={9} tone="faint" style={{ width: 16 }}>{i + 1}</Mono>
                 {p && <Face slug={p.slug} pos={p.pos} size={22} />}
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</Text>
@@ -924,11 +951,24 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                 })()}
                 {auction && !gone && myRoster != null && (
                   qMax[slug] != null ? (
-                    <Pressable hitSlop={6}
-                      onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
-                      style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>🕶 ${qMax[slug]} ✕</Text>
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      {([['▼', -1], ['▲', 1]] as const).map(([sym, dir]) => (
+                        <Pressable key={sym} hitSlop={6} onPress={() => {
+                          const step = (st.budget ?? 200) >= 500 ? 5 : 1;
+                          const v = Math.max(1, (qMax[slug] ?? 1) + dir * step);
+                          if (v === qMax[slug]) return;
+                          tap();
+                          void setQueueMax(leagueId, myRoster, slug, v).then((r) => { if (r.ok) setQMax((m) => ({ ...m, [slug]: v })); }).catch(() => {});
+                        }}>
+                          <Text style={{ fontFamily: MONO, fontSize: 10, color: t.dim }}>{sym}</Text>
+                        </Pressable>
+                      ))}
+                      <Pressable hitSlop={6}
+                        onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
+                        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>🕶 ${qMax[slug]} ✕</Text>
+                      </Pressable>
+                    </View>
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <TextInput value={qMaxDraft[slug] ?? ''} keyboardType="number-pad" placeholder="max" placeholderTextColor={t.faint}
@@ -949,10 +989,8 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     </View>
                   )
                 )}
-                <Pressable hitSlop={6} onPress={() => moveQueue(i, -1)}><Text style={{ color: t.dim, fontSize: 14 }}>↑</Text></Pressable>
-                <Pressable hitSlop={6} onPress={() => moveQueue(i, 1)}><Text style={{ color: t.dim, fontSize: 14 }}>↓</Text></Pressable>
                 <Pressable hitSlop={6} onPress={() => toggleQueue(slug)}><Text style={{ color: t.opp, fontSize: 13 }}>✕</Text></Pressable>
-              </View>
+              </Animated.View>
             );
           })}
         </Card>
