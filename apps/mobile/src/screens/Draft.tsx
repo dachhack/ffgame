@@ -538,6 +538,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     </Text>
                   )}
                 </View>
+                {/* the fuse (v0.354.10): the bell as a bar — full at a fresh
+                    window, gone at the gavel, refilled by any bid (a change
+                    resets the clock). */}
+                {left != null && (
+                  <View style={{ height: 4, borderRadius: 2, backgroundColor: t.sh, marginTop: 8, overflow: 'hidden' }}>
+                    <View style={{ height: '100%', width: `${Math.max(0, Math.min(100, (left / Math.max(1, st.lot_seconds)) * 100))}%`, backgroundColor: left <= 5 ? t.opp : t.you, borderRadius: 2 }} />
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   {quick.map((a) => (
                     <Pressable key={a} disabled={busy}
@@ -945,7 +953,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                   return mkt != null && qMax[slug] !== mkt ? (
                     <Pressable hitSlop={6}
                       onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((d2) => ({ ...d2, [slug]: '' })); } }).catch(() => {}); }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>mkt ${mkt}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>${mkt}</Text>
                     </Pressable>
                   ) : null;
                 })()}

@@ -1142,6 +1142,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                     </div>
                   )}
                 </div>
+                {/* the fuse (v0.354.10): the bell as a bar — full at a fresh
+                    window, gone at the gavel, and it REFILLS on any bid
+                    because a change resets the clock. */}
+                {left != null && (
+                  <div style={{ height: 4, borderRadius: 2, background: 'var(--bd)', marginTop: 8, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (left / Math.max(1, st.lot_seconds)) * 100))}%`, background: left <= 5 ? 'var(--opp)' : 'var(--you)', transition: 'width 0.45s linear', borderRadius: 2 }} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   {quick.map((a) => (
                     <button key={a} onClick={() => myRoster != null && run(() => placeBid(leagueId, myRoster, a, lot.id))} disabled={busy}
@@ -1528,7 +1536,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   return mkt != null && qMax[slug] !== mkt ? (
                     <button className="mono" title="one click sets your standing max to his market price — the value curve at his pool rank"
                       onClick={() => { void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((dd) => ({ ...dd, [slug]: '' })); } }).catch(() => {}); }}
-                      style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '0 3px' }}>mkt ${mkt}</button>
+                      style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '0 3px' }}>${mkt}</button>
                   ) : null;
                 })()}
                 {auction && !gone && myRoster != null && (qMax[slug] != null ? (
