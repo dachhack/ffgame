@@ -1069,6 +1069,20 @@ export interface MetriclessAudit {
 export const adminMetriclessPicks = (limit = 200) =>
   rpc<MetriclessAudit>('admin_metricless_picks', { p_limit: limit });
 
+/** One market_board refresh run (0237): what the pull applied and what moved. */
+export interface MarketRefreshRun {
+  id: number; as_of: string; applied_at: string; players: number;
+  entered: { slug: string; rank: number }[];
+  dropped: { slug: string; rank: number }[];
+  movers: { slug: string; from: number; to: number }[];
+  note?: string | null;
+}
+export interface MarketReport { ok: boolean; error?: string; board_size?: number; runs?: MarketRefreshRun[]; }
+/** Super admin: the market-refresh history — success of each run + its
+ *  significant changes (entered / dropped / 15-spot movers in the top 200). */
+export const adminMarketReport = (limit = 12) =>
+  rpc<MarketReport>('admin_market_report', { p_limit: limit });
+
 export const adminHealth = () => rpc<AdminHealth>('admin_health');
 export const adminSetPicks = (matchupId: string, appUserId: string, rows: { game_window: string; roster_slot: string; player_slug: string; metric_id: string }[]) =>
   rpc<{ ok: boolean; count?: number; error?: string }>('admin_set_picks', { p_matchup_id: matchupId, p_app_user_id: appUserId, p_rows: rows });
