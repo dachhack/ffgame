@@ -1138,6 +1138,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
 
       {st.status === 'live' && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
+          {/* MY WALLET, FIRST (v0.354.12, founder: "Budget needs to be more
+              visible") — the web's most-consulted number was a 9.5px footer;
+              now it leads the card at glance size, like the app. */}
+          {auction && myBudget && (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, borderBottom: '1px solid var(--bd)', paddingBottom: 10, marginBottom: 10 }}>
+              <div>
+                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>MY BUDGET</div>
+                <div className="grotesk" style={{ fontSize: 28, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>${myBudget.budget}</div>
+              </div>
+              <div>
+                <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>MAX BID</div>
+                <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${myBudget.max_bid}</div>
+              </div>
+              {myBudget.committed > 0 && (
+                <div>
+                  <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>COMMITTED</div>
+                  <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>${myBudget.committed}</div>
+                </div>
+              )}
+              <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>{(st.lots ?? []).length}/{st.max_lots} lots open</div>
+            </div>
+          )}
           {/* auction lots — up to max_lots run in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
@@ -1234,11 +1256,6 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               )}
             </div>
           )}
-          {auction && myBudget && (
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>
-              my budget ${myBudget.budget}{myBudget.committed > 0 ? ` · committed $${myBudget.committed}` : ''} · max new bid ${myBudget.max_bid} · {(st.lots ?? []).length}/{st.max_lots} lots open
-            </div>
-          )}
           {/* commish controls */}
           {isCommish && (
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
@@ -1306,7 +1323,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
         <div style={{ ...card, padding: 8, flex: '1.3 1 460px', minWidth: 320, maxHeight: 560, overflow: 'auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${teams}, 88px)`, gap: 4, width: 'max-content' }}>
             {(st.order ?? []).map((rid) => (
-              <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 2px 6px' }}>
+              <div key={`bh-${rid}`} style={{ position: 'sticky', top: 0, zIndex: 2, background: rid === myRoster ? 'color-mix(in srgb, var(--you) 14%, var(--surface))' : 'var(--surface)', display: 'flex', alignItems: 'center', gap: 5, padding: '2px 4px 6px', borderRadius: 6, boxShadow: rid === myRoster ? 'inset 0 -2px 0 var(--you)' : 'none' }}>
                 <Avatar name={teamName(rid) ?? `Team ${rid}`} src={byRoster[rid]?.avatar} size={20} />
                 <div style={{ minWidth: 0 }}>
                   <div className="mono" style={{ fontSize: 8, fontWeight: 700, color: rid === myRoster ? 'var(--you)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 56 }}>{teamName(rid) ?? `Team ${rid}`}</div>
@@ -1336,8 +1353,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                     style={{
                     height: 50, borderRadius: 6, padding: '4px 6px', boxSizing: 'border-box', overflow: 'hidden',
                     cursor: canEdit ? 'pointer' : undefined,
-                    background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : 'var(--bg)',
-                    border: `1px solid ${overallHere ? 'var(--you)' : 'var(--bd)'}`,
+                    background: cell ? `var(--pos-${pl?.pos ?? 'WR'}-bg)` : rid === myRoster ? 'color-mix(in srgb, var(--you) 7%, var(--bg))' : 'var(--bg)',
+                    border: `1px solid ${overallHere ? 'var(--you)' : rid === myRoster ? 'color-mix(in srgb, var(--you) 45%, var(--bd))' : 'var(--bd)'}`,
                     boxShadow: overallHere ? '0 0 8px color-mix(in srgb, var(--you) 45%, transparent)' : 'none',
                   }}>
                     {cell ? (
