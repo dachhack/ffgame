@@ -646,6 +646,17 @@ begin
     'ct18g the positional tag price inhales the overpay');
   perform assert_true(player_market_value(lid, 'fp-p150') <= 2,
     'ct18h ...while HIS market stays what his rank is worth');
+
+  -- 0236: the market BREATHES — a refreshed board rank overrides the pool's
+  -- frozen draft-day rank, and a player the board doesn't carry falls back.
+  insert into market_board (slug, rank) values ('fp-p150', 1);
+  perform assert_true(player_market_value(lid, 'fp-p150') between 12 and 14,
+    'ct18i a market refresh moves HIS price: board rank 1 beats pool rank 150');
+  perform assert_true(player_market_value(lid, 'fp-p1') between 12 and 14,
+    'ct18j a player off the board keeps his pool-rank curve');
+  delete from market_board where slug = 'fp-p150';
+  perform assert_true(player_market_value(lid, 'fp-p150') <= 2,
+    'ct18k the fallback returns when the board row goes');
 end $$;
 
 -- ── §19. rookie deals run the league's own term (0231) ───────────────────────
