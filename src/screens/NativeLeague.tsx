@@ -1015,9 +1015,18 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     // Assign mode makes the pick FOR the seat on the clock (0067's force pick
     // has always taken a slug — until now nothing called it with one).
     if (assigning) { run(() => commishForcePick(leagueId, slug)); return; }
-    if (!myTurn) return;   // auction: on_clock is null while the room is at lot capacity
-    if (auction) run(() => nominate(leagueId, slug, 1));
-    else run(() => makeDraftPick(leagueId, slug));
+    // The auction gate used to be a silent return — a paused room or a full
+    // lot board made NOM a dead button (v0.354.13, founder: "Everytime I
+    // click nom, nothing happens"). Name the reason instead.
+    if (auction) {
+      if (st?.paused) { setErr('The draft is paused — nominations resume when the commissioner hits ▶ RESUME.'); return; }
+      if (st?.on_clock == null) { setErr(`All ${st?.max_lots ?? ''} lots are on the block — a new nomination opens at the next bell.`); return; }
+      if (st.on_clock !== myRoster) { setErr(`It's ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}'s nomination, not yours.`); return; }
+      run(() => nominate(leagueId, slug, 1));
+      return;
+    }
+    if (!myTurn) return;   // snake: the board's glowing cell already says whose pick it is
+    run(() => makeDraftPick(leagueId, slug));
   };
 
   // Mock rooms are disposable — delete leaves the room, so don't refresh a
