@@ -538,6 +538,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
                     </Text>
                   )}
                 </View>
+                {/* the fuse (v0.354.10): the bell as a bar — full at a fresh
+                    window, gone at the gavel, refilled by any bid (a change
+                    resets the clock). */}
+                {left != null && (
+                  <View style={{ height: 4, borderRadius: 2, backgroundColor: t.sh, marginTop: 8, overflow: 'hidden' }}>
+                    <View style={{ height: '100%', width: `${Math.max(0, Math.min(100, (left / Math.max(1, st.lot_seconds)) * 100))}%`, backgroundColor: left <= 5 ? t.opp : t.you, borderRadius: 2 }} />
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   {quick.map((a) => (
                     <Pressable key={a} disabled={busy}
