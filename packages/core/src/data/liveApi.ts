@@ -1963,7 +1963,17 @@ export interface LeagueContracts {
   dead?: { roster_id: number; slug: string; amount: number; years_left: number; note: string | null }[];
   tenders?: RfaTenderRow[];
   payrolls?: { roster_id: number; team: string | null; payroll: number; cap?: number; cap_adjust?: number }[];
+  /** 0229 lock-to-play: my seat's lock, the auto-lock deadline, every seat's
+   *  state. `locked` above is the CALLER's assignability, not the league's. */
+  my_locked?: boolean;
+  lock_deadline?: string | null;
+  locks?: { roster_id: number; locked: boolean }[];
 }
+/** 0229: confirm your lengths as written — the wire opens for your team when
+ *  you lock (or at the league deadline, when unset deals stand at 1 year). */
+export const lockContracts = (leagueId: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; locked?: boolean; deals?: number }>('lock_contracts',
+    { p_league_id: leagueId, p_roster_id: rosterId });
 /** The cap sheet — rules, every deal, per-team payrolls (any member). */
 export const leagueContracts = (leagueId: string) => rpc<LeagueContracts>('league_contracts', { p_league_id: leagueId });
 /** Commissioner: switch the cap on at $cap (with an optional max length,

@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import {
   advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
-  leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve,
+  leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   guillotineTick, guillotineState, vampireState, vampireSteal, commishRuleSteal,
   type GuillotineState, type VampireState,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
@@ -161,6 +161,18 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
         ${st.salary_cap} cap · deals up to {st.years_max}yr · {deals.length} signed
         {offseason ? ' · OFFSEASON — tags, extensions & RFA are live' : ''}
       </Mono>
+      {/* ── 0229 LOCK-TO-PLAY (founder: "teams can make roster moves if they
+          'lock' all their contracts") — after the room closes, the wire stays
+          shut for a team until its manager confirms the lengths as written. */}
+      {myRoster != null && !st.my_locked && st.lock_deadline != null && Date.parse(st.lock_deadline) > Date.now() && (
+        <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 7, padding: 10, gap: 8 }}>
+          <Mono size={9} tone="warn" style={{ lineHeight: 14 }}>
+            🔒 Waivers & free agency are closed for your team until you lock your contract lengths. Set each deal below, then lock. Unset deals stay 1 year — everything auto-locks {new Date(st.lock_deadline).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+          </Mono>
+          <PrimaryButton label="🔒 LOCK MY CONTRACTS" disabled={busy}
+            onPress={() => { tap(); void act(() => lockContracts(leagueId, myRoster), '✓ locked — your wire is open'); }} />
+        </View>
+      )}
       {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
       <View style={{ marginTop: 8 }}>
         {(st.payrolls ?? []).map((p) => {
@@ -182,6 +194,9 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                   </Text>
                   {!!p.cap_adjust && <Mono size={7.5} tone="faint">cap {p.cap_adjust > 0 ? '+' : ''}${p.cap_adjust} by trade</Mono>}
                 </View>
+                {(st.locks ?? []).some((l) => l.roster_id === p.roster_id && !l.locked) && (
+                  <Mono size={8} tone="warn">🔓</Mono>
+                )}
                 <Mono size={9.5} weight="700" tone={room < 0 ? 'opp' : undefined} style={{ textAlign: 'right' }}>${p.payroll}/${cap}</Mono>
                 <Mono size={8.5} tone={room < 0 ? 'opp' : 'faint'} style={{ width: 58, textAlign: 'right' }}>
                   {room < 0 ? `$${-room} over` : `$${room} room`}
