@@ -112,6 +112,23 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
 // draft room is open, YOUR deals carry a length picker; in the OFFSEASON your
 // expiring deals grow the front-office row — 🏷 TAG, ⤴ EXTEND, 🪧 TENDER —
 // and open RFA tenders take rival bids and the owner's match-or-walk.
+/** The cap sheet's compact chip (v0.354.6, founder: "These chips are a bit
+ *  of a mess. we could make them smaller and aligned instead of wrapping") —
+ *  the standard Chip at 15 deals × 9 chips wrapped into porridge. This one
+ *  is sized so a deal's whole control set sits on ONE row each, and the
+ *  fixed-width row label keeps every deal's chips in the same columns. */
+function Mini({ label, on, disabled, onPress }: { label: string; on?: boolean; disabled?: boolean; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable disabled={disabled} onPress={onPress} hitSlop={4}
+      style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, opacity: disabled ? 0.5 : 1 }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const CAP_ROW_LABEL_W = 84;
+
 export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: string; myRoster: number | null; isCommish?: boolean }) {
   const t = useTheme();
   const [st, setSt] = useState<LeagueContracts | null>(null);
@@ -228,29 +245,33 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                       <Mono size={7.5} tone="faint">${d.retained} of ${d.salary} retained by a former team</Mono>
                     )}
                     {pickable && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2 }}>
-                        <LabelInfo label="LENGTH" title="Contract length"
-                          info={'1YR is an expiring deal — after this season he walks unless tagged, extended or tendered. Expiring deals cut free: no dead money.\n\nA 2–4 year deal carries into next season at a year less, but cutting it early leaves part of the salary as dead money on your cap for the deal\u2019s remaining life (the % is a league setting).\n\nLonger deals are commitment: cheaper to keep, costlier to escape.'} />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, marginBottom: 1 }}>
+                        <View style={{ width: CAP_ROW_LABEL_W }}>
+                          <LabelInfo label="LENGTH" title="Contract length"
+                            info={'1YR is an expiring deal — after this season he walks unless tagged, extended or tendered. Expiring deals cut free: no dead money.\n\nA 2–4 year deal carries into next season at a year less, but cutting it early leaves part of the salary as dead money on your cap for the deal\u2019s remaining life (the % is a league setting).\n\nLonger deals are commitment: cheaper to keep, costlier to escape.'} />
+                        </View>
                         {Array.from({ length: yearsMax }, (_, i) => i + 1).map((y) => (
-                          <Chip key={y} label={`${y}YR`} on={d.years === y} disabled={busy}
+                          <Mini key={y} label={`${y}YR`} on={d.years === y} disabled={busy}
                             onPress={() => { tap(); void act(() => setContractYears(leagueId, d.slug, y)); }} />
                         ))}
                       </View>
                     )}
                     {frontOffice && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, marginBottom: 2, flexWrap: 'wrap' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, marginBottom: 2 }}>
+                        <View style={{ width: CAP_ROW_LABEL_W }}>
                         <LabelInfo label="KEEP HIM" title="The front office"
-                          info={'Three ways to keep an expiring player, all offseason-only:\n\n\ud83c\udff7 TAG — one per team per season. Signs him for one more year at the top-5 positional salary average (the NFL\u2019s own tag formula) or your salary plus the league\u2019s raise %, whichever is higher. Star money for star players.\n\n\u2934 EXTEND — 1\u20133 more years at a discount of HIS market (the value curve at his pool rank). Locking a bargain in before he reaches the open market is the whole play.\n\n\ud83e\udea7 TENDER — restricted free agency: rivals bid a salary and length, and you keep the right to match their best offer exactly, or let him walk with it.'} />
+                          info={'Three ways to keep an expiring player, all offseason-only:\n\n\ud83c\udff7 TAG — one per team per season. Signs him for one more year at the top-5 positional salary average (the NFL\u2019s own tag formula) or your salary plus the league\u2019s raise %, whichever is higher. Star money for star players.\n\n\u2934 EXTEND — 1\u20133 more years at a discount of HIS market (the value curve at his pool rank). Locking a bargain in before he reaches the open market is the whole play.\n\n\ud83e\udea7 RFA — tender him to restricted free agency: rivals bid a salary and length, and you keep the right to match their best offer exactly, or let him walk with it.'} />
+                        </View>
                         {!myTagUsed && (
-                          <Chip label="🏷 TAG" disabled={busy}
+                          <Mini label="🏷 TAG" disabled={busy}
                             onPress={() => { tap(); void act(() => franchiseTag(leagueId, d.slug), `✓ ${nameOf(d.slug)} tagged`); }} />
                         )}
                         {!tendered && [1, 2, 3].map((y) => (
-                          <Chip key={y} label={`⤴ EXT ${y}YR`} disabled={busy}
+                          <Mini key={y} label={`+${y}YR`} disabled={busy}
                             onPress={() => { tap(); void act(() => extendContract(leagueId, d.slug, y), `✓ extended ${y}yr at ${rules?.ext_discount_pct ?? 85}% of market`); }} />
                         ))}
                         {rules?.rfa && !tendered && (
-                          <Chip label="🪧 TENDER" disabled={busy}
+                          <Mini label="🪧 RFA" disabled={busy}
                             onPress={() => { tap(); void act(() => rfaTender(leagueId, d.slug), `✓ ${nameOf(d.slug)} tendered to RFA`); }} />
                         )}
                       </View>
