@@ -1194,6 +1194,25 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: 'auto' }}>{(st.lots ?? []).length}/{st.max_lots} lots open</div>
             </div>
           )}
+          {/* THE ROOM'S WALLETS (v0.355.5, founder: "need an easy way to have
+              the remaining budgets of all other teams handy") — every rival's
+              remaining money under my own strip, in seat order so nothing
+              moves. Hover a chip for their max bid and open spots. */}
+          {auction && (st.budgets ?? []).length > 1 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: 10, marginBottom: 10 }}>
+              {(st.order ?? []).map((rid) => {
+                const b = (st.budgets ?? []).find((x) => x.roster_id === rid);
+                if (!b || rid === myRoster) return null;
+                return (
+                  <span key={rid} className="mono" title={`max bid $${b.max_bid} · ${b.spots_left} spot${b.spots_left === 1 ? '' : 's'} open`}
+                    style={{ fontSize: 10, border: '1px solid var(--bd)', borderRadius: 5, padding: '4px 8px', color: 'var(--dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {teamName(rid) ?? `Team ${rid}`} <b style={{ color: 'var(--text)' }}>${b.budget}</b>
+                    {b.committed > 0 && <span style={{ color: 'var(--warn)' }}> −${b.committed}</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {/* auction lots — up to max_lots run in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);

@@ -527,6 +527,28 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               )}
             </View>
           )}
+          {/* THE ROOM'S WALLETS (v0.355.5, founder: "need an easy way to have
+              the remaining budgets of all other teams handy") — every rival's
+              remaining money under my own strip, in seat order so nothing
+              moves; a warn −$n marks money they have riding on open lots. */}
+          {auction && (st.budgets ?? []).length > 1 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, paddingBottom: 10, marginBottom: 10 }}>
+              {(st.order ?? []).map((rid) => {
+                const b = (st.budgets ?? []).find((x) => x.roster_id === rid);
+                if (!b || rid === myRoster) return null;
+                return (
+                  <Pressable key={rid} hitSlop={4} onPress={() => { tap(); setTab('teams'); setTeamView(rid); }}
+                    style={{ flexDirection: 'row', gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: t.dim, maxWidth: 110 }}>{teamName(rid) ?? `Team ${rid}`}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.text, fontVariant: ['tabular-nums'] }}>${b.budget}</Text>
+                    {b.committed > 0 && (
+                      <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.warn, fontVariant: ['tabular-nums'] }}>−${b.committed}</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
           {/* auction lots — up to max_lots in parallel, each with its own bell */}
           {auction && (st.lots ?? []).map((lot, li) => {
             const lp = poolBySlug.get(lot.slug);
