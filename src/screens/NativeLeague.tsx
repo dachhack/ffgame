@@ -974,10 +974,17 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   };
   const toggleQueue = (slug: string) =>
     saveQueue(queue.includes(slug) ? queue.filter((s) => s !== slug) : [...queue, slug]);
-  const moveQueue = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= queue.length) return;
-    const next = queue.slice(); [next[i], next[j]] = [next[j], next[i]];
+// Drag to reorder (v0.354.8, founder: "Let's have drag to change order in
+  // the queue in all versions") — HTML5 drag & drop; the row is the handle.
+  const dragFrom = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const dropQueue = (to: number) => {
+    const from = dragFrom.current;
+    dragFrom.current = null; setDragOver(null);
+    if (from == null || from === to) return;
+    const next = queue.slice();
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
     saveQueue(next);
   };
 
@@ -1505,7 +1512,13 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             const p = poolBySlug.get(slug);
             const gone = taken.has(slug);
             return (
-              <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', opacity: gone ? 0.45 : 1 }}>
+              <div key={slug} draggable
+                onDragStart={() => { dragFrom.current = i; }}
+                onDragOver={(ev) => { ev.preventDefault(); if (dragOver !== i) setDragOver(i); }}
+                onDrop={() => dropQueue(i)}
+                onDragEnd={() => { dragFrom.current = null; setDragOver(null); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: dragOver === i ? '2px solid var(--you)' : '1px solid var(--bd)', opacity: gone ? 0.45 : 1, cursor: 'grab' }}>
+                <span className="mono" title="drag to reorder" style={{ fontSize: 11, color: 'var(--faint)', width: 14, cursor: 'grab' }}>⠿</span>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 18 }}>{i + 1}</span>
                 {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
@@ -1519,11 +1532,23 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   ) : null;
                 })()}
                 {auction && !gone && myRoster != null && (qMax[slug] != null ? (
-                  <button className="mono" title="clear the standing max"
-                    onClick={() => { void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
-                    style={{ ...linkBtn, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '2px 6px', fontSize: 9.5, fontWeight: 700 }}>
-                    {'🕶 $'}{qMax[slug]} ✕
-                  </button>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    {([['▼', -1], ['▲', 1]] as const).map(([sym, dir]) => (
+                      <button key={sym} className="mono" title={dir > 0 ? 'raise the standing max' : 'lower the standing max'}
+                        onClick={() => {
+                          const step = (st.budget ?? 200) >= 500 ? 5 : 1;
+                          const v = Math.max(1, (qMax[slug] ?? 1) + dir * step);
+                          if (v === qMax[slug]) return;
+                          void setQueueMax(leagueId, myRoster, slug, v).then((r) => { if (r.ok) setQMax((m) => ({ ...m, [slug]: v })); }).catch(() => {});
+                        }}
+                        style={{ ...linkBtn, fontSize: 9, color: 'var(--dim)', padding: '2px 3px' }}>{sym}</button>
+                    ))}
+                    <button className="mono" title="clear the standing max"
+                      onClick={() => { void setQueueMax(leagueId, myRoster, slug, null).then((r) => { if (r.ok) setQMax((m) => { const n = { ...m }; delete n[slug]; return n; }); }).catch(() => {}); }}
+                      style={{ ...linkBtn, color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '2px 6px', fontSize: 9.5, fontWeight: 700 }}>
+                      {'🕶 $'}{qMax[slug]} ✕
+                    </button>
+                  </span>
                 ) : (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <input value={qMaxDraft[slug] ?? ''} placeholder="max" className="mono"
@@ -1541,8 +1566,6 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                     )}
                   </span>
                 ))}
-                <button onClick={() => moveQueue(i, -1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↑</button>
-                <button onClick={() => moveQueue(i, 1)} className="mono" style={{ ...linkBtn, padding: '0 3px' }}>↓</button>
                 <button onClick={() => toggleQueue(slug)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '0 3px' }}>✕</button>
               </div>
             );
