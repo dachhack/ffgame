@@ -34,6 +34,7 @@ setSlugMetaOverrides([
   { slug: 'new-arrival-lb', pos: 'LB', team: 'CLE' },     // same, on defense
   { slug: 'pidless-giant', pos: 'WR', team: 'NYG' },      // old data: no play ids
   { slug: 'pidless-stranger', pos: 'WR', team: 'SEA' },
+  { slug: 'collider', pos: 'QB', team: 'GB' },            // nflverse ids restart per game: one of his collides
 ]);
 // The NYG@MIA feed knows plays 1-6; plays 100+ belong to some other game.
 setLiveGameFeed(WEEK, feedRowsToWeek([{
@@ -48,6 +49,11 @@ setLivePlays(WEEK, {
   'new-arrival-lb': [{ c: 60, pid: 3, k: 'tackle', y: 0, td: 0, ca: 1, tg: 0 }], // on NYG's snap
   'pidless-giant': [{ c: 60, k: 'rush', y: 12, td: 0, ca: 1, tg: 0 }],
   'pidless-stranger': [{ c: 60, k: 'rush', y: 12, td: 0, ca: 1, tg: 0 }],
+  // Baked nflverse play ids are only unique WITHIN a game — this stranger's
+  // ids 3, 200, 201 are from HIS game, and 3 numerically collides with a
+  // NYG@MIA play. Before v0.352.3 "any pid matches" seated him (and, at
+  // scale, the whole pool: the founder's seventeen-QB SEA@TEN sheet).
+  'collider': [rush(10, 3), rush(40, 200), rush(70, 201)],
 });
 
 const box = gameBoxScore(WEEK, 'MIA', 'NYG', 3600);
@@ -64,6 +70,8 @@ ok(awaySlugs.includes('pidless-giant'),
   'pid-less data keeps the old team rule — history does not vanish for lacking ids');
 ok(!homeSlugs.includes('pidless-stranger') && !awaySlugs.includes('pidless-stranger'),
   'pid-less AND wrong-team still excludes (the old rule, still standing where ids are absent)');
+ok(!homeSlugs.includes('collider') && !awaySlugs.includes('collider'),
+  'v0.352.3: a numeric pid collision is not membership — MOST of his plays must be this game\'s, not any');
 
 // No feed installed at all → membership is unknowable → pure team rule.
 clearLiveGameFeeds();
