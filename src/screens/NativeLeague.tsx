@@ -16,7 +16,7 @@ import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { statsForSlug } from '@drip/core/data/players';
 import {
-  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode,
+  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode, contractRosterDepth,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, addFreeAgent, setRosterSpot,
@@ -187,7 +187,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // limits. Classic: 15 (a starting lineup plus a real bench) and NO position
   // limits, because a classic league's shape is its starting-lineup spec —
   // capping the roster too would be two answers to one question.
-  const rounds = game === 'classic' ? 15 : 12;
+  // Contract types draft DEEP (v0.352.0): the roster covers everyone the AI
+  // market prices above the $1 floor at THIS budget, so startable players
+  // can't fall through to free street deals.
+  const rounds = contractType ? contractRosterDepth(teams, budget) : game === 'classic' ? 15 : 12;
   const caps: PosCaps | null = game === 'classic'
     ? null
     : capsToPosCaps({ QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
@@ -323,7 +326,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                 : continuity === 'keeper'
                   ? `Each team carries ${keepN} player${keepN === 1 ? '' : 's'} into next season and redrafts the rest.`
                   : continuity === 'contract'
-                    ? 'A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary. You assign each deal’s length (1–4 years) during the draft; waivers sign at their FAAB bid, free agents at $1, and the cap holds all season.'
+                    ? `A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary. You assign each deal’s length (1–4 years) during the draft. Preset: FAAB waivers (the bid signs the contract), free agents at $1, and a deep ${contractRosterDepth(teams, budget)}-spot roster so everyone worth over $1 gets drafted.`
                     : continuity === 'contract_dynasty'
                       ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing 3-year scale deals — and three seasons of tradeable picks dealt from day one.`
                       : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}

@@ -1514,6 +1514,19 @@ export const isDynastyContinuity = (c: LeagueContinuity | string | null | undefi
   c === 'dynasty' || c === 'contract_dynasty';
 export const isContractContinuity = (c: LeagueContinuity | string | null | undefined) =>
   c === 'contract' || c === 'contract_dynasty';
+/** Contract leagues preset a DEEP roster (v0.352.0, founder: "auto set the
+ *  benches deep. We want anyone who should have a salary over $1 to get
+ *  drafted in the auction."). The auction AI prices rank r at
+ *  budget × 0.34 × e^(−r/45), so the players worth $2+ number
+ *  45·ln(0.34·budget/1.5) — split across the seats, that is the depth at
+ *  which the drafted pool and the above-minimum market are the same set.
+ *  Never shallower than the 15-spot standard, capped at 25 so a tiny league
+ *  doesn't draft half the NFL. A default for the creation forms — an
+ *  explicitly chosen size always wins. */
+export const contractRosterDepth = (teams: number, budget = 200): number => {
+  const priced = Math.max(0, Math.floor(45 * Math.log((0.34 * budget) / 1.5)));
+  return Math.min(25, Math.max(15, Math.ceil(priced / Math.max(2, teams))));
+};
 export interface NativeCreateResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; invite_code?: string; game_mode?: 'drip' | 'classic'; dynasty?: boolean; continuity?: LeagueContinuity; }
 /** Per-position roster limits (0071). null = uncapped. Absent blob = legacy
  *  defaults (QB 3, TE 3, K 1, D/ST 1, RB/WR uncapped). Enforced server-side

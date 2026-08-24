@@ -456,4 +456,33 @@ begin
     's13u the carried payroll already spent part of seat 1''s money');
 end $$;
 
+-- ── §15. contract rooms preset FAAB (0226) ───────────────────────────────────
+-- In a contract league the winning waiver bid IS the signing salary, so the
+-- preset lands waiver_mode='faab' with the cap as the season budget — but a
+-- wire the commissioner already chose is never overwritten.
+do $$
+declare lid uuid; r jsonb;
+begin
+  perform probe_as('a');
+  -- fresh contract league → FAAB rides in, budget = cap
+  r := create_native_league('Bid To Sign', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
+  perform assert_ok(r, 'ct15a create contract league');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_true((select settings_json ->> 'waiver_mode' from league where id = lid) = 'faab',
+    'ct15b the contract preset lands FAAB waivers');
+  perform assert_true((select (settings_json ->> 'faab_budget')::int from league where id = lid) = 40,
+    'ct15c and the season budget speaks the cap''s currency');
+
+  -- a chosen wire survives the switch INTO a contract type
+  r := create_native_league('Chose Rolling', '2026', 2, 5, 60, 'auction', 40);
+  perform assert_ok(r, 'ct15d create plain league');
+  lid := (r ->> 'league_id')::uuid;
+  perform assert_ok(set_transaction_rules(lid, 'rolling', null, null), 'ct15e commish picks rolling waivers');
+  perform assert_ok(set_league_continuity(lid, 'contract'), 'ct15f switch to contract');
+  perform assert_true((select settings_json ->> 'waiver_mode' from league where id = lid) = 'rolling',
+    'ct15g a preset never overwrites a commissioner''s chosen wire');
+  perform assert_true((select (settings_json ->> 'salary_cap')::int from league where id = lid) = 40,
+    'ct15h ...while the cap still lands');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;
