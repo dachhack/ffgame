@@ -1788,7 +1788,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
   const rules = st.rules;
   const tenders = st.tenders ?? [];
   const nameOf = (s: string) => names[s]?.full_name ?? s;
-  const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie scale', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
+  const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie deal', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <div style={{ ...card, marginBottom: 12 }}>
       <LabelInfo label="📜 CAP SHEET"
