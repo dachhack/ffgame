@@ -234,16 +234,15 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             left is the line the strip does NOT carry: which seat you are. */}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
-            {e.league?.season ?? ''} · you are <b style={{ color: 'var(--text)' }}>{e.team_name}</b>{commish ? ' · ⚑ commissioner' : ''}
+            {e.league?.season ?? ''} · you are <b style={{ color: 'var(--text)' }}>{e.team_name}</b>{commish ? ' · commissioner' : ''}
           </div>
         </div>
-        <button onClick={onBack} className="mono" style={linkBtn}>← leagues</button>
       </div>
 
       {/* the commissioner's standing note — the board banner's message, here too */}
       {note && (
         <div className="mono" style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, lineHeight: 1.5, color: 'var(--text)', background: 'color-mix(in srgb, #A87BD8 10%, var(--surface))', border: '1px solid #A87BD8', borderRadius: 6, padding: '7px 11px', margin: '10px 0 0' }}>
-          <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 9, color: '#A87BD8', flex: 'none' }}>⚑ LEAGUE NOTE</span>
+          <span style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 9, color: '#A87BD8', flex: 'none' }}>LEAGUE NOTE</span>
           {note.text
             ? <span style={{ minWidth: 0, flex: 1, whiteSpace: 'pre-wrap' }}>{note.text}</span>
             : <span style={{ minWidth: 0, flex: 1, color: 'var(--faint)' }}>nothing posted — say something to the league</span>}
@@ -292,7 +291,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           the web answering a tap differently than the app does. Every one of
           these is an Overlay on the app, so every one of them is a Sheet here:
           over the page, one dismiss from gone, the menu untouched behind it. */}
-      <Band title="THE LEAGUE" wide={wide}>
+      <Band wide={wide}>
         {native && (
           <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
             onClick={() => setRostersOpen((v) => !v)} />

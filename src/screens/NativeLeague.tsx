@@ -2595,11 +2595,11 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           tab you happen to be standing in. */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
         {([
-          ['roster', '🧢 ROSTER'],
-          ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
-          ['trades', '⇄ TRADES'],
-          ...(hasContracts ? [['contracts', '📜 CONTRACTS'] as const] : []),
-          ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
+          ['roster', 'ROSTER'],
+          ['waivers', `WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', 'TRADES'],
+          ...(hasContracts ? [['contracts', 'CONTRACTS'] as const] : []),
+          ...(keeperCount > 0 ? [['keepers', 'KEEPERS'] as const] : []),
         ] as const).map(([id, label]) => (
           <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
         ))}
