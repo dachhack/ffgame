@@ -5,7 +5,7 @@ import { liveConfigured } from '@drip/core/data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
-  getSession, onAuth, signOut, ensureAppUser,
+  getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread, leagueTrades,
@@ -18,7 +18,6 @@ import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/li
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
-import { GameIcon, BRAND_MARK } from '../app/gameIcons';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
@@ -27,7 +26,6 @@ import { LeagueHubPage, useHeroBoard } from './LeagueHubPage';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
-import { markBootSessionChecked } from './DemoBoard';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -144,21 +142,20 @@ export function LiveOnboard() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY · LIVE</span>
-          {/* Signed in: a shortcut back to your leagues from any sub-view (no need
-              for the marketing demo). Signed out: the demo link. */}
-          {session
-            ? (view !== 'home' && <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← my leagues</button>)
-            : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>← demo</button>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* THE HEADER (v0.356.9, founder: the app's shape) — exit chip on the
+          left without the arrow, the wordmark absolutely centered with no
+          mark and no "LIVE", the gear on the right. Who you are and the way
+          out of the session live in the gear's menu now. */}
+      <header style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '10px 16px', gap: 10 }}>
+        {session
+          ? (view !== 'home' && <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>my leagues</button>)
+          : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>demo</button>}
+        <div style={{ flex: 1 }} />
+        <div style={{ position: 'absolute', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
+          <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>DRIP FANTASY</span>
           <VersionTag />
-          {session && <span className="mono" title={session.user.email ?? ''} style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 9px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◢ {sessionName(session)}</span>}
-          {session && <button onClick={() => { try { localStorage.removeItem('dripLive'); } catch { /* ignore */ } signOut(); markBootSessionChecked(); navigate({ name: 'demo' }); }} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>sign out</button>}
-          <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
         </div>
+        <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
       </header>
 
       {/* Unmissable while browsing as someone else. Sticky rather than inline:
@@ -185,15 +182,6 @@ export function LiveOnboard() {
       </main>
     </div>
   );
-}
-
-/** A friendly display name for the header chip: the chosen display name, else the
- *  local part of the email. */
-function sessionName(session: Session): string {
-  const dn = (session.user.user_metadata?.display_name as string | undefined)?.trim();
-  if (dn) return dn;
-  const email = session.user.email ?? '';
-  return email.includes('@') ? email.split('@')[0] : (email || 'you');
 }
 
 function Muted({ text }: { text: string }) {
@@ -651,6 +639,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     <LeagueStrip
       leagueId={homeFor.league_id}
       name={homeFor.league?.name ?? 'League'}
+      hideName={here === 'home'}
       rosterId={homeFor.sleeper_roster_id ?? null}
       native={homeFor.league?.provider === 'native'}
       here={here}
