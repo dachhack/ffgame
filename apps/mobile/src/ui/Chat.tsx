@@ -238,7 +238,7 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
   // it), so every bottom-pinned composer must clear the gesture bar itself.
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
       {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={onSend}
@@ -419,7 +419,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
-      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
         {(sugg.length > 0 || (suggAll && members.some((m) => !m.me))) && (
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -525,7 +525,7 @@ function DmHome({ leagueId }: { leagueId: string }) {
         )}
       </ScrollView>
       {!pick && (
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + insets.bottom }}>
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
           <Pressable onPress={() => { tap(); setPick(true); }}
             style={{ backgroundColor: t.you, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.onAccent }}>＋ NEW MESSAGE</Text>

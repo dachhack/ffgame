@@ -7,16 +7,17 @@
 // real stack (a tab bar, deep links into a screen, a back gesture that has to
 // feel native) rather than to model one push.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha } from './src/theme.native';
+import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, type Theme } from './src/theme.native';
+import { ScrollChromeCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
@@ -106,6 +107,16 @@ export function App() {
   // Defaults false so the chip shows until the answer lands: a live draft with
   // no way in would be worse than a finished one briefly showing.
   const [draftDone, setDraftDone] = useState(false);
+  // LinkedIn chrome (v0.356.0, founder: "their menu at the bottom ... hides
+  // down when you scroll the page down but comes back up again when you
+  // scroll up. The top folds up too"): one driver for the whole shell.
+  // League screens feed it scroll events via useLeagueScroll(); `shift`
+  // (0 = chrome home, 1 = folded) drives the header fold above and the room
+  // bar's duck below. Every room change brings the chrome home.
+  const chromeDrv = useScrollChromeDriver();
+  const [topH, setTopH] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { chromeDrv.reset(); }, [view, open?.leagueId]);
 
   // The player card's league context (v0.282.0) — set here because `open` IS
   // "which league is on screen", and cleared with it so a card opened from the
@@ -210,6 +221,20 @@ export function App() {
 
     return (
       <View style={{ flex: 1 }}>
+        {/* THE FOLDING TOP (v0.356.0): brand bar + league title slide away
+            together as a league screen scrolls down, and return on any
+            scroll up — the negative marginBottom pulls the content up in
+            step, so the fold is a slide, not a hole. Outside a league (and
+            on screens that never scroll) nothing drives the shift, so the
+            header simply stands. */}
+        <Animated.View
+          onLayout={(e) => setTopH(Math.round(e.nativeEvent.layout.height))}
+          style={{
+            zIndex: 2,
+            opacity: chromeDrv.shift.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.2, 0] }),
+            transform: [{ translateY: chromeDrv.shift.interpolate({ inputRange: [0, 1], outputRange: [0, -Math.max(1, topH)] }) }],
+            marginBottom: chromeDrv.shift.interpolate({ inputRange: [0, 1], outputRange: [0, -Math.max(1, topH)] }),
+          }}>
         {/* Brand bar — the web's persistent header: who you are, where you are,
             and the way back out. Version is shown because playtesters are
             running sideloaded builds and "which one have you got" is otherwise
@@ -275,46 +300,16 @@ export function App() {
           </Text>
         )}
         {open && (
-          <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, paddingHorizontal: 14, paddingTop: 8 }}>
+          <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 }}>
             {open.name}
           </Text>
         )}
-        {open && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 7 }}>
-            {(view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && ([
-              ['home', '🏠 LEAGUE', true],                             // the hub (0182)
-              ['picks', '▦ MATCHUP', open.rosterId != null],           // no seat → no lineup
-              ['draft', '⛏ DRAFT', open.native && !draftDone],         // native-only; leaves once drafted
-              ['team', '⇄ MY TEAM', open.native && open.rosterId != null],
-              // CHAT is the ICON ALONE (founder), and bigger for it: the word
-              // bought nothing a speech bubble doesn't already say, and the
-              // room it frees is what lets the title share this row.
-              ['chat', '💬', true],
-              // NO ⚑ COMMISH here (founder): the league menu carries the
-              // Commissioner tile, and the strip is for rooms every open
-              // league has. The commishtools VIEW stays reachable — a seatless
-              // commissioner still lands on it when they open the league.
-            ] as const)
-              .filter(([, , show]) => show)
-              .map(([id, label]) => (
-              <Pressable key={id} onPress={() => setView(id)}
-                accessibilityRole="button"
-                accessibilityLabel={id === 'chat' ? 'Chat' : undefined}
-                accessibilityState={{ selected: view === id }}
-                style={{
-                  borderWidth: StyleSheet.hairlineWidth, borderRadius: 6,
-                  paddingHorizontal: id === 'chat' ? 9 : 10, paddingVertical: id === 'chat' ? 4 : 6,
-                  borderColor: view === id ? theme.you : theme.bd,
-                  backgroundColor: view === id ? alpha(theme.you, 12) : theme.surface,
-                }}>
-                <Text style={id === 'chat'
-                  ? { fontSize: 15, lineHeight: 19 }
-                  : { fontFamily: MONO, fontSize: 9, fontWeight: '700', color: view === id ? theme.you : theme.dim }}>{label}</Text>
-                {id === 'chat' && <ChatChipDot leagueId={open.leagueId} active={view === 'chat'} />}
-              </Pressable>
-            ))}
-          </View>
-        )}
+        </Animated.View>
+        {/* The room strip moved to the BOTTOM (v0.356.0, founder: "I like how
+            linkedin has their menu at the bottom") — see LeagueBottomBar
+            after the view switch. NO ⚑ COMMISH there (founder): the league
+            menu carries the Commissioner tile, and the bar is for rooms
+            every open league has; the commishtools VIEW stays reachable. */}
 
         {/* The gear's destinations come FIRST, and deliberately are not nested
             under an open league.
@@ -326,6 +321,7 @@ export function App() {
             nothing. It went unnoticed because it only broke once the leagues
             list became the landing screen; before that a league was always open
             by the time you could reach the gear. */}
+        <ScrollChromeCtx.Provider value={chromeDrv.handlers}>
         {view === 'admin' ? (
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'board' ? (
@@ -409,6 +405,25 @@ export function App() {
             }}
           />
         )}
+        </ScrollChromeCtx.Provider>
+        {/* THE ROOM BAR (v0.356.0): the league's rooms along the bottom,
+            LinkedIn-style — it ducks out of the way as a screen scrolls
+            down and returns the moment you pull up. Absolute over the
+            content (screens reserve bottom padding for it), so its coming
+            and going never reflows what you're reading. */}
+        {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
+          <LeagueBottomBar theme={theme} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
+            onGo={(id) => setView(id)}
+            items={([
+              ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
+              ['picks', '▦', 'MATCHUP', open.rosterId != null],          // no seat → no lineup
+              ['draft', '⛏', 'DRAFT', open.native && !draftDone],        // native-only; leaves once drafted
+              ['team', '⇄', 'MY TEAM', open.native && open.rosterId != null],
+              ['chat', '💬', 'CHAT', true],
+            ] as const)
+              .filter(([, , , show]) => show)
+              .map(([id, icon, label]) => [id, icon, label] as ['home' | 'picks' | 'draft' | 'team' | 'chat', string, string])} />
+        )}
       </View>
     );
   };
@@ -438,5 +453,44 @@ export function App() {
         </SafeAreaView>
       </ThemeCtx.Provider>
     </SafeAreaProvider>
+  );
+}
+
+/** The room bar (v0.356.0, founder: "I like how linkedin has their menu at
+ *  the bottom") — the strip that lived under the league title, rebuilt as a
+ *  bottom bar: icon over label, one column per room, the active room in the
+ *  theme's `you`. `shift` (the shell's chrome fold) ducks it below the safe
+ *  area on scroll-down and brings it home on scroll-up. */
+const BAR_H = 50;
+function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
+  theme: Theme;
+  shift: Animated.Value;
+  items: ['home' | 'picks' | 'draft' | 'team' | 'chat', string, string][];
+  active: string;
+  leagueId: string;
+  onGo: (id: 'home' | 'picks' | 'draft' | 'team' | 'chat') => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Animated.View style={{
+      position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row',
+      backgroundColor: theme.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.bd,
+      paddingTop: 7, paddingBottom: Math.max(insets.bottom, 8),
+      transform: [{ translateY: shift.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_H + insets.bottom + 12] }) }],
+    }}>
+      {items.map(([id, icon, label]) => (
+        <Pressable key={id} onPress={() => onGo(id)}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          accessibilityState={{ selected: active === id }}
+          style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+          <View>
+            <Text style={{ fontSize: 16, lineHeight: 20, opacity: active === id ? 1 : 0.65 }}>{icon}</Text>
+            {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
+          </View>
+          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.5, color: active === id ? theme.you : theme.dim }}>{label}</Text>
+        </Pressable>
+      ))}
+    </Animated.View>
   );
 }

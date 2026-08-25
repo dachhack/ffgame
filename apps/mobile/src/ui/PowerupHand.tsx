@@ -59,11 +59,14 @@ const INK = '#EFE4C8';
  *  every theme's background, six of which the picker can swap under it. */
 const FELT_BAR = '#1C160C';
 
-export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
+export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
   cards: HandCard[];
   busyId?: string | null;
   onArm: (id: string) => void;
   onDisarm: (id: string) => void;
+  /** Extra bottom offset — the shell's room bar (v0.356.0) parks under the
+   *  hand, so league boards lift it clear of the bar. */
+  lift?: number;
 }) {
   const t = useTheme();
   // App.tsx's SafeAreaView deliberately omits the bottom edge so the hand can sit
@@ -123,7 +126,7 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
       <Animated.View
         pointerEvents={dealt ? 'box-none' : 'none'}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + HAND_TAB_H + 6, height: CARD_H + 40,
+          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + lift + HAND_TAB_H + 6, height: CARD_H + 40,
           opacity: rise,
           transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [CARD_H + 60, 0] }) }],
         }}
@@ -216,7 +219,7 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm }: {
       <Pressable
         onPress={() => { setOpen((o) => !o); setRaised(null); }}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0,
+          position: 'absolute', left: 0, right: 0, bottom: lift,
           height: HAND_TAB_H + insets.bottom, paddingBottom: insets.bottom,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
           backgroundColor: FELT_BAR,

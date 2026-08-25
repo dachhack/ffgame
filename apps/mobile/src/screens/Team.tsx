@@ -29,6 +29,7 @@ import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
 import { useTheme, MONO, fs } from '../theme.native';
+import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -272,6 +273,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }
 }
 
 export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
@@ -603,7 +605,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
 
   if (team.draft_status !== 'complete') {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Display size={17}>⇄ My team</Display>
           <View style={{ flex: 1 }} />
@@ -629,7 +631,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const recentClaims = team.my_claims.filter((c) => c.status !== 'pending').slice(0, 5);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Display size={17}>⇄ My team</Display>
         <View style={{ flex: 1 }} />

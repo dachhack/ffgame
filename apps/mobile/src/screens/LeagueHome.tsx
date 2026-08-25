@@ -15,6 +15,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
 import { Standings, Playoffs, CapSheet, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
+import { useLeagueScroll } from '../ui/scrollChrome';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -30,6 +31,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   onBack: () => void;
 }) {
   const t = useTheme();
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   // The note lives HERE now (0182.1 — off the board, founder's call), so the
   // commissioner's empty-state prompt shows too, not just a standing note.
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
@@ -113,7 +115,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1 }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       {!!champion && (
         <View style={{ backgroundColor: alpha(t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '800', color: t.text }}>🏆 {champion}</Text>

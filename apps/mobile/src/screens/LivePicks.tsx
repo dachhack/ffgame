@@ -40,6 +40,7 @@ import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
+import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
@@ -108,6 +109,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   openShopSignal?: number;
 }) {
   const t = useTheme();
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
   // Classic leagues (0157) swap the whole drip board for the traditional one.
   const [gameMode, setGameMode] = useState<'drip' | 'classic' | null>(null);
@@ -824,7 +826,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // rather than scrolling with it. Only the tab: the fan is stowed until you
       // ask for it, and reserving a card's height for something that isn't
       // there was 170pt of a phone screen spent on nothing.
-      contentContainerStyle={{ padding: 12, paddingBottom: hand.length ? HAND_TAB_H + 24 : 40 }}
+      {...chromeScroll}
+      // +64 clears the room bar (v0.356.0) pinned over the list's tail.
+      contentContainerStyle={{ padding: 12, paddingBottom: (hand.length ? HAND_TAB_H + 24 : 40) + 64 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}
     >
       {/* Week + score on ONE line — the web's slim strip. This was a full card
@@ -1350,6 +1354,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     </ScrollView>
 
     <PowerupHand
+      lift={58}
       cards={hand}
       busyId={buffBusy}
       onArm={armFromHand}
