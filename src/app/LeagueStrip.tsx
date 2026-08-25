@@ -43,9 +43,12 @@ function themeIsLight(): boolean {
   return (parseInt(h.slice(0, 2), 16) + parseInt(h.slice(2, 4), 16) + parseInt(h.slice(4, 6), 16)) / 3 > 140;
 }
 
-export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo }: {
+export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hideName }: {
   leagueId: string;
   name: string;
+  /** The hub prints its own identity block (v0.356.9) — the strip stays for
+   *  the chips/bar but keeps quiet about the name there. */
+  hideName?: boolean;
   /** null when this account has no seat: no lineup and no team desk. */
   rosterId: number | null;
   native: boolean;
@@ -127,10 +130,12 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo }: {
 
   return (
     <>
-      <div style={{ marginBottom: 12 }}>
-        <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {name}
-        </div>
+      <div style={{ marginBottom: hideName && !wide ? 0 : 12 }}>
+        {!hideName && (
+          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {name}
+          </div>
+        )}
         {/* Wide screens keep the chip row under the name — words, no emoji. */}
         {wide && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 7 }}>

@@ -22,7 +22,7 @@ import {
   leaguePool, nativeRosters, nativeTeamState, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
-  setTeamName, setTeamAvatar, setLeagueAvatar, setLeagueName,
+  setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
@@ -2186,8 +2186,8 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
   );
 }
 
-export function TeamManage({ leagueId, onBack, onDraft, focus }: {
-  leagueId: string; onBack: () => void; onDraft: () => void; focus?: TeamFocus;
+export function TeamManage({ leagueId, onDraft, focus }: {
+  leagueId: string; onDraft: () => void; focus?: TeamFocus;
 }) {
   // Player cards opened from this screen's roster and wire lists get the
   // league's own panels — who holds him, and the league's moves on him
@@ -2270,10 +2270,8 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
     if (stashRules.taxiLocked && !team?.is_commish) return 'the taxi squad locked at the season’s first kickoff — you can still take players OFF it';
     return null;
   };
-  const [picking, setPicking] = useState<'team' | 'league' | null>(null);      // avatar picker target
+  const [picking, setPicking] = useState<'team' | null>(null);      // avatar picker open?
   const [nameDraft, setNameDraft] = useState<string | null>(null);
-  // null = not editing; '' = editing from empty (0187 league rename).
-  const [leagueDraft, setLeagueDraft] = useState<string | null>(null);             // non-null ⇒ renaming
   const skew = useRef(0);
   // ── THE TABS (v0.296.5, founder: "let's make roster, waivers, trades tabs
   //    like in the app") ────────────────────────────────────────────────────
@@ -2458,13 +2456,16 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
 
   if (!team) return (
     <div>
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
       <div className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--dim)' }}>{err ?? 'Loading your team…'}</div>
     </div>
   );
 
-  // Team identity: avatar + name (self-serve), league crest (commissioner).
-  // Rendered pre-draft too, so avatars are set before draft night shows them.
+  // Team identity, the app's shape (v0.356.10, founder: "just have team name
+  // and avatar and the edit icon"): avatar tap → picker, a bare pencil opens
+  // the editor with the avatar link inside it. The league's own name/crest
+  // moved to the commissioner's console — a member's team page is no place
+  // to edit the league. Rendered pre-draft too, so avatars are set before
+  // draft night shows them.
   const identityCard = myRoster != null && (
     <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2473,59 +2474,24 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
         </button>
         <div style={{ minWidth: 0, flex: 1 }}>
           {nameDraft === null ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{team.my_team ?? `Team ${myRoster}`}</span>
-              <button onClick={() => setNameDraft(team.my_team ?? '')} className="mono" style={linkBtn}>✎ rename</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.my_team ?? `Team ${myRoster}`}</span>
+              <button onClick={() => setNameDraft(team.my_team ?? '')} title="edit team name or avatar" className="mono" style={linkBtn}>✎</button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input value={nameDraft} autoFocus maxLength={40} onChange={(e) => setNameDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); } if (e.key === 'Escape') setNameDraft(null); }}
-                style={{ ...input, padding: '7px 10px', fontSize: 13 }} />
-              <button onClick={() => { if (nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); } setNameDraft(null); }}
-                disabled={busy || !nameDraft.trim()} className="mono" style={{ ...btn, padding: '7px 12px', fontSize: 10 }}>SAVE</button>
-            </div>
+            <>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={nameDraft} autoFocus maxLength={40} onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); } if (e.key === 'Escape') setNameDraft(null); }}
+                  style={{ ...input, padding: '7px 10px', fontSize: 13 }} />
+                <button onClick={() => { if (nameDraft.trim()) { run(() => setTeamName(leagueId, myRoster, nameDraft)); } setNameDraft(null); }}
+                  disabled={busy || !nameDraft.trim()} className="mono" style={{ ...btn, padding: '7px 12px', fontSize: 10 }}>SAVE</button>
+              </div>
+              <button onClick={() => { setNameDraft(null); setPicking('team'); }} className="mono" style={{ ...linkBtn, color: 'var(--dim)', padding: 0, marginTop: 4 }}>change avatar</button>
+            </>
           )}
-          <button onClick={() => setPicking('team')} className="mono" style={{ ...linkBtn, color: 'var(--dim)', padding: 0, marginTop: 4 }}>change avatar</button>
         </div>
-        {team.is_commish && (
-          <button onClick={() => setPicking('league')} title="league crest (commissioner)"
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <Avatar name="League" accent="var(--warn)" src={team.league_avatar} size={34} />
-            <span className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', color: 'var(--faint)' }}>LEAGUE ⚑</span>
-          </button>
-        )}
       </div>
-      {/* THE LEAGUE'S OWN NAME (0187, founder). The crest has been settable
-          from this card for ages; the name had no setter anywhere, so a typo
-          at creation was permanent for every member. Commissioner only — the
-          RPC re-checks that, this just decides who is offered the pencil. */}
-      {team.is_commish && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
-          {leagueDraft === null ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>LEAGUE ⚑</span>
-              <button onClick={() => setLeagueDraft('')} className="mono" style={linkBtn}>✎ rename the league</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input value={leagueDraft} autoFocus maxLength={60} placeholder="league name"
-                onChange={(e) => setLeagueDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && leagueDraft.trim().length >= 2) { run(() => setLeagueName(leagueId, leagueDraft)); setLeagueDraft(null); }
-                  if (e.key === 'Escape') setLeagueDraft(null);
-                }}
-                style={{ ...input, padding: '7px 10px', fontSize: 13, flex: 1, minWidth: 160 }} />
-              <button onClick={() => { if (leagueDraft.trim().length >= 2) run(() => setLeagueName(leagueId, leagueDraft)); setLeagueDraft(null); }}
-                disabled={busy || leagueDraft.trim().length < 2} className="mono" style={{ ...btn, padding: '7px 12px', fontSize: 10 }}>SAVE</button>
-              <button onClick={() => setLeagueDraft(null)} className="mono" style={linkBtn}>cancel</button>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexBasis: '100%' }}>
-                2–60 characters — everyone in the league sees it.
-              </span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 
@@ -2536,18 +2502,13 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           onPick={(url) => { setPicking(null); run(() => setTeamAvatar(leagueId, myRoster, url)); }}
           onClose={() => setPicking(null)} />
       )}
-      {picking === 'league' && (
-        <AvatarPicker title="Pick the league crest"
-          onPick={(url) => { setPicking(null); run(() => setLeagueAvatar(leagueId, url)); }}
-          onClose={() => setPicking(null)} />
-      )}
     </>
   );
 
+  // NO BACK LINK, NO "Team management" TITLE (v0.356.10, founder) — the shell
+  // header's my-leagues chip and the room bar already say where you are.
   if (team.draft_status !== 'complete') return (
     <div>
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
-      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
       {/* NO NOTIFICATION SETTINGS HERE (v0.296.5, founder: "the notification
           settings can get removed because they are already in the league home
@@ -2569,8 +2530,6 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
 
   return (
     <div>
-      <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>
-      <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>⇄ Team management</div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
 
       {/* NO NOTIFICATION SETTINGS HERE (v0.296.5, founder: "the notification
@@ -2615,22 +2574,16 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
       {/* my roster */}
       {tab === 'roster' && (
       <div style={{ ...card, marginBottom: 12 }}>
+        {/* JUST THE COUNT (v0.356.10, founder: "we don't need all the text
+            under my roster") — the pos-caps readout and the explainers left;
+            the app's card has been this bare since v0.356.2. */}
         <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
-        {/* position usage vs the league's limits (∞ = uncapped) */}
-        {team.pos_caps && mine.length > 0 && (
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 6 }}>
-            {POS_CAP_KEYS.map((k) =>
-              `${posLabel(k)} ${mine.filter((p) => p.pos === k).length}/${team.pos_caps![k] ?? '∞'}`).join(' · ')}
-          </div>
-        )}
         {mine.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
 
         {/* STARTERS — one row per starting spot the league plays, filled by
             assignSpots. Labelled as the FIT, not the lineup. */}
         {mine.length > 0 && slotDefs.length > 0 && (<>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>
-            STARTING SPOTS <span style={{ letterSpacing: 0 }}>— how your roster fits; set the lineup on the board</span>
-          </div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>STARTING SPOTS</div>
           {bySpot.starters.map((r, i) => (
             <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} />
           ))}
@@ -2672,9 +2625,6 @@ export function TeamManage({ leagueId, onBack, onDraft, focus }: {
           ))}
         </>)}
 
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
-          Click a name to open his card — that's where you drop him. Dropped players sit on waivers for 24h (claims beat first-come). Roster changes apply from the next unlocked week — a week already underway keeps its lineup pool.
-        </div>
       </div>
 
       )}

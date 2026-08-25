@@ -86,6 +86,21 @@ export function useHeroBoard(e: Enrollment | null, userId: string) {
   return { play, building, err };
 }
 
+/** What KIND of league this is, for the hub's identity line: an imported
+ *  league answers with its platform, a native one with its continuity. */
+function leagueTypeLabel(e: Enrollment): string {
+  const lg = e.league;
+  if (!lg) return '';
+  if (lg.provider && lg.provider !== 'native') return lg.provider.toUpperCase();
+  switch (lg.continuity) {
+    case 'contract': return 'CONTRACT';
+    case 'contract_dynasty': return 'CONTRACT DYNASTY';
+    case 'dynasty': return 'DYNASTY';
+    case 'keeper': return 'KEEPER';
+    default: return 'REDRAFT';
+  }
+}
+
 const tile: React.CSSProperties = {
   width: '100%', textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--bd)',
   borderRadius: 8, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
@@ -224,19 +239,25 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           </div>
         </div>
       )}
-      {/* identity header */}
+      {/* THE LEAGUE'S OWN HEADER (v0.356.9, founder: "the league avatar, the
+          league name, league type and a commish badge") — one block: crest,
+          name at title size, the season + what KIND of league it is, and the
+          badge when this account runs it. The strip's name is hidden on the
+          hub so the name prints once. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        <Img src={e.league?.avatar_url} size={44} radius={9} alt={e.league?.name ?? ''}
-          fallback={<div className="grotesk" style={{ width: 44, height: 44, borderRadius: 9, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 17, fontWeight: 700, color: 'var(--you)' }}>{(e.league?.name ?? 'L').slice(0, 1).toUpperCase()}</div>} />
-        {/* NO SECOND TITLE (v0.288.0) — the league strip one row up is the
-            name now, at the same size, and printing it again here just pushed
-            the menu down. The app made this exact trim in v0.280.0. What is
-            left is the line the strip does NOT carry: which seat you are. */}
+        <Img src={e.league?.avatar_url} size={52} radius={10} alt={e.league?.name ?? ''}
+          fallback={<div className="grotesk" style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 19, fontWeight: 700, color: 'var(--you)' }}>{(e.league?.name ?? 'L').slice(0, 1).toUpperCase()}</div>} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
-            {e.league?.season ?? ''} · you are <b style={{ color: 'var(--text)' }}>{e.team_name}</b>{commish ? ' · commissioner' : ''}
+          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {e.league?.name ?? 'League'}
+          </div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2, letterSpacing: '0.06em' }}>
+            {e.league?.season ?? ''} · {leagueTypeLabel(e)}
           </div>
         </div>
+        {commish && (
+          <span className="mono" style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '4px 8px' }}>COMMISH</span>
+        )}
       </div>
 
       {/* the commissioner's standing note — the board banner's message, here too */}

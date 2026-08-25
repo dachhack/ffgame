@@ -476,6 +476,12 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             </button>
           )}
           {session && (
+            <div className="mono" style={{ borderTop: '1px solid var(--bd)', paddingTop: 12, marginTop: -2, fontSize: 10, color: 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>SIGNED IN</span><br />
+              <span style={{ color: 'var(--text)', fontWeight: 700 }}>{session.user.email ?? 'this device'}</span>
+            </div>
+          )}
+          {session && (
             <button
               onClick={() => {
                 setOpen(false);
