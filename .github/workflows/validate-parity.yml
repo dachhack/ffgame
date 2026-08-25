@@ -38,3 +38,9 @@ jobs:
         run: npm run check:prices
       - name: Locked-metric map parity (SQL ↔ TS)
         run: npm run check:metrics
+      # The empty slot's label is drawn from the theme's own warn token; this
+      # measures it on every palette so a new one cannot ship a card nobody can
+      # read (v0.357.1 — it had been 1.59:1 on daylight for as long as daylight
+      # had existed).
+      - name: Empty-slot card legible on every theme
+        run: npm run check:cardcontrast

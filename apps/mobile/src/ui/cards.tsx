@@ -31,7 +31,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet, storeSet } from '@drip/core/platform';
-import { MONO } from '../theme.native';
+import { MONO, useTheme, alpha } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 
 // True playing-card ratio (2.5:3.5). The web sets it as --ct-aspect so both
@@ -342,20 +342,36 @@ export function CardBack({ label = 'SEALED', idx = 0, size, onPress, actionLabel
 /** An unfilled slot — dashed, on the felt, and the same box as a card because it
  *  is literally the same shell. It deals and breathes too: a static dashed
  *  rectangle beside a wobbling card is what made the pair look mismatched. */
+/** THE SLOT WITH NOBODY IN IT — "+ PICK A PLAYER", and the one card on the
+ *  board that has to read on any ground.
+ *
+ *  IT WAS A FIXED GOLD (v0.357.1, founder: "pick a player spot in the app card
+ *  battle is washed out. Can we check that it is visible in each of the
+ *  themes?"). rgba(233,185,89,0.85) on a rgba(255,255,255,0.03) fill was drawn
+ *  for a dark board and measured 5.3–5.8:1 there — but 1.59:1 on daylight and
+ *  1.62:1 on arctic, below even the 3:1 floor for large text, because gold on
+ *  near-white is barely a colour and a 3% white fill on a white card is
+ *  nothing at all.
+ *
+ *  Both now come off the theme's own warn token, which every palette already
+ *  tunes to be legible on its own ground. scripts/check-card-contrast.mjs
+ *  measures it on all seven and fails the build below 4.5:1 text / 3:1 border,
+ *  so the next palette cannot quietly reintroduce this. */
 export function CardEmpty({ label, idx = 0, size, onPress }: { label: string; idx?: number; size?: CardSize; onPress?: () => void }) {
   const sc = size ? sizeSpec(size).s : 1;
+  const t = useTheme();
   return (
     <CardShell
       idx={idx}
       size={size}
       style={{
         borderRadius: 8,
-        borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(233,185,89,0.45)', borderStyle: 'dashed',
-        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(t.warn, 85), borderStyle: 'dashed',
+        backgroundColor: alpha(t.warn, 2),
       }}
     >
       <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 6 }}>
-        <Text style={{ fontFamily: MONO, fontSize: cs(10, sc), fontWeight: '700', letterSpacing: 1, textAlign: 'center', color: 'rgba(233,185,89,0.85)' }}>{label}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: cs(10, sc), fontWeight: '700', letterSpacing: 1, textAlign: 'center', color: t.warn }}>{label}</Text>
       </Pressable>
     </CardShell>
   );

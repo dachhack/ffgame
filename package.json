@@ -16,6 +16,7 @@
     "validate": "node scripts/espn/validate.mjs",
     "gen:rulebook": "tsx scripts/gen-rulebook.mjs",
     "check:prices": "tsx scripts/check-powerup-prices.mjs",
+    "check:cardcontrast": "tsx scripts/check-card-contrast.mjs",
     "check:metrics": "tsx scripts/check-locked-metrics.mjs",
     "check:injuries": "tsx scripts/check-injuries.mjs",
     "check:livemeta": "tsx scripts/check-live-meta.mjs",

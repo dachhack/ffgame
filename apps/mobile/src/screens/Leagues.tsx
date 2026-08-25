@@ -199,7 +199,11 @@ export function Leagues({ userId, onOpen, onBoard }: {
                 <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text }}>
                   {lg?.name ?? 'League'}
                 </Text>
-                <Text numberOfLines={1} style={{ fontSize: 12, color: t.mid }}>{leagueTypeLine(e)}</Text>
+                {/* Two lines allowed since v0.357.2: the line carries the
+                    GAME now (Drip/Classic, Guillotine, Vampire, Golf) as well
+                    as the type, and a loaded league runs past one line on a
+                    phone. Most read on one and look unchanged. */}
+                <Text numberOfLines={2} style={{ fontSize: 12, color: t.mid, lineHeight: 16 }}>{leagueTypeLine(e)}</Text>
                 {lg?.draft_status === 'live' && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />
