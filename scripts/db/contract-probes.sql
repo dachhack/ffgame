@@ -912,4 +912,34 @@ begin
   perform assert_err(set_league_archived(lid, true), 'not your league', 'ct24h strangers do not shelve it');
 end $$;
 
+-- ── §25. what the quiet league card reads (0240) ────────────────────────────
+-- The card shows DRAFTING and the tap picks a room from ONE field, so my_teams
+-- has to carry it: 'pending' before the room opens, 'live' while it runs, and
+-- the seat count beside it for the built type line.
+do $$
+declare lid uuid; row_ jsonb; pool jsonb := '[]'::jsonb; i int;
+begin
+  perform probe_as('a');
+  row_ := create_native_league('Quiet Shelf', '2026', 2, 5, 60, 'snake', 40);
+  perform assert_ok(row_, 'ct25a create');
+  lid := (row_ ->> 'league_id')::uuid;
+
+  select x into row_ from jsonb_array_elements(my_teams()) x where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(row_ -> 'league' ->> 'draft_status' = 'pending',
+    'ct25b THE POINT: a fresh league reads pending — the card lands you on the hub');
+  -- The league's SIZE, not "your row": a 2-team league says 2 whether or not
+  -- the other seat is occupied, which is what "2-Team" on the card means.
+  perform assert_true((row_ -> 'league' ->> 'rosters')::int = 2,
+    'ct25c seats travel with it, for the type line');
+
+  -- Open the room: the same field flips to 'live', which is the only thing
+  -- that puts DRAFTING on the card and sends a tap to the draft room.
+  for i in 1..12 loop pool := pool || jsonb_build_object('slug', 'qs-rb' || i, 'full', 'RB ' || i, 'pos', 'RB', 'team', 'T'); end loop;
+  perform assert_ok(seed_league_pool(lid, pool), 'ct25d-pre pool seeded');
+  perform assert_ok(start_draft(lid, '[1,2]'::jsonb), 'ct25d draft opens');
+  select x into row_ from jsonb_array_elements(my_teams()) x where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(row_ -> 'league' ->> 'draft_status' = 'live',
+    'ct25e THE POINT: drafting is drafting');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

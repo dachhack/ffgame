@@ -18,7 +18,7 @@ import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
-  leaveLeague, friendlyError,
+  leaveLeague, friendlyError, leagueTypeLine,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -68,36 +68,36 @@ export function useHeroBoard(e: Enrollment | null, userId: string) {
     // from any room, and a hook cannot be called only when a league is open.
     if (!e || building) return;
     setBuilding(true); setErr(null);
-    try {
-      const preseasonOn = !!e.league?.preseason_at;
-      const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
-        .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
-      const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
-      const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
-      const ctx = m ? { matchupId: m.id, userId: e.pick_user_id ?? userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
-      loadSimLeague(built, youTeamId, ctx);
-      if (intent === 'shop') requestShopOnBoard();
-      navigate({ name: 'matchup', week, phase: 'setup' });
-    } catch {
-      setErr('Couldn’t load your board — check your connection and try again.');
-      setBuilding(false);
-    }
+    const ok = await openHeroBoard(e, userId, loadSimLeague, navigate, intent);
+    if (!ok) { setErr('Couldn’t load your board — check your connection and try again.'); setBuilding(false); }
   };
   return { play, building, err };
 }
 
-/** What KIND of league this is, for the hub's identity line: an imported
- *  league answers with its platform, a native one with its continuity. */
-function leagueTypeLabel(e: Enrollment): string {
-  const lg = e.league;
-  if (!lg) return '';
-  if (lg.provider && lg.provider !== 'native') return lg.provider.toUpperCase();
-  switch (lg.continuity) {
-    case 'contract': return 'CONTRACT';
-    case 'contract_dynasty': return 'CONTRACT DYNASTY';
-    case 'dynasty': return 'DYNASTY';
-    case 'keeper': return 'KEEPER';
-    default: return 'REDRAFT';
+/** The board prelude itself, callable WITHOUT the hook (v0.356.16) — the
+ *  leagues list opens straight onto the matchup for a league that has drafted,
+ *  and it holds one enrollment per card rather than one hook's worth. Returns
+ *  false if the board could not be built; the caller owns the message. */
+export async function openHeroBoard(
+  e: Enrollment,
+  userId: string,
+  loadSimLeague: ReturnType<typeof useStore>['loadSimLeague'],
+  navigate: ReturnType<typeof useStore>['navigate'],
+  intent?: 'shop',
+): Promise<boolean> {
+  try {
+    const preseasonOn = !!e.league?.preseason_at;
+    const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
+      .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
+    const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
+    const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
+    const ctx = m ? { matchupId: m.id, userId: e.pick_user_id ?? userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
+    loadSimLeague(built, youTeamId, ctx);
+    if (intent === 'shop') requestShopOnBoard();
+    navigate({ name: 'matchup', week, phase: 'setup' });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -252,7 +252,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             {e.league?.name ?? 'League'}
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2, letterSpacing: '0.06em' }}>
-            {e.league?.season ?? ''} · {leagueTypeLabel(e)}
+            {leagueTypeLine(e)}
           </div>
         </div>
         {commish && (

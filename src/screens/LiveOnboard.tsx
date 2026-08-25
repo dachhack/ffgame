@@ -8,21 +8,19 @@ import {
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread, leagueTrades,
+  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
-  leagueTouch, leagueSignals,
+  leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
 import { track, identify, Ev } from '@drip/core/analytics';
-import { buildLiveLeague } from '@drip/core/data/liveBoard';
-import { lineupAlarmFor, alarmLabel, type LineupAlarm } from '@drip/core/data/lineupAlarm';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
-import { PRESEASON_BASE, isPreseasonWeek, preseasonWeekNum, weekLabel } from '@drip/core/data/nflSlate';
+import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
 import { LeagueBoard } from './LeagueBoard';
-import { LeagueHubPage, useHeroBoard } from './LeagueHubPage';
+import { LeagueHubPage, useHeroBoard, openHeroBoard } from './LeagueHubPage';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
@@ -51,9 +49,6 @@ function GoogleG() {
     </svg>
   );
 }
-
-/** Per-league badge counts from league_signals (0154). */
-interface LeagueSignalCounts { polls: number; waivers: number; commish: { waiting: number; review: number } | null; }
 
 /** The league rooms the `live` route can deep-link into from OUTSIDE this
  *  screen — the matchup board, which is its own top-level route and unmounts
@@ -506,7 +501,7 @@ interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
   // Super-admin support mode: every read below resolves against this user
   // instead of the signed-in one, and the write CTAs are hidden.
-  const { viewAs, route, navigate } = useStore();
+  const { viewAs, route, navigate, loadSimLeague } = useStore();
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
   const [waiting, setWaiting] = useState<WaitlistRow[]>([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,12 +516,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // cadence; chat_unread never marks anything read. Skipped under browse-as
   // (it would answer for the ADMIN, or refuse).
   const [unreads, setUnreads] = useState<Record<string, { n: number; mention: boolean }>>({});
-  // Lineup alarms + trade offers (0184), keyed by enrollment. Alarms need the
-  // card's matchup (id + week), so they compute once `cards` fills; offers are
-  // native-league trades sitting on YOUR answer (pending, to_roster = yours).
-  const [alarms, setAlarms] = useState<Record<string, LineupAlarm>>({});
-  const [offers, setOffers] = useState<Record<string, number>>({});
-  const [signals, setSignals] = useState<Record<string, LeagueSignalCounts>>({});
+  // THE LEAGUE-CARD SIGNAL POLL LEFT IN v0.356.16 (founder: "Avatar, league
+  // name, built text of league type, drafting if drafting. That's all we
+  // need"). It ran lineupAlarmFor + leagueTrades + leagueSignals for EVERY
+  // enrollment every two minutes to feed badges the card no longer wears —
+  // three round trips per league, on a list. Each signal still reaches you
+  // where you can act on it: chat's dot on the room bar, the rest on the hub.
   useEffect(() => {
     if (viewAs || !enrollments?.length) return;
     let dead = false;
@@ -545,44 +540,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     return () => { dead = true; clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollments, viewAs?.userId]);
-  useEffect(() => {
-    if (viewAs || !enrollments?.length) return;
-    let dead = false;
-    const poll = async () => {
-      const nextAlarms: Record<string, LineupAlarm> = {};
-      const nextOffers: Record<string, number> = {};
-      const nextSignals: Record<string, LeagueSignalCounts> = {};
-      await Promise.all(enrollments.filter((e) => !e.league?.is_mock).map(async (e) => {
-        const key = enrollKey(e);
-        const card = cards[key];
-        if (card?.matchup && card.matchup.status !== 'final') {
-          const a = await lineupAlarmFor(card.matchup.id, card.matchup.week, e.pick_user_id ?? session.user.id).catch(() => null);
-          if (a) nextAlarms[key] = a;
-        }
-        if (e.league?.provider === 'native') {
-          const ts = await leagueTrades(e.league_id, 30).catch(() => null);
-          if (Array.isArray(ts)) {
-            const n = ts.filter((tr) => tr.status === 'pending' && tr.to_roster === e.sleeper_roster_id).length;
-            if (n > 0) nextOffers[key] = n;
-          }
-        }
-        const sig = await leagueSignals(e.league_id).catch(() => null);
-        if (sig?.ok) {
-          const c = sig.commish;
-          nextSignals[e.league_id] = {
-            polls: sig.polls_unvoted ?? 0,
-            waivers: sig.waiver_results ?? 0,
-            commish: c && (c.waiting > 0 || c.review > 0) ? c : null,
-          };
-        }
-      }));
-      if (!dead) { setAlarms(nextAlarms); setOffers(nextOffers); setSignals(nextSignals); }
-    };
-    void poll();
-    const t = setInterval(() => { if (!document.hidden) void poll(); }, 120_000);
-    return () => { dead = true; clearInterval(t); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enrollments, cards, viewAs?.userId]);
   // A commissioner's share link (?code=…) stashes dripInviteCode and promises
   // "just sign in and confirm — no code to type." Honor that by skipping the
   // role chooser and going straight to the pre-filled redeem form.
@@ -949,7 +906,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
-      userId={viewAs?.userId ?? session.user.id}
       onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
@@ -957,12 +913,20 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         // Presence (0151) — skipped under browse-as: the admin looking is
         // not the member opening.
         if (!viewAs) void leagueTouch(e.league_id).catch(() => {});
-        setHomeFor(e); setView('leaguehome');
+        // WHERE THE LEAGUE IS IS WHERE YOU WANT TO BE (v0.356.16, founder):
+        // the matchup once it has drafted, the draft room while it is
+        // running, the hub when there is neither. `homeFor` is set either
+        // way, because it is what the room bar is drawn for.
+        setHomeFor(e);
+        setView('leaguehome');
+        const room = leagueLandingRoom(e);
+        if (room === 'draft') { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setView('draft'); return; }
+        // The board is its own top-level route: build it and go. `homeFor` is
+        // already set, so the way BACK from it is this league's hub — and a
+        // board that fails to build simply leaves you standing there.
+        if (room === 'matchup') void openHeroBoard(e, viewAs?.userId ?? session.user.id, loadSimLeague, navigate);
       }}
       unreads={unreads}
-      alarms={alarms}
-      offers={offers}
-      signals={signals}
       onAdd={guard(() => setView('add'))}
       onFind={guard(() => setView('board'))}
       onDeleted={refresh}
@@ -989,8 +953,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, alarms, offers, signals }: {
-  enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>; userId: string;
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads }: {
+  enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
   onDraft: (leagueId: string, rosterId: number) => void; onAdd: () => void; onFind: () => void;
@@ -999,10 +963,6 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
   onOpen: (e: Enrollment) => void;
   /** league_id → unread chat counts, for the card badges (0183). */
   unreads: Record<string, { n: number; mention: boolean }>;
-  /** enrollKey → soonest lock alarm / trade offers awaiting answer (0184). */
-  alarms: Record<string, LineupAlarm>;
-  offers: Record<string, number>;
-  signals: Record<string, LeagueSignalCounts>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -1089,11 +1049,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, userId, on
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} card={cards[enrollKey(e)]} commish={false} userId={userId} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} unread={unreads[e.league_id]} alarm={alarms[enrollKey(e)]} offers={offers[enrollKey(e)] ?? 0} sig={signals[e.league_id]} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish={false} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
       </div>
 
@@ -1226,197 +1186,70 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
 // those four links left in v0.292.0 and v0.292.1. The parent still owns every
 // one of the handlers, because the league HUB is where they are reached now;
 // the card simply stopped being a second menu in front of it.
-function LeagueCard({ e, card, commish, userId, onPodBuild, onOpen, unread, alarm, offers = 0, sig }: {
-  e: Enrollment; card?: MatchupCard; commish: boolean; userId: string;
+// THE LEAGUE CARD, QUIET (v0.356.16) ─────────────────────────────────────────
+// Founder, holding up Sleeper's own league list: "Let's make the league chips
+// less busy. Avatar, league name, built text of league type, drafting if
+// drafting. That's all we need too."
+//
+// So: the league's crest, the league's NAME as the heading (it was the team's,
+// with the league in small print underneath — but you pick a LEAGUE from a
+// list of leagues), one built grey line, and a single live badge. The whole
+// card is one target, and it lands you in the room the league is actually in.
+//
+// WHAT LEFT, and where it went instead:
+//   • COMMISSIONER / CO-MANAGER / SHOWDOWN / DFS / DYNASTY / KEEPER /
+//     PRACTICE badges — the type line says the same thing in words, and the
+//     hub's own identity block (v0.356.9) badges the commissioner.
+//   • the red "something is waiting" dot and the ⚠ lock alarm — the room bar
+//     carries chat's dot inside the league and the hub carries the rest.
+//   • the week's score preview, the LIVE/FINAL/PICKS OPEN chip, and the
+//     "matchup ›" corner link — the card opens ON the matchup now whenever
+//     there is one, so a preview of the thing you are one tap from is the
+//     furniture the founder was pointing at.
+//   • "OPEN LEAGUE →" — the card is the button.
+//
+// THE SQUAD BUILDER STAYS. A pod / showdown / DFS league has no draft and no
+// rooms, and this card is the ONLY door to its builder — the hub carries no
+// such tile. Cutting it would not have made the card quieter, it would have
+// made those leagues unplayable.
+function LeagueCard({ e, commish, onPodBuild, onOpen }: {
+  e: Enrollment; commish: boolean;
   onPodBuild: () => void;
   onOpen: () => void;
-  unread?: { n: number; mention: boolean };
-  alarm?: LineupAlarm;
-  offers?: number;
-  sig?: LeagueSignalCounts;
 }) {
-  const { loadSimLeague, navigate } = useStore();
-  const [building, setBuilding] = useState(false);
-  const [buildErr, setBuildErr] = useState<string | null>(null);
-  // The HERO board: the authentic full board built from this league's REAL rosters
-  // (setup/lineup for now; LIVE/FINAL come online when the feed populates). Enters
-  // as a live pilot (real sealed picks + opponent reveal) when a matchup exists.
-  const playHeroBoard = async () => {
-    if (building) return;
-    // Presence (0151): the quick-link is a league open too. The server
-    // no-ops a non-member (the browsing admin), so this can fire blind.
-    void leagueTouch(e.league_id).catch(() => {});
-    setBuilding(true); setBuildErr(null);
-    try {
-      // Open to the current NFL week (or the next upcoming if none is live) across
-      // the league's whole timeline — so a preseason-mode league lands on its next
-      // preseason game and rolls into Week 1 once preseason wraps.
-      const preseasonOn = !!e.league?.preseason_at;
-      const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
-        .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
-      const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
-      const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
-      // Co-managed seat: sealed picks are written AS the seat owner (0125) —
-      // pick_user_id is that identity; your own on seats you own.
-      const ctx = m ? { matchupId: m.id, userId: e.pick_user_id ?? userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
-      loadSimLeague(built, youTeamId, ctx);
-      navigate({ name: 'matchup', week, phase: 'setup' });
-    } catch {
-      setBuildErr('Couldn’t load your board — check your connection and try again.');
-      setBuilding(false);
-    }
-  };
-  // The 2025 demo board left with the "▷ demo (2025)" link (v0.292.0). It was
-  // built for someone deciding whether to play; a manager who already has a
-  // league open in front of them is past that, and the demo landing still
-  // carries it for everyone who isn't.
-  const m = card?.matchup;
-  const youAreHome = m ? m.home_roster_id === e.sleeper_roster_id : true;
-  const oppRoster = m ? (youAreHome ? m.away_roster_id : m.home_roster_id) : null;
-  const opp = m && oppRoster != null ? card?.teams[oppRoster] : null;
-  const status = m?.status ?? 'scheduled';
-  const live = status === 'live';
-  const final = status === 'final';
-  // No matchup for this week yet — the platform hasn't published a schedule (a
-  // Sleeper league returns no pairings until it drafts). Picks are keyed to a
-  // matchup (sealed_pick.matchup_id is NOT NULL), so there is nowhere to store a
-  // lineup yet: playHeroBoard would open with ctx null and silently discard
-  // everything the manager built. Say "pending" and hold the CTA instead.
-  const pending = !m;
-  // Preseason PRACTICE (migration 0110): board weeks above PRESEASON_BASE. Drives
-  // the badge and turns the meaningless "WK 102" into the board's own "PRE 2".
-  const practice = !!m && isPreseasonWeek(m.week);
-  // Everything the dot stands for, in the order a manager would want it read.
-  // Kept as WORDS rather than a count: the tooltip is the only place the detail
-  // survives now, and "3" would be the least useful thing it could say.
-  const waiting: string[] = [];
-  if (unread && unread.n > 0) waiting.push(unread.mention ? 'chat — you were mentioned' : `${unread.n} unread message${unread.n === 1 ? '' : 's'}`);
-  if (offers > 0) waiting.push(`${offers} trade offer${offers === 1 ? '' : 's'}`);
-  if ((sig?.polls ?? 0) > 0) waiting.push(`${sig!.polls} poll${sig!.polls === 1 ? '' : 's'} to vote in`);
-  if ((sig?.waivers ?? 0) > 0) waiting.push('waivers resolved');
-  if (sig?.commish) waiting.push(`${sig.commish.waiting + sig.commish.review} for the commissioner`);
-
-  const statusColor = live ? '#FF4F62' : final ? 'var(--dim)' : pending ? 'var(--faint)' : 'var(--warn)';
-  const statusLabel = live ? '● LIVE' : final ? 'FINAL' : pending ? 'SCHEDULE PENDING' : 'PICKS OPEN';
+  const drafting = e.league?.draft_status === 'live';
+  const squadLeague = e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs';
   return (
-    // COMPACT (v0.292.0, founder). The card's spacing was tuned when it carried
-    // six signal chips and five quick-links under a hero button; with those gone
-    // the padding was the only thing still making it tall. Nothing here changes
-    // what the card SAYS — the crest, the seat, the matchup and the door are all
-    // still full size.
     <div style={{ ...card2, padding: 12 }}>
-      {/* identity row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        {/* THE CREST, WITH SOMETHING TO SAY (v0.324.0). This was `avatar_url ?
-            <img> : <empty box>`, and a NATIVE league has no upstream to mirror
-            an avatar from — so every native seat drew the empty box, forever.
-            crestFor() falls team → league → letter; see data/crest.ts. */}
-        <Crest crest={crestFor({ teamAvatar: e.avatar_url, leagueAvatar: e.league?.avatar_url, teamName: e.team_name, leagueName: e.league?.name })}
-          size={32} radius={7} />
+      <button onClick={onOpen} aria-label={`Open ${e.league?.name ?? 'league'}`}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
+        {/* The LEAGUE's crest, falling to its own lettered box — this is a list
+            of leagues, so the team's avatar is the wrong picture here. */}
+        <Crest crest={crestFor({ teamAvatar: e.league?.avatar_url, leagueAvatar: e.avatar_url, teamName: e.league?.name, leagueName: e.team_name })}
+          size={40} radius={8} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-            <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{e.team_name}</span>
-            {commish && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', borderRadius: 4, padding: '2px 6px' }}>⚑ COMMISSIONER</span>}
-            {e.comanager && <span className="mono" title="you steer this team with its owner — one lineup, more thumbs" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⇄ CO-MANAGER</span>}
-            {e.league?.kind === 'weekly' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>🏆 WK {e.league.contest_week ?? '—'} SHOWDOWN</span>}
-            {e.league?.kind === 'dfs' && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 6px' }}>⚔ DFS LEAGUE</span>}
-            {/* continuity (0184/0185) — what carries over: keepers, or the full dynasty kit */}
-            {e.league?.dynasty && <span className="mono" title="Dynasty league — rosters carry into next season: keepers, rookie drafts, and tradeable future picks" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '2px 6px' }}>🏰 DYNASTY</span>}
-            {e.league?.continuity === 'keeper' && <span className="mono" title="Keeper league — each team carries its declared keepers into next season" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '2px 6px' }}>★ KEEPER</span>}
-            {/* Keyed to the week THIS CARD is showing, not to league.preseason_at:
-                a practice league rolls into WK 1 while the stamp is still set, and
-                badging a real matchup "practice" would be a lie about a game that
-                counts. In August the two agree; at the rollover only this is right. */}
-            {practice && <span className="mono" title="Preseason practice — a real preseason game on live play-by-play. Nothing carries over: no standings, no seeding, no coin, no power-up inventory." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', borderRadius: 4, padding: '2px 6px' }}>🏈 PRACTICE</span>}
-            {/* ONE RED DOT (v0.292.0, founder: "just have a red dot if there are
-                unseen events/messages"). This row used to carry a chip PER
-                signal — unread chat, trade offers, unvoted polls, waivers in,
-                and the commissioner's "⚑ 2 FOR YOU" — which on a card that also
-                badges COMMISSIONER, PRACTICE and PICKS OPEN meant six things
-                competing to be read, and answered a question nobody asked: the
-                count. What a leagues LIST has to say is "something is waiting in
-                here", and the dot says exactly that. The breakdown is a
-                tooltip, and the league itself is one click away.
-
-                THE ALARM BELOW IS NOT FOLDED IN, deliberately: a window locking
-                on an empty lineup is not an unseen message, it is a countdown
-                that costs points if it runs out, and it is the one thing on
-                this card that a silent dot would make worse. */}
-            {waiting.length > 0 && (
-              <span title={`Waiting for you: ${waiting.join(' · ')}`}
-                aria-label={`Waiting for you: ${waiting.join(', ')}`}
-                style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--opp)', flexShrink: 0, display: 'inline-block' }} />
-            )}
-            {/* the week-saver (0184): a window locks soon and slots sit empty.
-                The one signal that keeps its own chip — see the note above. */}
-            {alarm && (
-              <span className="mono" title="pick a player for every slot before the window locks — empty slots score nothing until auto-fill"
-                style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--opp)', border: '1px solid var(--opp)', borderRadius: 999, padding: '2px 7px' }}>
-                ⚠ {alarmLabel(alarm)}
-              </span>
-            )}
+          <div className="grotesk" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, color: 'var(--text)', minWidth: 0 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</span>
+            {commish && <span className="mono" title="you run this league" style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '1px 5px' }}>COMMISH</span>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
-            {e.league?.avatar_url && <img src={e.league.avatar_url} alt="" width={14} height={14} style={{ borderRadius: 3, flexShrink: 0 }} />}
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'} · {e.league?.season ?? ''}</span>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {leagueTypeLine(e)}
           </div>
+          {drafting && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--opp)' }} />
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--opp)' }}>DRAFTING</span>
+            </div>
+          )}
         </div>
-        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, border: `1px solid ${statusColor}`, borderRadius: 4, padding: '3px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>{statusLabel}</span>
-      </div>
-
-      {/* matchup row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6 }}>
-        <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', flexShrink: 0 }}>
-          {m ? weekLabel(m.week) : 'WK —'}
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}</span>
-        <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>vs</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{opp?.team_name ?? (m ? `Roster ${oppRoster}` : 'schedule pending')}</span>
-      </div>
+      </button>
+      {/* The showdown's crown (0090) stays: it is a RESULT, not a signal chip,
+          it renders only once the whole contest week is final, and no other
+          surface reports it. */}
       {e.league?.kind === 'weekly' && <WeeklyCrown leagueId={e.league_id} week={e.league.contest_week} myRoster={e.sleeper_roster_id} />}
-
-      {/* Pods + showdowns: the squad is BUILT under the salary cap (0092), not
-          dealt. Stays available through LIVE — players late-swap per game
-          (each locks 1h before his own kickoff, 0093) until the week is final. */}
-      {(e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs') && !final && (
-        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>{live ? '⛏ LATE-SWAP YOUR SQUAD →' : '⛏ BUILD YOUR SQUAD · $50K CAP →'}</button>
+      {squadLeague && (
+        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 10 }}>BUILD YOUR SQUAD · $50K CAP →</button>
       )}
-
-      {/* ONE CHIP, WITH A WORD IN ITS CORNER (v0.292.2, founder: "make the
-          matchup just be a small word at the top right of the open league chip.
-          Remove the icon from the open league chip").
-
-          The two stacked chips of v0.292.1 were still two rows of furniture for
-          what is really one destination with a side door. The matchup is now a
-          word riding the primary chip's top-right corner: present when there is
-          a board to open, absent while the schedule is pending.
-
-          NESTED BUTTONS ARE INVALID HTML, so this is a positioned wrapper rather
-          than a button inside a button — the matchup word sits above the chip in
-          the stacking order and stops its own click from reaching the chip
-          underneath, which is what lets it look like one control and behave like
-          two. */}
-      <div style={{ position: 'relative', marginTop: 9 }}>
-        <button onClick={onOpen} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>
-          OPEN LEAGUE →
-        </button>
-        {!pending && (
-          <button onClick={(ev) => { ev.stopPropagation(); void playHeroBoard(); }} disabled={building} className="mono"
-            title="straight to this week's board"
-            style={{ position: 'absolute', top: 3, right: 6, background: 'none', border: 'none', padding: '2px 4px',
-              fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
-              color: live ? '#FF4F62' : 'color-mix(in srgb, var(--on-accent) 80%, transparent)',
-              cursor: building ? 'default' : 'pointer', opacity: building ? 0.6 : 1 }}>
-            {building ? '…' : live ? '● matchup' : 'matchup ›'}
-          </button>
-        )}
-      </div>
-      {pending && (
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5, textAlign: 'center' }}>
-          No opponent yet — {e.league?.provider === 'native' ? 'the schedule is generated once the league drafts' : `${e.league?.provider === 'espn' ? 'ESPN' : 'Sleeper'} publishes pairings once the league drafts`}.
-        </div>
-      )}
-      {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{buildErr}</div>}
     </div>
   );
 }

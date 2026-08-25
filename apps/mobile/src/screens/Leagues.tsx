@@ -9,12 +9,12 @@ import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { crestInitial } from '@drip/core/data/crest';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread, setLeagueArchived,
+  leagueTypeLine, leagueLandingRoom,
   type AdminLeague, type Enrollment, type WaitlistRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
-import { CardUnreadPill, CardSignalPills } from '../ui/unread';
 import { BrandLoading } from '../ui/BrandLoading';
 
 /** A league or team crest.
@@ -56,7 +56,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat') => void;
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft') => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
 }) {
@@ -160,11 +160,18 @@ export function Leagues({ userId, onOpen, onBoard }: {
 
       {rows.filter((e) => !e.archived).filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
         const lg = e.league;
-        const kind = lg?.kind && lg.kind !== 'league' ? lg.kind.toUpperCase() : null;
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
-            onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id); }}
+            onPress={() => {
+              tap();
+              // Where the league is IS where you want to be (v0.356.16): the
+              // matchup once it has drafted, the draft room while it is
+              // running, the hub when there is neither.
+              const room = leagueLandingRoom(e);
+              onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id,
+                room === 'matchup' ? 'picks' : room);
+            }}
             android_ripple={{ color: alpha(t.you, 16) }}
             style={({ pressed }) => ({
               backgroundColor: t.surface, overflow: 'hidden',
@@ -174,49 +181,32 @@ export function Leagues({ userId, onOpen, onBoard }: {
               opacity: pressed ? 0.85 : 1,
             })}
           >
+            {/* AVATAR, NAME, ONE BUILT LINE, AND — ONLY WHILE IT IS TRUE —
+                DRAFTING (v0.356.16, founder, holding up Sleeper's own list:
+                "Avatar, league name, built text of league type, drafting if
+                drafting. That's all we need too").
+
+                What left: CO-MGR / MOCK / kind / DYNASTY / KEEPER pills (the
+                type line says the same thing in words), your team crest and
+                name, the season+provider line the type line replaces, and both
+                buttons — the card lands you in the right room now, so there is
+                nothing for a second door to do. The unread and signal pills
+                left with them: the room bar carries chat's dot inside the
+                league, and the hub carries the rest. */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
-              <Crest url={lg?.avatar_url} name={lg?.name} size={42} />
-              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: '700', color: t.text }}>
-                    {lg?.name ?? 'League'}
-                  </Text>
-                  {!!e.comanager && <Mono size={8.5} tone="warn" track={0.08}>CO-MGR</Mono>}
-                  {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
-                  {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
-                  {/* continuity (0184/0185) — what carries over: keepers, or the full dynasty kit */}
-                  {!!lg?.dynasty && <Mono size={8.5} tone="you" track={0.08}>DYNASTY</Mono>}
-                  {lg?.continuity === 'keeper' && <Mono size={8.5} tone="you" track={0.08}>KEEPER</Mono>}
-                  {!lg?.is_mock && <CardUnreadPill leagueId={e.league_id} />}
-                  {!lg?.is_mock && (
-                    <CardSignalPills league_id={e.league_id} sleeper_roster_id={e.sleeper_roster_id}
-                      pick_user_id={e.pick_user_id} native={lg?.provider === 'native'}
-                      season={lg?.season} preseason={!!lg?.preseason_at} userId={userId} />
-                  )}
-                </View>
-                {/* Your own team crest, small, beside the team it belongs to —
-                    the same pairing the web's league card uses, with the sizes
-                    swapped because there the TEAM is the heading and here the
-                    LEAGUE is. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {!!e.avatar_url && <Crest url={e.avatar_url} name={e.team_name} size={16} />}
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.mid }}>{e.team_name}</Text>
-                </View>
+              <Crest url={lg?.avatar_url} name={lg?.name} size={44} />
+              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text }}>
+                  {lg?.name ?? 'League'}
+                </Text>
+                <Text numberOfLines={1} style={{ fontSize: 12, color: t.mid }}>{leagueTypeLine(e)}</Text>
+                {lg?.draft_status === 'live' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />
+                    <Mono size={9} tone="opp" weight="700" track={0.1}>DRAFTING</Mono>
+                  </View>
+                )}
               </View>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              <Mono size={9} tone="faint" track={0.06}>
-                {lg?.season ?? ''}{lg?.provider ? ` · ${lg.provider.toUpperCase()}` : ''}
-              </Mono>
-              <View style={{ flex: 1 }} />
-              {/* straight to the board — the founder's quick link on the chip
-                  (0182); the card itself opens the LEAGUE HOME. */}
-              <Pressable hitSlop={6}
-                onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'picks'); }}
-                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>▶ MATCHUP</Text>
-              </Pressable>
-              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>OPEN →</Text>
             </View>
           </Pressable>
         );
