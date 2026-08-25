@@ -140,9 +140,10 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
     { id: 'home', icon: 'league', label: 'LEAGUE', show: true },
     { id: 'matchup', icon: 'matchup', label: 'MATCHUP', show: rosterId != null },
     { id: 'draft', icon: 'draft', label: 'DRAFT', show: native && draftDone === false },
-    // native only on the web for now — the app's read-only external team
-    // page (v0.356.5) has no web sibling yet.
-    { id: 'team', icon: 'team', label: 'MY TEAM', show: native && rosterId != null },
+    // ANY SEAT (v0.356.17): native gets the full desk, an imported league the
+    // read-only page the web finally has. The `native &&` here was the gate —
+    // it is off, and the room is the app's rule again.
+    { id: 'team', icon: 'team', label: 'MY TEAM', show: rosterId != null },
     { id: 'chat', icon: 'chat', label: 'CHAT', show: true },
   ];
   const go = (id: StripRoom | 'chat') => {
