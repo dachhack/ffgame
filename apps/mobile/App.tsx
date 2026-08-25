@@ -16,7 +16,7 @@ import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, type Theme } from './src/theme.native';
+import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha, type Theme } from './src/theme.native';
 import { ScrollChromeCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
@@ -115,6 +115,14 @@ export function App() {
   // bar's duck below. Every room change brings the chrome home.
   const chromeDrv = useScrollChromeDriver();
   const [topH, setTopH] = useState(0);
+  // Deep links out of 👥 Teams & rosters (v0.356.3, founder: "allow you to
+  // message that member or initiate a trade"): a one-shot DM target for the
+  // chat room and a one-shot trade partner for MY TEAM. Each clears when its
+  // room is left, so revisiting the room later doesn't replay the jump.
+  const [chatDm, setChatDm] = useState<{ peerId: string; peer: string } | null>(null);
+  const [tradePartner, setTradePartner] = useState<number | null>(null);
+  useEffect(() => { if (view !== 'chat') setChatDm(null); }, [view]);
+  useEffect(() => { if (view !== 'team') setTradePartner(null); }, [view]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { chromeDrv.reset(); }, [view, open?.leagueId]);
 
@@ -345,9 +353,9 @@ export function App() {
           // leaving the league, not landing on a lineup that doesn't exist.
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'chat' && open ? (
-          <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}`} leagueId={open.leagueId} /></View>
+          <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}-${chatDm?.peerId ?? ''}`} leagueId={open.leagueId} initialDm={chatDm} /></View>
         ) : view === 'commishtools' && open ? (
           <View style={{ flex: 1 }}><CommishTools key={`tools-${open.leagueId}-${toolsSection ?? ''}`}
             leagueId={open.leagueId} native={open.native} rosterId={open.rosterId} initialSection={toolsSection}
@@ -372,6 +380,8 @@ export function App() {
             <LeagueHome leagueId={open.leagueId} teamName={undefined}
               rosterId={open.rosterId} native={open.native} commish={!!open.commish}
               onGo={(room) => setView(room)}
+              onMessage={(peerId, peer) => { setChatDm({ peerId, peer }); setView('chat'); }}
+              onTrade={(rid) => { setTradePartner(rid); setView('team'); }}
               onShop={() => { setShopSignal((n) => n + 1); setView('picks'); }}
               onBack={() => setOpen(null)} />
           </View>
@@ -480,22 +490,32 @@ function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
     <Animated.View style={{
       position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row',
       backgroundColor: theme.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.bd,
-      paddingTop: 7, paddingBottom: Math.max(insets.bottom, 8),
+      paddingTop: 4, paddingBottom: Math.max(insets.bottom, 6),
       transform: [{ translateY: shift.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_H + insets.bottom + 12] }) }],
     }}>
-      {items.map(([id, icon, label]) => (
-        <Pressable key={id} onPress={() => onGo(id)}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          accessibilityState={{ selected: active === id }}
-          style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-          <View>
-            <Text style={{ fontSize: 16, lineHeight: 20, opacity: active === id ? 1 : 0.65 }}>{icon}</Text>
-            {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
-          </View>
-          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.5, color: active === id ? theme.you : theme.dim }}>{label}</Text>
-        </Pressable>
-      ))}
+      {/* Bigger items in the same rail (v0.356.3, founder: "make the bottom
+          menu items larger (but don't make the rail any taller) and colored
+          in each theme stand out") — the padding the icons grew into came
+          out of the rail's own, and the ACTIVE room sits on a pill of the
+          theme's accent so every theme carries its own color. */}
+      {items.map(([id, icon, label]) => {
+        const on = active === id;
+        return (
+          <Pressable key={id} onPress={() => onGo(id)}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            accessibilityState={{ selected: on }}
+            style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{ alignItems: 'center', gap: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 2, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
+              <View>
+                <Text style={{ fontSize: 19, lineHeight: 23, opacity: on ? 1 : 0.6 }}>{icon}</Text>
+                {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
+              </View>
+              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, color: on ? theme.you : theme.dim }}>{label}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
     </Animated.View>
   );
 }

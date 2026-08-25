@@ -23,13 +23,15 @@ import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 
-export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview, isCommish, onChanged }: {
+export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview, isCommish, presetPartner, onChanged }: {
   leagueId: string; myRoster: number | null;
   teams: { roster_id: number; team: string | null }[];
   rosters: { roster_id: number; slug: string }[];
   poolBySlug: Map<string, LeaguePoolPlayer>;
   tradeReview?: 'none' | 'commish';
   isCommish: boolean;
+  /** Deep link (v0.356.3): open the propose sheet pointed at this seat. */
+  presetPartner?: number | null;
   onChanged: () => void;
 }) {
   const t = useTheme();
@@ -124,6 +126,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     setPartner(partnerRid); setGive(giveSlugs); setGet(getSlugs);
     setGivePicks([]); setGetPicks([]); setErr(null); setOpen(true);
   };
+  // Deep link from 👥 Teams & rosters (v0.356.3): arrive with the propose
+  // sheet already pointed at the seat whose roster you were just reading.
+  useEffect(() => {
+    if (presetPartner != null) openPreset(presetPartner, [], []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetPartner]);
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (busy) return;

@@ -17,7 +17,7 @@ import { Img, Sheet } from '../app/ui';
 import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
-  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts,
+  myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
   leaveLeague, friendlyError,
   type Enrollment, type LiveMatchup, type TeamInfo,
 } from '@drip/core/data/liveApi';
@@ -401,8 +401,18 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
   // deal, every team header its total. Both maps stay empty without contracts.
   const [deals, setDeals] = useState<Map<string, string>>(new Map());
   const [pay, setPay] = useState<Map<number, string>>(new Map());
+  // Who OWNS each seat (0238) — the member's name under the team's.
+  const [owners, setOwners] = useState<Map<number, string>>(new Map());
   useEffect(() => {
     let dead = false;
+    chatMembers(leagueId).then((r) => {
+      if (dead || !r.ok) return;
+      const byId = new Map((r.members ?? []).map((m) => [m.id, m.name]));
+      setOwners(new Map((r.seats ?? []).flatMap((st) => {
+        const n = byId.get(st.user);
+        return n ? [[st.roster, n] as const] : [];
+      })));
+    }).catch(() => {});
     leagueContracts(leagueId).then((c) => {
       if (dead || !c.contracts) return;
       setDeals(new Map((c.deals ?? []).map((d) => [d.slug, `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}`])));
@@ -438,8 +448,9 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
         <div key={g.rid} style={{ borderBottom: '1px solid var(--bd)' }}>
           <button onClick={() => setOpenRid(openRid === g.rid ? null : g.rid)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 0', cursor: 'pointer' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: g.mine ? 'var(--you)' : 'var(--text)', flex: 1 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: g.mine ? 'var(--you)' : 'var(--text)', flex: 1, minWidth: 0 }}>
               {g.name}{g.mine ? ' (you)' : ''}
+              {owners.get(g.rid) && <span className="mono" style={{ fontSize: 9, fontWeight: 400, color: 'var(--faint)' }}> · {owners.get(g.rid)}</span>}
             </span>
             <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{pay.get(g.rid) ? `${pay.get(g.rid)} · ` : ''}{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</span>
           </button>

@@ -271,7 +271,12 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }
   );
 }
 
-export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
+export function Team({ leagueId, onBack, onDraft, tradePartner }: {
+  leagueId: string; onBack: () => void; onDraft: () => void;
+  /** Deep link from 👥 Teams & rosters (v0.356.3): land on TRADES with the
+   *  propose sheet already pointed at this seat. */
+  tradePartner?: number | null;
+}) {
   const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
@@ -885,7 +890,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
-        isCommish={!!team.is_commish} onChanged={() => void refresh()} />
+        isCommish={!!team.is_commish} presetPartner={tradePartner} onChanged={() => void refresh()} />
       )}
 
       {/* waiver order */}

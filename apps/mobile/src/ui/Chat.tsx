@@ -194,9 +194,14 @@ function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone:
   );
 }
 
-export function ChatScreen({ leagueId }: { leagueId: string }) {
+export function ChatScreen({ leagueId, initialDm }: {
+  leagueId: string;
+  /** Deep link from 👥 Teams & rosters (v0.356.3): open straight onto this
+   *  member's DM thread. The shell remounts the screen when it changes. */
+  initialDm?: { peerId: string; peer: string } | null;
+}) {
   const t = useTheme();
-  const [tab, setTab] = useState<'league' | 'dm'>('league');
+  const [tab, setTab] = useState<'league' | 'dm'>(initialDm ? 'dm' : 'league');
   const [canModerate, setCanModerate] = useState(false);
   useEffect(() => { leagueNote(leagueId).then((r) => setCanModerate(!!r.can_edit)).catch(() => {}); }, [leagueId]);
   return (
@@ -213,7 +218,7 @@ export function ChatScreen({ leagueId }: { leagueId: string }) {
       </View>
       {tab === 'league'
         ? <LeagueChat leagueId={leagueId} canModerate={canModerate} />
-        : <DmHome leagueId={leagueId} />}
+        : <DmHome leagueId={leagueId} initialDm={initialDm} />}
     </View>
   );
 }
@@ -461,10 +466,11 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   );
 }
 
-function DmHome({ leagueId }: { leagueId: string }) {
+function DmHome({ leagueId, initialDm }: { leagueId: string; initialDm?: { peerId: string; peer: string } | null }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const [openThread, setOpenThread] = useState<{ threadId: string | null; peerId: string; peer: string } | null>(null);
+  const [openThread, setOpenThread] = useState<{ threadId: string | null; peerId: string; peer: string } | null>(
+    initialDm ? { threadId: null, peerId: initialDm.peerId, peer: initialDm.peer } : null);
   const [threads, setThreads] = useState<DmThreadRow[] | null>(null);
   const [pick, setPick] = useState(false);
   const [members, setMembers] = useState<{ id: string; name: string; me: boolean }[] | null>(null);
