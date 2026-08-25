@@ -390,7 +390,13 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
   );
 }
 
-export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: string; leagueId?: string; rosterId?: number; onBack: () => void }) {
+export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
+  userId: string; leagueId?: string; rosterId?: number; onBack: () => void;
+  /** The room bar is on screen (v0.356.11) — its LEAGUE button is this
+   *  board's way back, so the header's own "← LEAGUE" would be a second
+   *  door in the same square inch. `onBack` still runs the swipe gesture. */
+  hideBack?: boolean;
+}) {
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [err, setErr] = useState<string | null>(null);
   const [matchup, setMatchup] = useState<LiveMatchup | null>(null);
@@ -1047,7 +1053,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack }: { userId: s
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer' }}>← LEAGUE</button>
+        {hideBack
+          ? <span />
+          : <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer' }}>← LEAGUE</button>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line. The
               founder: "we don't need the classic, week 1, full ppr line" — the
