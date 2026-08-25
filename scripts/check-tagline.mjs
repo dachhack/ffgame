@@ -4,7 +4,7 @@
 // different tagline." A classic league has no hidden picks and no effects, so
 // pitching them to a recruit is not a tone problem — it is a description of a
 // game they are not about to play.
-import { taglineFor, NEUTRAL_BLURB, joinDoorFor } from '../packages/core/src/data/leagueTagline';
+import { taglineFor, NEUTRAL_BLURB, joinDoorFor, readRecruitGame, recruitFraming } from '../packages/core/src/data/leagueTagline';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -74,6 +74,40 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
     joinDoorFor({ seatsOpen: 0, waitlistOpen: undefined }) === 'waitlist');
   ok('a negative seat count is treated as full, not as room',
     joinDoorFor({ seatsOpen: -1, waitlistOpen: false }) === 'full');
+}
+
+// ── THE RECRUITING LINK (v0.357.3) ──────────────────────────────────────────
+// Founder: "Im starting to recruit for non-drip leagues but the site still
+// draws people to the drip demo." The landing is the drip demo, so a classic
+// recruit sent to the bare site met a pitch for the other game. `?game=` is
+// the hint that fixes it, and these are the two ways it can go wrong: reading
+// something off a URL that isn't one of our modes, and telling a classic
+// recruit the drip story anyway.
+{
+  const q = (v) => (k) => (k === 'game' ? v : null);
+  ok('a classic link is read', readRecruitGame(q('classic')) === 'classic');
+  ok('a drip link is read', readRecruitGame(q('drip')) === 'drip');
+  ok('case and padding do not matter', readRecruitGame(q('  CLASSIC ')) === 'classic');
+  // NARROW ON PURPOSE — this value comes off a URL a stranger can edit, and it
+  // decides which pitch a visitor reads. Anything unrecognised means "no hint".
+  ok('junk is not a game', readRecruitGame(q('guillotine')) === null
+    && readRecruitGame(q('<script>')) === null && readRecruitGame(q('')) === null);
+  ok('a link with no hint says nothing', readRecruitGame(() => null) === null);
+
+  const classic = recruitFraming('classic', 'drip');
+  ok('a classic recruit is told the demo plays the OTHER game', classic.mismatch, classic);
+  ok('a classic recruit is named a CLASSIC league', /CLASSIC/.test(classic.lead), classic.lead);
+  // The whole point: the words that describe drip must not reach a classic
+  // recruit's headline OR their blurb.
+  ok('a classic recruit is never pitched hidden picks or effects',
+    !DRIP_WORDS.test(classic.blurb) && !DRIP_WORDS.test(classic.lead), classic);
+
+  const drip = recruitFraming('drip', 'drip');
+  ok('a drip recruit is told the demo IS their game', !drip.mismatch, drip);
+
+  const none = recruitFraming(null, 'drip');
+  ok('no hint still says there are two games', !none.mismatch && /[Tt]wo games/.test(none.lead), none.lead);
+  ok('no hint falls back to the line true of both', none.blurb === NEUTRAL_BLURB, none.blurb);
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

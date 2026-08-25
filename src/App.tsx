@@ -10,6 +10,7 @@ import { PlayerCardHost, setCardLeague } from './app/playerCard';
 import { UpdateBanner } from './app/UpdateBanner';
 import { DEMO_WEEK } from '@drip/core/config';
 import { readInviteParams } from '@drip/core/data/invite';
+import { readRecruitGame } from '@drip/core/data/leagueTagline';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
 // landing payload small. DemoBoard (the landing) + the request-code FAB stay eager
@@ -97,6 +98,16 @@ export function App() {
     // shape `gen_invite_code()` produces, and refuses outright when a `state`
     // param is present — so a Supabase PKCE return (`?code=<long token>`) or a
     // provider round trip is never mistaken for an invite. See invite.ts.
+    // ── WHICH GAME WAS THIS VISITOR SENT FOR (v0.357.3) ────────────────────
+    // `?game=classic` is a recruiter's framing hint, not a credential, so it
+    // is read BEFORE the invite branch and never routes anywhere by itself: a
+    // bare `?game=` link still lands on the demo, just framed for the game the
+    // reader was actually invited to play. Stashed because the URL is rewritten
+    // on the way in and the landing renders after that.
+    const recruited = readRecruitGame((k) => p.get(k));
+    if (recruited) {
+      try { localStorage.setItem('dripRecruitGame', recruited); } catch { /* ignore */ }
+    }
     const explicit = p.get('live') === '1';
     const invited = readInviteParams((k) => p.get(k), explicit);
     if (explicit || invited) {
