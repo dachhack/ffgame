@@ -1,9 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
-import { leagueGameMode } from '@drip/core/data/liveApi';
 import { ClassicBoard } from './ClassicBoard';
-import type { Phase } from '../app/store';
-import { Brand, SiteSettings, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
+import type { Phase, LiveCtx, Route } from '../app/store';
+import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
+import { LeagueStrip } from '../app/LeagueStrip';
+import { useWide } from './adminUi';
+import { leagueGameMode, myEnrollments } from '@drip/core/data/liveApi';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
@@ -102,6 +104,66 @@ const DEMO_POWERUPS = [
   { id: 'floodgates', icon: '🌊', name: 'Floodgates', blurb: 'Your drips ignore the opponent’s pauses and erases all game.' },
 ];
 
+// ── THE BOARD'S RAILS (v0.356.11) ────────────────────────────────────────────
+// Founder: "let's keep the bottom and top rails in the match up view in mobile
+// web". The matchup board — drip or classic — is its own top-level route, so
+// App.tsx unmounts LiveOnboard while it is up and the board inherited none of
+// the league chrome. On a phone that made it the one room you could only leave
+// by a back-chip. These two pieces put it back on the same rails as every
+// other room, and both boards render them.
+
+/** The top rail: exit chip left with no arrow, the wordmark centered with no
+ *  icon, the gear right — the shape every room has worn since v0.356.9. */
+function BoardBrandRow() {
+  const { navigate } = useStore();
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues"
+        style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>my leagues</button>
+      <div style={{ flex: 1 }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>DRIP FANTASY</span>
+        <VersionTag />
+      </div>
+      <SiteSettings />
+    </div>
+  );
+}
+
+/** The classic board draws no header of its own, so its rail brings the bar
+ *  chrome — background, rule, sticky — with it. The drip board nests the row
+ *  in the header it already has. */
+function BoardTopRail() {
+  return (
+    <div style={{ flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', padding: '7px 10px', position: 'sticky', top: 0, zIndex: 40 }}>
+      <BoardBrandRow />
+    </div>
+  );
+}
+
+/** The bottom rail: the league's room bar with MATCHUP lit. Every other room
+ *  is a navigation back into LiveOnboard carrying which room to open; MATCHUP
+ *  itself returns you to the top, since you are already standing in it. */
+function BoardRoomBar({ ctx, league, navigate }: {
+  ctx: LiveCtx;
+  league: { name: string; native: boolean };
+  navigate: (r: Route) => void;
+}) {
+  return (
+    <LeagueStrip
+      leagueId={ctx.leagueId}
+      name={league.name}
+      hideName
+      rosterId={ctx.rosterId ?? null}
+      native={league.native}
+      here="matchup"
+      onGo={(room) => {
+        if (room === 'matchup') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+        navigate({ name: 'live', view: room === 'home' ? 'leaguehome' : room, leagueId: ctx.leagueId });
+      }} />
+  );
+}
+
 // Stable empty record so props that fall back to "nothing" keep a constant
 // identity — lets the memoized WindowSection skip re-renders on every clock tick
 // (a fresh {} each render would look like a changed prop and defeat the memo).
@@ -153,6 +215,36 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const opp = getTeam(oppId)!;
 
   const isMobile = useIsMobile();
+  // ── THE ROOM BAR ON THE BOARD (v0.356.11, founder: "let's keep the bottom
+  //    and top rails in the match up view in mobile web") ───────────────────
+  // The board is its own top-level route, so it has always been the ONE league
+  // room with no rails — you left the league's chrome behind to look at your
+  // matchup. On a phone that made the board a dead end: the only ways off it
+  // were two back-chips in its header. It carries the same bar every other
+  // room does now, with MATCHUP lit.
+  //
+  // `useWide(720)` is the strip's OWN breakpoint, not `isMobile` (760): above
+  // it the strip draws a chip row instead of a bar, which is not what this
+  // screen wants stacked over a board. Between the two the header keeps its
+  // existing mobile shape — the band is 40px wide and needs no third layout.
+  const wide = useWide(720);
+  const railed = !wide && !!liveCtx && !demo;
+  // The bar needs the league's NAME and whether it is native (which rooms
+  // exist). `liveCtx` carries neither, so read the seat — the same my_teams
+  // call LiveOnboard runs, and only when the bar is actually on screen.
+  const [barLeague, setBarLeague] = useState<{ name: string; native: boolean } | null>(null);
+  useEffect(() => {
+    if (!railed || !liveCtx) { setBarLeague(null); return; }
+    let dead = false;
+    myEnrollments(liveCtx.userId)
+      .then((rows) => {
+        if (dead) return;
+        const e = rows.find((x) => x.league_id === liveCtx.leagueId);
+        if (e) setBarLeague({ name: e.league?.name ?? 'League', native: e.league?.provider === 'native' });
+      })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [railed, liveCtx?.leagueId, liveCtx?.userId]); // eslint-disable-line react-hooks/exhaustive-deps -- the ids are the identity of the seat
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
   // lineup you fielded (Matchup remounts per week, so this initializer is fresh).
@@ -1162,8 +1254,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // The hub lives inside LiveOnboard, which App.tsx unmounts while this board
     // is up, so the league id rides along and LiveOnboard looks the enrollment
     // back up on the way in.
-    return <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
-      onBack={() => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId })} />;
+    // v0.356.11: a classic league's matchup view is THIS board, so it wears
+    // the same rails the drip board does — it had neither a brand bar nor a
+    // gear of its own, which made it the barest dead end of the two.
+    const back = () => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId });
+    return (
+      <>
+        {railed && <BoardTopRail />}
+        <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
+          onBack={back} hideBack={railed} />
+        {railed && barLeague && (
+          <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />
+        )}
+      </>
+    );
   }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
@@ -1437,21 +1541,35 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           isMobile ? (
             // Mobile: two stacked rows so the chips/score/coin never collide.
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
-                  {liveLeagueChip}
-                  {liveLeaguesChip}
+              {/* THE TOP RAIL (v0.356.11) — the same brand bar every other room
+                  wears since v0.356.9: exit chip left with no arrow, the
+                  wordmark centered with no icon, the gear right. It replaces
+                  the board's own row of back-chips, because the bar at the
+                  foot is the way back into the league now. Above the strip's
+                  breakpoint the old chip row stays. */}
+              {railed ? <BoardBrandRow /> : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
+                    {liveLeagueChip}
+                    {liveLeaguesChip}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    {liveWeekResult}
+                    <SiteSettings />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  {liveWeekResult}
-                  <SiteSettings />
-                </div>
-              </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{liveTestChip}</div>
                 {liveScore}
               </div>
+              {/* WEEK RESULT lost its seat in the rail's right-hand corner, so
+                  at final it takes the width it deserves rather than crowding
+                  the wordmark. */}
+              {railed && liveWeekResult && (
+                <div style={{ display: 'flex' }}>{liveWeekResult}</div>
+              )}
             </div>
           ) : (
           // Desktop: minimal single row — Brand · big centered score · coin + gear.
@@ -1544,7 +1662,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
       {moment && <MomentBanner m={moment} week={week} isMobile={isMobile} onClose={nextMoment} />}
 
-      <div className={cardHand ? `ctable mx-felt${liveCtx ? '' : ' mx-demo'}` : undefined} style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0 }}>
+      <div className={cardHand ? `ctable mx-felt${liveCtx ? '' : ' mx-demo'}` : undefined} style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? undefined : 'flex-start', gap: isMobile ? 10 : 14, padding: isMobile ? 10 : 14, overflow: isMobile ? 'auto' : 'visible', minHeight: 0,
+        // The room bar floats over the page foot (v0.356.11). LeagueStrip
+        // reserves the space on <body>, which covers the window scroll; this
+        // covers the case where THIS box is the one scrolling, so the last
+        // window's card can never end its life under the bar.
+        ...(railed ? { paddingBottom: 86 } : {}) }}>
         {cardHand && <div className="ct-feltlayers" aria-hidden />}
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
@@ -1948,6 +2071,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       )}
 
       {earnOpen && <EarningsModal earnings={earnings} weeklyBudget={liveCtx && leagueBudget != null && leagueBudget !== WEEKLY_STIPEND ? leagueBudget : null} onReset={liveCtx ? undefined : () => { resetDripCoin(); setEarnOpen(false); }} onClose={() => setEarnOpen(false)} />}
+
+      {/* ── THE BOTTOM RAIL (v0.356.11) ──────────────────────────────────────
+          The same room bar as every other league room, MATCHUP lit. It draws
+          nothing until the seat resolves, so the bar never appears with the
+          wrong set of rooms in it. MATCHUP itself is a no-op that returns you
+          to the top — you are already here, and the bar's job on the room you
+          are standing in is to say so. */}
+      {railed && liveCtx && barLeague && <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />}
     </>
   );
 }

@@ -55,6 +55,11 @@ function GoogleG() {
 /** Per-league badge counts from league_signals (0154). */
 interface LeagueSignalCounts { polls: number; waivers: number; commish: { waiting: number; review: number } | null; }
 
+/** The league rooms the `live` route can deep-link into from OUTSIDE this
+ *  screen — the matchup board, which is its own top-level route and unmounts
+ *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
+const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
+
 type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
 
 export function LiveOnboard() {
@@ -608,24 +613,38 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // once it loads. ONE SHOT per intent, via the ref: `refresh` re-runs on a
   // timer and hands back a fresh array, and without the guard every refresh
   // would yank you back to the hub from wherever you had navigated since.
+  //
+  // WHICH ROOM (v0.356.11): the board carries the room bar now, so the intent
+  // is no longer always "the hub" — MY TEAM and DRAFT are reachable from the
+  // board too, and each lands in its own room here.
   const restored = useRef<string | null>(null);
   useEffect(() => {
-    if (route.name !== 'live' || route.view !== 'leaguehome' || !route.leagueId) return;
-    if (restored.current === route.leagueId) return;
+    if (route.name !== 'live' || !ROOM_VIEWS.includes(route.view as string) || !route.leagueId) return;
+    // Keyed by league AND room: coming back from the board into MY TEAM and
+    // then tapping LEAGUE on the bar is two intents for the same league, and a
+    // league-only key would swallow the second.
+    const key = `${route.leagueId}:${route.view}`;
+    if (restored.current === key) return;
     if (enrollments === null) return;     // still loading — run again when they land
     // One shot either way, FOUND OR NOT: a league you have since left (or a
     // stale intent) must stop the gate below pending, or the screen would sit on
     // "Loading your leagues…" forever waiting for an enrollment that isn't
     // coming. Not found simply leaves you on the leagues list.
-    restored.current = route.leagueId;
+    restored.current = key;
     const e = enrollments.find((x) => x.league_id === route.leagueId);
-    if (e) { setHomeFor(e); setView('leaguehome'); }
+    if (!e) return;
+    setHomeFor(e);
+    setTeamFocus(undefined);
+    if (route.view === 'team' || route.view === 'draft') {
+      setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id });
+      setView(route.view);
+    } else setView('leaguehome');
   }, [route, enrollments]);
-  /** True while we owe the route a hub and haven't produced one yet — held on
+  /** True while we owe the route a room and haven't produced one yet — held on
    *  the loading gate so the leagues list doesn't flash up for one frame on the
    *  way back from the board. */
-  const restorePending = route.name === 'live' && route.view === 'leaguehome'
-    && !!route.leagueId && restored.current !== route.leagueId;
+  const restorePending = route.name === 'live' && ROOM_VIEWS.includes(route.view as string)
+    && !!route.leagueId && restored.current !== `${route.leagueId}:${route.view}`;
 
   // ── THE LEAGUE STRIP (v0.288.0) ──────────────────────────────────────────
   // Founder: "same top row as on the app." `homeFor` is already this screen's
