@@ -5,11 +5,16 @@
 // read DOWN a page, and comes home the moment you pull UP, wherever you are.
 //
 // The driver tracks scroll DELTAS, not absolute position, so entering a
-// screen mid-scroll or hopping between tabs never strands the chrome: a
-// finger's downward travel folds it over ~FOLD_PX of movement, any upward
-// travel unfolds it, and the top of a page always shows it. When the finger
-// lifts half-way the chrome SNAPS to whichever side it is nearer — a
-// half-folded header reads as a rendering bug, not a state.
+// screen mid-scroll or hopping between tabs never strands the chrome.
+//
+// v0.356.1 (founder: "it's kinda twitchy"): the chrome is TWO STATES with
+// hysteresis, not a 1:1 shadow of the finger. The first cut moved the fold
+// with every scroll frame — micro-jitters in a touch wiggled it, and since
+// the header fold is a LAYOUT change (the viewport grows as it folds),
+// per-frame updates fed the scroll position back into itself. Now travel
+// ACCUMULATES per direction (a reversal resets the count): ~HIDE_PX down
+// triggers one smooth hide, ~SHOW_PX up one smooth show, and nothing at all
+// happens in between.
 //
 // Screens opt in by spreading useLeagueScroll() onto their MAIN ScrollView:
 //   <ScrollView {...useLeagueScroll()} ...>
@@ -19,8 +24,11 @@ import { createContext, useContext, useRef } from 'react';
 import { Animated } from 'react-native';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
-/** Downward travel that fully folds the chrome. */
-const FOLD_PX = 64;
+/** Accumulated downward travel that folds the chrome away. */
+const HIDE_PX = 28;
+/** Accumulated upward travel that brings it home — smaller, so the return
+ *  feels eager (the LinkedIn half the founder liked most). */
+const SHOW_PX = 12;
 /** Below this offset the chrome is always home — the page top owns it. */
 const HOME_PX = 40;
 /** A jump larger than this is a tab switch or programmatic scroll, not a
@@ -50,33 +58,39 @@ export function useScrollChromeDriver(): {
   reset: () => void;
 } {
   const shift = useRef(new Animated.Value(0)).current;
-  const val = useRef(0);
-  const lastY = useRef(0);
+  const st = useRef({ hidden: false, lastY: 0, acc: 0 });
 
   const ref = useRef<{ shift: Animated.Value; handlers: ScrollChromeHandlers; reset: () => void } | undefined>(undefined);
   if (!ref.current) {
-    const set = (v: number) => { val.current = v; shift.setValue(v); };
-    const snap = () => {
-      const to = val.current >= 0.5 ? 1 : 0;
-      val.current = to;
-      Animated.timing(shift, { toValue: to, duration: 150, useNativeDriver: false }).start();
+    const setHidden = (h: boolean, animate = true) => {
+      if (st.current.hidden === h) return;
+      st.current.hidden = h;
+      if (animate) Animated.timing(shift, { toValue: h ? 1 : 0, duration: 190, useNativeDriver: false }).start();
+      else shift.setValue(h ? 1 : 0);
     };
+    const settle = () => { st.current.acc = 0; };
     ref.current = {
       shift,
       handlers: {
         onScroll: (e) => {
+          const s = st.current;
           const y = Math.max(0, e.nativeEvent.contentOffset.y);
-          const dy = y - lastY.current;
-          lastY.current = y;
-          if (Math.abs(dy) > JUMP_PX) return;
-          if (y < HOME_PX) { set(0); return; }
-          set(Math.min(1, Math.max(0, val.current + dy / FOLD_PX)));
+          const dy = y - s.lastY;
+          s.lastY = y;
+          if (Math.abs(dy) > JUMP_PX) { s.acc = 0; return; }
+          if (y < HOME_PX) { s.acc = 0; setHidden(false); return; }
+          // A direction reversal starts the count over — this is the
+          // hysteresis that keeps micro-jitter from ever reaching the chrome.
+          if ((dy > 0) !== (s.acc > 0)) s.acc = 0;
+          s.acc += dy;
+          if (s.acc > HIDE_PX) setHidden(true);
+          else if (s.acc < -SHOW_PX) setHidden(false);
         },
-        onScrollEndDrag: snap,
-        onMomentumScrollEnd: snap,
+        onScrollEndDrag: settle,
+        onMomentumScrollEnd: settle,
         scrollEventThrottle: 16,
       },
-      reset: () => { lastY.current = 0; set(0); },
+      reset: () => { st.current.lastY = 0; st.current.acc = 0; setHidden(false, false); },
     };
   }
   return ref.current;
