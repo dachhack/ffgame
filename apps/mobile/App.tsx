@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
@@ -435,7 +435,7 @@ export function App() {
             content (screens reserve bottom padding for it), so its coming
             and going never reflows what you're reading. */}
         {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
-          <LeagueBottomBar theme={theme} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
+          <LeagueBottomBar theme={theme} light={isLight(themeName)} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
             onGo={(id) => setView(id)}
             items={([
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
@@ -485,8 +485,20 @@ export function App() {
  *  theme's `you`. `shift` (the shell's chrome fold) ducks it below the safe
  *  area on scroll-down and brings it home on scroll-up. */
 const BAR_H = 50;
-function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
+/** The founder's picked set (v0.356.6): sheet C1 glyphs with C2's list
+ *  clipboard for DRAFT. Light themes run the bare stickers; dark themes run
+ *  the same art with a thin light halo baked in, so the VS mark's navy half
+ *  doesn't sink into a dark rail. One family everywhere. */
+const RAIL_ICONS: Record<'home' | 'picks' | 'draft' | 'team' | 'chat', { light: number; dark: number }> = {
+  home:  { light: require('./assets/rail/league.png'),  dark: require('./assets/rail/league-halo.png') },
+  picks: { light: require('./assets/rail/matchup.png'), dark: require('./assets/rail/matchup-halo.png') },
+  draft: { light: require('./assets/rail/draft.png'),   dark: require('./assets/rail/draft-halo.png') },
+  team:  { light: require('./assets/rail/team.png'),    dark: require('./assets/rail/team-halo.png') },
+  chat:  { light: require('./assets/rail/chat.png'),    dark: require('./assets/rail/chat-halo.png') },
+};
+function LeagueBottomBar({ theme, light, shift, items, active, leagueId, onGo }: {
   theme: Theme;
+  light: boolean;
   shift: Animated.Value;
   items: ['home' | 'picks' | 'draft' | 'team' | 'chat', string, string][];
   active: string;
@@ -516,7 +528,8 @@ function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
             style={{ flex: 1, alignItems: 'center' }}>
             <View style={{ alignItems: 'center', gap: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 2, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
               <View>
-                <Text style={{ fontSize: 19, lineHeight: 23, opacity: on ? 1 : 0.6 }}>{icon}</Text>
+                <Image source={RAIL_ICONS[id][light ? 'light' : 'dark']} accessibilityLabel={icon}
+                  style={{ width: 23, height: 23, opacity: on ? 1 : 0.62 }} resizeMode="contain" />
                 {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
               </View>
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, color: on ? theme.you : theme.dim }}>{label}</Text>
