@@ -135,7 +135,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
       {(commishIds.size > 0 || managed.length > 0) && (
         <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
           <Chip label={`ALL (${rows.filter((e) => !e.archived).length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
-          <Chip label={`⚑ COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+          <Chip label={`COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
         </View>
       )}
 
@@ -153,7 +153,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
             league board below.
           </Mono>
           <View style={{ marginTop: 10 }}>
-            <PrimaryButton label="🔎 OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard(); }} />
+            <PrimaryButton label="OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard(); }} />
           </View>
         </Card>
       )}
@@ -185,8 +185,8 @@ export function Leagues({ userId, onOpen, onBoard }: {
                   {!!lg?.is_mock && <Mono size={8.5} tone="faint" track={0.08}>MOCK</Mono>}
                   {!!kind && <Mono size={8.5} tone="warn" track={0.08}>{kind}</Mono>}
                   {/* continuity (0184/0185) — what carries over: keepers, or the full dynasty kit */}
-                  {!!lg?.dynasty && <Mono size={8.5} tone="you" track={0.08}>🏰 DYNASTY</Mono>}
-                  {lg?.continuity === 'keeper' && <Mono size={8.5} tone="you" track={0.08}>★ KEEPER</Mono>}
+                  {!!lg?.dynasty && <Mono size={8.5} tone="you" track={0.08}>DYNASTY</Mono>}
+                  {lg?.continuity === 'keeper' && <Mono size={8.5} tone="you" track={0.08}>KEEPER</Mono>}
                   {!lg?.is_mock && <CardUnreadPill leagueId={e.league_id} />}
                   {!lg?.is_mock && (
                     <CardSignalPills league_id={e.league_id} sleeper_roster_id={e.sleeper_roster_id}
@@ -250,7 +250,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <Mono size={9} tone="faint" track={0.06}>{l.season}{l.provider ? ` · ${l.provider.toUpperCase()}` : ''}</Mono>
             <View style={{ flex: 1 }} />
-            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.warn }}>⚑ MANAGE →</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.warn }}>MANAGE →</Text>
           </View>
         </Pressable>
       ))}
@@ -264,17 +264,17 @@ export function Leagues({ userId, onOpen, onBoard }: {
             <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: t.text }}>{w.name}</Text>
             <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>You're in — waiting on a team assignment from the commissioner.</Text>
           </View>
-          <Mono size={9} tone="warn" weight="700" track={0.06}>⏳ WAITING</Mono>
+          <Mono size={9} tone="warn" weight="700" track={0.06}>WAITING</Mono>
         </View>
       ))}
 
-      {/* 🗄 ARCHIVED (0239) — the shelf: leagues you tucked away, collapsed
+      {/* ARCHIVED (0239) — the shelf: leagues you tucked away, collapsed
           until asked for, each one tap from coming back. */}
       {rows.some((e) => e.archived) && (
         <View style={{ marginTop: 4 }}>
           <Pressable onPress={() => { tap(); setShelfOpen((v) => !v); }} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
             <Mono size={9.5} tone="faint" weight="700" track={0.08}>
-              🗄 ARCHIVED ({rows.filter((e) => e.archived).length}) {shelfOpen ? '▾' : '▸'}
+              ARCHIVED ({rows.filter((e) => e.archived).length}) {shelfOpen ? '▾' : '▸'}
             </Mono>
           </Pressable>
           {shelfOpen && rows.filter((e) => e.archived).map((e) => (
@@ -363,7 +363,7 @@ function InboxStrip({ rows, onOpenChat }: {
   if (!loud.length) return null;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
-      <Mono size={8.5} weight="700" track={0.14} tone="faint">💬 INBOX</Mono>
+      <Mono size={8.5} weight="700" track={0.14} tone="faint">INBOX</Mono>
       {loud.map((e) => {
         const c = counts[e.league_id]!;
         return (

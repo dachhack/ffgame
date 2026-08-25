@@ -132,11 +132,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           doesn't carry — which seat you are — and the way out. */}
       {/* No "← leagues" here (v0.356.2, founder) — the brand bar's
           "← my leagues" is the one exit, and a second one was noise. */}
-      {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
+      {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · commissioner' : ''}</Mono>}
 
       {!!note && (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: alpha('#A87BD8', 10), borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#A87BD8', paddingTop: 1 }}>⚑ LEAGUE NOTE</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#A87BD8', paddingTop: 1 }}>LEAGUE NOTE</Text>
           {note.text
             ? <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note.text}</Text>
             : <Text style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: t.faint }}>nothing posted — say something to the league</Text>}
@@ -194,7 +194,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       <View style={{ marginTop: 22, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
         <Pressable onPress={() => { tap(); void setLeagueArchived(leagueId, true).catch(() => {}); onBack(); }}
           style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 14 }}>
-          <Mono size={9.5} weight="700" tone="faint">🗄 archive this league</Mono>
+          <Mono size={9.5} weight="700" tone="faint">archive this league</Mono>
         </Pressable>
         <Mono size={8.5} tone="faint" style={{ textAlign: 'center', marginTop: 2, lineHeight: 12 }}>
           Tucks it into ARCHIVED on your leagues list — just for you, undo any time.
@@ -226,7 +226,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       {/* Standings moved off MY TEAM's tabs (v0.274.0): the table is the
           league's, not the team's. Playoffs ride along — the bracket answers
           the same question one round later. */}
-      <Overlay visible={sheet === 'standings'} title="🏆 Standings" subtitle="THE TABLE · PLAYOFF BRACKET" onClose={() => setSheet(null)}>
+      <Overlay visible={sheet === 'standings'} title="Standings" subtitle="THE TABLE · PLAYOFF BRACKET" onClose={() => setSheet(null)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 12 }}>
           {/* Format cards first (0221/0222): in a guillotine league the
               cutline IS the standings; both render nothing elsewhere. */}
@@ -241,7 +241,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         </ScrollView>
       </Overlay>
 
-      <Overlay visible={sheet === 'register'} title="📜 League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" onClose={() => setSheet(null)}>
+      <Overlay visible={sheet === 'register'} title="League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" onClose={() => setSheet(null)}>
         <RegisterView leagueId={leagueId} />
       </Overlay>
 
@@ -254,11 +254,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         <RecruitView leagueId={leagueId} commish={commish} />
       </Overlay>
 
-      <Overlay visible={sheet === 'roster'} title="🧢 Roster settings" subtitle="LINEUP SPOTS · LIMITS · WAIVERS · TRADES" onClose={() => setSheet(null)}>
+      <Overlay visible={sheet === 'roster'} title="Roster settings" subtitle="LINEUP SPOTS · LIMITS · WAIVERS · TRADES" onClose={() => setSheet(null)}>
         <RosterRulesView leagueId={leagueId} />
       </Overlay>
 
-      <Overlay visible={alertsOpen} title="🔔 Alerts" subtitle="WHAT PINGS YOUR PHONE" onClose={() => setAlertsOpen(false)}>
+      <Overlay visible={alertsOpen} title="Alerts" subtitle="WHAT PINGS YOUR PHONE" onClose={() => setAlertsOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
           <PushPrefs />
         </ScrollView>
@@ -291,7 +291,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }
   const [deals, setDeals] = useState<Map<string, string>>(new Map());
   const [pay, setPay] = useState<Map<number, string>>(new Map());
   // Who OWNS each seat (0238): roster → member, for the owner line and the
-  // 💬 MESSAGE / ⇄ TRADE actions.
+  // MESSAGE / ⇄ TRADE actions.
   const [owners, setOwners] = useState<Map<number, { id: string; name: string; me: boolean }>>(new Map());
   useEffect(() => {
     if (!visible || groups !== null) return;
@@ -331,7 +331,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, leagueId]);
   return (
-    <Overlay visible={visible} title="👥 Teams & rosters" subtitle="tap a player for his card" onClose={onClose}>
+    <Overlay visible={visible} title="Teams & rosters" subtitle="tap a player for his card" onClose={onClose}>
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
         {err && <Mono size={10} tone="opp">Couldn't load the rosters.</Mono>}
         {!err && groups === null && <Mono size={10} tone="faint">Loading rosters…</Mono>}
@@ -361,13 +361,13 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }
                     {owners.get(g.rid) && !owners.get(g.rid)!.me && (
                       <Pressable onPress={() => { tap(); const o = owners.get(g.rid)!; onMessage(o.id, o.name); }}
                         style={{ flexDirection: 'row', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 6 }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.text }}>💬 MESSAGE</Text>
+                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.text }}>MESSAGE</Text>
                       </Pressable>
                     )}
                     {myRoster != null && (
                       <Pressable onPress={() => { tap(); onTrade(g.rid); }}
                         style={{ flexDirection: 'row', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 6 }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇄ TRADE</Text>
+                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>TRADE</Text>
                       </Pressable>
                     )}
                   </View>

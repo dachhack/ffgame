@@ -211,7 +211,7 @@ export function ChatScreen({ leagueId, initialDm }: {
           <Pressable key={id} onPress={() => { tap(); setTab(id); }}
             style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: tab === id ? alpha(t.you, 14) : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: tab === id ? t.you : t.bd }}>
             <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: tab === id ? t.you : t.dim }}>
-              {id === 'league' ? '💬 LEAGUE' : '✉ DIRECT'}
+              {id === 'league' ? 'LEAGUE' : 'DIRECT'}
             </Text>
           </Pressable>
         ))}
