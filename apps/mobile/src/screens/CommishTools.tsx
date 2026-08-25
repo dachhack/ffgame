@@ -59,6 +59,7 @@ const SPOT_PRESETS: { chip: string; pos: string[]; label: string; bb?: boolean; 
   { chip: 'VET 8+ FLEX', pos: ['RB', 'WR', 'TE'], label: 'Vet 8+ Flex', fMin: '8' },
 ];
 import { useTheme, MONO, fs } from '../theme.native';
+import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -239,6 +240,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   onSelfUnassigned: () => void;
 }) {
   const t = useTheme();
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Which destination is open (v0.264.0): null = the map alone. Tapping a
@@ -314,7 +316,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   }
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1 }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>

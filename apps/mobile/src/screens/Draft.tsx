@@ -34,6 +34,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { FlagChip } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
+import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -71,6 +72,7 @@ function Face({ slug, pos, size = 26 }: { slug: string; pos: string; size?: numb
 type DraftTab = 'board' | 'players' | 'teams' | 'queue';
 
 export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => void }) {
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
   const [st, setSt] = useState<DraftState | null>(null);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -426,7 +428,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
 
   return (
     <View style={{ flex: 1 }}>
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} scrollEnabled={dragIdx == null} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} scrollEnabled={dragIdx == null} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       {/* header: mode + state chips */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Display size={17}>⛏ Draft room</Display>

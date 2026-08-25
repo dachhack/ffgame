@@ -75,6 +75,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 
   const teamName = (rid: number) => teams.find((x) => x.roster_id === rid)?.team ?? `Team ${rid}`;
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
+  // A contract league trades DEALS, not just players (v0.355.9, founder: "in
+  // trades, we should see the contracts") — every surface that names a
+  // player prints his terms beside him. Null in a contract-free league.
+  const dealTag = (s: string) => {
+    const d = contracts?.deals?.find((x) => x.slug === s);
+    return d ? `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}` : null;
+  };
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) => {
     tap();
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -92,7 +99,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const pickAssetLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
     `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
-    const slugs = (side === 'give' ? x.give : x.get).map(pname);
+    const slugs = (side === 'give' ? x.give : x.get)
+      .map((s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); });
     const rid = side === 'give' ? x.from_roster : x.to_roster;
     const picks = ((side === 'give' ? x.give_picks : x.get_picks) ?? []).map((p) => `⛏ ${pickAssetLabel(p, rid)}`);
     return [...slugs, ...picks].join(', ') || '—';
@@ -186,6 +194,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               <Mono size={9} tone="dim" weight="700">ⓘ</Mono>
             </Pressable>
             <Mono size={8} tone="faint">{p?.pos}</Mono>
+            {dealTag(r.slug) != null && <Mono size={8} tone="dim" weight="700">{dealTag(r.slug)}</Mono>}
             {wantable && myRoster != null && (
               <Pressable hitSlop={6} onPress={() => toggleSignal(r.slug, 'want', !myWants.has(r.slug))}>
                 <Text style={{ fontSize: fs(12), opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</Text>
@@ -327,7 +336,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           <View key={`blk-${s.roster_id}-${s.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ fontSize: fs(12), fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
-              <Mono size={8.5} tone="faint">{p?.pos} · {mineRow ? 'your player' : teamName(s.roster_id)}</Mono>
+              <Mono size={8.5} tone="faint">{p?.pos}{dealTag(s.slug) ? ` · ${dealTag(s.slug)}` : ''} · {mineRow ? 'your player' : teamName(s.roster_id)}</Mono>
             </View>
             {n > 0 && <Mono size={9} tone="you" weight="700">👀 {n}</Mono>}
             {mineRow

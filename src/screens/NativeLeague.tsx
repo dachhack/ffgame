@@ -2973,6 +2973,13 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
 
   const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
+  // A contract league trades DEALS, not just players (v0.355.9, founder: "in
+  // trades, we should see the contracts") — every surface that names a
+  // player prints his terms beside him. Null in a contract-free league.
+  const dealTag = (s: string) => {
+    const d = contracts?.deals?.find((x) => x.slug === s);
+    return d ? `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}` : null;
+  };
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
   const samePick = (a: PickAssetRow, b: PickAssetRow) =>
@@ -2985,7 +2992,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const pickLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
     `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   const tradeLine = (t: TradeRow, side: 'give' | 'get') => {
-    const slugs = (side === 'give' ? t.give : t.get).map(pname);
+    const slugs = (side === 'give' ? t.give : t.get)
+      .map((s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); });
     const rid = side === 'give' ? t.from_roster : t.to_roster;
     const picks = ((side === 'give' ? t.give_picks : t.get_picks) ?? []).map((p) => `⛏ ${pickLabel(p, rid)}`);
     return [...slugs, ...picks].join(', ') || '—';
@@ -3088,6 +3096,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
             <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '☑' : '☐'} {p?.full_name ?? r.slug}</span>
             <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}</span>
+            {dealTag(r.slug) != null && <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>{dealTag(r.slug)}</span>}
             {wantable && myRoster != null && (
               <span onClick={(e) => { e.stopPropagation(); toggleSignal(r.slug, 'want', !myWants.has(r.slug)); }}
                 title={myWants.has(r.slug) ? 'remove your interest mark' : 'mark trade interest — the league sees it'}
@@ -3185,7 +3194,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           <div key={`blk-${s.roster_id}-${s.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
             <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <b>{pname(s.slug)}</b>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> {p?.pos} · {mineRow ? 'your player' : teamName(s.roster_id)}</span>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> {p?.pos}{dealTag(s.slug) ? ` · ${dealTag(s.slug)}` : ''} · {mineRow ? 'your player' : teamName(s.roster_id)}</span>
             </span>
             {n > 0 && <span className="mono" title={`${n} team${n === 1 ? '' : 's'} interested`} style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>👀 {n}</span>}
             {mineRow

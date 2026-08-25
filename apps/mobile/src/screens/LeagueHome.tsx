@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -15,6 +15,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
 import { Standings, Playoffs, CapSheet, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
+import { useLeagueScroll } from '../ui/scrollChrome';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -30,6 +31,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   onBack: () => void;
 }) {
   const t = useTheme();
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   // The note lives HERE now (0182.1 — off the board, founder's call), so the
   // commissioner's empty-state prompt shows too, not just a standing note.
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
@@ -113,7 +115,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    <ScrollView style={{ flex: 1 }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       {!!champion && (
         <View style={{ backgroundColor: alpha(t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '800', color: t.text }}>🏆 {champion}</Text>
@@ -264,9 +266,19 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
   const [groups, setGroups] = useState<TeamGroup[] | null>(null);
   const [err, setErr] = useState(false);
   const [openRid, setOpenRid] = useState<number | null>(null);
+  // A contract league's roster IS its payroll (v0.355.9, founder: "teams and
+  // rosters page ... should see the contracts"): every player carries his
+  // deal, every team header its total. Both maps stay empty without contracts.
+  const [deals, setDeals] = useState<Map<string, string>>(new Map());
+  const [pay, setPay] = useState<Map<number, string>>(new Map());
   useEffect(() => {
     if (!visible || groups !== null) return;
     let dead = false;
+    leagueContracts(leagueId).then((c) => {
+      if (dead || !c.contracts) return;
+      setDeals(new Map((c.deals ?? []).map((d) => [d.slug, `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}`])));
+      setPay(new Map((c.payrolls ?? []).map((p) => [p.roster_id, `$${p.payroll}${p.cap != null ? ` of $${p.cap}` : ''}`])));
+    }).catch(() => {});
     (async () => {
       try {
         const [rows, pool] = await Promise.all([nativeRosters(leagueId), leaguePool(leagueId)]);
@@ -301,7 +313,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
               <Text style={{ flex: 1, fontSize: 13.5, fontWeight: '700', color: g.mine ? t.you : t.text }}>
                 {g.name}{g.mine ? ' (you)' : ''}
               </Text>
-              <Mono size={9} tone="faint">{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</Mono>
+              <Mono size={9} tone="faint">{pay.get(g.rid) ? `${pay.get(g.rid)} · ` : ''}{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</Mono>
             </Pressable>
             {openRid === g.rid && (
               <View style={{ paddingBottom: 10, gap: 2 }}>
@@ -310,6 +322,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
                     style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 3 }}>
                     <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim, width: 30 }}>{p.pos === 'DEF' ? 'DST' : p.pos}</Text>
                     <Text style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.name}</Text>
+                    {deals.get(p.slug) != null && <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{deals.get(p.slug)}</Text>}
                     <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{p.team}</Text>
                   </Pressable>
                 ))}
