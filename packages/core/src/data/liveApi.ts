@@ -8,7 +8,7 @@ import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { resolveUser } from './sleeper';
-import { PRESEASON_BOARD_WEEKS } from './nflSlate';
+import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 
@@ -781,11 +781,26 @@ export async function myPool(leagueId: string, week: number, rosterId: number): 
   return readPool(data?.starters_json);
 }
 
-/** The latest synced week's pool for one seat (0239's external MY TEAM):
- *  the newest sleeper_lineup row, read through the shared reader. */
+/** The latest SYNCED week's pool for one seat (0239's external MY TEAM): the
+ *  newest real-week sleeper_lineup row, read through the shared reader.
+ *
+ *  REAL WEEKS ONLY (v0.356.18, founder: "Let's use the actual roster from
+ *  sleeper though, not the preseason fill in"). Preseason board weeks are
+ *  numbered ABOVE the real season — 101/102/103 against 1–18 — so a plain
+ *  `order by week desc` always picked one of them when a league had ever run
+ *  preseason practice. And those rows are not anybody's roster:
+ *  admin_seed_preseason_pool (0101) writes EVERY seat the same deep slate-team
+ *  pool, every active skill player on that week's teams, so backups who
+ *  actually take preseason snaps can be fielded. As a "my team" answer it was
+ *  both wrong and identical for all twelve managers.
+ *
+ *  The board still wants those pools and still gets them: it reads by explicit
+ *  week (poolForWeek / buildLiveLeague), never through here. */
 export async function myLatestPool(leagueId: string, rosterId: number): Promise<{ week: number; players: PoolPlayer[] } | null> {
   const { data, error } = await (await client()).from('sleeper_lineup').select('week, starters_json')
-    .eq('league_id', leagueId).eq('roster_id', rosterId).order('week', { ascending: false }).limit(1).maybeSingle();
+    .eq('league_id', leagueId).eq('roster_id', rosterId)
+    .lte('week', PRESEASON_BASE)
+    .order('week', { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(`roster read failed: ${error.message}`);
   if (!data) return null;
   return { week: (data as { week: number }).week, players: readPool((data as { starters_json: unknown }).starters_json) };
