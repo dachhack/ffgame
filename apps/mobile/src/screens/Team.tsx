@@ -585,11 +585,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                   <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.onAccent }}>SAVE</Text>
                 </Pressable>
               </View>
-              <LinkButton label="🖼 change team art" onPress={() => { tap(); setNameDraft(null); setMyArtOpen(true); }} />
+              <LinkButton label="change team art" onPress={() => { tap(); setNameDraft(null); setMyArtOpen(true); }} />
             </>
           )}
           {team.waiver_mode === 'faab' && team.my_faab != null && (
-            <Mono size={9.5} tone="you" style={{ marginTop: 4 }}>💰 FAAB budget ${team.my_faab}</Mono>
+            <Mono size={9.5} tone="you" style={{ marginTop: 4 }}>FAAB budget ${team.my_faab}</Mono>
           )}
         </View>
       </View>
@@ -617,7 +617,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             Waivers and free agency open once the draft is complete. Set your team name now — it shows on the draft board.
           </Mono>
           <View style={{ marginTop: 12 }}>
-            <PrimaryButton label="⛏ TO THE DRAFT ROOM" onPress={onDraft} />
+            <PrimaryButton label="TO THE DRAFT ROOM" onPress={onDraft} />
           </View>
         </Card>
         {settingsSheet}
@@ -648,23 +648,22 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           of falling to a second line. */}
       <View style={{ flexDirection: 'row', backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, overflow: 'hidden' }}>
         {([
-          ['roster', '🧢', 'ROSTER'],
-          ['waivers', '✚', `WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
-          ['trades', '⇄', 'TRADES'],
+          ['roster', 'ROSTER'],
+          ['waivers', `WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', 'TRADES'],
           // Contract leagues get their front office ON the team screen
           // (v0.353.1, founder: "wouldn't it make sense to have contract
           // tools and info in 'my team?'") — the cap sheet had been living
           // inside the league page's Standings overlay, where nobody looks.
-          ...(deals ? [['contracts', '📜', 'CONTRACTS'] as const] : []),
-          ...(keeperCount > 0 ? [['keepers', '★', 'KEEPERS'] as const] : []),
-        ] as const).map(([id, icon, label]) => {
+          ...(deals ? [['contracts', 'CONTRACTS'] as const] : []),
+          ...(keeperCount > 0 ? [['keepers', 'KEEPERS'] as const] : []),
+        ] as const).map(([id, label]) => {
           const on = tab === id;
           return (
             <Pressable key={id} onPress={() => { tap(); setTab(id); }}
               accessibilityRole="button" accessibilityState={{ selected: on }}
-              style={{ flex: 1, alignItems: 'center', paddingTop: 7, gap: 1 }}>
-              <Text style={{ fontSize: 13, lineHeight: 17, opacity: on ? 1 : 0.55 }}>{icon}</Text>
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', letterSpacing: 0.4, color: on ? t.you : t.dim }}>{label}</Text>
+              style={{ flex: 1, alignItems: 'center', paddingTop: 10, gap: 1 }}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.4, color: on ? t.you : t.dim }}>{label}</Text>
               <View style={{ height: 2, alignSelf: 'stretch', marginHorizontal: 12, marginTop: 4, borderRadius: 1, backgroundColor: on ? t.you : 'transparent' }} />
             </Pressable>
           );
@@ -755,10 +754,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {wireGate && (
         <Card style={{ borderLeftWidth: 3, borderLeftColor: t.warn }}>
           <Mono size={9.5} tone="warn" style={{ lineHeight: fs(15) }}>
-            🔒 Adds & claims open when you lock your contract lengths — set them on the 📜 CONTRACTS tab. Unset deals stay 1 year; everything auto-locks {new Date(wireGate).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
+            🔒 Adds & claims open when you lock your contract lengths — set them on the CONTRACTS tab. Unset deals stay 1 year; everything auto-locks {new Date(wireGate).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.
           </Mono>
           <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-            <Chip label="📜 TO MY CONTRACTS" onPress={() => { tap(); setTab('contracts'); }} />
+            <Chip label="TO MY CONTRACTS" onPress={() => { tap(); setTab('contracts'); }} />
           </View>
         </Card>
       )}
@@ -791,12 +790,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {/* free agents / waiver wire */}
       <Card>
         <Mono size={9} tone="faint" track={0.12}>
-          PLAYER POOL ({free.length}){team.waiver_mode === 'faab' && team.my_faab != null ? ` · 💰 $${team.my_faab}` : ''}
+          PLAYER POOL ({free.length}){team.waiver_mode === 'faab' && team.my_faab != null ? ` · FAAB $${team.my_faab}` : ''}
           {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
         </Mono>
         {deals && (
           <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
-            📜 every pickup signs a 1-yr deal against your cap — waiver wins at the bid, instant adds at the $1 street minimum
+            every pickup signs a 1-yr deal against your cap — waiver wins at the bid, instant adds at the $1 street minimum
           </Mono>
         )}
         <TextInput value={q} onChangeText={setQ} placeholder="Search players or teams…" placeholderTextColor={t.faint}
@@ -936,7 +935,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             the bid goes in, instead of a player materialising salary-free. */}
         {deals && (
           <Mono size={8.5} tone="you" style={{ marginTop: 6, lineHeight: fs(14) }}>
-            📜 Contract league: if you win, your bid becomes his salary — ${Math.max(1, parseInt(bidDraft || '0', 10) || 0)} · 1 yr against your cap ($1 minimum).
+            Contract league: if you win, your bid becomes his salary — ${Math.max(1, parseInt(bidDraft || '0', 10) || 0)} · 1 yr against your cap ($1 minimum).
           </Mono>
         )}
       </Overlay>

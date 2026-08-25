@@ -79,36 +79,36 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'SET UP', items: [
     // 0187: the league's own identity — the name had NO setter at all before
     // this, so a typo at creation was permanent for every member.
-    { id: 'identity', label: '🏷 NAME & CREST' },
-    { id: 'mode', label: '🎮 MODE' },
-    { id: 'lineup', label: '🧩 ROSTER' },
-    { id: 'scoring', label: '⚖ SCORING' },
+    { id: 'identity', label: 'NAME & CREST' },
+    { id: 'mode', label: 'MODE' },
+    { id: 'lineup', label: 'ROSTER' },
+    { id: 'scoring', label: 'SCORING' },
     // the old ⚑ SETTINGS overlay, folded into the map (v0.264.0) — each slice
     // is its own destination, mirroring the web console's sections
     { id: 'waivers', label: '⇄ WAIVERS & TRADES', nativeOnly: true },
     { id: 'format', label: '🎭 FORMAT', nativeOnly: true },
   ] },
   { title: 'RUN THE SEASON', items: [
-    { id: 'seats', label: '👥 SEATS' },
+    { id: 'seats', label: 'SEATS' },
     { id: 'players', label: '🧑 PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: '🏆 PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: '🔁 NEXT SEASON', nativeOnly: true },
   ] },
   { title: 'ENGAGE', items: [
-    { id: 'kit', label: '⚑ KIT' },
-    { id: 'activity', label: '👁 ACTIVITY' },
+    { id: 'kit', label: 'KIT' },
+    { id: 'activity', label: 'ACTIVITY' },
     // CLASSIC LEAGUES DON'T PLAY WITH COIN (v0.297.3, founder: "classic
     // leagues won't use power ups so they don't need that on the league menu.
     // They don't need drip coin either"). Coin exists to buy power-ups; a
     // classic league has neither, so both destinations leave its map.
-    { id: 'buffs', label: '◈ POWER-UPS', dripOnly: true },
+    { id: 'buffs', label: 'POWER-UPS', dripOnly: true },
     { id: 'board', label: '📣 LEAGUE BOARD', nativeOnly: true },
   ] },
   // Two wallets, two destinations — deliberately NOT one "money" screen. Drip
   // coin buys power-ups; FAAB buys players. They never trade against each
   // other, and a commissioner topping one up must not wonder which they moved.
   { title: 'MONEY', items: [
-    { id: 'coin', label: '◈ DRIP COIN', dripOnly: true },
+    { id: 'coin', label: 'DRIP COIN', dripOnly: true },
     { id: 'faab', label: '💰 FAAB', nativeOnly: true },
     { id: 'contracts', label: '📜 SALARY', nativeOnly: true },
   ] },
@@ -117,7 +117,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   // commissioner action, so it does not share a heading with anything you
   // might have been aiming for.
   { title: 'DANGER', items: [
-    { id: 'delete', label: '✕ DELETE LEAGUE' },
+    { id: 'delete', label: 'DELETE LEAGUE' },
   ] },
 ];
 
@@ -346,7 +346,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
       <Card>
         {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic)) }))
           .filter((g) => g.items.length > 0).map((g) => (
-          <View key={g.title} style={{ marginBottom: 6 }}>
+          <View key={g.title} style={{ marginBottom: 10 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
             {/* TWO FIXED COLUMNS, not an intrinsic-width wrap (v0.337.1).
                 Content-sized chips wrapped raggedly — SET UP broke 3-then-2
@@ -357,17 +357,21 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
                 instead of scattering it. Measured at the widest label
                 (⇄ WAIVERS & TRADES, 147dp at this type size) against the
                 narrowest track this grid produces. */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 5, marginTop: 4 }}>
+            {/* TALLER chips (v0.356.4, founder: "We can make these chips
+                taller so they fit the screen") — the map is the whole screen,
+                so the destinations grew into the space below instead of
+                huddling at the top; each is also a fatter tap target. */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8, marginTop: 5 }}>
               {g.items.map((it) => {
                 const on = section === it.id;
                 return (
                   <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}
-                    style={{ width: '49%', borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
+                    style={{ width: '49%', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 15, justifyContent: 'center', backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
                     {/* deliberately NOT numberOfLines={1}: the track fits the
                         widest label down to a 360dp screen, and below that a
                         wrapped label still says which destination it is where
                         an ellipsis would not. */}
-                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
                   </Pressable>
                 );
               })}
@@ -634,7 +638,7 @@ function CoinByTeam({ leagueId }: { leagueId: string }) {
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>◈ DRIP COIN BY TEAM</Mono>
+      <Mono size={9} tone="faint" track={0.12}>DRIP COIN BY TEAM</Mono>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!seats ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
         : rows.length === 0 ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>No teams yet.</Mono> : (
@@ -715,7 +719,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   }, [leagueId]);
   if (!st) return <Card><Mono size={10} tone="faint">{note ?? 'Loading…'}</Mono></Card>;
 
-  const modeName = st.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP';
+  const modeName = st.game_mode === 'classic' ? 'NORMAL' : 'DRIP';
   const rolled = !!st.rolled_league_id;
   const drafted = st.draft_status === 'complete';
   // the Super Bowl gate (0185): the rollover appears when the season is over
@@ -732,7 +736,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
       const r = await rolloverLeague(leagueId, 14, rookieOnly);
       if (r.ok) {
         commit();
-        setNote(`✓ rolled into ${r.season} — a ${r.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league, ${r.kept} keepers carried, ${r.draft_rounds}-round draft pending. Invite code ${r.invite_code}.`);
+        setNote(`✓ rolled into ${r.season} — a ${r.game_mode === 'classic' ? 'NORMAL' : 'DRIP'} league, ${r.kept} keepers carried, ${r.draft_rounds}-round draft pending. Invite code ${r.invite_code}.`);
         await load();
       } else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
@@ -765,10 +769,10 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
 
       <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
         {st.continuity === 'redraft'
-          ? 'Nothing carries over — switch to keeper or dynasty under 🎮 MODE.'
+          ? 'Nothing carries over — switch to keeper or dynasty under MODE.'
           : st.continuity === 'keeper'
-            ? `Each team keeps ${st.keeper_count} of ${st.roster_size} into ${st.next_season ?? 'next season'} — change it under 🎮 MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`
-            : `${st.rookie_rounds ?? 0}-round rookie drafts; each team keeps ${st.keeper_count} of ${st.roster_size} — change it under 🎮 MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`}
+            ? `Each team keeps ${st.keeper_count} of ${st.roster_size} into ${st.next_season ?? 'next season'} — change it under MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`
+            : `${st.rookie_rounds ?? 0}-round rookie drafts; each team keeps ${st.keeper_count} of ${st.roster_size} — change it under MODE. Managers declare keepers on their TEAM screen; a seat that declares nothing keeps its best-ranked.`}
       </Mono>
 
       {st.keeper_count > 0 && (
@@ -1177,7 +1181,7 @@ function FormatCard({ leagueId }: { leagueId: string }) {
             ))}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <Chip label={vamp?.steal_review ? '⚑ STEALS NEED YOUR APPROVAL' : '⚡ STEALS EXECUTE INSTANTLY'} on={!!vamp?.steal_review}
+            <Chip label={vamp?.steal_review ? 'STEALS NEED YOUR APPROVAL' : 'STEALS EXECUTE INSTANTLY'} on={!!vamp?.steal_review}
               disabled={busy || vamp?.seat == null}
               onPress={() => { if (vamp?.seat != null) void act(() => setVampire(leagueId, vamp.seat!, !vamp.steal_review), vamp.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling'); }} />
           </View>
@@ -2087,7 +2091,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       )}
       {view === 'scoring' && mode !== 'classic' && mode !== null && (
         <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
-          DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under 🎮 MODE for the full scoring editor.
+          DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under MODE for the full scoring editor.
         </Mono>
       )}
       {view === 'lineup' && mode === 'classic' && spots && (() => {

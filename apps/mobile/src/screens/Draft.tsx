@@ -670,14 +670,14 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           )}
           {isCommish && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, marginTop: 10 }}>
-              <Mono size={8.5} tone="faint" track={0.1}>⚑ COMMISH</Mono>
+              <Mono size={8.5} tone="faint" track={0.1}>COMMISH</Mono>
               {st.paused
                 ? ghost('▶ RESUME', () => void run(() => commishResumeDraft(leagueId)))
                 : ghost('⏸ PAUSE', () => void run(() => commishPauseDraft(leagueId)))}
               {!auction && ghost('⏭ FORCE PICK', () => void run(() => commishForcePick(leagueId)))}
               {!auction && ghost('↩ UNDO', () => void run(() => commishUndoPick(leagueId)), t.opp)}
               {ghost(st.night ? `🌙 ${fmtNight(st.night)}` : '🌙 QUIET HRS', () => { setNightOpen((v) => !v); })}
-              {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
+              {ghost(ctrlOpen ? 'CONTROLS ▴' : 'CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
           )}
           {isCommish && nightOpen && (
@@ -707,7 +707,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           {isCommish && (
             <View style={{ marginTop: 10, gap: 8 }}>
               {st.mode !== 'auction' && ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
-              {ghost(ctrlOpen ? '⚑ CONTROLS ▴' : '⚑ CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
+              {ghost(ctrlOpen ? 'CONTROLS ▴' : 'CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
           )}
           {isCommish && ctrlOpen && (
@@ -1252,7 +1252,7 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
     <View style={{ marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
       <Pressable onPress={() => { tap(); setOpen((v) => !v); }}>
         <Mono size={9.5} tone="dim" weight="700" track={0.08}>
-          {open ? '▾' : '▸'} ⚙ DRAFT SETUP{open ? '' : ' — clock, format, when, order'}
+          {open ? '▾' : '▸'} DRAFT SETUP{open ? '' : ' — clock, format, when, order'}
         </Mono>
       </Pressable>
       {open && (
@@ -1296,7 +1296,7 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
           )}
           <PrimaryButton label="SAVE FORMAT" disabled={busy} onPress={saveSetup} />
           <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-            Roster size and position limits are in ⚑ COMMISH → MODE &amp; SCORING. All of this locks when the draft starts.
+            Roster size and position limits are in COMMISH → MODE &amp; SCORING. All of this locks when the draft starts.
           </Mono>
 
           {/* ── when ── */}

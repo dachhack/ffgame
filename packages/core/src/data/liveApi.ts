@@ -604,6 +604,8 @@ export interface Enrollment {
   pick_user_id?: string;
   /** You steer this team but the seat isn't yours. */
   comanager?: boolean;
+  /** 0239: on YOUR shelf — the leagues list folds it into ARCHIVED. */
+  archived?: boolean;
   league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean; continuity?: LeagueContinuity } | null;
 }
 
@@ -612,6 +614,11 @@ export interface Enrollment {
  *  show a co-managed seat: RLS scopes that table to your own rows, and a
  *  co-manager's whole point is acting on somebody else's. The userId param
  *  survives for signature compatibility; the server answers for auth.uid(). */
+/** Shelve (or unshelve) a league for the CALLER alone (0239) — the seat,
+ *  the history and everyone else's view of the league are untouched. */
+export const setLeagueArchived = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; archived?: boolean }>('set_league_archived', { p_league_id: leagueId, p_on: on });
+
 export async function myEnrollments(_userId: string): Promise<Enrollment[]> {
   const r = await rpc<Enrollment[] | { error?: string }>('my_teams');
   if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load teams');
@@ -763,6 +770,16 @@ export async function myPool(leagueId: string, week: number, rosterId: number): 
   // shapes and a Sleeper-synced league uses `player_slug` — reading only `slug`
   // dropped every entry and reported the roster as empty. See poolEntry.ts.
   return readPool(data?.starters_json);
+}
+
+/** The latest synced week's pool for one seat (0239's external MY TEAM):
+ *  the newest sleeper_lineup row, read through the shared reader. */
+export async function myLatestPool(leagueId: string, rosterId: number): Promise<{ week: number; players: PoolPlayer[] } | null> {
+  const { data, error } = await (await client()).from('sleeper_lineup').select('week, starters_json')
+    .eq('league_id', leagueId).eq('roster_id', rosterId).order('week', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Error(`roster read failed: ${error.message}`);
+  if (!data) return null;
+  return { week: (data as { week: number }).week, players: readPool((data as { starters_json: unknown }).starters_json) };
 }
 
 /** The caller's saved picks for a matchup (locked = that window has sealed). */

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip/core/data/liveApi';
 import { Ev, identify, track } from '@drip/core/analytics';
@@ -33,6 +33,7 @@ import { registerForPush } from './src/ui/push';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
+import { PlatformTeam } from './src/screens/PlatformTeam';
 import { Recruit } from './src/screens/Recruit';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
@@ -247,7 +248,10 @@ export function App() {
             and the way back out. Version is shown because playtesters are
             running sideloaded builds and "which one have you got" is otherwise
             unanswerable. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
+        {/* COMPACT (v0.356.4, founder: "can we make the top rail more
+            compact?"): one line — the version rides beside the wordmark
+            instead of under it — and the gear shrank to match. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 5, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
           {/* THE BRAND IS THE CENTER (v0.356.2, founder: "put drip fantasy
               and the version in the center of the top and my leagues chip on
               the left without the arrow") — the wordmark sits absolutely
@@ -260,7 +264,7 @@ export function App() {
               // no league open — "my leagues" that doesn't show your leagues.
               onPress={() => { setOpen(null); setView('picks'); }}
               hitSlop={8}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, flexShrink: 1 }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 }}
             >
               <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
             </Pressable>
@@ -268,18 +272,18 @@ export function App() {
 
           <View style={{ flex: 1 }} />
 
-          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: theme.text }}>DRIP FANTASY</Text>
-            <Text style={{ fontFamily: MONO, fontSize: 8, color: theme.faint }}>{APP_VERSION}</Text>
+          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1.3, color: theme.text }}>DRIP FANTASY</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 7.5, color: theme.faint }}>{APP_VERSION}</Text>
           </View>
 
           <Pressable
             onPress={() => setSettingsOpen(true)}
             hitSlop={10}
             accessibilityLabel="Settings"
-            style={{ width: 34, height: 34, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, backgroundColor: theme.surface }}
+            style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, backgroundColor: theme.surface }}
           >
-            <Text style={{ fontSize: 15, color: theme.dim }}>⚙</Text>
+            <Text style={{ fontSize: 13, color: theme.dim }}>⚙</Text>
           </Pressable>
         </View>
 
@@ -354,6 +358,10 @@ export function App() {
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
+        ) : view === 'team' && open && open.rosterId != null ? (
+          // External league (v0.356.5): the read-only team page — the roster
+          // the platform sync carries, no waivers or trades.
+          <View style={{ flex: 1 }}><PlatformTeam leagueId={open.leagueId} rosterId={open.rosterId} /></View>
         ) : view === 'chat' && open ? (
           <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}-${chatDm?.peerId ?? ''}`} leagueId={open.leagueId} initialDm={chatDm} /></View>
         ) : view === 'commishtools' && open ? (
@@ -427,13 +435,13 @@ export function App() {
             content (screens reserve bottom padding for it), so its coming
             and going never reflows what you're reading. */}
         {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
-          <LeagueBottomBar theme={theme} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
+          <LeagueBottomBar theme={theme} light={isLight(themeName)} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
             onGo={(id) => setView(id)}
             items={([
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
               ['picks', '▦', 'MATCHUP', open.rosterId != null],          // no seat → no lineup
               ['draft', '⛏', 'DRAFT', open.native && !draftDone],        // native-only; leaves once drafted
-              ['team', '⇄', 'MY TEAM', open.native && open.rosterId != null],
+              ['team', '⇄', 'MY TEAM', open.rosterId != null],   // external gets the read-only page (v0.356.5)
               ['chat', '💬', 'CHAT', true],
             ] as const)
               .filter(([, , , show]) => show)
@@ -477,8 +485,20 @@ export function App() {
  *  theme's `you`. `shift` (the shell's chrome fold) ducks it below the safe
  *  area on scroll-down and brings it home on scroll-up. */
 const BAR_H = 50;
-function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
+/** The founder's picked set (v0.356.6): sheet C1 glyphs with C2's list
+ *  clipboard for DRAFT. Light themes run the bare stickers; dark themes run
+ *  the same art with a thin light halo baked in, so the VS mark's navy half
+ *  doesn't sink into a dark rail. One family everywhere. */
+const RAIL_ICONS: Record<'home' | 'picks' | 'draft' | 'team' | 'chat', { light: number; dark: number }> = {
+  home:  { light: require('./assets/rail/league.png'),  dark: require('./assets/rail/league-halo.png') },
+  picks: { light: require('./assets/rail/matchup.png'), dark: require('./assets/rail/matchup-halo.png') },
+  draft: { light: require('./assets/rail/draft.png'),   dark: require('./assets/rail/draft-halo.png') },
+  team:  { light: require('./assets/rail/team.png'),    dark: require('./assets/rail/team-halo.png') },
+  chat:  { light: require('./assets/rail/chat.png'),    dark: require('./assets/rail/chat-halo.png') },
+};
+function LeagueBottomBar({ theme, light, shift, items, active, leagueId, onGo }: {
   theme: Theme;
+  light: boolean;
   shift: Animated.Value;
   items: ['home' | 'picks' | 'draft' | 'team' | 'chat', string, string][];
   active: string;
@@ -508,7 +528,8 @@ function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
             style={{ flex: 1, alignItems: 'center' }}>
             <View style={{ alignItems: 'center', gap: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 2, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
               <View>
-                <Text style={{ fontSize: 19, lineHeight: 23, opacity: on ? 1 : 0.6 }}>{icon}</Text>
+                <Image source={RAIL_ICONS[id][light ? 'light' : 'dark']} accessibilityLabel={icon}
+                  style={{ width: 23, height: 23, opacity: on ? 1 : 0.62 }} resizeMode="contain" />
                 {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
               </View>
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, color: on ? theme.you : theme.dim }}>{label}</Text>

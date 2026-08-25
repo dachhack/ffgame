@@ -885,4 +885,31 @@ begin
     'ct23e THE POINT: seat 2 speaks with B''s id');
 end $$;
 
+-- ── §24. the shelf (0239) ────────────────────────────────────────────────────
+-- Archiving is per-USER and reversible: B shelves the league, B's my_teams
+-- row says so, A's does not, and unshelving clears it.
+do $$
+declare lid uuid; r jsonb; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Dusty Trophy', '2026', 2, 5, 60, 'snake', 40);
+  perform assert_ok(r, 'ct24a create');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Shelves'), 'ct24b B joins');
+  perform assert_ok(set_league_archived(lid, true), 'ct24c B archives');
+  perform assert_true((select bool_or((x -> 'archived')::boolean) from jsonb_array_elements(my_teams()) x
+      where (x ->> 'league_id')::uuid = lid), 'ct24d THE POINT: B''s list row is shelved');
+  perform probe_as('a');
+  perform assert_true(not (select bool_or((x -> 'archived')::boolean) from jsonb_array_elements(my_teams()) x
+      where (x ->> 'league_id')::uuid = lid), 'ct24e ...and A''s is not — the shelf is per-user');
+  perform probe_as('b');
+  perform assert_ok(set_league_archived(lid, false), 'ct24f B unshelves');
+  perform assert_true(not (select bool_or((x -> 'archived')::boolean) from jsonb_array_elements(my_teams()) x
+      where (x ->> 'league_id')::uuid = lid), 'ct24g back on the list');
+  perform probe_as('c');
+  perform assert_err(set_league_archived(lid, true), 'not your league', 'ct24h strangers do not shelve it');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;
