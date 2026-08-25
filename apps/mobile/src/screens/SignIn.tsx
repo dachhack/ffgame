@@ -17,7 +17,7 @@
 // "magic-link fallback for mobile".
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useKeyboardHeight } from '../ui/keyboard';
+import { useKeyboardInset } from '../ui/keyboard';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -32,7 +32,7 @@ type Mode = 'password' | 'signup' | 'code-request' | 'code-entry';
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const t = useTheme();
-  const kb = useKeyboardHeight();
+  const kb = useKeyboardInset();
   const [mode, setMode] = useState<Mode>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

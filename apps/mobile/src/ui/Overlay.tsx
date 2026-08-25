@@ -26,7 +26,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useKeyboardHeight } from './keyboard';
+import { useKeyboardInset } from './keyboard';
 import { useTheme, fs } from '../theme.native';
 
 /** SHEET BODY SIZING — why there is no number here any more.
@@ -68,7 +68,7 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const kb = useKeyboardHeight();
+  const kb = useKeyboardInset();
   // 0 = seated, 1 = fully off the bottom. One value drives the slide AND the
   // backdrop, so they can never disagree about how open the sheet is.
   const anim = useRef(new Animated.Value(1)).current;

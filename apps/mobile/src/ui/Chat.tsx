@@ -18,7 +18,7 @@ import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useKeyboardHeight } from './keyboard';
+import { useKeyboardInset } from './keyboard';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
@@ -234,7 +234,7 @@ export function ChatScreen({ leagueId, initialDm }: {
  *  composer a room-bar's height above the keys. */
 function useComposerPad(): { pad: number; kb: number } {
   const insets = useSafeAreaInsets();
-  const kb = useKeyboardHeight();
+  const kb = useKeyboardInset();
   return { pad: kb > 0 ? 10 + kb : 10 + 58 + insets.bottom, kb };
 }
 
@@ -570,7 +570,7 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const sticky = useStickyScroll();
-  const kb = useKeyboardHeight();
+  const kb = useKeyboardInset();
   // The message list shrinks by the keyboard's height when it opens, which
   // would slide the newest message out of view under the composer. Re-pin.
   useEffect(() => { if (kb > 0) sticky.ref.current?.scrollToEnd({ animated: true }); }, [kb]); // eslint-disable-line react-hooks/exhaustive-deps -- the ref is stable

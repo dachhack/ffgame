@@ -1,4 +1,4 @@
-// THE KEYBOARD OWNS THE BOTTOM (v0.356.12).
+// THE KEYBOARD OWNS THE BOTTOM (v0.356.12, corrected in .13).
 //
 // Founder: "text box disappears behind keypad in chat in the app."
 //
@@ -11,22 +11,37 @@
 // composer stayed exactly where it was — at the bottom of the screen, under
 // the keys — and `adjustResize` did nothing at all.
 //
-// WHY NOT KeyboardAvoidingView. RN's KAV is written for the resize model: on
-// Android it is normally handed `behavior={undefined}` precisely because the
-// window was expected to do the work (SignIn.tsx does this). Under
-// edge-to-edge there is no resize to lean on, and a behavior that assumes one
-// double-counts the moment the window ever does resize. Reading the IME's own
-// height and spending it as padding is the one answer that is right in both
-// worlds: on iOS the window never resizes either, so the same number applies.
+// WHY THE FIRST FIX STILL LANDED SHORT. Spending the reported keyboard height
+// as padding moved the composer almost all the way and left it a stubborn
+// ~38dp low. The reason is one line in RN's own ReactRootView:
+//
+//     int height = imeInsets.bottom - barInsets.bottom;
+//
+// `keyboardDidShow` reports the space the IME takes BEYOND the navigation bar,
+// not the space it covers. The keyboard is drawn over the nav bar too, so the
+// screen it actually hides is `height + barInsets.bottom`. This hook adds that
+// back, which is why it returns an INSET rather than a height — what a caller
+// wants is "how much of the bottom edge is behind the keyboard", and that is
+// the number that was wrong.
+//
+// The same routine makes `endCoordinates.screenY` useless here: under
+// adjustResize it is set to `mVisibleViewArea.bottom`, which an edge-to-edge
+// window never shrinks for the IME. That is also why KeyboardAvoidingView
+// cannot be the answer on this build — its Android path measures against
+// exactly that screenY.
+//
+// iOS is not affected: it reports the keyboard's true height from the screen
+// bottom, home indicator included, so the correction is Android-only.
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** How much of the screen's bottom edge the keyboard is covering right now, in
- *  dp — 0 when it is down. On Android this spans from the true screen bottom,
- *  so it already covers the gesture bar: never add a safe-area inset on top of
- *  it. iOS reports the same measure, and `will`-events there let the composer
+ *  dp — 0 when it is down. Already counts the navigation bar, so never add a
+ *  safe-area inset on top of it. On iOS the `will`-events let a composer
  *  travel with the keyboard rather than after it. */
-export function useKeyboardHeight(): number {
+export function useKeyboardInset(): number {
+  const insets = useSafeAreaInsets();
   const [h, setH] = useState(0);
   useEffect(() => {
     const ios = Platform.OS === 'ios';
@@ -36,5 +51,6 @@ export function useKeyboardHeight(): number {
       () => setH(0));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  return h;
+  if (h <= 0) return 0;
+  return Platform.OS === 'android' ? h + insets.bottom : h;
 }
