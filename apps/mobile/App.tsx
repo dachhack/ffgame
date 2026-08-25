@@ -72,6 +72,12 @@ interface OpenLeague {
   commish?: boolean;
 }
 
+/** Has this league drafted? Remembered for the app session so reopening a
+ *  league already knows, and the room bar never reshuffles under the thumb.
+ *  Written only from a real answer, so a miss means "not asked yet", never
+ *  "no" — the same rule the web's LeagueStrip follows (v0.356.14). */
+const DRAFT_DONE = new Map<string, boolean>();
+
 export function App() {
   const [themeName, setThemeName] = useState(loadTheme);
   const theme = THEMES[themeName];
@@ -103,11 +109,19 @@ export function App() {
   const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
-  // Whether the open league's draft is done — the ⛏ DRAFT chip leaves the strip
-  // once the draft completes (the room stays reachable from the league menu).
-  // Defaults false so the chip shows until the answer lands: a live draft with
-  // no way in would be worse than a finished one briefly showing.
-  const [draftDone, setDraftDone] = useState(false);
+  // Whether the open league's draft is done — the ⛏ DRAFT room leaves the bar
+  // once the draft completes (it stays reachable from the league menu's own
+  // Draft room tile, which is unconditional).
+  //
+  // null = WE DO NOT KNOW YET, and an unknown room is not drawn (v0.356.15,
+  // matching the web's v0.356.14). This defaulted to false — show the room,
+  // then take it away when native_team_state answered — on the reasoning that
+  // a live draft with no way in beats a finished one briefly showing. But
+  // there IS another way in the whole time (that tile), so the trade was
+  // paying a visible reshuffle of the bar on every league you open for a door
+  // that was never actually shut. The founder called the same flicker on the
+  // web; this is the app's half.
+  const [draftDone, setDraftDone] = useState<boolean | null>(null);
   // LinkedIn chrome (v0.356.0, founder: "their menu at the bottom ... hides
   // down when you scroll the page down but comes back up again when you
   // scroll up. The top folds up too"): one driver for the whole shell.
@@ -136,11 +150,18 @@ export function App() {
   }, [open?.leagueId, open?.native]);
 
   useEffect(() => {
-    setDraftDone(false);
-    if (!open?.native) return;
+    if (!open?.native) { setDraftDone(null); return; }
+    // Seed from what a previous open of this league learned, so coming back to
+    // it has the answer in hand and the bar never reshuffles.
+    const leagueId = open.leagueId;
+    setDraftDone(DRAFT_DONE.get(leagueId) ?? null);
     let dead = false;
-    nativeTeamState(open.leagueId)
-      .then((r) => { if (!dead && r.draft_status === 'complete') setDraftDone(true); })
+    nativeTeamState(leagueId)
+      .then((r) => {
+        const done = r.draft_status === 'complete';
+        DRAFT_DONE.set(leagueId, done);
+        if (!dead) setDraftDone(done);
+      })
       .catch(() => {});
     return () => { dead = true; };
   }, [open?.leagueId, open?.native]);
@@ -440,7 +461,7 @@ export function App() {
             items={([
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
               ['picks', '▦', 'MATCHUP', open.rosterId != null],          // no seat → no lineup
-              ['draft', '⛏', 'DRAFT', open.native && !draftDone],        // native-only; leaves once drafted
+              ['draft', '⛏', 'DRAFT', open.native && draftDone === false], // native-only; leaves once drafted, absent until known
               ['team', '⇄', 'MY TEAM', open.rosterId != null],   // external gets the read-only page (v0.356.5)
               ['chat', '💬', 'CHAT', true],
             ] as const)
