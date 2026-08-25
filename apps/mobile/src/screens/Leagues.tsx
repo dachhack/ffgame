@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
 import {
-  myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread,
+  myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread, setLeagueArchived,
   type AdminLeague, type Enrollment, type WaitlistRow,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, alpha } from '../theme.native';
@@ -62,6 +62,9 @@ export function Leagues({ userId, onOpen, onBoard }: {
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
+  // 🗄 THE SHELF (0239): archived leagues fold into a collapsed section at
+  // the bottom — per-user, reversible right from the row.
+  const [shelfOpen, setShelfOpen] = useState(false);
   // Native leagues I commission but hold no seat in. A commissioner does not
   // need a team (0039 — redeeming the code is the whole qualification), and
   // before this list a seatless commissioner had no door into their league on
@@ -126,13 +129,13 @@ export function Leagues({ userId, onOpen, onBoard }: {
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}
-      <InboxStrip rows={rows.filter((e) => !e.league?.is_mock)}
+      <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 
       {(commishIds.size > 0 || managed.length > 0) && (
         <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
-          <Chip label={`ALL (${rows.length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
-          <Chip label={`⚑ COMMISH (${rows.filter((e) => commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+          <Chip label={`ALL (${rows.filter((e) => !e.archived).length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+          <Chip label={`⚑ COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
         </View>
       )}
 
@@ -155,7 +158,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
         </Card>
       )}
 
-      {rows.filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
+      {rows.filter((e) => !e.archived).filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
         const lg = e.league;
         const kind = lg?.kind && lg.kind !== 'league' ? lg.kind.toUpperCase() : null;
         return (
@@ -264,6 +267,38 @@ export function Leagues({ userId, onOpen, onBoard }: {
           <Mono size={9} tone="warn" weight="700" track={0.06}>⏳ WAITING</Mono>
         </View>
       ))}
+
+      {/* 🗄 ARCHIVED (0239) — the shelf: leagues you tucked away, collapsed
+          until asked for, each one tap from coming back. */}
+      {rows.some((e) => e.archived) && (
+        <View style={{ marginTop: 4 }}>
+          <Pressable onPress={() => { tap(); setShelfOpen((v) => !v); }} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
+            <Mono size={9.5} tone="faint" weight="700" track={0.08}>
+              🗄 ARCHIVED ({rows.filter((e) => e.archived).length}) {shelfOpen ? '▾' : '▸'}
+            </Mono>
+          </Pressable>
+          {shelfOpen && rows.filter((e) => e.archived).map((e) => (
+            <Pressable key={`arch-${e.league_id}-${e.sleeper_roster_id}`}
+              onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, padding: 11, marginTop: 6, opacity: 0.8 }}>
+              <Crest url={e.league?.avatar_url} name={e.league?.name} size={30} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{e.league?.name ?? 'League'}</Text>
+                <Mono size={8.5} tone="faint">{e.league?.season ?? ''} · {e.team_name}</Mono>
+              </View>
+              <Pressable hitSlop={8}
+                onPress={() => {
+                  tap();
+                  void setLeagueArchived(e.league_id, false).catch(() => {});
+                  setRows((cur) => (cur ?? []).map((r) => r.league_id === e.league_id ? { ...r, archived: false } : r));
+                }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>UNARCHIVE</Text>
+              </Pressable>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {/* The league board: browse open leagues, post yours, recruit friends.
           Below the league list because your own leagues are the daily visit;

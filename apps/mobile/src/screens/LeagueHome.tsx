@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -187,8 +187,21 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           `commissioner_id = auth.uid()`), so offering the button and then
           explaining the refusal would be worse than not offering it. Their way
           out is ⚑ COMMISSIONER → delete the league. */}
+      {/* 🗄 THE SHELF (0239, founder: "the ability to archive leagues") —
+          one tap, reversible, per-user: the league folds into the leagues
+          list's ARCHIVED section. Everyone gets it, commissioner included:
+          shelving touches nothing but your own list. */}
+      <View style={{ marginTop: 22, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+        <Pressable onPress={() => { tap(); void setLeagueArchived(leagueId, true).catch(() => {}); onBack(); }}
+          style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 14 }}>
+          <Mono size={9.5} weight="700" tone="faint">🗄 archive this league</Mono>
+        </Pressable>
+        <Mono size={8.5} tone="faint" style={{ textAlign: 'center', marginTop: 2, lineHeight: 12 }}>
+          Tucks it into ARCHIVED on your leagues list — just for you, undo any time.
+        </Mono>
+      </View>
       {!commish && (
-        <View style={{ marginTop: 22, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+        <View style={{ marginTop: 4 }}>
           {leaveErr && <Mono size={9.5} tone="opp" style={{ marginBottom: 8, lineHeight: 14 }}>{leaveErr}</Mono>}
           <Pressable disabled={leaving} onPress={doLeave} style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 14, opacity: leaving ? 0.5 : 1 }}>
             <Mono size={9.5} weight="700" tone={leaveArmed ? 'opp' : 'faint'}>

@@ -33,6 +33,7 @@ import { registerForPush } from './src/ui/push';
 import { Admin } from './src/screens/Admin';
 import { Draft } from './src/screens/Draft';
 import { Team } from './src/screens/Team';
+import { PlatformTeam } from './src/screens/PlatformTeam';
 import { Recruit } from './src/screens/Recruit';
 import { SignIn } from './src/screens/SignIn';
 import { ErrorBoundary } from './src/ui/ErrorBoundary';
@@ -357,6 +358,10 @@ export function App() {
           <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
+        ) : view === 'team' && open && open.rosterId != null ? (
+          // External league (v0.356.5): the read-only team page — the roster
+          // the platform sync carries, no waivers or trades.
+          <View style={{ flex: 1 }}><PlatformTeam leagueId={open.leagueId} rosterId={open.rosterId} /></View>
         ) : view === 'chat' && open ? (
           <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}-${chatDm?.peerId ?? ''}`} leagueId={open.leagueId} initialDm={chatDm} /></View>
         ) : view === 'commishtools' && open ? (
@@ -436,7 +441,7 @@ export function App() {
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
               ['picks', '▦', 'MATCHUP', open.rosterId != null],          // no seat → no lineup
               ['draft', '⛏', 'DRAFT', open.native && !draftDone],        // native-only; leaves once drafted
-              ['team', '⇄', 'MY TEAM', open.native && open.rosterId != null],
+              ['team', '⇄', 'MY TEAM', open.rosterId != null],   // external gets the read-only page (v0.356.5)
               ['chat', '💬', 'CHAT', true],
             ] as const)
               .filter(([, , , show]) => show)
