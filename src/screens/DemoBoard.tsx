@@ -8,6 +8,7 @@ import { METRICS } from '@drip/core/data/metrics';
 import { loadRealWeek } from '@drip/core/data/realPbp';
 import { gamesInWindow, windowsForWeek } from '@drip/core/data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '@drip/core/data/demoNarration';
+import { readRecruitGame, recruitFraming } from '@drip/core/data/leagueTagline';
 import { classifyEvent } from '@drip/core/engine/moments';
 import { avatarUrl } from '@drip/core/data/media';
 import { getProvider } from '@drip/core/data/providers';
@@ -478,6 +479,38 @@ export function DemoBoard() {
 
   const [requesting, setRequesting] = useState(false);
   const [faq, setFaq] = useState(false);
+  // ── WHICH GAME WAS THIS VISITOR SENT FOR (v0.357.3) ─────────────────────
+  // Founder: "Im starting to recruit for non-drip leagues but the site still
+  // draws people to the drip demo." The join screen has pitched the right game
+  // since v0.325.0 — but only to a recruit HOLDING A CODE. Someone simply
+  // pointed at the site arrived at this board, which is the drip pitch end to
+  // end: hidden metrics, power-ups, a nuke. If they were being recruited to a
+  // classic league, every word of it was about the other game.
+  //
+  // `?game=classic` (stashed at boot by App.tsx) is the missing sentence. The
+  // band leads with the game they were actually sent for, and says plainly
+  // that the demo plays the other one. With no hint, drip stays the lead — a
+  // bare visit is not a classic recruit.
+  const [recruited] = useState<'drip' | 'classic' | null>(() => {
+    try { return readRecruitGame((k) => (k === 'game' ? localStorage.getItem('dripRecruitGame') : null)); }
+    catch { return null; }
+  });
+  const framing = recruitFraming(recruited, 'drip');
+  const band = (
+    <div style={{
+      margin: '0 14px 6px', padding: '10px 13px', borderRadius: 6,
+      background: framing.mismatch ? 'color-mix(in srgb, var(--warn) 9%, var(--surface))' : 'var(--surface)',
+      border: `1px solid ${framing.mismatch ? 'color-mix(in srgb, var(--warn) 45%, var(--bd))' : 'var(--bd)'}`,
+      display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px',
+    }}>
+      <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: framing.mismatch ? 'var(--warn)' : 'var(--text)' }}>
+        {framing.lead}
+      </span>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, flex: '1 1 260px', minWidth: 0 }}>
+        {framing.blurb}
+      </span>
+    </div>
+  );
 
   const header = (
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
@@ -633,6 +666,7 @@ export function DemoBoard() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
+      {band}
       <main style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 14, padding: '6px 14px 96px' }}>
         {/* your full roster — the hero board's drag rail (desktop, setup only) */}
         {phase === 'setup' && !narrow && (

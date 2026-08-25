@@ -61,6 +61,66 @@ export function taglineFor(mode?: GameMode | null): LeagueTagline {
   return { label: '', blurb: NEUTRAL_BLURB, known: false };
 }
 
+// ── WHICH GAME AM I BEING RECRUITED FOR (v0.357.3) ────────────────────────
+//
+// Founder: "Im starting to recruit for non-drip leagues but the site still
+// draws people to the drip demo."
+//
+// v0.325.0 fixed the recruit who arrives HOLDING A CODE — the join screen asks
+// what the league plays and pitches that. It could not fix the recruit who
+// arrives with nothing, because nothing in the URL said which game they were
+// sent for, and the landing page IS the drip demo: hidden metrics, power-ups,
+// a nuke. Someone invited to a classic league met a pitch for the other game.
+//
+// `?game=classic` is that missing sentence, and it costs no server: the static
+// host ignores query strings but the app reads them, the same way `?code=`
+// already works. A recruiter hands out the link; the landing leads with the
+// game they were actually sent for and says plainly that the demo shows the
+// other one.
+//
+// UNSET STAYS DRIP-FIRST. A bare visit is not a classic recruit, and guessing
+// would sell the ordinary version of the product to everyone.
+
+/** The game a recruiting link says its reader was sent for, or null when the
+ *  link never said. Deliberately narrow: only the two modes the product has,
+ *  never a free-text value off a URL. */
+export function readRecruitGame(get: (key: string) => string | null | undefined): 'drip' | 'classic' | null {
+  const g = (get('game') ?? '').trim().toLowerCase();
+  return g === 'classic' || g === 'drip' ? g : null;
+}
+
+/** The landing band's two lines for a visitor, given what the link said.
+ *  `demoMode` is the game the demo actually plays — stated rather than
+ *  assumed, so the day a classic demo exists this reads correctly without
+ *  being rewritten. */
+export function recruitFraming(recruited: 'drip' | 'classic' | null, demoMode: GameMode = 'drip'): {
+  /** The headline: what this visitor was sent here for. */
+  lead: string;
+  /** What that game is, in one line. */
+  blurb: string;
+  /** True when the demo below plays a DIFFERENT game than the one they were
+   *  recruited for — the case that needs saying out loud. */
+  mismatch: boolean;
+} {
+  const demo = taglineFor(demoMode);
+  if (!recruited) {
+    return {
+      lead: `Two games, one league app. This demo plays ${demo.label || 'DRIP'}.`,
+      blurb: NEUTRAL_BLURB,
+      mismatch: false,
+    };
+  }
+  const t = taglineFor(recruited);
+  const mismatch = recruited !== (demoMode ?? '').trim().toLowerCase();
+  return {
+    lead: mismatch
+      ? `You're being invited to a ${t.label} league. The demo below plays ${demo.label || 'DRIP'} — our other game.`
+      : `You're being invited to a ${t.label} league. That's what the demo below plays.`,
+    blurb: t.blurb,
+    mismatch,
+  };
+}
+
 // ── IS THERE ROOM, AND IS THE DOOR OPEN (v0.326.0) ────────────────────────
 //
 // Founder: "Can we have a commish option to close the waiting room. Just
