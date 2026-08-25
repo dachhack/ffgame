@@ -645,20 +645,34 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           the screen was one long scroll of everything; now one area shows at
           a time, ROSTER first. Identity and the over-limit warning stay
           global: who you are and what's broken outrank any tab. */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+      {/* ONE ROW, ALWAYS (v0.356.2, founder: "Can we fit the waivers,
+          contracts, etc. all on one row?") — the wrapping chip strip becomes
+          a segmented bar in the room bar's own idiom (icon over label, one
+          flexed column per tab), so a fifth tab narrows the columns instead
+          of falling to a second line. */}
+      <View style={{ flexDirection: 'row', backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, overflow: 'hidden' }}>
         {([
-          ['roster', '🧢 ROSTER'],
-          ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
-          ['trades', '⇄ TRADES'],
+          ['roster', '🧢', 'ROSTER'],
+          ['waivers', '✚', `WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', '⇄', 'TRADES'],
           // Contract leagues get their front office ON the team screen
           // (v0.353.1, founder: "wouldn't it make sense to have contract
           // tools and info in 'my team?'") — the cap sheet had been living
           // inside the league page's Standings overlay, where nobody looks.
-          ...(deals ? [['contracts', '📜 CONTRACTS'] as const] : []),
-          ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
-        ] as const).map(([id, label]) => (
-          <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
-        ))}
+          ...(deals ? [['contracts', '📜', 'CONTRACTS'] as const] : []),
+          ...(keeperCount > 0 ? [['keepers', '★', 'KEEPERS'] as const] : []),
+        ] as const).map(([id, icon, label]) => {
+          const on = tab === id;
+          return (
+            <Pressable key={id} onPress={() => { tap(); setTab(id); }}
+              accessibilityRole="button" accessibilityState={{ selected: on }}
+              style={{ flex: 1, alignItems: 'center', paddingTop: 7, gap: 1 }}>
+              <Text style={{ fontSize: 13, lineHeight: 17, opacity: on ? 1 : 0.55 }}>{icon}</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', letterSpacing: 0.4, color: on ? t.you : t.dim }}>{label}</Text>
+              <View style={{ height: 2, alignSelf: 'stretch', marginHorizontal: 12, marginTop: 4, borderRadius: 1, backgroundColor: on ? t.you : 'transparent' }} />
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
