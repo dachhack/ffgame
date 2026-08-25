@@ -19,6 +19,7 @@ import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
+import { PlatformTeam } from './PlatformTeam';
 import { LeagueBoard } from './LeagueBoard';
 import { LeagueHubPage, useHeroBoard, openHeroBoard } from './LeagueHubPage';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
@@ -790,7 +791,18 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'team' && target) return (
     <>
       {stripFor('team')}
-      <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')} />
+      {/* TWO TEAM PAGES, ONE ROOM (v0.356.17, founder: "We need a my team
+          section on web. This should apply to native, and non-native teams
+          (sleeper)"). A native league gets the full desk — roster, waivers,
+          trades, contracts. An imported one gets the read-only page: its
+          roster is managed on its own platform, and the weekly sync is what
+          we have to show. */}
+      {/* Only a KNOWN external provider takes the read-only page. `homeFor` is
+          set on every path into this room, but if it ever weren't, the native
+          desk is the older behaviour and the safer guess. */}
+      {homeFor?.league?.provider && homeFor.league.provider !== 'native'
+        ? <PlatformTeam leagueId={target.leagueId} rosterId={target.rosterId} userId={session.user.id} />
+        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')} />}
     </>
   );
   if (view === 'join') return (
