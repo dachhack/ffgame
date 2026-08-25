@@ -126,14 +126,9 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           league's name at header size in v0.279.3, and printing it again here
           just pushed the menu down. What is left is the line the header
           doesn't carry — which seat you are — and the way out. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
-        </View>
-        <Pressable hitSlop={8} onPress={() => { tap(); onBack(); }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>← leagues</Text>
-        </Pressable>
-      </View>
+      {/* No "← leagues" here (v0.356.2, founder) — the brand bar's
+          "← my leagues" is the one exit, and a second one was noise. */}
+      {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
 
       {!!note && (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: alpha('#A87BD8', 10), borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 }}>
@@ -160,7 +155,8 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           it is the league: who's in it, what it did, and the rules it runs on.
           The heading is what stops the menu reading as one undifferentiated
           pile of nine tiles. */}
-      <Mono size={8.5} tone="faint" weight="700" track={0.14} style={{ marginTop: 8, marginBottom: 2 }}>THE LEAGUE</Mono>
+      {/* No "THE LEAGUE" label (v0.356.2, founder) — the whole screen is the
+          league; the tiles say what they are. */}
 
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
       {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
