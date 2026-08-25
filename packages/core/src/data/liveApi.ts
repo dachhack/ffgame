@@ -1983,6 +1983,16 @@ export const setPushPrefs = (token: string, prefs: Record<string, boolean>) =>
   rpc<{ ok: boolean; error?: string; prefs?: Record<string, boolean> }>('set_push_prefs', { p_token: token, p_prefs: prefs });
 export const myPushTokens = () => rpc<PushTokenRow[]>('my_push_tokens');
 
+// ── Every message, per league (0241) ────────────────────────────────────────
+// Founder: "anytime someone ... posts a comment". The per-device mutes above
+// are global — turning chat off turns it off everywhere — so "every word of
+// THIS league" is a different question and gets its own answer. Off unless
+// somebody said yes.
+export const myLeagueChatPush = (leagueId: string) =>
+  rpc<{ ok: boolean; all_messages: boolean }>('my_league_chat_push', { p_league_id: leagueId });
+export const setLeagueChatPush = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; all_messages?: boolean }>('set_league_chat_push', { p_league_id: leagueId, p_on: on });
+
 // ── League scoring adjustments (0143): the commissioner's layering knobs ─────
 export interface LeagueScoringRow {
   td_bonus: number; yd_mult: number; to_penalty: number; can_edit: boolean;

@@ -368,7 +368,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       )}
       {info === 'alerts' && (
         <Sheet title="🔔 Alerts" subtitle="WHAT PINGS THIS BROWSER" onClose={() => setInfo(null)}>
-          <NotifPrefsCard bare />
+          <NotifPrefsCard bare leagueId={e.league_id} />
         </Sheet>
       )}
       {info === 'recruit' && (

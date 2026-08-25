@@ -26,7 +26,7 @@ import {
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
-  myPushTokens, setPushPrefs, type PushTokenRow,
+  myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, type PushTokenRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade, leagueContracts, type LeagueContracts,
   setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
@@ -3314,20 +3314,36 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
   { key: 'trades', label: '⇄ trade offers' },
   { key: 'waivers', label: '✚ waiver results' },
   { key: 'draft', label: '⛏ draft alerts' },
+  { key: 'members', label: '⚑ new managers' },
 ];
 
 /** Push/alert preferences, per device (exported since v0.287.0 so the league
  *  hub's 🔔 Alerts tile can host the same card the team screen does — the app
  *  puts alerts on the league menu, and the web mirroring that layout should not
  *  fork a second copy of the editor). */
-export function NotifPrefsCard({ bare }: { bare?: boolean } = {}) {
+export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: string } = {}) {
   const [tokens, setTokens] = useState<PushTokenRow[] | null>(null);
   const [web, setWeb] = useState<WebPushState>('unsupported');
+  // EVERY MESSAGE IN THIS LEAGUE (0241) — a per-league answer, so it only
+  // shows where a league is open. null until it loads.
+  const [allChat, setAllChat] = useState<boolean | null>(null);
   const reload = () => myPushTokens().then(setTokens).catch(() => setTokens([]));
   useEffect(() => {
     void reload();
     webPushState().then(setWeb).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!leagueId) { setAllChat(null); return; }
+    let dead = false;
+    myLeagueChatPush(leagueId).then((r) => { if (!dead) setAllChat(!!r?.all_messages); }).catch(() => {});
+    return () => { dead = true; };
+  }, [leagueId]);
+  const flipAllChat = () => {
+    if (!leagueId || allChat === null) return;
+    const next = !allChat;
+    setAllChat(next);
+    void setLeagueChatPush(leagueId, next).catch(() => setAllChat(!next));
+  };
   const toggle = (tok: PushTokenRow, key: string) => {
     const next = { ...(tok.prefs ?? {}), [key]: tok.prefs?.[key] === false };
     setTokens((cur) => (cur ?? []).map((x) => (x.token === tok.token ? { ...x, prefs: next } : x)));
@@ -3383,6 +3399,20 @@ export function NotifPrefsCard({ bare }: { bare?: boolean } = {}) {
           </div>
         </div>
       ))}
+      {leagueId && allChat !== null && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+          <button onClick={flipAllChat} className="mono"
+            style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
+              color: allChat ? 'var(--you)' : 'var(--dim)',
+              background: allChat ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)',
+              border: `1px solid ${allChat ? 'var(--you)' : 'var(--bd)'}` }}>
+            {allChat ? '✓ EVERY MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
+          </button>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+            Per league, not per device: leave it off and chat still pings you for mentions, DMs and polls.
+          </div>
+        </div>
+      )}
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         Lit = on. Mutes apply per kind, per device — they follow your account, so flipping them here reaches your phone.
       </div>

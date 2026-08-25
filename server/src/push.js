@@ -14,9 +14,12 @@
 //   lineup  — a window's lock (kickoff − 1h) is 55–65 min out and a manager
 //             still has empty base slots in it (slotsFor; extra powerup slots
 //             never alarm — you shouldn't be paged over a slot you'd buy).
-//   chat    — an @mention names you, or a DM lands in your thread.
+//   chat    — an @mention names you, a DM lands in your thread, a poll or a
+//             commish note goes up, or — for a league you have asked to hear
+//             EVERY message from (league_chat_push, 0241) — anybody speaks.
 //   trades  — a trade offer is created with you as the recipient.
 //   waivers — your waiver claim processed to WON or LOST.
+//   members — somebody took a seat in a league you commission (0241).
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -186,6 +189,42 @@ async function detectChat() {
       });
     }
   }
+  // EVERY MESSAGE, where somebody asked for it (0241). Per-device mutes are
+  // global — "chat off" means off everywhere — so wanting every word of one
+  // league and only mentions in another is a per-league answer, and this is
+  // where it is spent. Off unless a row says otherwise, so an upgrade alone
+  // never starts a phone buzzing.
+  const { data: subs } = await db().from('league_chat_push')
+    .select('league_id, app_user_id').eq('all_messages', true);
+  if (subs?.length) {
+    const wanted = new Map();          // league_id → [app_user_id]
+    for (const r of subs) {
+      if (!wanted.has(r.league_id)) wanted.set(r.league_id, []);
+      wanted.get(r.league_id).push(r.app_user_id);
+    }
+    const { data: all } = await db().from('league_message')
+      .select('id, league_id, body, mentions, author_id, kind, created_at')
+      .in('league_id', [...wanted.keys()]).gt('created_at', sinceIso());
+    const allNames = await leagueNames([...wanted.keys()]);
+    for (const m of all ?? []) {
+      // A poll already broadcasts to the whole league above; sending it again
+      // through this door would be the same message twice on one phone.
+      if (m.kind === 'poll') continue;
+      const mentioned = new Set(m.mentions ?? []);
+      for (const uid of wanted.get(m.league_id) ?? []) {
+        if (uid === m.author_id) continue;   // you wrote it
+        if (mentioned.has(uid)) continue;    // the mention push above is the better one
+        rows.push({
+          app_user_id: uid, kind: 'chat',
+          title: `New message · ${allNames.get(m.league_id) ?? 'your league'}`,
+          body: String(m.body ?? '').slice(0, 140),
+          data: { league_id: m.league_id, open: 'chat' },
+          dedupe_key: `chat:all${m.id}:${uid}`,
+        });
+      }
+    }
+  }
+
   const { data: dms } = await db().from('dm_message')
     .select('id, body, author_id, created_at, thread:dm_thread(id, league_id, user_lo, user_hi)')
     .gt('created_at', sinceIso());
@@ -430,9 +469,46 @@ async function flush() {
   if (sent) log(`delivered ${sent} push${sent === 1 ? '' : 'es'}`);
 }
 
+// ── somebody took a seat (0241) ─────────────────────────────────────────────
+// Founder: "anytime someone joins a league". THE COMMISSIONER'S NEWS, not the
+// whole room's — a league filling up is the person who sent the invites
+// watching it land, and twelve managers each hearing about the other eleven is
+// eleven pushes nobody asked for. If the room should hear it too, that is a
+// second audience to add here, not a different detector.
+//
+// Windows on league_membership.enrolled_at, which 0241 added and stamps by
+// trigger. Rows that predate the column are NULL and never match, so the first
+// sweep after deploy does not announce every existing member as new.
+async function detectMembers() {
+  const { data: joins } = await db().from('league_membership')
+    .select('id, league_id, team_name, app_user_id, enrolled_at')
+    .eq('enrolled', true).not('app_user_id', 'is', null).gt('enrolled_at', sinceIso());
+  if (!joins?.length) return;
+  const { data: leagues } = await db().from('league')
+    .select('id, name, commissioner_id').in('id', [...new Set(joins.map((j) => j.league_id))]);
+  const byId = new Map((leagues ?? []).map((l) => [l.id, l]));
+  await enqueue(joins.flatMap((j) => {
+    const l = byId.get(j.league_id);
+    if (!l?.commissioner_id) return [];
+    // The commissioner taking their own seat is not news to the commissioner.
+    if (l.commissioner_id === j.app_user_id) return [];
+    return [{
+      app_user_id: l.commissioner_id, kind: 'members',
+      title: `New manager · ${l.name}`,
+      body: `${j.team_name || 'A new manager'} joined the league.`,
+      data: { league_id: j.league_id },
+      // Keyed on the SEAT, not the moment: a seat vacated and retaken stamps a
+      // fresh enrolled_at and earns a fresh push, but one join cannot notify
+      // twice however many sweeps see it inside the window.
+      dedupe_key: `member:${j.id}:${j.enrolled_at}`,
+    }];
+  }));
+}
+
 /** One sweep: detect everything, then deliver. Called on its own interval. */
 export async function sweepPush() {
   await detectChat().catch((e) => log('chat detector error', e.message));
+  await detectMembers().catch((e) => log('members detector error', e.message));
   await detectTrades().catch((e) => log('trades detector error', e.message));
   await detectDraft().catch((e) => log('draft detector error', e.message));
   await detectWaivers().catch((e) => log('waivers detector error', e.message));

@@ -260,7 +260,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
 
       <Overlay visible={alertsOpen} title="Alerts" subtitle="WHAT PINGS YOUR PHONE" onClose={() => setAlertsOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
-          <PushPrefs />
+          <PushPrefs leagueId={leagueId} />
         </ScrollView>
       </Overlay>
     </ScrollView>
