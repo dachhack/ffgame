@@ -1867,7 +1867,10 @@ export const dmMessages = (threadId: string, before?: number) =>
 export const chatUnread = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; league?: number; dm?: number; mention?: number }>('chat_unread', { p_league_id: leagueId });
 export const chatMembers = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; members?: { id: string; name: string; me: boolean }[] }>('chat_members', { p_league_id: leagueId });
+  rpc<{ ok: boolean; error?: string; members?: { id: string; name: string; me: boolean }[];
+        /** 0238: which member OWNS each roster — Teams & rosters prints the
+         *  owner and hands the id to 💬 MESSAGE / ⇄ TRADE. */
+        seats?: { roster: number; user: string }[] }>('chat_members', { p_league_id: leagueId });
 
 // ── App push notifications (0150): device token registry + per-device mutes ──
 export interface PushTokenRow { token: string; platform: string; prefs: Record<string, boolean>; last_seen_at: string; }

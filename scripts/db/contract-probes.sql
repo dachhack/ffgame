@@ -863,4 +863,26 @@ begin
     'ct21m exp 5 and exp unknown both file as $1 veteran street deals');
 end $$;
 
+-- ── §23. the seat map (0238) ─────────────────────────────────────────────────
+-- chat_members now answers `seats`: roster → owning member, so 👥 Teams &
+-- rosters can print the owner and hand the id to 💬 MESSAGE / ⇄ TRADE.
+-- (Lives here for the fixture helpers, not because it is contract law.)
+do $$
+declare lid uuid; r jsonb; code text;
+begin
+  perform probe_as('a');
+  r := create_native_league('Seat Map', '2026', 2, 5, 60, 'snake', 40);
+  perform assert_ok(r, 'ct23a create');
+  lid := (r ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Owns'), 'ct23b B joins');
+  r := chat_members(lid);
+  perform assert_ok(r, 'ct23c members read');
+  perform assert_true(jsonb_array_length(r -> 'seats') >= 2, 'ct23d every claimed seat is mapped');
+  perform assert_true(exists (select 1 from jsonb_array_elements(r -> 'seats') s
+      where (s ->> 'roster')::int = 2 and (s ->> 'user') = '00000000-0000-0000-0000-00000000000b'),
+    'ct23e THE POINT: seat 2 speaks with B''s id');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

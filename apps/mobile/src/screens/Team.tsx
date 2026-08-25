@@ -10,19 +10,18 @@
 // (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
 // whole kit. The old "web only for now" list is empty.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addFreeAgent, cancelWaiverClaim,
-  friendlyError, leagueInvite, leaguePool, nativeRosters, setRosterSpot,
+  friendlyError, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
-  nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, POS_CAP_KEYS,
+  nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueContracts, type ContractDeal,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
-import { inviteMessage } from '@drip/core/data/invite';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -272,7 +271,12 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }
   );
 }
 
-export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: () => void; onDraft: () => void }) {
+export function Team({ leagueId, onBack, onDraft, tradePartner }: {
+  leagueId: string; onBack: () => void; onDraft: () => void;
+  /** Deep link from 👥 Teams & rosters (v0.356.3): land on TRADES with the
+   *  propose sheet already pointed at this seat. */
+  tradePartner?: number | null;
+}) {
   const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
@@ -346,7 +350,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   // win signs at the FAAB bid, $1 minimum, for a year) but no roster surface
   // said so. slug → deal, null until the league says it plays with contracts.
   const [deals, setDeals] = useState<Map<string, ContractDeal> | null>(null);
-  const [salaryCap, setSalaryCap] = useState<number | null>(null);
   // 0229 lock-to-play: the wire is shut for my team until I lock my lengths
   // (or the deadline passes). Captured here so the WAIVERS tab can say WHY
   // a claim would bounce, before the server has to.
@@ -354,7 +357,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   const loadDeals = () => {
     leagueContracts(leagueId).then((r) => {
       setDeals(r.contracts ? new Map((r.deals ?? []).map((d) => [d.slug, d])) : null);
-      setSalaryCap(r.contracts ? r.salary_cap ?? null : null);
       setWireGate(r.contracts && !r.my_locked && r.lock_deadline != null && Date.parse(r.lock_deadline) > Date.now()
         ? r.lock_deadline : null);
     }).catch(() => {});
@@ -539,21 +541,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   };
   const addOrClaim = (p: LeaguePoolPlayer) => { if (full) setPendingAdd(p); else doAdd(p); };
 
-  // Recruit a friend: fetch the code (enrolled members may — 0123) and hand it
-  // to the OS share sheet with the pitch attached.
-  const shareInvite = async () => {
-    tap();
-    try {
-      const r = await leagueInvite(leagueId);
-      if (!r.ok || !r.invite_code) { warn(); setErr(friendlyError(r.error ?? 'could not fetch the invite code')); return; }
-      // One message from every surface (v0.291.0) — and a LINK rather than four
-      // characters to dictate. `?code=` was already a complete join path; these
-      // buttons just weren't building the URL.
-      await Share.share({
-        message: inviteMessage({ league: r.name, code: r.invite_code, seatsOpen: r.seats_open }),
-      });
-    } catch { /* user dismissed the sheet — not an error */ }
-  };
 
   if (!team) {
     return (
@@ -564,34 +551,47 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
     );
   }
 
+  // Trimmed to identity alone (v0.356.2, founder: "Let's have the actual
+  // team avatar rather than 'team art' and just a pencil icon without
+  // 'rename'"): the AVATAR is on the card (tap it to change it), the ✎
+  // opens the name editor with the art link inside, and RECRUIT went back
+  // to the league page — this card is who you are, not a toolbar.
   const identityCard = myRoster != null && (
     <Card style={{ borderLeftWidth: 3, borderLeftColor: t.you }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Pressable onPress={() => { tap(); setMyArtOpen(true); }} accessibilityLabel="Change team art" hitSlop={4}>
+          {team.my_avatar
+            ? <Image source={{ uri: team.my_avatar }} style={{ width: 42, height: 42, borderRadius: 9, backgroundColor: t.bg }} />
+            : <View style={{ width: 42, height: 42, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 17 }}>🧢</Text>
+              </View>}
+        </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           {nameDraft === null ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Display size={16}>{team.my_team ?? `Team ${myRoster}`}</Display>
-              <LinkButton label="✎ rename" onPress={() => { tap(); setNameDraft(team.my_team ?? ''); }} />
-            </View>
-          ) : (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={nameDraft} autoFocus maxLength={40} onChangeText={setNameDraft}
-                style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
-              <Pressable disabled={busy || !nameDraft.trim()}
-                onPress={() => { if (nameDraft.trim() && myRoster != null) void run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); }}
-                style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !nameDraft.trim() ? 0.5 : 1 }}>
-                <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.onAccent }}>SAVE</Text>
+              <Pressable hitSlop={8} onPress={() => { tap(); setNameDraft(team.my_team ?? ''); }} accessibilityLabel="Edit team name or art">
+                <Text style={{ fontSize: 13, color: t.dim }}>✎</Text>
               </Pressable>
             </View>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput value={nameDraft} autoFocus maxLength={40} onChangeText={setNameDraft}
+                  style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
+                <Pressable disabled={busy || !nameDraft.trim()}
+                  onPress={() => { if (nameDraft.trim() && myRoster != null) void run(() => setTeamName(leagueId, myRoster, nameDraft)); setNameDraft(null); }}
+                  style={{ backgroundColor: t.you, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !nameDraft.trim() ? 0.5 : 1 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.onAccent }}>SAVE</Text>
+                </Pressable>
+              </View>
+              <LinkButton label="🖼 change team art" onPress={() => { tap(); setNameDraft(null); setMyArtOpen(true); }} />
+            </>
           )}
           {team.waiver_mode === 'faab' && team.my_faab != null && (
             <Mono size={9.5} tone="you" style={{ marginTop: 4 }}>💰 FAAB budget ${team.my_faab}</Mono>
           )}
-          <LinkButton label="🖼 team art" onPress={() => { tap(); setMyArtOpen(true); }} />
         </View>
-        <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
-        </Pressable>
       </View>
     </Card>
   );
@@ -606,17 +606,15 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
   if (team.draft_status !== 'complete') {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Display size={17}>⇄ My team</Display>
-          <View style={{ flex: 1 }} />
-          <LinkButton label="← back" onPress={onBack} />
-        </View>
+        {/* No screen title, no back link (v0.356.2, founder) — the room bar
+            below is the navigation, and the league title one row up already
+            says where you are. */}
         {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
         {identityCard}
         <Card>
           <Display size={15}>Rosters arrive at the draft</Display>
           <Mono size={10} style={{ marginTop: 8, lineHeight: fs(16) }}>
-            Waivers and free agency open once the draft is complete. Set your team name now — it shows on the draft board. Use RECRUIT to bring friends in before draft night.
+            Waivers and free agency open once the draft is complete. Set your team name now — it shows on the draft board.
           </Mono>
           <View style={{ marginTop: 12 }}>
             <PrimaryButton label="⛏ TO THE DRAFT ROOM" onPress={onDraft} />
@@ -632,11 +630,9 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Display size={17}>⇄ My team</Display>
-        <View style={{ flex: 1 }} />
-        <LinkButton label="← back" onPress={onBack} />
-      </View>
+      {/* No screen title, no back link (v0.356.2, founder) — the room bar
+          below is the navigation, and the league title one row up already
+          says where you are. */}
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
 
@@ -645,20 +641,34 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           the screen was one long scroll of everything; now one area shows at
           a time, ROSTER first. Identity and the over-limit warning stay
           global: who you are and what's broken outrank any tab. */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+      {/* ONE ROW, ALWAYS (v0.356.2, founder: "Can we fit the waivers,
+          contracts, etc. all on one row?") — the wrapping chip strip becomes
+          a segmented bar in the room bar's own idiom (icon over label, one
+          flexed column per tab), so a fifth tab narrows the columns instead
+          of falling to a second line. */}
+      <View style={{ flexDirection: 'row', backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, overflow: 'hidden' }}>
         {([
-          ['roster', '🧢 ROSTER'],
-          ['waivers', `✚ WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
-          ['trades', '⇄ TRADES'],
+          ['roster', '🧢', 'ROSTER'],
+          ['waivers', '✚', `WAIVERS${pendingClaims.length ? ` (${pendingClaims.length})` : ''}`],
+          ['trades', '⇄', 'TRADES'],
           // Contract leagues get their front office ON the team screen
           // (v0.353.1, founder: "wouldn't it make sense to have contract
           // tools and info in 'my team?'") — the cap sheet had been living
           // inside the league page's Standings overlay, where nobody looks.
-          ...(deals ? [['contracts', '📜 CONTRACTS'] as const] : []),
-          ...(keeperCount > 0 ? [['keepers', '★ KEEPERS'] as const] : []),
-        ] as const).map(([id, label]) => (
-          <Chip key={id} label={label} on={tab === id} onPress={() => { tap(); setTab(id); }} />
-        ))}
+          ...(deals ? [['contracts', '📜', 'CONTRACTS'] as const] : []),
+          ...(keeperCount > 0 ? [['keepers', '★', 'KEEPERS'] as const] : []),
+        ] as const).map(([id, icon, label]) => {
+          const on = tab === id;
+          return (
+            <Pressable key={id} onPress={() => { tap(); setTab(id); }}
+              accessibilityRole="button" accessibilityState={{ selected: on }}
+              style={{ flex: 1, alignItems: 'center', paddingTop: 7, gap: 1 }}>
+              <Text style={{ fontSize: 13, lineHeight: 17, opacity: on ? 1 : 0.55 }}>{icon}</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', letterSpacing: 0.4, color: on ? t.you : t.dim }}>{label}</Text>
+              <View style={{ height: 2, alignSelf: 'stretch', marginHorizontal: 12, marginTop: 4, borderRadius: 1, backgroundColor: on ? t.you : 'transparent' }} />
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
@@ -674,23 +684,10 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       {/* my roster */}
       {tab === 'roster' && (<>
       <Card>
+        {/* Just the count (v0.356.2, founder: "we don't need all the info
+            text. Just 'My Roster (x/x)'") — position tallies read off the
+            rows themselves, and the money story lives on 📜 CONTRACTS. */}
         <Mono size={9} tone="faint" track={0.12}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</Mono>
-        {team.pos_caps && mine.length > 0 && (
-          <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>
-            {POS_CAP_KEYS.map((k) => `${k} ${mine.filter((p) => p.pos === k).length}/${team.pos_caps![k] ?? '∞'}`).join(' · ')}
-          </Mono>
-        )}
-        {/* Contract league: what this roster costs, right where the roster is.
-            Deal salaries only — dead money, retained ghosts and IR relief live
-            on the league page's full cap sheet, and this line says so. */}
-        {deals && mine.length > 0 && myRoster != null && (() => {
-          const spend = mine.reduce((s, p) => s + (deals.get(p.slug)?.salary ?? 0), 0);
-          return (
-            <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>
-              📜 contracts ${spend}{salaryCap != null ? ` of $${salaryCap} cap` : ''} · deals, tags & cap on the 📜 CONTRACTS tab
-            </Mono>
-          );
-        })()}
         {mine.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No players yet.</Mono>}
 
         {/* ── STARTERS ─────────────────────────────────────────────────────
@@ -700,10 +697,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
             board and classic sets one per week, so calling this "your
             lineup" would be the one thing this screen must not say. */}
         {mine.length > 0 && slotDefs.length > 0 && (<>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-            <Mono size={9} tone="faint" track={0.12}>STARTING SPOTS</Mono>
-            <Mono size={8} tone="faint" style={{ flex: 1 }} numberOfLines={1}>how your roster fits — set the lineup on ▦ MATCHUP</Mono>
-          </View>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 10 }}>STARTING SPOTS</Mono>
           {bySpot.starters.map((row, i) => (
             <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} />
           ))}
@@ -748,10 +742,6 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
           ))}
         </>)}
 
-        <Mono size={8.5} tone="faint" style={{ marginTop: 10, lineHeight: fs(14) }}>
-          Tap a name to open his card — that's where you drop him. Dropped players sit on waivers for 24h (claims beat
-          first-come). Roster changes apply from the next unlocked week.
-        </Mono>
       </Card>
 
       </>)}
@@ -900,7 +890,7 @@ export function Team({ leagueId, onBack, onDraft }: { leagueId: string; onBack: 
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
-        isCommish={!!team.is_commish} onChanged={() => void refresh()} />
+        isCommish={!!team.is_commish} presetPartner={tradePartner} onChanged={() => void refresh()} />
       )}
 
       {/* waiver order */}

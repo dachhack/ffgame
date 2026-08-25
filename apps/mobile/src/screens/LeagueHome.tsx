@@ -6,26 +6,30 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, type TeamInfo } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
-import { Standings, Playoffs, CapSheet, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
+import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
 import { useLeagueScroll } from '../ui/scrollChrome';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
-export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo, onShop, onBack }: {
+export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo, onShop, onBack, onMessage, onTrade }: {
   leagueId: string;
   teamName?: string | null;
   rosterId: number | null;
   native: boolean;
   commish: boolean;
   onGo: (room: LeagueRoom) => void;
+  /** 👥 Teams & rosters actions (v0.356.3): open a DM with a member / open
+   *  MY TEAM's propose sheet pointed at a seat. */
+  onMessage: (peerId: string, peer: string) => void;
+  onTrade: (rosterId: number) => void;
   /** Opens the board with the power-up shop already up. */
   onShop: () => void;
   onBack: () => void;
@@ -126,14 +130,9 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           league's name at header size in v0.279.3, and printing it again here
           just pushed the menu down. What is left is the line the header
           doesn't carry — which seat you are — and the way out. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
-        </View>
-        <Pressable hitSlop={8} onPress={() => { tap(); onBack(); }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>← leagues</Text>
-        </Pressable>
-      </View>
+      {/* No "← leagues" here (v0.356.2, founder) — the brand bar's
+          "← my leagues" is the one exit, and a second one was noise. */}
+      {!!teamName && <Mono size={9.5} tone="faint">you are {teamName}{commish ? ' · ⚑ commissioner' : ''}</Mono>}
 
       {!!note && (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: alpha('#A87BD8', 10), borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 }}>
@@ -160,7 +159,8 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           it is the league: who's in it, what it did, and the rules it runs on.
           The heading is what stops the menu reading as one undifferentiated
           pile of nine tiles. */}
-      <Mono size={8.5} tone="faint" weight="700" track={0.14} style={{ marginTop: 8, marginBottom: 2 }}>THE LEAGUE</Mono>
+      {/* No "THE LEAGUE" label (v0.356.2, founder) — the whole screen is the
+          league; the tiles say what they are. */}
 
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
       {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
@@ -203,7 +203,9 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         </View>
       )}
 
-      {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)} />}
+      {native && <TeamsSheet visible={teamsOpen} leagueId={leagueId} myRoster={rosterId} onClose={() => setTeamsOpen(false)}
+        onMessage={(peerId, peer) => { setTeamsOpen(false); onMessage(peerId, peer); }}
+        onTrade={(rid) => { setTeamsOpen(false); onTrade(rid); }} />}
 
       {/* 🔔 push prefs, in a sheet — lived on the MY TEAM tabs (v0.268.0),
           moved here because alerts are league-wide plumbing, not roster
@@ -217,9 +219,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
               cutline IS the standings; both render nothing elsewhere. */}
           <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
           <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
+          {/* No cap sheet here (v0.356.2, founder: "All that info is in the
+              teams and rosters tab, no?") — payrolls and deals ride on 👥
+              Teams & rosters, and the full front office is MY TEAM → 📜
+              CONTRACTS. Standings is the table again. */}
           <Standings leagueId={leagueId} myRoster={rosterId} />
-          {/* Contract leagues only — the card renders nothing when the cap is off. */}
-          <CapSheet leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
           <Playoffs leagueId={leagueId} />
         </ScrollView>
       </Overlay>
@@ -259,8 +263,10 @@ interface TeamGroup { rid: number; name: string; mine: boolean; players: { slug:
 const POS_ORDER: Record<string, number> = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5 };
 const prettify = (slug: string) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 
-function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
+function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }: {
   visible: boolean; leagueId: string; myRoster: number | null; onClose: () => void;
+  onMessage: (peerId: string, peer: string) => void;
+  onTrade: (rosterId: number) => void;
 }) {
   const t = useTheme();
   const [groups, setGroups] = useState<TeamGroup[] | null>(null);
@@ -271,9 +277,20 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
   // deal, every team header its total. Both maps stay empty without contracts.
   const [deals, setDeals] = useState<Map<string, string>>(new Map());
   const [pay, setPay] = useState<Map<number, string>>(new Map());
+  // Who OWNS each seat (0238): roster → member, for the owner line and the
+  // 💬 MESSAGE / ⇄ TRADE actions.
+  const [owners, setOwners] = useState<Map<number, { id: string; name: string; me: boolean }>>(new Map());
   useEffect(() => {
     if (!visible || groups !== null) return;
     let dead = false;
+    chatMembers(leagueId).then((r) => {
+      if (dead || !r.ok) return;
+      const byId = new Map((r.members ?? []).map((m) => [m.id, m]));
+      setOwners(new Map((r.seats ?? []).flatMap((st) => {
+        const m = byId.get(st.user);
+        return m ? [[st.roster, m] as const] : [];
+      })));
+    }).catch(() => {});
     leagueContracts(leagueId).then((c) => {
       if (dead || !c.contracts) return;
       setDeals(new Map((c.deals ?? []).map((d) => [d.slug, `$${d.salary}·${d.years}yr${d.tagged ? ' ⭐' : ''}`])));
@@ -310,13 +327,38 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose }: {
           <View key={g.rid} style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
             <Pressable onPress={() => { tap(); setOpenRid(openRid === g.rid ? null : g.rid); }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11 }}>
-              <Text style={{ flex: 1, fontSize: 13.5, fontWeight: '700', color: g.mine ? t.you : t.text }}>
-                {g.name}{g.mine ? ' (you)' : ''}
-              </Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: g.mine ? t.you : t.text }}>
+                  {g.name}{g.mine ? ' (you)' : ''}
+                </Text>
+                {/* The MEMBER behind the seat (0238, founder: "show the name
+                    of the league member who owns each team") */}
+                {owners.get(g.rid) && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 1 }}>{owners.get(g.rid)!.name}</Mono>
+                )}
+              </View>
               <Mono size={9} tone="faint">{pay.get(g.rid) ? `${pay.get(g.rid)} · ` : ''}{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</Mono>
             </Pressable>
             {openRid === g.rid && (
               <View style={{ paddingBottom: 10, gap: 2 }}>
+                {/* ...and the two things you'd want with them: a DM and an
+                    offer (v0.356.3). Your own seat needs neither. */}
+                {!g.mine && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
+                    {owners.get(g.rid) && !owners.get(g.rid)!.me && (
+                      <Pressable onPress={() => { tap(); const o = owners.get(g.rid)!; onMessage(o.id, o.name); }}
+                        style={{ flexDirection: 'row', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 6 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.text }}>💬 MESSAGE</Text>
+                      </Pressable>
+                    )}
+                    {myRoster != null && (
+                      <Pressable onPress={() => { tap(); onTrade(g.rid); }}
+                        style={{ flexDirection: 'row', gap: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 6 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>⇄ TRADE</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
                 {g.players.map((p) => (
                   <Pressable key={p.slug} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, leagueId }); }}
                     style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 3 }}>
