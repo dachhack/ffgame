@@ -18,6 +18,7 @@ import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardHeight } from './keyboard';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
@@ -223,6 +224,20 @@ export function ChatScreen({ leagueId, initialDm }: {
   );
 }
 
+/** What a bottom-pinned composer must clear right now (v0.356.12).
+ *
+ *  KEYBOARD DOWN — the room bar (50 + its own lift) floats over the page foot
+ *  and App.tsx's SafeAreaView leaves the bottom edge open, so the composer
+ *  clears the bar AND the gesture bar itself.
+ *  KEYBOARD UP — the keyboard covers both of those, so the only thing left to
+ *  clear is the keyboard. Adding the old reservation on top would strand the
+ *  composer a room-bar's height above the keys. */
+function useComposerPad(): { pad: number; kb: number } {
+  const insets = useSafeAreaInsets();
+  const kb = useKeyboardHeight();
+  return { pad: kb > 0 ? 10 + kb : 10 + 58 + insets.bottom, kb };
+}
+
 /** Scroll body pinned to the newest message unless the reader scrolled up. */
 function useStickyScroll() {
   const ref = useRef<ScrollView>(null);
@@ -239,11 +254,9 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
   draft: string; setDraft: (v: string) => void; busy: boolean; err: string | null; onSend: () => void; placeholder: string;
 }) {
   const t = useTheme();
-  // App.tsx's SafeAreaView leaves the bottom edge open (the power-up hand owns
-  // it), so every bottom-pinned composer must clear the gesture bar itself.
-  const insets = useSafeAreaInsets();
+  const { pad: composerPad } = useComposerPad();
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
       {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={onSend}
@@ -309,7 +322,7 @@ function Reactions({ m, leagueId, onChange }: {
 
 function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const { pad: composerPad, kb } = useComposerPad();
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
   const [pins, setPins] = useState<ChatMessage[]>([]);
   const [pinsOpen, setPinsOpen] = useState(false);
@@ -327,6 +340,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [pollOpen, setPollOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
   const sticky = useStickyScroll();
+  // The message list shrinks by the keyboard's height when it opens, which
+  // would slide the newest message out of view under the composer. Re-pin.
+  useEffect(() => { if (kb > 0) sticky.ref.current?.scrollToEnd({ animated: true }); }, [kb]); // eslint-disable-line react-hooks/exhaustive-deps -- the ref is stable
   const load = () => chatMessages(leagueId)
     .then((r) => { if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); } })
     .catch(() => {});
@@ -424,7 +440,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
-      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
         {(sugg.length > 0 || (suggAll && members.some((m) => !m.me))) && (
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -468,7 +484,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
 
 function DmHome({ leagueId, initialDm }: { leagueId: string; initialDm?: { peerId: string; peer: string } | null }) {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const { pad: composerPad } = useComposerPad();
   const [openThread, setOpenThread] = useState<{ threadId: string | null; peerId: string; peer: string } | null>(
     initialDm ? { threadId: null, peerId: initialDm.peerId, peer: initialDm.peer } : null);
   const [threads, setThreads] = useState<DmThreadRow[] | null>(null);
@@ -531,7 +547,7 @@ function DmHome({ leagueId, initialDm }: { leagueId: string; initialDm?: { peerI
         )}
       </ScrollView>
       {!pick && (
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 10 + 58 + insets.bottom }}>
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
           <Pressable onPress={() => { tap(); setPick(true); }}
             style={{ backgroundColor: t.you, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.onAccent }}>＋ NEW MESSAGE</Text>
@@ -554,6 +570,10 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const sticky = useStickyScroll();
+  const kb = useKeyboardHeight();
+  // The message list shrinks by the keyboard's height when it opens, which
+  // would slide the newest message out of view under the composer. Re-pin.
+  useEffect(() => { if (kb > 0) sticky.ref.current?.scrollToEnd({ animated: true }); }, [kb]); // eslint-disable-line react-hooks/exhaustive-deps -- the ref is stable
   const load = (tid: string) => dmMessages(tid)
     .then((r) => { if (r.ok && r.messages) setMsgs([...r.messages].reverse()); })
     .catch(() => {});
