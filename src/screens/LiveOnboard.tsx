@@ -814,8 +814,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'team' && target) return (
     <>
       {stripFor('team')}
-      <TeamManage leagueId={target.leagueId} focus={teamFocus}
-        onBack={() => { setTeamFocus(undefined); setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onDraft={() => setView('draft')} />
+      <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')} />
     </>
   );
   if (view === 'join') return (

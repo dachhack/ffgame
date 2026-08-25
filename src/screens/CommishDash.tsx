@@ -3,14 +3,16 @@ import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeag
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
-import { leagueScoringGet, commishDeleteLeague, friendlyError } from '@drip/core/data/liveApi';
+import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar } from '@drip/core/data/liveApi';
+import { Avatar } from '../app/ui';
+import { AvatarPicker } from '../app/AvatarPicker';
 import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 
 // The builder's position chips (0163) — base positions only; combos are made by
 // lighting several chips on one spot.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const;
 import { LeagueRow, type LeagueTab } from './AdminPage';
-import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar } from './adminUi';
+import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar, inp, btn } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
 import { rosterRules, setTaxiRules, setIrRules, playerFlags } from '@drip/core/data/liveApi';
@@ -74,7 +76,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
             <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'} openSection={!!defaultTab}
               collapsible={shown.length > 1} defaultOpen={i === 0}
               panels={{
-                mode: <LeagueSettings leagueId={l.league_id} view="mode" />,
+                mode: <><LeagueIdentityPanel leagueId={l.league_id} name={l.name} avatar={l.avatar_url} reload={load} /><LeagueSettings leagueId={l.league_id} view="mode" /></>,
                 lineup: <LeagueSettings leagueId={l.league_id} view="lineup" />,
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
                 activity: <LastSeenPanel leagueId={l.league_id} />,
@@ -88,6 +90,67 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
         Share the invite link with your players, see who’s joined, sync each week’s matchups, and run the live windows — all for the leagues you commission.
       </div>
       <div style={{ textAlign: 'center', marginTop: 6 }}><button onClick={onBack} className="mono" style={linkBtn}>← all leagues</button></div>
+    </div>
+  );
+}
+
+
+// ── League identity (v0.356.10) ──────────────────────────────────────────────
+// The league's name and crest, editable where the founder says they belong:
+// the commissioner's console, not a member's team page (which carried both
+// since 0187 — TeamManage is bare of league controls now). Same RPCs, same
+// guards — set_league_name / set_league_avatar re-check the whistle.
+function LeagueIdentityPanel({ leagueId, name, avatar, reload }: {
+  leagueId: string; name: string; avatar?: string | null; reload: () => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);   // non-null ⇒ renaming
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await fn();
+      if (r.ok) reload(); else setNote(friendlyError(r.error ?? 'failed'));
+    } catch (e) { setNote(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <button onClick={() => setPicking(true)} title="change the league crest" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}>
+        <Avatar name={name} accent="var(--warn)" src={avatar} size={46} />
+      </button>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>LEAGUE NAME &amp; CREST</div>
+        {draft === null ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+            <span className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+            <button onClick={() => setDraft(name)} title="rename the league" className="mono" style={linkBtn}>✎</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+            <input value={draft} autoFocus maxLength={60} placeholder="league name"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && draft.trim().length >= 2) { void run(() => setLeagueName(leagueId, draft)); setDraft(null); }
+                if (e.key === 'Escape') setDraft(null);
+              }}
+              style={{ ...inp, fontSize: 13, flex: 1, minWidth: 160 }} />
+            <button onClick={() => { if (draft.trim().length >= 2) void run(() => setLeagueName(leagueId, draft)); setDraft(null); }}
+              disabled={busy || draft.trim().length < 2} className="mono" style={btn(true)}>SAVE</button>
+            <button onClick={() => setDraft(null)} className="mono" style={linkBtn}>cancel</button>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', flexBasis: '100%' }}>
+              2–60 characters — everyone in the league sees it.
+            </span>
+          </div>
+        )}
+        {note && <div className="mono" style={{ fontSize: 11, color: 'var(--opp)', marginTop: 4 }}>⚠ {note}</div>}
+      </div>
+      {picking && (
+        <AvatarPicker title="Pick the league crest"
+          onPick={(url) => { setPicking(false); void run(() => setLeagueAvatar(leagueId, url)); }}
+          onClose={() => setPicking(false)} />
+      )}
     </div>
   );
 }
