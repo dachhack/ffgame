@@ -13,7 +13,7 @@ import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
-import { Standings, Playoffs, CapSheet, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
+import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
 import { useLeagueScroll } from '../ui/scrollChrome';
 
@@ -213,9 +213,11 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
               cutline IS the standings; both render nothing elsewhere. */}
           <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
           <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
+          {/* No cap sheet here (v0.356.2, founder: "All that info is in the
+              teams and rosters tab, no?") — payrolls and deals ride on 👥
+              Teams & rosters, and the full front office is MY TEAM → 📜
+              CONTRACTS. Standings is the table again. */}
           <Standings leagueId={leagueId} myRoster={rosterId} />
-          {/* Contract leagues only — the card renders nothing when the cap is off. */}
-          <CapSheet leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
           <Playoffs leagueId={leagueId} />
         </ScrollView>
       </Overlay>
