@@ -346,7 +346,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
       <Card>
         {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic)) }))
           .filter((g) => g.items.length > 0).map((g) => (
-          <View key={g.title} style={{ marginBottom: 6 }}>
+          <View key={g.title} style={{ marginBottom: 10 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
             {/* TWO FIXED COLUMNS, not an intrinsic-width wrap (v0.337.1).
                 Content-sized chips wrapped raggedly — SET UP broke 3-then-2
@@ -357,17 +357,21 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
                 instead of scattering it. Measured at the widest label
                 (⇄ WAIVERS & TRADES, 147dp at this type size) against the
                 narrowest track this grid produces. */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 5, marginTop: 4 }}>
+            {/* TALLER chips (v0.356.4, founder: "We can make these chips
+                taller so they fit the screen") — the map is the whole screen,
+                so the destinations grew into the space below instead of
+                huddling at the top; each is also a fatter tap target. */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8, marginTop: 5 }}>
               {g.items.map((it) => {
                 const on = section === it.id;
                 return (
                   <Pressable key={it.id} onPress={() => { tap(); setSection(it.id); }}
-                    style={{ width: '49%', borderRadius: 3, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
+                    style={{ width: '49%', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 15, justifyContent: 'center', backgroundColor: on ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd }}>
                     {/* deliberately NOT numberOfLines={1}: the track fits the
                         widest label down to a 360dp screen, and below that a
                         wrapped label still says which destination it is where
                         an ellipsis would not. */}
-                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{it.label}</Text>
                   </Pressable>
                 );
               })}
