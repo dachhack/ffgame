@@ -1244,7 +1244,10 @@ function LeagueCard({ e, commish, onPodBuild, onOpen }: {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</span>
             {commish && <span className="mono" title="you run this league" style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '1px 5px' }}>COMMISH</span>}
           </div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {/* Wraps rather than clips (v0.357.2): the line carries the game
+              now, and a clipped ellipsis would hide the very words the founder
+              asked to see. */}
+          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2, lineHeight: 1.45 }}>
             {leagueTypeLine(e)}
           </div>
           {drafting && (

@@ -985,4 +985,40 @@ begin
     'ct26j strangers do not subscribe to a league''s chat');
 end $$;
 
+-- ── §27. which game is this (0242) ──────────────────────────────────────────
+-- The chip says what you PLAY, not just what carries over, and all three
+-- settings have to survive the trip through my_teams: the mode, the format,
+-- and golf. Defaults matter as much as the flips — an untouched league reads
+-- drip / standard / false, which is what keeps "Drip" on every chip honest.
+do $$
+declare lid uuid; lg jsonb;
+begin
+  perform probe_as('a');
+  lid := (create_native_league('Which Game', '2026', 2, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+
+  select x -> 'league' into lg from jsonb_array_elements(my_teams()) x
+    where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(lg ->> 'game_mode' = 'drip', 'ct27a a fresh league plays drip');
+  perform assert_true(lg ->> 'format' = 'standard', 'ct27b ...standard');
+  perform assert_true(not (lg ->> 'golf')::boolean, 'ct27c ...and high score wins');
+
+  -- GOLF IS A CLASSIC SETTING. set_league_golf refuses on a drip league, which
+  -- is worth pinning: it means "Drip Golf" can never appear on a chip, and the
+  -- word builder never has to guard against the pair.
+  perform assert_err(set_league_golf(lid, true), 'classic-league setting',
+    'ct27d golf is not a drip league''s to set');
+  -- Classic is an ADMIN-unlocked mode (0158) before it is a commissioner's
+  -- choice — probe 'a' is the admin, so it can hand itself the key.
+  perform assert_ok(set_league_classic_access(lid, true), 'ct27e-pre classic unlocked');
+  perform assert_ok(set_league_game_mode(lid, 'classic'), 'ct27e switch to classic');
+  perform assert_ok(set_league_golf(lid, true), 'ct27f now golf is on the table');
+  perform assert_ok(set_league_format(lid, 'vampire'), 'ct27g a vampire is appointed');
+
+  select x -> 'league' into lg from jsonb_array_elements(my_teams()) x
+    where (x ->> 'league_id')::uuid = lid;
+  perform assert_true(lg ->> 'game_mode' = 'classic' and (lg ->> 'golf')::boolean
+      and lg ->> 'format' = 'vampire',
+    'ct27h THE POINT: all three reach the chip');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

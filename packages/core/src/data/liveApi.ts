@@ -615,6 +615,11 @@ export interface Enrollment {
     draft_status?: DraftStatus | null;
     /** 0240: seats in the league, for the card's built type line. */
     rosters?: number;
+    /** 0242: WHICH GAME this league plays, for the same line. Native leagues
+     *  only — an imported one plays its platform's game, not ours. */
+    game_mode?: 'drip' | 'classic';
+    format?: LeagueFormat;
+    golf?: boolean;
   } | null;
 }
 
@@ -1592,8 +1597,34 @@ export function leagueTypeLine(e: Enrollment): string {
   if (lg.season) parts.push(lg.season);
   if (lg.rosters) parts.push(`${lg.rosters}-Team`);
   parts.push(leagueTypeName(e));
+  parts.push(...leagueGameWords(e));
   if (lg.is_mock) parts.push('Mock');
   return parts.join(' ');
+}
+
+/** WHICH GAME this league plays (0242, founder: "let's have drip or classic
+ *  vampire, golf etc on the chips in my leagues") — the continuity word above
+ *  says what CARRIES OVER, which is a different question from what you play on
+ *  a Sunday.
+ *
+ *  NATIVE LEAGUES ONLY. An imported league plays its own platform's game and
+ *  these settings are ours, so printing "Drip" on a Sleeper league would be a
+ *  claim about somebody else's rules. Nothing is printed for a pod, showdown
+ *  or DFS league either: those name themselves in the type word already.
+ *
+ *  The mode is always said — drip and classic are opposite games and the
+ *  founder asked for both — while a format and golf are said only when set,
+ *  because "Standard" on every chip is the word that isn't news. */
+export function leagueGameWords(e: Enrollment): string[] {
+  const lg = e.league;
+  if (!lg) return [];
+  if (lg.provider && lg.provider !== 'native') return [];
+  if (lg.kind && lg.kind !== 'league') return [];
+  const out = [lg.game_mode === 'classic' ? 'Classic' : 'Drip'];
+  if (lg.format === 'guillotine') out.push('Guillotine');
+  if (lg.format === 'vampire') out.push('Vampire');
+  if (lg.golf) out.push('Golf');
+  return out;
 }
 
 /** What kind of league this is, in a word or two: an imported league answers
