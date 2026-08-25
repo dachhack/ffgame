@@ -240,25 +240,30 @@ export function App() {
             running sideloaded builds and "which one have you got" is otherwise
             unanswerable. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: theme.text }}>DRIP FANTASY</Text>
-            <Text style={{ fontFamily: MONO, fontSize: 8, color: theme.faint }}>{APP_VERSION}</Text>
-          </View>
-
+          {/* THE BRAND IS THE CENTER (v0.356.2, founder: "put drip fantasy
+              and the version in the center of the top and my leagues chip on
+              the left without the arrow") — the wordmark sits absolutely
+              centered on the screen (pointerEvents off so it never eats a
+              tap), with the exit chip on the left and the gear on the right. */}
           {open && (
             <Pressable
               // Resets the view too, so the button lands where its label says.
               // Closing only the league would leave you sitting in Admin with
-              // no league open — "← my leagues" that doesn't show your leagues.
+              // no league open — "my leagues" that doesn't show your leagues.
               onPress={() => { setOpen(null); setView('picks'); }}
               hitSlop={8}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, flexShrink: 1 }}
             >
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>← my leagues</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
             </Pressable>
           )}
 
           <View style={{ flex: 1 }} />
+
+          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: theme.text }}>DRIP FANTASY</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 8, color: theme.faint }}>{APP_VERSION}</Text>
+          </View>
 
           <Pressable
             onPress={() => setSettingsOpen(true)}
