@@ -606,7 +606,16 @@ export interface Enrollment {
   comanager?: boolean;
   /** 0239: on YOUR shelf — the leagues list folds it into ARCHIVED. */
   archived?: boolean;
-  league: { name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null; is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean; continuity?: LeagueContinuity } | null;
+  league: {
+    name: string; season: string; preseason_at?: string | null; provider?: string; avatar_url?: string | null;
+    is_mock?: boolean; kind?: string; contest_week?: number | null; dynasty?: boolean; continuity?: LeagueContinuity;
+    /** 0240: where this league's draft stands. NULL/absent means there is no
+     *  draft of ours at all — an imported league drafted on its own platform —
+     *  which is NOT the same as 'pending'. */
+    draft_status?: DraftStatus | null;
+    /** 0240: seats in the league, for the card's built type line. */
+    rosters?: number;
+  } | null;
 }
 
 /** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
@@ -1545,6 +1554,66 @@ export const isDynastyContinuity = (c: LeagueContinuity | string | null | undefi
   c === 'dynasty' || c === 'contract_dynasty';
 export const isContractContinuity = (c: LeagueContinuity | string | null | undefined) =>
   c === 'contract' || c === 'contract_dynasty';
+
+// ── THE LEAGUE CARD'S ONE LINE, AND WHERE A TAP LANDS (0240) ─────────────────
+// Founder, holding up Sleeper's own list: "Avatar, league name, built text of
+// league type, drafting if drafting. That's all we need too." Both rules live
+// here rather than in either client, so the app and the web say the same thing
+// about the same league — the same reason `crestFor` and `isDynastyContinuity`
+// are in core.
+
+/** Where a league's own draft stands. Absent/null = no draft of ours at all
+ *  (an imported league drafted on its platform), which is NOT 'pending'. */
+export type DraftStatus = 'pending' | 'live' | 'complete';
+
+/** The card's single grey line: season, size, and what KIND of league this is.
+ *  Built from what my_teams already carries, dropping any part it doesn't
+ *  know rather than printing a gap. A mock says so — it is the most important
+ *  thing about a league that isn't real. */
+export function leagueTypeLine(e: Enrollment): string {
+  const lg = e.league;
+  if (!lg) return '';
+  const parts: string[] = [];
+  if (lg.season) parts.push(lg.season);
+  if (lg.rosters) parts.push(`${lg.rosters}-Team`);
+  parts.push(leagueTypeName(e));
+  if (lg.is_mock) parts.push('Mock');
+  return parts.join(' ');
+}
+
+/** What kind of league this is, in a word or two: an imported league answers
+ *  with its platform (its rules live there), a native one with its
+ *  continuity. */
+export function leagueTypeName(e: Enrollment): string {
+  const lg = e.league;
+  if (!lg) return '';
+  if (lg.kind && lg.kind !== 'league') return titleWord(lg.kind);
+  if (lg.provider && lg.provider !== 'native') return titleWord(lg.provider);
+  switch (lg.continuity) {
+    case 'contract': return 'Contract';
+    case 'contract_dynasty': return 'Contract Dynasty';
+    case 'dynasty': return 'Dynasty';
+    case 'keeper': return 'Keeper';
+    default: return 'Redraft';
+  }
+}
+
+const titleWord = (s: string) =>
+  s.split(/[\s_-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+/** Which room a tap on the card opens (0240, founder): the matchup once the
+ *  draft is done, the draft room while it is running, the league home when
+ *  there is neither — including every imported league, whose draft is not
+ *  ours to open. */
+export type LandingRoom = 'matchup' | 'draft' | 'home';
+export function leagueLandingRoom(e: Enrollment): LandingRoom {
+  const st = e.league?.draft_status;
+  if (st === 'live') return 'draft';
+  // No seat, no lineup: the matchup room cannot render for a commissioner who
+  // does not play, so the hub is the only honest landing.
+  if (st === 'complete') return e.sleeper_roster_id != null ? 'matchup' : 'home';
+  return 'home';
+}
 /** Contract leagues preset a DEEP roster (v0.352.0, founder: "auto set the
  *  benches deep. We want anyone who should have a salary over $1 to get
  *  drafted in the auction."). The auction AI prices rank r at
