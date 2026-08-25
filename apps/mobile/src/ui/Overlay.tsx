@@ -26,6 +26,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardInset } from './keyboard';
 import { useTheme, fs } from '../theme.native';
 
 /** SHEET BODY SIZING — why there is no number here any more.
@@ -67,6 +68,7 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const kb = useKeyboardInset();
   // 0 = seated, 1 = fully off the bottom. One value drives the slide AND the
   // backdrop, so they can never disagree about how open the sheet is.
   const anim = useRef(new Animated.Value(1)).current;
@@ -164,8 +166,15 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
 
           {/* The safe-area inset lives INSIDE the sheet now. The sheet is flush
               to the bottom edge, so without this its last row — which is where
-              the footer button is — sits under the home indicator. */}
-          <View style={{ paddingBottom: insets.bottom }}>
+              the footer button is — sits under the home indicator.
+              WHEN THE KEYBOARD IS UP (v0.356.12) it is the keyboard that owns
+              the bottom edge, and it already covers the home indicator — so
+              the sheet clears the keys instead. Without this any sheet with a
+              field in it (the GIF search, the poll composer, a player search)
+              types blind under the keyboard, the same way chat's own composer
+              did. Sheets are flush to the bottom of an edge-to-edge window,
+              which never resizes for the IME. */}
+          <View style={{ paddingBottom: kb > 0 ? kb : insets.bottom }}>
             {!!footer && (
               <View style={{ padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>{footer}</View>
             )}

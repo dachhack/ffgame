@@ -17,6 +17,7 @@
 // "magic-link fallback for mobile".
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useKeyboardInset } from '../ui/keyboard';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -31,6 +32,7 @@ type Mode = 'password' | 'signup' | 'code-request' | 'code-entry';
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const t = useTheme();
+  const kb = useKeyboardInset();
   const [mode, setMode] = useState<Mode>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -137,8 +139,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   );
 
   return (
+    // THE KEYBOARD, NOT THE WINDOW (v0.356.12). This leaned on `adjustResize`
+    // on Android — hence `behavior: undefined` there — but the window is
+    // edge-to-edge and never resizes for the IME, so the lower fields and the
+    // submit button typed blind under the keys. The scroll body spends the
+    // keyboard's own height as bottom padding instead, which is also what iOS
+    // has always needed; KAV keeps the iOS path it already had.
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 24, gap: 14, flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 24 + kb, gap: 14, flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: 4, marginBottom: 6 }}>
           <Display size={24}>Drip Fantasy</Display>
           <Mono size={10.5} tone="faint">

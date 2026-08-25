@@ -26,6 +26,12 @@ import { useWide } from '../screens/adminUi';
 
 export type StripRoom = 'home' | 'matchup' | 'draft' | 'team';
 
+/** Has this league drafted? Remembered per league for the page's lifetime,
+ *  because the strip is remounted on every room change and each mount would
+ *  otherwise start from nothing and reshuffle the bar under the thumb. Written
+ *  only from a real answer, so a miss means "not asked yet", never "no". */
+const DRAFT_DONE = new Map<string, boolean>();
+
 /** The founder's picked set (sheet C1 + C2's clipboard), same files the app
  *  bundles: bare stickers for light themes, halo-backed for dark so the VS
  *  mark's navy half doesn't sink into a dark rail. */
@@ -61,9 +67,17 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
   const wide = useWide(720);
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState<{ n: number; mention: boolean }>({ n: 0, mention: false });
-  // The DRAFT room leaves once the draft is done — it stays reachable from
-  // the hub's tile, which is the record after draft night (v0.269.0).
-  const [draftDone, setDraftDone] = useState(false);
+  // THE DRAFT ROOM leaves once the draft is done — it stays reachable from the
+  // hub's tile, which is the record after draft night (v0.269.0).
+  //
+  // null = WE DO NOT KNOW YET, and an unknown room is not drawn (v0.356.14,
+  // founder: "the draft icon shows briefly then disappears"). This used to
+  // start `false` — show it, then take it away when native_team_state answered
+  // — which on a phone meant the bar visibly reshuffled on arrival in every
+  // room, because THIS COMPONENT REMOUNTS ON EVERY ROOM CHANGE (LiveOnboard
+  // renders it inside each view's own return) and so re-guessed every time.
+  // Nothing is lost by waiting: the hub's tile is the other way into the room.
+  const [draftDone, setDraftDone] = useState<boolean | null>(() => DRAFT_DONE.get(leagueId) ?? null);
   const [light] = useState(themeIsLight);
   // The room bar ducks on scroll-down and returns on any pull up — the same
   // two-state hysteresis the app runs (v0.356.1): ~28px of accumulated
@@ -107,8 +121,16 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
       .then((r) => { if (!dead && r.ok && (r.polls_unvoted ?? 0) > 0) setUnread((u) => ({ ...u, n: u.n + (r.polls_unvoted ?? 0) })); })
       .catch(() => {});
     if (native) {
+      // Seed from what the last mount learned so the answer is already in hand
+      // on arrival, then refresh — a draft that completes mid-session still
+      // takes the room away without a reload.
+      setDraftDone(DRAFT_DONE.get(leagueId) ?? null);
       nativeTeamState(leagueId)
-        .then((t) => { if (!dead) setDraftDone(t?.draft_status === 'complete'); })
+        .then((t) => {
+          const done = t?.draft_status === 'complete';
+          DRAFT_DONE.set(leagueId, done);
+          if (!dead) setDraftDone(done);
+        })
         .catch(() => {});
     }
     return () => { dead = true; };
@@ -117,7 +139,7 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
   const rooms: { id: StripRoom | 'chat'; icon: string; label: string; show: boolean }[] = [
     { id: 'home', icon: 'league', label: 'LEAGUE', show: true },
     { id: 'matchup', icon: 'matchup', label: 'MATCHUP', show: rosterId != null },
-    { id: 'draft', icon: 'draft', label: 'DRAFT', show: native && !draftDone },
+    { id: 'draft', icon: 'draft', label: 'DRAFT', show: native && draftDone === false },
     // native only on the web for now — the app's read-only external team
     // page (v0.356.5) has no web sibling yet.
     { id: 'team', icon: 'team', label: 'MY TEAM', show: native && rosterId != null },
