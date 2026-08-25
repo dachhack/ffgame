@@ -247,7 +247,10 @@ export function App() {
             and the way back out. Version is shown because playtesters are
             running sideloaded builds and "which one have you got" is otherwise
             unanswerable. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
+        {/* COMPACT (v0.356.4, founder: "can we make the top rail more
+            compact?"): one line — the version rides beside the wordmark
+            instead of under it — and the gear shrank to match. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 5, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.bd }}>
           {/* THE BRAND IS THE CENTER (v0.356.2, founder: "put drip fantasy
               and the version in the center of the top and my leagues chip on
               the left without the arrow") — the wordmark sits absolutely
@@ -260,7 +263,7 @@ export function App() {
               // no league open — "my leagues" that doesn't show your leagues.
               onPress={() => { setOpen(null); setView('picks'); }}
               hitSlop={8}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, flexShrink: 1 }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 }}
             >
               <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
             </Pressable>
@@ -268,18 +271,18 @@ export function App() {
 
           <View style={{ flex: 1 }} />
 
-          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', letterSpacing: 1.4, color: theme.text }}>DRIP FANTASY</Text>
-            <Text style={{ fontFamily: MONO, fontSize: 8, color: theme.faint }}>{APP_VERSION}</Text>
+          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1.3, color: theme.text }}>DRIP FANTASY</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 7.5, color: theme.faint }}>{APP_VERSION}</Text>
           </View>
 
           <Pressable
             onPress={() => setSettingsOpen(true)}
             hitSlop={10}
             accessibilityLabel="Settings"
-            style={{ width: 34, height: 34, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, backgroundColor: theme.surface }}
+            style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, backgroundColor: theme.surface }}
           >
-            <Text style={{ fontSize: 15, color: theme.dim }}>⚙</Text>
+            <Text style={{ fontSize: 13, color: theme.dim }}>⚙</Text>
           </Pressable>
         </View>
 

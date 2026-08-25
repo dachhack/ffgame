@@ -109,7 +109,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
 
   if (rows === null) {
     return (
-      <BrandLoading label="Loading your leagues…" />
+      <BrandLoading label="Loading your leagues…" themed />
     );
   }
 

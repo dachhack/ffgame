@@ -20,18 +20,36 @@ import { useTheme, MONO } from '../theme.native';
  *  screen exists to avoid. */
 export const SPLASH_BG = '#163138';
 
-export function BrandLoading({ label }: { label?: string }) {
+export function BrandLoading({ label, themed = false }: {
+  label?: string;
+  /** IN-APP waits (v0.356.4, founder: "can we adapt that background for the
+   *  app theme you are using?") follow the theme — returning to the leagues
+   *  list mid-session has no native splash to match, so the fixed plate read
+   *  as a jarring flash of dark blue on any other theme. The LAUNCH keeps
+   *  the fixed plate (default): the native splash colour is baked into the
+   *  APK and cannot follow a theme, and matching it is this screen's job.
+   *  The lockup art is light-on-dark, so on a LIGHT theme the themed wait
+   *  keeps a rounded tile of the splash ground behind the mark. */
+  themed?: boolean;
+}) {
   const t = useTheme();
+  // Light theme ≈ a bright page ground. Read off the theme's own bg so this
+  // file needs no theme NAME plumbed in.
+  const hex = /^#([0-9a-f]{6})$/i.exec(t.bg)?.[1];
+  const lightTheme = !!hex && (parseInt(hex.slice(0, 2), 16) + parseInt(hex.slice(2, 4), 16) + parseInt(hex.slice(4, 6), 16)) / 3 > 140;
+  const tile = themed && lightTheme;
   return (
-    <View style={{ flex: 1, backgroundColor: SPLASH_BG, alignItems: 'center', justifyContent: 'center', gap: 26 }}>
-      <Image
-        source={require('../../assets/splash.png')}
-        style={{ width: 260, height: 260 }}
-        resizeMode="contain"
-      />
+    <View style={{ flex: 1, backgroundColor: themed ? t.bg : SPLASH_BG, alignItems: 'center', justifyContent: 'center', gap: 26 }}>
+      <View style={tile ? { backgroundColor: SPLASH_BG, borderRadius: 44, padding: 14 } : undefined}>
+        <Image
+          source={require('../../assets/splash.png')}
+          style={{ width: tile ? 232 : 260, height: tile ? 232 : 260 }}
+          resizeMode="contain"
+        />
+      </View>
       <View style={{ alignItems: 'center', gap: 12 }}>
         <ActivityIndicator color={t.you} />
-        {!!label && <Text style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>{label}</Text>}
+        {!!label && <Text style={{ fontFamily: MONO, fontSize: 11, color: themed ? t.dim : 'rgba(255,255,255,0.55)' }}>{label}</Text>}
       </View>
     </View>
   );
