@@ -19,7 +19,7 @@ import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { myPushTokens, setPushPrefs } from '@drip/core/data/liveApi';
+import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
 import { Overlay } from './Overlay';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
@@ -204,22 +204,29 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
 
 
 // ── Push notification prefs (0150) ──────────────────────────────────────────
-// Per-device mutes for the four push kinds; the toggles bite the token this
-// device registered this session. Without one (permission denied, or a build
-// with no Firebase config) the section offers a single ENABLE button.
+// Per-device mutes for the push kinds; the toggles bite the token this device
+// registered this session. Without one (permission denied, or a build with no
+// Firebase config) the section offers a single ENABLE button.
+//
+// `leagueId` (0241) adds the one pref that is NOT per-device: whether you want
+// every message from THIS league, or only the mentions and DMs everyone gets.
+// Rendered only where a league is open — the gear's copy has no league to ask
+// about.
 const PUSH_KINDS: { key: string; label: string }[] = [
   { key: 'lineup', label: '⚠ lineup locks soon' },
   { key: 'chat', label: '💬 mentions & DMs' },
   { key: 'trades', label: '⇄ trade offers' },
   { key: 'waivers', label: '✚ waiver results' },
   { key: 'draft', label: '⛏ draft alerts' },
+  { key: 'members', label: '⚑ new managers' },
 ];
 
-export function PushPrefs() {
+export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
   const t = useTheme();
   const [token, setToken] = useState<string | null>(registeredPushToken());
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [allChat, setAllChat] = useState<boolean | null>(null);
   useEffect(() => {
     if (!token) return;
     myPushTokens().then((rows) => {
@@ -227,6 +234,18 @@ export function PushPrefs() {
       if (mine) setPrefs(mine.prefs ?? {});
     }).catch(() => {});
   }, [token]);
+  useEffect(() => {
+    if (!leagueId) { setAllChat(null); return; }
+    let dead = false;
+    myLeagueChatPush(leagueId).then((r) => { if (!dead) setAllChat(!!r?.all_messages); }).catch(() => {});
+    return () => { dead = true; };
+  }, [leagueId]);
+  const flipAllChat = () => {
+    if (!leagueId || allChat === null) return;
+    const next = !allChat;
+    setAllChat(next);
+    void setLeagueChatPush(leagueId, next).catch(() => setAllChat(!next));
+  };
   const enable = async () => {
     if (busy) return;
     setBusy(true);
@@ -259,6 +278,19 @@ export function PushPrefs() {
               </Pressable>
             );
           })}
+        </View>
+      )}
+      {!!token && leagueId && allChat !== null && (
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 5 }}>
+          <Pressable onPress={flipAllChat}
+            style={{ borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: allChat ? t.you : t.bd, backgroundColor: allChat ? alpha(t.you, 12) : t.surface }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: allChat ? t.you : t.dim }}>
+              {allChat ? '✓ EVERY MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
+            </Text>
+          </Pressable>
+          <Mono size={8.5} tone="faint">
+            Per league, not per device — off still pings you for mentions, DMs and polls.
+          </Mono>
         </View>
       )}
     </View>

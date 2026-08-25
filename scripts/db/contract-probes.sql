@@ -942,4 +942,47 @@ begin
     'ct25e THE POINT: drafting is drafting');
 end $$;
 
+-- ── §26. who joined, who spoke (0241) ───────────────────────────────────────
+-- The join stamp is the whole basis of the members push: it must appear when a
+-- seat is TAKEN, not when the row was made, and it must not appear on rows
+-- that predate the column (or the first sweep pages every commissioner about
+-- every existing member). And the every-message subscription is per person,
+-- per league, off until asked for, and closed to strangers.
+do $$
+declare lid uuid; code text; stamp timestamptz;
+begin
+  perform probe_as('a');
+  lid := (create_native_league('Loud Room', '2026', 3, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+  select invite_code into code from league where id = lid;
+
+  -- Unclaimed seats are not joins: no occupant, no stamp.
+  perform assert_true((select count(*) from league_membership
+      where league_id = lid and enrolled_at is not null) = 1,
+    'ct26a only the creator''s own seat is stamped');
+
+  perform probe_as('b');
+  perform assert_ok(native_join(code, 'B Arrives'), 'ct26b B joins');
+  select enrolled_at into stamp from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000000b'::uuid;
+  perform assert_true(stamp is not null and stamp > now() - interval '1 minute',
+    'ct26c THE POINT: taking a seat stamps the moment it was taken');
+
+  -- The subscription: off until asked for, and it is the CALLER's answer.
+  perform assert_true(not (my_league_chat_push(lid) ->> 'all_messages')::boolean,
+    'ct26d every-message is off until somebody says otherwise');
+  perform assert_ok(set_league_chat_push(lid, true), 'ct26e B asks for every message');
+  perform assert_true((my_league_chat_push(lid) ->> 'all_messages')::boolean,
+    'ct26f ...and reads back on');
+  perform probe_as('a');
+  perform assert_true(not (my_league_chat_push(lid) ->> 'all_messages')::boolean,
+    'ct26g THE POINT: it is per-person — A did not ask, so A is off');
+  perform probe_as('b');
+  perform assert_ok(set_league_chat_push(lid, false), 'ct26h and reversible');
+  perform assert_true(not (my_league_chat_push(lid) ->> 'all_messages')::boolean, 'ct26i back off');
+
+  perform probe_as('c');
+  perform assert_err(set_league_chat_push(lid, true), 'not your league',
+    'ct26j strangers do not subscribe to a league''s chat');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;
