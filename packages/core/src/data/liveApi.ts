@@ -2048,7 +2048,9 @@ export interface PlayoffMatchup {
 }
 export interface PlayoffState {
   error?: string; ok?: boolean;
-  playoff_teams: number; playoff_start_week: number;
+  /** 0 = this league plays no playoffs (0246). */
+  playoff_teams: number;
+  playoff_start_week: number;
   generated: boolean; underway: boolean;
   rounds: number | null; seeds: number[] | null;
   /** The live consolation ladder, top rung first (final below-the-cut order once the title game ends). */
@@ -2059,7 +2061,11 @@ export interface PlayoffState {
 /** Everything the playoff view needs (any member). */
 export const playoffState = (leagueId: string) => rpc<PlayoffState>('playoff_state', { p_league_id: leagueId });
 export const leagueStandings = (leagueId: string) => rpc<StandingsRow[] | { error: string }>('league_standings', { p_league_id: leagueId });
-/** Commissioner: bracket size (2/4/6/8) + start week — locked once underway. */
+/** Commissioner: bracket size + start week — locked once underway.
+ *  `teams` is 0 (no playoffs at all — 0246), 2, 4, 6 or 8. Zero deletes a
+ *  bracket that was only ever scheduled and makes both the commissioner's
+ *  generate and the auto poke refuse; the season then ends with the last
+ *  regular-season week. A guillotine league sets itself to 0. */
 export const setPlayoffRules = (leagueId: string, teams: number | null, startWeek: number | null) =>
   rpc<{ ok: boolean; error?: string }>('set_playoff_rules', { p_league_id: leagueId, p_teams: teams, p_start_week: startWeek });
 /** Commissioner: (re)build round 1 — standings seeding, or an explicit seed

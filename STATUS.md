@@ -18,6 +18,50 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.363.0 — a league can play no playoffs at all
+
+Founder: "you should be able to turn off and customize playoffs in all leagues."
+
+CUSTOMISING them has existed since 0073 — bracket size and start week, any
+native league, locked once underway. What was missing is OFF. A league that
+wants its season to simply end (a guillotine, a keeper league that settles on
+the regular-season table, a wide pod where a four-team bracket is beside the
+point) had no way to say so — and 0162's auto-generation would build one
+anyway the moment the last regular-season game went final.
+
+OFF IS `playoff_teams = 0`, not a new flag. Every reader already goes through
+`league_playoff_teams()`, so a zero is understood everywhere at once, and a
+league that never set the key still reads the default 4 — nothing existing
+moves. 0246 teaches `set_playoff_rules` to accept it (deleting a bracket that
+was only ever SCHEDULED, which the function's own "playoffs are underway"
+guard makes safe: a played game can never be erased this way), and guards the
+one place a bracket is built. There are exactly two callers of that place —
+the commissioner's button and 0162's poke — so one guard covers both: the
+poke returns a quiet no-op, because it fires on EVERY member's league load all
+season and an error there would paint a banner on a screen working exactly as
+configured; the commissioner's own call is refused with the reason.
+
+A GUILLOTINE LEAGUE IS OFF BY CONSTRUCTION. It runs all 17 weeks (v0.362.0)
+and its survivor is the result, so a bracket booked for week 15 would collide
+with a season still being played. `set_league_format` now switches playoffs
+off when the format goes guillotine, next to where it already presets the FAAB
+market — and leaving guillotine does not silently re-book one.
+
+Both hosts get the control: OFF leads the bracket row, because it decides
+whether the rest of the panel means anything, and the start week, generate
+button and seeding list hide behind it. The app's playoff card returns nothing
+at all for an off league — a heading over "there is no bracket" is the same
+nothing with a title on it. Both panels' helper paragraphs folded into one ⓘ,
+and the trophy/crown prefixes came off the champion lines.
+
+Bracket sizes are still 2/4/6/8: round-1 seeding and `advance_playoffs` are
+hand-written per shape, so 16 or 32 is a bracket-engine rewrite, not a bound.
+That stays open.
+
+8 new scratch-DB probes (62 suites) — the default is untouched, the auto poke
+is silent, the manual call explains itself, turning back on restores the
+knobs, and guillotine sets itself off without help.
+
 ### v0.362.0 — a guillotine league plays all 17 weeks
 
 Founder: "Guillotine leagues go all 17 weeks. let's make sure that is wired in."
