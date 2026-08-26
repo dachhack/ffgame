@@ -285,7 +285,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
       // characters to dictate. `?code=` was already a complete join path; these
       // buttons just weren't building the URL.
       await Share.share({
-        message: inviteMessage({ league: r.name, code: r.invite_code, seatsOpen: r.seats_open }),
+        message: inviteMessage({ league: r.name, code: r.invite_code, seatsOpen: r.seats_open, game: r.game_mode }),
       });
     } catch (x) { warn(); setErr(friendlyError(x)); }
   };

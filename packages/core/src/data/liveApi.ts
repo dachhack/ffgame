@@ -2718,7 +2718,10 @@ export const joinFromBoard = (leagueId: string, teamName?: string) =>
 /** The invite code, for any enrolled member — so recruiting a friend doesn't
  *  need the commissioner's screen. */
 export const leagueInvite = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; invite_code?: string; name?: string; seats_open?: number }>(
+  rpc<{ ok: boolean; error?: string; invite_code?: string; name?: string; seats_open?: number;
+        /** 0243: which game a recruit should be SHOWN — the look-first link's
+         *  destination. Unset means drip, as everywhere else. */
+        game_mode?: string }>(
     'league_invite', { p_league_id: leagueId });
 /** The listing's true state, commish/admin only (0124). league_board() hides
  *  full leagues, so it cannot answer "is my league public?" — this can. */

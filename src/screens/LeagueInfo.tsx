@@ -10,7 +10,7 @@ import {
   requestLeagueSync, leagueSyncState, type SyncState,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
-import { inviteLink, inviteMessage } from '@drip/core/data/invite';
+import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -422,7 +422,7 @@ export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boo
 // (`post_league_listing` is commish-gated in SQL — it offers a seat to
 // strangers, which is a decision about who the league is).
 export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; commish: boolean; bare?: boolean }) {
-  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null } | null>(null);
+  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null; game?: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [listing, setListing] = useState<{ listed: boolean; blurb: string; seatsOpen: number } | null>(null);
@@ -434,7 +434,7 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
     leagueInvite(leagueId)
       .then((r) => {
         if (dead) return;
-        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open });
+        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open, game: r.game_mode });
         else setErr(friendlyError(r.error ?? 'could not fetch the invite code'));
       })
       .catch((x) => { if (!dead) setErr(friendlyError(x)); });
@@ -451,7 +451,19 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
   }, [leagueId, commish]);
 
   const link = inv ? inviteLink(inv.code) : '';
-  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats }) : '';
+  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats, game: inv.game }) : '';
+  // THE LOOK-FIRST LINK (v0.358.1, founder: "add the classic link to the
+  // commish invite area. Classic league invites should get you there"). Only a
+  // CLASSIC league has somewhere else to send a recruit: the bare site already
+  // opens on drip, so a drip commissioner would be copying the same
+  // destination twice.
+  const classic = (inv?.game ?? '').toLowerCase() === 'classic';
+  const look = previewLink('classic');
+  const [lookCopied, setLookCopied] = useState(false);
+  const copyLook = async () => {
+    try { await navigator.clipboard.writeText(look); setLookCopied(true); setTimeout(() => setLookCopied(false), 1600); }
+    catch { setErr('Couldn\u2019t reach the clipboard — select the link and copy it by hand.'); }
+  };
 
   const copy = async () => {
     if (!link) return;
@@ -503,6 +515,26 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8 }}>
           Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
         </div>
+
+        {/* A recruit who wants to look before committing. The invite link above
+            goes straight to sign-in, so it never shows them the game — this one
+            lands on the CLASSIC board, which is the whole point for a league
+            that doesn't play drip. */}
+        {classic && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+            <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+              NOT READY TO SIGN UP?
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, margin: '5px 0 7px' }}>
+              This one shows them the classic game first — nine slots, standard scoring, no sign-up. The invite link
+              above skips the demo entirely.
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 10px', wordBreak: 'break-all', lineHeight: 1.5 }}>{look}</div>
+            <button onClick={copyLook} className="mono" style={{ ...btn, marginTop: 8, borderColor: lookCopied ? 'var(--you)' : 'var(--bd)', color: lookCopied ? 'var(--you)' : 'var(--dim)' }}>
+              {lookCopied ? '\u2713 COPIED' : '\u29c9 COPY THE LOOK-FIRST LINK'}
+            </button>
+          </div>
+        )}
       </>)}
 
       {commish && (<>
