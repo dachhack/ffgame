@@ -29,7 +29,7 @@ import {
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, alpha } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -49,6 +49,53 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
   );
 }
 
+/** The board's branches. 'root' is the menu; the rest are one question each. */
+type Node = 'root' | 'browse' | 'create' | 'join' | 'post' | 'commish';
+const NODE_TITLE: Record<Node, string> = {
+  root: 'League board', browse: 'Open leagues', create: 'Start a league',
+  join: 'Join with a code', post: 'Post & recruit', commish: 'Commissioner code',
+};
+const NODE_SUB: Record<Node, string> = {
+  root: 'Find one, start one, or join with a code.',
+  browse: 'Open leagues looking for managers.',
+  create: 'Six or seven questions, one at a time.',
+  join: "Paste the code a friend sent you.",
+  post: 'List a league you run, or share its code.',
+  commish: 'Run a league without holding a seat.',
+};
+
+/** The create branch's steps, in the order the old form asked them. */
+type Step = 'copy' | 'game' | 'season' | 'format' | 'name' | 'draft' | 'review';
+const STEP_TITLE: Record<Step, string> = {
+  copy: 'COPY SETTINGS', game: 'WHICH GAME', season: 'NEXT SEASON', format: 'FORMAT',
+  name: 'NAME & SIZE', draft: 'THE DRAFT', review: 'REVIEW',
+};
+
+/** One row of the root menu — a destination, not a control. */
+function MenuRow({ icon, title, sub, onPress }: {
+  icon: string; title: string; sub: string; onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={onPress} android_ripple={{ color: alpha(t.you, 16) }}
+      style={({ pressed }) => ({
+        backgroundColor: t.surface, overflow: 'hidden',
+        borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+        borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11,
+        opacity: pressed ? 0.85 : 1,
+      })}>
+      <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 17 }}>{icon}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{title}</Text>
+        <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>{sub}</Text>
+      </View>
+      <Mono size={10} tone="you" weight="700">→</Mono>
+    </Pressable>
+  );
+}
+
 export function Recruit({ onBack, onJoined, onCreated, initial }: {
   onBack: () => void;
   /** 'create' — arrived from ＋ ADD A LEAGUE rather than 🔎 FIND A LEAGUE, so
@@ -56,7 +103,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
    *  share one screen (see the header), which is right for browsing and wrong
    *  for someone who came here to make one: they would land on a list of other
    *  people's leagues with their own answer below the fold. */
-  initial?: 'browse' | 'create';
+  initial?: 'root' | 'browse' | 'create';
   /** A join succeeded — the leagues list needs a reload. */
   onJoined: () => void;
   /** A LEAGUE was created — open it on its roster settings (v0.296.6). The
@@ -86,19 +133,17 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // teams, draft type, pace, clock. Roster size and position limits are
   // defaults the game type picks, adjustable from ⚑ COMMISH until the draft.
   const [canCreate, setCanCreate] = useState(false);
-  const [makeOpen, setMakeOpen] = useState(initial === 'create');
-  // Scroll to the create card once it has told us where it is. `scrolledRef`
-  // keeps that to ONE jump — the card's height changes as the form opens and
-  // re-fires onLayout, and re-scrolling on every change would fight the finger.
+  // WHERE IN THE TREE. The collapse-and-scroll this replaced was the old
+  // shape's apology for a screen that answered five questions at once: open
+  // the right card, then jump the scroll to it. A branch you can navigate to
+  // needs neither.
+  const [node, setNode] = useState<Node>(
+    initial === 'create' ? 'create' : initial === 'browse' ? 'browse' : 'root');
+  const [stepIx, setStepIx] = useState(0);
+  // Every branch starts at the top of its own screen; carrying the previous
+  // one's scroll into it is how a tree feels broken.
   const scrollRef = useRef<ScrollView>(null);
-  const makeYRef = useRef<number | null>(null);
-  const scrolledRef = useRef(false);
-  const jumpToMake = useCallback((y: number) => {
-    makeYRef.current = y;
-    if (initial !== 'create' || scrolledRef.current) return;
-    scrolledRef.current = true;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
-  }, [initial]);
+  useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [node, stepIx]);
   // NO DEFAULT (v0.251.0) — same rule as the web. This used to start on
   // 'drip', and a commissioner who never tapped 🏈 NORMAL got a drip league
   // with a normie name; the choice freezes at the draft, so the mistake is
@@ -357,7 +402,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
       setJoined(`${nm}, a ${contLabel}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
-      setMakeOpen(false); setNameDraft('');
+      // Back to the menu with the form reset — the branch is done, and a
+      // create screen still holding the league you just made is a trap.
+      setNode('root'); setStepIx(0); setNameDraft('');
       // Into the new league, on its roster settings. The `finally` below still
       // reloads the list behind this screen for the way back.
       onCreated?.(r.league_id, nm, r.roster_id ?? null);
@@ -379,6 +426,14 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     } catch { /* sheet dismissed */ }
   };
 
+  // The step list is COMPUTED: no copy step when there is nothing to copy
+  // from, so a first league is never asked a question with one answer.
+  const STEPS: Step[] = [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name', 'draft', 'review'];
+  const step: Step = STEPS[Math.min(stepIx, STEPS.length - 1)];
+  // The two steps that can be WRONG rather than merely unfinished. Everything
+  // else has a default that is a real answer, so NEXT is always allowed.
+  const canNext = step === 'game' ? game !== null : step === 'name' ? !!nameDraft.trim() : true;
+
   if (rows === null) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -391,13 +446,24 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   return (
     <ScrollView ref={scrollRef} style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.you} />}>
+      {/* A TREE, NOT ONE LONG SCREEN (founder: "Let's make this a tree of
+          selection screens rather one big screen").
+
+          The board answers five different questions — browse, start one, join
+          with a code, post yours, redeem a commish code — and it used to answer
+          all five at once, stacked, with the longest of them (the create form,
+          eight questions) in the middle. Every visit paid for every answer.
+
+          So: a root MENU, one screen per branch, and the create branch stepped.
+          Each screen asks one thing and says how far along you are. The header
+          is shared and its ← goes back UP the tree — out of the board only from
+          the root, which is the one place "back" means leaving. */}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View>
-          <Display size={20}>League board</Display>
-          <Mono size={9.5} tone="faint">Open leagues looking for managers.</Mono>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Display size={20}>{NODE_TITLE[node]}</Display>
+          <Mono size={9.5} tone="faint">{NODE_SUB[node]}</Mono>
         </View>
-        <View style={{ flex: 1 }} />
-        <LinkButton label="← back" onPress={onBack} />
+        <LinkButton label="← back" onPress={() => { tap(); if (node === 'root') onBack(); else { setNode('root'); setStepIx(0); } }} />
       </View>
 
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
@@ -420,196 +486,38 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         </Notice>
       )}
 
-      {/* START A LEAGUE (v0.226.0) — the last thing the app couldn't do.
-          Gated on the same `native` entitlement the web button uses, so the
-          card doesn't advertise a door the server would shut. */}
-      {canCreate && (
-        <Card onLayout={(e) => jumpToMake(e.nativeEvent.layout.y)}>
-          <Pressable onPress={() => { tap(); setMakeOpen((v) => !v); }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Mono size={9} tone="faint" track={0.12}>START YOUR OWN LEAGUE</Mono>
-                <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
-                  Create it here, invite friends, draft in the app. No Sleeper / ESPN / Yahoo league required.
-                </Mono>
-              </View>
-              <Mono size={12} tone="dim">{makeOpen ? '▾' : '▸'}</Mono>
-            </View>
-          </Pressable>
-          {makeOpen && (
-            <View style={{ marginTop: 10, gap: 10 }}>
-              {/* COPY SETTINGS FROM AN EXISTING LEAGUE — first, because it
-                  answers most of the questions below it. Picking one fills in
-                  the form and carries the rest (roster size, position caps,
-                  auction budget and lots, the overnight window) straight to
-                  create; scoring, waivers, the taxi squad and a classic
-                  league's own shape are applied right after, since none of
-                  them has a create-time argument.
-
-                  It lists leagues you hold a SEAT in, not ones you merely
-                  commission: continuity, format and game mode are readable
-                  only off the my_teams row, and a copy that quietly defaulted
-                  those three would hand back a redraft drip league wearing a
-                  contract dynasty league's name. */}
-              {mine.length > 0 && (
-                <View>
-                  <LabelInfo label="COPY SETTINGS FROM"
-                    info={'Start a league shaped like one you already run.\n\nCARRIES: teams, roster size, draft type and clock, auction budget and lots, position limits, drip vs normal, keeper/dynasty, the format, the scoring catalog, waivers and FAAB, trade review, the taxi squad and IR tags.\n\nDOES NOT CARRY: the name, the members, the draft itself, or anything the season has already written.\n\nEverything it fills in is still yours to change before you create.'} />
-                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                    <Chip label="START FRESH" on={!copyFrom} onPress={() => { tap(); void pickCopy(null); }} />
-                    {mine.map((e) => (
-                      <Chip key={`cp-${e.league_id}`} label={e.league?.name ?? 'League'}
-                        on={copyFrom?.league_id === e.league_id}
-                        onPress={() => { tap(); void pickCopy(e); }} />
-                    ))}
-                  </View>
-                  {copyBusy && <Mono size={8.5} tone="faint" style={{ marginTop: 5 }}>reading its settings…</Mono>}
-                  {copyBp && !copyBusy && (
-                    <View style={{ marginTop: 6, gap: 2 }}>
-                      {blueprintSummary(copyBp).map((line, i) => (
-                        <Mono key={`bp-${i}`} size={8.5} tone="dim" style={{ lineHeight: 13 }}>· {line}</Mono>
-                      ))}
-                      {copyBp.unread.length > 0 && (
-                        <Mono size={8.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>
-                          ⚠ couldn't read {copyBp.unread.join(', ')} — that part keeps the defaults
-                        </Mono>
-                      )}
-                    </View>
-                  )}
-                </View>
-              )}
-              {/* Same first question as the web (0175): the one choice that
-                  changes what you're playing rather than how it's set up. */}
-              <View>
-                <LabelInfo label="WHICH GAME?"
-                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\n◈ DRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\n🏈 NORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
-                  <Chip label="◈ DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
-                  <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
-                </View>
-                {game === null && (
-                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
-                )}
-                {/* CONTINUITY (0185): redraft / keeper / dynasty. One
-                    selection; the number it needs appears with it. Editable
-                    any time in 🎮 MODE. */}
-                <View style={{ marginTop: 10 }}>
-                  <LabelInfo label="NEXT SEASON"
-                    info={'What carries into next season:\n\nREDRAFT — every season starts fresh; full draft, nothing carries.\n\n★ KEEPER — each team carries the chosen number of players and redrafts the rest.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year, with three seasons of tradeable picks dealt from day one.\n\n📜 CONTRACT — a salary-cap league: the startup is an auction and every winning bid becomes that player\'s salary; you assign deal lengths during the draft, and the cap holds all season.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign scale deals (4yr default — a 📜 SALARY setting), plus the rookie rounds and the pick horizon.'} />
-                </View>
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
-                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
-                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
-                  <Chip label="📜 CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
-                  <Chip label="📜🏰 CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
-                </View>
-                {(continuity === 'keeper' || isDynastyContinuity(continuity)) && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'each team keeps' : 'rookie draft runs'}</Mono>
-                    <Pressable hitSlop={6} onPress={() => { tap(); (continuity === 'keeper' ? setKeepN : setRookieN)((v) => Math.max(1, v - 1)); }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
-                    </Pressable>
-                    <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 24, textAlign: 'center' }}>
-                      {continuity === 'keeper' ? keepN : rookieN}
-                    </Text>
-                    <Pressable hitSlop={6} onPress={() => { tap(); continuity === 'keeper' ? setKeepN((v) => Math.min(11, v + 1)) : setRookieN((v) => Math.min(9, v + 1)); }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
-                    </Pressable>
-                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>
-                  </View>
-                )}
-                {contractType && (
-                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>
-                    preset — auction (bids become salaries, cap at the budget) · FAAB waivers (bids sign the contract) · deep roster, so everyone worth over $1 gets drafted
-                  </Mono>
-                )}
-              </View>
-              <View>
-                <LabelInfo label="FORMAT"
-                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\n🔪 GUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'} />
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
-                  <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
-                  <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
-                </View>
-              </View>
-              <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
-                onChangeText={(v) => { setNameDraft(v); setErr(null); }}
-                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <Mono size={8.5} tone="faint" track={0.1}>TEAMS</Mono>
-                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.max(2, n - 1)); }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
-                </Pressable>
-                <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 26, textAlign: 'center' }}>{teamCount}</Text>
-                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(14, n + 1)); }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
-                </Pressable>
-                <View style={{ flex: 1 }} />
-                {/* a contract type already decided the room — auction only */}
-                {!contractType && <Chip label="SNAKE" on={draftMode === 'snake'} onPress={() => { tap(); setDraftMode('snake'); }} />}
-                <Chip label="AUCTION" on={draftMode === 'auction'} onPress={() => { if (!contractType) { tap(); setDraftMode('auction'); } }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <Mono size={8.5} tone="faint" track={0.1}>PACE</Mono>
-                <Chip label="⚡ LIVE" on={pace === 'live'} onPress={() => { tap(); setPace('live'); }} />
-                <Chip label="🐢 SLOW" on={pace === 'slow'} onPress={() => { tap(); setPace('slow'); }} />
-                <View style={{ flex: 1 }} />
-                <Mono size={8.5} tone="faint" track={0.1}>{pace === 'live' ? 'CLOCK (SEC)' : 'CLOCK (HRS)'}</Mono>
-                <TextInput value={clockDraft} keyboardType="number-pad" onChangeText={(v) => setClockDraft(v.replace(/\D/g, ''))}
-                  style={{ width: 62, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
-              </View>
-              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-                {game === null
-                  ? 'The roster shape follows the game you pick above.'
-                  : game === 'classic'
-                    ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
-                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
-                {' '}You take seat 1 as commissioner and a 14-week schedule is generated automatically.
-              </Mono>
-              {/* The button NAMES the game it will create — the confirmation
-                  lives in the moment of commitment, not in a dialog after. */}
-              <PrimaryButton
-                label={busy ? (makeNote || 'CREATING…')
-                  : game === null ? 'PICK A GAME TO CREATE'
-                  : game === 'classic' ? '⚡ CREATE 🏈 NORMAL LEAGUE' : '⚡ CREATE ◈ DRIP LEAGUE'}
-                disabled={busy || !nameDraft.trim() || !game} onPress={() => void doCreate()} />
-            </View>
+      {/* ── THE ROOT MENU ──────────────────────────────────────────────────
+          Ordered by how often a visit wants it, not by how the code is laid
+          out: most people arriving here were handed a code or want to see
+          what's open. A branch with nothing behind it does not render — an
+          empty POST row would advertise a screen that would greet a
+          commissioner with nothing of theirs to post. */}
+      {node === 'root' && (
+        <>
+          <MenuRow icon="🔎" title="Browse open leagues"
+            sub={rows.length ? `${rows.length} looking for managers` : 'nothing listed right now'}
+            onPress={() => { tap(); setNode('browse'); }} />
+          {canCreate && (
+            <MenuRow icon="＋" title="Start a league"
+              sub="Create it here, invite friends, draft in the app"
+              onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
           )}
-        </Card>
+          <MenuRow icon="→" title="Join with an invite code"
+            sub="A friend sent you a code" onPress={() => { tap(); setNode('join'); }} />
+          {myLeagues.length > 0 && (
+            <MenuRow icon="📣" title="Post & recruit"
+              sub={`List ${myLeagues.length === 1 ? 'your league' : 'your leagues'} on the board, share the code`}
+              onPress={() => { tap(); setNode('post'); }} />
+          )}
+          <MenuRow icon="⚑" title="Redeem a commissioner code"
+            sub="Run a league without holding a seat in it"
+            onPress={() => { tap(); setNode('commish'); }} />
+        </>
       )}
 
-      {/* POST — the commissioner's own native leagues */}
-      {myLeagues.length > 0 && (
-        <Card>
-          <Mono size={9} tone="faint" track={0.12}>YOUR LEAGUES — POST THEM HERE</Mono>
-          {myLeagues.map((l) => {
-            const listed = listedIds.has(l.league_id);
-            const open = l.rosters - l.enrolled;
-            return (
-              <View key={l.league_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{l.name}</Text>
-                  <Mono size={8.5} tone="faint">{open > 0 ? `${open} open seat${open === 1 ? '' : 's'}` : 'full'}{listed ? ' · ON THE BOARD' : ''}</Mono>
-                </View>
-                <Chip label="⇪ SHARE CODE" onPress={() => void share(l.league_id)} />
-                {listed
-                  ? <Chip label="UNLIST" onPress={() => { tap(); void unlist(l.league_id); }} />
-                  : <Chip label="POST" on onPress={() => {
-                      tap(); setPostFor(l); setBlurbDraft(''); setDuesDraft('');
-                      // prefill from the standing listing so a re-post doesn't
-                      // silently blank the blurb or clear the dues
-                      void leagueListingState(l.league_id).then((s) => {
-                        if (s.ok) { setBlurbDraft(s.blurb ?? ''); setDuesDraft(s.dues ?? ''); }
-                      }).catch(() => {});
-                    }} />}
-              </View>
-            );
-          })}
-        </Card>
-      )}
-
+      {/* ── BROWSE ─────────────────────────────────────────────────────── */}
+      {node === 'browse' && (
+        <>
       {/* BROWSE */}
       {rows.length === 0 && (
         <Card>
@@ -657,7 +565,237 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           </View>
         </Card>
       ))}
+        </>
+      )}
 
+      {/* ── START A LEAGUE, ONE QUESTION AT A TIME ──────────────────────────
+          The steps are the form's own order, which was already the right one:
+          copying answers most of what follows, the GAME decides what the rest
+          of the questions even mean, and the name comes late because it is the
+          only one you cannot get wrong.
+
+          COPY only appears when there is something to copy from, so a first
+          league is not asked a question with one possible answer. That is why
+          the step list is computed rather than constant — and why the counter
+          says "of 6" for that founder and "of 7" for this one. */}
+      {node === 'create' && canCreate && (
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+            <Mono size={9} tone="faint" track={0.12}>STEP {stepIx + 1} OF {STEPS.length} · {STEP_TITLE[step]}</Mono>
+            <View style={{ flex: 1 }} />
+            {/* One pip per step: how far in, and how far left, without a bar
+                that would need a width to mean anything. */}
+            <View style={{ flexDirection: 'row', gap: 3 }}>
+              {STEPS.map((s, i) => (
+                <View key={`pip-${s}`} style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: i <= stepIx ? t.you : t.bd }} />
+              ))}
+            </View>
+          </View>
+
+          <View style={{ gap: 10 }}>
+            {step === 'copy' && (
+              <View>
+              {/* COPY SETTINGS FROM AN EXISTING LEAGUE — first, because it
+                  answers most of the questions below it. Picking one fills in
+                  the form and carries the rest (roster size, position caps,
+                  auction budget and lots, the overnight window) straight to
+                  create; scoring, waivers, the taxi squad and a classic
+                  league's own shape are applied right after, since none of
+                  them has a create-time argument.
+
+                  It lists leagues you hold a SEAT in, not ones you merely
+                  commission: continuity, format and game mode are readable
+                  only off the my_teams row, and a copy that quietly defaulted
+                  those three would hand back a redraft drip league wearing a
+                  contract dynasty league's name. */}
+              {mine.length > 0 && (
+                <View>
+                  <LabelInfo label="COPY SETTINGS FROM"
+                    info={'Start a league shaped like one you already run.\n\nCARRIES: teams, roster size, draft type and clock, auction budget and lots, position limits, drip vs normal, keeper/dynasty, the format, the scoring catalog, waivers and FAAB, trade review, the taxi squad and IR tags.\n\nDOES NOT CARRY: the name, the members, the draft itself, or anything the season has already written.\n\nEverything it fills in is still yours to change before you create.'} />
+                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                    <Chip label="START FRESH" on={!copyFrom} onPress={() => { tap(); void pickCopy(null); }} />
+                    {mine.map((e) => (
+                      <Chip key={`cp-${e.league_id}`} label={e.league?.name ?? 'League'}
+                        on={copyFrom?.league_id === e.league_id}
+                        onPress={() => { tap(); void pickCopy(e); }} />
+                    ))}
+                  </View>
+                  {copyBusy && <Mono size={8.5} tone="faint" style={{ marginTop: 5 }}>reading its settings…</Mono>}
+                  {copyBp && !copyBusy && (
+                    <View style={{ marginTop: 6, gap: 2 }}>
+                      {blueprintSummary(copyBp).map((line, i) => (
+                        <Mono key={`bp-${i}`} size={8.5} tone="dim" style={{ lineHeight: 13 }}>· {line}</Mono>
+                      ))}
+                      {copyBp.unread.length > 0 && (
+                        <Mono size={8.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>
+                          ⚠ couldn't read {copyBp.unread.join(', ')} — that part keeps the defaults
+                        </Mono>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+              </View>
+            )}
+            {step === 'game' && (
+              <View>
+                <LabelInfo label="WHICH GAME?"
+                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\n◈ DRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\n🏈 NORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
+                  <Chip label="◈ DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
+                  <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                </View>
+                {game === null && (
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
+                )}
+              </View>
+            )}
+            {step === 'season' && (
+              <View>
+                {/* CONTINUITY (0185): redraft / keeper / dynasty. One
+                    selection; the number it needs appears with it. Editable
+                    any time in 🎮 MODE. */}
+                <View style={{ marginTop: 10 }}>
+                  <LabelInfo label="NEXT SEASON"
+                    info={'What carries into next season:\n\nREDRAFT — every season starts fresh; full draft, nothing carries.\n\n★ KEEPER — each team carries the chosen number of players and redrafts the rest.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year, with three seasons of tradeable picks dealt from day one.\n\n📜 CONTRACT — a salary-cap league: the startup is an auction and every winning bid becomes that player\'s salary; you assign deal lengths during the draft, and the cap holds all season.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign scale deals (4yr default — a 📜 SALARY setting), plus the rookie rounds and the pick horizon.'} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
+                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
+                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
+                  <Chip label="📜 CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
+                  <Chip label="📜🏰 CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
+                </View>
+                {(continuity === 'keeper' || isDynastyContinuity(continuity)) && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'each team keeps' : 'rookie draft runs'}</Mono>
+                    <Pressable hitSlop={6} onPress={() => { tap(); (continuity === 'keeper' ? setKeepN : setRookieN)((v) => Math.max(1, v - 1)); }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                    </Pressable>
+                    <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 24, textAlign: 'center' }}>
+                      {continuity === 'keeper' ? keepN : rookieN}
+                    </Text>
+                    <Pressable hitSlop={6} onPress={() => { tap(); continuity === 'keeper' ? setKeepN((v) => Math.min(11, v + 1)) : setRookieN((v) => Math.min(9, v + 1)); }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                    </Pressable>
+                    <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>
+                  </View>
+                )}
+                {contractType && (
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>
+                    preset — auction (bids become salaries, cap at the budget) · FAAB waivers (bids sign the contract) · deep roster, so everyone worth over $1 gets drafted
+                  </Mono>
+                )}
+              </View>
+            )}
+            {step === 'format' && (
+              <View>
+                <LabelInfo label="FORMAT"
+                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\n🔪 GUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'} />
+                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
+                  <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
+                  <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                </View>
+              </View>
+            )}
+            {step === 'name' && (
+              <View style={{ gap: 10 }}>
+              <TextInput value={nameDraft} maxLength={40} placeholder="League name" placeholderTextColor={t.faint}
+                onChangeText={(v) => { setNameDraft(v); setErr(null); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>TEAMS</Mono>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.max(2, n - 1)); }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                </Pressable>
+                <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 26, textAlign: 'center' }}>{teamCount}</Text>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(14, n + 1)); }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                </Pressable>
+                <View style={{ flex: 1 }} />
+                {/* a contract type already decided the room — auction only */}
+                {!contractType && <Chip label="SNAKE" on={draftMode === 'snake'} onPress={() => { tap(); setDraftMode('snake'); }} />}
+                <Chip label="AUCTION" on={draftMode === 'auction'} onPress={() => { if (!contractType) { tap(); setDraftMode('auction'); } }} />
+              </View>
+              </View>
+            )}
+            {step === 'draft' && (
+              <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="faint" track={0.1}>PACE</Mono>
+                <Chip label="⚡ LIVE" on={pace === 'live'} onPress={() => { tap(); setPace('live'); }} />
+                <Chip label="🐢 SLOW" on={pace === 'slow'} onPress={() => { tap(); setPace('slow'); }} />
+                <View style={{ flex: 1 }} />
+                <Mono size={8.5} tone="faint" track={0.1}>{pace === 'live' ? 'CLOCK (SEC)' : 'CLOCK (HRS)'}</Mono>
+                <TextInput value={clockDraft} keyboardType="number-pad" onChangeText={(v) => setClockDraft(v.replace(/\D/g, ''))}
+                  style={{ width: 62, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+              </View>
+              </View>
+            )}
+            {/* THE LAST SCREEN IS THE WHOLE ANSWER, because the steps that
+                built it are now behind you and the one thing you cannot undo
+                is about to happen. */}
+            {step === 'review' && (
+              <View style={{ gap: 8 }}>
+                <Mono size={9} tone="faint" track={0.12}>YOU ARE CREATING</Mono>
+                <Display size={16}>{nameDraft.trim() || 'un-named league'}</Display>
+                <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
+                  {teamCount} teams · {game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'}
+                  {continuity !== 'redraft' ? ` · ${contLabel.trim()}` : ' · REDRAFT'}
+                  {format !== 'standard' ? ` · ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'}` : ''}
+                </Mono>
+                <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
+                  {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
+                </Mono>
+                {copyBp && (
+                  <Mono size={9} tone="you" style={{ lineHeight: 14 }}>
+                    ⧉ copying {copyFrom?.league?.name ?? 'a league'} — scoring, waivers and the rest are applied right after it is made
+                  </Mono>
+                )}
+              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                {game === null
+                  ? 'The roster shape follows the game you pick above.'
+                  : game === 'classic'
+                    ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
+                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
+                {' '}You take seat 1 as commissioner and a 14-week schedule is generated automatically.
+              </Mono>
+              {/* The button NAMES the game it will create — the confirmation
+                  lives in the moment of commitment, not in a dialog after. */}
+              <PrimaryButton
+                label={busy ? (makeNote || 'CREATING…')
+                  : game === null ? 'PICK A GAME TO CREATE'
+                  : game === 'classic' ? '⚡ CREATE 🏈 NORMAL LEAGUE' : '⚡ CREATE ◈ DRIP LEAGUE'}
+                disabled={busy || !nameDraft.trim() || !game} onPress={() => void doCreate()} />
+              </View>
+            )}
+          </View>
+
+          {/* NEXT is refused rather than hidden when the step is unanswered,
+              and says WHY — a disabled button with no reason is a dead end. */}
+          {step !== 'review' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
+              <Chip label="← BACK" onPress={() => { tap(); if (stepIx === 0) { setNode('root'); } else setStepIx((i) => i - 1); }} />
+              <View style={{ flex: 1 }} />
+              {!canNext && (
+                <Mono size={8.5} tone="dim">{step === 'game' ? 'pick a game' : 'name it first'}</Mono>
+              )}
+              <Chip label="NEXT →" on={canNext} dim={!canNext}
+                onPress={() => { if (!canNext) { warn(); return; } tap(); setStepIx((i) => Math.min(STEPS.length - 1, i + 1)); }} />
+            </View>
+          )}
+          {step === 'review' && (
+            <View style={{ flexDirection: 'row', marginTop: 12 }}>
+              <Chip label="← BACK" onPress={() => { tap(); setStepIx((i) => Math.max(0, i - 1)); }} />
+            </View>
+          )}
+        </Card>
+      )}
+
+      {/* ── JOIN WITH A CODE ───────────────────────────────────────────── */}
+      {node === 'join' && (
+        <>
       {/* HAVE A CODE? — the invite path, above the commissioner one because
           it's the common case by a wide margin: most people arriving here were
           handed a code by a friend, not asked to run the league. */}
@@ -681,6 +819,47 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         </Mono>
       </Card>
 
+        </>
+      )}
+
+      {/* ── POST & RECRUIT ─────────────────────────────────────────────── */}
+      {node === 'post' && (
+        <>
+      {/* POST — the commissioner's own native leagues */}
+      {myLeagues.length > 0 && (
+        <Card>
+          <Mono size={9} tone="faint" track={0.12}>YOUR LEAGUES — POST THEM HERE</Mono>
+          {myLeagues.map((l) => {
+            const listed = listedIds.has(l.league_id);
+            const open = l.rosters - l.enrolled;
+            return (
+              <View key={l.league_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: '700', color: t.text }}>{l.name}</Text>
+                  <Mono size={8.5} tone="faint">{open > 0 ? `${open} open seat${open === 1 ? '' : 's'}` : 'full'}{listed ? ' · ON THE BOARD' : ''}</Mono>
+                </View>
+                <Chip label="⇪ SHARE CODE" onPress={() => void share(l.league_id)} />
+                {listed
+                  ? <Chip label="UNLIST" onPress={() => { tap(); void unlist(l.league_id); }} />
+                  : <Chip label="POST" on onPress={() => {
+                      tap(); setPostFor(l); setBlurbDraft(''); setDuesDraft('');
+                      // prefill from the standing listing so a re-post doesn't
+                      // silently blank the blurb or clear the dues
+                      void leagueListingState(l.league_id).then((s) => {
+                        if (s.ok) { setBlurbDraft(s.blurb ?? ''); setDuesDraft(s.dues ?? ''); }
+                      }).catch(() => {});
+                    }} />}
+              </View>
+            );
+          })}
+        </Card>
+      )}
+        </>
+      )}
+
+      {/* ── REDEEM A COMMISSIONER CODE ─────────────────────────────────── */}
+      {node === 'commish' && (
+        <>
       {/* redeem a commish code — the seatless way to run a league */}
       <Card>
         <Mono size={9} tone="faint" track={0.12}>COMMISSIONER?</Mono>
@@ -694,6 +873,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           <Chip label={busy ? '…' : '⚑ REDEEM'} on disabled={busy || !commishDraft.trim()} onPress={() => void doRedeemCommish()} />
         </View>
       </Card>
+        </>
+      )}
+
 
       {/* review → the whole league before a seat is taken (0156) */}
       <Overlay visible={!!previewFor} title={previewFor?.name ?? ''}
@@ -833,3 +1015,4 @@ const fmtNightHour = (m: number) => {
   const h = Math.floor(m / 60) % 24;
   return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'a' : 'p'}`;
 };
+

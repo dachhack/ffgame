@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.360.0 — the league board is a tree
+
+Founder: "Let's make this a tree of selection screens rather one big screen."
+
+THE BOARD ANSWERED FIVE QUESTIONS AT ONCE — browse, start one, join with a
+code, post yours, redeem a commissioner code — stacked on a single scroll, with
+the longest of them (the create form, eight questions) in the middle of it.
+Every visit paid for every answer. So: a root MENU, one screen per branch, and
+the create branch stepped one question at a time.
+
+THE STEP LIST IS COMPUTED, NOT CONSTANT. COPY SETTINGS only appears when there
+is something to copy from, so a first league is never asked a question with one
+possible answer — which is why the counter reads "of 6" for a new account and
+"of 7" for the founder's. NEXT is REFUSED rather than hidden on the two steps
+that can be wrong rather than merely unfinished (no game picked, no name), and
+it says which — a disabled button with no reason is a dead end.
+
+THE LAST STEP IS THE WHOLE ANSWER, because the steps that built it are behind
+you and the one thing you cannot undo is about to happen: name, teams, game,
+continuity, format, draft type and clock, plus the league being copied when
+there is one.
+
+WHAT THIS DELETED, and it is the point: the collapse-and-scroll from v0.359.0
+(open the create card, then jump the ScrollView to it) was the old shape's
+apology for a screen that answered everything at once. A branch you can
+navigate to needs neither, so `makeOpen`, the layout probe and the one-shot
+scroll ref all went, and `Card`'s `onLayout` passthrough went back with them.
+Each branch now scrolls to its own top on entry — carrying the previous
+screen's scroll position into a new one is how a tree feels broken.
+
+THREE DOORS, THREE DESTINATIONS. The leagues screen's FIND chip lands on the
+listings it names, ＋ ADD lands on the create branch, and the board tile — which
+advertises all of it — lands on the menu. `onBoard` takes which.
+
+The five section bodies are MOVED, not rewritten: the listings, the post
+section, both code forms and every question of the create form are the same
+JSX, re-parented. The only copy that changed is the header line per branch.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
 ### v0.359.1 — the control row on one line, measured
 
 Founder, with a screenshot of the row wrapping: "let's make the top buttons fit

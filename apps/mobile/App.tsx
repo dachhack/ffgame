@@ -109,7 +109,7 @@ export function App() {
   const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
-  const [boardEntry, setBoardEntry] = useState<'browse' | 'create'>('browse');
+  const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
   // Whether the open league's draft is done — the ⛏ DRAFT room leaves the bar
@@ -436,7 +436,7 @@ export function App() {
           <Leagues
             key={leaguesEpoch}
             userId={session.user.id}
-            onBoard={() => { setBoardEntry('browse'); setView('board'); }}
+            onBoard={(entry) => { setBoardEntry(entry ?? 'root'); setView('board'); }}
             onAdd={() => { setBoardEntry('create'); setView('board'); }}
             onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
               // `live: true` unconditionally: the native app has no sim leagues

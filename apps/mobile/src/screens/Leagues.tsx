@@ -57,8 +57,10 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
   onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft') => void;
-  /** Open the league board — browse open leagues, post yours, recruit. */
-  onBoard: () => void;
+  /** Open the league board. 'browse' lands on the listings, 'root' on the
+   *  board's own menu — the tile below wants the menu (it advertises all of
+   *  it), the FIND chip wants the listings it names. */
+  onBoard: (entry?: 'root' | 'browse') => void;
   /** Open the board already OPENED on starting a league / redeeming a code.
       Same screen as onBoard: the board is where both doors live, and landing
       on it scrolled to the top would leave the founder's own question ("where
@@ -177,7 +179,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
           <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
           <Chip label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
         </>)}
-        <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard(); }} />
+        <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
         <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
       </View>
 
@@ -195,7 +197,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
             league board below.
           </Mono>
           <View style={{ marginTop: 10 }}>
-            <PrimaryButton label="OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard(); }} />
+            <PrimaryButton label="OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard('root'); }} />
           </View>
         </Card>
       )}
@@ -347,7 +349,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
           Below the league list because your own leagues are the daily visit;
           finding a new one is the occasional one. */}
       <Pressable
-        onPress={() => { tap(); onBoard(); }}
+        onPress={() => { tap(); onBoard('root'); }}
         android_ripple={{ color: alpha(t.you, 16) }}
         style={({ pressed }) => ({
           backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,

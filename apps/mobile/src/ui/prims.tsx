@@ -5,7 +5,7 @@
 // Deliberately small — this is not a component library. Anything used once
 // belongs in the screen that uses it.
 import { type ReactNode } from 'react';
-import { Text, View, Pressable, StyleSheet, type StyleProp, type TextStyle, type ViewProps, type ViewStyle } from 'react-native';
+import { Text, View, Pressable, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useTheme, MONO, alpha, fs } from '../theme.native';
 import { tap } from './feedback';
 
@@ -46,15 +46,10 @@ export function Display({ children, size = 14, tone = 'text', style }: {
 }
 
 /** The web app's `card` style object: surface fill, hairline border, radius 8. */
-export function Card({ children, style, onLayout }: {
-  children: ReactNode; style?: StyleProp<ViewStyle>;
-  /** Passed through so a caller can find where the card ended up — the league
-   *  board scrolls to its create card with it. */
-  onLayout?: ViewProps['onLayout'];
-}) {
+export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   return (
-    <View onLayout={onLayout} style={[{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 16 }, style]}>
+    <View style={[{ backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 16 }, style]}>
       {children}
     </View>
   );
