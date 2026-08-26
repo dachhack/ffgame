@@ -26,6 +26,7 @@ import {
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
+import { scheduleWeeksFor } from '@drip/core/data/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -171,6 +172,17 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     : continuity === 'keeper' ? 'KEEPER ' : '';
   // FORMAT (0221/0222): how the season is WON.
   const [format, setFormat] = useState<LeagueFormat>('standard');
+  // GUILLOTINE BRINGS A CROWD (founder: "Guillotine should default to 18
+  // teams"). One team falls per completed week, so the format wants a field
+  // deep enough to survive the season — and with 0245's 17 weeks, 18 teams is
+  // exactly the number that reaches one survivor on the final week. Only a
+  // DEFAULT: the stepper is right there, and the same rule as the contract
+  // types — picking a format that presets something says so rather than
+  // quietly rearranging the form.
+  const pickFormat = (f: LeagueFormat) => {
+    setFormat(f);
+    if (f === 'guillotine' && teamCount < 18) setTeamCount(18);
+  };
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
@@ -398,7 +410,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
       setMakeNote('Generating the season schedule…');
-      const sched = await nativeGenerateSchedule(r.league_id, 14);
+      const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
       if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from COMMISH')); return; }
       commit();
       // The success note names the game too — created is the moment a wrong
@@ -698,11 +710,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {step === 'format' && (
               <View>
                 <LabelInfo label="FORMAT"
-                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
+                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins.\n\nIt plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, which is exactly the field that reaches one survivor on the final week. Fewer teams simply finish earlier.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
-                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
-                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); pickFormat('standard'); }} />
+                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); pickFormat('guillotine'); }} />
+                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); pickFormat('vampire'); }} />
                 </View>
               </View>
             )}

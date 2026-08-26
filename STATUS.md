@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.362.0 — a guillotine league plays all 17 weeks
+
+Founder: "Guillotine leagues go all 17 weeks. let's make sure that is wired in."
+
+WHY 17 IS THE RIGHT NUMBER, and not just a bigger one: guillotine is the only
+format with no playoffs to leave room for — the survivor IS the result — so
+weeks 15–17, which 0073 reserves for a bracket, are regular season here. And
+one team falls per COMPLETED week, so N teams need N−1 scored weeks. At 14 the
+format quietly capped at 15 teams and anything larger ended with several still
+alive and nothing to crown a winner. At 17 it reaches 18.
+
+WIRED IN TWO HALVES, because neither alone is enough:
+  · `scheduleWeeksFor(format)` in `core/data/league.ts` — both create flows
+    read it, so neither host decides a season's length on its own.
+  · migration 0245 re-cuts an EXISTING schedule inside `set_league_format`, so
+    a commissioner who flips the format later gets the right season on either
+    host without a client remembering to.
+
+THE ORDER TRAP THAT MADE THE SPLIT NECESSARY: both create flows call
+setLeagueFormat BEFORE generating the schedule, so a server-side 17 at creation
+would have been overwritten by the client's own generate a moment later. 0245
+therefore only re-cuts when a schedule ALREADY EXISTS — at creation there is
+none, and the client makes it at the right length. The probes assert exactly
+that: the format change must NOT conjure a schedule pre-creation.
+
+REGENERATING IS SAFE PRECISELY WHERE THIS FUNCTION ALREADY IS. 0221 refuses
+guillotine once the draft leaves 'pending' or the blade has fallen, and
+`native_generate_schedule` refuses to touch a schedule holding any matchup that
+is not still 'scheduled'. The body is copied from 0221, the live definition,
+with the block appended and three locals declared.
+
+AND THE DEFAULT THE FOUNDER ASKED FOR EARLIER NOW LANDS. "Guillotine should
+default to 18 teams" was deferred because 18 was neither reachable (the server
+capped at 14 until 0244) nor finishable (14 weeks). Both are gone, so picking
+GUILLOTINE now lifts the team count to 18 — a default, not a lock, in the same
+spirit as a contract type presetting the auction room.
+
+New `guillotine-weeks-probes.sql` (11 assertions, wired into the runner): the
+17-week schedule, that 18 teams can actually eliminate to one, that nobody byes
+(the floor reads a missing matchup as 0, so a bye is an automatic elimination),
+the commissioner flip in both directions, and that VAMPIRE keeps its 14 — it
+still has playoffs.
+
+Battery green: both typechecks, 767 parity assertions, vite build, **61 probe
+suites**, server smoke.
+
 ### v0.361.1 — the roster editor stops explaining itself
 
 Founder: "Let's make the preset slots a drop down or card so it doesn't take up
