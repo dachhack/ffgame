@@ -72,8 +72,8 @@ const STEP_TITLE: Record<Step, string> = {
 };
 
 /** One row of the root menu — a destination, not a control. */
-function MenuRow({ icon, title, sub, onPress }: {
-  icon: string; title: string; sub: string; onPress: () => void;
+function MenuRow({ title, sub, onPress }: {
+  title: string; sub: string; onPress: () => void;
 }) {
   const t = useTheme();
   return (
@@ -84,9 +84,6 @@ function MenuRow({ icon, title, sub, onPress }: {
         borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11,
         opacity: pressed ? 0.85 : 1,
       })}>
-      <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 17 }}>{icon}</Text>
-      </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{title}</Text>
         <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>{sub}</Text>
@@ -98,7 +95,7 @@ function MenuRow({ icon, title, sub, onPress }: {
 
 export function Recruit({ onBack, onJoined, onCreated, initial }: {
   onBack: () => void;
-  /** 'create' — arrived from ＋ ADD A LEAGUE rather than 🔎 FIND A LEAGUE, so
+  /** 'create' — arrived from ＋ ADD A LEAGUE rather than FIND A LEAGUE, so
    *  open the START A LEAGUE card and scroll to it. The board's three jobs
    *  share one screen (see the header), which is right for browsing and wrong
    *  for someone who came here to make one: they would land on a list of other
@@ -131,7 +128,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // Create-a-league (v0.226.0). The form is the web's post-v0.221.0 trim:
   // only what has NO setter after creation gets asked here — game type, name,
   // teams, draft type, pace, clock. Roster size and position limits are
-  // defaults the game type picks, adjustable from ⚑ COMMISH until the draft.
+  // defaults the game type picks, adjustable from COMMISH until the draft.
   const [canCreate, setCanCreate] = useState(false);
   // WHERE IN THE TREE. The collapse-and-scroll this replaced was the old
   // shape's apology for a screen that answered five questions at once: open
@@ -145,7 +142,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [node, stepIx]);
   // NO DEFAULT (v0.251.0) — same rule as the web. This used to start on
-  // 'drip', and a commissioner who never tapped 🏈 NORMAL got a drip league
+  // 'drip', and a commissioner who never tapped NORMAL got a drip league
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
@@ -164,10 +161,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     setContinuity(c);
     if (c === 'contract' || c === 'contract_dynasty') setDraftMode('auction');
   };
-  const contLabel = continuity === 'contract_dynasty' ? '📜 CONTRACT DYNASTY '
-    : continuity === 'contract' ? '📜 CONTRACT '
-    : continuity === 'dynasty' ? '🏰 DYNASTY '
-    : continuity === 'keeper' ? '★ KEEPER ' : '';
+  const contLabel = continuity === 'contract_dynasty' ? 'CONTRACT DYNASTY '
+    : continuity === 'contract' ? 'CONTRACT '
+    : continuity === 'dynasty' ? 'DYNASTY '
+    : continuity === 'keeper' ? 'KEEPER ' : '';
   // FORMAT (0221/0222): how the season is WON.
   const [format, setFormat] = useState<LeagueFormat>('standard');
   const [pace, setPace] = useState<'live' | 'slow'>('live');
@@ -252,7 +249,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // Redeem a commissioner code — whoever redeems it becomes the league's
   // commissioner (0039), with or without a team. This is how a league gets a
   // non-playing commissioner: redeem here, never take a seat, and the league
-  // shows up on your leagues screen as ⚑ MANAGE.
+  // shows up on your leagues screen as MANAGE.
   const doRedeemCommish = async () => {
     const code = commishDraft.trim();
     if (!code || busy) return;
@@ -268,7 +265,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // Redeem an INVITE code — a friend's league, not the public board.
   //
   // This was the app's onboarding dead end: both this screen and the
-  // commissioner's ⚑ RECRUIT button share an invite code ("Invite code: XXXX"),
+  // commissioner's RECRUIT button share an invite code ("Invite code: XXXX"),
   // and nothing in the app could accept one. Someone who installed the app
   // holding a code from a friend had to go find the website. Meanwhile the
   // COMMISSIONER code — the rarer, more advanced path — has had a box here all
@@ -368,7 +365,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         continuity, contN);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       if (format !== 'standard') {
-        setMakeNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
+        setMakeNote(`Setting the ${format === 'guillotine' ? 'GUILLOTINE' : 'VAMPIRE'} format…`);
         const fr = await setLeagueFormat(r.league_id, format);
         if (!fr.ok) { warn(); setErr(friendlyError(fr.error ?? 'could not set the format')); return; }
       }
@@ -397,11 +394,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
       setMakeNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, 14);
-      if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from ⚑ COMMISH')); return; }
+      if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from COMMISH')); return; }
       commit();
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
-      setJoined(`${nm}, a ${contLabel}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} league — you're its commissioner`);
+      setJoined(`${nm}, a ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} league — you're its commissioner`);
       // Back to the menu with the form reset — the branch is done, and a
       // create screen still holding the league you just made is a trap.
       setNode('root'); setStepIx(0); setNameDraft('');
@@ -482,7 +479,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           {copyReport.map((line, i) => (
             <Mono key={`cr-${i}`} size={9.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>· {line}</Mono>
           ))}
-          <Mono size={9} tone="dim" style={{ marginTop: 5, lineHeight: 13 }}>Set those by hand in ⚑ COMMISH — everything else carried.</Mono>
+          <Mono size={9} tone="dim" style={{ marginTop: 5, lineHeight: 13 }}>Set those by hand in COMMISH — everything else carried.</Mono>
         </Notice>
       )}
 
@@ -494,22 +491,22 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           commissioner with nothing of theirs to post. */}
       {node === 'root' && (
         <>
-          <MenuRow icon="🔎" title="Browse open leagues"
+          <MenuRow title="Browse open leagues"
             sub={rows.length ? `${rows.length} looking for managers` : 'nothing listed right now'}
             onPress={() => { tap(); setNode('browse'); }} />
           {canCreate && (
-            <MenuRow icon="＋" title="Start a league"
+          <MenuRow title="Start a league"
               sub="Create it here, invite friends, draft in the app"
               onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
           )}
-          <MenuRow icon="→" title="Join with an invite code"
+          <MenuRow title="Join with an invite code"
             sub="A friend sent you a code" onPress={() => { tap(); setNode('join'); }} />
           {myLeagues.length > 0 && (
-            <MenuRow icon="📣" title="Post & recruit"
+          <MenuRow title="Post & recruit"
               sub={`List ${myLeagues.length === 1 ? 'your league' : 'your leagues'} on the board, share the code`}
               onPress={() => { tap(); setNode('post'); }} />
           )}
-          <MenuRow icon="⚑" title="Redeem a commissioner code"
+          <MenuRow title="Redeem a commissioner code"
             sub="Run a league without holding a seat in it"
             onPress={() => { tap(); setNode('commish'); }} />
         </>
@@ -544,7 +541,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           </View>
           {/* the card tells the truth (0223): what KIND of league, and the money */}
           {!!r.identity && <Mono size={8.5} tone="dim" style={{ marginTop: 6 }}>{identityLine(r.identity)}</Mono>}
-          {!!r.dues && <Mono size={9} tone="warn" weight="700" style={{ marginTop: 3 }}>💵 DUES: {r.dues}</Mono>}
+          {!!r.dues && <Mono size={9} tone="warn" weight="700" style={{ marginTop: 3 }}>DUES: {r.dues}</Mono>}
           {!!r.blurb && <Mono size={10} style={{ marginTop: 8, lineHeight: 15 }}>{r.blurb}</Mono>}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
             {r.mine ? (
@@ -640,10 +637,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {step === 'game' && (
               <View>
                 <LabelInfo label="WHICH GAME?"
-                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\n◈ DRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\n🏈 NORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
+                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nNORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
-                  <Chip label="◈ DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
-                  <Chip label="🏈 NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                  <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
+                  <Chip label="NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
                 </View>
                 {game === null && (
                   <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
@@ -654,17 +651,17 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               <View>
                 {/* CONTINUITY (0185): redraft / keeper / dynasty. One
                     selection; the number it needs appears with it. Editable
-                    any time in 🎮 MODE. */}
+                    any time in MODE. */}
                 <View style={{ marginTop: 10 }}>
                   <LabelInfo label="NEXT SEASON"
-                    info={'What carries into next season:\n\nREDRAFT — every season starts fresh; full draft, nothing carries.\n\n★ KEEPER — each team carries the chosen number of players and redrafts the rest.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year, with three seasons of tradeable picks dealt from day one.\n\n📜 CONTRACT — a salary-cap league: the startup is an auction and every winning bid becomes that player\'s salary; you assign deal lengths during the draft, and the cap holds all season.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign scale deals (4yr default — a 📜 SALARY setting), plus the rookie rounds and the pick horizon.'} />
+                    info={'What carries into next season:\n\nREDRAFT — every season starts fresh; full draft, nothing carries.\n\nKEEPER — each team carries the chosen number of players and redrafts the rest.\n\nDYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year, with three seasons of tradeable picks dealt from day one.\n\nCONTRACT — a salary-cap league: the startup is an auction and every winning bid becomes that player\'s salary; you assign deal lengths during the draft, and the cap holds all season.\n\nCONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign scale deals (4yr default — a SALARY setting), plus the rookie rounds and the pick horizon.\n\nEither CONTRACT type presets the room: the startup is an auction (bids become salaries, capped at the budget), waivers run on FAAB so a winning bid signs the contract, and the roster drafts deep enough that everyone worth over $1 is taken.'} />
                 </View>
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
-                  <Chip label="★ KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
-                  <Chip label="🏰 DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
-                  <Chip label="📜 CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
-                  <Chip label="📜🏰 CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
+                  <Chip label="KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
+                  <Chip label="DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
+                  <Chip label="CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
+                  <Chip label="CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
                 </View>
                 {(continuity === 'keeper' || isDynastyContinuity(continuity)) && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -681,21 +678,23 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                     <Mono size={9} tone="dim">{continuity === 'keeper' ? 'into next season' : 'rounds each season'}</Mono>
                   </View>
                 )}
+                {/* The presets a contract type forces are EXPLANATION, so they
+                    live in the ⓘ above with the rest of the continuity story
+                    rather than as a fourth line under the chips. What stays
+                    inline is the one STATE line: which room you are now in. */}
                 {contractType && (
-                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>
-                    preset — auction (bids become salaries, cap at the budget) · FAAB waivers (bids sign the contract) · deep roster, so everyone worth over $1 gets drafted
-                  </Mono>
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>auction room — bids become salaries</Mono>
                 )}
               </View>
             )}
             {step === 'format' && (
               <View>
                 <LabelInfo label="FORMAT"
-                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\n🔪 GUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'} />
+                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
-                  <Chip label="🔪 GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
-                  <Chip label="🧛 VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
+                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
                 </View>
               </View>
             )}
@@ -724,8 +723,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               <View style={{ gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Mono size={8.5} tone="faint" track={0.1}>PACE</Mono>
-                <Chip label="⚡ LIVE" on={pace === 'live'} onPress={() => { tap(); setPace('live'); }} />
-                <Chip label="🐢 SLOW" on={pace === 'slow'} onPress={() => { tap(); setPace('slow'); }} />
+                <Chip label="LIVE" on={pace === 'live'} onPress={() => { tap(); setPace('live'); }} />
+                <Chip label="SLOW" on={pace === 'slow'} onPress={() => { tap(); setPace('slow'); }} />
                 <View style={{ flex: 1 }} />
                 <Mono size={8.5} tone="faint" track={0.1}>{pace === 'live' ? 'CLOCK (SEC)' : 'CLOCK (HRS)'}</Mono>
                 <TextInput value={clockDraft} keyboardType="number-pad" onChangeText={(v) => setClockDraft(v.replace(/\D/g, ''))}
@@ -741,32 +740,29 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <Mono size={9} tone="faint" track={0.12}>YOU ARE CREATING</Mono>
                 <Display size={16}>{nameDraft.trim() || 'un-named league'}</Display>
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
-                  {teamCount} teams · {game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'}
+                  {teamCount} teams · {game === 'classic' ? 'NORMAL' : 'DRIP'}
                   {continuity !== 'redraft' ? ` · ${contLabel.trim()}` : ' · REDRAFT'}
-                  {format !== 'standard' ? ` · ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'}` : ''}
+                  {format !== 'standard' ? ` · ${format === 'guillotine' ? 'GUILLOTINE' : 'VAMPIRE'}` : ''}
                 </Mono>
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
                   {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
                 </Mono>
                 {copyBp && (
                   <Mono size={9} tone="you" style={{ lineHeight: 14 }}>
-                    ⧉ copying {copyFrom?.league?.name ?? 'a league'} — scoring, waivers and the rest are applied right after it is made
+                    copying {copyFrom?.league?.name ?? 'a league'} — scoring, waivers and the rest are applied right after it is made
                   </Mono>
                 )}
-              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-                {game === null
-                  ? 'The roster shape follows the game you pick above.'
-                  : game === 'classic'
-                    ? '15 roster spots per team. Set the starting lineup and scoring from ⚑ COMMISH before the draft.'
-                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.'}
-                {' '}You take seat 1 as commissioner and a 14-week schedule is generated automatically.
-              </Mono>
+                <LabelInfo label="WHAT ELSE YOU GET"
+                  info={(game === 'classic'
+                    ? '15 roster spots per team. Set the starting lineup and scoring from COMMISH before the draft.'
+                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.')
+                    + '\n\nYou take seat 1 as commissioner, and a 14-week schedule is generated automatically.'} />
               {/* The button NAMES the game it will create — the confirmation
                   lives in the moment of commitment, not in a dialog after. */}
               <PrimaryButton
                 label={busy ? (makeNote || 'CREATING…')
                   : game === null ? 'PICK A GAME TO CREATE'
-                  : game === 'classic' ? '⚡ CREATE 🏈 NORMAL LEAGUE' : '⚡ CREATE ◈ DRIP LEAGUE'}
+                  : game === 'classic' ? 'CREATE NORMAL LEAGUE' : 'CREATE DRIP LEAGUE'}
                 disabled={busy || !nameDraft.trim() || !game} onPress={() => void doCreate()} />
               </View>
             )}
@@ -800,10 +796,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           it's the common case by a wide margin: most people arriving here were
           handed a code by a friend, not asked to run the league. */}
       <Card>
-        <Mono size={9} tone="faint" track={0.12}>GOT AN INVITE CODE?</Mono>
-        <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
-          A friend's league isn't on the board unless they listed it. Paste the code they sent and you're seated.
-        </Mono>
+        <LabelInfo label="GOT AN INVITE CODE?"
+          info={'A friend\'s league isn\'t on the board unless they listed it. Paste the code they sent and you\'re seated. You take the lowest open seat, and leaving the team name blank lets you set it later from MY TEAM.'} />
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <TextInput value={inviteDraft} autoCapitalize="characters" autoCorrect={false} maxLength={12}
             placeholder="INVITE CODE" placeholderTextColor={t.faint}
@@ -814,9 +808,6 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         <TextInput value={inviteTeam} maxLength={24} placeholder="team name (optional)" placeholderTextColor={t.faint}
           onChangeText={setInviteTeam}
           style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
-        <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
-          You take the lowest open seat. Leave the name blank and you can set it later from MY TEAM.
-        </Mono>
       </Card>
 
         </>
@@ -862,15 +853,13 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         <>
       {/* redeem a commish code — the seatless way to run a league */}
       <Card>
-        <Mono size={9} tone="faint" track={0.12}>COMMISSIONER?</Mono>
-        <Mono size={9.5} style={{ marginTop: 5, lineHeight: 14 }}>
-          Redeem a commissioner code to run a league — you don't need a team in it to be its commissioner.
-        </Mono>
+        <LabelInfo label="COMMISSIONER?"
+          info={'Redeem a commissioner code to run a league — you don\'t need a team in it to be its commissioner. You get a seatless commissioner\'s view: the league\'s tools without a lineup to set.'} />
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <TextInput value={commishDraft} autoCapitalize="characters" autoCorrect={false} maxLength={12}
             placeholder="COMMISH CODE" placeholderTextColor={t.faint} onChangeText={setCommishDraft}
             style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
-          <Chip label={busy ? '…' : '⚑ REDEEM'} on disabled={busy || !commishDraft.trim()} onPress={() => void doRedeemCommish()} />
+          <Chip label={busy ? '…' : 'REDEEM'} on disabled={busy || !commishDraft.trim()} onPress={() => void doRedeemCommish()} />
         </View>
       </Card>
         </>
@@ -890,11 +879,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               {!!preview.identity && (
                 <Mono size={9} tone="dim" style={{ lineHeight: 14 }}>{identityLine(preview.identity)}</Mono>
               )}
-              {!!preview.dues && <Mono size={10} tone="warn" weight="700">💵 DUES: {preview.dues}</Mono>}
+              {!!preview.dues && <Mono size={10} tone="warn" weight="700">DUES: {preview.dues}</Mono>}
               {!!preview.blurb && <Mono size={10.5} style={{ lineHeight: 16 }}>{preview.blurb}</Mono>}
               {preview.contract_rules && (
                 <View>
-                  <Mono size={8.5} weight="700" track={0.12} tone="faint">📜 CONTRACTS & CAP</Mono>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">CONTRACTS & CAP</Mono>
                   <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
                     ${preview.contract_rules.salary_cap} cap · deals up to {preview.contract_rules.years_max}yr · {preview.contract_rules.dead_pct}% dead money on cuts
                     {'\n'}{[
@@ -909,7 +898,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               )}
               {preview.draft && (
                 <View>
-                  <Mono size={8.5} weight="700" track={0.12} tone="faint">⛏ DRAFT</Mono>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">DRAFT</Mono>
                   <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
                     {preview.draft.mode === 'auction' ? `Auction · $${preview.draft.budget ?? 200} budget` : 'Snake'} · {preview.draft.rounds} rounds · {preview.draft.pick_seconds >= 3600 ? `${Math.round(preview.draft.pick_seconds / 3600)}h` : `${preview.draft.pick_seconds}s`} clock
                     {preview.draft.night ? ` · overnight pause ${fmtNightHour(preview.draft.night.start_min)}–${fmtNightHour(preview.draft.night.end_min)} ET` : ''}
@@ -919,7 +908,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               )}
               {preview.rules && (
                 <View>
-                  <Mono size={8.5} weight="700" track={0.12} tone="faint">⚖ HOUSE RULES</Mono>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">HOUSE RULES</Mono>
                   <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
                     Game: {preview.game_mode === 'classic'
                       ? `CLASSIC — traditional fantasy, ${preview.ppr === 1 ? 'full PPR' : preview.ppr === 0.5 ? 'half PPR' : 'non-PPR'}, no power-ups${(preview.bestball?.length ?? 0) > 0 ? ((preview.bestball?.length ?? 0) >= 9 ? ', FULL BEST BALL' : `, best ball ×${preview.bestball!.length}`) : ''}${preview.roster && Object.keys(preview.roster).length ? `\nLineup: ${rosterLabel(preview.roster)}` : ''}`
@@ -933,7 +922,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               )}
               {!!preview.teams?.length && (
                 <View>
-                  <Mono size={8.5} weight="700" track={0.12} tone="faint">👥 SEATS</Mono>
+                  <Mono size={8.5} weight="700" track={0.12} tone="faint">SEATS</Mono>
                   {preview.teams.map((tm) => (
                     <View key={tm.roster_id} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
                       <Text style={{ flex: 1, fontSize: 12, color: tm.taken ? t.text : t.faint }}>{tm.team_name}</Text>
@@ -943,12 +932,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 </View>
               )}
               <View style={{ marginTop: 6 }}>
-                <PrimaryButton label="✓ I'M IN — TAKE A SEAT" disabled={busy}
+                <PrimaryButton label="I'M IN — TAKE A SEAT" disabled={busy}
                   onPress={() => { tap(); const r = previewFor!; setPreviewFor(null); setJoinFor(r); setTeamDraft(''); }} />
               </View>
-              <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-                Joining takes one of the open seats. Browse freely — nothing is committed until you take one.
-              </Mono>
             </>
           )}
         </ScrollView>
@@ -961,11 +947,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           onChangeText={setTeamDraft}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
         <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : '✓ TAKE A SEAT'} disabled={busy} onPress={() => void doJoin()} />
+          <PrimaryButton label={busy ? '…' : 'TAKE A SEAT'} disabled={busy} onPress={() => void doJoin()} />
         </View>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 14 }}>
-          You get the next open seat. If the league drafts later, you'll draft with everyone else — check the DRAFT tab once you're in.
-        </Mono>
       </Overlay>
 
       {/* post → write the pitch */}
@@ -984,9 +967,6 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         <View style={{ marginTop: 10 }}>
           <PrimaryButton label={busy ? '…' : '⇪ PUT IT ON THE BOARD'} disabled={busy} onPress={() => void doPost()} />
         </View>
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 14 }}>
-          Anyone signed in can browse the board and take a seat. The card carries the league's type, scoring and dues automatically. The listing comes down when you unlist it or the seats fill.
-        </Mono>
       </Overlay>
     </ScrollView>
   );
@@ -994,17 +974,17 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
 
 
 /** What kind of league the card advertises (0223), in one printed line:
- *  "◈ DRIP · 📜 CONTRACT ($30 cap) · 🔪 GUILLOTINE · ½ PPR · custom scoring". */
+ *  "DRIP · CONTRACT ($30 cap) · GUILLOTINE · ½ PPR · custom scoring". */
 const identityLine = (id?: LeagueIdentity): string => {
   if (!id) return '';
-  const bits: string[] = [id.game_mode === 'classic' ? '🏈 NORMAL' : '◈ DRIP'];
-  if (id.continuity === 'contract') bits.push(`📜 CONTRACT${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
-  else if (id.continuity === 'contract_dynasty') bits.push(`📜🏰 CONTRACT DYNASTY${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
-  else if (id.continuity === 'dynasty') bits.push('🏰 DYNASTY');
-  else if (id.continuity === 'keeper') bits.push('★ KEEPER');
+  const bits: string[] = [id.game_mode === 'classic' ? 'NORMAL' : 'DRIP'];
+  if (id.continuity === 'contract') bits.push(`CONTRACT${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'contract_dynasty') bits.push(`CONTRACT DYNASTY${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
+  else if (id.continuity === 'dynasty') bits.push('DYNASTY');
+  else if (id.continuity === 'keeper') bits.push('KEEPER');
   else bits.push('REDRAFT');
-  if (id.format === 'guillotine') bits.push('🔪 GUILLOTINE');
-  if (id.format === 'vampire') bits.push('🧛 VAMPIRE');
+  if (id.format === 'guillotine') bits.push('GUILLOTINE');
+  if (id.format === 'vampire') bits.push('VAMPIRE');
   if (id.game_mode === 'classic') bits.push(id.ppr === 0 ? 'STANDARD (0 PPR)' : id.ppr === 0.5 ? '½ PPR' : id.ppr === 1 ? 'FULL PPR' : `${id.ppr} PPR`);
   if (id.scoring_custom) bits.push('custom scoring');
   return bits.join(' · ');

@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.360.1 — words, not icons; ⓘ, not paragraphs (pass 1)
+
+Founder: "no icons. make info chips instead of helper text. actually, apply
+this to whole app and web. icons only when necessary and info chips over text."
+
+BOTH RULES ALREADY EXISTED — this is finishing them, not inventing them:
+  • **v0.350.2** (app): "instead of explaining everything, let's have info
+    chips with pop ups." A control gets its LABEL and one ⓘ; the paragraph
+    opens on demand. DYNAMIC STATUS LINES STAY INLINE — state is not
+    explanation.
+  • **v0.356.7** (app): decorative emoji prefixes leave; STATE markers stay,
+    because they carry what the words don't repeat.
+
+Neither was ever applied to the WEB, which is why it still looked like this,
+and the app sweep missed the league board entirely.
+
+THE WEB HAD NO INFO CHIP AT ALL — two hand-rolled ⓘ (a board row's player dot,
+the metric sheet) and no shared component, which is exactly how its settings
+screens grew a paragraph under every control. `InfoChip` / `LabelInfo` now sit
+in `app/ui.tsx` beside the other prims, built on the existing Sheet.
+
+PASS 1 — the screens the founder was looking at, both hosts:
+  · app `Recruit.tsx`: 67 prefixes out (DRIP, NORMAL, KEEPER, DYNASTY,
+    CONTRACT, GUILLOTINE, VAMPIRE, LIVE, SLOW, and the root menu's icon
+    column, which was mine from v0.360.0 an hour earlier). Six helper
+    paragraphs folded into the ⓘ that already labelled their control.
+  · web `NativeLeague.tsx`: 56 prefixes out across the create screen, draft
+    room, cap sheet and team tools.
+
+WHAT STAYED, and why it is not an oversight: ⚠ on a severity line and ✓ on a
+state line ("✓ you're in this one") are the markers v0.356.7 kept. ✓ came OFF
+the two BUTTONS — a tick on an action is decoration, not state. Untouched by
+design: the power-up art in `data/powerups.ts`, `chatReactions`, and the sim's
+drama markers — those are the game's own vocabulary, not chrome.
+
+VERIFIED THE BLANKET REPLACE WAS SAFE: nothing anywhere compares against an
+icon-bearing label (`=== '◈ DRIP'` and friends return nothing), so every one of
+these strings is display-only.
+
+STILL TO DO — this is pass 1 of a staged sweep, not the whole thing. Roughly
+900 icon uses remain across ~69 files, the heaviest being web `AdminPage`
+(200), app `CommishTools` (174), web `Matchup` (78), app `LeagueExtras` (52),
+web `CommishDash` (43) and web `commishKit` (42), plus the helper-text pass on
+every web settings screen now that the web has a chip to fold into.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
 ### v0.360.0 — the league board is a tree
 
 Founder: "Let's make this a tree of selection screens rather one big screen."

@@ -91,7 +91,7 @@ function Chip({ on, children, onClick, title }: { on?: boolean; children: React.
   );
 }
 
-// ★ sort/filter over a player list, driven by the account's favorite stars
+// sort/filter over a player list, driven by the account's favorite stars
 // (0139 — the same stars the player card sets). 'first' floats starred players
 // to the top of whatever order the list already has; 'only' hides everyone
 // else. Distinct from the draft queue's Q (a per-draft ranked wishlist):
@@ -105,8 +105,8 @@ function starApply<T>(list: T[], mode: StarMode, favs: Set<string>, slugOf: (x: 
 function StarChips({ mode, setMode }: { mode: StarMode; setMode: (m: StarMode) => void }) {
   return (
     <>
-      <Chip on={mode === 'first'} onClick={() => setMode(mode === 'first' ? 'off' : 'first')}>★ FIRST</Chip>
-      <Chip on={mode === 'only'} onClick={() => setMode(mode === 'only' ? 'off' : 'only')}>★ ONLY</Chip>
+      <Chip on={mode === 'first'} onClick={() => setMode(mode === 'first' ? 'off' : 'first')}>FIRST</Chip>
+      <Chip on={mode === 'only'} onClick={() => setMode(mode === 'only' ? 'off' : 'only')}>ONLY</Chip>
     </>
   );
 }
@@ -134,7 +134,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // size, position caps) it sets as a DEFAULT rather than as another question.
   //
   // NO DEFAULT (v0.251.0). This used to start on 'drip', and a commissioner
-  // who never tapped 🏈 NORMAL got a drip league with a normie name — which is
+  // who never tapped NORMAL got a drip league with a normie name — which is
   // exactly how the founder's "Normie Test" happened, and the choice FREEZES
   // at the draft, so the mistake is permanent. The form now refuses to submit
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
@@ -155,12 +155,12 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     setContinuity(c);
     if (c === 'contract' || c === 'contract_dynasty') setMode('auction');
   };
-  const contLabel = continuity === 'contract_dynasty' ? '📜 CONTRACT DYNASTY '
-    : continuity === 'contract' ? '📜 CONTRACT '
-    : continuity === 'dynasty' ? '🏰 DYNASTY '
-    : continuity === 'keeper' ? '★ KEEPER ' : '';
+  const contLabel = continuity === 'contract_dynasty' ? 'CONTRACT DYNASTY '
+    : continuity === 'contract' ? 'CONTRACT '
+    : continuity === 'dynasty' ? 'DYNASTY '
+    : continuity === 'keeper' ? 'KEEPER ' : '';
   // FORMAT (0221/0222): how the season is WON. Guillotine presets a $1000
-  // FAAB market server-side; vampire gets its seat assigned in ⚑ COMMISH.
+  // FAAB market server-side; vampire gets its seat assigned in COMMISH.
   const [format, setFormat] = useState<LeagueFormat>('standard');
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
@@ -291,7 +291,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         continuity, contN);
       if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not create the league.')); setBusy(false); return; }
       if (format !== 'standard') {
-        setNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
+        setNote(`Setting the ${format === 'guillotine' ? 'GUILLOTINE' : 'VAMPIRE'} format…`);
         const fr = await setLeagueFormat(r.league_id, format);
         if (!fr.ok) { setErr(friendlyError(fr.error ?? 'Could not set the format.')); setBusy(false); return; }
       }
@@ -367,7 +367,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         <div className="mono" style={label}>WHAT ARE WE DRAFTING?</div>
         <div style={{ display: 'flex', gap: 6, marginTop: 7, marginBottom: 16 }}>
           <Chip on={kind === 'league'} onClick={() => setKind('league')}>REAL LEAGUE</Chip>
-          <Chip on={kind === 'mock'} onClick={() => setKind('mock')}>🤖 MOCK DRAFT</Chip>
+          <Chip on={kind === 'mock'} onClick={() => setKind('mock')}>MOCK DRAFT</Chip>
         </div>
         {/* THE GAME (0175). First question on the screen because it's the only
             one that changes what you're playing rather than how it's set up —
@@ -423,8 +423,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           <>
             <div className="mono" style={label}>WHICH GAME?</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-              <Chip on={game === 'drip'} onClick={() => setGame('drip')}>◈ DRIP</Chip>
-              <Chip on={game === 'classic'} onClick={() => setGame('classic')}>🏈 NORMAL</Chip>
+              <Chip on={game === 'drip'} onClick={() => setGame('drip')}>DRIP</Chip>
+              <Chip on={game === 'classic'} onClick={() => setGame('classic')}>NORMAL</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {game === null
@@ -435,15 +435,15 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             </div>
             {/* CONTINUITY (0185): redraft / keeper / dynasty. One selection;
                 the number it needs appears with it. Editable any time in
-                🎮 MODE & SEASON. */}
+                MODE & SEASON. */}
             <div style={{ height: 14 }} />
             <div className="mono" style={label}>NEXT SEASON</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={continuity === 'redraft'} onClick={() => pickContinuity('redraft')}>REDRAFT</Chip>
-              <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>★ KEEPER</Chip>
-              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>🏰 DYNASTY</Chip>
-              <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>📜 CONTRACT</Chip>
-              <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>📜🏰 CONTRACT DYNASTY</Chip>
+              <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>KEEPER</Chip>
+              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>
+              <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>CONTRACT</Chip>
+              <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>CONTRACT DYNASTY</Chip>
             </div>
             {continuity === 'keeper' && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
@@ -467,7 +467,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   : continuity === 'contract'
                     ? `A salary-cap league: the startup is an auction and every winning bid becomes that player’s salary. You assign each deal’s length (1–4 years) during the draft. Preset: FAAB waivers (the bid signs the contract), free agents at $1, and a deep ${contractRosterDepth(teams, budget)}-spot roster so everyone worth over $1 gets drafted.`
                     : continuity === 'contract_dynasty'
-                      ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing scale deals (4yr default — a 📜 SALARY setting) — and three seasons of tradeable picks dealt from day one.`
+                      ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing scale deals (4yr default — a SALARY setting) — and three seasons of tradeable picks dealt from day one.`
                       : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
             </div>
             {/* FORMAT (0221/0222): how the season is won. */}
@@ -475,14 +475,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div className="mono" style={label}>FORMAT</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={format === 'standard'} onClick={() => setFormat('standard')}>HEAD-TO-HEAD</Chip>
-              <Chip on={format === 'guillotine'} onClick={() => setFormat('guillotine')}>🔪 GUILLOTINE</Chip>
-              <Chip on={format === 'vampire'} onClick={() => setFormat('vampire')}>🧛 VAMPIRE</Chip>
+              <Chip on={format === 'guillotine'} onClick={() => setFormat('guillotine')}>GUILLOTINE</Chip>
+              <Chip on={format === 'vampire'} onClick={() => setFormat('vampire')}>VAMPIRE</Chip>
             </div>
             {format !== 'standard' && (
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {format === 'guillotine'
                   ? 'Each week the lowest-scoring team is ELIMINATED and its whole roster hits waivers — a $1000 FAAB frenzy (preset). Last team standing wins. Bring extra teams: one falls per week.'
-                  : 'One team is the Vampire: no waivers, no free agents — when it wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the vampire seat in ⚑ COMMISH after creating, where you can also require your approval per steal.'}
+                  : 'One team is the Vampire: no waivers, no free agents — when it wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the vampire seat in COMMISH after creating, where you can also require your approval per steal.'}
               </div>
             )}
             <div style={{ height: 16 }} />
@@ -515,8 +515,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           <div>
             <div className="mono" style={label}>PACE</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-              <Chip on={pace === 'live'} onClick={() => setPace('live')}>⚡ LIVE</Chip>
-              <Chip on={pace === 'slow'} onClick={() => setPace('slow')}>🐢 SLOW</Chip>
+              <Chip on={pace === 'live'} onClick={() => setPace('live')}>LIVE</Chip>
+              <Chip on={pace === 'slow'} onClick={() => setPace('slow')}>SLOW</Chip>
             </div>
           </div>
           {mode === 'auction' && <div><div className="mono" style={label}>BUDGET ($ / TEAM)</div><div style={{ marginTop: 7 }}>{num(budget, setBudget, 50, 1000, 25)}</div></div>}
@@ -559,7 +559,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
               <div key={`cr-${i}`} className="mono" style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 5, lineHeight: 1.5 }}>· {line}</div>
             ))}
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-              Everything else carried. Set these by hand in ⚑ COMMISH — they are all editable until the draft starts.
+              Everything else carried. Set these by hand in COMMISH — they are all editable until the draft starts.
             </div>
             <button onClick={() => onLeague(madeLeagueId)} className="mono"
               style={{ ...btn, width: '100%', marginTop: 12 }}>OPEN {name.trim().toUpperCase() || 'THE LEAGUE'} →</button>
@@ -570,9 +570,9 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         <button onClick={create} disabled={busy || (kind === 'league' && (!name.trim() || !game))} className="mono"
           style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || (kind === 'league' && (!name.trim() || !game)) ? 0.6 : 1 }}>
           {busy ? (note || 'CREATING…')
-            : kind === 'mock' ? '🤖 START THE MOCK →'
+            : kind === 'mock' ? 'START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
-            : `CREATE ${contLabel}${game === 'classic' ? '🏈 NORMAL' : '◈ DRIP'} LEAGUE →`}
+            : `CREATE ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
@@ -1265,9 +1265,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     <div>
       {!embedded && <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>⛏ Draft room</div>
+        <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Draft room</div>
         <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>{auction ? 'AUCTION' : 'SNAKE'}</span>
-        {st.is_mock && <span className="mono" title="practice room vs the AI — nothing is kept" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>🤖 MOCK</span>}
+        {st.is_mock && <span className="mono" title="practice room vs the AI — nothing is kept" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>MOCK</span>}
         {st.paused && <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 4, padding: '2px 7px' }}>⏸ PAUSED</span>}
         {st.night && (
           <span className="mono" title="clocks skip these hours — deadlines never land overnight"
@@ -1451,7 +1451,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               room keeps max_lots slots on screen and an open one just waits. */}
           {auction && Array.from({ length: Math.max(0, st.max_lots - (st.lots ?? []).length) }, (_, gi) => (
             <div key={`ghost-${gi}`} style={{ minHeight: 96, display: 'flex', alignItems: 'center', borderTop: gi + (st.lots ?? []).length > 0 ? '1px solid var(--bd)' : 'none', paddingTop: gi + (st.lots ?? []).length > 0 ? 10 : 0, marginTop: gi + (st.lots ?? []).length > 0 ? 10 : 0 }}>
-              <span className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--faint)' }}>⛏ LOT OPEN — waiting on a nomination</span>
+              <span className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--faint)' }}>LOT OPEN — waiting on a nomination</span>
             </div>
           ))}
           {/* nomination / pick banner. In an auction it stays MOUNTED even
@@ -1484,7 +1484,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           {/* commish controls */}
           {isCommish && (
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
-              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', alignSelf: 'center' }}>⚑ COMMISH</span>
+              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', alignSelf: 'center' }}>COMMISH</span>
               {st.paused
                 ? <button onClick={() => run(() => commishResumeDraft(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>▶ RESUME</button>
                 : <button onClick={() => run(() => commishPauseDraft(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>⏸ PAUSE</button>}
@@ -1495,7 +1495,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                 {st.night ? `🌙 ${fmtNightWin(st.night)}` : '🌙 QUIET HRS'}
               </button>
               <button onClick={() => setCtrlOpen((v) => !v)} className="mono" style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5 }}>
-                ⚑ CONTROLS {ctrlOpen ? '▴' : '▾'}
+                CONTROLS {ctrlOpen ? '▴' : '▾'}
               </button>
             </div>
           )}
@@ -1529,7 +1529,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             <button onClick={() => run(() => commishUndoPick(leagueId))} disabled={busy} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>↩ UNDO LAST PICK (reopens the draft)</button>
           )}
           {isCommish && !st.is_mock && (
-            <button onClick={() => setCtrlOpen((v) => !v)} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>⚑ COMMISH CONTROLS {ctrlOpen ? '▴' : '▾'}</button>
+            <button onClick={() => setCtrlOpen((v) => !v)} className="mono" style={{ ...ghostBtn, width: '100%', marginTop: 8, fontSize: 9.5 }}>COMMISH CONTROLS {ctrlOpen ? '▴' : '▾'}</button>
           )}
           {isCommish && ctrlOpen && (
             <CommishDraftControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
@@ -1699,7 +1699,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
           </div>
           {assigning && (
             <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 7, padding: '7px 9px', marginBottom: 8 }}>
-              ⚑ ASSIGNING FOR {teamName(st.on_clock) ?? `Team ${st.on_clock}`} — the next player you pick becomes their pick. Tap ⚑ CONTROLS to stop.
+              ASSIGNING FOR {teamName(st.on_clock) ?? `Team ${st.on_clock}`} — the next player you pick becomes their pick. Tap CONTROLS to stop.
             </div>
           )}
           <div className="mono" style={{ display: 'flex', gap: 8, padding: '0 0 4px 62px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
@@ -1734,7 +1734,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}
                     title="share of this platform's drafted leagues rostering him">{own ? `${own[p.slug] ?? 0}%` : '—'}</span>
                   {/* Q, not a star (v0.345.2, founder): the row already carries a
-                      GOLD ★ for favorites, and a second star meaning "queued"
+                      GOLD for favorites, and a second star meaning "queued"
                       made the two systems read as one. Q says which one this is. */}
                   <button onClick={() => toggleQueue(p.slug)} title={inQ ? 'remove from queue' : 'add to queue'} className="mono"
                     style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, minWidth: 22, padding: '2px 5px', borderRadius: 4, flexShrink: 0, background: inQ ? 'var(--warn)' : 'none', border: `1px solid ${inQ ? 'var(--warn)' : 'var(--bd)'}`, color: inQ ? 'var(--on-accent)' : 'var(--faint)' }}>Q</button>
@@ -1821,7 +1821,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             <div style={hdr}>MY QUEUE</div>
             {myRoster != null && (
               <Chip on={!!st.my_autodraft} onClick={() => run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft))}>
-                🤖 AUTODRAFT {st.my_autodraft ? 'ON' : 'OFF'}
+                AUTODRAFT {st.my_autodraft ? 'ON' : 'OFF'}
               </Chip>
             )}
           </div>
@@ -1835,7 +1835,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', lineHeight: 1.5, paddingTop: 6 }}>
-              🤖 Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
+              Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
             </div>
           )}
           {queue.map((slug, i) => {
@@ -2007,7 +2007,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
 
   return (
     <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--you)' }}>
-      <div style={hdr}>★ KEEPERS{st.next_season ? ` FOR ${st.next_season}` : ''} ({rolled ? carried.length : sel.size}/{st.keeper_count})</div>
+      <div style={hdr}>KEEPERS{st.next_season ? ` FOR ${st.next_season}` : ''} ({rolled ? carried.length : sel.size}/{st.keeper_count})</div>
       {rolled ? (
         <>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 6 }}>
@@ -2016,7 +2016,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {carried.map((k) => (
               <span key={k.slug} className="mono" style={{ fontSize: 10.5, border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 8px', color: 'var(--text)' }}>
-                {k.declared ? '★ ' : ''}{mine.find((p) => p.slug === k.slug)?.full_name ?? k.slug}
+                {k.declared ? '' : ''}{mine.find((p) => p.slug === k.slug)?.full_name ?? k.slug}
               </span>
             ))}
           </div>
@@ -2037,7 +2037,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
                     background: on ? 'var(--you)' : 'var(--bg)',
                     border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
                   }}>
-                  {on ? '★ ' : ''}{p.full_name}
+                  {on ? '' : ''}{p.full_name}
                 </button>
               );
             })}
@@ -2122,7 +2122,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
   );
 }
 
-// ── 📜 The cap sheet (v0.353.2) — web port of the app's CapSheet ─────────────
+// ── The cap sheet (v0.353.2) — web port of the app's CapSheet ─────────────
 // Every deal by team with payroll/room, length chips while the draft room is
 // open (commissioner: any time), the offseason front office (tag / extend /
 // RFA tender), retained-salary ghosts, dead money, and the RFA board.
@@ -2168,7 +2168,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
   const HOW: Record<string, string> = { auction: 'auction', rookie: 'rookie deal', draft: 'draft', waiver: 'waiver', fa: 'free agent', commish: 'commish' };
   return (
     <div style={{ ...card, marginBottom: 12 }}>
-      <LabelInfo label="📜 CAP SHEET"
+      <LabelInfo label="CAP SHEET"
         info={'How deals are born: auction wins sign at the exact bid, waiver wins at their FAAB bid, free agents at the $1 minimum, startup picks at the rookie scale. A move that would land a team over the cap is refused whole.\n\nWhile the draft room is open, set each of your own deals’ lengths; after it closes only the commissioner can change one (rookie-scale lengths are always fixed).\n\n"$X ghost" is salary a team retained on a player it traded away. Red lines are dead money from cuts, charged for the deal’s remaining life. "mkt $N" is HIS market price — the league’s value curve at his pool rank, scaled to the cap. Extensions discount off his market; the 🏷 tag prices off the top-5 positional salary average instead (the NFL’s own tag formula), so tagging a star costs star money.\n\nIn the OFFSEASON your expiring deals grow 🏷 TAG (one per team, at the market or a raise), ⤴ EXTEND (1–3yr at a discount of market), and 🪧 TENDER (RFA: rivals bid, you match or let him walk). Multi-year deals carry into next season at a year less; expiring deals walk unless kept one of those ways.'} />
       <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5 }}>
         ${st.salary_cap} cap · deals up to {st.years_max}yr · {deals.length} signed
@@ -2675,7 +2675,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       <div style={card}>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Rosters arrive at the draft</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Waivers and free agency open once the draft is complete. Set your team name and avatar now — they show on the draft board.</div>
-        <button onClick={onDraft} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>⛏ TO THE DRAFT ROOM</button>
+        <button onClick={onDraft} className="mono" style={{ ...btn, width: '100%', marginTop: 12 }}>TO THE DRAFT ROOM</button>
       </div>
       {pickers}
     </div>
@@ -3101,7 +3101,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     const slugs = (side === 'give' ? t.give : t.get)
       .map((s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); });
     const rid = side === 'give' ? t.from_roster : t.to_roster;
-    const picks = ((side === 'give' ? t.give_picks : t.get_picks) ?? []).map((p) => `⛏ ${pickLabel(p, rid)}`);
+    const picks = ((side === 'give' ? t.give_picks : t.get_picks) ?? []).map((p) => `${pickLabel(p, rid)}`);
     return [...slugs, ...picks].join(', ') || '—';
   };
 
@@ -3174,7 +3174,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     if (owned.length === 0) return null;
     return (
       <div style={{ marginTop: 6, border: '1px solid var(--bd)', borderRadius: 6, padding: 6 }}>
-        <div className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700, marginBottom: 3 }}>⛏ DRAFT PICKS</div>
+        <div className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700, marginBottom: 3 }}>DRAFT PICKS</div>
         {owned.map((a) => {
           const on = sel.some((x) => samePick(x, a));
           return (
@@ -3243,7 +3243,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           )}
           {!!t.cap_dollars && (
             <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 3 }}>
-              💵 {teamName(t.cap_dollars > 0 ? t.from_roster : t.to_roster)} sends ${Math.abs(t.cap_dollars)} of cap room
+              {teamName(t.cap_dollars > 0 ? t.from_roster : t.to_roster)} sends ${Math.abs(t.cap_dollars)} of cap room
             </div>
           )}
           {t.note && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3 }}>“{t.note}”</div>}
@@ -3396,7 +3396,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             )}
             {contracts?.rules?.cap_trading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-                <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>💵 CAP DOLLARS</span>
+                <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>CAP DOLLARS</span>
                 <Chip on={capDir === 1} onClick={() => setCapDir(1)}>I SEND</Chip>
                 <Chip on={capDir === -1} onClick={() => setCapDir(-1)}>I ASK</Chip>
                 <input value={capDraft} maxLength={5} inputMode="numeric" placeholder="0"
@@ -3469,8 +3469,8 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
   { key: 'chat', label: '💬 mentions & DMs' },
   { key: 'trades', label: '⇄ trade offers' },
   { key: 'waivers', label: '✚ waiver results' },
-  { key: 'draft', label: '⛏ draft alerts' },
-  { key: 'members', label: '⚑ new managers' },
+  { key: 'draft', label: 'draft alerts' },
+  { key: 'members', label: 'new managers' },
 ];
 
 /** Push/alert preferences, per device (exported since v0.287.0 so the league
@@ -3690,7 +3690,7 @@ function CommishDraftControls({ leagueId, st, busy, teamName, autos, assign, onA
         <div>
           <div style={hdr}>ASSIGN A PLAYER</div>
           <Chip on={assign} onClick={() => onAssign(!assign)}>
-            {assign ? '⚑ ASSIGNING — CLICK TO STOP' : '⚑ PICK FOR THE SEAT ON THE CLOCK'}
+            {assign ? 'ASSIGNING — CLICK TO STOP' : 'PICK FOR THE SEAT ON THE CLOCK'}
           </Chip>
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginTop: 6 }}>
             Turns the PLAYERS list into the on-clock team's board — the next player you pick becomes their pick.
@@ -3708,7 +3708,7 @@ function CommishDraftControls({ leagueId, st, busy, teamName, autos, assign, onA
                 {teamName(rid) ?? `Team ${rid}`}
               </span>
               <Chip on={!!autos[rid]} onClick={() => onRun(() => setAutodraft(leagueId, rid, !autos[rid]))}>
-                🤖 {autos[rid] ? 'AUTO' : 'OFF'}
+                {autos[rid] ? 'AUTO' : 'OFF'}
               </Chip>
               <button onClick={() => onRun(() => commishMoveDraftSlot(leagueId, rid, i))} disabled={busy || i === 0}
                 title="move up one spot" className="mono" style={{ ...linkBtn, padding: '0 3px', opacity: i === 0 ? 0.3 : 1 }}>↑</button>
