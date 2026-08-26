@@ -1,15 +1,197 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-21 · Build `v0.337.0` · migrations through `0212`_
+_Last updated: 2026-08-26 · Build `v0.358.1` · migrations through `0243`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
 > limits, the bug classes, and what to pick up. This file is the long tail
-> behind it, newest section first. Everything below the v0.337.0 section dates
-> from v0.263.0 and earlier; its design decisions still hold, but its "NEXT
-> SESSION" list does not — use the one in the kickoff prompt.
+> behind it, newest section first. Every "NEXT SESSION" list below is
+> superseded by the one in the kickoff prompt; the design notes are not.
 
-## Where this arc left off (v0.264.0 → v0.337.0)
+## Where this arc left off (v0.337.0 → v0.358.1)
+
+Seventy-odd merges and 31 migrations (0213 → 0243) in five days. Three
+things happened, in this order: the **two-rulebook class of bug got a
+structural cure**, a **whole front office** (contracts, cap, market) shipped,
+and the product turned outward — chrome, chips, alerts and a recruiting path.
+`git log --oneline --first-parent` is the changelog. What's worth carrying
+forward, rather than re-derived:
+
+### The engine now has one rulebook, and a check that says so
+
+This is the most load-bearing thing in the arc. For most of the project's life
+two resolvers — `matchup.ts` `buildMatchup` (web board, demo, sim) and
+`liveResolve.ts` `resolveLiveMatchup` (the worker's published rows) — each
+carried their own copy of the layered rules, "kept in sync by hand". They were
+not in sync. `scripts/check-engine-parity.mjs` measured the promise and broke
+it four ways at once (v0.339.6): a banker placement that flipped a match, a
+turnover swing the wallet never paid, a phantom week-1 stipend, and two
+different MVP-coin denominators.
+
+- **`engine/scoringRules.ts` (v0.340.0)** holds every layered rule ONCE,
+  side-generic: each takes a `SideLens` so the rule never knows whether it is
+  running over the board's `ResolvedSlot` (you/their) or the resolver's
+  `SlotRes` (home/away).
+- **`engine/orchestrate.ts` (v0.341.0)** holds the ORDER once, because that
+  was the half still living twice: the board applied the staked effects as
+  post-battle `bonuses[]` deltas while the resolver baked them in BEFORE the
+  window battles — grand totals agreed, window outcomes did not, and a lost
+  halftime stake flipped a +5 the board never showed. Canonical order:
+  `backups → suppress → banker → DoN → clutch DoN → awards → rivalry → red
+  herring → lead change → grudge`, then each engine runs its own window
+  battles on finals that already carry every effect.
+- **`engine/liveScore.ts` (v0.339.3–.4)** is the published-score mapping: the
+  resolver decides the week, so the resolver's number is what both hosts show.
+  A drip's value is a function of the clock, so two clocks give two honest
+  answers — that's why the flat metrics matched on screen and the drips didn't.
+
+**A rule change anywhere but these files is now a parity failure.** That is
+the entire point; don't route around it.
+
+### The front office: contracts, cap, and a market that breathes
+
+`0217` → `0237`, twenty-one migrations, all under the founder's "let's build
+them all". The shape:
+
+- **A contract is `(salary, years)` on a rostered player** (0217). Contracts
+  derive from the writes that already happened — an insert originates a deal,
+  a move re-homes it, a delete releases it — via triggers, so no existing
+  function was re-created. A **DEFERRED** constraint trigger holds every
+  touched team under the cap at commit, because a 2-for-1 trade is transiently
+  over-cap between its two updates and must be judged whole.
+- **Contract-ness lives on the continuity axis** (0218): picking `contract` or
+  `contract_dynasty` FORCES an auction room (bids become salaries) and turns
+  the cap on at the auction budget. Switching to a plain mode turns contracts
+  off. There is no "contract keeper".
+- **In-season mechanics** (0219): salary retention on trades, raw cap-space
+  trading, IR relief. `team_payroll` is the whole ledger and `team_cap` the
+  cap plus your traded `cap_adjust`; the deferred trigger and `execute_trade`
+  both judge against those two, so every mechanic lands in one place.
+- **The offseason** (0220): carriage is the keystone — until it, "a 4-year
+  contract" was a promise the rollover didn't keep. Plus franchise tags,
+  extensions at a market discount, RFA tenders with match-or-walk, and dead
+  money on cuts.
+- **Two markets, two jobs** (0230). The founder, over a cap sheet where a $1
+  flier read "mkt $286": one number was doing two jobs. `contract_market_value`
+  (top-5 positional average) is the NFL's own franchise-tag formula and stays
+  on the tag; `player_market_value` is per-player — the same curve the auction
+  AI bids from, `cap × 0.34 × e^(−rank/45)` — and is what "market" means on a
+  cap sheet and an extension.
+- **The market breathes** (0236/0237): `market_board` is a global rank table
+  refreshed from Stathead's DYNASTY values (ADP goes quiet after draft season;
+  a multi-year contract is a multi-year asset), with the frozen pool rank as
+  fallback. Superflex-aware (0237).
+- **Locks are final** (0233): a rookie term is never assignable and a locked
+  seat's lengths are final — commissioner and admin included.
+
+### Two new formats, and a register that remembers
+
+**🔪 Guillotine** (0221): each week the lowest-scoring survivor is eliminated
+and its roster released to the frenzy. The blade falls itself —
+`guillotine_tick` is idempotent and safe to poke from any member's league load
+(the `autoGeneratePlayoffs` pattern). Must be set pre-draft; locks once anyone
+is eliminated. **🧛 Vampire** (0222): one seat cannot sign from the street or
+the wire and instead steals a player from whoever it beats, one steal per win,
+while the win is fresh. `settings_json.steal_review` applies the trade-review
+pattern to steals.
+
+Both landed on the back of the **league register growing a memory**:
+`league_txn.note` plus a GUC pair (`app.txn_kind` / `app.txn_note`) that
+engines set so their roster writes log as the EVENT they belong to ("release —
+guillotine week 6", not a bare release). Eliminations, releases, steals, tags,
+extensions, RFA resolutions, retained salary, traded cap dollars and draft-setup
+changes all print there now.
+
+### An unclaimed seat works the wire
+
+`engine/seatWaivers.ts` (v0.338.0) is the decision half — roster in, claims
+out, no database, no clock — and `server/src/seatWire.js` spends it. The policy
+is deliberately conservative and the asymmetry IS the design: a **HOLE** (a
+starting spot empty, or held by someone the projection has already zeroed)
+clears on any positive gain, because it's a loss happening this week; an
+**UPGRADE** over a healthy starter must beat `UPGRADE_MIN_GAIN`. One threshold
+either ignores injuries or churns, and a human may claim this seat mid-season —
+they should inherit a team that was tended, not strip-mined. v0.339.0 extended
+agent seats to drip leagues, not just classic.
+
+### The app grew chrome, and the mobile web caught up
+
+v0.356.0 took LinkedIn's pattern — chrome folds away as you read down, comes
+home the moment you pull up. v0.356.1 fixed the twitch, and the fix is the
+lesson: the chrome is **two states with hysteresis**, not a 1:1 shadow of the
+finger. The header fold is a LAYOUT change, so per-frame updates fed the scroll
+position back into itself. Travel now ACCUMULATES per direction (a reversal
+resets), ~28px down to hide, less up to show, nothing in between. Screens opt
+in by spreading `useLeagueScroll()` onto their main ScrollView.
+
+v0.356.4–.18 then pulled the mobile web up to the same chrome and cut the
+scaffolding text the app never had. Two general fixes fell out:
+
+- **The keyboard owns the bottom** (v0.356.12–.13, `apps/mobile/src/ui/
+  keyboard.ts`). An edge-to-edge window does not resize for the IME, so
+  `adjustResize` does nothing and `KeyboardAvoidingView` cannot work. Worse,
+  RN's `keyboardDidShow` reports `imeInsets.bottom - barInsets.bottom` — the
+  space beyond the nav bar, not the space covered — which is exactly the 38dp
+  the first fix landed short by. `useKeyboardInset()` returns the true bottom
+  coverage.
+- **A remount re-guesses** (v0.356.14/.15). The rails flashed a DRAFT icon on
+  every navigation because `LeagueStrip` is rendered inside each view's return.
+  Tri-state (`boolean | null` — draw nothing while unknown) + a module-level
+  cache.
+
+### The league card, and the way in
+
+The founder sent Sleeper's league list: "Let's make the league chips less
+busy." v0.356.16 cut the chip to avatar, name, one built line
+(`2026 12-Team Contract Dynasty Drip`) and a DRAFTING badge, and made the tap
+land where the league actually is — matchup if the draft is done, draft if it's
+live, home if neither (`leagueLandingRoom`). 0240 and 0242 fed `my_teams` what
+that needed: `draft_status` (NULL for imported leagues — they have no draft row
+of ours, which is not the same as 'pending'), `rosters`, and the three game
+axes.
+
+Recruiting then got its own path (v0.357.3 → v0.358.1): `?game=classic` sets
+`localStorage.dripRecruitGame`, `src/screens/ClassicDemo.tsx` is a classic view
+of the same demo week that re-scores it every way we offer (PPR 0/0.5/1 ×
+best ball × golf, verified against real week-2 data), and the invite panel
+carries a **second, look-first link** for a recruit who wants to see before
+signing. The invite link itself deliberately never carries a game hint — it
+goes straight to sign-in and redeem, and `check:invite` asserts that.
+
+### Phone alerts for the two things that need them
+
+v0.357.0 + 0241: a commissioner gets pinged when someone JOINS, and anyone can
+opt a league's chat into every-message alerts. The migration is worth reading
+for one decision: `enrolled_at` was added **nullable with no default**, and
+stamped by a trigger. A `default now()` would have backfilled every existing
+row with the migration's timestamp and paged every commissioner about members
+who joined weeks ago. **Ask what a backfilled value would TRIGGER.**
+
+**Still not running**: the Fly worker has not been redeployed since, so
+`detectMembers` and the every-message path do not fire yet. Migration, prefs
+and UI are all live.
+
+### Contrast is measurable
+
+The founder: "pick a player spot in the app card battle is washed out. Can we
+check that it is visible in each of the themes?" It measured 5.3–5.8:1 on the
+dark boards it was drawn for and **1.59:1** on the light ones — below the floor
+for LARGE text, at 10px. The fix reads each theme's own `warn` token; the
+alphas (fill 2%, border 85%) were swept numerically, not guessed, because the
+first guess failed four themes. `scripts/check-card-contrast.mjs` walks all
+seven themes on every parity run, including the eighth nobody has written yet.
+
+### Probes and checks
+
+`check:parity` is now **740 assertions across 27 scripts**;
+`run-scratch-probes.sh` runs **65 suites**. Two traps, both paid for:
+**all suites share one database** (scope to your fixture or assert a delta),
+and **a check that isn't wired into the chain isn't a check** — `check:cardcontrast`
+sat unwired from v0.357.1 until this handoff found it.
+
+---
+
+## Where a previous arc left off (v0.264.0 → v0.337.0)
 
 Seventy-odd versions across roughly two weeks, driven almost entirely by the
 founder's screenshots. `git log --oneline --first-parent` is the changelog and

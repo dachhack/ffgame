@@ -10,13 +10,47 @@ Drip Fantasy (dripfantasy.com): a live head-to-head fantasy football game where 
 
 ## Current phase
 
-Pre-season pilot hardening + acquisition: engine and league infra are launch-ready; current work is solo onboarding (public pods, weekly showdowns), drama presentation, and the Reddit-ads funnel with attribution.
+Recruiting, two weeks from the first lock (Sep 9). The engine, the league infrastructure and the league-shape catalogue are done — drip and classic, redraft through contract dynasty, guillotine and vampire, golf and best ball — and the last arc spent itself on the outward-facing half: app and mobile-web chrome, quiet league chips, phone alerts, and a classic demo board plus a look-first invite link for recruiting non-drip leagues. Current work is filling those leagues.
 
 ## Cadence
 
 Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function).
 
 ## Last worked (superseded entries below)
+
+### v0.358.1 — the arc since v0.339.3, in one entry
+
+Five days, seventy-odd merges, migrations 0213 → 0243, all merged and
+deployed; latest APK is versionCode 35801. Per-version reasoning stopped being
+written here around v0.339.4 — `git log --oneline --first-parent` is the
+changelog and `HANDOFF.md`'s top section carries the design decisions. The
+three things that happened:
+
+**One rulebook.** Every layered scoring rule moved into
+`engine/scoringRules.ts` (v0.340.0) and the ORDER those rules run in moved
+into `engine/orchestrate.ts` (v0.341.0), both side-generic over a `SideLens`.
+The two resolvers — the web board and the worker — had each carried their own
+copy "kept in sync by hand", and `check:engine-parity` proved they weren't:
+a banker placement that flipped a match, a turnover swing the wallet never
+paid, a phantom week-1 stipend, two MVP-coin denominators, and staked effects
+applied on opposite sides of the window battles. A rule change anywhere else
+is now a build failure.
+
+**A whole front office.** Contracts and a salary cap (0217), contract league
+types on the continuity axis (0218), in-season retention / cap trading / IR
+relief (0219), the offseason — carriage, tags, extensions, RFA, dead money
+(0220) — and a per-player market that refreshes off Stathead dynasty values
+(0230, 0236, 0237). Plus two formats: 🔪 guillotine (0221) and 🧛 vampire
+(0222), and a league register that now records every automated movement.
+
+**The product turned outward.** LinkedIn-style app chrome with hysteresis
+(v0.356.0–.1), the mobile web pulled up to match, MY TEAM on the web for
+native and imported leagues alike, quiet league chips that land you where the
+league actually is (0240/0242), phone alerts when someone joins or speaks
+(0241 — worker redeploy still pending), an empty roster slot legible on all
+seven themes (v0.357.1), and a recruiting path for non-drip leagues:
+`?game=classic`, a classic demo board that re-scores one real week every way
+we offer (v0.358.0), and a look-first link in the invite panel (0243).
 
 ### v0.339.3 — the web reads the score the engine wrote
 
@@ -1780,12 +1814,31 @@ person meets the numbers where the mistake lives.
 
 ## Current blockers
 
-- Preseason practice (0110) is on the branch, not live: the migrate workflow only runs on push to `main` (`paths: supabase/migrations/**`), and the same `fly deploy` below carries `resolve.js`'s practice-week coin skip. Until both land, the RPC guards aren't in the DB and practice coin would still bank.
-- `fly deploy` of the worker pending — carries #262's `ret` emission for live game feeds, the practice-week coin skip above, AND the Window Pot's sweep. Do before the Aug 13 preseason slate, which is the validation run for all the live-fire fixes and the pot's live-fire.
-- Yahoo activation: set the `VITE_YAHOO_CLIENT_ID` repo VARIABLE (+ site rebuild) and fix the Yahoo console redirect URI (`https://dripfantasy.com/` + www — currently the httpbin placeholder); then the first real league connect (JSON mapping unvalidated against live Fantasy data).
+- **Fly worker redeploy** — `server/src/push.js` (join alerts, every-message
+  chat alerts, v0.357.0) and `server/src/seatWire.js` (agent-seat waiver
+  claims, v0.338.0) are merged but the worker has not been redeployed, so
+  neither runs. Migration 0241, the prefs UI and the RPCs are all live.
+  Outside this repo's deploy — needs a `fly deploy`.
+- **`scripts/db/external-roster-weeks.sql` needs a dispatch** (Actions → Run a
+  database query, writes off): does each imported league have a real-week
+  `sleeper_lineup` row, or only preseason ones? Where it reads 0, web MY TEAM
+  says "No synced roster yet" and the fix is a live Sleeper fetch. Claude's
+  token cannot dispatch workflows (403).
+- **No production league has ever rolled over**, and no contract league has
+  run a tag / extension / RFA tender for real. The probes cover the SQL end to
+  end; the loops have never been live-fired.
 
 ## Next 3 tasks
 
-1. **Live-fire the Window Pot** on the Aug 13 slate: `fly deploy` the worker, then flip the two-account test league on from the admin page and walk all five outcomes across the six-window preseason slate — an offer matched and laddered to the cap, one backed out of (costs exactly ◎10), one wager left unanswered (returns at picks lock), one offer left unmatched (voids), and one window finished + re-resolved twice to prove the pot pays once. Spec §12 has the flag-flip procedure.
-2. Aug 13 preseason slate = regression run for the nine live-fire fixes (lock lead, dedupe ingest, state-driven FINAL, feed-anchored clocks) + first `ret`/`yac` splits on live data. Watch `fly logs` for the new loud `poll game` errors.
-3. Yahoo end-to-end (variable + redirect URI + first league connect), then update the FAQ's "Yahoo landing next" line to fully supported. Carried: showdown re-engagement email; DFS commissioner + solo flag approvals.
+1. **Redeploy the Fly worker** — unblocks join alerts, every-message chat
+   alerts and agent-seat wire claims, all of which are merged and inert.
+2. **Recruiting, through Sep 9.** The classic path is live end to end
+   (`?game=classic` → classic demo board → look-first link in the invite
+   panel). What's untested is whether a cold recruit lands, understands and
+   signs. Watch the funnel; the demo is the pitch. Related and unbuilt:
+   nobody is notified when someone lands in a league's waiting room — 0241's
+   push plumbing makes that the same detector shape as `detectMembers`.
+3. **Rebake `proj2026.ts` + `adp2026.ts` weekly right up to Sep 9** (last
+   pulled 2026-08-22). `projStats2026.ts` rides the same `get_projections`
+   call — all three or none. Auto-slot, seat agents, previews, keeper defaults
+   and the auction AI all rank by these numbers.
