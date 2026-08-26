@@ -1021,4 +1021,31 @@ begin
     'ct27h THE POINT: all three reach the chip');
 end $$;
 
+-- ── §28. the invite panel knows the game (0243) ─────────────────────────────
+-- The commissioner's look-first link points at the classic board only if
+-- league_invite says the league is classic. Four surfaces build invite links
+-- and all four read this one call, so the field has to be there and it has to
+-- default to drip for a league that never chose.
+do $$
+declare lid uuid; r jsonb;
+begin
+  perform probe_as('a');
+  lid := (create_native_league('Slow Hands', '2026', 2, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+
+  r := league_invite(lid);
+  perform assert_ok(r, 'ct28a the panel loads');
+  perform assert_true(r ->> 'game_mode' = 'drip',
+    'ct28b a league that never chose reads as drip');
+
+  perform assert_ok(set_league_classic_access(lid, true), 'ct28c-pre classic unlocked');
+  perform assert_ok(set_league_game_mode(lid, 'classic'), 'ct28c switched to classic');
+  r := league_invite(lid);
+  perform assert_true(r ->> 'game_mode' = 'classic',
+    'ct28d THE POINT: the invite panel can send recruits to the right game');
+  -- The code and seat count are what the panel was already for; a respin that
+  -- dropped either would break every invite surface at once.
+  perform assert_true(coalesce(r ->> 'invite_code', '') <> '' and (r ? 'seats_open'),
+    'ct28e ...without losing what the panel already carried');
+end $$;
+
 select 'ALL CONTRACT PROBES PASSED' as result;

@@ -11,7 +11,7 @@ import {
   requestLeagueSync, leagueSyncState, type SyncState,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
-import { inviteLink, inviteMessage } from '@drip/core/data/invite';
+import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -445,7 +445,7 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
 //   is commish-gated in SQL (0123) and this only shows the half you may use.
 export function RecruitView({ leagueId, commish }: { leagueId: string; commish: boolean }) {
   const t = useTheme();
-  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null } | null>(null);
+  const [inv, setInv] = useState<{ code: string; name?: string | null; seats?: number | null; game?: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // The listing (commissioner only). `listed` undefined = still asking.
   const [listing, setListing] = useState<{ listed: boolean; blurb: string; seatsOpen: number } | null>(null);
@@ -457,7 +457,7 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
     leagueInvite(leagueId)
       .then((r) => {
         if (dead) return;
-        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open });
+        if (r.ok && r.invite_code) setInv({ code: r.invite_code, name: r.name, seats: r.seats_open, game: r.game_mode });
         else setErr(friendlyError(r.error ?? 'could not fetch the invite code'));
       })
       .catch((x) => { if (!dead) setErr(friendlyError(x)); });
@@ -474,7 +474,12 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
   }, [leagueId, commish]);
 
   const link = inv ? inviteLink(inv.code) : '';
-  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats }) : '';
+  const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats, game: inv.game }) : '';
+  // The look-first link (v0.358.1) — classic leagues only; the bare site
+  // already opens on drip, so a drip commissioner would be handing out the
+  // same destination twice.
+  const classic = (inv?.game ?? '').toLowerCase() === 'classic';
+  const look = previewLink('classic');
 
   const send = async () => {
     if (!message) return;
@@ -519,6 +524,22 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
         <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: 12 }}>
           Invite code {inv.code}{inv.seats ? ` \u00b7 ${inv.seats} seat${inv.seats === 1 ? '' : 's'} open` : ''}
         </Mono>
+
+        {/* A recruit who wants to look first. The invite link above goes
+            straight to sign-in and never shows them the game — this one lands
+            on the CLASSIC board, which is the point for a league that doesn't
+            play drip. Selectable for the same reason the link above is. */}
+        {classic && (
+          <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.bd, gap: 6 }}>
+            <Mono size={9} weight="700" track={0.12} tone="faint">NOT READY TO SIGN UP?</Mono>
+            <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+              This one shows them the classic game first — nine slots, standard scoring, no sign-up.
+            </Mono>
+            <View style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, paddingHorizontal: 10, paddingVertical: 9 }}>
+              <Text selectable numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, lineHeight: 14 }}>{look}</Text>
+            </View>
+          </View>
+        )}
       </>)}
 
       {commish && (<>

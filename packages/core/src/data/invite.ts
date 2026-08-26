@@ -52,6 +52,27 @@ export const SOLO_PASS_RE = /^solo-/i;
 export const inviteLink = (code: string): string =>
   `${SITE_ORIGIN}/?live=1&code=${encodeURIComponent(code.trim().toUpperCase())}`;
 
+/** THE OTHER LINK (v0.358.1) — for a recruit who wants to LOOK before they
+ *  commit.
+ *
+ *  Founder: "let's add the classic link to the commish invite area. Classic
+ *  league invites should get you there."
+ *
+ *  `inviteLink` above carries a code and goes straight to sign-in and redeem;
+ *  it never shows the demo, and the join screen has pitched the right game
+ *  since v0.325.0. This one carries NO code — it lands on the demo, which is
+ *  where a game hint is the whole difference: a classic league's recruit gets
+ *  the classic board (v0.358.0) rather than a pitch for hidden metrics and
+ *  power-ups.
+ *
+ *  DRIP GETS THE BARE ORIGIN. Unset means drip everywhere in this codebase and
+ *  the demo already opens on it, so the parameter would say nothing while
+ *  making the link longer to paste and easier to mistype. */
+export const previewLink = (game?: string | null): string => {
+  const g = (game ?? '').trim().toLowerCase();
+  return g === 'classic' ? `${SITE_ORIGIN}/?game=classic` : SITE_ORIGIN;
+};
+
 /** What a landing URL is asking for, or null when it is asking for nothing.
  *
  *  Pure, and takes a getter rather than a URL so both a `URLSearchParams` and a
@@ -101,13 +122,20 @@ export function readInviteParams(
  *  The CODE is repeated in plain text under the link deliberately: SMS and some
  *  chat clients strip or mangle query strings, and a recruit who can still read
  *  "ABCD" out of the message can finish the job by hand. */
-export function inviteMessage(o: { league?: string | null; code: string; seatsOpen?: number | null }): string {
+export function inviteMessage(o: { league?: string | null; code: string; seatsOpen?: number | null; game?: string | null }): string {
   const code = o.code.trim().toUpperCase();
   const named = o.league?.trim() ? `"${o.league.trim()}"` : 'my league';
   const seats = o.seatsOpen && o.seatsOpen > 0
     ? ` ${o.seatsOpen} seat${o.seatsOpen === 1 ? '' : 's'} open.`
     : '';
+  // THE LOOK-FIRST LINE (v0.358.1). Only for a CLASSIC league: the bare origin
+  // already opens on drip, so offering a drip recruit "or see the game first"
+  // pointing at the same site the line above points at is a second URL that
+  // adds nothing. A classic recruit has something to be sent somewhere else
+  // for, and that is exactly the recruit this was breaking for.
+  const classic = (o.game ?? '').trim().toLowerCase() === 'classic';
+  const look = classic ? `\n\nNot ready to sign up? See how it plays: ${previewLink('classic')}` : '';
   return `Join ${named} on Drip Fantasy — real-time fantasy football.${seats}\n\n`
     + `${inviteLink(code)}\n\n`
-    + `(or enter invite code ${code} at ${SITE_ORIGIN})`;
+    + `(or enter invite code ${code} at ${SITE_ORIGIN})${look}`;
 }

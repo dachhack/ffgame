@@ -10,7 +10,7 @@
 // The cause was a comment. invite.ts asserted "?code=XXXX has been a complete
 // path for a long time — App.tsx reads it off the landing URL"; App.tsx reads
 // it only inside `if (p.get('live') === '1')`. Nobody asked App.tsx.
-import { inviteLink, inviteMessage, readInviteParams, INVITE_CODE_RE, SITE_ORIGIN } from '../packages/core/src/data/invite';
+import { inviteLink, inviteMessage, previewLink, readInviteParams, INVITE_CODE_RE, SITE_ORIGIN } from '../packages/core/src/data/invite';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -106,6 +106,39 @@ const q = (search) => { const p = new URLSearchParams(search); return (k) => p.g
     && inviteMessage({ code: 'A1B2C3D4', seatsOpen: 1 }).includes('1 seat open'));
   ok('no seats claims none', !inviteMessage({ code: 'A1B2C3D4', seatsOpen: 0 }).includes('seat'));
   ok('an unnamed league still reads', inviteMessage({ code: 'A1B2C3D4' }).includes('my league'));
+}
+
+// ── THE LOOK-FIRST LINK (v0.358.1) ──────────────────────────────────────────
+// Founder: "add the classic link to the commish invite area. Classic league
+// invites should get you there." Two things have to hold. The invite link goes
+// to sign-in and must NEVER pick up a game hint — the join screen already
+// pitches per-mode, and a hint there would be dead weight on a URL people
+// paste by hand. The look-first link is the opposite: it carries no code, so
+// the hint is the only thing distinguishing a classic recruit's landing from a
+// drip one's.
+{
+  ok('a classic league sends recruits to the classic board',
+    previewLink('classic') === `${SITE_ORIGIN}/?game=classic`, previewLink('classic'));
+  // DRIP GETS THE BARE ORIGIN — the demo already opens on drip, so the
+  // parameter would say nothing while making the link longer to mistype.
+  ok('a drip league just sends them to the site', previewLink('drip') === SITE_ORIGIN);
+  ok('an unset mode is drip, as everywhere else',
+    previewLink() === SITE_ORIGIN && previewLink(null) === SITE_ORIGIN && previewLink('') === SITE_ORIGIN);
+  ok('case and padding do not matter', previewLink('  CLASSIC ') === `${SITE_ORIGIN}/?game=classic`);
+  ok('an unknown mode is not classic', previewLink('guillotine') === SITE_ORIGIN);
+
+  // THE INVITE LINK STAYS CLEAN whatever the league plays.
+  ok('a game hint never lands on the invite link itself',
+    !inviteLink('A1B2C3D4').includes('game='), inviteLink('A1B2C3D4'));
+
+  const cm = inviteMessage({ league: 'Slow Hands', code: 'A1B2C3D4', game: 'classic' });
+  ok('a classic invite offers the look-first link', cm.includes(previewLink('classic')), cm);
+  ok('…and still carries the real join link', cm.includes(inviteLink('A1B2C3D4')));
+  const dm = inviteMessage({ league: 'Fast Hands', code: 'A1B2C3D4', game: 'drip' });
+  ok('a drip invite does not offer a second link to the same place',
+    !dm.includes('?game='), dm);
+  ok('a league that never chose reads as drip',
+    !inviteMessage({ code: 'A1B2C3D4' }).includes('?game='));
 }
 
 if (fails) { console.log(`\n${fails} INVITE-LINK ASSERTION(S) FAILED`); process.exit(1); }
