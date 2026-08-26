@@ -173,10 +173,17 @@ export function Leagues({ userId, onOpen, onBoard }: {
                 room === 'matchup' ? 'picks' : room);
             }}
             android_ripple={{ color: alpha(t.you, 16) }}
+            // THE SPINE HAS TO EARN ITS PLACE — the web card carries the same
+            // rule and the same comment (LiveOnboard's LeagueCard). Every card
+            // used to wear the accent bar, which is the same as none of them
+            // wearing it; now it rests in a plain border and the bar appears
+            // only while the league is DRAFTING — the one live signal this card
+            // still carries, in the same --opp the DRAFTING dot below uses.
             style={({ pressed }) => ({
               backgroundColor: t.surface, overflow: 'hidden',
               borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-              borderLeftWidth: 3, borderLeftColor: t.you,
+              borderLeftWidth: lg?.draft_status === 'live' ? 3 : StyleSheet.hairlineWidth,
+              borderLeftColor: lg?.draft_status === 'live' ? t.opp : t.bd,
               borderRadius: 12, padding: 14, gap: 4,
               opacity: pressed ? 0.85 : 1,
             })}

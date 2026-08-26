@@ -1232,7 +1232,19 @@ function LeagueCard({ e, commish, onPodBuild, onOpen }: {
   const drafting = e.league?.draft_status === 'live';
   const squadLeague = e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs';
   return (
-    <div style={{ ...card2, padding: 12 }}>
+    // THE SPINE HAS TO EARN ITS PLACE (founder: "I don't like the chips with
+    // the highlight on the left"). card2's accent bar was on EVERY card, which
+    // is the same as being on none of them — a mark every row wears marks
+    // nothing, and it was the loudest thing in a list v0.356.16 had just
+    // finished quieting down. So the card rests inside a plain border and the
+    // bar appears only while the league WANTS something from you.
+    //
+    // Drafting is the one live signal this card still carries: the waiting dot
+    // and the lock alarm moved to the room bar and the hub in v0.356.16, and
+    // re-reading them here to paint a border would undo that on purpose. It is
+    // --opp rather than --you because the DRAFTING dot below is already --opp,
+    // and one state should not speak in two colours.
+    <div style={{ ...card2, padding: 12, borderLeft: drafting ? '3px solid var(--opp)' : '1px solid var(--bd)' }}>
       <button onClick={onOpen} aria-label={`Open ${e.league?.name ?? 'league'}`}
         style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
         {/* The LEAGUE's crest, falling to its own lettered box — this is a list

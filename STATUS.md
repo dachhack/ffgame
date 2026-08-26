@@ -18,6 +18,124 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.358.4 — the spine has to earn its place
+
+Founder: "I don't like the chips with the highlight on the left. What other
+options do we have?" — then, from seven treatments rendered in the real neon
+palette: "Let's do the G chips."
+
+THE BAR WAS ON EVERY CARD, which is the same as being on none of them. A mark
+every row wears marks nothing; it was decoration, and it was the loudest thing
+left in a list v0.356.16 had just finished quieting down ("let's make the
+league chips less busy"). So the card now rests inside a plain border and the
+spine appears ONLY while the league wants something from you.
+
+WHICH IS DRAFTING, AND ONLY DRAFTING. That is the one live signal this card
+still carries: the waiting dot and the ⚠ lock alarm moved to the room bar and
+the hub in v0.356.16, and re-reading them here just to paint a border would
+undo that on purpose. The bar is --opp rather than --you because the DRAFTING
+dot beside it is already --opp — one state should not speak in two colours.
+
+BOTH HOSTS, ONE RULE, so they cannot drift: `LeagueCard` in LiveOnboard.tsx and
+the play card in the app's Leagues.tsx, same condition, same colour, the same
+comment in both places.
+
+WHAT WAS DELIBERATELY LEFT ALONE, because gating a change on the condition that
+motivated it cuts both ways (v0.332.0 → v0.333.0): `card2`'s default spine,
+which three other web surfaces still use; the mock-draft card's amber; and the
+commissioner-without-a-team card on either host. Those mark a KIND of row in a
+section of their own, not an alarm. One thing to fix when it earns a session:
+that card is --you on the web and --warn in the app. They should agree.
+
+Battery green: both typechecks, 740 parity assertions, vite build.
+
+### v0.358.3 — the alert wears our mark, not Android's robot
+
+Founder, with a screenshot of their own status bar: "how do I get my alerts to
+show up with a custom icon?"
+
+THE ROBOT IS THE FALLBACK, and both of our push surfaces were asking for it.
+Android's status-bar glyph keeps ONLY THE ALPHA CHANNEL — it discards the
+colours and tints the remaining shape itself — so a full-colour icon arrives as
+a solid opaque square and the system draws its own default instead.
+
+  • the app declared no icon at all: `expo-notifications` sat in app.json as a
+    bare string, with no `icon` and no `color`.
+  • the web was worse, because it looked done: `sw.js` set `badge` — which IS
+    the status-bar glyph — to `icon-192.png`, the full-colour art. Pointing it
+    at a picture is the same as pointing it at nothing.
+
+So one asset, generated once, worn by both: a white droplet on transparent,
+96x96, in `scripts/gen-notification-icon.py`. `color` is `#34E5D9`, neon's
+accent and the app's default theme, which tints the glyph in the shade.
+
+THE DROPLET, NOT THE APP ICON. The mark has to survive 18px, and at that size
+interior detail is mush — the icon's own DF letters and the PWA mascot both go.
+A droplet is the brand read at a glance and it is legible at every density
+Android will scale it to (measured at 18 / 24 / 36 / 48 before wiring it).
+
+WHY IT IS COMPUTED, NOT DRAWN. `gen-pwa-icons.py` needs Pillow, which this
+environment does not have, and headless Chromium silently drops SVG and CSS
+transforms at a 96px window here — it returned a 2-pixel image, twice, and the
+alpha check is the only reason that was caught rather than committed. So the
+shape is arithmetic: a circle unioned with the triangle on its two TANGENT
+lines, supersampled 4x4 for the edges, written out through a 30-line PNG
+encoder. It reproduces anywhere Python runs. Two properties are asserted in the
+generator rather than eyeballed — transparent corners, opaque body — because
+those are exactly what a bad mask gets wrong.
+
+iOS is unaffected: it uses the app icon and has no silhouette slot.
+
+Battery green: both typechecks, 740 parity assertions, vite build, 59 probe
+suites, server smoke.
+
+### v0.358.2 — the weekly bake, two weeks out from the lock
+
+The standing pre-season chore, four days late: `proj2026.ts`, `projStats2026.ts`
+and `adp2026.ts` all re-pulled from StatHead, as_of **2026-08-26**. ADP moves
+all summer and auto-slot, the seat agents, previews, the pod deal pool and the
+keeper defaults all rank by these numbers, so a stale bake mis-ranks every one
+of them at once. First lock is Sep 9.
+
+ONE PULL, THREE FILES, as the headers require — `get_projections` served ppg,
+games, sleeper_id and the eight stat components in a single call, so the level
+and the components describe the same player at the same instant. ADP came from
+`get_adp` (consensus blend: FantasyPros 2026-08-21 · Sleeper 2026-08-26 ·
+FFC 2026-08-25).
+
+WHAT ACTUALLY MOVED, and it is worth knowing how little: **75 of 445 ppg values
+changed, and nothing else did.** Every name, every sleeper_id and every
+projected `games` count came back identical to the 08-22 bake — checked as a set
+diff against the old file before writing the new one. So no depth chart turned
+over in those four days; the model just re-priced. Biggest moves are backups
+whose role firmed up (Malik Davis 5.17 → 8.08, Tank Dell 6.29 → 7.93) and one
+starter stepping back (Javonte Williams 17.25 → 16.25).
+
+THE ADP FILE GREW, 200 rows → 221, and the cutoff is now written down rather
+than eyeballed: the consensus blend degrades into unrostered and retired names
+past its first TEAM-LESS row (this pull: `Isaiah McKoy,WR,,239`), so the bake
+stops there. Everything above it is a real player on a real roster. No name from
+the previous bake fell out; the 21 additions are all deep-tail (ADP 213–239).
+
+THE THREE PINS IN `check-draft-spots` HELD. Allen 20.4, Lawrence 18.0, Nacua
+18.4 all came back unchanged — the pins exist precisely so a rebake has to stop
+and look, and this time looking cost nothing. Only Taylor moved (24.7 → 24.9)
+and his comment is updated with it.
+
+HOW THE TRANSCRIPTION WAS PROVED, because a hand-copied 445-row CSV is exactly
+where a silent wrong number gets in: parity's `check:projscoring` re-derives the
+bake from the stat lines under the standard catalog, per row, with no systematic
+drift — so ppg, games and all eight components have to agree with StatHead's own
+arithmetic or the suite fails. Names and ids were proved separately by the set
+diff above. A dropped TE row (Kenny Fletcher) was caught this way and restored
+before anything was written.
+
+Battery green: both typechecks, **740 parity assertions**, vite build, **59
+probe suites**, server smoke.
+
+NOT DONE: no APK. `packages/core` changed, so the app still ranks by the 08-22
+numbers until one is built.
+
 ### v0.339.3 — the web reads the score the engine wrote
 
 Founder: "I need these to match."
