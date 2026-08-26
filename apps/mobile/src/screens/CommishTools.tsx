@@ -1771,6 +1771,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  const [presetPick, setPresetPick] = useState(false);
   // The review-before-save sheet (v0.351.0, founder: "a confirmation that
   // details all the roster decisions and rules and asks for confirmation or
   // go back") — SAVE LINEUP opens it; only ✓ CONFIRM actually writes.
@@ -2086,13 +2087,6 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           next season. Lives here per the founder ("put it in mode and
           season"); NEXT SEASON shows the consequences. */}
       <ContinuityRow leagueId={leagueId} />
-      {/* The RECEPTIONS pills moved into the scoring presets (web parity) —
-          receptions are a scoring decision. */}
-      {mode === 'classic' && (
-        <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: fs(12) }}>
-          The lineup lives under ROSTER; receptions and every other value under ⚖ SCORING.
-        </Mono>
-      )}
       </>)}
       {view === 'lineup' && mode !== 'classic' && mode !== null && (
         <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
@@ -2183,15 +2177,42 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 {'One tap adds a fully-configured spot:\n\nROOKIE SFLX / FLEX — best-ball spots only a rookie (0 years experience) may fill.\n\nBB KICKER / D/ST — best-ball K and D/ST: the spot picks its own best scorer each week.\n\nNFC / AFC SFLX — a superflex only that conference\'s players may fill.\n\nVET 8+ — spots reserved for players with 8+ years of NFL experience.\n\nEvery preset is editable after adding (✏️) — they are ordinary spots, just pre-assembled. Tenure- and conference-limited spots need the pool seeded with experience data (re-seed if tenure shows blank).'}
               </InfoChip>
             </View>
-            <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-              {SPOT_PRESETS.map((pr) => (
-                <Pill key={pr.chip} on={false} label={pr.chip} onPress={() => {
-                  if (spots.length >= 20) return;
-                  setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: [...pr.pos], bb: pr.bb, label: pr.label, fTeams: pr.fTeams ?? '', fMin: pr.fMin ?? '', fMax: pr.fMax ?? '', fFlags: [], zero: '' }]);
-                  setSpotsDirty(true);
-                }} />
-              ))}
+            {/* A PICKER, NOT EIGHT CHIPS (founder: "let's make the preset
+                slots a drop down or card so it doesn't take up so much
+                room"). Eight pre-baked spots wrapped to three rows inside an
+                editor that already runs long, and the list only grows. One
+                button opens them over the page, where each one has the room
+                to say what it actually is rather than shouting an
+                abbreviation. */}
+            <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, alignItems: 'center' }}>
+              <Pill on={false} label="ADD A PRESET SPOT" onPress={() => { tap(); setPresetPick(true); }} />
+              <Mono size={8.5} tone="faint">{SPOT_PRESETS.length} available</Mono>
             </View>
+            <Overlay visible={presetPick} title="Preset spots" onClose={() => setPresetPick(false)}>
+              <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 8 }}>
+                {SPOT_PRESETS.map((pr) => (
+                  <Pressable key={`ps-${pr.chip}`} disabled={spots.length >= 20}
+                    onPress={() => {
+                      if (spots.length >= 20) return;
+                      tap(); setPresetPick(false);
+                      setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: [...pr.pos], bb: pr.bb, label: pr.label, fTeams: pr.fTeams ?? '', fMin: pr.fMin ?? '', fMax: pr.fMax ?? '', fFlags: [], zero: '' }]);
+                      setSpotsDirty(true);
+                    }}
+                    style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12, opacity: spots.length >= 20 ? 0.45 : 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{pr.label}</Text>
+                    <Mono size={9.5} tone="faint" style={{ marginTop: 3 }}>
+                      {pr.pos.join(' / ')}{pr.bb ? ' · best ball' : ''}
+                      {pr.fMax === '0' ? ' · rookies only' : ''}
+                      {pr.fMin ? ` · ${pr.fMin}+ years` : ''}
+                      {pr.fTeams ? ' · conference-limited' : ''}
+                    </Mono>
+                  </Pressable>
+                ))}
+                {spots.length >= 20 && (
+                  <Mono size={9.5} tone="warn" style={{ lineHeight: 14 }}>20 spots is the ceiling — remove one to add a preset.</Mono>
+                )}
+              </ScrollView>
+            </Overlay>
           </View>
 
           {/* ── REVIEW & CONFIRM (v0.351.0) ─────────────────────────────────
@@ -2255,9 +2276,6 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                   onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
                   placeholder={`e.g. FLEX, Only NFC Players — empty = ${sp.pos.join('/')}`} placeholderTextColor={t.faint}
                   style={{ fontFamily: MONO, fontSize: fs(13), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, marginTop: 6, backgroundColor: t.bg }} />
-                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-                  Shows on the draft board and lineups in place of the position list. The position chips and the filters below decide who may actually fill it.
-                </Mono>
 
                 <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>WHO MAY FILL IT (0172)</Mono>
                 <TextInput value={sp.fTeams}
@@ -2307,21 +2325,15 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     spot: that spot fills itself, so "unfilled" is not a state
                     it has, and the server refuses the pair rather than storing
                     half of what was asked for. */}
-                <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>⛳ ZERO-FILL</Mono>
-                {sp.bb ? (
-                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-                    Not available on a best-ball spot — it fills itself from whoever is left, so it is never unfilled. Turn best ball off first.
-                  </Mono>
-                ) : (
+                <View style={{ marginTop: 14 }}><LabelInfo label="ZERO-FILL"
+                  info={'The points this spot banks when it is empty, or when its player scores nothing. Blank turns it off.\n\nNot available on a best-ball spot — that spot fills itself from whoever is left, so it is never unfilled. Turn best ball off first.'} /></View>
+                {sp.bb ? null : (
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                       <TextInput value={sp.zero}
                         onChangeText={(v) => { const n = v.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: n })); setSpotsDirty(true); }}
                         placeholder="off" keyboardType="number-pad" placeholderTextColor={t.faint}
                         style={{ fontFamily: MONO, fontSize: fs(13), color: sp.zero ? t.warn : t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.zero ? t.warn : t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, width: 70, textAlign: 'center' }} />
-                      <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: fs(12) }}>
-                        points this spot banks if it’s empty, or if its player scores nothing. Blank = off.
-                      </Mono>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                       {['', '5', '10', '15'].map((v) => (
@@ -2366,7 +2378,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               move at ANY time. */}
           {shape.taxi > 0 && taxi && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
-              <Mono size={8.5} tone="faint" weight="700">🚕 TAXI SQUAD · who may ride it, and when it shuts</Mono>
+              <LabelInfo label="TAXI SQUAD"
+                info={'Who may ride the taxi squad, and when it shuts.\n\nA locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time.\n\nUnknown experience cannot prove it qualifies, so a tenure rule excludes it.'} />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 <Mono size={8} tone="dim">TENURE</Mono>
                 {([[null, 'ANYONE'], [0, 'ROOKIES'], [1, '≤ 1 YR'], [2, '≤ 2 YRS'], [3, '≤ 3 YRS']] as const).map(([v, label]) => (
@@ -2379,9 +2392,6 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 <Pill on={!taxi.lock} label="NEVER" onPress={() => void saveTaxi(null, false)} />
                 {taxi.lockedNow && <Mono size={8} weight="700" tone="warn">🔒 LOCKED NOW</Mono>}
               </View>
-              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
-                A locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time. Unknown experience can't prove it qualifies, so a tenure rule excludes it.
-              </Mono>
             </View>
           )}
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────
@@ -2389,15 +2399,13 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               vocabulary is the injury report's own and nothing else. */}
           {shape.ir > 0 && irTags && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
-              <Mono size={8.5} tone="faint" weight="700">IR ELIGIBILITY · which designations may be stashed</Mono>
+              <LabelInfo label="IR ELIGIBILITY"
+                info={'Which injury designations may be stashed on IR.\n\nA player with none of these — a healthy one included — cannot be put on IR by anyone, YOU included: this is a fact about the player, not a deadline.\n\nSomeone already stashed stays put when you narrow the list.'} />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 {([['IR', 'IR'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
                   <Pill key={tag} on={irTags.includes(tag)} label={label} onPress={() => void saveIrTag(tag)} />
                 ))}
               </View>
-              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
-                A player with none of these — a healthy one included — can't be put on IR by anyone, YOU included: this is a fact about the player, not a deadline. Someone already stashed stays put when you narrow the list.
-              </Mono>
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>

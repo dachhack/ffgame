@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.361.1 — the roster editor stops explaining itself
+
+Founder: "Let's make the preset slots a drop down or card so it doesn't take up
+so much room. There's a crap ton of helper text on the roster editor. Let's
+info chip it."
+
+PRESET SPOTS IS A PICKER. Eight pre-baked spots wrapped to three rows inside an
+editor that already runs long, and the list only grows. One button opens them
+over the page, where each has room to say what it IS — "Rookie Superflex ·
+QB / RB / WR / TE · best ball · rookies only" — instead of shouting ROOKIE
+SFLX. The 20-spot ceiling is stated in the picker rather than silently doing
+nothing on the 21st tap.
+
+FIVE HELPER PARAGRAPHS FOLDED INTO ⓘ: the taxi squad's lock rules, IR
+eligibility, the spot LABEL field's "shows on the draft board", ZERO-FILL's
+best-ball caveat, and the classic/scoring cross-reference. Both section headers
+became LabelInfo, which is how the rest of this screen already labels a control.
+
+THREE STAYED, and they are the rule rather than an oversight (v0.350.2: state
+is not explanation): the two EMPTY STATES that tell a drip league why this
+editor has nothing in it — that is the screen's content, not a note under a
+control — and the one dynamic line, "Positions the league can roster: …",
+which reports what the spots above it currently add up to.
+
+A NOTE ON THE MECHANICS, because it cost a broken build: three of those
+paragraphs were the entire body of a conditional (`{mode === 'classic' && (…)}`,
+`{sp.bb ? (…) : (…)}`). Deleting the text left `&& ( )` and an empty ternary
+branch, which is a parse error rather than a blank space. The best-ball branch
+is now an explicit `null` and its caveat lives in the ZERO-FILL ⓘ.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+STILL OPEN: the WEB's roster editor has its own helper text and has not had
+this pass.
+
 ### v0.361.0 — 32 teams, and a menu that lists what is behind it
 
 Founder: "Under each chip title, the small text should just list the items in
