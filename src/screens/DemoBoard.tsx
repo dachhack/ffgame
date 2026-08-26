@@ -8,7 +8,8 @@ import { METRICS } from '@drip/core/data/metrics';
 import { loadRealWeek } from '@drip/core/data/realPbp';
 import { gamesInWindow, windowsForWeek } from '@drip/core/data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '@drip/core/data/demoNarration';
-import { readRecruitGame, recruitFraming } from '@drip/core/data/leagueTagline';
+import { readRecruitGame, recruitFraming, FORMAT_NOTES, CONTINUITY_NOTES, DRAFT_NOTES, type FormatNote } from '@drip/core/data/leagueTagline';
+import { ClassicDemo } from './ClassicDemo';
 import { classifyEvent } from '@drip/core/engine/moments';
 import { avatarUrl } from '@drip/core/data/media';
 import { getProvider } from '@drip/core/data/providers';
@@ -495,7 +496,11 @@ export function DemoBoard() {
     try { return readRecruitGame((k) => (k === 'game' ? localStorage.getItem('dripRecruitGame') : null)); }
     catch { return null; }
   });
-  const framing = recruitFraming(recruited, 'drip');
+  // WHICH GAME IS ON SCREEN (v0.358.0). A ?game=classic recruit lands on the
+  // classic board rather than reading that the demo plays something else —
+  // v0.357.3 made the framing honest, this makes the demo match it.
+  const [game, setGame] = useState<'drip' | 'classic'>(recruited === 'classic' ? 'classic' : 'drip');
+  const framing = recruitFraming(recruited, game);
   const band = (
     <div style={{
       margin: '0 14px 6px', padding: '10px 13px', borderRadius: 6,
@@ -506,10 +511,62 @@ export function DemoBoard() {
       <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: framing.mismatch ? 'var(--warn)' : 'var(--text)' }}>
         {framing.lead}
       </span>
-      <span className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, flex: '1 1 260px', minWidth: 0 }}>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, flex: '1 1 200px', minWidth: 0 }}>
         {framing.blurb}
       </span>
+      {/* BOTH GAMES ARE PLAYABLE HERE (v0.358.0) — the band said there were
+          two; this is how you see the other one. */}
+      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+        {(['drip', 'classic'] as const).map((g) => (
+          <button key={g} onClick={() => setGame(g)} aria-pressed={game === g} className="mono"
+            title={g === 'drip' ? 'Hidden metrics, live effects, power-ups.' : 'Nine slots, standard scoring, kickoff locks.'}
+            style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px',
+              borderRadius: 4, cursor: 'pointer',
+              color: game === g ? 'var(--on-accent)' : 'var(--dim)',
+              background: game === g ? 'var(--you)' : 'var(--bg)',
+              border: `1px solid ${game === g ? 'var(--you)' : 'var(--bd)'}`,
+            }}>{g.toUpperCase()}</button>
+        ))}
+      </div>
     </div>
+  );
+
+  // ── WHAT ELSE A SEASON CAN BE (v0.358.0) ────────────────────────────────
+  // Founder: "We want to show off all the scoring options and game
+  // formats/modes." The scoring options are demonstrated above — one real week
+  // re-scored. A FORMAT decides how a season goes, so none of it can happen
+  // inside a single week; saying so plainly beats faking a demo of it. Copy
+  // from core, beside the join-screen wording it has to agree with.
+  const formats = (
+    <section style={{ maxWidth: 760, margin: '0 auto', padding: '28px 14px 0' }}>
+      <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>
+        AND OVER A SEASON
+      </div>
+      <div className="grotesk" style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', margin: '6px 0 4px' }}>
+        The parts a single week can’t show you
+      </div>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.55, marginBottom: 14 }}>
+        Every one of these is a switch a commissioner actually has.
+      </div>
+      {([
+        ['HOW THE SEASON ENDS', FORMAT_NOTES],
+        ['WHAT CARRIES OVER', CONTINUITY_NOTES],
+        ['HOW THE ROSTER FILLS', DRAFT_NOTES],
+      ] as const).map(([heading, notes]) => (
+        <div key={heading} style={{ marginBottom: 16 }}>
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 7 }}>{heading}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))', gap: 9 }}>
+            {notes.map((n: FormatNote) => (
+              <div key={n.name} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
+                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{n.name}</div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, marginTop: 4 }}>{n.line}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 
   const header = (
@@ -667,6 +724,19 @@ export function DemoBoard() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
       {band}
+      {/* THE OTHER GAME (v0.358.0). Its own board rather than a branch through
+          this one: classic has no windows, no metrics and no power-ups, so
+          almost nothing below applies to it. Same week, same real plays. */}
+      {game === 'classic' && (
+        <>
+          <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '6px 14px 0' }}>
+            <ClassicDemo youId={youId} oppId={oppId} week={DEMO_WEEK} />
+          </main>
+          {formats}
+          <div style={{ height: 96 }} />
+        </>
+      )}
+      {game === 'drip' && (
       <main style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 14, padding: '6px 14px 96px' }}>
         {/* your full roster — the hero board's drag rail (desktop, setup only) */}
         {phase === 'setup' && !narrow && (
@@ -906,6 +976,10 @@ export function DemoBoard() {
           <RosterAside side="their" pools={oppPools} picks={{}} phase="setup" sealed collapsed={!rosterOpen.their} onToggle={() => setRosterOpen((o) => ({ ...o, their: !o.their }))} bye={byeTheir} week={DEMO_WEEK} />
         )}
       </main>
+      )}
+      {/* The season-shape formats sit under BOTH boards — they are true of the
+          product, not of whichever game is on screen. */}
+      {game === 'drip' && <div style={{ padding: '0 0 96px' }}>{formats}</div>}
 
       {/* "More demo?" bar — the identity ask, shown only AFTER the payoff starts
           (first window gone final). Showing it from second zero contradicted the
