@@ -18,6 +18,197 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.360.1 — words, not icons; ⓘ, not paragraphs (pass 1)
+
+Founder: "no icons. make info chips instead of helper text. actually, apply
+this to whole app and web. icons only when necessary and info chips over text."
+
+BOTH RULES ALREADY EXISTED — this is finishing them, not inventing them:
+  • **v0.350.2** (app): "instead of explaining everything, let's have info
+    chips with pop ups." A control gets its LABEL and one ⓘ; the paragraph
+    opens on demand. DYNAMIC STATUS LINES STAY INLINE — state is not
+    explanation.
+  • **v0.356.7** (app): decorative emoji prefixes leave; STATE markers stay,
+    because they carry what the words don't repeat.
+
+Neither was ever applied to the WEB, which is why it still looked like this,
+and the app sweep missed the league board entirely.
+
+THE WEB HAD NO INFO CHIP AT ALL — two hand-rolled ⓘ (a board row's player dot,
+the metric sheet) and no shared component, which is exactly how its settings
+screens grew a paragraph under every control. `InfoChip` / `LabelInfo` now sit
+in `app/ui.tsx` beside the other prims, built on the existing Sheet.
+
+PASS 1 — the screens the founder was looking at, both hosts:
+  · app `Recruit.tsx`: 67 prefixes out (DRIP, NORMAL, KEEPER, DYNASTY,
+    CONTRACT, GUILLOTINE, VAMPIRE, LIVE, SLOW, and the root menu's icon
+    column, which was mine from v0.360.0 an hour earlier). Six helper
+    paragraphs folded into the ⓘ that already labelled their control.
+  · web `NativeLeague.tsx`: 56 prefixes out across the create screen, draft
+    room, cap sheet and team tools.
+
+WHAT STAYED, and why it is not an oversight: ⚠ on a severity line and ✓ on a
+state line ("✓ you're in this one") are the markers v0.356.7 kept. ✓ came OFF
+the two BUTTONS — a tick on an action is decoration, not state. Untouched by
+design: the power-up art in `data/powerups.ts`, `chatReactions`, and the sim's
+drama markers — those are the game's own vocabulary, not chrome.
+
+VERIFIED THE BLANKET REPLACE WAS SAFE: nothing anywhere compares against an
+icon-bearing label (`=== '◈ DRIP'` and friends return nothing), so every one of
+these strings is display-only.
+
+STILL TO DO — this is pass 1 of a staged sweep, not the whole thing. Roughly
+900 icon uses remain across ~69 files, the heaviest being web `AdminPage`
+(200), app `CommishTools` (174), web `Matchup` (78), app `LeagueExtras` (52),
+web `CommishDash` (43) and web `commishKit` (42), plus the helper-text pass on
+every web settings screen now that the web has a chip to fold into.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+### v0.360.0 — the league board is a tree
+
+Founder: "Let's make this a tree of selection screens rather one big screen."
+
+THE BOARD ANSWERED FIVE QUESTIONS AT ONCE — browse, start one, join with a
+code, post yours, redeem a commissioner code — stacked on a single scroll, with
+the longest of them (the create form, eight questions) in the middle of it.
+Every visit paid for every answer. So: a root MENU, one screen per branch, and
+the create branch stepped one question at a time.
+
+THE STEP LIST IS COMPUTED, NOT CONSTANT. COPY SETTINGS only appears when there
+is something to copy from, so a first league is never asked a question with one
+possible answer — which is why the counter reads "of 6" for a new account and
+"of 7" for the founder's. NEXT is REFUSED rather than hidden on the two steps
+that can be wrong rather than merely unfinished (no game picked, no name), and
+it says which — a disabled button with no reason is a dead end.
+
+THE LAST STEP IS THE WHOLE ANSWER, because the steps that built it are behind
+you and the one thing you cannot undo is about to happen: name, teams, game,
+continuity, format, draft type and clock, plus the league being copied when
+there is one.
+
+WHAT THIS DELETED, and it is the point: the collapse-and-scroll from v0.359.0
+(open the create card, then jump the ScrollView to it) was the old shape's
+apology for a screen that answered everything at once. A branch you can
+navigate to needs neither, so `makeOpen`, the layout probe and the one-shot
+scroll ref all went, and `Card`'s `onLayout` passthrough went back with them.
+Each branch now scrolls to its own top on entry — carrying the previous
+screen's scroll position into a new one is how a tree feels broken.
+
+THREE DOORS, THREE DESTINATIONS. The leagues screen's FIND chip lands on the
+listings it names, ＋ ADD lands on the create branch, and the board tile — which
+advertises all of it — lands on the menu. `onBoard` takes which.
+
+The five section bodies are MOVED, not rewritten: the listings, the post
+section, both code forms and every question of the create form are the same
+JSX, re-parented. The only copy that changed is the header line per branch.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+### v0.359.1 — the control row on one line, measured
+
+Founder, with a screenshot of the row wrapping: "let's make the top buttons fit
+on one line. we don't need the icons if we need more space."
+
+DROPPING THE ICONS WAS NECESSARY AND NOT SUFFICIENT — which is only knowable by
+measuring, and the measurement also turned up why the row was wider than it
+looked: the chip's text is **fs(11.5) = 13px**, not 11.5. Everything below the
+15px TYPE_PIVOT gets lifted by the type scale, so every estimate made off the
+source number is ~13% short.
+
+Measured at 13px bold against the usable width (screen − 12 container − 4
+inset, both sides), for the four chips plus their 6dp gaps:
+
+    icons + "FIND A LEAGUE" / "ADD A LEAGUE"    519dp   wraps at 412dp
+    icons dropped, same words                   481dp   wraps at 412dp
+    "FIND LEAGUE" / "ADD LEAGUE", no parens     429dp   wraps at 412dp
+    ALL 4 · COMMISH 4 · FIND · ADD              305dp   fits from 360dp
+
+So the words had to go too. `ALL 4 / COMMISH 4 / FIND / ADD`.
+
+THE PARENS CAME OFF FOR THE CASE THAT BREAKS A TODAY-FITS FIX. With them,
+"COMMISH (12)" is 10dp more than "COMMISH 12" and the row is 347dp — which
+fits the founder's phone and wraps on a 360dp one. A commissioner with twelve
+leagues is exactly who this row is for, so the fix has to hold at two digits:
+without parens it is 323dp and still fits.
+
+WHAT THE CHIPS NO LONGER SAY, THEY SAY TO A SCREEN READER (`a11y="Find a
+league"` / `"Add a league"`), where nothing is competing for width. flexWrap
+stays as the safety net — a future label that outgrows the row should fold
+rather than clip.
+
+NOT TOUCHED: the web's row, which carries the same icons and the same words and
+wraps the same way on a phone — but has room to spare on the desktop layout the
+same component serves. Shortening it there would cost clarity where there is no
+problem. Worth a look if the founder wants the mobile web to match.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+### v0.359.0 — a league shaped like one you already run
+
+Founder: "let's add the create/add a league and league board to the app. When
+creating a new league, you should be able to copy the settings from an
+existing."
+
+FIRST, WHAT WAS ALREADY THERE. The app has had all four doors since v0.225.0
+and v0.226.0 — browse the board, post a listing, redeem an invite code, create
+a league outright — every one of them inside `Recruit.tsx`. What it never got
+was the web's v0.292.3 control row ("put the find a league at the top by the
+all/commish chips"): the only way in was a dashed tile at the BOTTOM of the
+leagues screen, under the league list and the archived shelf, with START A
+LEAGUE another scroll inside that. A door that exists and cannot be found is a
+door you get asked for. So 🔎 FIND A LEAGUE and ＋ ADD A LEAGUE now sit beside
+ALL/COMMISH, the row always renders (only the FILTER is conditional — hiding it
+for a non-commissioner takes the create button from the people most likely to
+need it), and ＋ ADD A LEAGUE opens the board already scrolled to the create
+card, once, via an onLayout the ScrollView jumps to.
+
+COPYING A LEAGUE IS NOT ONE CALL, which is why `data/leagueBlueprint.ts` exists
+rather than a `p_copy_from` argument. A league's settings live in three tiers:
+what `create_native_league` takes (teams, roster size, draft type and clock,
+auction budget and lots, the overnight window, position caps, drip vs classic,
+keeper/dynasty and its N), the scoring catalog, and the roster/transaction
+rules (waivers, FAAB, trade review, the windows, taxi, IR tags) — plus a
+classic league's own shape. Only the first tier can be set at creation; the
+rest are setters on a league that already exists.
+
+SO A COPY CAN HALF-LAND, and that is the fact the module is built around.
+`applyBlueprint` never throws and never rolls back — it returns a step list,
+and both screens print what refused. The app shows a note beside the success
+banner; the web HOLDS THE SCREEN rather than navigating to the dashboard,
+because a page change would hide the misses behind it and the commissioner
+would meet their missing scoring in week 1, from a score.
+
+ORDER IS LOAD-BEARING IN ONE PLACE, and it is asserted rather than remembered:
+`setLeagueFormat` presets a $1000 FAAB market for a guillotine league, so the
+format goes on BEFORE the transaction rules or the copied budget is overwritten
+by the preset.
+
+THE PICKER LISTS LEAGUES YOU HOLD A SEAT IN, not ones you merely commission.
+`commish_overview` carries neither continuity, format nor game mode — only the
+`my_teams` row does — so sourcing it from the commissioner's list would have
+copied a contract dynasty classic league into a redraft drip league without
+saying a word. What a read genuinely cannot see lands in `unread` and the
+picker says so.
+
+WHAT YOU CAN SEE, YOU CAN CHANGE. The blueprint prefills the form; the form is
+the truth at submit, and the effective blueprint is rebuilt from it before
+anything is applied. The fields the form never asks (roster size, caps, the
+night window) ride from the source — which is also why `rounds` and `caps` on
+the web now defer to the blueprint: they are derived consts, and without that
+a copied league silently reverted to the game-type default in the one place
+nobody checks until the draft.
+
+New `check:blueprint` — 27 assertions. The pure halves are tested directly; the
+apply sequence is a chain of RPCs, so its two invariants (format before
+transaction rules, every setter wrapped so none can throw) are pinned by
+reading the source with comment lines stripped. One of them counts
+`create_native_league`'s own `p_` arguments, so adding a parameter there fails
+HERE rather than silently dropping a setting from every copied league.
+
+Battery green: both typechecks, **767 parity assertions**, vite build, 59 probe
+suites, server smoke. No APK yet.
+
 ### v0.358.4 — the spine has to earn its place
 
 Founder: "I don't like the chips with the highlight on the left. What other

@@ -51,14 +51,21 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen, onBoard }: {
+export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
   onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft') => void;
-  /** Open the league board — browse open leagues, post yours, recruit. */
-  onBoard: () => void;
+  /** Open the league board. 'browse' lands on the listings, 'root' on the
+   *  board's own menu — the tile below wants the menu (it advertises all of
+   *  it), the FIND chip wants the listings it names. */
+  onBoard: (entry?: 'root' | 'browse') => void;
+  /** Open the board already OPENED on starting a league / redeeming a code.
+      Same screen as onBoard: the board is where both doors live, and landing
+      on it scrolled to the top would leave the founder's own question ("where
+      do I make one?") one more scroll away. */
+  onAdd: () => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
@@ -132,12 +139,49 @@ export function Leagues({ userId, onOpen, onBoard }: {
       <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 
-      {(commishIds.size > 0 || managed.length > 0) && (
-        <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
-          <Chip label={`ALL (${rows.filter((e) => !e.archived).length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
-          <Chip label={`COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
-        </View>
-      )}
+      {/* THE CONTROL ROW, AT THE TOP — the web's arrangement (v0.292.3,
+          founder: "put the find a league at the top by the all/commish
+          chips"), which the app never got. Both doors were reachable already
+          (v0.225.0 redeem, v0.226.0 create) but only through the League board
+          tile at the BOTTOM of this screen, under the league list and the
+          archived shelf, with START A LEAGUE another scroll inside it. A door
+          that exists and cannot be found is a door you get asked for.
+
+          Like the web's, the row ALWAYS renders and only the FILTER is
+          conditional: the chips a non-commissioner lacks are ALL/COMMISH, and
+          hiding the whole row for them would take the create and join buttons
+          away from exactly the people most likely to need them. */}
+      {/* ONE LINE, MEASURED (founder: "let's make the top buttons fit on one
+          line. we don't need the icons if we need more space").
+
+          Dropping the icons was necessary and NOT sufficient — the row is four
+          chips and the chip text is fs(11.5) = 13px bold, not 11.5, because the
+          type scale lifts everything under the 15px pivot. Measured at that
+          size, against the usable width (screen − 12 container − 4 inset, both
+          sides):
+
+            icons + "FIND A LEAGUE" / "ADD A LEAGUE"   519dp   wraps everywhere
+            icons dropped, same words                  481dp   wraps everywhere
+            "FIND LEAGUE" / "ADD LEAGUE"               452dp   wraps everywhere
+            ALL 4 · COMMISH 4 · FIND · ADD             305dp   fits from 360dp
+
+          So the verbs carry it. The counts keep their parens off for the same
+          reason: "COMMISH (12)" costs 10dp over "COMMISH 12", and a founder
+          with twelve leagues is exactly who this row is for — at 323dp it
+          still fits a 360dp phone.
+
+          The words the chips no longer say are said to a SCREEN READER
+          instead, where nothing is competing for width. flexWrap stays as the
+          safety net: a future label that outgrows the row should fold, not
+          clip. */}
+      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4, flexWrap: 'wrap' }}>
+        {(commishIds.size > 0 || managed.length > 0) && (<>
+          <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+          <Chip label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+        </>)}
+        <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
+        <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
+      </View>
 
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
 
@@ -153,7 +197,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
             league board below.
           </Mono>
           <View style={{ marginTop: 10 }}>
-            <PrimaryButton label="OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard(); }} />
+            <PrimaryButton label="OPEN THE LEAGUE BOARD" onPress={() => { tap(); onBoard('root'); }} />
           </View>
         </Card>
       )}
@@ -305,7 +349,7 @@ export function Leagues({ userId, onOpen, onBoard }: {
           Below the league list because your own leagues are the daily visit;
           finding a new one is the occasional one. */}
       <Pressable
-        onPress={() => { tap(); onBoard(); }}
+        onPress={() => { tap(); onBoard('root'); }}
         android_ripple={{ color: alpha(t.you, 16) }}
         style={({ pressed }) => ({
           backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,

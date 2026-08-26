@@ -629,4 +629,46 @@ export function UserChip({ handle, sub }: { handle: string; sub?: string }) {
   );
 }
 
+// ⓘ — THE EXPLAINER, FOLDED AWAY. The app's rule since v0.350.2 (founder:
+// "instead of explaining everything, let's have info chips with pop ups"),
+// brought to the web because the founder asked for it on both hosts: a control
+// gets its LABEL and, when it needs explaining, one ⓘ beside it; the paragraph
+// opens on demand. DYNAMIC STATUS LINES STAY INLINE — state is not
+// explanation, and folding "3 seats left" behind a tap would hide the very
+// thing the screen is for.
+//
+// The web had ⓘ twice already (the player dot on a board row, the metric
+// sheet) and no shared component, which is how the settings screens grew a
+// paragraph under every control instead.
+export function InfoChip({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`About ${title}`}
+        className="mono"
+        style={{
+          flex: 'none', fontSize: 11, fontWeight: 700, color: 'var(--faint)',
+          background: 'none', border: 'none', padding: '0 2px', cursor: 'help', lineHeight: 1,
+        }}>ⓘ</button>
+      {open && (
+        <Sheet title={title} onClose={() => setOpen(false)} max={460}>
+          <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{children}</div>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+/** A section label with its ⓘ — the arrangement nearly every caller wants. */
+export function LabelInfo({ label, title, info, style }: {
+  label: string; title?: string; info: ReactNode; style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, ...style }}>
+      <span className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 }}>{label}</span>
+      <InfoChip title={title ?? label}>{info}</InfoChip>
+    </div>
+  );
+}
+
 export const fonts = { MONO, GROTESK };

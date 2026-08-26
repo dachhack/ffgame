@@ -107,6 +107,9 @@ export function App() {
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
   const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
+  // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
+  // opens the create card. One screen, two entrances (see Recruit).
+  const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
   // Whether the open league's draft is done — the ⛏ DRAFT room leaves the bar
@@ -364,7 +367,7 @@ export function App() {
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'board' ? (
           <View style={{ flex: 1 }}>
-            <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)}
+            <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} initial={boardEntry}
               // Created a league → its ⚑ COMMISSIONER tools, open on 🧩 ROSTER.
               onCreated={(leagueId, name, rosterId) => {
                 setLeaguesEpoch((n) => n + 1);
@@ -433,7 +436,8 @@ export function App() {
           <Leagues
             key={leaguesEpoch}
             userId={session.user.id}
-            onBoard={() => setView('board')}
+            onBoard={(entry) => { setBoardEntry(entry ?? 'root'); setView('board'); }}
+            onAdd={() => { setBoardEntry('create'); setView('board'); }}
             onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
