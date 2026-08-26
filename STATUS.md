@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.359.1 — the control row on one line, measured
+
+Founder, with a screenshot of the row wrapping: "let's make the top buttons fit
+on one line. we don't need the icons if we need more space."
+
+DROPPING THE ICONS WAS NECESSARY AND NOT SUFFICIENT — which is only knowable by
+measuring, and the measurement also turned up why the row was wider than it
+looked: the chip's text is **fs(11.5) = 13px**, not 11.5. Everything below the
+15px TYPE_PIVOT gets lifted by the type scale, so every estimate made off the
+source number is ~13% short.
+
+Measured at 13px bold against the usable width (screen − 12 container − 4
+inset, both sides), for the four chips plus their 6dp gaps:
+
+    icons + "FIND A LEAGUE" / "ADD A LEAGUE"    519dp   wraps at 412dp
+    icons dropped, same words                   481dp   wraps at 412dp
+    "FIND LEAGUE" / "ADD LEAGUE", no parens     429dp   wraps at 412dp
+    ALL 4 · COMMISH 4 · FIND · ADD              305dp   fits from 360dp
+
+So the words had to go too. `ALL 4 / COMMISH 4 / FIND / ADD`.
+
+THE PARENS CAME OFF FOR THE CASE THAT BREAKS A TODAY-FITS FIX. With them,
+"COMMISH (12)" is 10dp more than "COMMISH 12" and the row is 347dp — which
+fits the founder's phone and wraps on a 360dp one. A commissioner with twelve
+leagues is exactly who this row is for, so the fix has to hold at two digits:
+without parens it is 323dp and still fits.
+
+WHAT THE CHIPS NO LONGER SAY, THEY SAY TO A SCREEN READER (`a11y="Find a
+league"` / `"Add a league"`), where nothing is competing for width. flexWrap
+stays as the safety net — a future label that outgrows the row should fold
+rather than clip.
+
+NOT TOUCHED: the web's row, which carries the same icons and the same words and
+wraps the same way on a phone — but has room to spare on the desktop layout the
+same component serves. Shortening it there would cost clarity where there is no
+problem. Worth a look if the founder wants the mobile web to match.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
 ### v0.359.0 — a league shaped like one you already run
 
 Founder: "let's add the create/add a league and league board to the app. When

@@ -149,13 +149,36 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
           conditional: the chips a non-commissioner lacks are ALL/COMMISH, and
           hiding the whole row for them would take the create and join buttons
           away from exactly the people most likely to need them. */}
+      {/* ONE LINE, MEASURED (founder: "let's make the top buttons fit on one
+          line. we don't need the icons if we need more space").
+
+          Dropping the icons was necessary and NOT sufficient — the row is four
+          chips and the chip text is fs(11.5) = 13px bold, not 11.5, because the
+          type scale lifts everything under the 15px pivot. Measured at that
+          size, against the usable width (screen − 12 container − 4 inset, both
+          sides):
+
+            icons + "FIND A LEAGUE" / "ADD A LEAGUE"   519dp   wraps everywhere
+            icons dropped, same words                  481dp   wraps everywhere
+            "FIND LEAGUE" / "ADD LEAGUE"               452dp   wraps everywhere
+            ALL 4 · COMMISH 4 · FIND · ADD             305dp   fits from 360dp
+
+          So the verbs carry it. The counts keep their parens off for the same
+          reason: "COMMISH (12)" costs 10dp over "COMMISH 12", and a founder
+          with twelve leagues is exactly who this row is for — at 323dp it
+          still fits a 360dp phone.
+
+          The words the chips no longer say are said to a SCREEN READER
+          instead, where nothing is competing for width. flexWrap stays as the
+          safety net: a future label that outgrows the row should fold, not
+          clip. */}
       <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4, flexWrap: 'wrap' }}>
         {(commishIds.size > 0 || managed.length > 0) && (<>
-          <Chip label={`ALL (${rows.filter((e) => !e.archived).length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
-          <Chip label={`COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+          <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+          <Chip label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
         </>)}
-        <Chip label="🔎 FIND A LEAGUE" onPress={() => { tap(); onBoard(); }} />
-        <Chip label="＋ ADD A LEAGUE" onPress={() => { tap(); onAdd(); }} />
+        <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard(); }} />
+        <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
       </View>
 
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
