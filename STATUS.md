@@ -18,6 +18,71 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.359.0 — a league shaped like one you already run
+
+Founder: "let's add the create/add a league and league board to the app. When
+creating a new league, you should be able to copy the settings from an
+existing."
+
+FIRST, WHAT WAS ALREADY THERE. The app has had all four doors since v0.225.0
+and v0.226.0 — browse the board, post a listing, redeem an invite code, create
+a league outright — every one of them inside `Recruit.tsx`. What it never got
+was the web's v0.292.3 control row ("put the find a league at the top by the
+all/commish chips"): the only way in was a dashed tile at the BOTTOM of the
+leagues screen, under the league list and the archived shelf, with START A
+LEAGUE another scroll inside that. A door that exists and cannot be found is a
+door you get asked for. So 🔎 FIND A LEAGUE and ＋ ADD A LEAGUE now sit beside
+ALL/COMMISH, the row always renders (only the FILTER is conditional — hiding it
+for a non-commissioner takes the create button from the people most likely to
+need it), and ＋ ADD A LEAGUE opens the board already scrolled to the create
+card, once, via an onLayout the ScrollView jumps to.
+
+COPYING A LEAGUE IS NOT ONE CALL, which is why `data/leagueBlueprint.ts` exists
+rather than a `p_copy_from` argument. A league's settings live in three tiers:
+what `create_native_league` takes (teams, roster size, draft type and clock,
+auction budget and lots, the overnight window, position caps, drip vs classic,
+keeper/dynasty and its N), the scoring catalog, and the roster/transaction
+rules (waivers, FAAB, trade review, the windows, taxi, IR tags) — plus a
+classic league's own shape. Only the first tier can be set at creation; the
+rest are setters on a league that already exists.
+
+SO A COPY CAN HALF-LAND, and that is the fact the module is built around.
+`applyBlueprint` never throws and never rolls back — it returns a step list,
+and both screens print what refused. The app shows a note beside the success
+banner; the web HOLDS THE SCREEN rather than navigating to the dashboard,
+because a page change would hide the misses behind it and the commissioner
+would meet their missing scoring in week 1, from a score.
+
+ORDER IS LOAD-BEARING IN ONE PLACE, and it is asserted rather than remembered:
+`setLeagueFormat` presets a $1000 FAAB market for a guillotine league, so the
+format goes on BEFORE the transaction rules or the copied budget is overwritten
+by the preset.
+
+THE PICKER LISTS LEAGUES YOU HOLD A SEAT IN, not ones you merely commission.
+`commish_overview` carries neither continuity, format nor game mode — only the
+`my_teams` row does — so sourcing it from the commissioner's list would have
+copied a contract dynasty classic league into a redraft drip league without
+saying a word. What a read genuinely cannot see lands in `unread` and the
+picker says so.
+
+WHAT YOU CAN SEE, YOU CAN CHANGE. The blueprint prefills the form; the form is
+the truth at submit, and the effective blueprint is rebuilt from it before
+anything is applied. The fields the form never asks (roster size, caps, the
+night window) ride from the source — which is also why `rounds` and `caps` on
+the web now defer to the blueprint: they are derived consts, and without that
+a copied league silently reverted to the game-type default in the one place
+nobody checks until the draft.
+
+New `check:blueprint` — 27 assertions. The pure halves are tested directly; the
+apply sequence is a chain of RPCs, so its two invariants (format before
+transaction rules, every setter wrapped so none can throw) are pinned by
+reading the source with comment lines stripped. One of them counts
+`create_native_league`'s own `p_` arguments, so adding a parameter there fails
+HERE rather than silently dropping a setting from every copied league.
+
+Battery green: both typechecks, **767 parity assertions**, vite build, 59 probe
+suites, server smoke. No APK yet.
+
 ### v0.358.4 — the spine has to earn its place
 
 Founder: "I don't like the chips with the highlight on the left. What other

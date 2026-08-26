@@ -12,7 +12,7 @@
 //     someone sent you (v0.225.0). Both landed here rather than on their own
 //     screens because this is already the one place the app answers "how do I
 //     get into a league"; a separate screen would split that question in two.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
 import {
@@ -21,7 +21,11 @@ import {
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat,
   nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
+  myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
+import {
+  readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
+} from '@drip/core/data/leagueBlueprint';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -45,8 +49,14 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
   );
 }
 
-export function Recruit({ onBack, onJoined, onCreated }: {
+export function Recruit({ onBack, onJoined, onCreated, initial }: {
   onBack: () => void;
+  /** 'create' — arrived from ＋ ADD A LEAGUE rather than 🔎 FIND A LEAGUE, so
+   *  open the START A LEAGUE card and scroll to it. The board's three jobs
+   *  share one screen (see the header), which is right for browsing and wrong
+   *  for someone who came here to make one: they would land on a list of other
+   *  people's leagues with their own answer below the fold. */
+  initial?: 'browse' | 'create';
   /** A join succeeded — the leagues list needs a reload. */
   onJoined: () => void;
   /** A LEAGUE was created — open it on its roster settings (v0.296.6). The
@@ -76,7 +86,19 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   // teams, draft type, pace, clock. Roster size and position limits are
   // defaults the game type picks, adjustable from ⚑ COMMISH until the draft.
   const [canCreate, setCanCreate] = useState(false);
-  const [makeOpen, setMakeOpen] = useState(false);
+  const [makeOpen, setMakeOpen] = useState(initial === 'create');
+  // Scroll to the create card once it has told us where it is. `scrolledRef`
+  // keeps that to ONE jump — the card's height changes as the form opens and
+  // re-fires onLayout, and re-scrolling on every change would fight the finger.
+  const scrollRef = useRef<ScrollView>(null);
+  const makeYRef = useRef<number | null>(null);
+  const scrolledRef = useRef(false);
+  const jumpToMake = useCallback((y: number) => {
+    makeYRef.current = y;
+    if (initial !== 'create' || scrolledRef.current) return;
+    scrolledRef.current = true;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  }, [initial]);
   // NO DEFAULT (v0.251.0) — same rule as the web. This used to start on
   // 'drip', and a commissioner who never tapped 🏈 NORMAL got a drip league
   // with a normie name; the choice freezes at the draft, so the mistake is
@@ -106,17 +128,34 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
+  // COPY THE SETTINGS FROM AN EXISTING LEAGUE (founder). The picker lists the
+  // leagues you hold a SEAT in rather than the ones you commission, because
+  // the row from my_teams is the only place continuity, format and game mode
+  // can be read — commish_overview carries none of the three, and defaulting
+  // them would hand back a redraft drip league wearing a dynasty league's name.
+  const [mine, setMine] = useState<Enrollment[]>([]);
+  const [copyFrom, setCopyFrom] = useState<Enrollment | null>(null);
+  const [copyBp, setCopyBp] = useState<LeagueBlueprint | null>(null);
+  const [copyBusy, setCopyBusy] = useState(false);
+  // What the post-create setters actually managed. Kept after the league is
+  // made so the note can name a step that refused rather than claiming a
+  // clean copy — the league exists either way and nothing rolls back.
+  const [copyReport, setCopyReport] = useState<string[] | null>(null);
 
   const load = useCallback(async () => {
     setErr(null);
     try {
-      const [b, cl] = await Promise.all([
+      const [b, cl, en] = await Promise.all([
         leagueBoard(),
         // The commissioner's own leagues feed the POST section. Only native
         // ones can be listed (the board's promise is a claimable seat).
         commishOverview().then((ls) => ls.filter((l) => l.provider === 'native')).catch(() => [] as AdminLeague[]),
+        // Copy-from candidates. Native only: an imported Sleeper league has no
+        // settings of ours to read. The userId argument is vestigial — my_teams
+        // answers for auth.uid() — so what is passed here cannot matter.
+        myEnrollments('').then((es) => es.filter((e) => e.league?.provider === 'native')).catch(() => [] as Enrollment[]),
       ]);
-      setRows(b); setMyLeagues(cl);
+      setRows(b); setMyLeagues(cl); setMine(en);
     } catch (e) { setErr(friendlyError(e)); setRows([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -223,6 +262,41 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   // league standing but incomplete — which is why each one reports what broke
   // rather than a generic failure, and why the league still lands on the
   // leagues screen either way (it exists; it just needs another go).
+  // Pick a league to copy, read its settings, and prefill the form with the
+  // ones the form SHOWS. The rest of the blueprint (roster size, position
+  // caps, auction budget and lots, the overnight window) rides straight to
+  // create at submit — see doCreate. That split is the rule: what you can see,
+  // you can change; what the form does not ask, comes from the source league.
+  const pickCopy = async (e: Enrollment | null) => {
+    setCopyFrom(e); setCopyBp(null); setCopyReport(null);
+    if (!e) return;
+    setCopyBusy(true); setErr(null);
+    try {
+      const bp = await readBlueprint(e.league_id, {
+        rosters: e.league?.rosters ?? null,
+        continuity: e.league?.continuity ?? null,
+        format: e.league?.format ?? null,
+        game_mode: e.league?.game_mode ?? null,
+      });
+      setCopyBp(bp);
+      setGame(bp.gameMode);
+      pickContinuity(bp.continuity);
+      // pickContinuity forces auction for contract types; otherwise the source
+      // league's own room. 'linear' has no chip here, and it drafts in the same
+      // fixed order a snake reverses, so it lands on snake rather than nothing.
+      if (bp.continuity !== 'contract' && bp.continuity !== 'contract_dynasty') {
+        setDraftMode(bp.mode === 'auction' ? 'auction' : 'snake');
+      }
+      setTeamCount(bp.teams);
+      setFormat(bp.format);
+      // The clock is stored in seconds and asked for in either seconds or
+      // hours, so a slow league's 12h has to come back as 12 and not 43200.
+      if (bp.pickSeconds >= 3600) { setPace('slow'); setClockDraft(String(Math.round(bp.pickSeconds / 3600))); }
+      else { setPace('live'); setClockDraft(String(bp.pickSeconds)); }
+    } catch (x) { setErr(friendlyError(x)); setCopyFrom(null); }
+    finally { setCopyBusy(false); }
+  };
+
   const doCreate = async () => {
     const nm = nameDraft.trim();
     if (!nm || busy || !game) return;
@@ -237,15 +311,41 @@ export function Recruit({ onBack, onJoined, onCreated }: {
       // Contract types draft DEEP (v0.352.0): the roster covers everyone the
       // AI market prices above the $1 floor, so startable players can't fall
       // through to free street deals.
-      const rounds = contractType ? contractRosterDepth(teamCount, 200) : game === 'classic' ? 15 : 12;
-      const caps = game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
-      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode, 200, 15, 1, null, null, caps, game,
-        continuity, continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null);
+      const bp = copyBp;
+      const rounds = bp ? bp.rounds
+        : contractType ? contractRosterDepth(teamCount, 200) : game === 'classic' ? 15 : 12;
+      const caps = bp ? bp.posCaps : game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
+      const contN = continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null;
+      const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode,
+        bp ? bp.budget : 200, bp ? bp.lotSeconds : 15,
+        bp && draftMode === 'auction' ? bp.maxLots : 1,
+        bp ? bp.nightStartMin : null, bp ? bp.nightEndMin : null, caps, game,
+        continuity, contN);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       if (format !== 'standard') {
         setMakeNote(`Setting the ${format === 'guillotine' ? '🔪 GUILLOTINE' : '🧛 VAMPIRE'} format…`);
         const fr = await setLeagueFormat(r.league_id, format);
         if (!fr.ok) { warn(); setErr(friendlyError(fr.error ?? 'could not set the format')); return; }
+      }
+      // THE COPY'S SECOND HALF, and the reason it runs HERE rather than
+      // inside create: scoring, waivers, the taxi squad and the classic shape
+      // have no create-time argument, so they are setters on a league that
+      // already exists. Any one can refuse on its own, and none of it rolls
+      // back — so this collects what failed and shows it rather than aborting
+      // a league that is already real and already named.
+      //
+      // format is blanked because the block above just applied the FORM's
+      // choice, which is the one the commissioner can see and may have changed
+      // since copying. Re-applying the source's would also re-preset a
+      // guillotine league's $1000 FAAB market, wiping the budget copied below.
+      if (bp) {
+        setMakeNote('Copying the settings…');
+        const steps = await applyBlueprint(r.league_id, {
+          ...bp, format: 'standard',
+          teams: teamCount, rounds, pickSeconds: secs, mode: draftMode,
+          gameMode: game, continuity, continuityN: contN,
+        });
+        setCopyReport(steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`));
       }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
@@ -289,7 +389,7 @@ export function Recruit({ onBack, onJoined, onCreated }: {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}
+    <ScrollView ref={scrollRef} style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.you} />}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View>
@@ -307,11 +407,24 @@ export function Recruit({ onBack, onJoined, onCreated }: {
         </Notice>
       )}
 
+      {/* A COPY THAT ONLY PARTLY LANDED SAYS SO. The league exists and is
+          usable either way, so this is a note rather than an error — but a
+          silent partial copy would be found in week 1, from a score. */}
+      {copyReport !== null && copyReport.length > 0 && (
+        <Notice tone="warn">
+          <Mono size={10} tone="warn">⚠ The league was created, but some settings didn't copy:</Mono>
+          {copyReport.map((line, i) => (
+            <Mono key={`cr-${i}`} size={9.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>· {line}</Mono>
+          ))}
+          <Mono size={9} tone="dim" style={{ marginTop: 5, lineHeight: 13 }}>Set those by hand in ⚑ COMMISH — everything else carried.</Mono>
+        </Notice>
+      )}
+
       {/* START A LEAGUE (v0.226.0) — the last thing the app couldn't do.
           Gated on the same `native` entitlement the web button uses, so the
           card doesn't advertise a door the server would shut. */}
       {canCreate && (
-        <Card>
+        <Card onLayout={(e) => jumpToMake(e.nativeEvent.layout.y)}>
           <Pressable onPress={() => { tap(); setMakeOpen((v) => !v); }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
@@ -325,6 +438,46 @@ export function Recruit({ onBack, onJoined, onCreated }: {
           </Pressable>
           {makeOpen && (
             <View style={{ marginTop: 10, gap: 10 }}>
+              {/* COPY SETTINGS FROM AN EXISTING LEAGUE — first, because it
+                  answers most of the questions below it. Picking one fills in
+                  the form and carries the rest (roster size, position caps,
+                  auction budget and lots, the overnight window) straight to
+                  create; scoring, waivers, the taxi squad and a classic
+                  league's own shape are applied right after, since none of
+                  them has a create-time argument.
+
+                  It lists leagues you hold a SEAT in, not ones you merely
+                  commission: continuity, format and game mode are readable
+                  only off the my_teams row, and a copy that quietly defaulted
+                  those three would hand back a redraft drip league wearing a
+                  contract dynasty league's name. */}
+              {mine.length > 0 && (
+                <View>
+                  <LabelInfo label="COPY SETTINGS FROM"
+                    info={'Start a league shaped like one you already run.\n\nCARRIES: teams, roster size, draft type and clock, auction budget and lots, position limits, drip vs normal, keeper/dynasty, the format, the scoring catalog, waivers and FAAB, trade review, the taxi squad and IR tags.\n\nDOES NOT CARRY: the name, the members, the draft itself, or anything the season has already written.\n\nEverything it fills in is still yours to change before you create.'} />
+                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                    <Chip label="START FRESH" on={!copyFrom} onPress={() => { tap(); void pickCopy(null); }} />
+                    {mine.map((e) => (
+                      <Chip key={`cp-${e.league_id}`} label={e.league?.name ?? 'League'}
+                        on={copyFrom?.league_id === e.league_id}
+                        onPress={() => { tap(); void pickCopy(e); }} />
+                    ))}
+                  </View>
+                  {copyBusy && <Mono size={8.5} tone="faint" style={{ marginTop: 5 }}>reading its settings…</Mono>}
+                  {copyBp && !copyBusy && (
+                    <View style={{ marginTop: 6, gap: 2 }}>
+                      {blueprintSummary(copyBp).map((line, i) => (
+                        <Mono key={`bp-${i}`} size={8.5} tone="dim" style={{ lineHeight: 13 }}>· {line}</Mono>
+                      ))}
+                      {copyBp.unread.length > 0 && (
+                        <Mono size={8.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>
+                          ⚠ couldn't read {copyBp.unread.join(', ')} — that part keeps the defaults
+                        </Mono>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
               {/* Same first question as the web (0175): the one choice that
                   changes what you're playing rather than how it's set up. */}
               <View>

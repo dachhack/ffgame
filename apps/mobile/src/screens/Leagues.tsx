@@ -51,7 +51,7 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen, onBoard }: {
+export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
@@ -59,6 +59,11 @@ export function Leagues({ userId, onOpen, onBoard }: {
   onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft') => void;
   /** Open the league board — browse open leagues, post yours, recruit. */
   onBoard: () => void;
+  /** Open the board already OPENED on starting a league / redeeming a code.
+      Same screen as onBoard: the board is where both doors live, and landing
+      on it scrolled to the top would leave the founder's own question ("where
+      do I make one?") one more scroll away. */
+  onAdd: () => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
@@ -132,12 +137,26 @@ export function Leagues({ userId, onOpen, onBoard }: {
       <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 
-      {(commishIds.size > 0 || managed.length > 0) && (
-        <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
+      {/* THE CONTROL ROW, AT THE TOP — the web's arrangement (v0.292.3,
+          founder: "put the find a league at the top by the all/commish
+          chips"), which the app never got. Both doors were reachable already
+          (v0.225.0 redeem, v0.226.0 create) but only through the League board
+          tile at the BOTTOM of this screen, under the league list and the
+          archived shelf, with START A LEAGUE another scroll inside it. A door
+          that exists and cannot be found is a door you get asked for.
+
+          Like the web's, the row ALWAYS renders and only the FILTER is
+          conditional: the chips a non-commissioner lacks are ALL/COMMISH, and
+          hiding the whole row for them would take the create and join buttons
+          away from exactly the people most likely to need them. */}
+      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4, flexWrap: 'wrap' }}>
+        {(commishIds.size > 0 || managed.length > 0) && (<>
           <Chip label={`ALL (${rows.filter((e) => !e.archived).length + managed.length})`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
           <Chip label={`COMMISH (${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length})`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
-        </View>
-      )}
+        </>)}
+        <Chip label="🔎 FIND A LEAGUE" onPress={() => { tap(); onBoard(); }} />
+        <Chip label="＋ ADD A LEAGUE" onPress={() => { tap(); onAdd(); }} />
+      </View>
 
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
 
