@@ -142,3 +142,4 @@ $RUN -f scripts/db/chat-reaction-probes.sql | grep -E "PROBE FAIL|ALL CHAT-REACT
 $RUN -f scripts/db/metricless-audit-probes.sql | grep -E "PROBE FAIL|ALL METRICLESS-AUDIT PROBES" || { echo "METRICLESS-AUDIT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/agent-wire-probes.sql | grep -E "PROBE FAIL|ALL AGENT-WIRE PROBES" || { echo "AGENT-WIRE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/drip-agent-probes.sql | grep -E "PROBE FAIL|ALL DRIP-AGENT PROBES" || { echo "DRIP-AGENT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/team-cap-probes.sql | grep -E "PROBE FAIL|ALL TEAM-CAP PROBES" || { echo "TEAM-CAP PROBES FAILED"; exit 1; }

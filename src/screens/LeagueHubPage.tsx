@@ -314,27 +314,27 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           over the page, one dismiss from gone, the menu untouched behind it. */}
       <Band wide={wide}>
         {native && (
-          <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
+          <Tile icon="👥" title="Teams & rosters" sub="teams · rosters · owners"
             onClick={() => setRostersOpen((v) => !v)} />
         )}
-        {native && <Tile icon="" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
+        {native && <Tile icon="" title="Draft room" sub="players · board · teams · queue" onClick={guard(onDraft)} />}
 
         {/* The app's wording, plus the half the app's sheet cannot hold: the
             web opens the full results page, which is the table AND every
             pairing of every week. */}
-        <Tile icon="🏆" title="Standings" sub="the table · playoff bracket · every pairing, every week" onClick={onResults} />
+        <Tile icon="🏆" title="Standings" sub="table · bracket · every pairing" onClick={onResults} />
 
         {/* The league's own reference sheets (v0.274.0) — what it did, and the
             rules it runs on. Read-only for everyone; the commissioner edits the
             same facts behind ⚑ Manage league. */}
-        {native && <Tile icon="📜" title="League register" sub="every add, drop, claim and trade" onClick={() => toggleInfo('register')} />}
-        <Tile icon="⊞" title="Scoring settings" sub="how this league turns plays into points" onClick={() => toggleInfo('scoring')} />
-        {native && <Tile icon="🧢" title="Roster settings" sub="lineup spots · limits · waivers · trades" onClick={() => toggleInfo('roster')} />}
-        <Tile icon="🔔" title="Alerts" sub="push notifications — what pings this browser" onClick={() => toggleInfo('alerts')} />
+        {native && <Tile icon="📜" title="League register" sub="adds · drops · claims · trades" onClick={() => toggleInfo('register')} />}
+        <Tile icon="⊞" title="Scoring settings" sub="catalog · adjustments · scoped bonuses" onClick={() => toggleInfo('scoring')} />
+        {native && <Tile icon="🧢" title="Roster settings" sub="lineup · limits · waivers · free agency · trades" onClick={() => toggleInfo('roster')} />}
+        <Tile icon="🔔" title="Alerts" sub="chat · trades · waivers · playoffs" onClick={() => toggleInfo('alerts')} />
         {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
             half is every member's; the board half inside it is commish-gated
             and simply isn't drawn for anyone else. */}
-        <Tile icon="📣" title="Recruit" sub={commish ? 'send an invite link · post to the board' : 'send an invite link to a friend'}
+        <Tile icon="📣" title="Recruit" sub={commish ? 'invite link · board listing' : 'invite link'}
           onClick={() => toggleInfo('recruit')} />
         {commish && (
           <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent

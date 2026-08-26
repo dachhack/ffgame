@@ -492,7 +492,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           </>
         )}
         <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap' }}>
-          <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 14, 1)}</div></div>
+          <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 32, 1)}</div></div>
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>

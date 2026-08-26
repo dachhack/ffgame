@@ -49,6 +49,10 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
   );
 }
 
+/** 0244 raised the server's ceiling from 14 to 32; the stepper has to know
+ *  the same number or the form refuses what the database would accept. */
+const MAX_TEAMS = 32;
+
 /** The board's branches. 'root' is the menu; the rest are one question each. */
 type Node = 'root' | 'browse' | 'create' | 'join' | 'post' | 'commish';
 const NODE_TITLE: Record<Node, string> = {
@@ -497,18 +501,18 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             onPress={() => { tap(); setNode('browse'); }} />
           {canCreate && (
           <MenuRow title="Start a league"
-              sub="Create it here, invite friends, draft in the app"
+              sub="name · game · season · format · draft"
               onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
           )}
           <MenuRow title="Join with an invite code"
-            sub="A friend sent you a code" onPress={() => { tap(); setNode('join'); }} />
+            sub="invite code · team name" onPress={() => { tap(); setNode('join'); }} />
           {myLeagues.length > 0 && (
           <MenuRow title="Post & recruit"
               sub={`List ${myLeagues.length === 1 ? 'your league' : 'your leagues'} on the board, share the code`}
               onPress={() => { tap(); setNode('post'); }} />
           )}
           <MenuRow title="Redeem a commissioner code"
-            sub="Run a league without holding a seat in it"
+            sub="commissioner code"
             onPress={() => { tap(); setNode('commish'); }} />
         </>
       )}
@@ -713,7 +717,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
                 </Pressable>
                 <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 26, textAlign: 'center' }}>{teamCount}</Text>
-                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(14, n + 1)); }}>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(MAX_TEAMS, n + 1)); }}>
                   <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                 </Pressable>
                 <View style={{ flex: 1 }} />

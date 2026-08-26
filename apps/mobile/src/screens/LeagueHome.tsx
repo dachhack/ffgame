@@ -162,17 +162,17 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       {/* No "THE LEAGUE" label (v0.356.2, founder) — the whole screen is the
           league; the tiles say what they are. */}
 
-      {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
-      {native && tile('', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
-      {native && tile('🏆', 'Standings', 'the table · playoff bracket', () => { track(Ev.hubTileOpened, { tile: 'standings' }); setSheet('standings'); })}
-      {native && tile('📜', 'League register', 'every add, drop, claim and trade', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
-      {tile('⊞', 'Scoring settings', 'how this league turns plays into points', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
-      {native && tile('🧢', 'Roster settings', 'lineup spots · limits · waivers · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
-      {tile('🔔', 'Alerts', 'push notifications — what pings your phone', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
+      {native && tile('👥', 'Teams & rosters', "teams · rosters · owners", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
+      {native && tile('', 'Draft room', 'players · board · teams · queue', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
+      {native && tile('🏆', 'Standings', 'table · playoff bracket', () => { track(Ev.hubTileOpened, { tile: 'standings' }); setSheet('standings'); })}
+      {native && tile('📜', 'League register', 'adds · drops · claims · trades', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
+      {tile('⊞', 'Scoring settings', 'catalog · adjustments · scoped bonuses', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
+      {native && tile('🧢', 'Roster settings', 'lineup · limits · waivers · free agency · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
+      {tile('🔔', 'Alerts', 'chat · trades · waivers · playoffs', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
       {/* 📣 RECRUIT (v0.291.0) — every member gets the tile, because the LINK
           half is every member's; the board half inside it is commish-gated and
           simply isn't drawn for anyone else. */}
-      {tile('📣', 'Recruit', commish ? 'send an invite link · post to the board' : 'send an invite link to a friend',
+      {tile('📣', 'Recruit', commish ? 'invite link · board listing' : 'invite link',
         () => { track(Ev.hubTileOpened, { tile: 'recruit' }); setSheet('recruit'); })}
       {commish && tile('⚑', 'Commissioner', 'seats · rules · kit · scoring', () => { track(Ev.hubTileOpened, { tile: 'commish' }); onGo('commishtools'); },
         { accent: true, ...(sig.commish && sig.commish.waiting + sig.commish.review > 0 ? { badge: `${sig.commish.waiting + sig.commish.review} waiting` } : {}) })}

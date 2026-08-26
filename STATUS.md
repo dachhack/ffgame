@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.361.0 — 32 teams, and a menu that lists what is behind it
+
+Founder: "Under each chip title, the small text should just list the items in
+the area. no flavor text" and "We also need the option to have up to 32 teams
+in any league."
+
+THE SUBTITLES ARE INVENTORIES NOW, on both hosts' league menus. Two tiles
+already did it right ("lineup spots · limits · waivers · trades", "seats ·
+rules · kit · scoring") and the rest were describing themselves instead —
+"every team in the league and who they're holding", "how this league turns
+plays into points". Each new list was read off the sheet it opens rather than
+invented: Scoring's are the `<Head>`s of its own sheet (catalog · adjustments ·
+scoped bonuses), Alerts' are the push kinds the server actually sends (chat ·
+trades · waivers · playoffs), Draft room's are its four tabs. The rule reached
+the board's own menu rows too.
+
+32 TEAMS — migration 0244. `create_native_league` has refused anything over 14
+since 0064 and every redefinition since carried the line forward. Nothing else
+in the schema needed changing: `native_generate_schedule` pairs any n ≥ 2 and
+ghosts an odd count (0215), the seat loop is `for i in 1..p_teams`, and
+POOL_CAP is 1200 — 32 teams over a 15-man roster is 480 picks. Both clients
+raised with it, the app through a named MAX_TEAMS so the stepper and the
+database quote the same number.
+
+THE FUNCTION BODY WAS COPIED FROM 0218, THE LIVE DEFINITION, with two changes:
+the bound and the message quoting it. New `team-cap-probes.sql` (13
+assertions, wired into the runner) exists for exactly that reason — it asserts
+the new ceiling at both ends AND that a 32-team league still comes out whole:
+32 seats minted, a draft at the rounds asked for, and 0218's `salary_cap` and
+`continuity` keys still landing on a contract league. A cap raise that dropped
+the capkeys branch would pass any test that only counted teams.
+
+TWO THINGS THE PROBES TAUGHT ME, both about the harness rather than the code:
+a fixture must grant itself the `native` entitlement (0095) or every create
+returns "invite-only" and the suite asserts the GATE, not the cap; and the
+runner greps STDOUT under `set -euo pipefail`, so a suite that reports through
+`raise notice` (stderr) is read as a failure even when every assertion passed.
+Failures `raise exception`; the banner is a `select`.
+
+WHAT 32 TEAMS DOES NOT YET DO, written into the migration so the next reader
+finds it: playoffs still seat 2/4/6/8, so 8 of 32 make the bracket; and a
+guillotine league needs N−1 scored weeks, while the schedule is generated at
+14 — so anything over 15 teams ends with several still alive.
+
+Battery green: both typechecks, 767 parity assertions, vite build, **60 probe
+suites**, server smoke.
+
 ### v0.360.2 — the salary room a league never had, and four less crowded screens
 
 Founder, a batch: the copy-from list could get long, the commish menu still
