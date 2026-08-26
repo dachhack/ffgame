@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.358.3 — the alert wears our mark, not Android's robot
+
+Founder, with a screenshot of their own status bar: "how do I get my alerts to
+show up with a custom icon?"
+
+THE ROBOT IS THE FALLBACK, and both of our push surfaces were asking for it.
+Android's status-bar glyph keeps ONLY THE ALPHA CHANNEL — it discards the
+colours and tints the remaining shape itself — so a full-colour icon arrives as
+a solid opaque square and the system draws its own default instead.
+
+  • the app declared no icon at all: `expo-notifications` sat in app.json as a
+    bare string, with no `icon` and no `color`.
+  • the web was worse, because it looked done: `sw.js` set `badge` — which IS
+    the status-bar glyph — to `icon-192.png`, the full-colour art. Pointing it
+    at a picture is the same as pointing it at nothing.
+
+So one asset, generated once, worn by both: a white droplet on transparent,
+96x96, in `scripts/gen-notification-icon.py`. `color` is `#34E5D9`, neon's
+accent and the app's default theme, which tints the glyph in the shade.
+
+THE DROPLET, NOT THE APP ICON. The mark has to survive 18px, and at that size
+interior detail is mush — the icon's own DF letters and the PWA mascot both go.
+A droplet is the brand read at a glance and it is legible at every density
+Android will scale it to (measured at 18 / 24 / 36 / 48 before wiring it).
+
+WHY IT IS COMPUTED, NOT DRAWN. `gen-pwa-icons.py` needs Pillow, which this
+environment does not have, and headless Chromium silently drops SVG and CSS
+transforms at a 96px window here — it returned a 2-pixel image, twice, and the
+alpha check is the only reason that was caught rather than committed. So the
+shape is arithmetic: a circle unioned with the triangle on its two TANGENT
+lines, supersampled 4x4 for the edges, written out through a 30-line PNG
+encoder. It reproduces anywhere Python runs. Two properties are asserted in the
+generator rather than eyeballed — transparent corners, opaque body — because
+those are exactly what a bad mask gets wrong.
+
+iOS is unaffected: it uses the app icon and has no silhouette slot.
+
+Battery green: both typechecks, 740 parity assertions, vite build, 59 probe
+suites, server smoke.
+
 ### v0.358.2 — the weekly bake, two weeks out from the lock
 
 The standing pre-season chore, four days late: `proj2026.ts`, `projStats2026.ts`
