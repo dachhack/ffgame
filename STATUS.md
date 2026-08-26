@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.358.4 — the spine has to earn its place
+
+Founder: "I don't like the chips with the highlight on the left. What other
+options do we have?" — then, from seven treatments rendered in the real neon
+palette: "Let's do the G chips."
+
+THE BAR WAS ON EVERY CARD, which is the same as being on none of them. A mark
+every row wears marks nothing; it was decoration, and it was the loudest thing
+left in a list v0.356.16 had just finished quieting down ("let's make the
+league chips less busy"). So the card now rests inside a plain border and the
+spine appears ONLY while the league wants something from you.
+
+WHICH IS DRAFTING, AND ONLY DRAFTING. That is the one live signal this card
+still carries: the waiting dot and the ⚠ lock alarm moved to the room bar and
+the hub in v0.356.16, and re-reading them here just to paint a border would
+undo that on purpose. The bar is --opp rather than --you because the DRAFTING
+dot beside it is already --opp — one state should not speak in two colours.
+
+BOTH HOSTS, ONE RULE, so they cannot drift: `LeagueCard` in LiveOnboard.tsx and
+the play card in the app's Leagues.tsx, same condition, same colour, the same
+comment in both places.
+
+WHAT WAS DELIBERATELY LEFT ALONE, because gating a change on the condition that
+motivated it cuts both ways (v0.332.0 → v0.333.0): `card2`'s default spine,
+which three other web surfaces still use; the mock-draft card's amber; and the
+commissioner-without-a-team card on either host. Those mark a KIND of row in a
+section of their own, not an alarm. One thing to fix when it earns a session:
+that card is --you on the web and --warn in the app. They should agree.
+
+Battery green: both typechecks, 740 parity assertions, vite build.
+
 ### v0.358.3 — the alert wears our mark, not Android's robot
 
 Founder, with a screenshot of their own status bar: "how do I get my alerts to
