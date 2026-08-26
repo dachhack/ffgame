@@ -431,7 +431,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} scrollEnabled={dragIdx == null} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       {/* header: mode + state chips */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Display size={17}>⛏ Draft room</Display>
+        <Display size={17}>Draft room</Display>
         <Mono size={9} tone="faint" track={0.1}>{auction ? 'AUCTION' : 'SNAKE'}</Mono>
         {st.is_mock && <Mono size={9} tone="warn" track={0.1}>🤖 MOCK</Mono>}
         {st.paused && <Mono size={9} tone="warn" track={0.1}>⏸ PAUSED</Mono>}
@@ -638,7 +638,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
               keeps max_lots slots on screen and an open one just waits. */}
           {auction && Array.from({ length: Math.max(0, st.max_lots - (st.lots ?? []).length) }, (_, gi) => (
             <View key={`ghost-${gi}`} style={{ minHeight: 92, justifyContent: 'center', borderTopWidth: gi + (st.lots ?? []).length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd, paddingTop: gi + (st.lots ?? []).length > 0 ? 10 : 0, marginTop: gi + (st.lots ?? []).length > 0 ? 10 : 0 }}>
-              <Mono size={9.5} tone="faint" track={0.1}>⛏ LOT OPEN — waiting on a nomination</Mono>
+              <Mono size={9.5} tone="faint" track={0.1}>LOT OPEN — waiting on a nomination</Mono>
             </View>
           ))}
           {/* nomination / pick banner. In an auction it stays MOUNTED even
@@ -731,7 +731,19 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
           <TextInput value={q} onChangeText={setQ} placeholder="Search players or teams…" placeholderTextColor={t.faint}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          {/* ONE LINE THAT SCROLLS, NOT FOUR THAT WRAP (founder: "for the
+              draft filters, make them scroll off the side of the screen
+              instead of wrap"). A wrapped filter row grows as the league does
+              — position chips, the two star modes and TAKEN pushed it to three
+              and four lines on a phone, which moves the PLAYER LIST down the
+              screen during the one minute you are on the clock. Scrolling
+              costs a swipe to reach the last chip; wrapping costs rows of the
+              thing you are actually reading. The order is deliberate: ALL and
+              the positions come first, so what scrolls out of reach is the
+              modes, not the filter you use every pick. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 8, flexGrow: 0 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingRight: 4 }}>
             <Chip label={`ALL${myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}`}
               on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
             {posChips.map((p) => {
@@ -744,16 +756,18 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
             <Chip label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />
-          </View>
+          </ScrollView>
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ already
               print beside every name. */}
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 8, flexGrow: 0 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 4 }}>
             <Mono size={8} tone="faint">SORT</Mono>
             {POOL_SORTS.map((o) => (
               <Chip key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
             ))}
-          </View>
+          </ScrollView>
           {assigning && (
             <Notice tone="warn">
               <Mono size={9.5} tone="warn" style={{ lineHeight: 15 }}>

@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.360.2 — the salary room a league never had, and four less crowded screens
+
+Founder, a batch: the copy-from list could get long, the commish menu still
+wears icons, SALARY shows in a league with no contracts, kill the pickaxe, and
+let the draft filters scroll.
+
+THE BUG FIRST. `SALARY` in the app's commissioner map was gated `nativeOnly`,
+which every native league is — so a redraft, keeper or dynasty league offered a
+room whose own screen opens on "OFF — this league plays without contracts". It
+now gates on `contractOnly`, read from `league_contracts.contracts` the same way
+`classic` is read from `league_game_mode`: false until the read lands, because a
+menu that pops an item IN reads worse than one that briefly omits a room.
+
+COPY-FROM IS A CARD NOW, not a chip per league. One chip carries the current
+answer and the list opens over the form — a commissioner with a dozen leagues
+was going to push the rest of the step off the screen. Each row shows the
+league's own type line, so the choice is made on what the league IS.
+
+DRAFT FILTERS SCROLL. Position chips, the two star modes and TAKEN wrapped to
+three or four lines on a phone, and every one of those lines pushes the PLAYER
+LIST further down during the minute you are on the clock. A swipe to reach the
+last chip is cheaper than rows of the thing you are reading. Order is
+deliberate: ALL and the positions first, so what scrolls out of reach is the
+modes, not the filter used every pick.
+
+ICONS: 97 prefixes out of `CommishTools` (the app's commissioner map, its
+section headers and its sheet titles), and the ⛏ pickaxe is gone from all 8
+files that carried it, both hosts.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+STILL OPEN from the same batch, and deliberately not guessed at: the roster
+editor's helper text, the preset-slots picker, and guillotine's team count —
+that last one is not a default change, see the note to the founder.
+
 ### v0.360.1 — words, not icons; ⓘ, not paragraphs (pass 1)
 
 Founder: "no icons. make info chips instead of helper text. actually, apply

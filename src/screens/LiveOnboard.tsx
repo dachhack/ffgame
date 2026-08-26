@@ -776,7 +776,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onDone={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); refresh(); setView('draft'); }}
       // STRAIGHT TO 🧢 ROSTER (v0.296.6, founder: "after you create a league,
       // you should go to the roster settings so the draft can reflect the
-      // correct number and type of positions"). It used to land on ⛏ DRAFT,
+      // correct number and type of positions"). It used to land on DRAFT,
       // which is the room you want SECOND: the draft drafts the roster the
       // league is shaped for, and the shape freezes the moment it starts.
       onLeague={(leagueId) => { setManageId(leagueId); setManageTab('lineup'); refresh(); setView('commishdash'); }}
@@ -1185,7 +1185,7 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>practice vs the AI · nothing is kept</div>
         </div>
       </div>
-      <button onClick={onDraft} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⛏ ENTER THE DRAFT ROOM</button>
+      <button onClick={onDraft} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>ENTER THE DRAFT ROOM</button>
       {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{err}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
         <button onClick={del} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>🗑 delete this mock</button>

@@ -317,7 +317,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           <Tile icon="👥" title="Teams & rosters" sub="every team in the league and who they're holding"
             onClick={() => setRostersOpen((v) => !v)} />
         )}
-        {native && <Tile icon="⛏" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
+        {native && <Tile icon="" title="Draft room" sub="live on draft night, the record after" onClick={guard(onDraft)} />}
 
         {/* The app's wording, plus the half the app's sheet cannot hold: the
             web opens the full results page, which is the table AND every

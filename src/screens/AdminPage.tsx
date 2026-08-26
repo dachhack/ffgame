@@ -601,7 +601,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>DRAFT PICK TRADING</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(pickTrading, pickTrading ? '⛏ ON' : '⛏ OFF', () => void (async () => {
+            {toggle(pickTrading, pickTrading ? 'ON' : 'OFF', () => void (async () => {
               const next = !pickTrading;
               const r = await setPickTrading(leagueId, next);
               if (r.ok) { setPickTrading_(next); setPickNote(null); } else setPickNote(friendlyError(r.error ?? 'that didn’t work'));
@@ -1243,7 +1243,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     {
       title: 'RUN THE SEASON',
       items: [
-        ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
+        ...(native ? [{ id: 'draft', label: 'DRAFT' } as TabDef<LeagueTab>] : []),
         { id: 'members', label: '👥 SEATS' },   // the app has always called them SEATS; one name now
         ...(classic ? [] : [{ id: 'coin', label: '◈ DRIP COIN' } as TabDef<LeagueTab>]),
         { id: 'ready', label: 'PICKS' },

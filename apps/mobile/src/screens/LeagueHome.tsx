@@ -163,7 +163,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
           league; the tiles say what they are. */}
 
       {native && tile('👥', 'Teams & rosters', "every team in the league and who they're holding", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
-      {native && tile('⛏', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
+      {native && tile('', 'Draft room', 'live on draft night, the record after', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
       {native && tile('🏆', 'Standings', 'the table · playoff bracket', () => { track(Ev.hubTileOpened, { tile: 'standings' }); setSheet('standings'); })}
       {native && tile('📜', 'League register', 'every add, drop, claim and trade', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
       {tile('⊞', 'Scoring settings', 'how this league turns plays into points', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}

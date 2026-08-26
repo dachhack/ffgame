@@ -20,7 +20,7 @@ import {
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat,
-  nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
+  nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
 import {
@@ -179,6 +179,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [copyFrom, setCopyFrom] = useState<Enrollment | null>(null);
   const [copyBp, setCopyBp] = useState<LeagueBlueprint | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
+  const [copyPick, setCopyPick] = useState(false);
   // What the post-create setters actually managed. Kept after the league is
   // made so the note can name a step that refused rather than claiming a
   // clean copy — the league exists either way and nothing rolls back.
@@ -609,13 +610,16 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <View>
                   <LabelInfo label="COPY SETTINGS FROM"
                     info={'Start a league shaped like one you already run.\n\nCARRIES: teams, roster size, draft type and clock, auction budget and lots, position limits, drip vs normal, keeper/dynasty, the format, the scoring catalog, waivers and FAAB, trade review, the taxi squad and IR tags.\n\nDOES NOT CARRY: the name, the members, the draft itself, or anything the season has already written.\n\nEverything it fills in is still yours to change before you create.'} />
-                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                    <Chip label="START FRESH" on={!copyFrom} onPress={() => { tap(); void pickCopy(null); }} />
-                    {mine.map((e) => (
-                      <Chip key={`cp-${e.league_id}`} label={e.league?.name ?? 'League'}
-                        on={copyFrom?.league_id === e.league_id}
-                        onPress={() => { tap(); void pickCopy(e); }} />
-                    ))}
+                  {/* A PICKER, NOT A ROW OF EVERY LEAGUE YOU ARE IN (founder:
+                      "the possible leagues to copy from could be a pretty big
+                      list. Let's make that a drop down or a card that pops
+                      up"). One chip showing the current answer; the list opens
+                      over the form. A commissioner with a dozen leagues was
+                      going to push the rest of this step off the screen. */}
+                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, alignItems: 'center' }}>
+                    <Chip label={copyFrom ? (copyFrom.league?.name ?? 'League') : 'START FRESH'}
+                      on={!!copyFrom} onPress={() => { tap(); setCopyPick(true); }} />
+                    <Mono size={8.5} tone="faint">{mine.length} to choose from</Mono>
                   </View>
                   {copyBusy && <Mono size={8.5} tone="faint" style={{ marginTop: 5 }}>reading its settings…</Mono>}
                   {copyBp && !copyBusy && (
@@ -865,6 +869,27 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         </>
       )}
 
+
+      {/* the copy-from list, over the form rather than inside it */}
+      <Overlay visible={copyPick} title="Copy settings from" onClose={() => setCopyPick(false)}>
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 8 }}>
+          <Pressable onPress={() => { tap(); setCopyPick(false); void pickCopy(null); }}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: !copyFrom ? t.you : t.bd, borderRadius: 8, padding: 12 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: !copyFrom ? t.you : t.text }}>Start fresh</Text>
+            <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>the form's own defaults</Mono>
+          </Pressable>
+          {mine.map((e) => (
+            <Pressable key={`cs-${e.league_id}`}
+              onPress={() => { tap(); setCopyPick(false); void pickCopy(e); }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: copyFrom?.league_id === e.league_id ? t.you : t.bd, borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: copyFrom?.league_id === e.league_id ? t.you : t.text }}>
+                {e.league?.name ?? 'League'}
+              </Text>
+              <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>{leagueTypeLine(e)}</Mono>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </Overlay>
 
       {/* review → the whole league before a seat is taken (0156) */}
       <Overlay visible={!!previewFor} title={previewFor?.name ?? ''}
