@@ -18,6 +18,81 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.2 — a disarm refund must prove the coin was paid (mint closed)
+
+Sweep finding #3, confirmed by reproduction: unlimited coin forgery. Two
+writers put buffs into applied_state.buffs — arm_buff (0157), which CHARGES the
+wallet, and hero_set_buffs (0157), the inventory model's apply sync, which
+writes them for FREE. disarm_buff (0063) then refunded powerup_price for any
+buff present, with no check a charge ever happened. So: free-arm a buff via
+hero_set_buffs, disarm it to be handed its price, repeat. Reproduced live —
+five loops minted 475 coin from a zero balance.
+
+0248 gates disarm_buff's refund on a real, unrefunded ledger charge: net of
+what arm_buff spent ('spend:<buff>') minus what past disarms already returned
+('refund:<buff>:<epoch>'), for this seat and matchup. A buff armed through
+hero_set_buffs has no spend row, so its net paid is 0 and nothing comes back —
+which kills the loop; a buff genuinely armed through arm_buff still refunds
+once, and a second disarm finds the charge spent. The amp-cascade guards and
+the applied_state write from 0063 carry across untouched. Practice weeks are
+exempt (their spends never hit coin_ledger, and credit_wallet caps a practice
+refund at the week's budget — no real coin to forge). The legacy charged pair
+is no longer called by either client, so no live flow changes; only the free
+money goes.
+
+New scripts/db/coin-mint-probes.sql (70 suites) proves both halves against the
+scratch DB: five free-arm/disarm loops move the wallet by 0 (a negative control
+with the old unconditional refund fails here with the exact 'minted 475'), a
+charged arm→disarm still nets to zero, and a re-armed already-paid-back buff
+cannot double-refund.
+
+NOT fixed here (separate, deeper): hero_set_buffs still writes scored buffs
+without checking inventory ownership, and the worker scores applied_state.buffs
+unconditionally (finding #4) — free SCORED buffs, a competitive-integrity hole
+that needs an inventory-reconciliation decision rather than a refund gate.
+
+### v0.364.1 — the week actually closes (worker: finals get stamped)
+
+The single most serious finding from the mode/season sweep, and it would have
+bitten the FIRST real scored week (Sep 9). The only writer of a matchup's
+home_final/away_final is resolveMatchup, and only at status==='final'
+(server/src/resolve.js). But the worker tick's completed-week branch
+(index.js) returned right after finalizeMatchups — which ONLY flips status
+live→final — and before its live resolve loop. So on the tick that finalized a
+week, nothing resolved it; every later tick returned there too. Result: a
+finished week's finals stayed NULL forever, and everything downstream that
+reads `home_final is not null` — standings, playoff seeding/advancement, the
+guillotine floor, weekly coin banking — silently never moved. It hid because
+no real week had completed yet (preseason uses practice weeks, which don't
+rank or bank) and because NOTHING tested the tick's orchestration: every
+resolve test called the engine or resolveMatchup directly, never the tick's
+decision of WHEN to call it.
+
+THE FIX (server/src): finalizeMatchups still flips status; a new stampFinals
+(resolve.js) then resolves every final matchup that still lacks a score
+(status='final' AND home_final IS NULL) through the real resolveMatchup, with
+no startedWins so all windows publish and the totals are complete. It targets
+unscored finals rather than "what I just flipped", so a transient failure is
+retried next tick instead of stranded, and once every final carries its score
+the query returns nothing and the pass goes quiet. The tick's completed-week
+branch now finalizes then stamps (setting the runtime slate first so a cold
+start still derives real windows); the old, provably-dead second finalize
+below the live loop was removed — its presence hid that the close was missing
+a resolve.
+
+THE TEST that proves it, on the REAL scorer (not the demo): test/final-resolve.mjs
+drives the actual finalizeMatchups → stampFinals pair on baked Week-1
+play-by-play and asserts (1) finalize ALONE leaves home_final NULL — the bug
+itself, pinned — then (2) stampFinals writes real non-zero finals (76.6–56.3)
+and banks both sides' coin, and (3) a re-run is a quiet no-op. Folded into
+`npm run smoke` (which now runs engine-smoke + final-resolve); the full worker
+suite is `npm test`.
+
+Noted for a separate look, not fixed here: test/h2h-verify.mjs's coin
+assertion is stale (expects a 50 stipend baked into the resolver; the resolver
+now returns MVP/window coin only, ~30/15 — the flat stipend moved to the
+weekly-budget path). It prints ✗ but exits 0, so it never gated anything.
+
 ### v0.364.0 — a bye is not a zero, and not a crash
 
 Founder, on odd-sized leagues: "can we do byes throughout the schedule and
