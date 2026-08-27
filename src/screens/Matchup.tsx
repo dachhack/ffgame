@@ -1883,7 +1883,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 onApplyToWindow={applyToWindow}
                 onScout={(win) => setScoutWin(win)}
                 onArmClutch={onArmClutch}
-                preKick={preKickPhase}
+                // preKick — the "locked in, kickoff within the hour" state that
+                // locks the card (but keeps the Underdog door open) — is PER
+                // WINDOW on the live board: a window enters it at its OWN lock,
+                // not when the board (any window) first goes live. Board-level
+                // `preKickPhase` locked every setup window's card the moment the
+                // earliest window kicked its lock hour, so a later window still
+                // reading SETUP couldn't be edited. Sim/demo keeps the single
+                // board phase.
+                preKick={liveCtx ? winRt(rw.window.id) === 'locked' : preKickPhase}
               />
             ))}
           </div>

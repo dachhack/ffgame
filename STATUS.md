@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.5 — web: the OTHER half of the setup-window edit lock (card preKick)
+
+v0.364.4 fixed the roster RAIL but the founder was still blocked: the board
+CARD itself stayed locked. The card's `preKick` (Matchup.tsx) — the "locked in,
+kickoff within the hour" state that locks a card (Underdog door aside) — was
+board-level (`preKickPhase = phase === 'live' && !anyStarted`) and passed to
+every window. So the instant the earliest window entered its lock hour, the
+board phase went 'live' and EVERY setup window's card locked, even while its
+per-window badge correctly read SETUP. `preKick` is now per-window on the live
+board (`winRt(window) === 'locked'`); sim/demo keeps the single board phase.
+Together with 0.364.4's rail fix, a window reading SETUP is fully editable —
+card and roster — regardless of what other windows are doing. Web-only.
+
 ### v0.364.4 — web: a live window you can still edit stays editable (roster fix)
 
 Founder, on a live PRE 4 board: windows reading SETUP couldn't have their
