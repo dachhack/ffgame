@@ -653,6 +653,47 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   return { home: round(homeTotal), away: round(awayTotal), coin };
 }
 
+/** Stamp the finals on a week's just-finalized matchups — the second half of
+ *  closing a week.
+ *
+ *  THE BUG THIS EXISTS TO CLOSE: finalizeMatchups only flips status live→final;
+ *  home_final/away_final and the weekly coin are written by resolveMatchup, and
+ *  only when it sees status==='final' (see the two guards above). The tick's
+ *  completed-week path returns right after finalizing, before its live resolve
+ *  loop, and every later tick returns there too — so without this call a
+ *  completed week's finals stay NULL forever, and standings, playoffs, the
+ *  guillotine and coin never move. Nothing in the tick invoked the scorer on a
+ *  final matchup; that seam had no test, which is how it hid.
+ *
+ *  Targets every final matchup that still lacks a score (status==='final' AND
+ *  home_final IS NULL), NOT just the ids the caller finalized this tick — so a
+ *  matchup that erred on its transition tick is retried on the next one instead
+ *  of staying NULL forever, and once every final carries its score the query
+ *  returns nothing and the pass goes quiet. NO startedWins: the week is over,
+ *  so every window publishes and the totals are complete. Idempotent within a
+ *  tick — the matchup_state upsert and credit_wallet's idem key make a re-run
+ *  rewrite the same values. `opts.playsInjected` lets a caller that already
+ *  injected the week's plays (a test, mainly) skip the live_play refetch. */
+export async function stampFinals(week, playerIndex, opts = {}) {
+  const { data } = await db().from('matchup').select('*')
+    .eq('week', week).eq('status', 'final').is('home_final', null);
+  const rows = data ?? [];
+  if (!rows.length) return 0;
+  if (!opts.playsInjected) await injectWeekPlays(week);
+  const ctx = await prefetchTick(rows, week);
+  let done = 0; const errs = [];
+  for (let i = 0; i < rows.length; i += 20) {
+    await Promise.all(rows.slice(i, i + 20).map((m) =>
+      resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx })
+        .then(() => { done++; })
+        .catch((e) => errs.push(`${m.id}: ${e.message}`))));
+  }
+  // A failure leaves home_final NULL, so the next tick retries it — but surface
+  // it loudly rather than letting a week quietly never close.
+  if (errs.length) throw new Error(`stampFinals: ${errs.length}/${rows.length} failed — ${errs[0]}`);
+  return done;
+}
+
 /** Idempotently bank a side's weekly coin into its team wallet (service role). */
 async function creditWallet(matchup, rosterId, delta) {
   if (delta == null) return;

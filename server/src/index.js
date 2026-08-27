@@ -20,7 +20,7 @@ import { pollMarket } from './poll/market.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { ensureSeatAgents } from './agents.js';
-import { resolveMatchup, injectWeekPlays, prefetchTick } from './resolve.js';
+import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
@@ -326,10 +326,23 @@ async function tickContext(ctx, season) {
   // switched off: once the last preseason game finishes, preseason simply stops
   // doing work, and it resumes by itself if ESPN rolls to another week.
   if (!games.length || games.every((g) => g.completed)) {
-    // Still finalize once — a week that completed between ticks needs its close.
+    // A completed week still needs CLOSING, in two steps that the live resolve
+    // loop below never reaches on this branch: finalizeMatchups flips the last
+    // 'live' rows to 'final', and stampFinals then resolves them so their
+    // home_final/away_final and weekly coin actually get written. Without the
+    // second step a finished week's scores stay NULL forever — standings,
+    // playoffs, the guillotine and coin all stall. The runtime slate is set
+    // first so the final resolve derives the real windows even on a cold start
+    // (a worker restart between the last live tick and this one).
     if (games.length) {
+      const slate = slateFromGames(games);
+      setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
       const f = await finalizeMatchups(week, true);
       if (f) log(`[${ctx.tag}] finalized`, f, 'matchups');
+      try {
+        const stamped = await stampFinals(week, playerIndex);
+        if (stamped) log(`[${ctx.tag}] stamped finals on`, stamped, 'matchups');
+      } catch (e) { log(`[${ctx.tag}] stamp finals`, e.message); }
     }
     return games;
   }
@@ -444,10 +457,11 @@ async function tickContext(ctx, season) {
     log(`[${ctx.tag}] resolved`, done, '/', live.length, 'matchups');
   }
 
-  if (games.every((g) => g.completed)) {
-    const f = await finalizeMatchups(week, true);
-    if (f) log(`[${ctx.tag}] finalized`, f, 'matchups');
-  }
+  // (No completed-week close here: reaching this line means at least one game
+  // is NOT complete — the branch above already returned for a fully-complete
+  // week. The old `if (games.every(completed))` finalize here was dead, and its
+  // presence hid that the CLOSE was missing a resolve pass. Closing lives in
+  // the early-return branch above, where the week actually ends.)
   return games;
 }
 

@@ -8,7 +8,8 @@
   "scripts": {
     "start": "tsx src/index.js",
     "cli": "tsx src/cli.js",
-    "smoke": "tsx test/engine-smoke.mjs",
+    "smoke": "tsx test/engine-smoke.mjs && tsx test/final-resolve.mjs",
+    "test": "for t in test/*.mjs; do echo \"── $t\"; tsx \"$t\" || exit 1; done",
     "study": "tsx scripts/metric-study.mjs",
     "study:fg": "tsx scripts/fg-study.mjs"
   },

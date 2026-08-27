@@ -714,7 +714,12 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
   return n;
 }
 
-/** Mark matchups final once all their week's games are complete. */
+/** Mark matchups final once all their week's games are complete.
+ *
+ *  Flipping status is only HALF of closing a week: the finals themselves
+ *  (home_final/away_final) and the weekly coin are written by resolveMatchup at
+ *  status==='final' (resolve.js), which the tick runs via stampFinals right
+ *  after this. */
 export async function finalizeMatchups(week, completed) {
   if (!completed) return 0;
   const { data } = await db().from('matchup').update({ status: 'final' }).eq('week', week).eq('status', 'live').select('id');
