@@ -800,15 +800,23 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   }
 
   if (state === 'none') {
+    // BYE OR UNBUILT (v0.364.0)? `weeks` is the league's own week list, so if
+    // it holds this week the schedule is fine and this seat is simply the one
+    // sitting out — an odd-sized league byes somebody every week. The old copy
+    // told that manager their commissioner had not synced a season that had
+    // generated correctly.
+    const bye = weeks.includes(curWeek);
     return (
       <View style={{ flex: 1, backgroundColor: t.bg, padding: 16, justifyContent: 'center' }}>
         <Card>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <Display size={17} style={{ flex: 1 }}>No week {curWeek} matchup yet</Display>
+            <Display size={17} style={{ flex: 1 }}>{bye ? `Week ${curWeek} · bye` : `No week ${curWeek} matchup yet`}</Display>
             <WeekNav />
           </View>
           <Mono size={10.5} style={{ marginTop: 10 }}>
-            Your team is enrolled. Matchups appear here once your commissioner syncs the schedule — use ‹ › to page through the season.{err ? `\n— ${err}` : ''}
+            {bye
+              ? `Your league has an odd number of teams, so one sits out each week and this week it’s yours. Nothing to set — your record and your roster carry over untouched. Use ‹ › for the rest of the season.`
+              : `Your team is enrolled. Matchups appear here once your commissioner syncs the schedule — use ‹ › to page through the season.`}{err ? `\n— ${err}` : ''}
           </Mono>
           <View style={{ alignItems: 'center', marginTop: 14 }}><LinkButton label="← back" onPress={onBack} /></View>
         </Card>

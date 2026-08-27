@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.0 — a bye is not a zero, and not a crash
+
+Founder, on odd-sized leagues: "can we do byes throughout the schedule and
+playoffs?" — then, once the damage was clear, "let's stop the bleeding."
+
+BYES HAVE ALWAYS HAPPENED. 0064's circle method pads an odd league with a ghost
+seat and skips that pair, so exactly one team has no matchup each week, and any
+commissioner can build an odd league from the team stepper today. What never
+happened is anything downstream knowing about it. Three things were live:
+
+THE GUILLOTINE EXECUTED THE BYED TEAM. The floor read `coalesce(<that week's
+final>, 0)`, and a team with no matchup scores 0, which is always the lowest
+score. In an odd guillotine league that is not an edge case, it IS the season:
+the blade falls in bye order until one team is left for reasons unrelated to
+fantasy football. 0247 makes the score NULL rather than 0 and drops a null seat
+from the candidates — not being eligible to die on a week you did not play is
+not a rule change, it is what the rule already meant. A negative control (the
+old `coalesce` restored, the new probes run) executed roster 1 on its week-1
+bye, which is the commissioner's own seat.
+
+THE WEB BOARD WHITE-SCREENED. With no matchup row the hub still navigated to
+the board with a null context, and the board fell back to `'rock-tunnel'` — a
+BAKED DEMO TEAM — asserted non-null and threw on its name. A classic league hit
+it too: the classic handoff is gated on that same null context, so it fell
+through to the drip board. The lookup is checked now instead of asserted, the
+hub opens on the nearest week the seat actually plays, and both week steppers
+walk YOUR weeks rather than the league's.
+
+THE COPY BLAMED THE COMMISSIONER. Every "no matchup" screen said the schedule
+had not been synced, on a schedule that had generated correctly. A bye and an
+unbuilt schedule are both "no row" from one seat, so 0247 adds
+`league_week_role` to tell them apart league-wide; the classic boards keep
+their week nav on a bye instead of dead-ending, and the guillotine board prints
+BYE rather than 0.0 with a knife next to it.
+
+Also: the leagues list fell back to the week-LESS `myMatchup` on a miss, which
+is `.order('week').limit(1)` — it printed the Week 1 opponent as this week's.
+`myMatchupFrom` asks for the next game at or after a week instead.
+
+LEFT UNDONE ON PURPOSE — fairness, not bleeding: the extra byes still land on
+the lowest roster ids every season (9 teams over 14 weeks byes seats 1–5 twice
+and 6–9 once), and standings still sort on wins then TOTAL points-for, which
+favours whoever played the extra game. Odd PLAYOFF brackets (3/5/7) are still
+unsupported, and remain the same job as 16/32 teams: the general seed-and-bye
+engine, which reproduces all four hand-written shapes exactly (n=8 comes out
+`(1,8),(4,5),(2,7),(3,6)`, the current insert order).
+
+12 new source assertions (779) and 8 new scratch-DB probes (63 suites).
+
 ### v0.363.0 — a league can play no playoffs at all
 
 Founder: "you should be able to turn off and customize playoffs in all leagues."

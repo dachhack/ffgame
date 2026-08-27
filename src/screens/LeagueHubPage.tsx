@@ -87,10 +87,24 @@ export async function openHeroBoard(
 ): Promise<boolean> {
   try {
     const preseasonOn = !!e.league?.preseason_at;
-    const week = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
+    const open = await defaultOpenWeek(e.league_id, e.league?.season ?? '2026', preseasonOn)
       .catch(() => (preseasonOn ? PRESEASON_BASE + 1 : 1));
+    const first = await buildLiveLeague(e.league_id, e.sleeper_roster_id, open);
+
+    // OPEN ON A WEEK THIS SEAT ACTUALLY PLAYS (v0.364.0). defaultOpenWeek
+    // answers for the LEAGUE, and in an odd-sized one somebody sits out every
+    // week — so on your bye it used to hand the board a week with no game,
+    // which is the state the drip board crashed on. The built schedule is the
+    // whole season, so the nearest week of your own is already in hand: prefer
+    // the next one, else the last one played.
+    const mine = first.built.league.schedule
+      .filter((g) => g.homeId === first.youTeamId || g.awayId === first.youTeamId)
+      .map((g) => g.week).sort((a, b) => a - b);
+    const week = mine.includes(open) ? open : (mine.find((w) => w > open) ?? mine[mine.length - 1] ?? open);
+    // buildLiveLeague's lineups are week-scoped, so a moved week rebuilds.
+    const { built, youTeamId } = week === open ? first : await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
+
     const m = await myMatchup(e.league_id, e.sleeper_roster_id, week).catch(() => null);
-    const { built, youTeamId } = await buildLiveLeague(e.league_id, e.sleeper_roster_id, week);
     const ctx = m ? { matchupId: m.id, userId: e.pick_user_id ?? userId, leagueId: e.league_id, rosterId: e.sleeper_roster_id, week: m.week } : null;
     loadSimLeague(built, youTeamId, ctx);
     if (intent === 'shop') requestShopOnBoard();

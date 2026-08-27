@@ -399,7 +399,9 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
       )}
       <View style={{ marginTop: 8 }}>
         {alive.map((a, i) => {
-          const doomed = st.champion == null && i === 0;
+          // 0247: a byed seat has no score and cannot fall this week, so it is
+          // never the one under the blade — however the list happens to sort.
+          const doomed = st.champion == null && i === 0 && !a.bye;
           const mine = a.roster_id === myRoster;
           return (
             <View key={a.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
@@ -407,7 +409,9 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : doomed ? t.opp : t.text, fontWeight: mine || doomed ? '700' : '400' }}>
                 {a.team ?? `Roster ${a.roster_id}`}
               </Text>
-              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : undefined}>{Math.round(a.pts * 10) / 10}</Mono>
+              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : a.bye ? 'faint' : undefined}>
+                {a.bye || a.pts == null ? 'BYE' : Math.round(a.pts * 10) / 10}
+              </Mono>
             </View>
           );
         })}

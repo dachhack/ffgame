@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { Brand, SiteSettings, PosPill, useIsMobile } from '../app/ui';
-import { getTeam, gameForTeam } from '@drip/core/data/league';
+import { Brand, SiteSettings, PosPill, useIsMobile, NoGameScreen } from '../app/ui';
+import { getTeam, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '@drip/core/data/realPbp';
 import { metricById } from '@drip/core/data/metrics';
@@ -13,9 +13,12 @@ import { PuIcon } from '../app/gameIcons';
 export function MatchupFinal({ week }: { week: number }) {
   const { navigate, youTeamId: YOU, applied } = useStore();
   const isMobile = useIsMobile();
-  const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
-  const opp = getTeam(oppId)!;
-  const you = getTeam(YOU)!;
+  // See Matchup.tsx: 'rock-tunnel' is the demo league's team and resolves to
+  // nothing in a live one, so this is checked rather than asserted (v0.364.0).
+  const game = gameForTeam(YOU, week);
+  const oppId = game?.oppId ?? 'rock-tunnel';
+  const opp = getTeam(oppId);
+  const you = getTeam(YOU);
 
   const [ready, setReady] = useState(() => !REAL_WEEKS.has(week) || isRealWeekLoaded(week));
   useEffect(() => {
@@ -68,6 +71,14 @@ export function MatchupFinal({ week }: { week: number }) {
   const nextOppId = gameForTeam(YOU, nextWeek)?.oppId;
   const nextOpp = nextOppId ? getTeam(nextOppId) : null;
 
+  // A week you did not play has no recap to show — and, before v0.364.0, no
+  // opponent either: this screen reached for the demo team and threw.
+  if (!you || !opp) {
+    return (
+      <NoGameScreen week={week} bye={!game && getActiveLeague().schedule.some((g) => g.week === week)}
+        onBack={() => navigate({ name: 'leagues' })} backLabel="← MY LEAGUES" />
+    );
+  }
   if (!ready) {
     return (
       <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.08em' }}>

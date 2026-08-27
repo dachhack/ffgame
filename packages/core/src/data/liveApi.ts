@@ -714,6 +714,29 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
   return (data as LiveMatchup) ?? null;
 }
 
+/** The caller's soonest matchup AT OR AFTER a week — the honest answer for a
+ *  seat that is on BYE at the week the league is currently playing (v0.364.0).
+ *
+ *  An odd-sized league sits one team out each week, and every caller here used
+ *  to fall back to the week-LESS myMatchup, which is `.order('week').limit(1)`
+ *  — Week 1. So the leagues list printed a Week 1 opponent as though it were
+ *  this week's game. Asking for "my next one from here" is one query and
+ *  cannot be stale. */
+export async function myMatchupFrom(leagueId: string, rosterId: number, week: number): Promise<LiveMatchup | null> {
+  const { data } = await (await client()).from('matchup').select('*')
+    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`)
+    .gte('week', week).order('week').limit(1).maybeSingle();
+  return (data as LiveMatchup) ?? null;
+}
+
+/** Is this seat PLAYING, on BYE, or is the schedule not built (0247)? A bye and
+ *  an unbuilt schedule look identical from one seat — both are "no matchup
+ *  row" — and only the league-wide view can tell them apart. Saying the wrong
+ *  one blames the commissioner for a schedule that is working correctly. */
+export const leagueWeekRole = (leagueId: string, rosterId: number, week: number) =>
+  rpc<'playing' | 'bye' | 'unbuilt'>('league_week_role',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_week: week });
+
 /** The week a league's board should open to: the current NFL week (its games in
  *  progress), or — when none is live — the next upcoming week, across the league's
  *  whole matchup timeline. Preseason (offset) weeks sort ahead of the regular
@@ -2207,7 +2230,9 @@ export interface GuillotineState {
   guillotine: boolean;
   week?: number | null;
   champion?: number | null;
-  alive?: { roster_id: number; team: string | null; pts: number }[];
+  /** `pts` is null and `bye` true for a seat with no matchup that week (0247):
+   *  a bye is not a zero, and a team on bye cannot be eliminated. */
+  alive?: { roster_id: number; team: string | null; pts: number | null; bye?: boolean }[];
   fallen?: { roster_id: number; team: string | null; week: number }[];
   /** The frenzy: released players still clearing waivers, best rank first. */
   frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];

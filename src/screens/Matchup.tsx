@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { useStore } from '../app/store';
 import { ClassicBoard } from './ClassicBoard';
 import type { Phase, LiveCtx, Route } from '../app/store';
-import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop } from '../app/ui';
+import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
 import { leagueGameMode, myEnrollments } from '@drip/core/data/liveApi';
@@ -210,9 +210,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }, [demo, liveCtx?.leagueId]);
 
 
+  // 'rock-tunnel' is a BAKED DEMO TEAM, and it is only ever the right answer
+  // on the demo board. A real league's teams come from league_membership, so
+  // in a live league this fallback resolved to nothing and the `!` lied about
+  // it — the crash an odd-sized league hit on its first bye week (v0.364.0).
+  // The truth is checked below rather than asserted here.
   const oppId = gameForTeam(YOU, week)?.oppId ?? 'rock-tunnel';
-  const you = getTeam(YOU)!;
-  const opp = getTeam(oppId)!;
+  const you = getTeam(YOU);
+  const opp = getTeam(oppId);
+  const noGame = !you || !opp;
+  // Somebody else playing this week means the schedule is fine and this seat
+  // is simply the one sitting out.
+  const weekIsBye = noGame && activeLeague.schedule.some((g) => g.week === week);
 
   const isMobile = useIsMobile();
   // ── THE ROOM BAR ON THE BOARD (v0.356.11, founder: "let's keep the bottom
@@ -584,8 +593,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // range — preseason (offset) weeks first, then the regular season — so a
   // preseason-enabled league flips PRE 1 → … → PRE 4 → WK 1 → … in one stride.
   // Driven by the schedule the league actually has, so it only offers real weeks.
+  // YOUR weeks, not the league's (v0.364.0): in an odd-sized league the seat
+  // sitting out has no game that week, and stepping onto it emptied the board.
+  // Skipping it means ‹ › walks 4 → 6 rather than into a dead end.
   const orderedWeeks = (() => {
-    const ws = new Set(getActiveLeague().schedule.map((g) => g.week));
+    const sched = getActiveLeague().schedule;
+    const ws = new Set(sched.filter((g) => g.homeId === YOU || g.awayId === YOU).map((g) => g.week));
     ws.add(week);
     return [...ws].sort((a, b) => (isPreseasonWeek(a) ? 0 : 1) - (isPreseasonWeek(b) ? 0 : 1) || a - b);
   })();
@@ -598,9 +611,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     setSwitchingWeek(target);
     try {
       const m = await myMatchup(liveCtx.leagueId, liveCtx.rosterId, target).catch(() => null);
+      // No game at the target means a bye the stepper should not have offered.
+      // Staying put beats loading a board with no opponent (v0.364.0).
+      if (!m) { setSwitchingWeek(null); return; }
       const { built, youTeamId } = await buildLiveLeague(liveCtx.leagueId, liveCtx.rosterId, target);
-      const ctx = m ? { matchupId: m.id, userId: liveCtx.userId, leagueId: liveCtx.leagueId, rosterId: liveCtx.rosterId, week: m.week } : null;
-      loadSimLeague(built, youTeamId, ctx);
+      loadSimLeague(built, youTeamId,
+        { matchupId: m.id, userId: liveCtx.userId, leagueId: liveCtx.leagueId, rosterId: liveCtx.rosterId, week: m.week });
       navigate({ name: 'matchup', week: target, phase: 'setup' });
     } catch {
       setSwitchingWeek(null); // stay put on failure
@@ -1271,6 +1287,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   }
 
   const headline = phase === 'setup' ? 'Set Your Windows' : phase === 'live' ? 'Live Resolution' : `Week ${week} — Final`;
+  // The bye/unbuilt screen comes BEFORE anything that reads `you`/`opp` — and
+  // before the classic handoff below, which is gated on liveCtx and would
+  // otherwise drop a classic league onto the drip board on its bye week.
+  if (noGame) {
+    return (
+      <NoGameScreen week={week} bye={weekIsBye}
+        onBack={liveCtx ? () => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId }) : () => navigate({ name: 'leagues' })} />
+    );
+  }
   // The real live board advances on real time (no manual per-window playback), so
   // it drops the "hit ▶ / run them all" copy; the sim/demo replay keeps it.
   const subhead = liveCtx

@@ -8,7 +8,7 @@ import {
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
+  myMatchup, myMatchupFrom, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
@@ -686,11 +686,17 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     // myMatchup returns the LOWEST week (Week 1) — wrong whenever a later week
     // is the live one (preseason weeks sort at 101+), so resolve the board's
     // default-open week first and show THAT matchup.
+    //
+    // AND IF THIS SEAT IS ON BYE that week (v0.364.0), show its NEXT game
+    // rather than falling back to the week-less read, which returned Week 1
+    // and printed a months-old opponent as if it were the one coming up.
     for (const e of rows) {
       defaultOpenWeek(e.league_id, e.league?.season ?? '2026', !!e.league?.preseason_at)
         .catch(() => undefined)
         .then((wk) => myMatchup(e.league_id, e.sleeper_roster_id, wk)
-          .then((m) => m ?? myMatchup(e.league_id, e.sleeper_roster_id)))
+          .then((m) => m ?? (wk == null
+            ? myMatchup(e.league_id, e.sleeper_roster_id)
+            : myMatchupFrom(e.league_id, e.sleeper_roster_id, wk))))
         .then(async (m) => {
         if (!m) return;
         const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));

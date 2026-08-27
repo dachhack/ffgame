@@ -145,3 +145,4 @@ $RUN -f scripts/db/drip-agent-probes.sql | grep -E "PROBE FAIL|ALL DRIP-AGENT PR
 $RUN -f scripts/db/team-cap-probes.sql | grep -E "PROBE FAIL|ALL TEAM-CAP PROBES" || { echo "TEAM-CAP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/guillotine-weeks-probes.sql | grep -E "PROBE FAIL|ALL GUILLOTINE-WEEKS PROBES" || { echo "GUILLOTINE-WEEKS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/playoffs-off-probes.sql | grep -E "PROBE FAIL|ALL PLAYOFFS-OFF PROBES" || { echo "PLAYOFFS-OFF PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/bye-week-probes.sql | grep -E "PROBE FAIL|ALL BYE-WEEK PROBES" || { echo "BYE-WEEK PROBES FAILED"; exit 1; }

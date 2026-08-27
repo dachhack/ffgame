@@ -671,4 +671,39 @@ export function LabelInfo({ label, title, info, style }: {
   );
 }
 
+/** NO GAME THIS WEEK (v0.364.0).
+ *
+ *  An odd-sized league sits one seat out every week — 0064's schedule pads the
+ *  field with a ghost and skips that pair — and until now every screen read the
+ *  missing matchup row as "the schedule isn't ready", or worse: the drip board
+ *  fell through to a BAKED DEMO OPPONENT that does not exist in a real league,
+ *  and threw on its name.
+ *
+ *  `bye` is the whole distinction and it is knowable locally: if anyone else
+ *  plays that week, the schedule is fine and this seat is on bye. If nobody
+ *  does, it genuinely has not been built. Saying the wrong one blames the
+ *  commissioner for a schedule that is working. */
+export function NoGameScreen({ week, bye, onBack, backLabel = '\u2190 LEAGUE', children }: {
+  week: number; bye: boolean; onBack?: () => void; backLabel?: string; children?: ReactNode;
+}) {
+  return (
+    <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.06em', textAlign: 'center', padding: 20 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+        {bye ? `WEEK ${week} \u00b7 BYE` : `NO WEEK ${week} MATCHUP YET`}
+      </div>
+      <div style={{ color: 'var(--faint)', fontSize: 10.5, maxWidth: 330, lineHeight: 1.6, letterSpacing: 0 }}>
+        {bye
+          ? 'Your league has an odd number of teams, so one team sits out each week and this week it\u2019s yours. Nothing to set — your record and your roster carry over untouched.'
+          : 'The rest of the league has no game this week either. Matchups appear once the commissioner generates the schedule.'}
+      </div>
+      {children}
+      {onBack && (
+        <button onClick={onBack} style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 6, padding: '8px 18px', cursor: 'pointer' }}>
+          {backLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export const fonts = { MONO, GROTESK };
