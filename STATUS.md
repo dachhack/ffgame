@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.2 — a disarm refund must prove the coin was paid (mint closed)
+
+Sweep finding #3, confirmed by reproduction: unlimited coin forgery. Two
+writers put buffs into applied_state.buffs — arm_buff (0157), which CHARGES the
+wallet, and hero_set_buffs (0157), the inventory model's apply sync, which
+writes them for FREE. disarm_buff (0063) then refunded powerup_price for any
+buff present, with no check a charge ever happened. So: free-arm a buff via
+hero_set_buffs, disarm it to be handed its price, repeat. Reproduced live —
+five loops minted 475 coin from a zero balance.
+
+0248 gates disarm_buff's refund on a real, unrefunded ledger charge: net of
+what arm_buff spent ('spend:<buff>') minus what past disarms already returned
+('refund:<buff>:<epoch>'), for this seat and matchup. A buff armed through
+hero_set_buffs has no spend row, so its net paid is 0 and nothing comes back —
+which kills the loop; a buff genuinely armed through arm_buff still refunds
+once, and a second disarm finds the charge spent. The amp-cascade guards and
+the applied_state write from 0063 carry across untouched. Practice weeks are
+exempt (their spends never hit coin_ledger, and credit_wallet caps a practice
+refund at the week's budget — no real coin to forge). The legacy charged pair
+is no longer called by either client, so no live flow changes; only the free
+money goes.
+
+New scripts/db/coin-mint-probes.sql (70 suites) proves both halves against the
+scratch DB: five free-arm/disarm loops move the wallet by 0 (a negative control
+with the old unconditional refund fails here with the exact 'minted 475'), a
+charged arm→disarm still nets to zero, and a re-armed already-paid-back buff
+cannot double-refund.
+
+NOT fixed here (separate, deeper): hero_set_buffs still writes scored buffs
+without checking inventory ownership, and the worker scores applied_state.buffs
+unconditionally (finding #4) — free SCORED buffs, a competitive-integrity hole
+that needs an inventory-reconciliation decision rather than a refund gate.
+
 ### v0.364.1 — the week actually closes (worker: finals get stamped)
 
 The single most serious finding from the mode/season sweep, and it would have
