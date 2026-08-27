@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.6 — web: autosave no longer paints a permanent "NOT SAVED" over a saved board
+
+The founder swapped a player in an OPEN Thursday slot and it silently didn't
+save, under a stuck "NOT SAVED — Window tnf is locked" banner. Root cause: the
+autosave effect (Matchup.tsx) batches EVERY window's picks into one upsert, and
+the slot-cap/lock triggers reject the WHOLE upsert if any row is bad — so one
+locked window's rows vetoed the open-window edits riding along AND left the
+banner up over an otherwise-saved board. The batch filtered windows on
+`windowKickoffMs` (kickoff), but `enforce_window_lock` refuses a window from its
+LOCK time (kickoff − 1h), so a window in its lock hour (tnf: locks 6pm, kicks
+7pm) slipped into the batch. Gate is now `windowLockMs`; locked windows stay out
+of the save, open edits land. Web-only.
+
 ### v0.364.5 — web: the OTHER half of the setup-window edit lock (card preKick)
 
 v0.364.4 fixed the roster RAIL but the founder was still blocked: the board

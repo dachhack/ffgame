@@ -10,7 +10,7 @@ import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, windowKickoffMs, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
@@ -288,19 +288,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx || !heroHydrated) return;
     const t = setTimeout(() => {
       const rows: PickRow[] = [];
-      // A KICKED window's rows stay out of the save (unless the week is under
-      // an admin hold, where post-kick editing is the point). They're immutable
+      // A LOCKED window's rows stay out of the save (unless the week is under
+      // an admin hold, where post-lock editing is the point). They're immutable
       // on both ends — the UI can't edit them and enforce_window_lock refuses
       // changes — but re-sending them made the save fragile: any refusal is a
       // whole-batch rejection, so one locked window painted a permanent
       // "NOT SAVED" banner over a fully-saved board AND vetoed the legitimate
-      // unkicked edits riding in the same batch.
+      // still-open edits riding in the same batch.
+      //
+      // The gate is the LOCK time (kickoff − 1h), NOT the kickoff: the server
+      // refuses a window from the moment it locks, so filtering on kickoff let
+      // a window in its lock hour slip into the batch and reject the whole
+      // save — the exact "Window tnf is locked" banner this block exists to
+      // prevent, while a legitimate edit to an open window silently didn't save.
       const held = !!liveCtx && heldPairs.has(`${liveCtx.leagueId}:${week}`);
       for (const [key, p] of Object.entries(picks)) {
         if (!p?.playerId) continue;
         const [win, slot] = key.split('#');
         if (win == null || slot == null) continue;
-        const k = windowKickoffMs(week, win as WindowId);
+        const k = windowLockMs(week, win as WindowId);
         if (!held && k != null && k <= Date.now()) continue;
         rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
       }
