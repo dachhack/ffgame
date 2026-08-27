@@ -146,3 +146,4 @@ $RUN -f scripts/db/team-cap-probes.sql | grep -E "PROBE FAIL|ALL TEAM-CAP PROBES
 $RUN -f scripts/db/guillotine-weeks-probes.sql | grep -E "PROBE FAIL|ALL GUILLOTINE-WEEKS PROBES" || { echo "GUILLOTINE-WEEKS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/playoffs-off-probes.sql | grep -E "PROBE FAIL|ALL PLAYOFFS-OFF PROBES" || { echo "PLAYOFFS-OFF PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/bye-week-probes.sql | grep -E "PROBE FAIL|ALL BYE-WEEK PROBES" || { echo "BYE-WEEK PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/season-sim-probes.sql | grep -E "SIM .* FAIL|PROBE FAIL|ALL SEASON-SIM PROBES" || { echo "SEASON-SIM PROBES FAILED"; exit 1; }
