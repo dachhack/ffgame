@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.3 — the worker drives the endgame (playoffs/guillotine no longer stall)
+
+Sweep finding: playoffs and the guillotine only ever moved when a member opened
+the right screen — the client's generate/advance/tick pokes were the ONLY
+driver. A league whose managers were away between rounds simply stalled, and a
+bracket advanced late landed its next round on a lock_at the tick had already
+passed, so it never resolved. Silent, and with no push to prompt anyone.
+
+The Fly worker now drives all three on its own cadence (server/src/native.js
+sweepProgression, hourly — rounds are weekly, and the round's own scoring is
+stamped every tick by the resolver from v0.364.1, so nothing here is
+latency-sensitive): build round 1 once the regular season is final, advance a
+finished round, drop a guillotine week. Full leagues only (kind='league', not
+mocks/pods/weekly). Everything is idempotent and self-guarding server-side, so
+a quiet sweep is cheap and a redundant one is a no-op — and because the worker
+advances promptly, the late-advance/past-lock_at stall can't arise.
+
+The catch was auth: the worker calls as the service role (auth.uid() null).
+advance_playoffs already allowed that (0073), which is why it alone worked — it
+seeds from the STORED bracket. generate (auto) and guillotine_tick refused the
+null uid, and generate also seeds from LIVE standings, so league_standings
+refused it too and the {error} object then blew up jsonb_array_elements. 0249
+gives those three the same one-line guard advance_playoffs uses
+(`auth.uid() is not null and not (...)`) — nothing else in the bodies moves,
+the MANUAL seeded generate stays commissioner-only (only its auto branch
+learned the null uid), and there is no anon exposure (the grants are
+authenticated-only, and an authenticated user always carries a uid, so a null
+uid is only ever the trusted worker key).
+
+New scripts/db/worker-progression-probes.sql (71 suites): as the worker (app.uid
+= '' → null), build round 1, refuse a manual seeded generate, advance to a
+champion, and drop a guillotine week — each of which a negative control (0249
+reverted) fails with 'forbidden'.
+
 ### v0.364.2 — a disarm refund must prove the coin was paid (mint closed)
 
 Sweep finding #3, confirmed by reproduction: unlimited coin forgery. Two
