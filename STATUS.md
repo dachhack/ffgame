@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.4 — web: a live window you can still edit stays editable (roster fix)
+
+Founder, on a live PRE 4 board: windows reading SETUP couldn't have their
+PLAYERS changed. Confirmed a real web bug. The drip board's roster rail
+(RosterAside, src/screens/boardParts.tsx) gated its player taps on the
+BOARD-LEVEL phase — `interactive = side === 'you' && phase === 'setup'` — but
+that phase flips to 'live' the moment ANY window in the week kicks off (all
+windows setup → setup, else live; Matchup.tsx:782). So in a multi-window week,
+once the earliest window locked, the whole rail went dead and a LATER window
+still in its setup period could not have a player placed or swapped — even
+though it correctly showed a SETUP badge and its metric picker still worked
+(that path is per-window, which is why only PLAYER editing broke).
+
+Fix: RosterAside takes an optional `winEditable(winId)` and gates each player
+by ITS OWN window's state rather than the board's; the live board passes
+`(id) => winRt(id) === 'setup'`, and the sim/demo board (one global phase)
+passes nothing and keeps the old fallback. Native was already correct — it
+assigns through the per-slot picker (per-window winLocked), not a board-phase
+rail — so this is web-only. No migration, no worker.
+
 ### v0.364.3 — the worker drives the endgame (playoffs/guillotine no longer stall)
 
 Sweep finding: playoffs and the guillotine only ever moved when a member opened

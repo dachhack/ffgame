@@ -142,12 +142,19 @@ function PoolFilterBar({ filter, setFilter, players, shown, games, compact }: {
   );
 }
 
-export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, collapsed, onToggle, bye = [], week, fluid }: {
+export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
   onPlayer?: (id: string) => void;
   phase: Phase;
+  /** LIVE board: is THIS window still open for edits? The rail lists every
+   *  window at once, and a window's own lock is what closes it — not the
+   *  board's. Without this the whole rail went dead the instant the first
+   *  window kicked off, so a later window still reading SETUP could not have
+   *  its PLAYER changed even though its metric picker still worked. Omitted on
+   *  the sim/demo board, which has one global `phase`. */
+  winEditable?: (winId: WindowId) => boolean;
   sealed?: boolean;
   collapsed: boolean;
   onToggle: () => void;
@@ -207,7 +214,12 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
             shown={shownTotal} games={railGames} compact />
         </div>
       )}
-      {railWindows.map((w) => (
+      {railWindows.map((w) => {
+        // Editability is PER WINDOW on the live board — a window closes at its
+        // own lock, not when the board (any window) first goes live. Falls back
+        // to the single board phase on the sim/demo board.
+        const winOpen = winEditable ? winEditable(w.id) : phase === 'setup';
+        return (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
             <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{w.label}</span>
@@ -217,7 +229,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
           {poolFor(w.id).map((p) => {
             // Never reveal which players the opponent has selected during setup.
             const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
-            const interactive = side === 'you' && phase === 'setup';
+            const interactive = side === 'you' && winOpen;
             return (
               <button
                 key={p.id}
@@ -239,7 +251,8 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, sealed, colla
             );
           })}
         </div>
-      ))}
+        );
+      })}
       {bye.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, opacity: 0.5 }}>
           <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700, padding: '0 4px' }}>ON BYE · {bye.length}</span>

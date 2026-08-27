@@ -1694,7 +1694,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         // window's card can never end its life under the bar.
         ...(railed ? { paddingBottom: 86 } : {}) }}>
         {cardHand && <div className="ct-feltlayers" aria-hidden />}
-        {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
+        {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} winEditable={liveCtx ? (id) => winRt(id) === 'setup' : undefined} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
         {isMobile && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1702,7 +1702,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button onClick={() => toggleRoster('you')} className="mono" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', textAlign: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.you ? 'var(--you)' : 'var(--bd)'}`, color: rosterOpen.you ? 'var(--you)' : 'var(--dim)' }}>{rosterOpen.you ? '▾' : '▸'} YOUR ROSTER</button>
               <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', textAlign: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
             </div>
-            {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
+            {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} winEditable={liveCtx ? (id) => winRt(id) === 'setup' : undefined} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
             {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
           </div>
         )}
