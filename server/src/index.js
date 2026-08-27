@@ -516,6 +516,9 @@ async function tick() {
     if (nat.autopicks || nat.claimsWon || nat.claimsLost || nat.allowance || nat.drafted) {
       log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost,', nat.allowance, 'allowances,', nat.drafted, 'drafts started');
     }
+    if (nat.generated || nat.advanced || nat.eliminated) {
+      log('progression:', nat.generated, 'brackets built,', nat.advanced, 'rounds advanced,', nat.eliminated, 'guillotine cuts');
+    }
   } catch (e) { log('native sweep error', e.message); }
 
   // Members (0133): re-pull Sleeper users/rosters for poked leagues (a claimant

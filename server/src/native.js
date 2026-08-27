@@ -15,6 +15,54 @@
 // still-scheduled weeks' sleeper_lineup itself.
 import { db } from './supabase.js';
 
+// The season's endgame — build round 1 when the regular season closes, advance
+// a finished round, and drop a guillotine week — used to move ONLY when a
+// member opened the right screen (the client's generate/advance/tick pokes). So
+// a league whose managers were away between rounds simply stalled, and a bracket
+// advanced late landed its next round on a lock_at the tick had already passed.
+// The worker drives all three now, hourly: rounds are weekly, and the round's
+// own SCORING is stamped every tick by the resolver, so nothing here is
+// latency-sensitive. Everything below is idempotent and self-guarding
+// server-side (0249 lets the service role in; the auto/guillotine/advance
+// guards are unchanged), so a quiet sweep is cheap and a redundant one is a
+// no-op.
+const PROGRESSION_MS = Number(process.env.PROGRESSION_MS || 3600000); // 1h
+let lastProgression = 0;
+
+async function sweepProgression(log) {
+  if (Date.now() - lastProgression < PROGRESSION_MS) return { generated: 0, advanced: 0, eliminated: 0 };
+  lastProgression = Date.now();   // before the awaits: a slow sweep must not queue a second
+  let generated = 0, advanced = 0, eliminated = 0;
+  // Full leagues only — pods and weekly showdowns (kind <> 'league') play no
+  // bracket, and mocks are practice rooms.
+  const { data: leagues, error } = await db()
+    .from('league').select('id, settings_json')
+    .eq('provider', 'native').eq('kind', 'league').eq('is_mock', false);
+  if (error) { log('progression sweep', error.message); return { generated, advanced, eliminated }; }
+  for (const lg of leagues ?? []) {
+    const format = lg.settings_json?.format;
+    try {
+      if (format === 'guillotine') {
+        // Idempotent catch-up loop; eliminates at most one seat per completed
+        // week, and a guillotine league books no bracket (0246).
+        const { data } = await db().rpc('guillotine_tick', { p_league_id: lg.id });
+        eliminated += Number(data?.eliminated ?? 0);
+      } else {
+        // Round 1, once the regular season is final. Auto = seedless, and the
+        // RPC refuses before the season ends, never builds over an existing
+        // bracket, and quiet-no-ops when playoffs are off — so "regular season
+        // not finished" is the ordinary mid-season answer, not an error.
+        const { data: g } = await db().rpc('generate_playoffs', { p_league_id: lg.id, p_seeds: null, p_auto: true });
+        if (g?.bracket) generated += 1;
+        // Advance a finished round; no-op without a bracket or a completed round.
+        const { data: a } = await db().rpc('advance_playoffs', { p_league_id: lg.id });
+        if (a?.advanced) advanced += 1;
+      }
+    } catch (e) { log('progression', lg.id, e.message); }
+  }
+  return { generated, advanced, eliminated };
+}
+
 export async function sweepNative(log = () => {}, weeks = []) {
   let drafts = 0, won = 0, lost = 0, allowance = 0, started = 0;
 
@@ -62,5 +110,8 @@ export async function sweepNative(log = () => {}, weeks = []) {
     } catch (e) { log('auto_weekly_budget', w, e.message); }
   }
 
-  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started };
+  // The endgame — hourly-gated internally, so calling it every sweep is cheap.
+  const prog = await sweepProgression(log);
+
+  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started, ...prog };
 }
