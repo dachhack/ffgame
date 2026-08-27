@@ -8,7 +8,7 @@ import {
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
+  myMatchup, myMatchupFrom, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
@@ -686,11 +686,17 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     // myMatchup returns the LOWEST week (Week 1) — wrong whenever a later week
     // is the live one (preseason weeks sort at 101+), so resolve the board's
     // default-open week first and show THAT matchup.
+    //
+    // AND IF THIS SEAT IS ON BYE that week (v0.364.0), show its NEXT game
+    // rather than falling back to the week-less read, which returned Week 1
+    // and printed a months-old opponent as if it were the one coming up.
     for (const e of rows) {
       defaultOpenWeek(e.league_id, e.league?.season ?? '2026', !!e.league?.preseason_at)
         .catch(() => undefined)
         .then((wk) => myMatchup(e.league_id, e.sleeper_roster_id, wk)
-          .then((m) => m ?? myMatchup(e.league_id, e.sleeper_roster_id)))
+          .then((m) => m ?? (wk == null
+            ? myMatchup(e.league_id, e.sleeper_roster_id)
+            : myMatchupFrom(e.league_id, e.sleeper_roster_id, wk))))
         .then(async (m) => {
         if (!m) return;
         const teams = await matchupTeams(e.league_id, [m.home_roster_id, m.away_roster_id]).catch(() => ({}));
@@ -776,7 +782,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onDone={(leagueId, rosterId) => { setTarget({ leagueId, rosterId }); refresh(); setView('draft'); }}
       // STRAIGHT TO 🧢 ROSTER (v0.296.6, founder: "after you create a league,
       // you should go to the roster settings so the draft can reflect the
-      // correct number and type of positions"). It used to land on ⛏ DRAFT,
+      // correct number and type of positions"). It used to land on DRAFT,
       // which is the room you want SECOND: the draft drafts the roster the
       // league is shaped for, and the shape freezes the moment it starts.
       onLeague={(leagueId) => { setManageId(leagueId); setManageTab('lineup'); refresh(); setView('commishdash'); }}
@@ -1185,7 +1191,7 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>practice vs the AI · nothing is kept</div>
         </div>
       </div>
-      <button onClick={onDraft} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⛏ ENTER THE DRAFT ROOM</button>
+      <button onClick={onDraft} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '13px 0', cursor: 'pointer', marginTop: 12, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>ENTER THE DRAFT ROOM</button>
       {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8, lineHeight: 1.4 }}>{err}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
         <button onClick={del} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)', opacity: busy ? 0.6 : 1 }}>🗑 delete this mock</button>

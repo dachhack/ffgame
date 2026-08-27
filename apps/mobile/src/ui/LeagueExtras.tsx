@@ -399,7 +399,9 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
       )}
       <View style={{ marginTop: 8 }}>
         {alive.map((a, i) => {
-          const doomed = st.champion == null && i === 0;
+          // 0247: a byed seat has no score and cannot fall this week, so it is
+          // never the one under the blade — however the list happens to sort.
+          const doomed = st.champion == null && i === 0 && !a.bye;
           const mine = a.roster_id === myRoster;
           return (
             <View key={a.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
@@ -407,7 +409,9 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : doomed ? t.opp : t.text, fontWeight: mine || doomed ? '700' : '400' }}>
                 {a.team ?? `Roster ${a.roster_id}`}
               </Text>
-              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : undefined}>{Math.round(a.pts * 10) / 10}</Mono>
+              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : a.bye ? 'faint' : undefined}>
+                {a.bye || a.pts == null ? 'BYE' : Math.round(a.pts * 10) / 10}
+              </Mono>
             </View>
           );
         })}
@@ -528,6 +532,14 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
 // ── Playoff controls — lives in the ⚑ League settings sheet ──────────────────
 // Split from the bracket card below: editing is a settings decision, the
 // bracket is a scoreboard. Both read the same playoff_state.
+//
+// The one explainer this card keeps; everything else it prints is state.
+const PLAYOFF_INFO = `Bracket size, when it starts, and whether the league plays one at all.
+
+OFF ends the season with the last regular-season week — the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.
+
+Seeding comes from the standings: wins, then points-for. Higher seeds host. A 6-team bracket byes the top two. The bracket itself shows on the MY TEAM screen for everyone.`
+
 export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onChanged: () => void }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -549,6 +561,7 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
     finally { setBusy(false); void load(); onChanged(); }
   };
   if (!st || st.error) return null;
+  const off = st.playoff_teams === 0;
   return (
     <View>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
@@ -557,42 +570,51 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
       ) : (
         <>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <Mono size={9} tone="faint">BRACKET</Mono>
+            <LabelInfo label="BRACKET" title="Playoffs" info={PLAYOFF_INFO} />
+            {/* 0246: OFF sits first, because it is the choice that decides
+                whether the rest of this card means anything. */}
+            <Chip label="OFF" on={off}
+              onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, 0, null), 'no playoffs'); }} />
             {[2, 4, 6, 8].map((n) => (
               <Chip key={n} label={`${n} TEAMS`} on={st.playoff_teams === n}
                 onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, n, null), `bracket of ${n}`); }} />
             ))}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <Mono size={9} tone="faint">STARTS WK</Mono>
-            {[15, 16, 17].map((w) => (
-              <Chip key={w} label={String(w)} on={st.playoff_start_week === w}
-                onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start week ${w}`); }} />
-            ))}
-          </View>
-          <View style={{ marginTop: 8 }}>
-            <PrimaryButton label={busy ? '…' : st.generated ? '↻ REGENERATE ROUND 1 (reseeds from standings)' : '⚡ GENERATE THE BRACKET'}
-              disabled={busy} onPress={() => {
-                tap();
-                if (st.generated) {
-                  Alert.alert('Regenerate round 1?', 'Reseeds from the current standings — any manual bracket state from the old round 1 is replaced.', [
-                    { text: 'cancel', style: 'cancel' },
-                    { text: 'regenerate', style: 'destructive', onPress: () => void run(() => generatePlayoffs(leagueId), 'round 1 rebuilt') },
-                  ]);
-                } else void run(() => generatePlayoffs(leagueId), 'bracket generated');
-              }} />
-          </View>
+          {off ? (
+            <Mono size={9} tone="faint" style={{ marginTop: 6 }}>
+              No playoffs — the season ends with the final regular-season week and the standings settle it.
+            </Mono>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <Mono size={9} tone="faint">STARTS WK</Mono>
+                {[15, 16, 17].map((w) => (
+                  <Chip key={w} label={String(w)} on={st.playoff_start_week === w}
+                    onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start week ${w}`); }} />
+                ))}
+              </View>
+              <View style={{ marginTop: 8 }}>
+                <PrimaryButton label={busy ? '…' : st.generated ? 'REGENERATE ROUND 1' : 'GENERATE THE BRACKET'}
+                  disabled={busy} onPress={() => {
+                    tap();
+                    if (st.generated) {
+                      Alert.alert('Regenerate round 1?', 'Reseeds from the current standings — any manual bracket state from the old round 1 is replaced.', [
+                        { text: 'cancel', style: 'cancel' },
+                        { text: 'regenerate', style: 'destructive', onPress: () => void run(() => generatePlayoffs(leagueId), 'round 1 rebuilt') },
+                      ]);
+                    } else void run(() => generatePlayoffs(leagueId), 'bracket generated');
+                  }} />
+              </View>
+            </>
+          )}
         </>
       )}
-      {st.generated && st.champion == null && (
+      {!off && st.generated && st.champion == null && (
         <View style={{ marginTop: 8 }}>
-          <PrimaryButton label={busy ? '…' : '⏭ ADVANCE (build the next round from finals)'} disabled={busy}
+          <PrimaryButton label={busy ? '…' : 'ADVANCE THE BRACKET'} disabled={busy}
             onPress={() => { tap(); void run(() => advancePlayoffs(leagueId), 'advanced'); }} />
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-        Seeding comes from the standings (wins, then points-for). The bracket itself shows on the MY TEAM screen for everyone.
-      </Mono>
     </View>
   );
 }
@@ -607,6 +629,9 @@ export function Playoffs({ leagueId }: { leagueId: string }) {
   }, [leagueId]);
 
   if (!st || st.error) return null;
+  // 0246: a league that plays no playoffs shows no playoff card. A line saying
+  // "there is no bracket" is the same nothing, with a heading on it.
+  if (st.playoff_teams === 0) return null;
   const teamOf = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Roster ${rid}`;
   const seedOf = (rid: number) => {
     const i = (st.seeds ?? []).indexOf(rid);
@@ -615,11 +640,11 @@ export function Playoffs({ leagueId }: { leagueId: string }) {
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>🏆 PLAYOFFS</Mono>
+      <Mono size={9} tone="faint" track={0.12}>PLAYOFFS</Mono>
 
       {st.champion != null && (
         <Mono size={11} tone="you" weight="700" style={{ marginTop: 6 }}>
-          👑 {st.champion_team ?? teamOf(st.champion)} — league champion
+          {st.champion_team ?? teamOf(st.champion)} — league champion
         </Mono>
       )}
 

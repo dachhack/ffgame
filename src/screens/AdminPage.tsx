@@ -601,7 +601,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>DRAFT PICK TRADING</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(pickTrading, pickTrading ? '⛏ ON' : '⛏ OFF', () => void (async () => {
+            {toggle(pickTrading, pickTrading ? 'ON' : 'OFF', () => void (async () => {
               const next = !pickTrading;
               const r = await setPickTrading(leagueId, next);
               if (r.ok) { setPickTrading_(next); setPickNote(null); } else setPickNote(friendlyError(r.error ?? 'that didn’t work'));
@@ -1243,7 +1243,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     {
       title: 'RUN THE SEASON',
       items: [
-        ...(native ? [{ id: 'draft', label: '⛏ DRAFT' } as TabDef<LeagueTab>] : []),
+        ...(native ? [{ id: 'draft', label: 'DRAFT' } as TabDef<LeagueTab>] : []),
         { id: 'members', label: '👥 SEATS' },   // the app has always called them SEATS; one name now
         ...(classic ? [] : [{ id: 'coin', label: '◈ DRIP COIN' } as TabDef<LeagueTab>]),
         { id: 'ready', label: 'PICKS' },
@@ -3759,6 +3759,9 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
   );
 }
 
+// The panel's one explainer (v0.350.2) — everything else it prints is state.
+const PLAYOFF_INFO = 'Bracket size, when it starts, and whether the league plays one at all.\n\nOFF ends the season with the last regular-season week \u2014 the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.\n\nSeeding = regular-season standings (wins, then points-for). Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week, and finished rounds roll forward automatically.';
+
 function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [teams, setTeams] = useState(4);
@@ -3818,41 +3821,48 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {st.champion != null && (
         <div style={{ background: 'var(--bg)', border: '1px solid var(--you)', borderLeft: '3px solid var(--you)', borderRadius: 8, padding: '12px 14px' }}>
-          <span className="grotesk" style={{ fontSize: 17.5, fontWeight: 700, color: 'var(--you)' }}>🏆 {st.champion_team ?? teamName(st.champion)} — league champion</span>
+          <span className="grotesk" style={{ fontSize: 17.5, fontWeight: 700, color: 'var(--you)' }}>{st.champion_team ?? teamName(st.champion)} — league champion</span>
         </div>
       )}
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
 
       <div>
-        <div style={subhead}>PLAYOFF SETTINGS</div>
+        <LabelInfo label="PLAYOFF SETTINGS" title="Playoffs" info={PLAYOFF_INFO} style={{ marginBottom: 7 }} />
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TEAMS</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
+              {/* 0246: OFF leads the row — it decides whether the rest of this
+                  panel means anything. */}
+              {toggle(teams === 0, 'off', () => setTeams(0), st.underway)}
               {[2, 4, 6, 8].map((n) => toggle(teams === n, String(n), () => setTeams(n), st.underway))}
             </div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, opacity: st.underway ? 0.5 : 1 }}>
-              <button onClick={() => !st.underway && setStartWeek(Math.max(2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
-              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
-              <button onClick={() => !st.underway && setStartWeek(Math.min(18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
+          {teams !== 0 && (
+            <div style={{ textAlign: 'center' }}>
+              <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, opacity: st.underway ? 0.5 : 1 }}>
+                <button onClick={() => !st.underway && setStartWeek(Math.max(2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
+                <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
+                <button onClick={() => !st.underway && setStartWeek(Math.min(18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
+              </div>
             </div>
-          </div>
-          {!st.underway && (
-            <button onClick={() => run(() => setPlayoffRules(leagueId, teams, startWeek))} disabled={busy} className="mono" style={btn(true)}>✓ save</button>
           )}
           {!st.underway && (
+            <button onClick={() => run(() => setPlayoffRules(leagueId, teams, teams === 0 ? null : startWeek))} disabled={busy} className="mono" style={btn(true)}>save</button>
+          )}
+          {!st.underway && teams !== 0 && st.playoff_teams !== 0 && (
             <button onClick={() => run(() => generatePlayoffs(leagueId, order.slice(0, teams)))} disabled={busy} className="mono" style={btn(true)}>
-              {st.generated ? '↻ regenerate bracket' : '🏆 generate bracket'}
+              {st.generated ? 'regenerate bracket' : 'generate bracket'}
             </button>
           )}
           {st.underway && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }}>playoffs underway — settings locked</span>}
         </div>
-        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-          Seeding = regular-season standings (wins, then points-for). Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week; finished rounds roll forward automatically.
-        </div>
+        {st.playoff_teams === 0 && (
+          <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6 }}>
+            No playoffs — the season ends with the last regular-season week and the standings settle it.
+          </div>
+        )}
       </div>
 
       {st.generated && rounds.length > 0 && (
@@ -3910,6 +3920,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
         </div>
       )}
 
+      {teams !== 0 && (
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <div style={subhead}>SEEDING{st.underway ? ' (LOCKED)' : ''}</div>
@@ -3939,6 +3950,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
             : `Top ${teams} make the playoffs — everyone else starts on the consolation ladder. Use ↑↓ to override the seeding before generating.`}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -104,7 +104,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     const slugs = (side === 'give' ? x.give : x.get)
       .map((s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); });
     const rid = side === 'give' ? x.from_roster : x.to_roster;
-    const picks = ((side === 'give' ? x.give_picks : x.get_picks) ?? []).map((p) => `⛏ ${pickAssetLabel(p, rid)}`);
+    const picks = ((side === 'give' ? x.give_picks : x.get_picks) ?? []).map((p) => `${pickAssetLabel(p, rid)}`);
     return [...slugs, ...picks].join(', ') || '—';
   };
 
@@ -227,7 +227,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     if (owned.length === 0) return null;
     return (
       <View style={{ marginTop: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }}>
-        <Mono size={7.5} tone="faint" track={0.1} style={{ marginBottom: 2 }}>⛏ DRAFT PICKS</Mono>
+        <Mono size={7.5} tone="faint" track={0.1} style={{ marginBottom: 2 }}>DRAFT PICKS</Mono>
         {owned.map((a) => {
           const on = sel.some((x) => samePick(x, a));
           return (

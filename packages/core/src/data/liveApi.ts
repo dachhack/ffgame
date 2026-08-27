@@ -714,6 +714,29 @@ export async function myMatchup(leagueId: string, rosterId: number, week?: numbe
   return (data as LiveMatchup) ?? null;
 }
 
+/** The caller's soonest matchup AT OR AFTER a week — the honest answer for a
+ *  seat that is on BYE at the week the league is currently playing (v0.364.0).
+ *
+ *  An odd-sized league sits one team out each week, and every caller here used
+ *  to fall back to the week-LESS myMatchup, which is `.order('week').limit(1)`
+ *  — Week 1. So the leagues list printed a Week 1 opponent as though it were
+ *  this week's game. Asking for "my next one from here" is one query and
+ *  cannot be stale. */
+export async function myMatchupFrom(leagueId: string, rosterId: number, week: number): Promise<LiveMatchup | null> {
+  const { data } = await (await client()).from('matchup').select('*')
+    .eq('league_id', leagueId).or(`home_roster_id.eq.${rosterId},away_roster_id.eq.${rosterId}`)
+    .gte('week', week).order('week').limit(1).maybeSingle();
+  return (data as LiveMatchup) ?? null;
+}
+
+/** Is this seat PLAYING, on BYE, or is the schedule not built (0247)? A bye and
+ *  an unbuilt schedule look identical from one seat — both are "no matchup
+ *  row" — and only the league-wide view can tell them apart. Saying the wrong
+ *  one blames the commissioner for a schedule that is working correctly. */
+export const leagueWeekRole = (leagueId: string, rosterId: number, week: number) =>
+  rpc<'playing' | 'bye' | 'unbuilt'>('league_week_role',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_week: week });
+
 /** The week a league's board should open to: the current NFL week (its games in
  *  progress), or — when none is live — the next upcoming week, across the league's
  *  whole matchup timeline. Preseason (offset) weeks sort ahead of the regular
@@ -2048,7 +2071,9 @@ export interface PlayoffMatchup {
 }
 export interface PlayoffState {
   error?: string; ok?: boolean;
-  playoff_teams: number; playoff_start_week: number;
+  /** 0 = this league plays no playoffs (0246). */
+  playoff_teams: number;
+  playoff_start_week: number;
   generated: boolean; underway: boolean;
   rounds: number | null; seeds: number[] | null;
   /** The live consolation ladder, top rung first (final below-the-cut order once the title game ends). */
@@ -2059,7 +2084,11 @@ export interface PlayoffState {
 /** Everything the playoff view needs (any member). */
 export const playoffState = (leagueId: string) => rpc<PlayoffState>('playoff_state', { p_league_id: leagueId });
 export const leagueStandings = (leagueId: string) => rpc<StandingsRow[] | { error: string }>('league_standings', { p_league_id: leagueId });
-/** Commissioner: bracket size (2/4/6/8) + start week — locked once underway. */
+/** Commissioner: bracket size + start week — locked once underway.
+ *  `teams` is 0 (no playoffs at all — 0246), 2, 4, 6 or 8. Zero deletes a
+ *  bracket that was only ever scheduled and makes both the commissioner's
+ *  generate and the auto poke refuse; the season then ends with the last
+ *  regular-season week. A guillotine league sets itself to 0. */
 export const setPlayoffRules = (leagueId: string, teams: number | null, startWeek: number | null) =>
   rpc<{ ok: boolean; error?: string }>('set_playoff_rules', { p_league_id: leagueId, p_teams: teams, p_start_week: startWeek });
 /** Commissioner: (re)build round 1 — standings seeding, or an explicit seed
@@ -2201,7 +2230,9 @@ export interface GuillotineState {
   guillotine: boolean;
   week?: number | null;
   champion?: number | null;
-  alive?: { roster_id: number; team: string | null; pts: number }[];
+  /** `pts` is null and `bye` true for a seat with no matchup that week (0247):
+   *  a bye is not a zero, and a team on bye cannot be eliminated. */
+  alive?: { roster_id: number; team: string | null; pts: number | null; bye?: boolean }[];
   fallen?: { roster_id: number; team: string | null; week: number }[];
   /** The frenzy: released players still clearing waivers, best rank first. */
   frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];

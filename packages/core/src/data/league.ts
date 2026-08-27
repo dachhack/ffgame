@@ -270,6 +270,21 @@ export function getActiveLeague(): League { return activeLeague; }
  *  new league's schedule — REAL_WEEKS is what to read for "do we have data". */
 export const REG_SEASON_WEEKS = 14;
 
+/** A GUILLOTINE LEAGUE PLAYS ALL 17 (founder: "Guillotine leagues go all 17
+ *  weeks"). It is the one format with no playoffs to leave room for — the last
+ *  team standing IS the result — so weeks 15–17, which migration 0073 reserves
+ *  for a bracket, are regular season here.
+ *
+ *  It is also what makes the format finishable: one team falls per completed
+ *  week, so N teams need N−1 scored weeks to crown a winner. At 14 that capped
+ *  a guillotine league at 15 teams; at 17 it reaches 18. */
+export const GUILLOTINE_WEEKS = 17;
+
+/** How many weeks to generate for a league of this format. Both create flows
+ *  read it, so neither host can decide the season's length on its own. */
+export const scheduleWeeksFor = (format?: string | null): number =>
+  format === 'guillotine' ? GUILLOTINE_WEEKS : REG_SEASON_WEEKS;
+
 /** A fully-built league + its player registry, ready to make active. */
 export interface BuiltLeague { league: League; players: Record<string, Player>; weeks: number; }
 /** Swap in a live (Sleeper-built) league. */

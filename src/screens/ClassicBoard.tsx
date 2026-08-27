@@ -23,13 +23,13 @@ import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import {
-  myRoster, myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
+  myRoster, myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
-import { PlayerImg, PosPill, useIsMobile } from '../app/ui';
+import { PlayerImg, PosPill, useIsMobile, NoGameScreen } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
@@ -465,6 +465,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // null means "whatever week the league is on" — the board's own default, and
   // what it opens on. A number is a week the manager asked for.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // THE WEEK THIS SEAT SITS OUT (v0.364.0). An odd-sized league byes one team
+  // a week, and `state = 'none'` — which returns before the header and its
+  // stepper render — stranded whoever stepped onto theirs. Held separately
+  // from `matchup` so the arrows below keep an anchor to walk from.
+  const [byeWeek, setByeWeek] = useState<number | null>(null);
   // The last regular-season week: the playoff start minus one. Read from the
   // league rather than assumed, because 14 is a default and not a rule.
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
@@ -480,7 +485,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         if (!r) { setState('none'); return; }
         setRos(r);
         const m = await myMatchup(r.leagueId, r.rosterId, weekWanted ?? undefined);
-        if (!m) { setState('none'); return; }
+        if (!m) {
+          // No row for this seat is either a BYE or a schedule nobody has
+          // built, and only the league-wide view knows which (0247).
+          const role = weekWanted == null ? 'unbuilt'
+            : await leagueWeekRole(r.leagueId, r.rosterId, weekWanted).catch(() => 'unbuilt');
+          if (role === 'bye') { setByeWeek(weekWanted); setState('ready'); return; }
+          setState('none'); return;
+        }
+        setByeWeek(null);
         setMatchup(m);
         nativeRosters(r.leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
@@ -905,14 +918,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
    *  offer a week the board can't fill, because `myMatchup` for a week with no
    *  game returns nothing and the screen would empty. */
   const canGo = (d: -1 | 1): boolean => {
-    const w = matchup?.week;
+    const w = byeWeek ?? matchup?.week;
     if (w == null) return false;
     const next = w + d;
     if (next < 1) return false;
     if (lastRegWeek != null && next > lastRegWeek) return false;
     return true;
   };
-  const goWeek = (d: -1 | 1) => { if (canGo(d) && matchup) setWeekWanted(matchup.week + d); };
+  const goWeek = (d: -1 | 1) => {
+    const w = byeWeek ?? matchup?.week;
+    if (canGo(d) && w != null) setWeekWanted(w + d);
+  };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
    *  way pages move under a thumb. Guarded on the vertical component so a
@@ -1020,6 +1036,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
   if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
+  const weekBtn = (on: boolean): React.CSSProperties => ({
+    fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
+    color: on ? 'var(--text)' : 'var(--faint)', background: 'var(--surface)',
+    border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 12px',
+    cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.45,
+  });
+  if (byeWeek != null) return (
+    <NoGameScreen week={byeWeek} bye onBack={onBack}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} className="mono" style={weekBtn(canGo(-1))}>‹ WK {byeWeek - 1}</button>
+        <button onClick={() => goWeek(1)} disabled={!canGo(1)} className="mono" style={weekBtn(canGo(1))}>WK {byeWeek + 1} ›</button>
+      </div>
+    </NoGameScreen>
+  );
   if (state === 'none') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>No matchup this week.</div>;
   if (state === 'error') return (
     <div style={{ padding: 24 }}>

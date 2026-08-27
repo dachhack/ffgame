@@ -18,6 +18,262 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.364.0 — a bye is not a zero, and not a crash
+
+Founder, on odd-sized leagues: "can we do byes throughout the schedule and
+playoffs?" — then, once the damage was clear, "let's stop the bleeding."
+
+BYES HAVE ALWAYS HAPPENED. 0064's circle method pads an odd league with a ghost
+seat and skips that pair, so exactly one team has no matchup each week, and any
+commissioner can build an odd league from the team stepper today. What never
+happened is anything downstream knowing about it. Three things were live:
+
+THE GUILLOTINE EXECUTED THE BYED TEAM. The floor read `coalesce(<that week's
+final>, 0)`, and a team with no matchup scores 0, which is always the lowest
+score. In an odd guillotine league that is not an edge case, it IS the season:
+the blade falls in bye order until one team is left for reasons unrelated to
+fantasy football. 0247 makes the score NULL rather than 0 and drops a null seat
+from the candidates — not being eligible to die on a week you did not play is
+not a rule change, it is what the rule already meant. A negative control (the
+old `coalesce` restored, the new probes run) executed roster 1 on its week-1
+bye, which is the commissioner's own seat.
+
+THE WEB BOARD WHITE-SCREENED. With no matchup row the hub still navigated to
+the board with a null context, and the board fell back to `'rock-tunnel'` — a
+BAKED DEMO TEAM — asserted non-null and threw on its name. A classic league hit
+it too: the classic handoff is gated on that same null context, so it fell
+through to the drip board. The lookup is checked now instead of asserted, the
+hub opens on the nearest week the seat actually plays, and both week steppers
+walk YOUR weeks rather than the league's.
+
+THE COPY BLAMED THE COMMISSIONER. Every "no matchup" screen said the schedule
+had not been synced, on a schedule that had generated correctly. A bye and an
+unbuilt schedule are both "no row" from one seat, so 0247 adds
+`league_week_role` to tell them apart league-wide; the classic boards keep
+their week nav on a bye instead of dead-ending, and the guillotine board prints
+BYE rather than 0.0 with a knife next to it.
+
+Also: the leagues list fell back to the week-LESS `myMatchup` on a miss, which
+is `.order('week').limit(1)` — it printed the Week 1 opponent as this week's.
+`myMatchupFrom` asks for the next game at or after a week instead.
+
+LEFT UNDONE ON PURPOSE — fairness, not bleeding: the extra byes still land on
+the lowest roster ids every season (9 teams over 14 weeks byes seats 1–5 twice
+and 6–9 once), and standings still sort on wins then TOTAL points-for, which
+favours whoever played the extra game. Odd PLAYOFF brackets (3/5/7) are still
+unsupported, and remain the same job as 16/32 teams: the general seed-and-bye
+engine, which reproduces all four hand-written shapes exactly (n=8 comes out
+`(1,8),(4,5),(2,7),(3,6)`, the current insert order).
+
+12 new source assertions (779) and 8 new scratch-DB probes (63 suites).
+
+### v0.363.0 — a league can play no playoffs at all
+
+Founder: "you should be able to turn off and customize playoffs in all leagues."
+
+CUSTOMISING them has existed since 0073 — bracket size and start week, any
+native league, locked once underway. What was missing is OFF. A league that
+wants its season to simply end (a guillotine, a keeper league that settles on
+the regular-season table, a wide pod where a four-team bracket is beside the
+point) had no way to say so — and 0162's auto-generation would build one
+anyway the moment the last regular-season game went final.
+
+OFF IS `playoff_teams = 0`, not a new flag. Every reader already goes through
+`league_playoff_teams()`, so a zero is understood everywhere at once, and a
+league that never set the key still reads the default 4 — nothing existing
+moves. 0246 teaches `set_playoff_rules` to accept it (deleting a bracket that
+was only ever SCHEDULED, which the function's own "playoffs are underway"
+guard makes safe: a played game can never be erased this way), and guards the
+one place a bracket is built. There are exactly two callers of that place —
+the commissioner's button and 0162's poke — so one guard covers both: the
+poke returns a quiet no-op, because it fires on EVERY member's league load all
+season and an error there would paint a banner on a screen working exactly as
+configured; the commissioner's own call is refused with the reason.
+
+A GUILLOTINE LEAGUE IS OFF BY CONSTRUCTION. It runs all 17 weeks (v0.362.0)
+and its survivor is the result, so a bracket booked for week 15 would collide
+with a season still being played. `set_league_format` now switches playoffs
+off when the format goes guillotine, next to where it already presets the FAAB
+market — and leaving guillotine does not silently re-book one.
+
+Both hosts get the control: OFF leads the bracket row, because it decides
+whether the rest of the panel means anything, and the start week, generate
+button and seeding list hide behind it. The app's playoff card returns nothing
+at all for an off league — a heading over "there is no bracket" is the same
+nothing with a title on it. Both panels' helper paragraphs folded into one ⓘ,
+and the trophy/crown prefixes came off the champion lines.
+
+Bracket sizes are still 2/4/6/8: round-1 seeding and `advance_playoffs` are
+hand-written per shape, so 16 or 32 is a bracket-engine rewrite, not a bound.
+That stays open.
+
+8 new scratch-DB probes (62 suites) — the default is untouched, the auto poke
+is silent, the manual call explains itself, turning back on restores the
+knobs, and guillotine sets itself off without help.
+
+### v0.362.0 — a guillotine league plays all 17 weeks
+
+Founder: "Guillotine leagues go all 17 weeks. let's make sure that is wired in."
+
+WHY 17 IS THE RIGHT NUMBER, and not just a bigger one: guillotine is the only
+format with no playoffs to leave room for — the survivor IS the result — so
+weeks 15–17, which 0073 reserves for a bracket, are regular season here. And
+one team falls per COMPLETED week, so N teams need N−1 scored weeks. At 14 the
+format quietly capped at 15 teams and anything larger ended with several still
+alive and nothing to crown a winner. At 17 it reaches 18.
+
+WIRED IN TWO HALVES, because neither alone is enough:
+  · `scheduleWeeksFor(format)` in `core/data/league.ts` — both create flows
+    read it, so neither host decides a season's length on its own.
+  · migration 0245 re-cuts an EXISTING schedule inside `set_league_format`, so
+    a commissioner who flips the format later gets the right season on either
+    host without a client remembering to.
+
+THE ORDER TRAP THAT MADE THE SPLIT NECESSARY: both create flows call
+setLeagueFormat BEFORE generating the schedule, so a server-side 17 at creation
+would have been overwritten by the client's own generate a moment later. 0245
+therefore only re-cuts when a schedule ALREADY EXISTS — at creation there is
+none, and the client makes it at the right length. The probes assert exactly
+that: the format change must NOT conjure a schedule pre-creation.
+
+REGENERATING IS SAFE PRECISELY WHERE THIS FUNCTION ALREADY IS. 0221 refuses
+guillotine once the draft leaves 'pending' or the blade has fallen, and
+`native_generate_schedule` refuses to touch a schedule holding any matchup that
+is not still 'scheduled'. The body is copied from 0221, the live definition,
+with the block appended and three locals declared.
+
+AND THE DEFAULT THE FOUNDER ASKED FOR EARLIER NOW LANDS. "Guillotine should
+default to 18 teams" was deferred because 18 was neither reachable (the server
+capped at 14 until 0244) nor finishable (14 weeks). Both are gone, so picking
+GUILLOTINE now lifts the team count to 18 — a default, not a lock, in the same
+spirit as a contract type presetting the auction room.
+
+New `guillotine-weeks-probes.sql` (11 assertions, wired into the runner): the
+17-week schedule, that 18 teams can actually eliminate to one, that nobody byes
+(the floor reads a missing matchup as 0, so a bye is an automatic elimination),
+the commissioner flip in both directions, and that VAMPIRE keeps its 14 — it
+still has playoffs.
+
+Battery green: both typechecks, 767 parity assertions, vite build, **61 probe
+suites**, server smoke.
+
+### v0.361.1 — the roster editor stops explaining itself
+
+Founder: "Let's make the preset slots a drop down or card so it doesn't take up
+so much room. There's a crap ton of helper text on the roster editor. Let's
+info chip it."
+
+PRESET SPOTS IS A PICKER. Eight pre-baked spots wrapped to three rows inside an
+editor that already runs long, and the list only grows. One button opens them
+over the page, where each has room to say what it IS — "Rookie Superflex ·
+QB / RB / WR / TE · best ball · rookies only" — instead of shouting ROOKIE
+SFLX. The 20-spot ceiling is stated in the picker rather than silently doing
+nothing on the 21st tap.
+
+FIVE HELPER PARAGRAPHS FOLDED INTO ⓘ: the taxi squad's lock rules, IR
+eligibility, the spot LABEL field's "shows on the draft board", ZERO-FILL's
+best-ball caveat, and the classic/scoring cross-reference. Both section headers
+became LabelInfo, which is how the rest of this screen already labels a control.
+
+THREE STAYED, and they are the rule rather than an oversight (v0.350.2: state
+is not explanation): the two EMPTY STATES that tell a drip league why this
+editor has nothing in it — that is the screen's content, not a note under a
+control — and the one dynamic line, "Positions the league can roster: …",
+which reports what the spots above it currently add up to.
+
+A NOTE ON THE MECHANICS, because it cost a broken build: three of those
+paragraphs were the entire body of a conditional (`{mode === 'classic' && (…)}`,
+`{sp.bb ? (…) : (…)}`). Deleting the text left `&& ( )` and an empty ternary
+branch, which is a parse error rather than a blank space. The best-ball branch
+is now an explicit `null` and its caveat lives in the ZERO-FILL ⓘ.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+STILL OPEN: the WEB's roster editor has its own helper text and has not had
+this pass.
+
+### v0.361.0 — 32 teams, and a menu that lists what is behind it
+
+Founder: "Under each chip title, the small text should just list the items in
+the area. no flavor text" and "We also need the option to have up to 32 teams
+in any league."
+
+THE SUBTITLES ARE INVENTORIES NOW, on both hosts' league menus. Two tiles
+already did it right ("lineup spots · limits · waivers · trades", "seats ·
+rules · kit · scoring") and the rest were describing themselves instead —
+"every team in the league and who they're holding", "how this league turns
+plays into points". Each new list was read off the sheet it opens rather than
+invented: Scoring's are the `<Head>`s of its own sheet (catalog · adjustments ·
+scoped bonuses), Alerts' are the push kinds the server actually sends (chat ·
+trades · waivers · playoffs), Draft room's are its four tabs. The rule reached
+the board's own menu rows too.
+
+32 TEAMS — migration 0244. `create_native_league` has refused anything over 14
+since 0064 and every redefinition since carried the line forward. Nothing else
+in the schema needed changing: `native_generate_schedule` pairs any n ≥ 2 and
+ghosts an odd count (0215), the seat loop is `for i in 1..p_teams`, and
+POOL_CAP is 1200 — 32 teams over a 15-man roster is 480 picks. Both clients
+raised with it, the app through a named MAX_TEAMS so the stepper and the
+database quote the same number.
+
+THE FUNCTION BODY WAS COPIED FROM 0218, THE LIVE DEFINITION, with two changes:
+the bound and the message quoting it. New `team-cap-probes.sql` (13
+assertions, wired into the runner) exists for exactly that reason — it asserts
+the new ceiling at both ends AND that a 32-team league still comes out whole:
+32 seats minted, a draft at the rounds asked for, and 0218's `salary_cap` and
+`continuity` keys still landing on a contract league. A cap raise that dropped
+the capkeys branch would pass any test that only counted teams.
+
+TWO THINGS THE PROBES TAUGHT ME, both about the harness rather than the code:
+a fixture must grant itself the `native` entitlement (0095) or every create
+returns "invite-only" and the suite asserts the GATE, not the cap; and the
+runner greps STDOUT under `set -euo pipefail`, so a suite that reports through
+`raise notice` (stderr) is read as a failure even when every assertion passed.
+Failures `raise exception`; the banner is a `select`.
+
+WHAT 32 TEAMS DOES NOT YET DO, written into the migration so the next reader
+finds it: playoffs still seat 2/4/6/8, so 8 of 32 make the bracket; and a
+guillotine league needs N−1 scored weeks, while the schedule is generated at
+14 — so anything over 15 teams ends with several still alive.
+
+Battery green: both typechecks, 767 parity assertions, vite build, **60 probe
+suites**, server smoke.
+
+### v0.360.2 — the salary room a league never had, and four less crowded screens
+
+Founder, a batch: the copy-from list could get long, the commish menu still
+wears icons, SALARY shows in a league with no contracts, kill the pickaxe, and
+let the draft filters scroll.
+
+THE BUG FIRST. `SALARY` in the app's commissioner map was gated `nativeOnly`,
+which every native league is — so a redraft, keeper or dynasty league offered a
+room whose own screen opens on "OFF — this league plays without contracts". It
+now gates on `contractOnly`, read from `league_contracts.contracts` the same way
+`classic` is read from `league_game_mode`: false until the read lands, because a
+menu that pops an item IN reads worse than one that briefly omits a room.
+
+COPY-FROM IS A CARD NOW, not a chip per league. One chip carries the current
+answer and the list opens over the form — a commissioner with a dozen leagues
+was going to push the rest of the step off the screen. Each row shows the
+league's own type line, so the choice is made on what the league IS.
+
+DRAFT FILTERS SCROLL. Position chips, the two star modes and TAKEN wrapped to
+three or four lines on a phone, and every one of those lines pushes the PLAYER
+LIST further down during the minute you are on the clock. A swipe to reach the
+last chip is cheaper than rows of the thing you are reading. Order is
+deliberate: ALL and the positions first, so what scrolls out of reach is the
+modes, not the filter used every pick.
+
+ICONS: 97 prefixes out of `CommishTools` (the app's commissioner map, its
+section headers and its sheet titles), and the ⛏ pickaxe is gone from all 8
+files that carried it, both hosts.
+
+Battery green: both typechecks, 767 parity assertions, vite build.
+
+STILL OPEN from the same batch, and deliberately not guessed at: the roster
+editor's helper text, the preset-slots picker, and guillotine's team count —
+that last one is not a default change, see the note to the founder.
+
 ### v0.360.1 — words, not icons; ⓘ, not paragraphs (pass 1)
 
 Founder: "no icons. make info chips instead of helper text. actually, apply

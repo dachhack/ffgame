@@ -1,4 +1,4 @@
-// The commissioner's kit, as its own tab — ⚑ COMMISH.
+// The commissioner's kit, as its own tab — COMMISH.
 //
 // This used to live inside MY TEAM, which buried league management under a
 // screen about one roster and made a seatless commissioner "open their team"
@@ -49,10 +49,10 @@ const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB']
 const AFC_TEAMS = 'BUF, MIA, NE, NYJ, BAL, CIN, CLE, PIT, HOU, IND, JAX, TEN, DEN, KC, LV, LAC';
 const NFC_TEAMS = 'DAL, NYG, PHI, WAS, CHI, DET, GB, MIN, ATL, CAR, NO, TB, ARI, LA, SEA, SF';
 const SPOT_PRESETS: { chip: string; pos: string[]; label: string; bb?: boolean; fMin?: string; fMax?: string; fTeams?: string }[] = [
-  { chip: '🎯 ROOKIE SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'Rookie Superflex', bb: true, fMax: '0' },
-  { chip: '🎯 ROOKIE FLEX', pos: ['RB', 'WR', 'TE'], label: 'Rookie Flex', bb: true, fMax: '0' },
-  { chip: '🎯 BB KICKER', pos: ['K'], label: 'Best-ball K', bb: true },
-  { chip: '🎯 BB D/ST', pos: ['DEF'], label: 'Best-ball D/ST', bb: true },
+  { chip: 'ROOKIE SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'Rookie Superflex', bb: true, fMax: '0' },
+  { chip: 'ROOKIE FLEX', pos: ['RB', 'WR', 'TE'], label: 'Rookie Flex', bb: true, fMax: '0' },
+  { chip: 'BB KICKER', pos: ['K'], label: 'Best-ball K', bb: true },
+  { chip: 'BB D/ST', pos: ['DEF'], label: 'Best-ball D/ST', bb: true },
   { chip: 'NFC SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'NFC Superflex', fTeams: NFC_TEAMS },
   { chip: 'AFC SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'AFC Superflex', fTeams: AFC_TEAMS },
   { chip: 'VET 8+ SFLX', pos: ['QB', 'RB', 'WR', 'TE'], label: 'Vet 8+ Superflex', fMin: '8' },
@@ -72,7 +72,7 @@ import { CommishToolsCard } from '../ui/CommishKit';
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
 // hides what a Sleeper-backed league manages on its own platform.
-const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean; dripOnly?: boolean }[] }[] = [
+const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean; dripOnly?: boolean; contractOnly?: boolean }[] }[] = [
   // MODE & SCORING was ONE mega-scroll (mode toggle + roster builder + the
   // ~36-knob catalog stacked); the scoring knobs lived two screens below the
   // fold. Split three ways (v0.259.0) to match the web rail exactly.
@@ -83,16 +83,16 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'mode', label: 'MODE' },
     { id: 'lineup', label: 'ROSTER' },
     { id: 'scoring', label: 'SCORING' },
-    // the old ⚑ SETTINGS overlay, folded into the map (v0.264.0) — each slice
+    // the old SETTINGS overlay, folded into the map (v0.264.0) — each slice
     // is its own destination, mirroring the web console's sections
-    { id: 'waivers', label: '⇄ WAIVERS & TRADES', nativeOnly: true },
-    { id: 'format', label: '🎭 FORMAT', nativeOnly: true },
+    { id: 'waivers', label: 'WAIVERS & TRADES', nativeOnly: true },
+    { id: 'format', label: 'FORMAT', nativeOnly: true },
   ] },
   { title: 'RUN THE SEASON', items: [
     { id: 'seats', label: 'SEATS' },
-    { id: 'players', label: '🧑 PLAYERS', nativeOnly: true },
-    { id: 'playoffs', label: '🏆 PLAYOFFS', nativeOnly: true },
-    { id: 'dynasty', label: '🔁 NEXT SEASON', nativeOnly: true },
+    { id: 'players', label: 'PLAYERS', nativeOnly: true },
+    { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
+    { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
   ] },
   { title: 'ENGAGE', items: [
     { id: 'kit', label: 'KIT' },
@@ -102,15 +102,20 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // They don't need drip coin either"). Coin exists to buy power-ups; a
     // classic league has neither, so both destinations leave its map.
     { id: 'buffs', label: 'POWER-UPS', dripOnly: true },
-    { id: 'board', label: '📣 LEAGUE BOARD', nativeOnly: true },
+    { id: 'board', label: 'LEAGUE BOARD', nativeOnly: true },
   ] },
   // Two wallets, two destinations — deliberately NOT one "money" screen. Drip
   // coin buys power-ups; FAAB buys players. They never trade against each
   // other, and a commissioner topping one up must not wonder which they moved.
   { title: 'MONEY', items: [
     { id: 'coin', label: 'DRIP COIN', dripOnly: true },
-    { id: 'faab', label: '💰 FAAB', nativeOnly: true },
-    { id: 'contracts', label: '📜 SALARY', nativeOnly: true },
+    { id: 'faab', label: 'FAAB', nativeOnly: true },
+    // CONTRACTS, NOT MERELY NATIVE (founder: "there's salary in the commish
+    // menu in a non-contract league"). nativeOnly was the wrong gate: every
+    // native league is native, and only a contract one has a cap to run. The
+    // screen behind it already knew — it opens on "OFF — this league plays
+    // without contracts" — so the menu was offering a room to be told no.
+    { id: 'contracts', label: 'SALARY', nativeOnly: true, contractOnly: true },
   ] },
   // Its own group, at the bottom, with nothing else in it (0188). Deleting a
   // league is the only commissioner action that cannot be undone by another
@@ -121,7 +126,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   ] },
 ];
 
-/** ── 🏷 NAME & CREST (0187) ──────────────────────────────────────────────
+/** ── NAME & CREST (0187) ──────────────────────────────────────────────
  *
  *  The league's own identity, and the only place it can be changed. The crest
  *  had a setter already (set_league_avatar); the NAME had none — whatever
@@ -223,7 +228,7 @@ function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
 export function CommishTools({ leagueId, native, rosterId, initialSection, onBack, onSelfUnassigned }: {
   leagueId: string;
   /** Open on a destination rather than the map — creating a league lands on
-   *  🧩 ROSTER (v0.296.6), because the draft drafts the roster the league is
+   *  ROSTER (v0.296.6), because the draft drafts the roster the league is
    *  SHAPED for and both freeze when it starts. */
   initialSection?: string | null;
   /** Platform (Sleeper) leagues get seat/co-manager/coin management only —
@@ -257,6 +262,10 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   // destinations (v0.297.3). False until the read lands — a menu that pops
   // items IN reads worse than one that briefly offers a room you don't need.
   const [classic, setClassic] = useState(false);
+  // Does this league run a salary cap? Same shape as `classic` above, and
+  // false until the read lands for the same reason: a menu that pops an item
+  // IN reads worse than one that briefly omits a room you may not need.
+  const [contracts, setContracts] = useState(false);
 
   const refresh = async () => {
     if (!native) return; // native_team_state is a native-league RPC
@@ -269,12 +278,13 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   useEffect(() => {
     void refresh();
     leagueGameMode(leagueId).then((g) => { if (g.ok) setClassic(g.mode === 'classic'); }).catch(() => {});
+    leagueContracts(leagueId).then((c) => setContracts(!!c.contracts)).catch(() => {});
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [leagueId]);
 
   const myRoster = native ? (team?.my_roster_id ?? null) : rosterId;
 
-  // The same OS share sheet MY TEAM's ⇪ RECRUIT opens — a commissioner filling
+  // The same OS share sheet MY TEAM's RECRUIT opens — a commissioner filling
   // seats is this button's whole audience, so it lives here too.
   const shareInvite = async () => {
     tap();
@@ -320,17 +330,17 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Display size={17}>⚑ Commissioner</Display>
+            <Display size={17}>Commissioner</Display>
             <Mono size={9} tone="faint" style={{ marginTop: 3 }}>
               {!native
                 ? 'Rosters and rules live on Sleeper — seats, co-managers and coin are managed here.'
                 : myRoster != null ? 'You also manage a team — that stays in MY TEAM.' : 'You run this league without a team in it.'}
             </Mono>
           </View>
-          {/* ⚑ SETTINGS is gone (v0.264.0) — its slices live in the map below
-              as ⇄ WAIVERS & TRADES, 🏆 PLAYOFFS and 📣 LEAGUE BOARD. */}
+          {/* SETTINGS is gone (v0.264.0) — its slices live in the map below
+              as WAIVERS & TRADES, PLAYOFFS and LEAGUE BOARD. */}
           <Pressable onPress={shareInvite} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }}>
-            <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>⇪ RECRUIT</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>RECRUIT</Text>
           </Pressable>
         </View>
         {!!err && <Mono size={10} tone="opp" style={{ marginTop: 6 }}>⚠ {err}</Mono>}
@@ -344,7 +354,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           all fit on screen, so nothing hides behind a swipe (the mistake the
           web's phone strip made). One section renders at a time. */}
       <Card>
-        {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic)) }))
+        {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic) && (!it.contractOnly || contracts)) }))
           .filter((g) => g.items.length > 0).map((g) => (
           <View key={g.title} style={{ marginBottom: 10 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
@@ -355,7 +365,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
                 a ~half width gives two straight columns: the emoji all line
                 up, and a group with an odd count leaves its gap on the right
                 instead of scattering it. Measured at the widest label
-                (⇄ WAIVERS & TRADES, 147dp at this type size) against the
+                (WAIVERS & TRADES, 147dp at this type size) against the
                 narrowest track this grid produces. */}
             {/* TALLER chips (v0.356.4, founder: "We can make these chips
                 taller so they fit the screen") — the map is the whole screen,
@@ -385,7 +395,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           away, so the whole map is always one dismiss from view — the same
           content the web console shows as a lone panel with a back chip,
           presented the way this app presents everything else (Overlay). The
-          three ex-⚑ SETTINGS slices keep their own sheet (CommishSettings
+          three ex-SETTINGS slices keep their own sheet (CommishSettings
           carries their shared loads and save paths). */}
       {section != null && !['waivers', 'playoffs', 'board'].includes(section) && (
         <Overlay visible
@@ -444,9 +454,9 @@ const coinFmt = (v?: number) => {
 /** League-wide drip coin: the weekly allowance (set once, grant per week) and
  *  the bulk levers — the same signed grant commish_seed_coin makes, applied to
  *  every seat at once, plus a zero-everything reset. Balances live on the seat
- *  rows above (💰 chips); this card is everything that moves them together.
+ *  rows above (chips); this card is everything that moves them together.
  *
- *  Moved here from the ⚑ SETTINGS sheet: an allowance is something you REVISIT
+ *  Moved here from the SETTINGS sheet: an allowance is something you REVISIT
  *  (set it, grant a week, check balances, grant again), and burying it two taps
  *  deep under league rules made it read as configuration instead of a tool. */
 function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () => void }) {
@@ -497,7 +507,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>💰 DRIP COIN — THE WHOLE LEAGUE AT ONCE</Mono>
+      <Mono size={9} tone="faint" track={0.12}>DRIP COIN — THE WHOLE LEAGUE AT ONCE</Mono>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
 
       {/* the standing allowance: set it once, grant it per week (idempotent) */}
@@ -516,7 +526,7 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
         <Mono size={9} tone="faint">GRANT WEEK</Mono>
         <TextInput value={grantWeekDraft} keyboardType="number-pad" placeholder="wk#"
           placeholderTextColor={t.faint} onChangeText={(v) => setGrantWeekDraft(v.replace(/\D/g, ''))} style={inp(56)} />
-        <Chip label="💰 ALL TEAMS" disabled={busy || !grantWeekDraft || !weeklyInit}
+        <Chip label="ALL TEAMS" disabled={busy || !grantWeekDraft || !weeklyInit}
           onPress={() => {
             const wk = parseInt(grantWeekDraft || '0', 10);
             if (!wk) return;
@@ -529,14 +539,14 @@ function CommishCoin({ leagueId, onChanged }: { leagueId: string; onChanged: () 
       </Mono>
 
       {/* one-off bulk move: every seat, same signed amount — commish_seed_coin
-          generalized. NOT idempotent, exactly like the per-seat 💰 lever. */}
+          generalized. NOT idempotent, exactly like the per-seat lever. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, flexWrap: 'wrap' }}>
         <Mono size={9} tone="faint">ONE-OFF</Mono>
         <Chip label="＋" on={bulkSign === 1} onPress={() => { tap(); setBulkSign(1); }} />
         <Chip label="−" on={bulkSign === -1} onPress={() => { tap(); setBulkSign(-1); }} />
         <TextInput value={bulkDraft} keyboardType="number-pad" placeholder="amount"
           placeholderTextColor={t.faint} onChangeText={(v) => setBulkDraft(v.replace(/\D/g, ''))} style={inp(80)} />
-        <Chip label={bulkSign === 1 ? '💰 GRANT ALL' : '− DOCK ALL'} disabled={busy || !bulkDraft}
+        <Chip label={bulkSign === 1 ? 'GRANT ALL' : '− DOCK ALL'} disabled={busy || !bulkDraft}
           onPress={() => {
             const amt = (parseInt(bulkDraft || '0', 10) || 0) * bulkSign;
             if (!amt) return;
@@ -599,7 +609,7 @@ function GrantSheet({ visible, title, subtitle, unit, busy, grantLabel, dockLabe
 
 /** DRIP COIN BY TEAM (v0.220.0) — the web's v0.213.2 table, ported.
  *
- *  Per-seat balances already existed in the app, but only as a 💰 chip on each
+ *  Per-seat balances already existed in the app, but only as a chip on each
  *  SEATS row: to compare two teams you scrolled a seat list reading one number
  *  at a time, and the two coin questions a commissioner actually has ("who has
  *  what", "give that team some") lived on a screen about who has JOINED. One
@@ -664,7 +674,7 @@ function CoinByTeam({ leagueId }: { leagueId: string }) {
               ))}
             </View>
             <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-              Tap a team to grant or dock. Adjustments are additive and immediate, and land on the coin ledger like any other move. DRIP COIN buys power-ups and live buffs — it is NOT the FAAB waiver budget, which has its own wallet under 💰 FAAB.
+              Tap a team to grant or dock. Adjustments are additive and immediate, and land on the coin ledger like any other move. DRIP COIN buys power-ups and live buffs — it is NOT the FAAB waiver budget, which has its own wallet under FAAB.
             </Mono>
           </>
         )}
@@ -724,9 +734,9 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   const drafted = st.draft_status === 'complete';
   // the Super Bowl gate (0185): the rollover appears when the season is over
   const canRoll = !!st.season_over || !!st.admin;
-  const contName = st.continuity === 'contract_dynasty' ? '📜🏰 CONTRACT DYNASTY'
-    : st.continuity === 'contract' ? '📜 CONTRACT'
-    : st.continuity === 'dynasty' ? '🏰 DYNASTY' : st.continuity === 'keeper' ? '★ KEEPER' : 'REDRAFT';
+  const contName = st.continuity === 'contract_dynasty' ? 'CONTRACT DYNASTY'
+    : st.continuity === 'contract' ? 'CONTRACT'
+    : st.continuity === 'dynasty' ? 'DYNASTY' : st.continuity === 'keeper' ? 'KEEPER' : 'REDRAFT';
   const nameOf = (s: string) => names[s] ?? s;
   const futurePicks = futureSeason == null ? [] : picks.filter((p) => p.season >= futureSeason);
 
@@ -760,7 +770,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Mono size={9} tone="faint" track={0.12}>🔁 NEXT SEASON</Mono>
+        <Mono size={9} tone="faint" track={0.12}>NEXT SEASON</Mono>
         <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: st.continuity === 'redraft' ? t.bd : t.you, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.5, color: st.continuity === 'redraft' ? t.dim : t.you }}>{contName}{st.continuity !== 'redraft' ? ' LEAGUE' : ''}</Text>
         </View>
@@ -787,7 +797,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
                 ? <Mono size={9} tone="faint">rosters arrive at the draft</Mono>
                 : tm.keep.map((k) => (
                   <View key={k.slug} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>{k.declared ? '' : ''}{nameOf(k.slug)}</Text>
                   </View>
                 ))}
             </View>
@@ -813,7 +823,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
                   : owned.map((p) => (
                     <View key={`${p.season}:${p.round}:${p.orig}`} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
                       <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dim }}>
-                        ’{p.season.slice(2)} R{p.round}{p.orig !== p.owner ? ` ⇄ ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
+                        ’{p.season.slice(2)} R{p.round}{p.orig !== p.owner ? ` ${st.teams.find((x) => x.roster_id === p.orig)?.team ?? `Team ${p.orig}`}` : ''}
                       </Text>
                     </View>
                   ))}
@@ -852,7 +862,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
             </Mono>
           )}
           <View style={{ marginTop: 10 }}>
-            <PrimaryButton label={busy ? '…' : `🔁 ROLL INTO ${st.next_season ?? '—'} · ${modeName}`} onPress={roll} disabled={busy} />
+            <PrimaryButton label={busy ? '…' : `ROLL INTO ${st.next_season ?? '—'} · ${modeName}`} onPress={roll} disabled={busy} />
           </View>
           <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
             Creates the {st.next_season} league: same settings and seats, keepers on the rosters, a fresh {st.keeper_count > 0 ? `${st.roster_size - st.keeper_count}-round` : 'full'} draft waiting, schedule generated. Coin wallets start fresh — the weekly budget funds the new season.
@@ -900,7 +910,7 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
 
   return (
     <Card>
-      <LabelInfo label="💰 FAAB WALLETS"
+      <LabelInfo label="FAAB WALLETS"
         info={'Grants are additive — a claw-back is a negative, and a balance never drops below $0 (the claim resolver assumes a bid can always be paid).\n\nChanging the waiver mode or the season budget resets every balance to the default.\n\nFAAB buys players; it is NOT drip coin, which buys power-ups. The two never trade against each other.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!w ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
@@ -920,7 +930,7 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
               <View style={{ marginTop: 8 }}>
                 <Notice tone="warn">
                   <Mono size={9} tone="warn" style={{ lineHeight: fs(13) }}>
-                    This league runs {mode === 'standings' ? 'standings-order' : 'rolling-priority'} waivers, so grants are refused. Switch waivers to FAAB in ⚑ SETTINGS first — and note that the switch itself resets every balance to the season budget, which is exactly why a grant made now would evaporate.
+                    This league runs {mode === 'standings' ? 'standings-order' : 'rolling-priority'} waivers, so grants are refused. Switch waivers to FAAB in SETTINGS first — and note that the switch itself resets every balance to the season budget, which is exactly why a grant made now would evaporate.
                   </Mono>
                 </Notice>
               </View>
@@ -928,7 +938,7 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
             {live && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 <Mono size={9} tone="faint">EVERY TEAM</Mono>
-                <Chip label="💰 GRANT ALL" disabled={busy || teams.length === 0}
+                <Chip label="GRANT ALL" disabled={busy || teams.length === 0}
                   onPress={() => { tap(); setTarget({ roster_id: null, team: null, faab: 0 }); }} />
               </View>
             )}
@@ -962,7 +972,7 @@ function FaabWalletsCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-/** ── 📜 CONTRACTS & CAP (0217) ───────────────────────────────────────────────
+/** ── CONTRACTS & CAP (0217) ───────────────────────────────────────────────
  *  The commissioner's switch for contract leagues: cap on at $N (auction bids
  *  become salaries, waiver wins sign at their FAAB bid, FA adds at the $1
  *  minimum), max contract length, and the live payroll sheet. Cap off = the
@@ -1028,7 +1038,7 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
   const deals = st?.deals ?? [];
   return (
     <Card>
-      <LabelInfo label="📜 CONTRACTS & SALARY CAP"
+      <LabelInfo label="CONTRACTS & SALARY CAP"
         info={'With the cap on, every acquisition signs a contract:\n\n· an auction win signs at its exact winning bid\n· a waiver win signs at its FAAB bid\n· a free-agent add signs at the $1 minimum\n· startup picks sign at the rookie scale ($12/$6/$3/$1 by round; rookie drafts deal scale contracts at the ROOKIE DEALS term below — default 4yr)\n\nManagers pick each deal\'s length while the draft room is open; after that only you can change one. A move that would land a team over the cap is refused whole.\n\nMulti-year deals carry into next season at a year less; expiring deals walk unless tagged, extended, or matched in RFA.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!st ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono> : (
@@ -1047,7 +1057,7 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
             ))}
           </View>
           <View style={{ marginTop: 10, gap: 8 }}>
-            <PrimaryButton label={busy ? '…' : on ? '✓ UPDATE CAP & LENGTH' : '📜 TURN CONTRACTS ON'}
+            <PrimaryButton label={busy ? '…' : on ? '✓ UPDATE CAP & LENGTH' : 'TURN CONTRACTS ON'}
               disabled={busy || !Number.isFinite(capNum) || capNum < 1}
               onPress={() => void save(capNum)} />
             {on && <LinkButton label="✕ TURN CONTRACTS OFF" onPress={() => void save(null)} />}
@@ -1056,7 +1066,7 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
           {on && (
             <View style={{ marginTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
               <LabelInfo label="SALARY RULES"
-                info={'DEAD MONEY % — cut a multi-year deal and this share of it stays on your books for the deal\'s remaining life. 0 turns the penalty off.\n\nTAG RAISE % — the franchise tag (one per team, offseason) re-signs an expiring deal for one year at whichever is higher: the top-5 positional market average, or last salary plus this raise.\n\nEXT. DISCOUNT % — offseason extensions re-sign expiring deals for 1–3 years at this share of the league\'s own market value.\n\n⇄ RETENTION — a trader may keep eating part of a traded salary ($1 up to salary−1); the ghost stays on their cap for the deal\'s life.\n\n💵 CAP TRADING — raw cap dollars move in trades like a pick. Many leagues ban this; it defaults off.\n\n🏥 IR RELIEF — an IR\'d player\'s salary comes off the books until he\'s activated.\n\n🪧 RFA — owners may tender expiring players to the market: rivals bid salary and years, and the owner matches or lets him walk with the re-priced deal.'} />
+                info={'DEAD MONEY % — cut a multi-year deal and this share of it stays on your books for the deal\'s remaining life. 0 turns the penalty off.\n\nTAG RAISE % — the franchise tag (one per team, offseason) re-signs an expiring deal for one year at whichever is higher: the top-5 positional market average, or last salary plus this raise.\n\nEXT. DISCOUNT % — offseason extensions re-sign expiring deals for 1–3 years at this share of the league\'s own market value.\n\nRETENTION — a trader may keep eating part of a traded salary ($1 up to salary−1); the ghost stays on their cap for the deal\'s life.\n\nCAP TRADING — raw cap dollars move in trades like a pick. Many leagues ban this; it defaults off.\n\nIR RELIEF — an IR\'d player\'s salary comes off the books until he\'s activated.\n\nRFA — owners may tender expiring players to the market: rivals bid salary and years, and the owner matches or lets him walk with the re-priced deal.'} />
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
                 {([['DEAD MONEY %', deadDraft, setDeadDraft, 'cut a multi-year deal, eat this % of it'],
                    ['TAG RAISE %', tagDraft, setTagDraft, 'franchise tag floor over last salary'],
@@ -1087,10 +1097,10 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
                 ))}
               </View>
               <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                <Chip label="⇄ RETENTION" on={retention} onPress={() => { tap(); setRetention((v) => !v); }} />
-                <Chip label="💵 CAP TRADING" on={capTrading} onPress={() => { tap(); setCapTrading((v) => !v); }} />
-                <Chip label="🏥 IR RELIEF" on={irRelief} onPress={() => { tap(); setIrRelief((v) => !v); }} />
-                <Chip label="🪧 RFA" on={rfa} onPress={() => { tap(); setRfa((v) => !v); }} />
+                <Chip label="RETENTION" on={retention} onPress={() => { tap(); setRetention((v) => !v); }} />
+                <Chip label="CAP TRADING" on={capTrading} onPress={() => { tap(); setCapTrading((v) => !v); }} />
+                <Chip label="IR RELIEF" on={irRelief} onPress={() => { tap(); setIrRelief((v) => !v); }} />
+                <Chip label="RFA" on={rfa} onPress={() => { tap(); setRfa((v) => !v); }} />
               </View>
               <View style={{ marginTop: 8 }}>
                 <PrimaryButton label={busy ? '…' : '✓ SAVE SALARY RULES'} disabled={busy} onPress={() => void saveRules()} />
@@ -1122,12 +1132,12 @@ function ContractRulesCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-/** ── 🎭 FORMAT (0221/0222) ───────────────────────────────────────────────────
- *  How the season is WON: head-to-head, 🔪 guillotine (weekly elimination +
- *  frenzy — pre-draft only, the server enforces it), or 🧛 vampire (a seat
+/** ── FORMAT (0221/0222) ───────────────────────────────────────────────────
+ *  How the season is WON: head-to-head, guillotine (weekly elimination +
+ *  frenzy — pre-draft only, the server enforces it), or vampire (a seat
  *  that steals on wins). The vampire's controls live here too: appoint the
  *  seat and flip steal review (the founder's "commish can option to approve
- *  risky moves"). Pending steal rulings surface on the 🧛 card in Standings. */
+ *  risky moves"). Pending steal rulings surface on the card in Standings. */
 function FormatCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [fmt, setFmt] = useState<LeagueFormat | null>(null);
@@ -1159,21 +1169,21 @@ function FormatCard({ leagueId }: { leagueId: string }) {
   if (fmt == null) return <Card><Mono size={10} tone="faint">Loading…</Mono></Card>;
   return (
     <Card>
-      <LabelInfo label="🎭 LEAGUE FORMAT"
-        info={'How the season is WON.\n\nHEAD-TO-HEAD — the standard game: weekly matchups, standings, playoffs.\n\n🔪 GUILLOTINE — each week the lowest-scoring surviving team is eliminated and its whole roster is released to a FAAB frenzy; the last team standing wins. Pick it BEFORE the draft (it changes how the season scores); it presets FAAB waivers with a $1000 budget. Bring extra teams — one falls per week.\n\n🧛 VAMPIRE — one seat lives off wins alone: no waivers or free agents, but when it wins a matchup it steals a player from the loser\'s active roster, giving one of its own back.'} />
+      <LabelInfo label="LEAGUE FORMAT"
+        info={'How the season is WON.\n\nHEAD-TO-HEAD — the standard game: weekly matchups, standings, playoffs.\n\nGUILLOTINE — each week the lowest-scoring surviving team is eliminated and its whole roster is released to a FAAB frenzy; the last team standing wins. Pick it BEFORE the draft (it changes how the season scores); it presets FAAB waivers with a $1000 budget. Bring extra teams — one falls per week.\n\nVAMPIRE — one seat lives off wins alone: no waivers or free agents, but when it wins a matchup it steals a player from the loser\'s active roster, giving one of its own back.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <Chip label="HEAD-TO-HEAD" on={fmt === 'standard'} disabled={busy}
           onPress={() => void act(() => setLeagueFormat(leagueId, 'standard'), '✓ head-to-head')} />
-        <Chip label="🔪 GUILLOTINE" on={fmt === 'guillotine'} disabled={busy}
+        <Chip label="GUILLOTINE" on={fmt === 'guillotine'} disabled={busy}
           onPress={() => void act(() => setLeagueFormat(leagueId, 'guillotine'), '✓ guillotine — $1000 FAAB market preset')} />
-        <Chip label="🧛 VAMPIRE" on={fmt === 'vampire'} disabled={busy}
+        <Chip label="VAMPIRE" on={fmt === 'vampire'} disabled={busy}
           onPress={() => void act(() => setLeagueFormat(leagueId, 'vampire'), '✓ vampire — now appoint the seat below')} />
       </View>
       {fmt === 'vampire' && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
           <LabelInfo label="THE VAMPIRE'S SEAT"
-            info={'Pick which team is the Vampire. That seat can\'t sign free agents or claim waivers — its whole game is winning matchups and stealing.\n\nSTEAL APPROVAL is your hand on it: with approval on, each declared steal parks as PENDING and you approve or veto it from the 🧛 card in the Standings sheet. Either ruling prints in the league register.'} />
+            info={'Pick which team is the Vampire. That seat can\'t sign free agents or claim waivers — its whole game is winning matchups and stealing.\n\nSTEAL APPROVAL is your hand on it: with approval on, each declared steal parks as PENDING and you approve or veto it from the card in the Standings sheet. Either ruling prints in the league register.'} />
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
             {seats.map((m) => (
               <Chip key={m.roster_id} label={m.team ?? `Team ${m.roster_id}`} on={vamp?.seat === m.roster_id} disabled={busy}
@@ -1298,7 +1308,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
 
   return (
     <Card>
-      <Mono size={9} tone="faint" track={0.12}>⚑ TEAMS — ASSIGN, UNASSIGN, KICK</Mono>
+      <Mono size={9} tone="faint" track={0.12}>TEAMS — ASSIGN, UNASSIGN, KICK</Mono>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {seats === null ? <ActivityIndicator color={t.you} style={{ marginTop: 8 }} /> : seats.map((m) => {
         const openSeat = !m.enrolled && !m.claim_email;
@@ -1325,10 +1335,10 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
                     human takes it back. The standard AWOL-manager fix. */}
                 <Chip label={m.controller === 'ai' ? '🤖' : '👤'} on={m.controller === 'ai'}
                   onPress={() => { tap(); void act(() => setTeamController(leagueId, m.roster_id, m.controller === 'ai' ? 'human' : 'ai'),
-                    () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'human' : '🤖 AI'} control`)); }} />
+                    () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'human' : 'AI'} control`)); }} />
                 {/* the balance IS the button label — you see what you're about
                     to move, and it re-reads with the seats after every act() */}
-                <Chip label={`💰 ${coinFmt(m.coin)}`} onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); setCoinSign(1); }} />
+                <Chip label={`${coinFmt(m.coin)}`} onPress={() => { tap(); setCoinFor(m); setCoinDraft(''); setCoinSign(1); }} />
                 <Chip label={self ? '✕ LEAVE' : '✕'} onPress={() => { tap(); doKick(m); }} />
               </>
             )}
@@ -1355,7 +1365,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
             </View>
             {seatMgrs.map((g) => (
               <View key={g.app_user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, paddingLeft: 12 }}>
-                <Mono size={8.5} tone="dim" style={{ flex: 1 }}>⇄ {g.email ?? g.app_user_id.slice(0, 8)}</Mono>
+                <Mono size={8.5} tone="dim" style={{ flex: 1 }}>{g.email ?? g.app_user_id.slice(0, 8)}</Mono>
                 <LinkButton label="remove" tone="opp" onPress={() => void act(
                   () => commishSetManager(leagueId, m.roster_id, { appUserId: g.app_user_id, remove: true }),
                   () => setNote('✓ co-manager removed'))} />
@@ -1424,7 +1434,7 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
             style={{ width: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: fs(14), color: t.text, backgroundColor: t.bg }} />
         </View>
         <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : coinSign === 1 ? '💰 GRANT' : '− DOCK'} disabled={busy || !coinDraft}
+          <PrimaryButton label={busy ? '…' : coinSign === 1 ? 'GRANT' : '− DOCK'} disabled={busy || !coinDraft}
             onPress={() => {
               const m = coinFor; const amt = parseInt(coinDraft || '0', 10) * coinSign;
               if (!m || !amt) return;
@@ -1572,7 +1582,7 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // counters…). Off refuses new arms server-side before any coin moves; buffs
 // armed before the flip stay reclaimable. The shop's pre-game power-ups are a
 // different lever and are untouched.
-// Normie mode (0157): DRIP ⇄ CLASSIC + the PPR knob while classic. The server
+// Normie mode (0157): DRIP CLASSIC + the PPR knob while classic. The server
 // freezes the mode once the draft starts; its refusal shows inline. CLASSIC
 // only offers itself where the founder's per-league flag (0158) is on.
 // A builder spot's local draft row: pos/bb plus the PER-SLOT player filter
@@ -1660,7 +1670,7 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
  *  LeagueSettings `view` prop: the state (mode gates everything; the builder
  *  and the scoring drafts load together) stays shared, and `view` only decides
  *  which block renders. */
-// ── Continuity (0185): REDRAFT / KEEPER / DYNASTY, in 🎮 MODE ────────────────
+// ── Continuity (0185): REDRAFT / KEEPER / DYNASTY, in MODE ────────────────
 // Mirror of the web ContinuityEditor. One selection; the number it needs
 // appears beside it; dynasty deals three seasons of tradeable picks on save.
 function ContinuityRow({ leagueId }: { leagueId: string }) {
@@ -1705,13 +1715,13 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
   return (
     <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
       <LabelInfo label="NEXT SEASON · CONTINUITY"
-        info={'What carries into next season:\n\nREDRAFT — every season starts fresh. Full draft, nothing carries over.\n\n★ KEEPER — each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen; undeclared seats keep their best-ranked.\n\n🏰 DYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year. Every team\'s picks for the NEXT THREE SEASONS are dealt as tradeable assets — see them in 🔁 NEXT SEASON.\n\n📜 CONTRACT — a salary-cap league: auction bids become salaries and the cap turns on at the auction budget. Tune it under MONEY → 📜 SALARY.\n\n📜🏰 CONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign 3-year scale deals, plus the rookie rounds and the pick horizon.\n\nSwitching to a plain type turns contracts off — the selector owns contract-ness.'} />
+        info={'What carries into next season:\n\nREDRAFT — every season starts fresh. Full draft, nothing carries over.\n\nKEEPER — each team carries that many players into next season and redrafts the rest. Managers declare keepers on their TEAM screen; undeclared seats keep their best-ranked.\n\nDYNASTY — teams keep everyone except the rookie-draft spots and draft rookies each year. Every team\'s picks for the NEXT THREE SEASONS are dealt as tradeable assets — see them in NEXT SEASON.\n\nCONTRACT — a salary-cap league: auction bids become salaries and the cap turns on at the auction budget. Tune it under MONEY → SALARY.\n\nCONTRACT DYNASTY — contracts AND dynasty: bids become salaries, rookies sign 3-year scale deals, plus the rookie rounds and the pick horizon.\n\nSwitching to a plain type turns contracts off — the selector owns contract-ness.'} />
       <View style={{ flexDirection: 'row', gap: 5, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
         <Chip on={cmode === 'redraft'} label="REDRAFT" disabled={busy || rolled} onPress={() => pick('redraft')} />
-        <Chip on={cmode === 'keeper'} label="★ KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
-        <Chip on={cmode === 'dynasty'} label="🏰 DYNASTY" disabled={busy || rolled} onPress={() => pick('dynasty')} />
-        <Chip on={cmode === 'contract'} label="📜 CONTRACT" disabled={busy || rolled} onPress={() => pick('contract')} />
-        <Chip on={cmode === 'contract_dynasty'} label="📜🏰 CONTRACT DYNASTY" disabled={busy || rolled} onPress={() => pick('contract_dynasty')} />
+        <Chip on={cmode === 'keeper'} label="KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
+        <Chip on={cmode === 'dynasty'} label="DYNASTY" disabled={busy || rolled} onPress={() => pick('dynasty')} />
+        <Chip on={cmode === 'contract'} label="CONTRACT" disabled={busy || rolled} onPress={() => pick('contract')} />
+        <Chip on={cmode === 'contract_dynasty'} label="CONTRACT DYNASTY" disabled={busy || rolled} onPress={() => pick('contract_dynasty')} />
         {needsN && (
           <TextInput value={n} onChangeText={(v) => setN(v.replace(/\D/g, ''))} keyboardType="number-pad"
             editable={!busy && !rolled}
@@ -1761,6 +1771,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
   const [spots, setSpots] = useState<SpotDraft[] | null>(null);
   const [spotsDirty, setSpotsDirty] = useState(false);
+  const [presetPick, setPresetPick] = useState(false);
   // The review-before-save sheet (v0.351.0, founder: "a confirmation that
   // details all the roster decisions and rules and asks for confirmation or
   // go back") — SAVE LINEUP opens it; only ✓ CONFIRM actually writes.
@@ -2013,7 +2024,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       {view === 'mode' && (<>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <LabelInfo label="🎮 GAME MODE"
+          <LabelInfo label="GAME MODE"
             info={'DRIP is the full game: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.\n\nCLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups.\n\nThe mode locks once the draft starts: it decides what the league drafts FOR, so it can\'t be a decide-later.'} />
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -2074,15 +2085,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       )}
       {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into
           next season. Lives here per the founder ("put it in mode and
-          season"); 🔁 NEXT SEASON shows the consequences. */}
+          season"); NEXT SEASON shows the consequences. */}
       <ContinuityRow leagueId={leagueId} />
-      {/* The RECEPTIONS pills moved into the scoring presets (web parity) —
-          receptions are a scoring decision. */}
-      {mode === 'classic' && (
-        <Mono size={8} tone="faint" style={{ marginTop: 8, lineHeight: fs(12) }}>
-          The lineup lives under 🧩 ROSTER; receptions and every other value under ⚖ SCORING.
-        </Mono>
-      )}
       </>)}
       {view === 'lineup' && mode !== 'classic' && mode !== null && (
         <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
@@ -2102,7 +2106,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
               starting spot — its own eligible positions + best-ball flag. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Mono size={8.5} tone="faint" weight="700">🧩 ROSTER BUILDER · {spots.length} STARTING SPOTS</Mono>
+            <Mono size={8.5} tone="faint" weight="700">ROSTER BUILDER · {spots.length} STARTING SPOTS</Mono>
             {spotsDirty && <Pill on label="SAVE LINEUP" onPress={() => setReviewOpen(true)} />}
           </View>
           <View style={{ gap: 5, marginTop: 6 }}>
@@ -2163,25 +2167,52 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <Pill on={false} label="＋ ADD SPOT" onPress={() => { if (spots.length < 20) { setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [], zero: '' }]); setSpotsDirty(true); } }} />
-            <Mono size={7.5} tone="faint">⠿ drag to reorder · 🎯 best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
+            <Mono size={7.5} tone="faint">⠿ drag to reorder · best-ball fills itself · ✏️ name the spot + limit who fills it</Mono>
           </View>
           {/* PRE-BAKED SPOTS (v0.351.0): one tap, fully configured. */}
           <View style={{ marginTop: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Mono size={8} tone="faint" weight="700" track={0.1}>PRESET SPOTS</Mono>
               <InfoChip title="Preset spots">
-                {'One tap adds a fully-configured spot:\n\n🎯 ROOKIE SFLX / FLEX — best-ball spots only a rookie (0 years experience) may fill.\n\n🎯 BB KICKER / D/ST — best-ball K and D/ST: the spot picks its own best scorer each week.\n\nNFC / AFC SFLX — a superflex only that conference\'s players may fill.\n\nVET 8+ — spots reserved for players with 8+ years of NFL experience.\n\nEvery preset is editable after adding (✏️) — they are ordinary spots, just pre-assembled. Tenure- and conference-limited spots need the pool seeded with experience data (re-seed if tenure shows blank).'}
+                {'One tap adds a fully-configured spot:\n\nROOKIE SFLX / FLEX — best-ball spots only a rookie (0 years experience) may fill.\n\nBB KICKER / D/ST — best-ball K and D/ST: the spot picks its own best scorer each week.\n\nNFC / AFC SFLX — a superflex only that conference\'s players may fill.\n\nVET 8+ — spots reserved for players with 8+ years of NFL experience.\n\nEvery preset is editable after adding (✏️) — they are ordinary spots, just pre-assembled. Tenure- and conference-limited spots need the pool seeded with experience data (re-seed if tenure shows blank).'}
               </InfoChip>
             </View>
-            <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-              {SPOT_PRESETS.map((pr) => (
-                <Pill key={pr.chip} on={false} label={pr.chip} onPress={() => {
-                  if (spots.length >= 20) return;
-                  setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: [...pr.pos], bb: pr.bb, label: pr.label, fTeams: pr.fTeams ?? '', fMin: pr.fMin ?? '', fMax: pr.fMax ?? '', fFlags: [], zero: '' }]);
-                  setSpotsDirty(true);
-                }} />
-              ))}
+            {/* A PICKER, NOT EIGHT CHIPS (founder: "let's make the preset
+                slots a drop down or card so it doesn't take up so much
+                room"). Eight pre-baked spots wrapped to three rows inside an
+                editor that already runs long, and the list only grows. One
+                button opens them over the page, where each one has the room
+                to say what it actually is rather than shouting an
+                abbreviation. */}
+            <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, alignItems: 'center' }}>
+              <Pill on={false} label="ADD A PRESET SPOT" onPress={() => { tap(); setPresetPick(true); }} />
+              <Mono size={8.5} tone="faint">{SPOT_PRESETS.length} available</Mono>
             </View>
+            <Overlay visible={presetPick} title="Preset spots" onClose={() => setPresetPick(false)}>
+              <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 8 }}>
+                {SPOT_PRESETS.map((pr) => (
+                  <Pressable key={`ps-${pr.chip}`} disabled={spots.length >= 20}
+                    onPress={() => {
+                      if (spots.length >= 20) return;
+                      tap(); setPresetPick(false);
+                      setSpots((cur) => [...cur!, { k: spotKeySeq++, pos: [...pr.pos], bb: pr.bb, label: pr.label, fTeams: pr.fTeams ?? '', fMin: pr.fMin ?? '', fMax: pr.fMax ?? '', fFlags: [], zero: '' }]);
+                      setSpotsDirty(true);
+                    }}
+                    style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12, opacity: spots.length >= 20 ? 0.45 : 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{pr.label}</Text>
+                    <Mono size={9.5} tone="faint" style={{ marginTop: 3 }}>
+                      {pr.pos.join(' / ')}{pr.bb ? ' · best ball' : ''}
+                      {pr.fMax === '0' ? ' · rookies only' : ''}
+                      {pr.fMin ? ` · ${pr.fMin}+ years` : ''}
+                      {pr.fTeams ? ' · conference-limited' : ''}
+                    </Mono>
+                  </Pressable>
+                ))}
+                {spots.length >= 20 && (
+                  <Mono size={9.5} tone="warn" style={{ lineHeight: 14 }}>20 spots is the ceiling — remove one to add a preset.</Mono>
+                )}
+              </ScrollView>
+            </Overlay>
           </View>
 
           {/* ── REVIEW & CONFIRM (v0.351.0) ─────────────────────────────────
@@ -2196,14 +2227,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               <Mono size={9} tone="faint" weight="700" track={0.12}>STARTING SPOTS ({spots.length})</Mono>
               {spots.map((sp, i) => {
                 const rules: string[] = [];
-                if (sp.bb) rules.push('🎯 best-ball — fills itself');
+                if (sp.bb) rules.push('best-ball — fills itself');
                 if (sp.fMax === '0') rules.push('rookies only');
                 else {
                   if (sp.fMin) rules.push(`${sp.fMin}+ yrs experience`);
                   if (sp.fMax && sp.fMax !== '0') rules.push(`≤${sp.fMax} yrs experience`);
                 }
                 if (sp.fTeams.trim()) rules.push(`teams: ${sp.fTeams.trim()}`);
-                if (sp.fFlags.length) rules.push(`⚑ ${sp.fFlags.join(', ')} only`);
+                if (sp.fFlags.length) rules.push(`${sp.fFlags.join(', ')} only`);
                 if (sp.zero.trim()) rules.push(`⛳ zero-fill ${sp.zero.trim()}pts`);
                 return (
                   <View key={sp.k} style={{ paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
@@ -2245,9 +2276,6 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                   onChangeText={(v) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: v.slice(0, 24) })); setSpotsDirty(true); }}
                   placeholder={`e.g. FLEX, Only NFC Players — empty = ${sp.pos.join('/')}`} placeholderTextColor={t.faint}
                   style={{ fontFamily: MONO, fontSize: fs(13), color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, marginTop: 6, backgroundColor: t.bg }} />
-                <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-                  Shows on the draft board and lineups in place of the position list. The position chips and the filters below decide who may actually fill it.
-                </Mono>
 
                 <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>WHO MAY FILL IT (0172)</Mono>
                 <TextInput value={sp.fTeams}
@@ -2275,7 +2303,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     player may stand in. Hidden until the league has flags. */}
                 {flagLabels.length > 0 && (
                   <View style={{ marginTop: 10 }}>
-                    <Mono size={9} tone="faint" weight="700" track={0.12}>⚑ FLAGGED ONLY</Mono>
+                    <Mono size={9} tone="faint" weight="700" track={0.12}>FLAGGED ONLY</Mono>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
                       {flagLabels.map((fl) => {
                         const on = sp.fFlags.some((x) => x.toLowerCase() === fl.toLowerCase());
@@ -2297,21 +2325,15 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     spot: that spot fills itself, so "unfilled" is not a state
                     it has, and the server refuses the pair rather than storing
                     half of what was asked for. */}
-                <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 14 }}>⛳ ZERO-FILL</Mono>
-                {sp.bb ? (
-                  <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-                    Not available on a 🎯 best-ball spot — it fills itself from whoever is left, so it is never unfilled. Turn best ball off first.
-                  </Mono>
-                ) : (
+                <View style={{ marginTop: 14 }}><LabelInfo label="ZERO-FILL"
+                  info={'The points this spot banks when it is empty, or when its player scores nothing. Blank turns it off.\n\nNot available on a best-ball spot — that spot fills itself from whoever is left, so it is never unfilled. Turn best ball off first.'} /></View>
+                {sp.bb ? null : (
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                       <TextInput value={sp.zero}
                         onChangeText={(v) => { const n = v.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: n })); setSpotsDirty(true); }}
                         placeholder="off" keyboardType="number-pad" placeholderTextColor={t.faint}
                         style={{ fontFamily: MONO, fontSize: fs(13), color: sp.zero ? t.warn : t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.zero ? t.warn : t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, width: 70, textAlign: 'center' }} />
-                      <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: fs(12) }}>
-                        points this spot banks if it’s empty, or if its player scores nothing. Blank = off.
-                      </Mono>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                       {['', '5', '10', '15'].map((v) => (
@@ -2356,7 +2378,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               move at ANY time. */}
           {shape.taxi > 0 && taxi && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
-              <Mono size={8.5} tone="faint" weight="700">🚕 TAXI SQUAD · who may ride it, and when it shuts</Mono>
+              <LabelInfo label="TAXI SQUAD"
+                info={'Who may ride the taxi squad, and when it shuts.\n\nA locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time.\n\nUnknown experience cannot prove it qualifies, so a tenure rule excludes it.'} />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 <Mono size={8} tone="dim">TENURE</Mono>
                 {([[null, 'ANYONE'], [0, 'ROOKIES'], [1, '≤ 1 YR'], [2, '≤ 2 YRS'], [3, '≤ 3 YRS']] as const).map(([v, label]) => (
@@ -2369,9 +2392,6 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 <Pill on={!taxi.lock} label="NEVER" onPress={() => void saveTaxi(null, false)} />
                 {taxi.lockedNow && <Mono size={8} weight="700" tone="warn">🔒 LOCKED NOW</Mono>}
               </View>
-              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
-                A locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time. Unknown experience can't prove it qualifies, so a tenure rule excludes it.
-              </Mono>
             </View>
           )}
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────
@@ -2379,19 +2399,17 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               vocabulary is the injury report's own and nothing else. */}
           {shape.ir > 0 && irTags && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
-              <Mono size={8.5} tone="faint" weight="700">🏥 IR ELIGIBILITY · which designations may be stashed</Mono>
+              <LabelInfo label="IR ELIGIBILITY"
+                info={'Which injury designations may be stashed on IR.\n\nA player with none of these — a healthy one included — cannot be put on IR by anyone, YOU included: this is a fact about the player, not a deadline.\n\nSomeone already stashed stays put when you narrow the list.'} />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 {([['IR', 'IR'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
                   <Pill key={tag} on={irTags.includes(tag)} label={label} onPress={() => void saveIrTag(tag)} />
                 ))}
               </View>
-              <Mono size={7.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(11) }}>
-                A player with none of these — a healthy one included — can't be put on IR by anyone, YOU included: this is a fact about the player, not a deadline. Someone already stashed stays put when you narrow the list.
-              </Mono>
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · 🎯 BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
+            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>

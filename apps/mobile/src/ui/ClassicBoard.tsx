@@ -20,7 +20,7 @@ import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
 import {
-  myMatchup, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
+  myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
@@ -29,6 +29,7 @@ import {
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
+import { NoGame } from './NoGame';
 import { Overlay } from './Overlay';
 import { FieldView } from './FieldView';
 import { openPlayerCard } from './PlayerCardSheet';
@@ -368,6 +369,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // the arrows or by a swipe.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
+  // THE WEEK THIS SEAT SITS OUT (v0.364.0) — held apart from `matchup` so the
+  // stepper keeps an anchor to walk from. Before this, `state = 'none'`
+  // returned above the header and stranded whoever stepped onto their bye.
+  const [byeWeek, setByeWeek] = useState<number | null>(null);
   // The live injury report is a module cache React can't see; this redraws.
   const [injuryVer, setInjuryVer] = useState(0);
 
@@ -376,7 +381,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       try {
         setState('loading'); setErr(null);
         const m = await myMatchup(leagueId, rosterId, weekWanted ?? undefined);
-        if (!m) { setState('none'); return; }
+        if (!m) {
+          // No row for this seat is either a BYE or a schedule nobody has
+          // built, and only the league-wide view knows which (0247).
+          const role = weekWanted == null ? 'unbuilt'
+            : await leagueWeekRole(leagueId, rosterId, weekWanted).catch(() => 'unbuilt');
+          if (role === 'bye') { setByeWeek(weekWanted); setState('ready'); return; }
+          setState('none'); return;
+        }
+        setByeWeek(null);
         setMatchup(m);
         nativeRosters(leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
@@ -776,14 +789,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
    *  offer a week the board can't fill — `myMatchup` for a week with no game
    *  returns nothing, and the screen would empty. */
   const canGo = (d: -1 | 1): boolean => {
-    const w = matchup?.week;
+    const w = byeWeek ?? matchup?.week;
     if (w == null) return false;
     const next = w + d;
     if (next < 1) return false;
     if (lastRegWeek != null && next > lastRegWeek) return false;
     return true;
   };
-  const goWeek = (d: -1 | 1) => { if (canGo(d) && matchup) { tap(); setWeekWanted(matchup.week + d); } };
+  const goWeek = (d: -1 | 1) => {
+    const w = byeWeek ?? matchup?.week;
+    if (canGo(d) && w != null) { tap(); setWeekWanted(w + d); }
+  };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
    *  way pages move under a thumb. The responder only claims a gesture that is
@@ -898,6 +914,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
 
   if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
+  if (byeWeek != null) return (
+    <NoGame week={byeWeek} bye>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
+        <Chip label={`‹ WK ${byeWeek - 1}`} disabled={!canGo(-1)} onPress={() => goWeek(-1)} />
+        <Chip label={`WK ${byeWeek + 1} ›`} disabled={!canGo(1)} onPress={() => goWeek(1)} />
+      </View>
+    </NoGame>
+  );
   if (state === 'none') return <View style={{ padding: 24 }}><Mono size={10} tone="faint">No matchup this week.</Mono></View>;
   if (state === 'error') return <View style={{ padding: 24 }}><Mono size={10} tone="warn">{err}</Mono></View>;
 

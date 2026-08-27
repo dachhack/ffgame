@@ -14,6 +14,7 @@ import type { Pos } from '@drip/core/types';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
+import { scheduleWeeksFor } from '@drip/core/data/league';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
@@ -162,6 +163,12 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // FORMAT (0221/0222): how the season is WON. Guillotine presets a $1000
   // FAAB market server-side; vampire gets its seat assigned in COMMISH.
   const [format, setFormat] = useState<LeagueFormat>('standard');
+  // Guillotine brings a crowd — see the app's twin. 17 weeks (0245) makes 18
+  // teams the number that reaches one survivor on the final week.
+  const pickFormat = (f: LeagueFormat) => {
+    setFormat(f);
+    if (f === 'guillotine' && teams < 18) setTeams(18);
+  };
   const [name, setName] = useState('');
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
@@ -318,7 +325,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
       setNote('Generating the season schedule…');
-      const sched = await nativeGenerateSchedule(r.league_id, 14);
+      const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
       if (!sched.ok) { setErr(friendlyError(sched.error ?? 'Could not build the schedule.')); setBusy(false); return; }
       // A COPY THAT ONLY PARTLY LANDED HOLDS THE SCREEN. Navigating away on a
       // partial copy would hide the misses behind a page change and leave the
@@ -474,14 +481,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ height: 14 }} />
             <div className="mono" style={label}>FORMAT</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
-              <Chip on={format === 'standard'} onClick={() => setFormat('standard')}>HEAD-TO-HEAD</Chip>
-              <Chip on={format === 'guillotine'} onClick={() => setFormat('guillotine')}>GUILLOTINE</Chip>
-              <Chip on={format === 'vampire'} onClick={() => setFormat('vampire')}>VAMPIRE</Chip>
+              <Chip on={format === 'standard'} onClick={() => pickFormat('standard')}>HEAD-TO-HEAD</Chip>
+              <Chip on={format === 'guillotine'} onClick={() => pickFormat('guillotine')}>GUILLOTINE</Chip>
+              <Chip on={format === 'vampire'} onClick={() => pickFormat('vampire')}>VAMPIRE</Chip>
             </div>
             {format !== 'standard' && (
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {format === 'guillotine'
-                  ? 'Each week the lowest-scoring team is ELIMINATED and its whole roster hits waivers — a $1000 FAAB frenzy (preset). Last team standing wins. Bring extra teams: one falls per week.'
+                  ? 'Each week the lowest-scoring team is ELIMINATED and its whole roster hits waivers — a $1000 FAAB frenzy (preset). Last team standing wins. It plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, the field that reaches one survivor on the final week; fewer teams simply finish earlier.'
                   : 'One team is the Vampire: no waivers, no free agents — when it wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the vampire seat in COMMISH after creating, where you can also require your approval per steal.'}
               </div>
             )}
@@ -492,7 +499,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           </>
         )}
         <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap' }}>
-          <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 14, 1)}</div></div>
+          <div><div className="mono" style={label}>TEAMS</div><div style={{ marginTop: 7 }}>{num(teams, setTeams, 2, 32, 1)}</div></div>
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>

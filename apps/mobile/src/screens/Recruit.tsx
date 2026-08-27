@@ -20,12 +20,13 @@ import {
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat,
-  nativeGenerateSchedule, myFeatures, isAdmin, type AdminLeague, type BoardListing,
+  nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
+import { scheduleWeeksFor } from '@drip/core/data/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -48,6 +49,10 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
     </View>
   );
 }
+
+/** 0244 raised the server's ceiling from 14 to 32; the stepper has to know
+ *  the same number or the form refuses what the database would accept. */
+const MAX_TEAMS = 32;
 
 /** The board's branches. 'root' is the menu; the rest are one question each. */
 type Node = 'root' | 'browse' | 'create' | 'join' | 'post' | 'commish';
@@ -167,6 +172,17 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     : continuity === 'keeper' ? 'KEEPER ' : '';
   // FORMAT (0221/0222): how the season is WON.
   const [format, setFormat] = useState<LeagueFormat>('standard');
+  // GUILLOTINE BRINGS A CROWD (founder: "Guillotine should default to 18
+  // teams"). One team falls per completed week, so the format wants a field
+  // deep enough to survive the season — and with 0245's 17 weeks, 18 teams is
+  // exactly the number that reaches one survivor on the final week. Only a
+  // DEFAULT: the stepper is right there, and the same rule as the contract
+  // types — picking a format that presets something says so rather than
+  // quietly rearranging the form.
+  const pickFormat = (f: LeagueFormat) => {
+    setFormat(f);
+    if (f === 'guillotine' && teamCount < 18) setTeamCount(18);
+  };
   const [pace, setPace] = useState<'live' | 'slow'>('live');
   const [clockDraft, setClockDraft] = useState('90');
   const [makeNote, setMakeNote] = useState('');
@@ -179,6 +195,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [copyFrom, setCopyFrom] = useState<Enrollment | null>(null);
   const [copyBp, setCopyBp] = useState<LeagueBlueprint | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
+  const [copyPick, setCopyPick] = useState(false);
   // What the post-create setters actually managed. Kept after the league is
   // made so the note can name a step that refused rather than claiming a
   // clean copy — the league exists either way and nothing rolls back.
@@ -393,7 +410,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
       setMakeNote('Generating the season schedule…');
-      const sched = await nativeGenerateSchedule(r.league_id, 14);
+      const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
       if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from COMMISH')); return; }
       commit();
       // The success note names the game too — created is the moment a wrong
@@ -496,18 +513,18 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             onPress={() => { tap(); setNode('browse'); }} />
           {canCreate && (
           <MenuRow title="Start a league"
-              sub="Create it here, invite friends, draft in the app"
+              sub="name · game · season · format · draft"
               onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
           )}
           <MenuRow title="Join with an invite code"
-            sub="A friend sent you a code" onPress={() => { tap(); setNode('join'); }} />
+            sub="invite code · team name" onPress={() => { tap(); setNode('join'); }} />
           {myLeagues.length > 0 && (
           <MenuRow title="Post & recruit"
               sub={`List ${myLeagues.length === 1 ? 'your league' : 'your leagues'} on the board, share the code`}
               onPress={() => { tap(); setNode('post'); }} />
           )}
           <MenuRow title="Redeem a commissioner code"
-            sub="Run a league without holding a seat in it"
+            sub="commissioner code"
             onPress={() => { tap(); setNode('commish'); }} />
         </>
       )}
@@ -609,13 +626,16 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <View>
                   <LabelInfo label="COPY SETTINGS FROM"
                     info={'Start a league shaped like one you already run.\n\nCARRIES: teams, roster size, draft type and clock, auction budget and lots, position limits, drip vs normal, keeper/dynasty, the format, the scoring catalog, waivers and FAAB, trade review, the taxi squad and IR tags.\n\nDOES NOT CARRY: the name, the members, the draft itself, or anything the season has already written.\n\nEverything it fills in is still yours to change before you create.'} />
-                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                    <Chip label="START FRESH" on={!copyFrom} onPress={() => { tap(); void pickCopy(null); }} />
-                    {mine.map((e) => (
-                      <Chip key={`cp-${e.league_id}`} label={e.league?.name ?? 'League'}
-                        on={copyFrom?.league_id === e.league_id}
-                        onPress={() => { tap(); void pickCopy(e); }} />
-                    ))}
+                  {/* A PICKER, NOT A ROW OF EVERY LEAGUE YOU ARE IN (founder:
+                      "the possible leagues to copy from could be a pretty big
+                      list. Let's make that a drop down or a card that pops
+                      up"). One chip showing the current answer; the list opens
+                      over the form. A commissioner with a dozen leagues was
+                      going to push the rest of this step off the screen. */}
+                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, alignItems: 'center' }}>
+                    <Chip label={copyFrom ? (copyFrom.league?.name ?? 'League') : 'START FRESH'}
+                      on={!!copyFrom} onPress={() => { tap(); setCopyPick(true); }} />
+                    <Mono size={8.5} tone="faint">{mine.length} to choose from</Mono>
                   </View>
                   {copyBusy && <Mono size={8.5} tone="faint" style={{ marginTop: 5 }}>reading its settings…</Mono>}
                   {copyBp && !copyBusy && (
@@ -690,11 +710,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {step === 'format' && (
               <View>
                 <LabelInfo label="FORMAT"
-                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins. Bring extra teams — one falls per week.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
+                  info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins.\n\nIt plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, which is exactly the field that reaches one survivor on the final week. Fewer teams simply finish earlier.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); setFormat('standard'); }} />
-                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); setFormat('guillotine'); }} />
-                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); setFormat('vampire'); }} />
+                  <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); pickFormat('standard'); }} />
+                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); pickFormat('guillotine'); }} />
+                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); pickFormat('vampire'); }} />
                 </View>
               </View>
             )}
@@ -709,7 +729,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
                 </Pressable>
                 <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 26, textAlign: 'center' }}>{teamCount}</Text>
-                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(14, n + 1)); }}>
+                <Pressable hitSlop={6} onPress={() => { tap(); setTeamCount((n) => Math.min(MAX_TEAMS, n + 1)); }}>
                   <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                 </Pressable>
                 <View style={{ flex: 1 }} />
@@ -865,6 +885,27 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         </>
       )}
 
+
+      {/* the copy-from list, over the form rather than inside it */}
+      <Overlay visible={copyPick} title="Copy settings from" onClose={() => setCopyPick(false)}>
+        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 8 }}>
+          <Pressable onPress={() => { tap(); setCopyPick(false); void pickCopy(null); }}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: !copyFrom ? t.you : t.bd, borderRadius: 8, padding: 12 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: !copyFrom ? t.you : t.text }}>Start fresh</Text>
+            <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>the form's own defaults</Mono>
+          </Pressable>
+          {mine.map((e) => (
+            <Pressable key={`cs-${e.league_id}`}
+              onPress={() => { tap(); setCopyPick(false); void pickCopy(e); }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: copyFrom?.league_id === e.league_id ? t.you : t.bd, borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: copyFrom?.league_id === e.league_id ? t.you : t.text }}>
+                {e.league?.name ?? 'League'}
+              </Text>
+              <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>{leagueTypeLine(e)}</Mono>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </Overlay>
 
       {/* review → the whole league before a seat is taken (0156) */}
       <Overlay visible={!!previewFor} title={previewFor?.name ?? ''}

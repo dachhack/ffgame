@@ -368,7 +368,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               has already traded for is their property, and the server says so
               rather than deleting it). */}
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <Chip label={pickTrading ? '⛏ PICK TRADING ON' : '⛏ PICK TRADING OFF'} on={pickTrading}
+            <Chip label={pickTrading ? 'PICK TRADING ON' : 'PICK TRADING OFF'} on={pickTrading}
               onPress={() => {
                 tap();
                 void (async () => {
