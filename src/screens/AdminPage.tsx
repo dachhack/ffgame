@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -1477,6 +1477,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <span style={{ flex: 1 }} />
             <DeleteLeague name={l.name} onDelete={async () => { const r = await adminDeleteLeague(l.league_id); if (r.ok) reload(); return r; }} />
           </div>
+          {!!l.test_live_at && <StampWeekControl leagueId={l.league_id} />}
         </div>
       )}
 
@@ -2328,6 +2329,46 @@ function WeekLockControl({ leagueId }: { leagueId: string }) {
       <button onClick={() => go(Number(week), true)} disabled={busy || !week} title="Release the hold on this week and restore its natural lock time."
         className="mono" style={{ ...btn, opacity: busy || !week ? 0.6 : 1 }}>{busy ? '…' : '🔒 lock wk'}</button>
       {note && <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>{note}</span>}
+    </div>
+  );
+}
+
+/** ⚡ STAMP WEEK (0250) — complete the sandbox league's next week on demand,
+ *  so the week-completion mechanics can be REHEARSED: the guillotine's blade
+ *  falls with the stamp, the vampire's steal window arms off a favored win.
+ *  Only rendered while 🧪 LIVE TEST is on — the RPC refuses otherwise, and a
+ *  control that mostly errors is worse than one that appears when usable. */
+function StampWeekControl({ leagueId }: { leagueId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [favor, setFavor] = useState('');
+  const [doom, setDoom] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const seatInput: React.CSSProperties = { width: 44, fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4 };
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    const r = await adminStampWeek(leagueId, null, favor ? Number(favor) : null, doom ? Number(doom) : null).catch(() => null);
+    setBusy(false);
+    if (!r?.ok) { setNote(`⚠ ${r?.error ?? 'failed'}`); return; }
+    const bits = [`week ${r.week} stamped (${r.stamped} games)`];
+    if (r.eliminated != null) bits.push(`🔪 ${r.eliminated} eliminated`);
+    if (r.vampire_won != null) bits.push(r.vampire_won ? '🧛 vampire won — steal armed' : '🧛 vampire lost — no steal');
+    setNote(bits.join(' · '));
+  };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+      <button onClick={go} disabled={busy} className="mono"
+        title="Write plausible finals on the next unstamped week — the guillotine tick / vampire steal window arm off completed weeks. Sandbox leagues only."
+        style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        {busy ? '…' : '⚡ stamp next week'}
+      </button>
+      <label className="mono" style={{ fontSize: 10, color: 'var(--dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        favor seat <input value={favor} onChange={(e) => setFavor(e.target.value.replace(/\D/g, ''))} placeholder="—" style={seatInput} title="This seat WINS its matchup (arm a vampire steal)" />
+      </label>
+      <label className="mono" style={{ fontSize: 10, color: 'var(--dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        doom seat <input value={doom} onChange={(e) => setDoom(e.target.value.replace(/\D/g, ''))} placeholder="—" style={seatInput} title="This seat takes the week's floor (choose the guillotine's victim)" />
+      </label>
+      {note && <span className="mono" style={{ fontSize: 10.5, color: note.startsWith('⚠') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
     </div>
   );
 }

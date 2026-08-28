@@ -1246,6 +1246,14 @@ export const leagueWeeklyBudget = async (leagueId: string): Promise<number | nul
   return b == null ? null : Number(b);
 };
 /** Super-admin: toggle a league's live-test mode (compressed real-time schedule). */
+/** ⚡ Complete a SANDBOX league's week on demand (0250) — writes plausible
+ *  finals so the week-completion mechanics (guillotine blade, vampire steal
+ *  window) arm without waiting for the real NFL calendar. Admin-only AND the
+ *  league must be in 🧪 LIVE TEST; p_favor makes that seat win its matchup,
+ *  p_doom hands it the week's floor. week null = earliest unstamped. */
+export const adminStampWeek = (leagueId: string, week?: number | null, favor?: number | null, doom?: number | null) =>
+  rpc<{ ok: boolean; error?: string; week?: number; stamped?: number; eliminated?: number; vampire_won?: boolean }>(
+    'admin_stamp_week', { p_league_id: leagueId, p_week: week ?? null, p_favor: favor ?? null, p_doom: doom ?? null });
 export const adminSetTestLive = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; test_live_at?: string | null }>('admin_set_test_live', { p_league_id: leagueId, p_on: on });
 /** Super-admin: toggle a league's preseason mode — clones its Week-1 pairings into
