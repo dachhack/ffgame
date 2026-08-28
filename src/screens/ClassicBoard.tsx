@@ -19,7 +19,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
@@ -787,12 +787,32 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
     return out;
   }, [slate, nowTs]);
 
+  // 🧪 REHEARSAL (v0.367.2): under LIVE TEST the worker's sim streams a baked
+  // week into the feed while the REAL slate's kickoffs sit in the future — so
+  // the slate clock kept every player 'pre' ("Yet to play") and hid points
+  // that were already accruing (the founder's "Should the scores be at 0?"
+  // screenshot). In a sandbox the FEED is the truth: a team whose game has
+  // plays flowing is LIVE, done once the matchup is final. A real Sunday never
+  // enters this branch — testLive is the super-admin sandbox flag. normTeam on
+  // both sides: the feed speaks nflverse (LA/WAS/JAX) and the pool may not.
+  const simTeams = useMemo(() => {
+    const s = new Set<string>();
+    if (testLive == null) return s;
+    for (const f of gameFeeds) {
+      if (!f.plays?.length) continue;
+      if (f.home) s.add(normTeam(f.home));
+      if (f.away) s.add(normTeam(f.away));
+    }
+    return s;
+  }, [testLive, gameFeeds]);
+
   const entryFor = useMemo(() => {
     void playsAt; void flagsVer;
     return (slug: string | null | undefined, slotPos?: string[], slot?: string): BoardEntry | null => {
       if (!slug) return null;
       const m = slugMeta(slug);
       const g = gameFor(m.team, slate);
+      const simLive = simTeams.size > 0 && simTeams.has(normTeam(m.team ?? ''));
       return {
         slug,
         name: prettySlug(slug),
@@ -808,7 +828,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         // and a spot-scoped bonus never appeared in the spot it pays. Same
         // three layers the live scorer applies, in the same order.
         proj: projectedPoints({ id: slug, pos: m.pos ?? "", team: m.team }, slot, slotPos),
-        state: g ? entryState(g.kickoff, m.team, nowTs, finalTeams) : 'pre',
+        state: simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+          : g ? entryState(g.kickoff, m.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
@@ -822,7 +843,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer]);
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
