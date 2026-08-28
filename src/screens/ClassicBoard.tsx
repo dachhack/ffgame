@@ -52,8 +52,7 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
   const right = align === 'right';
   const box: React.CSSProperties = {
     background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8,
-    padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
-    flexDirection: right ? 'row-reverse' : 'row',
+    padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
     // A game line with a feed is a DOOR (v0.270.0): it opens that game's live
     // field + play log as a card over the board.
     ...(onOpen ? { cursor: 'pointer' } : {}),
@@ -74,27 +73,31 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
   const status = bye ? 'No game this week'
     : e.statline ?? (e.state === 'done' ? '—' : e.state === 'live' ? 'In progress' : 'Yet to play');
   return (
+    /* SCORE ON THE WHEN LINE, STATLINE ACROSS THE WHOLE CARD (v0.368.3,
+       founder: "how can we rearrange the player boxes to show their full
+       stat lines?"). The old row layout gave the statline only the text
+       column beside the score, so on a phone it ellipsed after two stats —
+       and an INT that got cut is exactly the stat a manager needed. The
+       score shares the top line with the clock now (both are short), and
+       the statline gets the card's full width and WRAPS instead of hiding. */
     <div style={box} onClick={onOpen} title={onOpen ? "open this game's live field + play log" : undefined}>
-      <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
-        <div className="mono" style={{ fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
+        <div className="mono" style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left', fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {when}
           {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
           {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.statline ?? undefined}>
-          {status}
-          {onOpen && <span style={{ color: 'var(--you)', marginLeft: 5 }}>▦ field</span>}
-        </div>
+        {/* NO "proj" LABEL (founder, v0.241.0): the number alone — projection
+            before kickoff, points after, told apart by the quiet colour. 16px
+            since v0.368.1. */}
+        <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
+          {pre ? e.proj.toFixed(1) : e.live.toFixed(2)}
+        </span>
       </div>
-      {/* NO "proj" LABEL (founder, v0.241.0): the number alone. Before kickoff
-          it is the projection and after it is points — carried by the quiet
-          colour and by the status line beneath, not by a word taking up room.
-          16px (v0.368.1, founder: "room to make the points larger?") — the
-          text column beside it is two lines tall, so the number was smaller
-          than its own box; this costs no row height. */}
-      <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
-        {pre ? e.proj.toFixed(1) : e.live.toFixed(2)}
-      </span>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: right ? 'right' : 'left', lineHeight: 1.5, overflowWrap: 'break-word' }}>
+        {status}
+        {onOpen && <span style={{ color: 'var(--you)', marginLeft: 5, whiteSpace: 'nowrap' }}>▦ field</span>}
+      </div>
     </div>
   );
 }
@@ -861,7 +864,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         // founder: rows sat on the kickoff time and bare points while the sim
         // streamed). Both refresh with playsAt — each poll re-renders them.
         clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, m.team) : null,
-        statline: st !== 'pre' && matchup ? boardStatline(mkPlayer(slug), matchup.week, true) : null,
+        // FULL format (v0.368.3): the card gives the statline its whole width
+        // and lets it wrap, so nothing needs abbreviating away any more.
+        statline: st !== 'pre' && matchup ? boardStatline(mkPlayer(slug), matchup.week, false) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
         // know used to read "BYE" on the day he played his opener.

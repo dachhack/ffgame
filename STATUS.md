@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.3 — full statlines on the classic row
+
+Founder: "how can we rearrange the player boxes to show their full stat
+lines?" The web GameCard's statline shared its line with nothing but still
+sat in the text column BESIDE the 16px score, so on a phone it ellipsed
+after two stats. Rearranged: the score rides the when-line (clock + score
+are both short), and the statline gets the card's full width and WRAPS —
+so the web board now renders the FULL fmtStat format (C/ATT, INT, sk, the
+whole rushing line). The compact format — still what the app board and the
+drip live cards use — gains the QB detail it dropped ("18/25-230 pass",
+INT/sk when they happened), and the app's statline wraps to two lines.
+App changes ride the next APK.
+
 ### v0.368.2 — the rehearsal fields YOUR roster (0252)
 
 Founder, auction roster open beside the board: "the sim isn't using my actual

@@ -272,9 +272,12 @@ function BoardCell({ e, align, onGame, onName }: {
         </Text>
       )}
       {/* The counting line, once there is one (v0.368.0) — what the points on
-          this row are MADE OF. Costs height only when the player has played. */}
+          this row are MADE OF. Costs height only when the player has played.
+          Two lines (v0.368.3): one line ellipsed exactly the INT/sk tail a
+          manager goes looking for; the compact format plus a wrap fits the
+          whole line in a phone cell. */}
       {!!e.statline && (
-        <Text numberOfLines={1} style={{ fontSize: 8, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
+        <Text numberOfLines={2} style={{ fontSize: 8, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
           {e.statline}
         </Text>
       )}
