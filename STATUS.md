@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.7 — Matthew resolves through Matt (first-name variant slugs)
+
+Founder: "hibner is a TE" — the WAS@BAL box listed BAL TE Matthew Hibner as
+WR. The directory bake files him `matt-hibner` (TE · BAL) while the live
+feed's plays are slugged `matthew-hibner` — an unknown slug, so slugMeta
+fell to the WR/'' default. slugMeta now tries first-name-variant slugs
+(matt/matthew, mike/michael, steve/steven/stephen, … — a conservative
+same-name-different-dress table, surname must match exactly) as the LAST
+resort before the default: for a man nothing knows, the variant namesake's
+meta beats a guaranteed-wrong WR/'', and any exact entry (overlay, baked
+slugs, bio) still wins outright. Pinned in check-live-meta with the real
+Hibner rows. Fixes pos AND team (column placement) everywhere slugMeta
+resolves — box scores, boards, scoring — on both hosts.
+
 ### v0.368.6 — the one-play returner stops haunting every box score
 
 Founder, over preseason All-fields sheets: "how is Jalen Reagor on two
