@@ -35,6 +35,8 @@ setSlugMetaOverrides([
   { slug: 'pidless-giant', pos: 'WR', team: 'NYG' },      // old data: no play ids
   { slug: 'pidless-stranger', pos: 'WR', team: 'SEA' },
   { slug: 'collider', pos: 'QB', team: 'GB' },            // nflverse ids restart per game: one of his collides
+  { slug: 'lone-returner', pos: 'WR', team: 'CAR' },      // ONE play, genuinely this game's (stale tag)
+  { slug: 'lone-collider', pos: 'WR', team: 'CAR' },      // ONE play, id collides, different moment
 ]);
 // The NYG@MIA feed knows plays 1-6; plays 100+ belong to some other game.
 setLiveGameFeed(WEEK, feedRowsToWeek([{
@@ -54,6 +56,15 @@ setLivePlays(WEEK, {
   // NYG@MIA play. Before v0.352.3 "any pid matches" seated him (and, at
   // scale, the whole pool: the founder's seventeen-QB SEA@TEN sheet).
   'collider': [rush(10, 3), rush(40, 200), rush(70, 201)],
+  // THE ONE-PLAY CASE (v0.368.6, founder: "how is Jalen Reagor on two
+  // teams?"). The majority rule alone collapses at one play — a pure
+  // returner's single small id collides with an early play of every game and
+  // 1-of-1 is a majority, so he appeared in every box on the slate. The id
+  // AND the clock have to agree now: lone-returner's play is pid 5 at c 120,
+  // exactly the feed's; lone-collider's is pid 3 at c 10, while THIS game's
+  // pid 3 happened at c 60 — same number, different moment, different game.
+  'lone-returner': [{ c: 120, pid: 5, k: 'return', y: 26, td: 0, ca: 0, tg: 0 }],
+  'lone-collider': [{ c: 10, pid: 3, k: 'return', y: 26, td: 0, ca: 0, tg: 0 }],
 });
 
 const box = gameBoxScore(WEEK, 'MIA', 'NYG', 3600);
@@ -72,6 +83,10 @@ ok(!homeSlugs.includes('pidless-stranger') && !awaySlugs.includes('pidless-stran
   'pid-less AND wrong-team still excludes (the old rule, still standing where ids are absent)');
 ok(!homeSlugs.includes('collider') && !awaySlugs.includes('collider'),
   'v0.352.3: a numeric pid collision is not membership — MOST of his plays must be this game\'s, not any');
+ok(homeSlugs.includes('lone-returner'),
+  'a one-play returner whose play IS this game\'s (id + clock agree) is seated, column from possession');
+ok(!homeSlugs.includes('lone-collider') && !awaySlugs.includes('lone-collider'),
+  'v0.368.6: a one-play id collision at a DIFFERENT clock is not membership — the Reagor-on-two-teams case');
 
 // No feed installed at all → membership is unknowable → pure team rule.
 clearLiveGameFeeds();

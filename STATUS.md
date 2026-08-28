@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.6 — the one-play returner stops haunting every box score
+
+Founder, over preseason All-fields sheets: "how is Jalen Reagor on two
+teams?" — Reagor and Jonathan Ward (return-only lines) appeared in BOTH
+Friday games' boxes with identical stats. The v0.352.3 majority rule (most
+of a player's play ids must be in this game's feed) collapses at one play:
+a returner's single small id collides with an early play of every game and
+1-of-1 is a majority. Membership now requires id AND game-clock to agree
+(same clockOf both sides, ±3s for revision jitter), and the column
+derivation counts only matched plays so a collision can't steer the column
+either. check-box-game pins both one-play cases (genuine → seated;
+collision at a different moment → out).
+
 ### v0.368.5 — app windows stop lying about LIVE + the slate sheet opens from the live board
 
 Founder, on the APK drip board pre-kickoff: "these should be locked but not
