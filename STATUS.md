@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.0 — box-score membership joins on the GAME ID
+
+Founder: "Jonathan Ward still in two places. Don't we have player IDs to
+use?" — right on both counts. The v0.368.6 (pid, clock) join has one
+degenerate case: the OPENING KICKOFF is pid ~1 at clock ~0 in every game,
+so a kick returner collided on both. And yes, the exact key always existed:
+live_play.game_id and game_feed.game_id — dropped at the API layer, which
+is what forced the box onto heuristics. v0.369.0 threads game_id through
+(weekLivePlays/weekGameFeeds selects, RealPlay/RawPlay gain `gid`,
+WeekGameFeed/TeamGameFeed gain gids/gid) and membership is now: where a
+player's play gids name any of the week's feed games, the answer is exact —
+his gid matches this game's or he's out. pid/clock + team rules stay as the
+fallback for data without game ids (2025 bakes; the board sim's flat 'SIM'
+gid names no feed game so it proves nothing either way). check-box-game
+pins the opening-kickoff collision, the gid-decides-membership case, and
+the sim fallback (14 assertions).
+
 ### v0.368.7 — Matthew resolves through Matt (first-name variant slugs)
 
 Founder: "hibner is a TE" — the WAS@BAL box listed BAL TE Matthew Hibner as

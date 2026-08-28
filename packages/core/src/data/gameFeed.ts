@@ -33,8 +33,11 @@ export interface WeekGameFeed {
   games: Record<string, GamePlay[]>; // "AWAY@HOME" -> plays
   teams: Record<string, string>;     // team abbr -> "AWAY@HOME"
   states?: Record<string, string>;   // "AWAY@HOME" -> real game state (pre|in|post), live rows only
+  gids?: Record<string, string>;     // "AWAY@HOME" -> source game id (live_play's
+                                     // game_id vocabulary) — the box score's exact
+                                     // membership key (v0.369.0); live rows only
 }
-export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; }
+export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; gid?: string | null; }
 
 const cache = new Map<number, WeekGameFeed>();
 const inflight = new Map<number, Promise<void>>();
@@ -61,16 +64,18 @@ function widenTeams(wk: WeekGameFeed): WeekGameFeed {
 }
 
 /** game_feed DB rows → a week's {games, teams} (mirrors the baker's shape). */
-export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null }[]): WeekGameFeed {
+export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null; game_id?: string | null }[]): WeekGameFeed {
   const games: Record<string, GamePlay[]> = {};
   const teams: Record<string, string> = {};
   const states: Record<string, string> = {};
+  const gids: Record<string, string> = {};
   for (const r of rows) {
     games[r.key] = r.plays ?? [];
     teams[r.away] = r.key; teams[r.home] = r.key;
     if (r.state) states[r.key] = r.state;
+    if (r.game_id) gids[r.key] = r.game_id;
   }
-  return widenTeams({ games, teams, states });
+  return widenTeams({ games, teams, states, gids });
 }
 /** Install the week's live game feeds; makes that week resolve live-only. */
 export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, widenTeams(feed)); }
@@ -135,7 +140,7 @@ export function allGameFeeds(week: number): TeamGameFeed[] {
   if (!wk) return [];
   return Object.entries(wk.games).map(([key, plays]) => {
     const [away, home] = key.split('@');
-    return { key, away, home, plays: plays ?? [], st: wk.states?.[key] ?? null };
+    return { key, away, home, plays: plays ?? [], st: wk.states?.[key] ?? null, gid: wk.gids?.[key] ?? null };
   });
 }
 
@@ -283,5 +288,5 @@ export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | 
   const plays = key ? wk?.games[key] : undefined;
   if (!key || !plays) return null;
   const [away, home] = key.split('@');
-  return { key, away, home, plays, st: wk?.states?.[key] ?? null };
+  return { key, away, home, plays, st: wk?.states?.[key] ?? null, gid: wk?.gids?.[key] ?? null };
 }
