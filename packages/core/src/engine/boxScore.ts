@@ -134,29 +134,50 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
   // of his ids against the feed; a stranger's numeric collisions are a few
   // percent — so the test is a strict majority, decisive on both data shapes
   // without depending on how the ids were minted.
+  //
+  // …AND THE CLOCK HAS TO AGREE (v0.368.6). The majority rule collapses for a
+  // player with ONE play: a pure returner's single small id collides with an
+  // early play of every game, 1-of-1 is a majority, and he appears in every
+  // box score on the slate with the same line (the founder's "how is Jalen
+  // Reagor on two teams?"). A play is this game's only when its id AND its
+  // game-clock position both match — the feed's `c` and the play's `clock`
+  // come from the same clockOf, so a genuine member matches exactly, while a
+  // foreign collision would need the same id at the same second (±3s covers
+  // any revision jitter). The column derivation counts only matched plays for
+  // the same reason: a collision must not get to steer the column either.
   const feed = gameFeedFor(week, H);
   const pidTm = new Map<number, string>();
-  for (const p of feed?.plays ?? []) if (p.pid != null) pidTm.set(p.pid, normTeam(p.tm ?? ''));
+  const pidClocks = new Map<number, number[]>();
+  for (const p of feed?.plays ?? []) {
+    if (p.pid == null) continue;
+    pidTm.set(p.pid, normTeam(p.tm ?? ''));
+    const cs = pidClocks.get(p.pid) ?? [];
+    cs.push(p.c);
+    pidClocks.set(p.pid, cs);
+  }
+  const playMatches = (pid: number | null | undefined, clock: number): boolean =>
+    pid != null && (pidClocks.get(pid) ?? []).some((c) => Math.abs(c - clock) <= 3);
 
   for (const slug of realPbpSlugs(week)) {
     const meta = slugMeta(slug);
     const team = normTeam(meta.team ?? '');
     const plays = realRawPlays(slug, week);
     if (!plays || !plays.length) continue;
-    const pids = plays.map((p) => p.pid).filter((id): id is number => id != null);
+    const withPid = plays.filter((p) => p.pid != null);
     // true = his plays are in this game; false = provably elsewhere; null = no
     // pid data on one side or the other, membership unknowable → team rule.
-    const matched = pids.filter((id) => pidTm.has(id)).length;
-    const inGame = pidTm.size && pids.length ? matched * 2 > pids.length : null;
+    const matchedPlays = withPid.filter((p) => playMatches(p.pid, p.clock));
+    const inGame = pidTm.size && withPid.length ? matchedPlays.length * 2 > withPid.length : null;
     if (inGame === false) continue;
     if (inGame === null && team !== H && team !== A) continue;
     const pos = (meta.pos ?? 'WR') as Pos;
     let col = team === H ? H : team === A ? A : null;
     if (!col) {
       // In the game, but the tag names neither team: majority offense of his
-      // plays, flipped for defenders (their plays are the opponent's snaps).
+      // MATCHED plays, flipped for defenders (their plays are the opponent's
+      // snaps).
       const n = new Map<string, number>();
-      for (const id of pids) { const tm = pidTm.get(id); if (tm) n.set(tm, (n.get(tm) ?? 0) + 1); }
+      for (const p of matchedPlays) { const tm = pidTm.get(p.pid!); if (tm) n.set(tm, (n.get(tm) ?? 0) + 1); }
       const top = [...n.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
       if (!top) continue;
       const mine = DEF_POS.has(pos) ? (top === H ? A : top === A ? H : '') : top;
