@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.0 — web: metric unlocks arm into applied_state (match the app), so Combo Drip saves
+
+Buying a metric unlock on the web (Combo Drip / Return Yards / Air Raid /
+Underdog) put it in team_inventory via wallet_buy_powerup — a store the
+save-gate never reads. The DB gates (enforce_locked_metric,
+enforce_single_combodrip) read applied_state.unlocks, which only arm_unlock
+writes and the web never called. So a bought-and-picked unlock was silently
+rejected at the sealed_pick upsert (whole-batch → NOT SAVED). The app arms into
+applied_state and gates its picker on the armed set; the web now does the same
+(founder's call — "match the app"): on the LIVE board a metric-unlock buy calls
+arm_unlock (spends the wallet, combo qty+1), and the metric picker + underdog
+door + mulligan gate on the armed set instead of local inventory. Boolean
+unlocks arm once and field on any slot; Combo Drip is one slot per purchase
+(comboOpen caps the picker client-side so an over-pick never reaches — and gets
+rejected by — the whole-batch save). Sim/demo boards keep the local-inventory
+consumable model unchanged (unlocks is null there → inventory fallback).
+Web-only; no DB/engine/mobile change. Follow-up: the web shop doesn't yet show
+armed unlocks as "ARMED ×N" or offer a sell/disarm (buy feedback is the balance
+dropping); and stale pre-fix team_inventory unlock rows are orphaned (harmless).
+
 ### v0.364.6 — web: autosave no longer paints a permanent "NOT SAVED" over a saved board
 
 The founder swapped a player in an OPEN Thursday slot and it silently didn't

@@ -295,6 +295,10 @@ export function TwinChip() {
 
 export function SetupRow(props: {
   slotKeyStr: string; winId: WindowId; week: number; pick?: Pick; selected: boolean; inventory: Record<string, number>; armed: Record<string, boolean>; twinLink?: boolean;
+  /** Live board: the caller's armed metric unlocks (applied_state), and whether
+   *  another Combo Drip slot may still be placed. Null/absent on sim/demo, where
+   *  a locked metric is gated on the local-inventory consumable count instead. */
+  unlocks?: Set<string> | null; comboOpen?: boolean;
   appliedPu: string[];
   applyMode: string | null; onApplyToSpot: () => void;
   onOpenPicker: () => void; onPickMetric: (m: string) => void; onClearSlot: () => void; onDropPlayer: (id: string) => void; onScout: () => void;
@@ -312,10 +316,19 @@ export function SetupRow(props: {
    *  caller whose picks are present from the first render. */
   hydrated?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick, hydrated = true } = props;
+  const { winId, week, pick, selected, inventory, unlocks, comboOpen, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick, hydrated = true } = props;
+  // Is a locked metric offerable in this slot? Live board (unlocks provided):
+  // the four booleans arm once and field anywhere (armed-set membership); Combo
+  // Drip is one slot per purchase (comboOpen has headroom, or this slot already
+  // runs it). Sim/demo (unlocks null): the local-inventory consumable count.
+  const metricUnlocked = (lock: string): boolean => {
+    if (!unlocks) return (inventory[lock] ?? 0) > 0;
+    if (lock === 'unlock-combo-drip') return pick?.metricId === 'combodrip' || !!comboOpen;
+    return unlocks.has(lock);
+  };
   // Pre-kick, the metric door stays open ONLY for the Underdog flip — and only
   // when the unlock is actually owned (or the slot already flipped).
-  const underdogDoor = !!preKick && ((inventory['unlock-underdog'] ?? 0) > 0 || pick?.metricId === 'underdog');
+  const underdogDoor = !!preKick && (metricUnlocked('unlock-underdog') || pick?.metricId === 'underdog');
   const metricLocked = !!lockPlayer && !underdogDoor;
   const isMobile = useIsMobile();
   const { bigText, cardSkin } = useStore();
@@ -511,7 +524,7 @@ export function SetupRow(props: {
             <button onClick={() => setMetricOpen(false)} className="mono" style={{ flex: 'none', background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>✕</button>
           </div>
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '60vh', overflow: 'auto' }}>
-            {METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === pick?.metricId)
+            {METRICS[player.pos].filter((m) => !m.lock || metricUnlocked(m.lock) || m.id === pick?.metricId)
               .filter((m) => !preKick || m.id === pick?.metricId || m.id === 'underdog') // lock period: only the comeback flip
               .map((m) => {
               const cur = m.id === pick?.metricId;

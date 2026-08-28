@@ -28,7 +28,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myComboQty, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -653,6 +653,41 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => setLiveWallet(0));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
   const coinBal = liveCtx ? (liveWallet ?? 0) : coins;
+
+  // Metric unlocks (Combo Drip / Return Yards / Air Raid / Underdog) on the LIVE
+  // board are governed by applied_state — the same store the app arms into and
+  // the DB gate (enforce_locked_metric / enforce_single_combodrip) reads. The
+  // web used to buy them into team_inventory, which the gate never sees, so a
+  // bought-and-picked unlock was silently rejected at save. Now buying ARMS the
+  // unlock (arm_unlock) and the picker gates on this armed set, matching the app:
+  // the boolean unlocks arm once and field on any slot; Combo Drip is one slot
+  // per purchase (comboQty). Sim/demo keeps the local-inventory consumable model
+  // (unlocks is left null there — the picker falls back to inventory).
+  const [unlocks, setUnlocks] = useState<Set<string> | null>(null);
+  const [comboQty, setComboQty] = useState(0);
+  useEffect(() => {
+    if (!liveCtx) { setUnlocks(null); setComboQty(0); return; }
+    myUnlocks(liveCtx.matchupId).then((u) => setUnlocks(new Set(u ?? []))).catch(() => setUnlocks(new Set()));
+    myComboQty(liveCtx.matchupId, liveCtx.userId).then(setComboQty).catch(() => setComboQty(0));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Buy = arm one unlock (arm_unlock spends the wallet server-side; combo-drip
+  // buys ANOTHER each time, qty+1). Refresh the armed set + wallet from the RPC.
+  const armUnlockLive = async (id: string): Promise<boolean> => {
+    if (!liveCtx) return false;
+    const r = await armUnlock(liveCtx.matchupId, id).catch(() => null);
+    if (!r?.ok) return false;
+    if (r.unlocks) setUnlocks(new Set(r.unlocks));
+    if (id === 'unlock-combo-drip' && typeof r.comboQty === 'number') setComboQty(r.comboQty);
+    ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => {});
+    return true;
+  };
+  // Combo Drip is one slot per purchase: offer it while placed picks are under
+  // the purchased quantity (a slot already on it can always keep it). This caps
+  // the picker client-side so an over-pick never reaches — and gets rejected by
+  // — the whole-batch save. The four booleans arm-once/field-anywhere.
+  const placedCombo = useMemo(() => Object.values(picks).filter((p) => p.metricId === 'combodrip').length, [picks]);
+  const comboOpen = comboQty > placedCombo;
+
   // Card-table theme (league_pref.card_theme): on flagged leagues the owned
   // power-ups also render as a hand of cards pinned to the bottom of the board.
   const [cardHand, setCardHand] = useState(false);
@@ -679,6 +714,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Buy a power-up into inventory, charged against the real wallet (hero board).
   const buyFromWallet = async (id: string): Promise<boolean> => {
     if (!liveCtx) return false;
+    // Metric unlocks arm into applied_state (the store the save-gate reads), not
+    // team_inventory — so a bought Combo Drip actually saves. Everything else is
+    // an owned power-up bought into inventory.
+    if (powerupById(id)?.kind === 'metric') return armUnlockLive(id);
     const r = await walletBuyPowerup(liveCtx.matchupId, id).catch(() => null);
     if (!r?.ok) return false;
     grantPowerup(id); setLiveWallet(Number(r.balance ?? 0));
@@ -1181,6 +1220,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Refund an unlock-metric powerup if this pick was using one (dropped a spot).
   function refundUnlockFor(pk?: Pick) {
+    if (liveCtx) return; // live: unlocks are armed in applied_state, not consumed per-slot
     if (!pk?.metricId) return;
     const pl = getPlayer(pk.playerId);
     const m = pl ? metricById(pl.pos, pk.metricId) : null;
@@ -1216,11 +1256,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const pk = picks[key];
     const player = pk ? getPlayer(pk.playerId) : null;
     const m = player ? metricById(player.pos, metricId) : null;
-    // A locked (unlock) metric consumes one of its powerup the first time it's set.
-    if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
-    // Switching off a previously-picked unlock metric refunds it.
-    const prevM = player && pk?.metricId ? metricById(player.pos, pk.metricId) : null;
-    if (prevM?.lock && prevM.id !== metricId) refundUnlock(prevM.lock);
+    // Sim/demo: a locked (unlock) metric consumes one of its powerup the first
+    // time it's set, and switching off refunds it. Live: unlocks live in
+    // applied_state (armed on buy) and the picker already gates on the armed set,
+    // so there's nothing to consume or refund here.
+    if (!liveCtx) {
+      if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
+      const prevM = player && pk?.metricId ? metricById(player.pos, pk.metricId) : null;
+      if (prevM?.lock && prevM.id !== metricId) refundUnlock(prevM.lock);
+    }
     setPicks((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev);
     setSelSlot(null);
   }
@@ -1877,6 +1921,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
                 youPools={youPools}
                 inventory={inventory}
+                unlocks={unlocks}
+                comboOpen={comboOpen}
                 onAssign={assignFromRoster}
                 turnoverCoin={turnoverCoin}
                 backups={backupAssign}
@@ -2034,7 +2080,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         const atRt = realTimeAt(p, week, atClock, slot!.you!.metricId ?? undefined);
         return (
           <MulliganModal
-            player={p} curMetric={slot!.you!.metricId} inventory={inventory}
+            player={p} curMetric={slot!.you!.metricId} inventory={inventory} unlocks={unlocks} comboOpen={comboOpen}
             onPick={(m) => { if (applyMulligan(week, mulliganSlot, atClock, atRt, m)) liveTargeted('mulligan', { ...keyParts(mulliganSlot), toMetric: m, atClock, atRt }); setMulliganSlot(null); setPendingApply(null); }}
             onClose={() => { setMulliganSlot(null); setPendingApply(null); }}
           />
@@ -2458,10 +2504,17 @@ function SpyRevealModal({ onPick, onClose }: { onPick: (r: 'player' | 'metric') 
 }
 
 // Mulligan: after tapping your slot, pick the metric to re-roll into (free swap).
-function MulliganModal({ player, curMetric, inventory, onPick, onClose }: {
-  player: Player; curMetric: string; inventory: Record<string, number>; onPick: (m: string) => void; onClose: () => void;
+function MulliganModal({ player, curMetric, inventory, unlocks, comboOpen, onPick, onClose }: {
+  player: Player; curMetric: string; inventory: Record<string, number>; unlocks?: Set<string> | null; comboOpen?: boolean; onPick: (m: string) => void; onClose: () => void;
 }) {
-  const options = METRICS[player.pos].filter((m) => !m.lock || (inventory[m.lock] ?? 0) > 0 || m.id === curMetric);
+  // Same gate as the setup picker: live board reads the armed-unlock set (Combo
+  // Drip capped by comboOpen), sim/demo the local-inventory consumable count.
+  const metricUnlocked = (lock: string): boolean => {
+    if (!unlocks) return (inventory[lock] ?? 0) > 0;
+    if (lock === 'unlock-combo-drip') return curMetric === 'combodrip' || !!comboOpen;
+    return unlocks.has(lock);
+  };
+  const options = METRICS[player.pos].filter((m) => !m.lock || metricUnlocked(m.lock) || m.id === curMetric);
   return (
     <PuShell title={<><PuIcon id="mulligan" emoji="🎲" size="1.2em" /> Mulligan — Re-roll</>} subtitle={`PICK A NEW METRIC FOR ${player.name.toUpperCase()} · COUNTS ONLY PLAYS AFTER NOW (REAL TIME)`} accent="var(--warn)" onClose={onClose}>
       {options.map((m) => {
@@ -2554,6 +2607,11 @@ function WindowSectionInner(props: {
   togglePBP: (k: string) => void;
   youPools: Record<WindowId, Player[]>;
   inventory: Record<string, number>;
+  /** Live board: the caller's armed metric unlocks (applied_state), and whether
+   *  another Combo Drip slot may still be placed. Null/absent on sim/demo, where
+   *  SetupRow falls back to the local-inventory consumable model. */
+  unlocks?: Set<string> | null;
+  comboOpen?: boolean;
   onAssign: (id: string) => void;
   turnoverCoin: number;
   backups: Record<string, string>;
@@ -2576,7 +2634,7 @@ function WindowSectionInner(props: {
    *  below still short-circuits idle windows. */
   potMatchupId?: string | null;
 }) {
-  const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
+  const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, unlocks, comboOpen, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
   // The resolver's per-slot scores, parsed ONCE per distinct payload. Keyed
   // both ways — `y#3` / `t#3` by roster slot and `y@josh-allen` by slug — so a
@@ -2825,7 +2883,7 @@ function WindowSectionInner(props: {
           if (phase === 'setup' || preKick) {
             const setupRow = (
               <SetupRow
-                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} armed={armed} twinLink={twinLinked.has(key)}
+                key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} unlocks={unlocks} comboOpen={comboOpen} armed={armed} twinLink={twinLinked.has(key)}
                 appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.ghost?.includes(key) ? ['ghost'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
