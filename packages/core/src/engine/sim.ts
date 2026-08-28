@@ -423,6 +423,10 @@ export function clockAtRealTime(player: Player, week: number, rt: number, metric
 // shown under each score card (real stats, independent of the metric scoring).
 export interface StatLine {
   passYds: number; passTds: number;
+  // QB passing detail (0166 truth flags): completions, attempts (sacks are NOT
+  // attempts), sacks taken, interceptions thrown. Zero on legacy data that
+  // predates the flags, so a QB line falls back to yards + TDs there.
+  comp: number; att: number; sacked: number; passInts: number;
   carries: number; rushYds: number; rushTds: number;
   targets: number; rec: number; recYds: number; recTds: number;
   retYds: number; retTds: number;
@@ -439,11 +443,20 @@ export function statlineAt(player: Player, week: number, clock: number, metricId
  *  log's half of the same split as `rawPlaysFrom`: the numbers a card prints
  *  come from the same accumulation the board's do. */
 export function statlineFrom(plays: RawPlay[], clock: number): StatLine {
-  const s: StatLine = { passYds: 0, passTds: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0 };
+  const s: StatLine = { passYds: 0, passTds: 0, comp: 0, att: 0, sacked: 0, passInts: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0 };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
     switch (p.kind) {
-      case 'pass': s.passYds += p.yards; if (p.td) s.passTds++; break;
+      // A QB's every dropback is a 'pass' row carrying truth flags: a completion
+      // and an incompletion are both ATTEMPTS; a sack is neither; an INT thrown
+      // is an incompletion + turnover (a sack-fumble is a turnover on a sack
+      // row, so `inc` is what keeps it out of the pick count).
+      case 'pass':
+        s.passYds += p.yards; if (p.td) s.passTds++;
+        if (p.cmp) { s.comp++; s.att++; }
+        else if (p.inc) { s.att++; if (p.turnover) s.passInts++; }
+        else if (p.skd) { s.sacked++; }
+        break;
       case 'rush': s.carries++; s.rushYds += p.yards; if (p.td) s.rushTds++; break;
       case 'rec': s.rec++; s.targets++; s.recYds += p.yards; if (p.td) s.recTds++; break;
       case 'incomplete': s.targets++; break;
@@ -1366,8 +1379,18 @@ export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
     // K / DEF lines are already short — fall through to the full format.
   }
   if (pos === 'QB') {
-    const p = [`${s.passYds} pass yd`, `${s.passTds} TD`];
-    if (s.rushYds) p.push(`${s.rushYds} rush`);
+    // Full passing line: C/ATT (when the flags are present), yards, TDs, INTs
+    // thrown, sacks taken — then the whole rushing line, so a QB who scrambles
+    // for a score shows the carries and the rush TD, not just loose rush yards.
+    const p: string[] = [];
+    if (s.att) p.push(`${s.comp}/${s.att}`);
+    p.push(`${s.passYds} pass yd`, `${s.passTds} TD`);
+    if (s.passInts) p.push(`${s.passInts} INT`);
+    if (s.sacked) p.push(`${s.sacked} sk`);
+    if (s.carries || s.rushYds) {
+      p.push(`${s.carries} car`, `${s.rushYds} rush yd`);
+      if (s.rushTds) p.push(`${s.rushTds} rush TD`);
+    }
     return p.join(' · ');
   }
   if (pos === 'RB') {
