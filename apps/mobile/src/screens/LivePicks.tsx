@@ -1116,7 +1116,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         subtitle="EVERY GAME THIS WEEK · YOURS FIRST · LIVE DRIVES"
         onClose={() => setFieldsOpen(false)}
       >
-        <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}>
+        {/* Pull-to-refresh the whole slate here too (founder): the sheet's own
+            gesture reaches the SAME refreshLive the board's does — it re-pulls
+            every game's feed + plays, so all the fields update at once without
+            leaving the sheet. The realtime channel still pushes in the
+            background; this is the manual nudge for a stalled feed. */}
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
           {fieldGames.length === 0 && (
             <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>
           )}

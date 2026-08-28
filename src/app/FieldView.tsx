@@ -14,7 +14,7 @@ import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupF
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
-import { gameBoxScore } from '@drip/core/engine/boxScore';
+import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, ModalBackdrop } from './ui';
@@ -536,14 +536,21 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   week: number; home: string; away: string; clock: number; onClose: () => void;
 }) {
   const box = useMemo(() => gameBoxScore(week, home, away, clock), [week, home, away, clock]);
-  const col = (label: string, rows: typeof box.home) => (
+  // OFFENSE / DEFENSE tabs (v0.365.1, founder) — matching the app's box sheet:
+  // the single list ran long and "how did the defense do" meant scrolling past
+  // every receiver. Membership is core's boxTabRows (stat-driven), so a two-way
+  // player appears on BOTH tabs, phrased through each side's lens.
+  const [tab, setTab] = useState<'off' | 'def'>('off');
+  const col = (label: string, rows: typeof box.home) => {
+    const shown = boxTabRows(rows, tab);
+    return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
         {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={14} height={14} style={{ display: 'block' }} />}{label}
       </div>
-      {rows.length === 0
+      {shown.length === 0
         ? <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>— nothing yet —</div>
-        : rows.map((r) => (
+        : shown.map((r) => (
           <div key={r.slug} style={{ padding: '3px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
               <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
@@ -553,6 +560,11 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
           </div>
         ))}
     </div>
+    );
+  };
+  const tabBtn = (id: 'off' | 'def', label: string) => (
+    <button onClick={() => setTab(id)} className="mono"
+      style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: tab === id ? 'var(--text)' : 'var(--dim)', background: tab === id ? 'var(--bd)' : 'transparent' }}>{label}</button>
   );
   return (
     <ModalBackdrop onClick={onClose} zIndex={80}>
@@ -562,11 +574,16 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
           <button onClick={onClose} aria-label="close the box score" className="mono"
             style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
         </div>
+        {/* Offense / Defense tab bar — matches the app; stays put above the list. */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 3, borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)' }}>
+          {tabBtn('off', 'OFFENSE')}
+          {tabBtn('def', 'DEFENSE')}
+        </div>
         <div style={{ display: 'flex', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</div>
         {/* Said plainly: an empty column is a player who has not touched the
             ball, not a player the box score forgot. */}
         <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
-          everyone with a stat in this game · most involved first · follows the log's clock
+          everyone with a stat on this side of the ball · most involved first · two-way players appear on both tabs · follows the log&rsquo;s clock
         </div>
       </div>
     </ModalBackdrop>

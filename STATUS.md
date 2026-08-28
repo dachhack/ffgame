@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.1 — web box-score gets the app's OFFENSE/DEFENSE tabs; app all-fields sheets pull-to-refresh
+
+Two founder asks. (1) The web field-visual box score (FieldView.tsx) was a
+single flat list; the app grew OFFENSE/DEFENSE tabs (v0.343.2) via core's
+`boxTabRows` (stat-driven membership, two-way players on both tabs). Web now
+has the same tab bar over the same `gameBoxScore` — one source of truth, so the
+two hosts can't disagree. (2) The app's "All fields" sheets (drip LivePicks +
+ClassicBoard) had no RefreshControl, so you couldn't pull-to-refresh the slate
+while the sheet was open — the fields only moved on the realtime push. Both
+sheets now wire the SAME `onPullRefresh`/`refreshLive` the main board uses (it
+re-pulls every game's feed + plays), so a pull updates all fields at once
+without leaving the sheet. Web box-score change ships on the Pages deploy; the
+mobile pull-to-refresh needs a new APK to take effect.
+
 ### v0.365.0 — web: metric unlocks arm into applied_state (match the app), so Combo Drip saves
 
 Buying a metric unlock on the web (Combo Drip / Return Yards / Air Raid /
