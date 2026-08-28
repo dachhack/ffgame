@@ -1164,7 +1164,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       </Pressable>
                     )}
                   </View>
-                  <Mono size={11} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 38, textAlign: 'right' }}>
+                  {/* 12.5 in a 42px box (v0.368.1, founder: "room to make the
+                      points larger?"). A per-player score is at most 5 mono
+                      chars ("21.40"), so the bump costs each name cell 2px —
+                      nothing v0.323.1's name-width work misses. */}
+                  <Mono size={12.5} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 42, textAlign: 'right' }}>
                     {scoreOf(row.home)}
                   </Mono>
                   {/* …and the centre column is FIXED at the pill's own width,
@@ -1174,7 +1178,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     <SlotPill pos={row.pos} label={row.label} />
                     {auto && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
                   </View>
-                  <Mono size={11} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
+                  <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
                     {scoreOf(row.away)}
                   </Mono>
                   <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)}
@@ -1206,11 +1210,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
                       {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)}
                              onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
-                      <Mono size={11} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38, textAlign: 'right' }}>
+                      <Mono size={12.5} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42, textAlign: 'right' }}>
                         {h ? scoreOf(h) : ''}
                       </Mono>
                       <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
-                      <Mono size={11} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 38 }}>
+                      <Mono size={12.5} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
                         {a ? scoreOf(a) : ''}
                       </Mono>
                       {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)}

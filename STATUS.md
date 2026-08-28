@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.1 — bigger per-player points
+
+Founder: "Do we have room to make the points scored by each player larger?"
+Yes, on both hosts, without costing row height: the web GameCard's number sat
+beside a two-line text column (13px in a ~30px box) — now 16px; the app's
+score column was 11px in a fixed 38px box — now 12.5px in 42px, which costs
+each name cell 2px (a per-player score is at most five mono chars, so the
+v0.323.1 name-width work is untouched). Rides the next APK for the app.
+
 ### v0.368.0 — the classic row goes live: game clock, statlines, playing vs yet-to-play
 
 Founder, first rehearsal WITH data flowing: "The game times below the players

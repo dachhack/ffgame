@@ -88,8 +88,11 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
       </div>
       {/* NO "proj" LABEL (founder, v0.241.0): the number alone. Before kickoff
           it is the projection and after it is points — carried by the quiet
-          colour and by the status line beneath, not by a word taking up room. */}
-      <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
+          colour and by the status line beneath, not by a word taking up room.
+          16px (v0.368.1, founder: "room to make the points larger?") — the
+          text column beside it is two lines tall, so the number was smaller
+          than its own box; this costs no row height. */}
+      <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
         {pre ? e.proj.toFixed(1) : e.live.toFixed(2)}
       </span>
     </div>
