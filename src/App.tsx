@@ -20,6 +20,7 @@ const LeagueHub = lazy(() => import('./screens/LeagueHub').then((m) => ({ defaul
 const LeagueOverview = lazy(() => import('./screens/LeagueOverview').then((m) => ({ default: m.LeagueOverview })));
 const Matchup = lazy(() => import('./screens/Matchup').then((m) => ({ default: m.Matchup })));
 const MatchupFinal = lazy(() => import('./screens/MatchupFinal').then((m) => ({ default: m.MatchupFinal })));
+const ClassicSim = lazy(() => import('./screens/ClassicSim').then((m) => ({ default: m.ClassicSim })));
 const Leagues = lazy(() => import('./screens/Leagues').then((m) => ({ default: m.Leagues })));
 const SleeperLeague = lazy(() => import('./screens/SleeperLeague').then((m) => ({ default: m.SleeperLeague })));
 const LiveOnboard = lazy(() => import('./screens/LiveOnboard').then((m) => ({ default: m.LiveOnboard })));
@@ -174,6 +175,7 @@ export function App() {
         {route.name === 'league' && <LeagueOverview />}
         {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
         {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
+        {route.name === 'classicSim' && <ClassicSim />}
       </Suspense>
       {/* Persistent "out" across the discovery funnel — request a pilot code for
           your league. Hidden inside the live pilot (already in), on splash / the
