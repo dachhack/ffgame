@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.367.1 — classic rehearses on the REAL board; the week-0 replica retires
+
+Founder, over a Week-0-vs-real-board screenshot pair: "Looks like we have a
+custom board for the demo. Can we please reuse the actual matchup board for
+the sim so I know everything works as is." Exactly right — a rehearsal that
+proves the plumbing must run on the board that ships. The 0251 worker sim
+already speaks classic (resolveMatchup branches on game_mode; the classic
+branch explicitly refuses drip-shaped lineups leaking in), so: the REHEARSAL
+strip (SimStrip) now renders on the web ClassicBoard too (loads
+leagueTestLiveAt; strip self-gates on the server's forbidden) — ▶ drives the
+real classic board through live_play → resolver → classic finals. The week-0
+ClassicSim door is REMOVED from both boards (web + mobile; mobile
+ClassicSim.tsx deleted, stepper floors back at week 1), and web ClassicSim
+reverts to its bare v0.365.3 self — the hidden #/classic-sim scoring-shape
+comparison on demo teams, which is what it started as. Mobile door removal
+rides the next APK; the current APK still watches a simmed week fine (it
+reads the same rows).
+
 ### v0.367.0 — ▶ sim from the board: the dress rehearsal, playable in place
 
 Founder: "Can we make this all playable from the matchup board in the test

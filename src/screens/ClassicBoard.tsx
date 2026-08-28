@@ -9,8 +9,8 @@
 // your starters vs theirs, each scoring classicPoints off the same live play
 // stream the drip boards run on, refreshed every 60s.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Pos, Player } from '@drip/core/types';
-import { ClassicSim } from './ClassicSim';
+import type { Pos } from '@drip/core/types';
+import { SimStrip } from './SimStrip';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
@@ -26,7 +26,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/ga
 import {
   myRoster, myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
@@ -466,14 +466,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // null means "whatever week the league is on" — the board's own default, and
   // what it opens on. A number is a week the manager asked for.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
-  // WEEK 0 — THE SIM (v0.365.4, founder: "wire it into each classic league as a
-  // week 0 in the matchup view. It should use all the league scoring and
-  // rules"). Stepping back from week 1 opens the 2025-replay sim under THIS
-  // league's slots/scoring/rosters instead of refusing. Held apart from
-  // weekWanted on purpose: week 0 has no matchup row, so routing it through the
-  // loader would land on "No matchup this week" — the board underneath stays on
-  // week 1, fully loaded, and stepping forward simply closes the overlay.
-  const [simOpen, setSimOpen] = useState(false);
+  // 🧪 LIVE TEST (0053): non-null marks this league a sandbox, which is what
+  // lets the REHEARSAL strip below offer the worker-driven sim (0251) on THIS
+  // board. The founder's call (v0.367.1): the week-0 client-side replay is
+  // gone — a rehearsal that proves the plumbing has to run on the real board,
+  // through the real feed, or it proves a different board.
+  const [testLive, setTestLive] = useState<number | null>(null);
   // THE WEEK THIS SEAT SITS OUT (v0.364.0). An odd-sized league byes one team
   // a week, and `state = 'none'` — which returns before the header and its
   // stepper render — stranded whoever stepped onto theirs. Held separately
@@ -551,6 +549,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         playoffState(r.leagueId).then((ps) => {
           if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
         }).catch(() => {});
+        // 🧪 LIVE TEST → the REHEARSAL strip may offer the worker-driven sim here.
+        leagueTestLiveAt(r.leagueId).then(setTestLive).catch(() => setTestLive(null));
         // The week's NFL slate drives every player's kickoff, opponent and —
         // by absence — their bye. Scoped to the matchup's own season/week.
         liveSlate(m.week, '2026').then(setSlate).catch(() => {});
@@ -930,17 +930,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
     const w = byeWeek ?? matchup?.week;
     if (w == null) return false;
     const next = w + d;
-    if (next < 0) return false; // 0 is the SIM — one step past it is nothing
+    if (next < 1) return false;
     if (lastRegWeek != null && next > lastRegWeek) return false;
     return true;
   };
   const goWeek = (d: -1 | 1) => {
     const w = byeWeek ?? matchup?.week;
-    if (!canGo(d) || w == null) return;
-    // Week 0 is the sim overlay, not a schedule row — open it in place and
-    // leave weekWanted (and the loaded board under it) on week 1.
-    if (w + d === 0) { setSimOpen(true); return; }
-    setWeekWanted(w + d);
+    if (canGo(d) && w != null) setWeekWanted(w + d);
   };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
@@ -1049,24 +1045,6 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
   if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
-  // WEEK 0 — the sim, under THIS league's rules. Rosters are the two sides the
-  // board already loaded (stash-filtered, exp attached for tenure spots);
-  // scoring is the board's own merged catalog `sc`, and the scoped rules +
-  // flags it installed into the module caches score the sim too — so week 0
-  // counts points exactly the way week 1 will.
-  if (simOpen) {
-    const simPlayers = (rows: PoolPlayer[]): Player[] => rows
-      .filter((x) => !stashed.has(x.slug))
-      .map((x) => ({ id: x.slug, name: x.full, full: x.full, pos: x.pos, team: x.team, exp: expMap[x.slug] ?? null, stats: { ...ZERO } }) as unknown as Player);
-    return (
-      <ClassicSim league={{
-        slots: slotDefs, sc, bestball, golf,
-        youName: names.me, oppName: names.opp,
-        you: simPlayers(pool), opp: simPlayers(oppPool),
-        onExit: () => setSimOpen(false),
-      }} />
-    );
-  }
   const weekBtn = (on: boolean): React.CSSProperties => ({
     fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
     color: on ? 'var(--text)' : 'var(--faint)', background: 'var(--surface)',
@@ -1144,6 +1122,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
           )}
         </div>
       </div>
+
+      {/* The dress rehearsal's steering wheel (0251) — same strip as the drip
+          board: admin-only (it self-gates on the server's forbidden), LIVE TEST
+          leagues only. ▶ drives THIS board through the real feed + resolver —
+          the founder's call (v0.367.1): the sim runs on the actual matchup
+          board, not a replica, so what it proves is the thing that ships. */}
+      {ros && matchup && testLive != null && <SimStrip leagueId={ros.leagueId} week={matchup.week} />}
 
       {/* ── SCOREBOARD (v0.228.0) ──────────────────────────────────────────
           Live score big, projected final under it, and a win bar that reads

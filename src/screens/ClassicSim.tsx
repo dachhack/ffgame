@@ -3,26 +3,23 @@
 // Founder: "how can I play test classic mode? Can we use 2025 data to sim a
 // week?" The drip board has had a scrubbable 2025 demo (DemoBoard) since the
 // start; classic only had ClassicDemo, a static scoring-comparison. This is the
-// missing piece: a real 2025 week (DEMO_WEEK), scored under CLASSIC rules,
-// driven by a clock you can drag or play — so you watch a classic lineup accrue
-// play by play, with the shared field visuals + box score scrubbing alongside.
+// missing piece: the same real 2025 week (DEMO_WEEK), scored under CLASSIC
+// rules, driven by a clock you can drag or play — so you watch a classic
+// lineup accrue play by play, with the shared field visuals + box score
+// scrubbing alongside it.
 //
-// TWO DOORS, ONE BOARD.
-//  • Bare (#/classic-sim, super-admin panel): the demo teams under the default
-//    classic catalog, with PPR / best-ball toggles to compare scoring shapes.
-//  • League mode (`league` prop — ClassicBoard's WEEK 0, founder: "wire it into
-//    each classic league as a week 0 in the matchup view. It should use all the
-//    league scoring and rules"): YOUR roster vs your opponent's, the league's
-//    own slot layout, its full scoring catalog (scoped rules + flags are module
-//    caches the board installed before handing over), its best-ball spots, its
-//    golf setting. No PPR chips there — the league's rules are not a toggle.
-//
+// Hidden by design: reached only from the super-admin panel or #/classic-sim.
+// (v0.367.1: this screen briefly doubled as the classic board's WEEK 0 under
+// league rules; the founder retired that door — "reuse the actual matchup
+// board for the sim so I know everything works as is" — so the REHEARSAL strip
+// on ClassicBoard now drives the worker sim on the real board, and this stays
+// what it started as: a client-side scoring-shape comparison on demo teams.)
 // Nothing here touches the server — it reads the baked play cache the drip demo
 // already loads and re-scores it with `classicPointsFrom`, clock-filtered, so
 // the sim can never disagree with the real board about what a week was worth.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../app/store';
-import { classicSlots, classicPointsFrom, bestballFillBy, isRetSlot, type ClassicPick, type ClassicScoring, type ClassicSlotDef } from '@drip/core/engine/classic';
+import { classicSlots, classicPoints, classicPointsFrom, bestballFillBy, type ClassicPick, type ClassicSlotDef } from '@drip/core/engine/classic';
 import { projectedPoints } from '@drip/core/engine/projScoring';
 import { playsForPlayer } from '@drip/core/engine/sim';
 import { teamRoster, getTeam, gameForTeam, YOU_TEAM_ID } from '@drip/core/data/league';
@@ -34,20 +31,6 @@ import { FieldView } from '../app/FieldView';
 import { PosPill, PlayerImg } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
 import type { Player } from '@drip/core/types';
-
-/** Everything a classic league's WEEK 0 hands the sim: its slot layout, its
- *  merged scoring catalog, its best-ball spots, golf, and the two sides'
- *  rosters (already stash-filtered, `exp` attached for tenure slots). */
-export interface ClassicSimLeague {
-  slots: ClassicSlotDef[];
-  sc: Partial<ClassicScoring>;
-  /** Slot names the league runs as best ball — always filled by actual points. */
-  bestball: string[];
-  golf: boolean;
-  youName: string; oppName: string;
-  you: Player[]; opp: Player[];
-  onExit: () => void;
-}
 
 // Regulation caps at 55:00 (matches the engine's GAME_SECONDS); OT plays reach
 // past it, so the real ceiling is read from the week's plays and this is only
@@ -69,7 +52,7 @@ function qClock(sec: number): string {
 
 type Row = { def: ClassicSlotDef; player: Player | null };
 
-export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
+export function ClassicSim() {
   const { navigate } = useStore();
   const [ppr, setPpr] = useState(1);
   const [bestBall, setBestBall] = useState(false);
@@ -87,42 +70,30 @@ export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
 
   const youId = YOU_TEAM_ID;
   const oppId = gameForTeam(youId, DEMO_WEEK)?.oppId ?? null;
-  const youName = league ? league.youName : (getTeam(youId)?.name ?? '—');
-  const oppName = league ? league.oppName : (oppId ? getTeam(oppId)?.name ?? '—' : '—');
+  const youTeam = getTeam(youId);
+  const oppTeam = oppId ? getTeam(oppId) : undefined;
 
-  // League mode plays the LEAGUE's layout and catalog; bare mode the defaults.
-  const slots = useMemo(() => league?.slots ?? classicSlots(), [league]);
+  const slots = useMemo(() => classicSlots(), []);
   const slotNames = useMemo(() => slots.map((s) => s.slot), [slots]);
-  const sc: number | Partial<ClassicScoring> = league ? league.sc : ppr;
-  const leagueBb = useMemo(() => new Set(league?.bestball ?? []), [league]);
 
-  /** The week's classic value of one player in one spot — the league's scoring,
-   *  the RET lens where the spot is a returner, the spot name for scoped
-   *  bonuses. `plays` pre-filtered by the caller (full week or clock-cut). */
-  const scoreRow = (plays: ReturnType<typeof playsForPlayer>['plays'], p: Player, d: ClassicSlotDef): number =>
-    classicPointsFrom(plays, p, sc, d.pos && isRetSlot(d.pos) ? 'RET' : undefined, d.slot);
-
-  // Each side's lineup. A league best-ball spot — and every spot under the
-  // hindsight toggle — fills by the week's ACTUAL points; everything else by
-  // projection, i.e. what a manager would have set before kickoff.
-  const fillSide = (roster: Player[]): Row[] => {
-    if (!ready || !roster.length) return slots.map((d) => ({ def: d, player: null }));
-    const valueOf = (p: Player, d: ClassicSlotDef): number =>
-      (bestBall || leagueBb.has(d.slot))
-        ? scoreRow(playsForPlayer(p, DEMO_WEEK).plays, p, d)
-        : projectedPoints(p, d.slot, d.pos);
+  // Each side's lineup — best-ball optimizes on the week's actual points (a
+  // fixed, hindsight-perfect lineup we then watch score); otherwise it's the
+  // projection fill, i.e. what a manager would have set before kickoff.
+  const fillSide = (teamId: string | null): Row[] => {
+    if (!teamId || !ready) return slots.map((d) => ({ def: d, player: null }));
+    const roster = teamRoster(teamId);
+    const valueOf: (p: Player, d: ClassicSlotDef) => number = bestBall
+      ? (p) => classicPoints(p, DEMO_WEEK, ppr)
+      : (p, d) => projectedPoints(p, d.slot, d.pos);
     const picks: ClassicPick[] = bestballFillBy([], slotNames, roster, slots, valueOf);
     const bySlot = new Map(picks.map((p) => [p.slot, p.player]));
     return slots.map((d) => ({ def: d, player: bySlot.get(d.slot) ?? null }));
   };
-  const youRoster = useMemo(() => league?.you ?? (ready ? teamRoster(youId) : []), [league, ready, youId]);
-  const oppRoster = useMemo(() => league?.opp ?? (ready && oppId ? teamRoster(oppId) : []), [league, ready, oppId]);
-  const youRows = useMemo(() => fillSide(youRoster), [youRoster, ready, ppr, bestBall, slots, leagueBb]); // eslint-disable-line react-hooks/exhaustive-deps
-  const themRows = useMemo(() => fillSide(oppRoster), [oppRoster, ready, ppr, bestBall, slots, leagueBb]); // eslint-disable-line react-hooks/exhaustive-deps
+  const youRows = useMemo(() => fillSide(youId), [youId, ready, ppr, bestBall]); // eslint-disable-line react-hooks/exhaustive-deps
+  const themRows = useMemo(() => fillSide(oppId), [oppId, ready, ppr, bestBall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every starter's plays, once — the clock filter below runs over these each
-  // frame rather than re-reading the cache 18 times a tick. A 2026 arrival with
-  // no 2025 week simply has none and scores 0 — said in the caption, not hidden.
+  // frame rather than re-reading the cache 18 times a tick.
   const playsBySlug = useMemo(() => {
     const m = new Map<string, ReturnType<typeof playsForPlayer>['plays']>();
     for (const r of [...youRows, ...themRows]) {
@@ -139,14 +110,14 @@ export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
     return mx;
   }, [playsBySlug]);
 
-  const ptsAt = (r: Row): number => {
-    if (!r.player) return 0;
-    const plays = playsBySlug.get(r.player.id) ?? [];
+  const ptsAt = (player: Player | null): number => {
+    if (!player) return 0;
+    const plays = playsBySlug.get(player.id) ?? [];
     const upto = clock >= maxClock ? plays : plays.filter((p) => p.clock <= clock);
-    return scoreRow(upto, r.player, r.def);
+    return classicPointsFrom(upto, player, ppr);
   };
 
-  const sideTotal = (rows: Row[]) => rows.reduce((n, r) => n + ptsAt(r), 0);
+  const sideTotal = (rows: Row[]) => rows.reduce((n, r) => n + ptsAt(r.player), 0);
   const youTotal = sideTotal(youRows);
   const themTotal = sideTotal(themRows);
 
@@ -177,27 +148,23 @@ export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
     cursor: 'pointer', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}`,
     background: on ? 'var(--warn)' : 'var(--surface)', color: on ? 'var(--on-accent)' : 'var(--dim)',
   });
-  const tag: React.CSSProperties = {
-    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 999,
-    border: '1px solid var(--bd)', background: 'var(--surface)', color: 'var(--dim)',
-  };
 
-  const sideCol = (label: string, rows: Row[], total: number, tone: 'you' | 'opp') => (
+  const sideCol = (team: ReturnType<typeof getTeam>, rows: Row[], total: number, tone: 'you' | 'opp') => (
     <div style={{ flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-        <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: `var(--${tone})`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: `var(--${tone})`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team?.name ?? '—'}</span>
         <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{total.toFixed(1)}</span>
       </div>
       {rows.map((r) => {
         const p = r.player;
-        const pts = ptsAt(r);
+        const pts = ptsAt(p);
         return (
           <div key={r.def.slot} onClick={p ? () => openPlayerCard({ slug: p.id, name: p.name, pos: p.pos, team: p.team ?? '', week: DEMO_WEEK }) : undefined}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)', cursor: p ? 'pointer' : 'default' }}>
-            <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: leagueBb.has(r.def.slot) ? 'var(--warn)' : 'var(--faint)', width: 34, flex: 'none' }} title={leagueBb.has(r.def.slot) ? 'league best-ball spot' : undefined}>{r.def.slot}</span>
+            <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--faint)', width: 30, flex: 'none' }}>{r.def.slot}</span>
             {p ? <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={26} /> : <div style={{ width: 26, height: 26, flex: 'none' }} />}
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {p ? (league ? p.name : shortName(p.id)) : <span style={{ color: 'var(--faint)' }}>—</span>}
+              {p ? shortName(p.id) : <span style={{ color: 'var(--faint)' }}>—</span>}
             </span>
             {p && <PosPill pos={p.pos} />}
             <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: pts ? 'var(--text)' : 'var(--faint)', width: 42, textAlign: 'right', flex: 'none' }}>{pts.toFixed(1)}</span>
@@ -214,26 +181,18 @@ export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div>
-          <div className="grotesk" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>🧪 {league ? 'Week 0 · Sim' : 'Classic Sim'}</div>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', letterSpacing: '0.04em' }}>
-            {league ? `2025 WEEK ${DEMO_WEEK} REPLAY · YOUR LEAGUE'S SCORING, SLOTS & ROSTERS` : `WEEK ${DEMO_WEEK} · 2025 REAL PLAYS · CLASSIC SCORING · PLAYTEST`}
-          </div>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>🧪 Classic Sim</div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', letterSpacing: '0.04em' }}>WEEK {DEMO_WEEK} · 2025 REAL PLAYS · CLASSIC SCORING · PLAYTEST</div>
         </div>
-        {league
-          ? <button onClick={league.onExit} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>WEEK 1 →</button>
-          : <button onClick={() => navigate({ name: 'live', view: 'admin' })} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>← ADMIN</button>}
+        <button onClick={() => navigate({ name: 'live', view: 'admin' })} className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>← ADMIN</button>
       </div>
 
-      {/* scoring controls — bare mode compares catalogs; league mode PLAYS the
-          league's (its rules are not a toggle), so only the hindsight fill and
-          the league's own trait chips show there. */}
+      {/* scoring controls */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        {!league && PPR_STEPS.map((s) => <button key={s.v} onClick={() => setPpr(s.v)} className="mono" style={chip(ppr === s.v)}>{s.label}</button>)}
-        {!league && <span style={{ width: 1, height: 20, background: 'var(--bd)', margin: '0 4px' }} />}
+        {PPR_STEPS.map((s) => <button key={s.v} onClick={() => setPpr(s.v)} className="mono" style={chip(ppr === s.v)}>{s.label}</button>)}
+        <span style={{ width: 1, height: 20, background: 'var(--bd)', margin: '0 4px' }} />
         <button onClick={() => setBestBall((b) => !b)} className="mono" style={chip(bestBall)}>{bestBall ? '✓ BEST BALL' : 'BEST BALL'}</button>
         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.04em' }}>{bestBall ? 'hindsight-perfect lineup' : 'projection lineup (set pre-kick)'}</span>
-        {league && leagueBb.size > 0 && <span className="mono" style={tag} title="These spots always take the best scorer — the league runs them as best ball.">🎯 {leagueBb.size} BEST-BALL SPOT{leagueBb.size === 1 ? '' : 'S'}</span>}
-        {league?.golf && <span className="mono" style={tag} title="Golf league — the LOW score wins this matchup.">⛳ GOLF · LOW WINS</span>}
       </div>
 
       {!ready ? (
@@ -259,14 +218,9 @@ export function ClassicSim({ league }: { league?: ClassicSimLeague }) {
 
           {/* lineups */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {sideCol(youName, youRows, youTotal, 'you')}
-            {sideCol(oppName, themRows, themTotal, 'opp')}
+            {sideCol(youTeam, youRows, youTotal, 'you')}
+            {sideCol(oppTeam, themRows, themTotal, 'opp')}
           </div>
-          {league && (
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.04em', lineHeight: 1.5 }}>
-              a rehearsal, not a result — your league scored on last season&rsquo;s Week {DEMO_WEEK}. A 2026 rookie has no 2025 plays and scores 0; an empty spot means nobody on the roster fits it.
-            </div>
-          )}
 
           {/* fields — every game with a starter, scrubbing at the current clock */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
