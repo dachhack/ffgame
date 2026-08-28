@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.5 — the app gets WEEK 0: the classic sim ported to mobile
+
+Founder validated the web week-0 sim ("looks good. Let's put it in the app").
+New apps/mobile/src/ui/ClassicSim.tsx — the web sim's league mode as a native
+sheet: same core judgement (classicPointsFrom clock-filtered, bestballFillBy,
+projectedPoints), native mechanics where the platforms differ. The app replays
+its BUNDLED 2025 week (w8, the demo's — the web sim uses its own DEMO_WEEK 2;
+both are "a real 2025 week", neither claims to be the same one), installed via
+the Metro-require door (installRealWeek/installGameFeedWeek, idempotent beside
+the demo board's own install). The scrub bar is a PanResponder track (RN has no
+range input) — tap or drag seeks; PLAY/⏭ as on web. Mobile ClassicBoard grew
+the identical week-0 door: canGo allows next 0, goWeek(w+d===0) opens a
+simOpen overlay (week 0 has no matchup row — the loaded week-1 board stays
+under it), early-returned above the bye guard, handing the sim slotDefs, sc,
+bestball, golf, names, stash-filtered rosters + exp. Swipe-right from week 1
+reaches it too (same goWeek). Needs an APK; web unchanged this bump.
+
 ### v0.365.4 — classic leagues get WEEK 0: the sim inside the matchup view, under league rules
 
 Founder: "wire it into each classic league as a week 0 in the matchup view. It
