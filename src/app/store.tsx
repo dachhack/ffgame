@@ -65,7 +65,8 @@ export type Route =
   | { name: 'hub' }
   | { name: 'league' }
   | { name: 'matchup'; week: number; phase: Phase }
-  | { name: 'final'; week: number };
+  | { name: 'final'; week: number }
+  | { name: 'classicSim' }; // hidden playtest board: scrub a baked 2025 week under classic rules
 
 /** Identifies the user's real pilot matchup behind a sim board, so the board can
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
@@ -89,6 +90,7 @@ function routeToHash(r: Route): string {
     case 'league': return '#/league';
     case 'matchup': return `#/matchup/${r.week}/${r.phase}`;
     case 'final': return `#/final/${r.week}`;
+    case 'classicSim': return '#/classic-sim';
   }
 }
 /** URL hash → Route, or null when the hash carries no (valid) route so the caller
@@ -104,6 +106,7 @@ function hashToRoute(hash: string): Route | null {
     case 'live': return { name: 'live' };
     case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
     case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
+    case 'classic-sim': return { name: 'classicSim' };
     default: return null;
   }
 }

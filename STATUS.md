@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.3 — Classic Sim: a hidden, scrubbable playtest of classic mode on 2025 data
+
+Founder: "how can I play test classic mode? Can we use 2025 data to sim a
+week?" The drip board always had a scrubbable 2025 demo; classic only had
+ClassicDemo (a static scoring compare). New `ClassicSim` screen (web, hidden —
+super-admin panel → 🧪 classic sim, or #/classic-sim) loads the same baked
+DEMO_WEEK, fills both sides' classic lineups (projection or best-ball), and
+drives a clock you drag/play. Scores are `classicPointsFrom` over each starter's
+plays filtered to `clock <= scrub` — so it can't disagree with the real board —
+and the shared FieldView renders every starter's game at the current clock, so
+the down & distance + box score scrub alongside. Verified in a headless
+Chromium: Week 2 renders 127.7–108.8 at final, 48.3–49.9 scrubbed to mid-game
+(maxClock 3895 catches OT), 13 games' fields drawn. Web-only, additive, no
+engine/DB/mobile change.
+
 ### v0.365.2 — full QB line in the box score; down & distance on the field visual
 
 Two founder asks, both on the live-board box-score/field surface (web + app).

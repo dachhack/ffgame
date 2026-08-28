@@ -165,6 +165,7 @@ function PremiumTierPanel() {
 type AdminTab = 'leagues' | 'requests' | 'users' | 'system' | 'audit';
 
 export function AdminPage({ onBack }: { onBack: () => void }) {
+  const { navigate } = useStore();
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [overrides, setOverrides] = useState<AdminOverride[]>([]);
   const [audit, setAudit] = useState<AdminAudit[]>([]);
@@ -214,7 +215,12 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
             {leagues === null ? '…' : `${leagues.length} league${leagues.length === 1 ? '' : 's'}`}{pendingReqs ? ` · ${pendingReqs} open request${pendingReqs === 1 ? '' : 's'}` : ''}
           </div>
         </div>
-        <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          {/* Playtest classic mode on a baked 2025 week — scrub a real game
+              under classic scoring. Hidden here (super-admin) + #/classic-sim. */}
+          <button onClick={() => navigate({ name: 'classicSim' })} className="mono" style={{ ...linkBtn, flexShrink: 0 }} title="Scrub a real 2025 week under classic scoring">🧪 classic sim</button>
+          <button onClick={load} className="mono" style={{ ...linkBtn, flexShrink: 0 }}>↻ refresh</button>
+        </div>
       </div>
       {err && <div className="mono" style={{ fontSize: 13, color: 'var(--opp)', marginBottom: 10, lineHeight: 1.5, wordBreak: 'break-word' }}>⚠ {err}</div>}
 
