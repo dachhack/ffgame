@@ -42,6 +42,9 @@ ok('roster order, not alphabetical',
   yetToPlayBreakdown([E({ pos: 'WR' }), E({ pos: 'QB' }), E({ pos: 'WR' }), E({ pos: 'TE' })]) === '1 QB, 2 WR, 1 TE',
   yetToPlayBreakdown([E({ pos: 'WR' }), E({ pos: 'QB' }), E({ pos: 'WR' }), E({ pos: 'TE' })]));
 ok('finished players drop out', yetToPlayBreakdown([E({ pos: 'QB', state: 'done' }), E({ pos: 'RB' })]) === '1 RB');
+// v0.368.0: a player mid-game is PLAYING, not yet to play — nine starters all
+// live used to read "yet to play (9)" over nine live rows.
+ok('live players drop out too', yetToPlayBreakdown([E({ pos: 'QB', state: 'live' }), E({ pos: 'RB' })]) === '1 RB');
 
 // the whole board
 const slots = [
@@ -56,6 +59,10 @@ const board = buildMatchupBoard({
 ok('live total counts only what is scored', board.home.live === 24, board.home.live);
 ok('projected blends done + live floor', board.home.projected === 32, board.home.projected);
 ok('an EMPTY spot is not "yet to play"', board.away.yetToPlay === 0, board.away.yetToPlay);
+// v0.368.0: yetToPlay counts only 'pre'; a live starter lands in `playing`.
+ok('a live starter is playing, not yet to play', board.home.yetToPlay === 0 && board.home.playing === 1,
+  { yetToPlay: board.home.yetToPlay, playing: board.home.playing });
+ok('a finished side has nobody playing', board.away.playing === 0, board.away.playing);
 ok('an empty spot contributes nothing', board.away.projected === 10, board.away.projected);
 ok('win pcts still sum to 1', Math.abs(board.home.winPct + board.away.winPct - 1) < 1e-9);
 

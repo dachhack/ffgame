@@ -1352,6 +1352,17 @@ export function metricDriver(pos: Pos, metricId: string | null | undefined, s: S
   return null;
 }
 
+/** The classic board row's statline (v0.368.0): the week's whole counting line
+ *  so far, formatted — or null while the player has no counted play, because a
+ *  row of zeros under a man who hasn't touched the ball says less than
+ *  "In progress" does. MAX clock deliberately: the board is live, so the line
+ *  is everything the feed has released, not a position on a replay. */
+export function boardStatline(player: Player, week: number, compact = false): string | null {
+  const s = statlineAt(player, week, Number.MAX_SAFE_INTEGER);
+  if (!Object.values(s).some((v) => v > 0)) return null;
+  return fmtStat(player.pos, s, compact);
+}
+
 export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
   // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.

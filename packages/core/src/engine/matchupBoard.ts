@@ -35,6 +35,14 @@ export interface BoardEntry {
   state: 'pre' | 'live' | 'done';
   /** "Sun 1:00 PM", already localised by the caller (hosts differ on Intl). */
   kickoff?: string | null;
+  /** "Q2 6:10" — where the game clock stands, from the feed's latest released
+   *  play (feedClockLabel). Only meaningful while state is 'live'; the row
+   *  shows it IN PLACE of the kickoff, whose job ended at the whistle
+   *  (v0.368.0, founder: "the game times below the players didn't tick"). */
+  clock?: string | null;
+  /** "12-58 ru · 3/4-31 rec" — the week's counting line so far (boardStatline),
+   *  null until the player has a counted play. Live and done rows only. */
+  statline?: string | null;
   /** "@ CIN" / "vs CLE" / "BYE". */
   opponent?: string | null;
   /** 'Q' | 'O' | 'D' | 'IR' — rendered as a tag beside the position. */
@@ -65,9 +73,17 @@ export interface BoardSide {
   live: number;
   /** Live + the remaining share of every starter still to play. */
   projected: number;
-  /** Starters whose game hasn't finished. */
+  /** Starters whose game hasn't STARTED (state 'pre').
+   *
+   *  Until v0.368.0 this counted everyone not finished, so nine starters all
+   *  mid-game still read "yet to play (9)" — a line contradicting the nine
+   *  live rows under it (the founder's rehearsal report). A player on the
+   *  field is not yet to play; he is `playing`. The win-probability spread
+   *  still counts both, because a live player's score is still unresolved. */
   yetToPlay: number;
-  /** "2 QB, 2 RB, 4 WR" — what's left, by position, in roster order. */
+  /** Starters whose game is on right now (state 'live'). */
+  playing: number;
+  /** "2 QB, 2 RB, 4 WR" — still to START, by position, in roster order. */
   yetToPlayBreakdown: string;
   /** Win chance 0..1 — see winProbability below for what it is and isn't. */
   winPct: number;
@@ -141,7 +157,9 @@ const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', '
 export function yetToPlayBreakdown(entries: BoardEntry[]): string {
   const counts = new Map<string, number>();
   for (const e of entries) {
-    if (e.state === 'done') continue;
+    // Only 'pre' counts (v0.368.0): a player mid-game is playing, not yet to
+    // play, and listing him here contradicted his own live row.
+    if (e.state !== 'pre') continue;
     counts.set(e.pos, (counts.get(e.pos) ?? 0) + 1);
   }
   return [...counts.entries()]
@@ -217,7 +235,11 @@ export function buildMatchupBoard(input: {
     // An EMPTY starting spot counts as nothing scored and nothing to come —
     // it is not "yet to play", because nobody is going to play it. Counting it
     // would tell a manager to keep waiting on a slot they simply left blank.
+    // `left` (unfinished: pre + live) feeds the win-probability spread — a
+    // live player's score is still unresolved; the DISPLAY counts split it.
     const left = played.filter((e) => e.state !== 'done').length;
+    const pre = played.filter((e) => e.state === 'pre').length;
+    const playing = played.filter((e) => e.state === 'live').length;
     const theirPlayed = theirs.filter((e): e is BoardEntry => !!e);
     const theirProjected = theirs.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0);
     const theirLeft = theirPlayed.filter((e) => e.state !== 'done').length;
@@ -227,7 +249,8 @@ export function buildMatchupBoard(input: {
       avatar: s.avatar ?? null,
       live,
       projected,
-      yetToPlay: left,
+      yetToPlay: pre,
+      playing,
       yetToPlayBreakdown: yetToPlayBreakdown(played),
       winPct: winProbability(projected, theirProjected, left, theirLeft),
       record: s.record ?? null,
