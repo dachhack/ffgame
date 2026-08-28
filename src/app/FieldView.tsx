@@ -324,6 +324,10 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
     : !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
     : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''));
+  // Down & distance the CURRENT play was snapped on (dn/dist are pre-snap; the
+  // situation chip above shows the RESULTING next snap). Goal-to-go when the
+  // sticks reach the goal line. dn 0 = kickoff/PAT — no down to show.
+  const curDD = cur && cur.dn > 0 ? `${ORD[cur.dn]} & ${cur.dist >= cur.yl ? 'Goal' : cur.dist}` : null;
   const score = cur ? { a: cur.as, h: cur.hs } : { a: 0, h: 0 };
 
   const logo = ballTm ? teamLogo(ballTm) : null;
@@ -495,7 +499,9 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
       )}
       {cur && !over && (
         <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--text)', textAlign: 'center', marginTop: 4, overflowWrap: 'anywhere' }} key={cur.pid ?? cur.c} className="fv-txt">
-          {accent && <span style={{ color: accent }}>● </span>}{cur.txt}
+          {accent && <span style={{ color: accent }}>● </span>}
+          {curDD && <span className="mono" style={{ fontWeight: 700, fontSize: 9, letterSpacing: '0.06em', color: 'var(--dim)', marginRight: 5 }}>{curDD.toUpperCase()}</span>}
+          {cur.txt}
         </div>
       )}
       {/* ── BOX SCORE (v0.336.0) ─────────────────────────────────────────

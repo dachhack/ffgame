@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.2 — full QB line in the box score; down & distance on the field visual
+
+Two founder asks, both on the live-board box-score/field surface (web + app).
+(1) The QB box-score line showed only pass yds + TDs (+ loose rush yds). It now
+reads the full game line — C/ATT · pass yd · TD · INT · sk · car · rush yd ·
+rush TD — driven by the 0166 truth flags the feed already carries (cmp/inc/skd/
+turnover), which `statlineFrom` now counts into new StatLine fields (comp, att,
+sacked, passInts). Legacy data without the flags falls back to the old yds+TD
+line, and the compact card format is untouched (only the box score reads the
+full format). (2) The field visual now prints the CURRENT play's down &
+distance next to its play text (the situation chip above still shows the
+resulting next snap) — goal-to-go aware, ported identically to the mobile
+FieldView. Web ships on Pages; the mobile halves need a new APK.
+
 ### v0.365.1 — web box-score gets the app's OFFENSE/DEFENSE tabs; app all-fields sheets pull-to-refresh
 
 Two founder asks. (1) The web field-visual box score (FieldView.tsx) was a

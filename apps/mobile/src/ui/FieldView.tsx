@@ -153,6 +153,10 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
     : !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
     : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''));
+  // Down & distance the CURRENT play was snapped on (the chip above shows the
+  // resulting next snap). Goal-to-go when the sticks reach the goal line; dn 0
+  // = kickoff/PAT, nothing to show. Ported from the web FieldView.
+  const curDD = cur && cur.dn > 0 ? `${ORD[cur.dn]} & ${cur.dist >= cur.yl ? 'Goal' : cur.dist}` : null;
   const score = cur ? { a: cur.as, h: cur.hs } : { a: 0, h: 0 };
 
   const awayCol = teamColor(away), homeCol = teamColor(home);
@@ -311,7 +315,9 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
       )}
       {!!cur && !over && (
         <Text style={{ fontSize: 10.5, lineHeight: 14, color: t.text, textAlign: 'center', marginTop: 4 }}>
-          {accent ? <Text style={{ color: accent }}>● </Text> : null}{cur.txt}
+          {accent ? <Text style={{ color: accent }}>● </Text> : null}
+          {curDD ? <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{curDD.toUpperCase()}  </Text> : null}
+          {cur.txt}
         </Text>
       )}
 
