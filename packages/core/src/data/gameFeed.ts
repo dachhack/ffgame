@@ -241,6 +241,33 @@ export function groupFieldGames(week: number, entries: FieldBoardEntry[]): Field
     .map(([g]) => g);
 }
 
+/** "Q2 6:10" from game-elapsed seconds — the one quarter-clock formatter
+ *  (v0.368.0). The OT branch is the part worth centralising: overtime is
+ *  10-minute periods past 3600, and a hand-rolled copy once read a late-Q4
+ *  game as "OT" during the first live-fire. Same arithmetic FieldView's score
+ *  strip and the play logs use. */
+export function fmtQuarterClock(c: number): string {
+  if (c >= 3600) { const rem = 600 - ((c - 3600) % 600); return `OT ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`; }
+  const q = Math.floor(c / 900) + 1; const rem = 900 - (c % 900);
+  return `Q${q} ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
+}
+
+/** Where a team's game clock stands, off the feed the board already holds —
+ *  the latest ingested play's position as "Q2 6:10", or null when the week has
+ *  no feed for the team or no plays yet. LATEST BY `c`, ties to the later
+ *  array entry — the same rule as slateScores, and for the same reason: a
+ *  revised play must win over the provisional one it replaces. */
+export function feedClockLabel(week: number, team?: string | null): string | null {
+  const f = gameFeedFor(week, team);
+  if (!f?.plays?.length) return null;
+  let best = -1;
+  for (const p of f.plays) {
+    const c = Number(p?.c);
+    if (Number.isFinite(c) && c >= best) best = c;
+  }
+  return best < 0 ? null : fmtQuarterClock(best);
+}
+
 export function feedPossFor(week: number, team?: string | null): number[][] {
   const f = gameFeedFor(week, team);
   if (!f || !team) return [];

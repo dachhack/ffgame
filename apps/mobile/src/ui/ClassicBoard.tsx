@@ -18,7 +18,8 @@ import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds } from '@dr
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
-import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock } from '@drip/core/data/gameFeed';
+import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
@@ -239,7 +240,12 @@ function BoardCell({ e, align, onGame, onName }: {
   // which is most of what made the rows tall.
   // A blank game line reads as a rendering fault, so an unplaceable player
   // says so rather than showing nothing (and rather than claiming a bye).
-  const line = e.opponent === 'BYE' ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+  // The line follows the game (v0.368.0): kickoff before the whistle, the
+  // feed's game clock while it's live, Final after — the web twin's rule.
+  const line = e.opponent === 'BYE' ? 'BYE'
+    : e.state === 'live' && e.clock ? `${e.clock} ${e.opponent ?? ''}`.trim()
+    : e.state === 'done' ? `Final ${e.opponent ?? ''}`.trim()
+    : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
       {onName ? (
@@ -263,6 +269,13 @@ function BoardCell({ e, align, onGame, onName }: {
       ) : (
         <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
           {`${line}${roofMark(e)}`}
+        </Text>
+      )}
+      {/* The counting line, once there is one (v0.368.0) — what the points on
+          this row are MADE OF. Costs height only when the player has played. */}
+      {!!e.statline && (
+        <Text numberOfLines={1} style={{ fontSize: 8, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
+          {e.statline}
         </Text>
       )}
     </View>
@@ -299,13 +312,9 @@ const fmtKick = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
-/** "Q2 8:41" from game-elapsed seconds — the play log's clock column (the same
- *  arithmetic FieldView uses for its score strip). */
-const fmtQClock = (c: number): string => {
-  if (c >= 3600) { const rem = 600 - ((c - 3600) % 600); return `OT ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`; }
-  const q = Math.floor(c / 900) + 1; const rem = 900 - (c % 900);
-  return `Q${q} ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
-};
+/** "Q2 8:41" — the play log's clock column, now core's one formatter
+ *  (fmtQuarterClock, v0.368.0) so the row clocks and the log can't drift. */
+const fmtQClock = fmtQuarterClock;
 
 export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; leagueId: string; rosterId: number }) {
   const t = useTheme();
@@ -696,6 +705,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       const meta = slugMeta(slug);
       const g = gameFor(meta.team, slate);
       const simLive = simTeams.size > 0 && simTeams.has(normTeam(meta.team ?? ''));
+      const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+        : g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre';
       return {
         slug,
         name: prettySlug(slug),
@@ -706,9 +717,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // bake, so a custom-scoring league projected under rules it does not
         // play by, and a spot-scoped bonus never showed in the spot it pays.
         proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot, slotPos),
-        state: simLive ? (matchup?.status === 'final' ? 'done' : 'live')
-          : g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
+        state: st,
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
+        // The clock and the statline are FEED facts, not slate facts (v0.368.0,
+        // founder: rows sat on the kickoff time and bare points while the sim
+        // streamed). Both refresh with playsAt — each poll re-renders them.
+        clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, meta.team) : null,
+        statline: st !== 'pre' && matchup ? boardStatline(mkPlayer(slug), matchup.week, true) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
         // know used to read "BYE" on the day he played his opener.
@@ -760,10 +775,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // THE WEEK'S SLATE, aggregated against THIS matchup's starters (v0.312.0).
   // Derived from the board rather than from the pool, so a chip's points and
   // the headline totals above it can only ever agree.
-  const chips = useMemo(
-    () => (board ? slateChips(board.starters, slate, nowTs, finalTeams, liveScores) : []),
-    [board, slate, nowTs, finalTeams, liveScores],
-  );
+  const chips = useMemo(() => {
+    const base = board ? slateChips(board.starters, slate, nowTs, finalTeams, liveScores) : [];
+    // 🧪 REHEARSAL (v0.368.0): the chips' state comes from the slate clock,
+    // which under a sim sits in the future — so the NFL SLATE chip kept saying
+    // "9 starters to play" over a board of live rows. Same override rule as
+    // entryFor's: a game whose feed has plays flowing is LIVE, done once the
+    // matchup is final. A game the sim hasn't reached yet stays 'pre'.
+    if (!simTeams.size) return base;
+    return base.map((c) => (simTeams.has(normTeam(c.home)) || simTeams.has(normTeam(c.away))
+      ? { ...c, state: (matchup?.status === 'final' ? 'done' : 'live') as SlateChip['state'] }
+      : c));
+  }, [board, slate, nowTs, finalTeams, liveScores, simTeams, matchup]);
   // THE WEEK'S SCOREBOARD (v0.323.0), out of the feeds the board already has —
   // every game the worker has polled, not only the ones this matchup is in.
   const slateTotals = useMemo(() => slateSummary(chips), [chips]);
@@ -1036,13 +1059,23 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 <Mono size={9} tone="you" weight="700">{Math.round(board.home.winPct * 100)}% WIN</Mono>
                 <Mono size={9} tone="opp" weight="700">{Math.round(board.away.winPct * 100)}% WIN</Mono>
               </View>
+              {/* PLAYING is its own count now (v0.368.0): "yet to play (9)"
+                  over nine live rows was the header contradicting its own
+                  board. Yet-to-play means has not started; a side with nothing
+                  left and nobody on the field is simply all final. */}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 7, gap: 10 }}>
-                <Mono size={8.5} tone="faint" style={{ flex: 1, lineHeight: 12 }}>
-                  {`yet to play (${board.home.yetToPlay})${board.home.yetToPlayBreakdown ? `\n${board.home.yetToPlayBreakdown}` : ''}`}
-                </Mono>
-                <Mono size={8.5} tone="faint" style={{ flex: 1, textAlign: 'right', lineHeight: 12 }}>
-                  {`yet to play (${board.away.yetToPlay})${board.away.yetToPlayBreakdown ? `\n${board.away.yetToPlayBreakdown}` : ''}`}
-                </Mono>
+                {([['left', board.home], ['right', board.away]] as const).map(([alignSide, s]) => (
+                  <View key={alignSide} style={{ flex: 1, alignItems: alignSide === 'right' ? 'flex-end' : 'flex-start' }}>
+                    {s.playing > 0 && (
+                      <Mono size={8.5} tone={alignSide === 'left' ? 'you' : 'opp'} weight="700">{`playing (${s.playing})`}</Mono>
+                    )}
+                    {s.yetToPlay > 0
+                      ? <Mono size={8.5} tone="faint" style={{ textAlign: alignSide === 'right' ? 'right' : 'left', lineHeight: 12 }}>
+                          {`yet to play (${s.yetToPlay})${s.yetToPlayBreakdown ? `\n${s.yetToPlayBreakdown}` : ''}`}
+                        </Mono>
+                      : s.playing === 0 ? <Mono size={8.5} tone="faint">all final</Mono> : null}
+                  </View>
+                ))}
               </View>
             </>
           )}

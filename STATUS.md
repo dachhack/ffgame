@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.0 — the classic row goes live: game clock, statlines, playing vs yet-to-play
+
+Founder, first rehearsal WITH data flowing: "The game times below the players
+didn't tick through. We also need statlines for each player synced with the
+feed. The yet to play lines also didn't change." Three gaps, all real on live
+Sundays too, not just sims: (1) the row's game line showed the kickoff time
+forever — now it follows the game: kickoff pre, the feed's game clock ("Q2
+6:10", core fmtQuarterClock/feedClockLabel — latest released play, revisions
+win ties) while live, "Final" after; (2) rows showed bare points — BoardEntry
+now carries `statline` (core boardStatline: the week's counting line off the
+same live plays the points come from, null until the player has a counted
+play, compact format), rendered under the game line on both hosts; (3)
+"yet to play (9)" over nine live rows was the header contradicting its own
+board — BoardSide.yetToPlay now counts only 'pre', new `playing` counts
+'live', the win-probability spread still counts both (a live score is still
+unresolved), and the header renders "playing (n)" + "yet to play (m)" /
+"all final". Also: the NFL SLATE chip and slate sheet get the same sim
+override the rows got in v0.367.2 (chips' state came from the slate clock,
+so they said "9 starters to play" mid-sim). Board checks pin the new
+semantics. Mobile twin updated throughout — rides the next APK; web is the
+rehearsal surface today.
+
 ### v0.367.4 — the missing COPY: the worker image never shipped the gamefeed bakes
 
 Founder, third report: "stil no stats by the individual players" — on a build
