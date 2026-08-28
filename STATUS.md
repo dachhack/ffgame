@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.5 — app windows stop lying about LIVE + the slate sheet opens from the live board
+
+Founder, on the APK drip board pre-kickoff: "these should be locked but not
+live yet" + "in the web version if you click on the slate you get a pop up
+of the games in the window. let's have the same in the app." Two app fixes,
+both in the Duel (live board): (1) the window status chip fell back to the
+MATCHUP's status, so the moment the matchup went live every window wore
+● LIVE, kicked or not — the window's own clock decides now (winKicked, with
+hasRows as the feed-truth override), revealed-but-not-kicked reads 🔒 LOCKED
+(the web's word), unrevealed stays SEALED; (2) the Duel's slate crest row is
+a door: it opens the SAME Game Slate sheet the setup board already owns
+(games, kickoffs, fielded players both sides), handed through a new
+onOpenSlate prop rather than duplicated — the demo replay omits the prop
+and its crest row stays inert. App-only; rides the next APK.
+
 ### v0.368.4 — once the ball is live, the stats ARE the card
 
 Founder: "once the game starts we don't really need the game info. just the

@@ -50,7 +50,7 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras, userId }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras, userId, onOpenSlate }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -78,6 +78,13 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   liveExtras?: (win: string, slot: string, side: 'you' | 'their') => {
     gameLabel?: string | null; stat?: string | null; coin?: number | null;
   } | null;
+  /** Opens the window's GAME SLATE sheet (v0.368.5, founder: "in the web
+   *  version if you click on the slate you get a pop up of the games in the
+   *  window. let's have the same in the app."). The sheet itself lives in
+   *  LivePicks — the setup board already owns one, and a second copy here
+   *  would drift — so the live board hands the door through. Callers without
+   *  a sheet (the demo replay) omit it and the crest row stays inert. */
+  onOpenSlate?: (win: string) => void;
 }) {
   const t = useTheme();
   // Which DONE windows have their field + play log expanded (0182.2) —
@@ -214,10 +221,18 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         const hasRows = !!s?.slot_scores?.length;
         // A kicked window is never "SEALED" — from kickoff the reveal has, by
         // rule, happened; an empty opposing half from here on means UNOPPOSED.
+        // And a window that has NOT kicked is never "LIVE" (v0.368.5, founder:
+        // "these should be locked but not live yet"): the chip used to fall
+        // back to the MATCHUP's status, so the moment the matchup went live
+        // every window wore ● LIVE, kicked or not. The window's own clock
+        // decides now — with `hasRows` as the feed-truth override (a sim or
+        // an irregular slate can score a window the wall clock calls pre).
+        // Revealed-but-not-kicked is the lock hour: 🔒 LOCKED, the web's word.
         const st = winStatus?.(win)
           ?? (status === 'final' ? 'FINAL'
-            : sealedBacks > 0 && !hasRows && !winKicked(win) ? 'SEALED'
-            : status === 'live' ? '● LIVE' : winKicked(win) ? '● LIVE' : 'SEALED');
+            : winKicked(win) || hasRows ? '● LIVE'
+            : th.length ? '🔒 LOCKED'
+            : 'SEALED');
         // PAIR BY ROSTER SLOT, NOT ARRAY POSITION (v0.344.2). `revealed`
         // arrives in query-row order, and zipping my[i] against th[i] crossed
         // duels whenever the two sides' rows sorted differently — the
@@ -254,27 +269,34 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                 {/* The web pulses this chip with ct-livepulse. Only while the
                     window is actually live — a permanent pulse is just chrome. */}
                 {st === '● LIVE' && <LivePulse color={t.you} />}
-                <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : 'faint'}>{st}</Mono>
+                <Mono size={9} weight="700" tone={st === '● LIVE' ? 'you' : st === '🔒 LOCKED' ? 'warn' : 'faint'}>{st}</Mono>
               </View>
             </View>
 
-            {/* The slate crests — which games this window actually is. */}
+            {/* The slate crests — which games this window actually is. A DOOR
+                now (v0.368.5): tapping opens the window's Game Slate sheet —
+                the setup board's own sheet, handed through onOpenSlate, the
+                web popup's twin. */}
             {(() => {
               const games = gamesInWindow(week, win as never);
               if (!games.length) return null;
               const logos = [...new Set(games.flatMap((g) => [g.away, g.home]))];
-              return (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+              const row = (
+                <>
                   {logos.slice(0, 10).map((tm) => {
                     const url = teamLogo(tm);
                     return url ? <Image key={tm} source={{ uri: url }} style={{ width: 14, height: 14 }} resizeMode="contain" />
                       : <Mono key={tm} size={8} tone="faint">{tm}</Mono>;
                   })}
                   <Mono size={8.5} tone="faint" track={0.12}>
-                    SLATE · {games.length} GAME{games.length === 1 ? '' : 'S'}
+                    SLATE · {games.length} GAME{games.length === 1 ? '' : 'S'}{onOpenSlate ? ' ›' : ''}
                   </Mono>
-                </View>
+                </>
               );
+              const rowStyle = { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8, flexWrap: 'wrap' } as const;
+              return onOpenSlate
+                ? <Pressable hitSlop={6} onPress={() => onOpenSlate(win)} style={rowStyle}>{row}</Pressable>
+                : <View style={rowStyle}>{row}</View>;
             })()}
 
             {/* WINDOW BATTLE — the web's bar, not a bare "x VS y". The bar is
@@ -369,6 +391,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
           </Card>
         );
       })}
+
     </>
   );
 }

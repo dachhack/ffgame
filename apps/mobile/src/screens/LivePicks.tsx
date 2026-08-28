@@ -1003,6 +1003,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               // 4-hour literal until v0.340.1.) null = let Duel derive
               // SEALED/LIVE from kickoff + reveal state as before.
               winStatus={(id) => windowPhase(week, id as never, nowTs, { matchupFinal: matchup!.status === 'final' }) === 'final' ? 'FINAL' : null}
+              // The Game Slate sheet is the SETUP board's (below) — the live
+              // board's crest row opens the same one (v0.368.5, founder: the
+              // web's slate popup, now on the app too).
+              onOpenSlate={(id) => setSlateWin(wins.find((x) => String(x.id) === id) ?? null)}
               slotDetail={slotDetail}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
