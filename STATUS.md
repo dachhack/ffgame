@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.367.3 — the rehearsal breathes: 10s cadence, instant ▶/⏹ refresh, a visible build stamp
+
+Founder, still mid-rehearsal: "Still no numbers, it also looks like the scores
+don't reset immediately when you hit reset." Verified the v0.367.2 fix IS on
+main and the team-code predicate matches every real feed code (normTeam probe
+over the baked w1 gamefeed) — the remaining culprits are the classic board's
+PRODUCTION cadence and an unfalsifiable client build. Three fixes: (1) the
+SimStrip now prints APP_VERSION ("🧪 REHEARSAL · v0.367.3") — the classic
+board showed no version anywhere, so a stale PWA bundle could not be told
+apart from a real bug, twice now; (2) the board's live poll runs every 10s
+under LIVE TEST (production keeps 60s) — a 10-40× rehearsal on a minute
+cadence reads as a dead board; (3) SimStrip grew onChanged, and ClassicBoard
+re-runs its WHOLE loader on ▶/⏹ (simVer dep) — reset flips matchup.status
+back to scheduled and unlocks picks, which only the loader reads, so a
+poll-only refresh left the header in live dress over a reverted week. Web-only.
+
 ### v0.367.2 — rehearsal scores flow: the sim feed outranks the slate clock
 
 Founder, mid-rehearsal ("Should the scores be at 0?"): the worker was

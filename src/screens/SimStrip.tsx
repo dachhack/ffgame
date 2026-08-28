@@ -13,10 +13,14 @@
 // picks unlocked, SIM rows gone.
 import { useEffect, useRef, useState } from 'react';
 import { adminSimStart, adminSimReset, simRunState, type SimRun } from '@drip/core/data/liveApi';
+import { APP_VERSION } from '@drip/core/version';
 
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-export function SimStrip({ leagueId, week }: { leagueId: string; week: number }) {
+/** `onChanged` fires after a successful ▶/⏹ so the host board can refetch its
+ *  live data NOW instead of on its next poll tick — a reset that leaves stale
+ *  scores up for a minute reads as a reset that didn't work (founder). */
+export function SimStrip({ leagueId, week, onChanged }: { leagueId: string; week: number; onChanged?: () => void }) {
   // null = probing, false = not an admin (render nothing), SimRun|'idle' = show.
   const [state, setState] = useState<SimRun | 'idle' | false | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,6 +50,7 @@ export function SimStrip({ leagueId, week }: { leagueId: string; week: number })
     const r = await adminSimStart(leagueId, week).catch(() => null);
     setBusy(false);
     if (!r?.ok) { setErr(r?.error ?? 'failed'); return; }
+    onChanged?.();
     refresh();
   };
   const reset = async () => {
@@ -55,6 +60,7 @@ export function SimStrip({ leagueId, week }: { leagueId: string; week: number })
     const r = await adminSimReset(leagueId, run?.week ?? week).catch(() => null);
     setBusy(false);
     if (!r?.ok) { setErr(r?.error ?? 'failed'); return; }
+    onChanged?.();
     refresh();
   };
 
@@ -65,7 +71,7 @@ export function SimStrip({ leagueId, week }: { leagueId: string; week: number })
 
   return (
     <div className="mono" style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 10, color: 'var(--dim)', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))', border: '1px dashed var(--warn)', borderRadius: 6, padding: '6px 10px' }}>
-      <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>🧪 REHEARSAL</span>
+      <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>🧪 REHEARSAL · {APP_VERSION}</span>
       {run ? (
         <span>
           week {run.week} · {run.status === 'running'
