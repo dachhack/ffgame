@@ -1368,8 +1368,14 @@ export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
   // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.
   if (compact) {
     if (pos === 'QB') {
-      const p = [`${s.passYds} pass`, `${s.passTds} TD`];
-      if (s.rushYds) p.push(`${s.rushYds} ru`);
+      // C/ATT rides the yards ("18/25-230 pass") and INT/sk appear when they
+      // happened (v0.368.3): the compact line used to drop exactly the stats
+      // that explain a bad QB score, and an INT you cannot see is the one a
+      // manager goes looking for.
+      const p = [s.att ? `${s.comp}/${s.att}-${s.passYds} pass` : `${s.passYds} pass`, `${s.passTds} TD`];
+      if (s.passInts) p.push(`${s.passInts} INT`);
+      if (s.sacked) p.push(`${s.sacked} sk`);
+      if (s.carries || s.rushYds) p.push(`${s.carries}-${s.rushYds} ru`);
       return p.join(' · ');
     }
     if (pos === 'RB') {
