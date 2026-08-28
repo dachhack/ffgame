@@ -9,7 +9,11 @@
 --       a second LEAGUE on the same week (SIM feed rows are week-scoped, so
 --       two leagues on one week would share and destroy each other's feed);
 --   (3) RESET reverting everything the sim touched — and only that: matchups
---       back to scheduled, picks unlocked, SIM rows gone, the run row gone.
+--       back to scheduled, picks unlocked, SIM rows gone, the run row gone;
+--   (4) the ROSTER REFRESH (0252): start and reset rewrite a native week's
+--       pool from native_roster and drop picks naming unrostered players,
+--       because native_materialize's all-scheduled guard freezes any week
+--       the sim has ever touched.
 \set QUIET on
 \pset pager off
 set client_min_messages = notice;
@@ -142,6 +146,44 @@ begin
   r := admin_sim_start(lid, 2);
   if (r ->> 'ok')::boolean or position('finals' in (r ->> 'error')) = 0 then
     raise exception 'SR8 FAIL: a sim armed over stamped finals — %', r;
+  end if;
+
+  -- ══ THE ROSTER REFRESH (0252) ═════════════════════════════════════════════
+  -- The frozen-pool bug the founder hit: native_materialize skips any week
+  -- that has ever gone non-scheduled, so a re-simmed week's pool kept a stale
+  -- pre-draft pool — and picks written off it were locked as lineups (both
+  -- seats fielded the same stars). START must rewrite the week's pool from
+  -- native_roster and drop picks naming players their seat no longer holds,
+  -- while a pick the seat DOES hold survives, locked.
+  delete from sleeper_lineup where league_id = lid and week = 1;
+  insert into sleeper_lineup (league_id, week, roster_id, starters_json)
+  values (lid, 1, 1, '[{"slot":1,"slug":"stale-1","player_slug":"stale-1","full":"Stale One","pos":"RB","team":"T"}]'::jsonb);
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
+  values (mid, '00000000-0000-0000-0000-0000000d0e01', 'am', 'S1', 'stale-1');
+  r := admin_sim_start(lid);
+  if not (r ->> 'ok')::boolean or (r ->> 'week')::int <> 1 then
+    raise exception 'SR9 FAIL: start refused on the stale-pool week — %', r;
+  end if;
+  if exists (select 1 from sealed_pick where matchup_id = mid and player_slug = 'stale-1') then
+    raise exception 'SR9 FAIL: a pick naming an unrostered player survived the pre-flight';
+  end if;
+  if not exists (select 1 from sealed_pick where matchup_id = mid and player_slug = 'sra-1' and locked) then
+    raise exception 'SR9 FAIL: the seat''s real pick did not survive the refresh, locked';
+  end if;
+  select count(*) into n from sleeper_lineup
+    where league_id = lid and week = 1 and roster_id = 1
+      and starters_json @> '[{"slug":"sra-1"}]'::jsonb;
+  if n <> 1 then raise exception 'SR9 FAIL: the week pool was not rewritten from native_roster'; end if;
+  if exists (select 1 from sleeper_lineup where league_id = lid and week = 1
+             and starters_json::text like '%stale-1%') then
+    raise exception 'SR9 FAIL: the stale pool survived the refresh';
+  end if;
+  perform admin_sim_reset(lid);
+  -- …and RESET runs the same refresh, so the board shows real rosters
+  -- immediately rather than after the next ▶.
+  if exists (select 1 from sleeper_lineup where league_id = lid and week = 1
+             and not (starters_json @> '[{"slug":"sra-1"}]'::jsonb) and roster_id = 1) then
+    raise exception 'SR9 FAIL: reset did not keep the materialized pool';
   end if;
 
   raise notice 'sim-run probes done';

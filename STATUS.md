@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.2 — the rehearsal fields YOUR roster (0252)
+
+Founder, auction roster open beside the board: "the sim isn't using my actual
+roster." Both seats fielded the same stars (both started J. Allen) — the
+auto-slotter filling from a stale pool. Mechanism: the board and the sim draw
+lineups from the week's sleeper_lineup pool rows, and native_materialize
+(0064) — the only rewrite from native_roster — deliberately skips any week
+whose matchups are not all 'scheduled'. A week the sim ever locked/finalized
+is frozen after, so its pool kept its pre-draft contents, the client
+auto-slot wrote picks from it, and admin_sim_start locked them as lineups.
+Fix (0252): native_materialize_week — the 0064 rewrite scoped to one week,
+no all-scheduled guard — runs in BOTH admin_sim_start and admin_sim_reset
+for native leagues, and both drop sealed picks naming players their seat no
+longer holds (emptied spots stay; Sleeper-mirror sandboxes untouched — their
+lineup rows ARE the roster truth). Seats left with no picks fall to
+simLineups' autoLineup off the now-correct pool. SR9 pins it: stale pool +
+stale pick → start rewrites the pool from native_roster, drops the stale
+pick, keeps + locks the real one; reset keeps the materialized pool.
+
 ### v0.368.1 — bigger per-player points
 
 Founder: "Do we have room to make the points scored by each player larger?"
