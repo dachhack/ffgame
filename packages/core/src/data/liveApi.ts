@@ -1246,6 +1246,19 @@ export const leagueWeeklyBudget = async (leagueId: string): Promise<number | nul
   return b == null ? null : Number(b);
 };
 /** Super-admin: toggle a league's live-test mode (compressed real-time schedule). */
+/** ▶ Board-driven dress rehearsal (0251): arm/reset a sim_run the WORKER
+ *  drives — baked plays dripped through live_play → resolver → this board.
+ *  Same double gate as the stamp lever: admin + 🧪 LIVE TEST. One sim per
+ *  week across all leagues (the SIM feed rows are week-scoped). */
+export const adminSimStart = (leagueId: string, week?: number | null, src?: number | null, speed?: number | null) =>
+  rpc<{ ok: boolean; error?: string; week?: number; src?: number; matchups?: number }>(
+    'admin_sim_start', { p_league_id: leagueId, p_week: week ?? null, p_src: src ?? null, p_speed: speed ?? 20 });
+export const adminSimReset = (leagueId: string, week?: number | null) =>
+  rpc<{ ok: boolean; error?: string; week?: number }>('admin_sim_reset', { p_league_id: leagueId, p_week: week ?? null });
+export interface SimRun { week: number; src: number; speed: number; status: 'running' | 'done'; started_at: string; cursor_at: number; clock: number }
+export const simRunState = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; run?: SimRun | null }>('sim_run_state', { p_league_id: leagueId });
+
 /** ⚡ Complete a SANDBOX league's week on demand (0250) — writes plausible
  *  finals so the week-completion mechanics (guillotine blade, vampire steal
  *  window) arm without waiting for the real NFL calendar. Admin-only AND the

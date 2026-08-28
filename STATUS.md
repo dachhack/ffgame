@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.367.0 — ▶ sim from the board: the dress rehearsal, playable in place
+
+Founder: "Can we make this all playable from the matchup board in the test
+league?" The feed simulator (CLI/workflow only until now) grows a board door.
+0251: `sim_run` control table + admin_sim_start/reset + sim_run_state — same
+double gate as 0250 (admin AND 🧪 LIVE TEST), one sim per week across leagues
+(SIM feed rows are week-scoped). START does the CLI's pre-flight (lock picks,
+matchups live, fresh SIM rows); the WORKER's new sweep (server/src/simsweep.js,
+wired into the tick beside sweepNative) advances a derived clock
+(wall-elapsed × speed, cursor on the row so a restarted worker resumes, never
+replays), drips due plays into live_play + game_feed, resolves each tick, and
+finalizes through resolveMatchup-at-final (finals + coin) when the feed is
+spent. Judgement is IMPORTED from simulate.js (buildFeed/simLineups/keyOf now
+exported; simulateLive refactored onto simLineups — CLI dry re-run PASS). Web:
+SimStrip on the live board (LIVE TEST leagues; self-gates on the server's
+forbidden) with ▶ SIM WEEK / ⏹ RESET + a 10s status poll. Tests: sim-run
+probes (74th suite: gates, pre-flight, refusals incl. cross-league same-week,
+reset reverts everything) + server/test/sim-sweep.mjs pinning the cursor
+windowing ((from,to] with no gap/overlap, dedupe keeps the latest delivery).
+Founder recipe: throwaway league → 🧪 LIVE TEST → open the board → ▶.
+
 ### v0.366.0 — ⚡ admin stamp-week: the vampire/guillotine playtest lever
 
 Founder: "how can I play test the vampire and guillotine mechanics?" Both arm

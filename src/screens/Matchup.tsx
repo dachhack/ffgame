@@ -35,6 +35,7 @@ import { Rulebook } from './Rulebook';
 import { PuIcon, Emoji, DripCoin } from '../app/gameIcons';
 import type { Pick, Player, Pos, WindowId, PbpEvent, BuffFx } from '@drip/core/types';
 import { RosterAside, SetupRow, PlayerPicker, ScoutModal, buffAppliesToSpot, TwinChip } from './boardParts';
+import { SimStrip } from './SimStrip';
 import { usePot, WindowPotChip, potOutcomeLine } from './WindowPot';
 import { CommishNoteBanner } from '../app/commishKit';
 import { ChatButton } from '../app/chat';
@@ -1855,6 +1856,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             </div>
             {/* Conditional, full-width status lines below the headline row. */}
             <CommishNoteBanner />
+            {/* The dress rehearsal's steering wheel (0251) — admin-only (the
+                strip self-gates on the server's answer), LIVE TEST leagues only. */}
+            {liveCtx && testAnchor != null && <SimStrip leagueId={liveCtx.leagueId} week={week} />}
             {preKickPhase && !liveCtx && (
               <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 6, padding: '6px 10px' }}>
                 ▶ Nothing's kicked yet — press <span style={{ color: 'var(--text)' }}>RUN ALL</span> (or ▶ on a window) to play the week out.

@@ -25,6 +25,7 @@ import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
 import { sweepNative } from './native.js';
+import { sweepSim } from './simsweep.js';
 import { sweepSeatWire } from './seatWire.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
@@ -520,6 +521,14 @@ async function tick() {
       log('progression:', nat.generated, 'brackets built,', nat.advanced, 'rounds advanced,', nat.eliminated, 'guillotine cuts');
     }
   } catch (e) { log('native sweep error', e.message); }
+
+  // Board-driven dress rehearsals (0251): advance any running sim_run — drip
+  // the due baked plays, resolve, finalize when the feed is spent. A quiet
+  // pass (no runs) is one SELECT.
+  try {
+    const sim = await sweepSim(log, playerIndex);
+    if (sim.runs) log('sim sweep:', sim.runs, 'running,', sim.released, 'plays released,', sim.finished, 'finished');
+  } catch (e) { log('sim sweep error', e.message); }
 
   // Members (0133): re-pull Sleeper users/rosters for poked leagues (a claimant
   // bounced off redeem_invite and asked) and, on a slow cadence, every
