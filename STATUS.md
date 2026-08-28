@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.365.4 — classic leagues get WEEK 0: the sim inside the matchup view, under league rules
+
+Founder: "wire it into each classic league as a week 0 in the matchup view. It
+should use all the league scoring and rules." ClassicBoard's week stepper now
+steps BACK from week 1 into the sim (week 0 — a `simOpen` overlay, not a
+weekWanted change, since week 0 has no matchup row and would land on "No
+matchup this week"). ClassicSim grew a `league` prop: the board hands it the
+league's slot layout (slotDefs), merged scoring catalog (`sc` — and the scoped
+rules + flags the board installed into the module caches score the sim too),
+best-ball spots (always filled by actual points), golf, team names, and both
+sides' stash-filtered rosters with exp attached (tenure slots). League mode
+hides the PPR chips — the league's rules are not a toggle — and captions the
+honest caveats (2026 rookies score 0 on a 2025 week; an empty spot means no
+roster fit). Bare mode (#/classic-sim, admin) is unchanged — verified
+byte-identical in headless Chromium (127.7–108.8 final, 48.3–49.9 scrubbed).
+Web-only; the app's ClassicBoard has no week-0 door yet (future APK work).
+
 ### v0.365.3 — Classic Sim: a hidden, scrubbable playtest of classic mode on 2025 data
 
 Founder: "how can I play test classic mode? Can we use 2025 data to sim a
