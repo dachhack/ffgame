@@ -57,7 +57,7 @@ export type RealPlayKind =
 // Phase-3 (0168): `tt` on tackle rows — 's' solo / 'a' assist — and `hf` on an
 // individual defender's sack row when the credit is split (scores half).
 // 0170: `p6` on a QB's INT row — the pick was returned for a TD (pick-6).
-export interface RealPlay { c: number; t?: number; pid?: number; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; rk?: string; tt?: string; hf?: number; p6?: number; }
+export interface RealPlay { c: number; t?: number; pid?: number; gid?: string; k: RealPlayKind; y: number; td: number; ca: number; tg: number; to?: number; fd?: number; cp?: number; ic?: number; sk?: number; rk?: string; tt?: string; hf?: number; p6?: number; }
 
 interface WeekData { pbp: Record<string, RealPlay[]>; points: Record<string, number>; poss?: Record<string, number[][]>; wall?: Record<string, number[]>; ends?: Record<string, number>; kick?: Record<string, number>; }
 
@@ -92,11 +92,14 @@ export function setLivePlays(week: number, pbp: Record<string, RealPlay[]>, poin
 /** Drop all live overlays (back to baked/synth resolution). */
 export function clearLivePlays(): void { livePbp.clear(); livePts.clear(); }
 
-/** live_play DB rows → {slug: RealPlay[]} (mirrors the worker's rowsToPbp). */
-export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null; tt?: string | null; hf?: number | null; p6?: number | null }[]): Record<string, RealPlay[]> {
+/** live_play DB rows → {slug: RealPlay[]} (mirrors the worker's rowsToPbp).
+ *  `game_id` rides along as `gid` (v0.369.0): the row always carried WHICH
+ *  game a play came from, and dropping it is what forced the box score onto
+ *  pid/clock heuristics for game membership. */
+export function liveRowsToPbp(rows: { player_slug: string; c: number; t: number | null; pid: number | null; game_id?: string | null; k: string; y: number; td: number; ca: number; tg: number; to: number | null; fd?: number | null; cp?: number | null; ic?: number | null; sk?: number | null; rk?: string | null; tt?: string | null; hf?: number | null; p6?: number | null }[]): Record<string, RealPlay[]> {
   const by: Record<string, RealPlay[]> = {};
   for (const r of rows) (by[r.player_slug] ||= []).push({
-    c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, k: r.k as RealPlayKind, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
+    c: r.c, t: r.t ?? undefined, pid: r.pid ?? undefined, ...(r.game_id ? { gid: r.game_id } : {}), k: r.k as RealPlayKind, y: r.y, td: r.td, ca: r.ca, tg: r.tg,
     ...(r.to ? { to: r.to } : {}),
     ...(r.fd ? { fd: 1 } : {}), ...(r.cp ? { cp: 1 } : {}), ...(r.ic ? { ic: 1 } : {}), ...(r.sk ? { sk: 1 } : {}),
     ...(r.rk ? { rk: r.rk } : {}), ...(r.tt ? { tt: r.tt } : {}), ...(r.hf ? { hf: 1 } : {}),

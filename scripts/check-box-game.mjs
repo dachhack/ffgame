@@ -37,12 +37,20 @@ setSlugMetaOverrides([
   { slug: 'collider', pos: 'QB', team: 'GB' },            // nflverse ids restart per game: one of his collides
   { slug: 'lone-returner', pos: 'WR', team: 'CAR' },      // ONE play, genuinely this game's (stale tag)
   { slug: 'lone-collider', pos: 'WR', team: 'CAR' },      // ONE play, id collides, different moment
+  { slug: 'ward-case', pos: 'RB', team: 'MIA' },          // opening kickoff: pid AND clock collide; gid says E2
+  { slug: 'gid-member', pos: 'RB', team: 'MIA' },         // gid says E1 though pid/clock match nothing
+  { slug: 'sim-flat', pos: 'RB', team: 'MIA' },           // gid 'SIM' names no feed game → fallback rules
 ]);
 // The NYG@MIA feed knows plays 1-6; plays 100+ belong to some other game.
+// game_id rides the rows (v0.369.0): E1 is this game, E2 the other one on
+// the slate — the exact-membership universe.
 setLiveGameFeed(WEEK, feedRowsToWeek([{
-  key: 'NYG@MIA', away: 'NYG', home: 'MIA', state: 'in',
+  key: 'NYG@MIA', away: 'NYG', home: 'MIA', state: 'in', game_id: 'E1',
   plays: [feedPlay(0, 1, 'MIA'), feedPlay(30, 2, 'MIA'), feedPlay(60, 3, 'NYG'),
           feedPlay(90, 4, 'NYG'), feedPlay(120, 5, 'MIA'), feedPlay(150, 6, 'MIA')],
+}, {
+  key: 'OTH@ERS', away: 'OTH', home: 'ERS', state: 'in', game_id: 'E2',
+  plays: [feedPlay(0, 1, 'OTH')],
 }]));
 setLivePlays(WEEK, {
   'real-dolphin': [rush(0, 1), rush(30, 2)],
@@ -65,6 +73,17 @@ setLivePlays(WEEK, {
   // pid 3 happened at c 60 — same number, different moment, different game.
   'lone-returner': [{ c: 120, pid: 5, k: 'return', y: 26, td: 0, ca: 0, tg: 0 }],
   'lone-collider': [{ c: 10, pid: 3, k: 'return', y: 26, td: 0, ca: 0, tg: 0 }],
+  // THE OPENING KICKOFF (v0.369.0, founder: "Jonathan Ward still in two
+  // places. Don't we have player IDs to use?"). Every game's first play is
+  // pid ~1 at clock ~0, so a kick returner collides on id AND clock — the one
+  // case the ±3s join cannot tell apart. His live_play rows carry the game_id
+  // they were ingested from, and that is decisive: ward-case's play matches
+  // NYG@MIA's opening play exactly (pid 1, c 0) but his gid says E2 — out.
+  // gid-member's play matches NOTHING by pid/clock but his gid says E1 — in.
+  // sim-flat's gid ('SIM') names no feed game, so the pid/clock rules stand.
+  'ward-case': [{ c: 0, pid: 1, gid: 'E2', k: 'return', y: 30, td: 0, ca: 0, tg: 0 }],
+  'gid-member': [{ c: 999, pid: 777, gid: 'E1', k: 'rush', y: 9, td: 0, ca: 1, tg: 0 }],
+  'sim-flat': [{ c: 120, pid: 5, gid: 'SIM', k: 'rush', y: 8, td: 0, ca: 1, tg: 0 }],
 });
 
 const box = gameBoxScore(WEEK, 'MIA', 'NYG', 3600);
@@ -87,6 +106,12 @@ ok(homeSlugs.includes('lone-returner'),
   'a one-play returner whose play IS this game\'s (id + clock agree) is seated, column from possession');
 ok(!homeSlugs.includes('lone-collider') && !awaySlugs.includes('lone-collider'),
   'v0.368.6: a one-play id collision at a DIFFERENT clock is not membership — the Reagor-on-two-teams case');
+ok(!homeSlugs.includes('ward-case') && !awaySlugs.includes('ward-case'),
+  'v0.369.0 THE POINT: an opening-kickoff collision (pid AND clock match) loses to the play\'s own game id');
+ok(homeSlugs.includes('gid-member'),
+  'a play whose game id names THIS game is seated, whatever the pid/clock heuristics think');
+ok(homeSlugs.includes('sim-flat'),
+  "a flat sim gid ('SIM') names no feed game — the pid/clock rules still decide, and his play is genuine");
 
 // No feed installed at all → membership is unknowable → pure team rule.
 clearLiveGameFeeds();

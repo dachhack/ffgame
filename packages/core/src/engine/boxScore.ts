@@ -22,7 +22,7 @@
 
 import { statlineFrom, realRawPlays, fmtStat, type StatLine } from './sim';
 import { realPbpSlugs } from '../data/realPbp';
-import { gameFeedFor } from '../data/gameFeed';
+import { gameFeedFor, allGameFeeds } from '../data/gameFeed';
 import { slugMeta, normTeam } from '../data/slugMeta';
 import type { Pos } from '../theme';
 
@@ -145,7 +145,23 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
   // foreign collision would need the same id at the same second (±3s covers
   // any revision jitter). The column derivation counts only matched plays for
   // the same reason: a collision must not get to steer the column either.
+  //
+  // ── THE GAME ID IS THE ANSWER WHERE IT EXISTS (v0.369.0) ─────────────────
+  // Even (pid, clock) has a degenerate case: the OPENING KICKOFF happens at
+  // clock ≈ 0 with the game's first play ids in EVERY game, so a pure kick
+  // returner still collided (the founder's "Jonathan Ward still in two
+  // places. Don't we have player IDs to use?"). We do: every live_play row
+  // carries the game_id it was ingested from, and every game_feed row carries
+  // its own — the exact join, now threaded through instead of dropped at the
+  // API layer. Where a player's plays name a game the week's feeds know, that
+  // IS the membership answer, no heuristics. The pid/clock rules stay as the
+  // fallback for data without game ids: the 2025 bakes, and the board sim
+  // (whose live_play rows are flat 'SIM' — week-scoped, so they name no feed
+  // game and prove nothing either way).
   const feed = gameFeedFor(week, H);
+  const feedGid = feed?.gid ?? null;
+  const weekGids = new Set<string>();
+  for (const f of allGameFeeds(week)) if (f.gid) weekGids.add(f.gid);
   const pidTm = new Map<number, string>();
   const pidClocks = new Map<number, number[]>();
   for (const p of feed?.plays ?? []) {
@@ -166,8 +182,12 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     const withPid = plays.filter((p) => p.pid != null);
     // true = his plays are in this game; false = provably elsewhere; null = no
     // pid data on one side or the other, membership unknowable → team rule.
+    // The GAME-ID join answers first (v0.369.0): a play gid that names any of
+    // the week's feed games is decisive evidence, exactly.
+    const knownGids = [...new Set(plays.map((p) => p.gid).filter((g): g is string => !!g && weekGids.has(g)))];
     const matchedPlays = withPid.filter((p) => playMatches(p.pid, p.clock));
-    const inGame = pidTm.size && withPid.length ? matchedPlays.length * 2 > withPid.length : null;
+    const inGame = feedGid && knownGids.length ? knownGids.includes(feedGid)
+      : pidTm.size && withPid.length ? matchedPlays.length * 2 > withPid.length : null;
     if (inGame === false) continue;
     if (inGame === null && team !== H && team !== A) continue;
     const pos = (meta.pos ?? 'WR') as Pos;
