@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.367.4 — the missing COPY: the worker image never shipped the gamefeed bakes
+
+Founder, third report: "stil no stats by the individual players" — on a build
+whose client code was verified correct twice. The tell was in their OWN
+screenshots: no ▦ FIELDS chip, ever. Root cause: the worker's Dockerfile
+copies public/pbp but NOT public/gamefeed — so on Fly, loadBaked (plays)
+works and loadBakedFeeds returns null GRACEFULLY (its catch): plays flowed
+(header counted), game_feed rows were never written, the board's gameFeeds
+stayed empty, simTeams stayed empty, and the v0.367.2 state override — keyed
+off the feeds — never fired. Every symptom across three rounds, one missing
+COPY line, zero error logs. Fix: COPY public/gamefeed into the image
+(Dockerfile is in deploy-worker.yml's trigger paths, so this redeploys the
+worker), and the sweep now LOGS loudly when a run has no baked feeds — the
+grace that hid this is no longer silent. Reset + re-run after the worker
+deploy: rows, fields, and the FIELDS chip should all light.
+
 ### v0.367.3 — the rehearsal breathes: 10s cadence, instant ▶/⏹ refresh, a visible build stamp
 
 Founder, still mid-rehearsal: "Still no numbers, it also looks like the scores

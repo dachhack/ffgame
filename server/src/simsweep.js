@@ -52,6 +52,13 @@ async function runCtx(run) {
   const feed = buildFeed(pbp, run.week, 0, 0);
   const maxAt = feed.length ? feed[feed.length - 1].at : 0;
   const bakedFeeds = loadBakedFeeds(run.src_week);
+  if (!bakedFeeds) {
+    // Said LOUDLY (v0.367.4): this returning null is graceful by design — and
+    // that grace once hid a missing COPY in the Dockerfile for three founder
+    // bug reports: plays flowed, game_feed never did, and the classic board's
+    // sim-state override (keyed off the feeds) left every row "Yet to play".
+    console.log(`sim: no baked gamefeed for w${run.src_week} — field visuals + the board's live-state override will NOT work this run`);
+  }
   const { data: matchups } = await db().from('matchup').select('*').eq('league_id', run.league_id).eq('week', run.week);
   const live = (matchups ?? []).map((m) => ({ ...m, status: 'live' }));
   const { lineups } = await simLineups(db, run.league_id, run.week, live);

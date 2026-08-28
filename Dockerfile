@@ -16,6 +16,11 @@ COPY scripts/espn ./scripts/espn
 # Baked play-by-play — needed by the on-worker dress rehearsal (`fly ssh … simulate`)
 # and the scale re-run (`scripts/loadtest.mjs`); the live tick reads plays from the DB.
 COPY public/pbp ./public/pbp
+# The field-visual bakes ride along for the board-driven sim (0251): the sweep
+# releases game_feed docs from these. Their absence is GRACEFUL (loadBakedFeeds
+# returns null) — which is exactly how it went silently missing: plays flowed,
+# fields never did, and every classic row sat on "Yet to play" (v0.367.4).
+COPY public/gamefeed ./public/gamefeed
 # Worker source + ops scripts + tests (so `fly ssh … npm run smoke` / loadtest / simulate work).
 COPY server/src ./server/src
 COPY server/scripts ./server/scripts
