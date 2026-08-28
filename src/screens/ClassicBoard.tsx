@@ -61,43 +61,49 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
   const bye = e.opponent === 'BYE';
   const pre = e.state === 'pre';
   const roof = e.roof && e.roof !== 'open' ? e.roof : null;
-  // The WHEN line follows the game (v0.368.0, founder: "the game times below
-  // the players didn't tick through"): the kickoff's job ends at the whistle —
-  // live shows the feed's game clock, done says Final. The status line beneath
-  // becomes the STATLINE once the player has one; "In progress" was only ever
-  // a placeholder for not having anything to say yet.
-  const when = bye ? 'BYE'
-    : e.state === 'live' && e.clock ? `${e.clock} ${e.opponent ?? ''}`.trim()
-    : e.state === 'done' ? `Final ${e.opponent ?? ''}`.trim()
-    : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
-  const status = bye ? 'No game this week'
-    : e.statline ?? (e.state === 'done' ? '—' : e.state === 'live' ? 'In progress' : 'Yet to play');
+  const field = onOpen && <span style={{ color: 'var(--you)', marginLeft: 5, whiteSpace: 'nowrap' }}>▦ field</span>;
   return (
-    /* SCORE ON THE WHEN LINE, STATLINE ACROSS THE WHOLE CARD (v0.368.3,
-       founder: "how can we rearrange the player boxes to show their full
-       stat lines?"). The old row layout gave the statline only the text
-       column beside the score, so on a phone it ellipsed after two stats —
-       and an INT that got cut is exactly the stat a manager needed. The
-       score shares the top line with the clock now (both are short), and
-       the statline gets the card's full width and WRAPS instead of hiding. */
+    /* THE STATS ARE THE CARD ONCE THE BALL IS LIVE (v0.368.4, founder: "once
+       the game starts we don't really need the game info. just the player
+       stats"). Before kickoff the card answers WHEN — kickoff, opponent,
+       venue marks, projection. From the first snap those all stop deciding
+       anything, so they leave: the full statline takes the card, wrapping
+       freely beside the score. One word survives the cut — "Final" — because
+       done-vs-still-playing is the fact that decides whether to keep
+       watching. The clock, the score and the play log stay one tap away
+       behind ▦ field. */
     <div style={box} onClick={onOpen} title={onOpen ? "open this game's live field + play log" : undefined}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
-        <div className="mono" style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left', fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {when}
-          {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
-          {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
+      {pre || bye ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
+            <div className="mono" style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left', fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {bye ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed')}
+              {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
+              {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
+            </div>
+            {/* NO "proj" LABEL (founder, v0.241.0): the number alone — the
+                quiet colour says it is a projection. 16px since v0.368.1. */}
+            <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+              {e.proj.toFixed(1)}
+            </span>
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: right ? 'right' : 'left', lineHeight: 1.5 }}>
+            {bye ? 'No game this week' : 'Yet to play'}
+            {field}
+          </div>
+        </>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
+          <div className="mono" style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left', fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.55, overflowWrap: 'break-word' }}>
+            {e.state === 'done' && <span style={{ color: 'var(--dim)', fontWeight: 700 }}>{'Final · '}</span>}
+            {e.statline ?? (e.state === 'done' ? '—' : 'In progress')}
+            {field}
+          </div>
+          <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+            {e.live.toFixed(2)}
+          </span>
         </div>
-        {/* NO "proj" LABEL (founder, v0.241.0): the number alone — projection
-            before kickoff, points after, told apart by the quiet colour. 16px
-            since v0.368.1. */}
-        <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: pre ? 'var(--faint)' : 'var(--text)', whiteSpace: 'nowrap' }}>
-          {pre ? e.proj.toFixed(1) : e.live.toFixed(2)}
-        </span>
-      </div>
-      <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: right ? 'right' : 'left', lineHeight: 1.5, overflowWrap: 'break-word' }}>
-        {status}
-        {onOpen && <span style={{ color: 'var(--you)', marginLeft: 5, whiteSpace: 'nowrap' }}>▦ field</span>}
-      </div>
+      )}
     </div>
   );
 }

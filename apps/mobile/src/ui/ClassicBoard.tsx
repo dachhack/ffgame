@@ -240,11 +240,15 @@ function BoardCell({ e, align, onGame, onName }: {
   // which is most of what made the rows tall.
   // A blank game line reads as a rendering fault, so an unplaceable player
   // says so rather than showing nothing (and rather than claiming a bye).
-  // The line follows the game (v0.368.0): kickoff before the whistle, the
-  // feed's game clock while it's live, Final after — the web twin's rule.
-  const line = e.opponent === 'BYE' ? 'BYE'
-    : e.state === 'live' && e.clock ? `${e.clock} ${e.opponent ?? ''}`.trim()
-    : e.state === 'done' ? `Final ${e.opponent ?? ''}`.trim()
+  // THE STATS ARE THE LINE ONCE THE BALL IS LIVE (v0.368.4, founder: "once
+  // the game starts we don't really need the game info. just the player
+  // stats"): kickoff + opponent before the whistle, the statline after —
+  // "Final" keeps its one word because done-vs-playing still decides whether
+  // to keep watching. The clock and score live one tap away in the field.
+  const bye = e.opponent === 'BYE';
+  const started = !bye && e.state !== 'pre';
+  const line = bye ? 'BYE'
+    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? 'In progress'}`
     : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
@@ -260,25 +264,19 @@ function BoardCell({ e, align, onGame, onName }: {
         {e.team ? ` · ${e.team}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
+      {/* Venue/night marks ride only the pre-kick line — game info, and the
+          founder's cut applies to all of it. Three lines once started, so
+          the whole compact statline fits a phone cell without ellipsing the
+          INT/sk tail a manager goes looking for. */}
       {onGame ? (
         <Pressable hitSlop={6} onPress={() => { tap(); onGame(); }} style={{ alignSelf: right ? 'flex-end' : 'flex-start' }}>
-          <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: t.you, textAlign: right ? 'right' : 'left' }}>
-            {right ? `▸ ${line}${roofMark(e)}` : `${line}${roofMark(e)} ▸`}
+          <Text numberOfLines={started ? 3 : 1} style={{ fontSize: 8.5, marginTop: 1, color: t.you, textAlign: right ? 'right' : 'left' }}>
+            {right ? `▸ ${line}${started ? '' : roofMark(e)}` : `${line}${started ? '' : roofMark(e)} ▸`}
           </Text>
         </Pressable>
       ) : (
-        <Text numberOfLines={1} style={{ fontSize: 8.5, marginTop: 1, color: e.opponent === 'BYE' ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
-          {`${line}${roofMark(e)}`}
-        </Text>
-      )}
-      {/* The counting line, once there is one (v0.368.0) — what the points on
-          this row are MADE OF. Costs height only when the player has played.
-          Two lines (v0.368.3): one line ellipsed exactly the INT/sk tail a
-          manager goes looking for; the compact format plus a wrap fits the
-          whole line in a phone cell. */}
-      {!!e.statline && (
-        <Text numberOfLines={2} style={{ fontSize: 8, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
-          {e.statline}
+        <Text numberOfLines={started ? 3 : 1} style={{ fontSize: 8.5, marginTop: 1, color: bye ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
+          {`${line}${started ? '' : roofMark(e)}`}
         </Text>
       )}
     </View>
