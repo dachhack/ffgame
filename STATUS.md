@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.368.4 — once the ball is live, the stats ARE the card
+
+Founder: "once the game starts we don't really need the game info. just the
+player stats." Live/done rows drop the clock, opponent and venue marks: the
+full statline takes the card, wrapping beside the score. One word survives —
+"Final" — because done-vs-still-playing decides whether to keep watching.
+Pre-kick cards keep kickoff + opponent + projection unchanged; the clock,
+game score and play log stay one tap away behind ▦ field. Same rule on the
+app board (statline becomes the game line, three lines allowed) — next APK.
+
 ### v0.368.3 — full statlines on the classic row
 
 Founder: "how can we rearrange the player boxes to show their full stat
