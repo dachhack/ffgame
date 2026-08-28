@@ -1303,7 +1303,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         title="All fields"
         subtitle="EVERY GAME WITH A STARTER · LIVE DRIVES"
         onClose={() => setFieldsOpen(false)}>
-        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 30 }}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 30 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
           {fieldGames.length === 0 && (
             <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No live games with starters yet.</Mono>
           )}
