@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.366.0 — ⚡ admin stamp-week: the vampire/guillotine playtest lever
+
+Founder: "how can I play test the vampire and guillotine mechanics?" Both arm
+off a FULLY-FINAL week, which only the worker produced, on the real calendar —
+so the arcs couldn't be rehearsed before Sep 9. New 0250 `admin_stamp_week
+(league, week?, favor?, doom?)`: writes plausible finals (70–130) across one
+week, DOUBLE-GATED — is_admin() AND league.test_live_at (the 🧪 LIVE TEST
+sandbox flag) — so it can never touch a real league. p_favor makes a seat WIN
+its matchup (arm the vampire's steal), p_doom hands it the week's floor
+(choose the blade's victim); week null walks to the earliest unstamped; a
+stamped week refuses a second stamp. After stamping it fires the format's
+engine the way the worker's sweep would (guillotine_tick inline; vampire
+result says whether the steal window armed). Probes: stamp-week-probes.sql
+(72nd suite) pins both gates, the walk, doom-picks-the-victim, and favor
+opening/its absence closing the steal window — negative control run (gate
+stripped in scratch → probe fails, restored → refusal returns). Web UI: admin
+panel ADMIN MODES grows "⚡ stamp next week" + favor/doom seat inputs, shown
+only while LIVE TEST is on. Playtest recipe: throwaway league → 🧪 LIVE TEST →
+tap stamp per week.
+
 ### v0.365.5 — the app gets WEEK 0: the classic sim ported to mobile
 
 Founder validated the web week-0 sim ("looks good. Let's put it in the app").
