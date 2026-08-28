@@ -472,6 +472,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // gone — a rehearsal that proves the plumbing has to run on the real board,
   // through the real feed, or it proves a different board.
   const [testLive, setTestLive] = useState<number | null>(null);
+  // Bumped by the strip's ▶/⏹ — a dep of the live poll below, so the board
+  // refetches the instant a rehearsal starts or resets instead of leaving the
+  // old scores up for the rest of a poll interval.
+  const [simVer, setSimVer] = useState(0);
   // THE WEEK THIS SEAT SITS OUT (v0.364.0). An odd-sized league byes one team
   // a week, and `state = 'none'` — which returns before the header and its
   // stepper render — stranded whoever stepped onto theirs. Held separately
@@ -591,8 +595,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         setErr(e instanceof Error ? e.message : 'Failed to load.'); setState('error');
       }
     })();
+    // simVer: the strip's ▶/⏹ re-runs the WHOLE load — reset flips
+    // matchup.status back to scheduled and unlocks picks, which only this
+    // loader reads, so a poll-only refresh would leave the header in live
+    // dress over a reverted week.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, leagueId, rosterId, weekWanted]);
+  }, [userId, leagueId, rosterId, weekWanted, simVer]);
 
   // THE WEEK IS UNDERWAY — the only thing this flag still decides is
   // PRESENTATION (live scores rather than projections, the win bar, the
@@ -660,9 +668,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
       } catch { /* transient — next tick retries */ }
     };
     void load();
-    const t = window.setInterval(() => { void load(); }, 60_000);
+    // A rehearsal moves at 10-40× real time — the production minute cadence
+    // reads as a dead board there. 10s under LIVE TEST, the usual 60s outside.
+    const t = window.setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
     return () => { stop = true; window.clearInterval(t); };
-  }, [matchup, userId, ros]);
+  }, [matchup, userId, ros, testLive]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
   // has a settings_json home and a catalog home, and a bare `{...scoring,
@@ -1149,7 +1159,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
           leagues only. ▶ drives THIS board through the real feed + resolver —
           the founder's call (v0.367.1): the sim runs on the actual matchup
           board, not a replica, so what it proves is the thing that ships. */}
-      {ros && matchup && testLive != null && <SimStrip leagueId={ros.leagueId} week={matchup.week} />}
+      {ros && matchup && testLive != null && <SimStrip leagueId={ros.leagueId} week={matchup.week} onChanged={() => setSimVer((v) => v + 1)} />}
 
       {/* ── SCOREBOARD (v0.228.0) ──────────────────────────────────────────
           Live score big, projected final under it, and a win bar that reads
