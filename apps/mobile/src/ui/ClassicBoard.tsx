@@ -29,6 +29,8 @@ import {
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
+import { ClassicSim } from './ClassicSim';
+import type { Player } from '@drip/core/types';
 import { NoGame } from './NoGame';
 import { Overlay } from './Overlay';
 import { FieldView } from './FieldView';
@@ -368,6 +370,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // null = whatever week the league is on. A number is a week asked for, by
   // the arrows or by a swipe.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // WEEK 0 — THE SIM (v0.365.5, the web board's door ported): stepping back
+  // from week 1 opens the bundled-2025-week sim under THIS league's rules.
+  // Held apart from weekWanted — week 0 has no matchup row, so routing it
+  // through the loader would land on "No matchup this week"; the loaded week-1
+  // board stays underneath and stepping forward closes the overlay.
+  const [simOpen, setSimOpen] = useState(false);
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
   // THE WEEK THIS SEAT SITS OUT (v0.364.0) — held apart from `matchup` so the
   // stepper keeps an anchor to walk from. Before this, `state = 'none'`
@@ -792,13 +800,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     const w = byeWeek ?? matchup?.week;
     if (w == null) return false;
     const next = w + d;
-    if (next < 1) return false;
+    if (next < 0) return false; // 0 is the SIM — one step past it is nothing
     if (lastRegWeek != null && next > lastRegWeek) return false;
     return true;
   };
   const goWeek = (d: -1 | 1) => {
     const w = byeWeek ?? matchup?.week;
-    if (canGo(d) && w != null) { tap(); setWeekWanted(w + d); }
+    if (!canGo(d) || w == null) return;
+    tap();
+    // Week 0 is the sim overlay, not a schedule row — open it in place and
+    // leave weekWanted (and the loaded board under it) on week 1.
+    if (w + d === 0) { setSimOpen(true); return; }
+    setWeekWanted(w + d);
   };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
@@ -914,6 +927,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
 
   if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
+  // WEEK 0 — the sim, under THIS league's rules. Rosters are the two sides the
+  // board already loaded (stash-filtered, exp attached for tenure spots);
+  // scoring is the board's merged catalog `sc`, and the scoped rules + flags
+  // it installed into the module caches score the sim too — so week 0 counts
+  // points exactly the way week 1 will.
+  if (simOpen) {
+    const simPlayers = (rows: PoolPlayer[]): Player[] => rows
+      .filter((x) => !stashed.has(x.slug))
+      .map((x) => ({ id: x.slug, name: x.full, full: x.full, pos: x.pos, team: x.team, exp: expMap[x.slug] ?? null, stats: { ...ZERO } }) as unknown as Player);
+    return (
+      <ClassicSim league={{
+        slots: slotDefs, sc, bestball, golf,
+        youName: names.me, oppName: names.opp,
+        you: simPlayers(pool), opp: simPlayers(oppPool),
+        onExit: () => setSimOpen(false),
+      }} />
+    );
+  }
   if (byeWeek != null) return (
     <NoGame week={byeWeek} bye>
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
