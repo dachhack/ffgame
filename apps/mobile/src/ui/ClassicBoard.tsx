@@ -14,7 +14,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -22,7 +22,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor } from '@drip/core/data/ga
 import {
   myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet,
+  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
@@ -369,6 +369,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // the arrows or by a swipe.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
+  // 🧪 LIVE TEST — non-null marks a sandbox; the rehearsal feed then drives
+  // per-player state (see simTeams below).
+  const [testLive, setTestLive] = useState<number | null>(null);
   // THE WEEK THIS SEAT SITS OUT (v0.364.0) — held apart from `matchup` so the
   // stepper keeps an anchor to walk from. Before this, `state = 'none'`
   // returned above the header and stranded whoever stepped onto their bye.
@@ -425,6 +428,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // wore last year's Q and everybody else wore nothing.
         loadLiveInjuries(m.week).then((n) => { if (n) setInjuryVer((v) => v + 1); }).catch(() => {});
         // The last regular-season week, for the stepper's far end.
+        leagueTestLiveAt(leagueId).then(setTestLive).catch(() => setTestLive(null));
         playoffState(leagueId).then((ps) => {
           if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
         }).catch(() => {});
@@ -668,12 +672,30 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return out;
   }, [slate, nowTs]);
 
+  // 🧪 REHEARSAL (v0.367.2, ported from the web twin): under LIVE TEST the
+  // worker's sim streams a baked week while the REAL slate's kickoffs sit in
+  // the future, so the slate clock kept every player 'pre' and hid accruing
+  // points. In a sandbox the FEED is the truth: a team with plays flowing is
+  // LIVE, done once the matchup is final. normTeam both sides — the feed
+  // speaks nflverse (LA/WAS/JAX) and the pool may not.
+  const simTeams = useMemo(() => {
+    const s = new Set<string>();
+    if (testLive == null) return s;
+    for (const f of gameFeeds) {
+      if (!f.plays?.length) continue;
+      if (f.home) s.add(normTeam(f.home));
+      if (f.away) s.add(normTeam(f.away));
+    }
+    return s;
+  }, [testLive, gameFeeds]);
+
   const entryFor = useMemo(() => {
     void playsAt; void flagsVer;
     return (slug: string | null | undefined, slotPos?: string[], slot?: string): BoardEntry | null => {
       if (!slug) return null;
       const meta = slugMeta(slug);
       const g = gameFor(meta.team, slate);
+      const simLive = simTeams.size > 0 && simTeams.has(normTeam(meta.team ?? ''));
       return {
         slug,
         name: prettySlug(slug),
@@ -684,7 +706,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // bake, so a custom-scoring league projected under rules it does not
         // play by, and a spot-scoped bonus never showed in the spot it pays.
         proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot, slotPos),
-        state: g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
+        state: simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+          : g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre',
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
@@ -698,7 +721,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer]);
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams]);
 
   const board = useMemo(() => {
     if (!matchup) return null;

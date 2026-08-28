@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.367.2 — rehearsal scores flow: the sim feed outranks the slate clock
+
+Founder, mid-rehearsal ("Should the scores be at 0?"): the worker was
+streaming plays (feed at 6:10) but every player read "Yet to play" with
+projections. Root cause — exactly the seam the rehearsal exists to catch:
+ClassicBoard's `entryFor` derives per-player state from the REAL 2026 slate's
+kickoffs (`entryState(g.kickoff, …, nowTs)`), and Sep 10-14 is in the future,
+so every player stayed 'pre' and the board showed projections while live
+points were already accruing in live_play. On a real Sunday the kickoffs pass
+and this never bites; in a sandbox the FEED must be the truth. Fix (web +
+mobile ClassicBoard): under 🧪 LIVE TEST, a `simTeams` set (teams with plays
+in the week's game feeds, normTeam'd both sides — the feed speaks nflverse)
+overrides state to 'live' ('done' once the matchup is final); the slate path
+is untouched for real leagues, and the branch is unreachable without the
+sandbox flag. Web ships on Pages; the mobile half rides the next APK (the
+current APK still shows the slate-gated "Yet to play" during a rehearsal).
+
 ### v0.367.1 — classic rehearses on the REAL board; the week-0 replica retires
 
 Founder, over a Week-0-vs-real-board screenshot pair: "Looks like we have a
