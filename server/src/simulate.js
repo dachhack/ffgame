@@ -31,7 +31,7 @@ const SLOTS = WINDOWS.flatMap((w) => Array.from({ length: w.slots }, (_, j) => (
  *  window/slot grid, honest default metric per position (shared DEFAULT_AI_METRIC).
  *  No Field-General flip here — the dry round-trip asserts per-player points
  *  reproduce the baked box score, and FG zeroes its QB. Shape matches enrolledPicks. */
-function autoLineup(starters) {
+export function autoLineup(starters) {
   return (starters ?? [])
     .filter((s) => s.player_slug)
     .slice(0, SLOTS.length)
@@ -44,14 +44,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 /** Baked week's play map: { slug: RealPlay[] } plus the source points for the check. */
-function loadBaked(srcWeek) {
+export function loadBaked(srcWeek) {
   const data = JSON.parse(readFileSync(new URL(`../../public/pbp/w${srcWeek}.json`, import.meta.url), 'utf8'));
   return { pbp: data.pbp, points: data.points ?? {} };
 }
 
 /** Baked week's game feeds ({games, teams} from public/gamefeed/) — the field
  *  visuals' data. Optional: missing file (unbaked week) just skips the visuals. */
-function loadBakedFeeds(srcWeek) {
+export function loadBakedFeeds(srcWeek) {
   try { return JSON.parse(readFileSync(new URL(`../../public/gamefeed/w${srcWeek}.json`, import.meta.url), 'utf8')); }
   catch { return null; }
 }
@@ -79,7 +79,7 @@ function baseScore(plays) {
  *   • corrections (0–1): that fraction of scoring plays arrive PROVISIONAL (a
  *     wrong stat) first, then the TRUE baked value `correctionDelay` s later —
  *     same key, so the upsert overwrites and the score self-corrects live. */
-function buildFeed(pbp, week, jitter = 0, corrections = 0, correctionDelay = 60) {
+export function buildFeed(pbp, week, jitter = 0, corrections = 0, correctionDelay = 60) {
   const feed = [];
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const p of plays) {
@@ -103,7 +103,7 @@ function buildFeed(pbp, week, jitter = 0, corrections = 0, correctionDelay = 60)
 }
 
 // The live_play conflict key — the unit a re-poll reconciles on (week,game,pid,slug,kind).
-const keyOf = (r) => `${r.week}|${r.game_id}|${r.pid}|${r.player_slug}|${r.k}`;
+export const keyOf = (r) => `${r.week}|${r.game_id}|${r.pid}|${r.player_slug}|${r.k}`;
 
 /** In-memory model of live_play under the worker's per-poll reconcile: each poll
  *  carries a game's FULL current play set, so we upsert every row (corrections
@@ -204,6 +204,41 @@ async function simulateDry({ week, speed, tickMs, jitter }) {
   if ((off || (P && !rOk))) log(`\nFAIL`); else log(`\nPASS — feed round-trip + reconciliation both hold. Ready for a real ESPN source.`);
 }
 
+/** Lineups for a league-week's matchups: a roster's real LOCKED picks when it
+ *  set any, else auto-built from its synced starters — the sim never needs
+ *  enrollment. Shared by the CLI run and the worker's board-driven sweep
+ *  (simsweep.js), so the two rehearsal doors can never disagree about who is
+ *  on the field. `db` is the supabase accessor function (called per query). */
+export async function simLineups(db, leagueId, week, live) {
+  const rosterIds = [...new Set(live.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
+  const { data: members } = await db().from('league_membership')
+    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+  const memByRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
+  const { data: lineupRows } = await db().from('sleeper_lineup').select('roster_id,starters_json').eq('league_id', leagueId).eq('week', week);
+  const startersByRoster = new Map((lineupRows ?? []).map((r) => [r.roster_id, r.starters_json]));
+  const sealedPicks = async (matchupId, appUserId) => {
+    const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
+      .eq('matchup_id', matchupId).eq('app_user_id', appUserId).eq('locked', true);
+    return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
+  };
+  const sideFor = async (matchupId, rosterId) => {
+    const mem = memByRoster.get(rosterId);
+    // AI-controlled teams skip any human picks and auto-lineup.
+    if (mem?.controller !== 'ai' && mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
+    return autoLineup(startersByRoster.get(rosterId));
+  };
+  const lineups = new Map();
+  let autoCount = 0; const warnings = [];
+  for (const m of live) {
+    const home = await sideFor(m.id, m.home_roster_id);
+    const away = await sideFor(m.id, m.away_roster_id);
+    lineups.set(m.id, { home, away });
+    if (!home.length || !away.length) warnings.push(`${m.home_roster_id}v${m.away_roster_id}: ${[!home.length && 'home', !away.length && 'away'].filter(Boolean).join('+')} has no synced lineup → scores 0`);
+    autoCount += [home, away].filter((s) => s.length).length;
+  }
+  return { lineups, autoCount, warnings };
+}
+
 // ── LIVE: drive a real pilot matchup in Supabase. ────────────────────────────────
 async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, corrections }) {
   const { db } = await import('./supabase.js');
@@ -229,33 +264,8 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   // Self-contained lineups: honor a roster's real LOCKED picks if it set any,
   // otherwise auto-build from its synced Sleeper starters — so both sides resolve
   // with full metric effects and nobody has to set a lineup to watch a real duel.
-  const rosterIds = [...new Set(live.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
-  const { data: members } = await db().from('league_membership')
-    .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
-  const memByRoster = new Map((members ?? []).map((m) => [m.sleeper_roster_id, m]));
-  const { data: lineupRows } = await db().from('sleeper_lineup').select('roster_id,starters_json').eq('league_id', leagueId).eq('week', week);
-  const startersByRoster = new Map((lineupRows ?? []).map((r) => [r.roster_id, r.starters_json]));
-
-  const sealedPicks = async (matchupId, appUserId) => {
-    const { data } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,metric_id')
-      .eq('matchup_id', matchupId).eq('app_user_id', appUserId).eq('locked', true);
-    return data && data.length ? data.map((p) => ({ win: p.game_window, slot: p.roster_slot, slug: p.player_slug, metric: p.metric_id })) : null;
-  };
-  const sideFor = async (matchupId, rosterId) => {
-    const mem = memByRoster.get(rosterId);
-    // AI-controlled teams skip any human picks and auto-lineup.
-    if (mem?.controller !== 'ai' && mem?.enrolled && mem.app_user_id) { const sp = await sealedPicks(matchupId, mem.app_user_id); if (sp) return sp; }
-    return autoLineup(startersByRoster.get(rosterId));
-  };
-  const lineups = new Map();
-  let autoCount = 0;
-  for (const m of live) {
-    const home = await sideFor(m.id, m.home_roster_id);
-    const away = await sideFor(m.id, m.away_roster_id);
-    lineups.set(m.id, { home, away });
-    if (!home.length || !away.length) log(`  ⚠ ${m.home_roster_id}v${m.away_roster_id}: ${[!home.length && 'home', !away.length && 'away'].filter(Boolean).join('+')} has no synced lineup → scores 0 (run sync-week)`);
-    autoCount += [home, away].filter((s) => s.length).length;
-  }
+  const { lineups, autoCount, warnings } = await simLineups(db, leagueId, week, live);
+  for (const w of warnings) log(`  ⚠ ${w} (run sync-week)`);
   log(`lineups ready for ${live.length} matchups (${autoCount} sides, default metric per position) — full metric duel, no enrollment needed`);
 
   const feed = buildFeed(pbp, week, jitter, corrections, Math.max(60, speed * 3));
