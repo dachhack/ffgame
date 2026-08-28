@@ -78,6 +78,22 @@ clearSlugMetaOverrides();
 setSlugMetaOverrides(poolMetaRows([{ slug: 'rams-guy', pos: 'WR', team: 'LAR' }]));
 ok(slugMeta('rams-guy').team === 'LA', 'LAR normalises to LA so the slug slate-gates to a real game');
 
+// ── 7. FIRST-NAME VARIANTS (v0.368.7, founder: "hibner is a TE") ───────────
+// The directory bake files BAL TE `matt-hibner`; the live feed slugged him
+// `matthew-hibner`, which nothing knew, so the box score defaulted him to WR.
+// The variant fallback runs only when the exact slug resolves nowhere — an
+// overlay entry for the exact slug still wins outright.
+clearSlugMetaOverrides();
+ok(slugMeta('matthew-hibner').pos === 'TE',
+  `an unknown Matthew resolves through the bake's Matt (got ${slugMeta('matthew-hibner').pos})`);
+ok(slugMeta('matthew-hibner').team === slugMeta('matt-hibner').team,
+  'and carries the variant\'s team, live overrides included');
+ok(slugMeta('matthew-zzz-nobody').pos === 'WR' && slugMeta('matthew-zzz-nobody').team === '',
+  'a variant that matches nobody still degrades to the neutral default');
+setSlugMetaOverrides(poolMetaRows([{ slug: 'matthew-hibner', pos: 'RB', team: 'KC' }]));
+ok(slugMeta('matthew-hibner').pos === 'RB',
+  'an exact-slug overlay beats the variant fallback (it only fills true unknowns)');
+
 clearSlugMetaOverrides();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-META ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

@@ -109,5 +109,45 @@ export function slugMeta(slug: string): { pos: Pos; team: string } {
   // beats the bake for anyone who has since moved.
   const bio = PLAYER_BIO[slug];
   if (bio?.pos) return { pos: bio.pos as Pos, team: normTeam(teamFor(slug) ?? bio.team ?? '') };
+  // FIRST-NAME VARIANTS, as the last resort before the default (v0.368.7).
+  // The same man arrives under two slugs when two sources spell his first
+  // name differently: the directory bake filed BAL TE `matt-hibner` while the
+  // live feed's plays were slugged `matthew-hibner` — an unknown slug, so the
+  // box score defaulted him to WR (the founder's "hibner is a TE"). Tried
+  // ONLY when the exact slug resolves nowhere above: for a man we know
+  // nothing about, the variant namesake's meta is strictly better than the
+  // guaranteed-wrong WR/'' below, and an exact entry always wins outright.
+  for (const v of variantSlugs(slug)) {
+    const vb = BAKED_SLUGS[v];
+    if (vb) return { pos: vb.pos as Pos, team: normTeam(vb.team) };
+    const vbio = PLAYER_BIO[v];
+    if (vbio?.pos) return { pos: vbio.pos as Pos, team: normTeam(teamFor(v) ?? vbio.team ?? '') };
+  }
   return { pos: 'WR', team: '' };
+}
+
+// The common English given-name variant groups, lowercase, as they appear in
+// slug first tokens. Deliberately conservative: only pairings that are the
+// SAME name in different dress — no phonetic guessing, no surname edits.
+const NICK_GROUPS: string[][] = [
+  ['matt', 'matthew'], ['mike', 'michael'], ['rob', 'robert'], ['will', 'william'],
+  ['dan', 'daniel'], ['ben', 'benjamin'], ['chris', 'christopher'], ['nick', 'nicholas'],
+  ['alex', 'alexander'], ['zach', 'zachary'], ['jake', 'jacob'], ['josh', 'joshua'],
+  ['sam', 'samuel'], ['tim', 'timothy'], ['tom', 'thomas'], ['tony', 'anthony'],
+  ['drew', 'andrew'], ['joe', 'joseph'], ['jim', 'james'], ['pat', 'patrick'],
+  ['steve', 'steven', 'stephen'], ['dave', 'david'], ['gabe', 'gabriel'],
+  ['cam', 'cameron'], ['nate', 'nathan', 'nathaniel'], ['jeff', 'jeffrey'],
+  ['ken', 'kenneth'], ['greg', 'gregory'], ['jon', 'jonathan'], ['ed', 'edward'],
+  ['max', 'maxwell'], ['charlie', 'charles'], ['ray', 'raymond'], ['rick', 'richard'],
+];
+const NICK_ALTS = new Map<string, string[]>();
+for (const g of NICK_GROUPS) for (const n of g) NICK_ALTS.set(n, g.filter((x) => x !== n));
+
+/** The slug respelled under each variant of its FIRST name token — the rest
+ *  of the slug (surname, suffixes) must match exactly. */
+function variantSlugs(slug: string): string[] {
+  const i = slug.indexOf('-');
+  if (i <= 0) return [];
+  const rest = slug.slice(i);
+  return (NICK_ALTS.get(slug.slice(0, i)) ?? []).map((n) => n + rest);
 }
