@@ -41,6 +41,59 @@ export function Crest({ crest, size = 32, radius = 7 }: {
 }
 
 /** True when the viewport is at/below `maxWidth` — drives the mobile layout. */
+/** PULL DOWN TO REFRESH, the web's own (v0.369.1). Founder: "right now pull
+ *  down kicks you back to your leagues" — the browser's native gesture
+ *  reloads the whole SPA, which boots to the default screen. styles.css now
+ *  claims overscroll (`overscroll-behavior-y: none`), and this hook is the
+ *  replacement: pulled far enough DOWN from the very top of the page, it
+ *  fires `onRefresh` on release — a data reload in place, never a page load.
+ *
+ *  Returns whether the pull is past the threshold RIGHT NOW, so the screen
+ *  can show a "release to refresh" hint. `enabled` lets a board switch the
+ *  gesture off while an overlay card is open — a drag inside a fixed-position
+ *  sheet still reads window.scrollY = 0 and would fire a refresh under it.
+ *  Listeners are passive and window-level: they observe, never preventDefault,
+ *  so scrolling itself is untouched. */
+export function usePullRefresh(onRefresh: () => void, enabled = true): boolean {
+  const [armed, setArmed] = useState(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const armedRef = useRef(false);
+  const cb = useRef(onRefresh); cb.current = onRefresh;
+  const en = useRef(enabled); en.current = enabled;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      // Only a pull that BEGINS at the top of the page counts — mid-scroll
+      // drags are scrolling, and must never fire a surprise reload.
+      start.current = en.current && window.scrollY <= 0 && t ? { x: t.clientX, y: t.clientY } : null;
+      armedRef.current = false; setArmed(false);
+    };
+    const onMove = (e: TouchEvent) => {
+      const s = start.current; const t = e.touches[0];
+      if (!s || !t) return;
+      // 90px down, mostly vertical, still at the top: the classic PTR shape.
+      const on = t.clientY - s.y > 90 && Math.abs(t.clientX - s.x) < 60 && window.scrollY <= 0;
+      if (on !== armedRef.current) { armedRef.current = on; setArmed(on); }
+    };
+    const onEnd = () => {
+      if (armedRef.current) cb.current();
+      start.current = null; armedRef.current = false; setArmed(false);
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+  return armed;
+}
+
 export function useIsMobile(maxWidth = 760): boolean {
   const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(`(max-width:${maxWidth}px)`).matches);
   useEffect(() => {

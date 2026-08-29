@@ -31,7 +31,7 @@ import {
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
 } from '@drip/core/data/liveApi';
-import { PlayerImg, PosPill, useIsMobile, NoGameScreen } from '../app/ui';
+import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
@@ -498,8 +498,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   const [testLive, setTestLive] = useState<number | null>(null);
   // Bumped by the strip's ▶/⏹ — a dep of the live poll below, so the board
   // refetches the instant a rehearsal starts or resets instead of leaving the
-  // old scores up for the rest of a poll interval.
+  // old scores up for the rest of a poll interval. Pull-to-refresh (v0.369.1)
+  // bumps the same counter: both mean "re-run the whole load, now".
   const [simVer, setSimVer] = useState(0);
+  // ↓ PULL TO REFRESH (v0.369.1, founder: "right now pull down kicks you back
+  // to your leagues"). The browser's native gesture is off (styles.css); a
+  // pull from the top of the board re-runs the loader in place. Disabled
+  // while any card is over the board — a drag inside a fixed sheet still
+  // reads scrollY 0 and would fire a refresh under it.
+  const pullArmed = usePullRefresh(
+    () => setSimVer((v) => v + 1),
+    !fieldsOpen && !fieldGame && !slateOpen && !pickerSlot,
+  );
   // THE WEEK THIS SEAT SITS OUT (v0.364.0). An odd-sized league byes one team
   // a week, and `state = 'none'` — which returns before the header and its
   // stepper render — stranded whoever stepped onto theirs. Held separately
@@ -1162,6 +1172,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
        width, and `maxWidth` caps the BOX, not the track. See SlateStrip. */
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       style={{ maxWidth: 720, margin: '0 auto', padding: '12px 12px 40px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
+      {/* The pull-to-refresh hint — visible only while the pull is past the
+          threshold, so releasing right now is what it describes. */}
+      {pullArmed && (
+        <div className="mono" style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 80, background: 'var(--surface)', border: '1px solid var(--bdh, var(--bd))', borderRadius: 14, padding: '5px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', boxShadow: '0 6px 18px rgba(0,0,0,0.35)' }}>
+          ↻ RELEASE TO REFRESH
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {hideBack
           ? <span />
