@@ -477,35 +477,59 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '11r cleanup');
 end $$;
 
--- ── 12. purchases are never blocked (0254/0255) ──────────────────────────────
--- "I can't buy anything 'metric - 1 week'": arm_unlock refused any matchup past
--- 'scheduled', closing the shop at the week's FIRST kickoff even though 0058
--- keeps later windows' picks editable until their own. Then the principle,
--- stated by the founder: "we shouldn't ever block purchases, just power up
--- usages" — so the shop has NO status gate at all; enforce_window_lock and
--- enforce_locked_metric keep guarding the picks themselves.
+-- ── 12. metric unlocks are cards (0254/0255/0256) ────────────────────────────
+-- The arc: the shop refused unlocks mid-week (0254 relaxed it), then the
+-- founder's principle "we shouldn't ever block purchases, just power up
+-- usages" (0255 dropped the gate), then "purchase goes to your power up hand
+-- ... nothing expires, no refunds, confirm before use" (0256). End state:
+--   BUY   wallet_buy_powerup, any time — coin out, a card into the hand;
+--   USE   arm_unlock consumes ONE OWNED CARD (no coin), refuses 'not owned'
+--         and refuses only a FINAL matchup;
+--   UNDO  disarm_unlock (pre-week only) hands the CARD back — never coin.
 do $$
-declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int; bal0 numeric; bal numeric; q int;
 begin
   perform probe_as('1');
   perform assert_ok(set_preseason_practice(lid, true), '12a practice re-opens');
   select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
   select id into mid from matchup where league_id = lid and week = wk limit 1;
-  -- The week is underway (an earlier window kicked off) — the shop stays open.
-  update matchup set status = 'live' where id = mid;
+  -- No card, no arm — whatever the coin balance says.
   r := arm_unlock(mid, 'unlock-return');
-  perform assert_ok(r, '12b unlock arms mid-week (window locks guard picks, not the shop)');
-  perform assert_eq((r ->> 'charged')::numeric, powerup_price('unlock-return'), '12c charged the real price');
-  -- Even a finished matchup sells — a useless buy is the buyer's call, and the
-  -- board it could land on is gated elsewhere.
+  perform assert_err(r, 'not owned', '12b arming without the card refuses');
+  -- The purchase is never blocked: the week is underway and the card still sells.
+  update matchup set status = 'live' where id = mid;
+  bal0 := my_wallet(mid);
+  r := wallet_buy_powerup(mid, 'unlock-return');
+  perform assert_ok(r, '12c the card sells mid-week');
+  perform assert_eq((r ->> 'balance')::numeric, bal0 - powerup_price('unlock-return'), '12d coin left on the BUY');
+  select coalesce(qty, 0) into q from practice_inventory
+    where league_id = lid and roster_id = 1 and week = wk and powerup_id = 'unlock-return';
+  perform assert_eq(q, 1, '12e the card is in the hand');
+  -- USING it consumes the card and no further coin.
+  bal := my_wallet(mid);
+  r := arm_unlock(mid, 'unlock-return');
+  perform assert_ok(r, '12f the owned card arms');
+  perform assert_eq(my_wallet(mid), bal, '12g arming moved no coin');
+  select coalesce(qty, 0) into q from practice_inventory
+    where league_id = lid and roster_id = 1 and week = wk and powerup_id = 'unlock-return';
+  perform assert_eq(q, 0, '12h the card was consumed');
+  -- Pre-week disarm un-uses: the CARD comes back, the coin does not.
+  update matchup set status = 'scheduled' where id = mid;
+  bal := my_wallet(mid);
+  r := disarm_unlock(mid, 'unlock-return');
+  perform assert_ok(r, '12i disarm ok');
+  perform assert_eq(my_wallet(mid), bal, '12j no coin refunded');
+  select coalesce(qty, 0) into q from practice_inventory
+    where league_id = lid and roster_id = 1 and week = wk and powerup_id = 'unlock-return';
+  perform assert_eq(q, 1, '12k the card returned to the hand');
+  -- A FINAL matchup refuses the USE (nothing left to field it on) — the one
+  -- usage gate kept; the extra slot likewise keeps its pre-match usage rule.
   update matchup set status = 'final' where id = mid;
-  r := arm_unlock(mid, 'unlock-underdog');
-  perform assert_ok(r, '12d even a FINAL matchup never blocks the purchase');
-  -- The extra slot keeps its pre-match rule: buying it IS applying it — it
-  -- restructures every window for both players, so it is a usage, not a buy.
+  r := arm_unlock(mid, 'unlock-return');
+  perform assert_err(r, 'locked', '12l a FINAL matchup refuses the use');
   r := buy_extra_slot(mid);
-  perform assert_err(r, 'locked', '12e extra slot stays a pre-match usage');
-  perform assert_ok(set_preseason_practice(lid, false), '12f cleanup');
+  perform assert_err(r, 'locked', '12m extra slot stays a pre-match usage');
+  perform assert_ok(set_preseason_practice(lid, false), '12n cleanup');
 end $$;
 
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

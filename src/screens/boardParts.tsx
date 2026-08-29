@@ -318,13 +318,14 @@ export function SetupRow(props: {
 }) {
   const { winId, week, pick, selected, inventory, unlocks, comboOpen, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick, hydrated = true } = props;
   // Is a locked metric offerable in this slot? Live board (unlocks provided):
+  // armed, OR an owned card in the hand (0256 — picking it confirms + uses).
   // the four booleans arm once and field anywhere (armed-set membership); Combo
   // Drip is one slot per purchase (comboOpen has headroom, or this slot already
   // runs it). Sim/demo (unlocks null): the local-inventory consumable count.
   const metricUnlocked = (lock: string): boolean => {
     if (!unlocks) return (inventory[lock] ?? 0) > 0;
-    if (lock === 'unlock-combo-drip') return pick?.metricId === 'combodrip' || !!comboOpen;
-    return unlocks.has(lock);
+    if (lock === 'unlock-combo-drip') return pick?.metricId === 'combodrip' || !!comboOpen || (inventory[lock] ?? 0) > 0;
+    return unlocks.has(lock) || (inventory[lock] ?? 0) > 0;
   };
   // Pre-kick, the metric door stays open ONLY for the Underdog flip — and only
   // when the unlock is actually owned (or the slot already flipped).

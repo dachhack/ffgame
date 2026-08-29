@@ -180,13 +180,12 @@ export function LeagueOverview() {
 // they will in Week 1, which is the point: free power-ups taught "arm everything",
 // the one habit that bankrupts a manager in the real season. The flag only changes
 // what the header SAYS, so nobody reads their unfamiliar balance as a bug.
-export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, unlocks, comboQty = 0, onDisarm }: {
+export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, inventoryOverride }: {
   onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean | string>; cards?: boolean; practice?: boolean;
-  /** Live board only (v0.370.3): the armed metric-unlock set + Combo Drip count.
-   *  When provided, unlock cards show ARMED / ✓ DISARM instead of re-selling
-   *  silently — the app has shown this state since v0.343; the web shop just
-   *  flashed and said nothing, so a bought unlock looked buyable forever. */
-  unlocks?: Set<string>; comboQty?: number; onDisarm?: (id: string) => Promise<boolean | string>;
+  /** Live board: the server-side hand (my_inventory), so OWNED counts are the
+   *  DB's truth. Metric unlocks buy like everything else now (0256) — a card
+   *  into the hand, no auto-arm; using one happens in the metric picker. */
+  inventoryOverride?: Record<string, number>;
 }) {
   const { coins, inventory, buyPowerup } = useStore();
   const [flash, setFlash] = useState<string | null>(null);
@@ -219,15 +218,7 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
     if (r === true) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
     else if (typeof r === 'string') setErr(r);
   }
-  async function disarm(id: string) {
-    if (!onDisarm) return;
-    setErr(null);
-    const r = await onDisarm(id);
-    if (typeof r === 'string') setErr(r);
-  }
-  // Armed metric unlocks (live board only — `unlocks` unset elsewhere).
-  const armedFor = (p: { id: string; kind?: string }) =>
-    !!unlocks && p.kind === 'metric' && (p.id === 'unlock-combo-drip' ? comboQty > 0 : unlocks.has(p.id));
+  const inv = inventoryOverride ?? inventory;
   const errLine = err && (
     <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--opp)', marginBottom: 8 }}>{err}</div>
   );
@@ -241,37 +232,19 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
         <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {shownPu.map((p, i) => {
-              const have = inventory[p.id] ?? 0;
+              const have = inv[p.id] ?? 0;
               const afford = canAfford(p.price);
-              const armed = armedFor(p);
-              const combo = p.id === 'unlock-combo-drip';
-              // An armed unlock is done shopping: the card flips to DISARM
-              // (combo keeps selling — each purchase is another slot).
-              if (armed && !combo) {
-                return (
-                  <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
-                    timingLabel={'METRIC · 1 WK'} cost={p.price} footLabel="✓ DISARM" flashed
-                    note="armed this week — tap to disarm & refund"
-                    onClick={() => void disarm(p.id)} />
-                );
-              }
               return (
                 <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
-                  timingLabel={p.kind === 'metric' ? 'METRIC · 1 WK' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
-                  cost={p.price} owned={armed && combo ? comboQty : have} disabled={!afford} flashed={flash === p.id}
-                  note={!afford ? `need ◈${p.price}` : armed && combo ? `ARMED ×${comboQty} — buy again for another slot` : undefined}
+                  timingLabel={p.kind === 'metric' ? 'METRIC' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
+                  cost={p.price} owned={have} disabled={!afford} flashed={flash === p.id}
+                  note={!afford ? `need ◈${p.price}` : p.kind === 'metric' ? 'to your hand — use it from a slot’s metric picker' : undefined}
                   onClick={() => buy(p.id)} />
               );
             })}
           </div>
-          {comboQty > 0 && onDisarm && (
-            <button onClick={() => void disarm('unlock-combo-drip')} className="mono"
-              style={{ display: 'block', margin: '10px auto 0', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', background: 'none', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}>
-              − remove one Combo Drip slot (refund)
-            </button>
-          )}
           <div className="mono" style={{ fontSize: 9, color: '#93A594', letterSpacing: '0.06em', marginTop: 12, lineHeight: 1.5 }}>
-            PRE-MATCH cards apply during setup and lock once a window starts. REAL-TIME cards can be played during live games. METRIC unlocks last the current week only. Bought cards land in your hand.
+            PRE-MATCH cards apply during setup and lock once a window starts. REAL-TIME cards can be played during live games. METRIC cards never expire — using one (from a slot&rsquo;s metric picker, with a confirm) arms that metric for the current week. Bought cards land in your hand.
           </div>
         </div>
       </Modal>
@@ -283,10 +256,8 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
       {errLine}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440, overflow: 'auto' }}>
         {shownPu.map((p) => {
-          const have = inventory[p.id] ?? 0;
+          const have = inv[p.id] ?? 0;
           const afford = canAfford(p.price);
-          const armed = armedFor(p);
-          const combo = p.id === 'unlock-combo-drip';
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
           return (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
@@ -295,38 +266,25 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
                   <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: p.timing === 'pre' ? 'var(--warn)' : 'var(--you)', border: `1px solid ${p.timing === 'pre' ? 'var(--warn)' : 'var(--you)'}`, borderRadius: 3, padding: '1px 4px' }}>{timingTag}</span>
-                  {p.kind === 'metric' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>METRIC · 1 WK</span>}
+                  {p.kind === 'metric' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>METRIC</span>}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{p.blurb}</div>
-                {have > 0 && !armed && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>OWNED ×{have}</div>}
-                {/* ARMED, not OWNED — an unlock never lands in inventory. */}
-                {armed && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>{combo ? `ARMED ×${comboQty} — buy again for another slot` : 'ARMED THIS WEEK'}</div>}
+                {have > 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>OWNED ×{have}</div>}
               </div>
-              {armed && combo && onDisarm && (
-                <button onClick={() => void disarm(p.id)} className="mono" title="remove one Combo Drip slot (refund)"
-                  style={{ flex: 'none', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '8px 9px', border: '1px solid var(--bd)', cursor: 'pointer', color: 'var(--dim)', background: 'var(--surface)' }}>−</button>
-              )}
-              {armed && !combo ? (
-                <button onClick={() => void disarm(p.id)} className="mono"
-                  style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: '1px solid var(--you)', cursor: 'pointer', color: 'var(--you)', background: 'var(--surface)' }}>
-                  ✓ DISARM
-                </button>
-              ) : (
-                <button
-                  onClick={() => buy(p.id)}
-                  disabled={!afford}
-                  className="mono"
-                  style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
-                >
-                  <GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}
-                </button>
-              )}
+              <button
+                onClick={() => buy(p.id)}
+                disabled={!afford}
+                className="mono"
+                style={{ flex: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 4, padding: '8px 11px', border: 'none', cursor: afford ? 'pointer' : 'default', color: afford ? 'var(--bg)' : 'var(--faint)', background: afford ? 'var(--you)' : 'var(--surface)', opacity: afford ? 1 : 0.6 }}
+              >
+                <GameIcon name={COIN_GOLD} emoji="◈" size="1.2em" /> {p.price}
+              </button>
             </div>
           );
         })}
       </div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 12, lineHeight: 1.5 }}>
-        PRE-MATCH powerups apply during setup and lock once a window starts. REAL-TIME powerups can be applied during live play. METRIC unlocks last the current week only. Apply them from the matchup screen.
+        PRE-MATCH powerups apply during setup and lock once a window starts. REAL-TIME powerups can be applied during live play. METRIC cards never expire — using one arms its metric for the current week. Apply them from the matchup screen.
       </div>
     </Modal>
   );

@@ -12,7 +12,7 @@ import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGam
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
-import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL, LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
+import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
@@ -29,7 +29,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, disarmUnlock, myUnlocks, myComboQty, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -676,36 +676,26 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     myUnlocks(liveCtx.matchupId).then((u) => setUnlocks(new Set(u ?? []))).catch(() => setUnlocks(new Set()));
     myComboQty(liveCtx.matchupId, liveCtx.userId).then(setComboQty).catch(() => setComboQty(0));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Buy = arm one unlock (arm_unlock spends the wallet server-side; combo-drip
-  // buys ANOTHER each time, qty+1). Refresh the armed set + wallet from the RPC.
-  // Resolves `true` or an error STRING — the shop shows the string (v0.370.3):
-  // a swallowed refusal read as "the button does nothing".
+  // The server-side hand (0256): unlock CARDS you own, read from the week's
+  // inventory. Buying stocks it; USING a locked metric in the picker consumes
+  // one (behind a confirm). Nothing expires, no refunds.
+  const [srvInv, setSrvInv] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    if (!liveCtx) { setSrvInv(null); return; }
+    myInventory(liveCtx.matchupId).then((m) => setSrvInv(m ?? {})).catch(() => setSrvInv({}));
+  }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // USE one owned unlock card: arm_unlock consumes it server-side (0256) and
+  // arms the metric for this week. Resolves `true` or an error STRING.
   const armUnlockLive = async (id: string): Promise<true | string> => {
     if (!liveCtx) return 'not on the live board';
     const r = await armUnlock(liveCtx.matchupId, id).catch((e) => ({ ok: false as const, error: friendlyError(e), unlocks: undefined, comboQty: undefined }));
-    if (!r?.ok) return friendlyError(('error' in (r ?? {}) && r?.error) || 'that didn’t work — try again');
+    if (!r?.ok) {
+      const raw = ('error' in (r ?? {}) && r?.error) || '';
+      return raw === 'not owned' ? 'You don’t own that card — buy it in the SHOP first.' : friendlyError(raw || 'that didn’t work — try again');
+    }
     if (r.unlocks) setUnlocks(new Set(r.unlocks));
     if (id === 'unlock-combo-drip' && typeof r.comboQty === 'number') setComboQty(r.comboQty);
-    ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => {});
-    return true;
-  };
-  // Disarm an armed unlock (refund; server clears dependent picks — mirror that
-  // locally so the picker doesn't show a metric the gate would now reject).
-  const disarmUnlockLive = async (id: string): Promise<true | string> => {
-    if (!liveCtx) return 'not on the live board';
-    const r = await disarmUnlock(liveCtx.matchupId, id).catch((e) => ({ ok: false as const, error: friendlyError(e), unlocks: undefined, comboQty: undefined }));
-    if (!r?.ok) return friendlyError(('error' in (r ?? {}) && r?.error) || 'that didn’t work — try again');
-    if (r.unlocks) setUnlocks(new Set(r.unlocks));
-    if (typeof r.comboQty === 'number') setComboQty(r.comboQty);
-    setPicks((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) {
-        const mid = next[k].metricId;
-        if (mid && LOCKED_METRIC_UNLOCK[mid] === id) next[k] = { ...next[k], metricId: null };
-      }
-      return next;
-    });
-    ensureWallet(liveCtx.matchupId).then((b) => setLiveWallet(Number(b ?? 0))).catch(() => {});
+    setSrvInv((prev) => ({ ...(prev ?? {}), [id]: Math.max(0, ((prev ?? {})[id] ?? 0) - 1) }));
     return true;
   };
   // Combo Drip is one slot per purchase: offer it while placed picks are under
@@ -714,6 +704,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // — the whole-batch save. The four booleans arm-once/field-anywhere.
   const placedCombo = useMemo(() => Object.values(picks).filter((p) => p.metricId === 'combodrip').length, [picks]);
   const comboOpen = comboQty > placedCombo;
+  // The inventory the PICKER sees: live board reads the server hand (owned
+  // unlock cards make their metrics offerable — picking one confirms + uses
+  // the card); sim/demo keeps the local store.
+  const invView = liveCtx ? (srvInv ?? {}) : inventory;
 
   // Card-table theme (league_pref.card_theme): on flagged leagues the owned
   // power-ups also render as a hand of cards pinned to the bottom of the board.
@@ -739,16 +733,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return () => { alive = false; };
   }, [liveCtx, activeLeague]); // eslint-disable-line react-hooks/exhaustive-deps
   // Buy a power-up into inventory, charged against the real wallet (hero board).
-  // `true` or an error string for the shop to show (v0.370.3).
+  // `true` or an error string for the shop to show (v0.370.3). Metric unlocks
+  // buy like everything else now (0256) — a CARD into the hand, no auto-arm;
+  // using one happens in the metric picker, behind a confirm.
   const buyFromWallet = async (id: string): Promise<true | string> => {
     if (!liveCtx) return 'not on the live board';
-    // Metric unlocks arm into applied_state (the store the save-gate reads), not
-    // team_inventory — so a bought Combo Drip actually saves. Everything else is
-    // an owned power-up bought into inventory.
-    if (powerupById(id)?.kind === 'metric') return armUnlockLive(id);
     const r = await walletBuyPowerup(liveCtx.matchupId, id).catch(() => null);
     if (!r?.ok) return friendlyError(r?.error ?? 'that didn’t work — try again');
     grantPowerup(id); setLiveWallet(Number(r.balance ?? 0));
+    setSrvInv((prev) => ({ ...(prev ?? {}), [id]: ((prev ?? {})[id] ?? 0) + 1 }));
     return true;
   };
   useEffect(() => {
@@ -1285,13 +1278,32 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const player = pk ? getPlayer(pk.playerId) : null;
     const m = player ? metricById(player.pos, metricId) : null;
     // Sim/demo: a locked (unlock) metric consumes one of its powerup the first
-    // time it's set, and switching off refunds it. Live: unlocks live in
-    // applied_state (armed on buy) and the picker already gates on the armed set,
-    // so there's nothing to consume or refund here.
+    // time it's set, and switching off refunds it.
     if (!liveCtx) {
       if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
       const prevM = player && pk?.metricId ? metricById(player.pos, pk.metricId) : null;
       if (prevM?.lock && prevM.id !== metricId) refundUnlock(prevM.lock);
+    }
+    // Live (0256): picking a locked metric that isn't armed yet USES one owned
+    // card — this is the founder's confirm-before-use moment. Non-combo unlocks
+    // arm once for the whole week; Combo Drip is one slot per card.
+    if (liveCtx && m?.lock && pk?.metricId !== metricId) {
+      const needsArm = m.lock === 'unlock-combo-drip'
+        ? !(pk?.metricId === 'combodrip' || comboOpen)
+        : !unlocks?.has(m.lock);
+      if (needsArm) {
+        const owned = srvInv?.[m.lock] ?? 0;
+        const puName = powerupById(m.lock)?.name ?? m.name;
+        if (owned < 1) { window.alert(`You don’t own ${puName} — buy it in the 🛒 SHOP first. It goes to your hand and never expires.`); return; }
+        if (!window.confirm(`Use 1 × ${puName}?\n\nIt arms ${m.name} for this week${m.lock === 'unlock-combo-drip' ? ' (one slot per card)' : ''}. You own ${owned}. No refunds.`)) return;
+        void (async () => {
+          const r = await armUnlockLive(m.lock!);
+          if (r !== true) { window.alert(r); return; }
+          setPicks((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev);
+          setSelSlot(null);
+        })();
+        return;
+      }
     }
     setPicks((prev) => prev[key] ? { ...prev, [key]: { ...prev[key], metricId } } : prev);
     setSelSlot(null);
@@ -1951,7 +1963,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 openPBP={openPBP}
                 togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
                 youPools={youPools}
-                inventory={inventory}
+                inventory={invView}
                 unlocks={unlocks}
                 comboOpen={comboOpen}
                 onAssign={assignFromRoster}
@@ -2125,7 +2137,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {/* practice: preseason board weeks charge nothing (0110), so the shop must
           neither gate on the balance nor imply one will be deducted. */}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} practice={!!liveCtx && preseason}
-        unlocks={liveCtx ? unlocks ?? undefined : undefined} comboQty={comboQty} onDisarm={liveCtx ? disarmUnlockLive : undefined} />}
+        inventoryOverride={liveCtx ? srvInv ?? undefined : undefined} />}
       {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
           fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
           enters the existing tap-a-target flow (pendingApply); tapping the

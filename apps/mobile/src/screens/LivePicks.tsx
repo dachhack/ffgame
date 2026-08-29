@@ -11,7 +11,7 @@
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
 import { useCallback, useEffect, useMemo, useState, useRef} from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
@@ -24,8 +24,8 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
-  myUnlocks, armUnlock, disarmUnlock, myComboQty,
-  myWallet, ensureWallet,
+  myUnlocks, armUnlock, myComboQty,
+  ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
@@ -600,9 +600,6 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     return () => clearTimeout(id);
   }, [picks, matchup, hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refreshCoins = () => { if (matchup) myWallet(matchup.id).then((c) => setCoins(Number(c ?? 0))).catch(() => {}); };
-  const priceOf = (id: string) => powerupById(id)?.price ?? 0;
-  const insufficientMsg = (id: string) => `Not enough drip coin — ${powerupById(id)?.name ?? id} costs ◆${priceOf(id)}, you have ◆${Math.round(coins)}.`;
   const puLocked = (id: string) => !matchPremium && !isFreePowerup(id);
   const upgradeMsg = 'Premium power-up — unlock premium ($5 you · $30 league) to arm it.';
 
@@ -694,46 +691,39 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       };
     });
 
-  // Purchases are never blocked (0255, founder) — arming an unlock is a buy, so
-  // the week being locked no longer gates it client-side; the usage gates
-  // (window locks, the metric picker) still hold. Disarm attempts on a locked
-  // week get the server's answer in the error line.
-  const toggleUnlock = async (id: string) => {
-    if (!matchup || buffBusy) return;
-    const combo = id === 'unlock-combo-drip';
-    const armed = unlocks.has(id) && !combo; // combo: every tap buys another
-    if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
-    if (!armed && coins < priceOf(id)) { setErr(insufficientMsg(id)); return; }
-    setBuffBusy(id); setErr(null);
-    try {
-      const r = armed ? await disarmUnlock(matchup.id, id) : await armUnlock(matchup.id, id);
-      if (r.ok && r.unlocks) {
-        setUnlocks(new Set(r.unlocks));
-        if (combo && typeof r.comboQty === 'number') setComboQty(r.comboQty);
-        refreshCoins();
-        // Disarming clears dependent picks server-side — mirror locally.
-        if (armed) setPicks((prev) => {
-          const next = { ...prev };
-          for (const k of Object.keys(next)) {
-            const mid = next[k].metric_id;
-            if (mid && LOCKED_METRIC_UNLOCK[mid] === id) next[k] = { ...next[k], metric_id: null };
-          }
-          return next;
-        });
-      } else setErr(r.error === 'insufficient' ? insufficientMsg(id) : (r.error ?? 'Could not update unlocks.'));
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update unlocks.'); }
-    finally { setBuffBusy(null); }
-  };
-
-  const disarmComboOne = async () => {
-    if (!matchup || locked || buffBusy || comboQty <= 0) return;
-    setBuffBusy('unlock-combo-drip'); setErr(null);
-    try {
-      const r = await disarmUnlock(matchup.id, 'unlock-combo-drip');
-      if (r.ok) setAttempt((a) => a + 1); // full reload — picks may have been trimmed server-side
-      else setErr(r.error ?? 'Could not remove the Combo Drip.');
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not remove the Combo Drip.'); }
-    finally { setBuffBusy(null); }
+  // Unlocks are CARDS (0256, founder): the shop only ever sells them into the
+  // hand; picking a locked metric here USES one — behind this confirm. Nothing
+  // expires, no refunds. Non-combo cards arm once for the whole week; Combo
+  // Drip is one slot per card.
+  const pickMetricWithCard = (key: string, mid: string | null) => {
+    const lock = mid ? LOCKED_METRIC_UNLOCK[mid] : undefined;
+    if (!matchup || !lock || !mid) { setSlot(key, { metric_id: mid }); return; }
+    if (buffBusy) return;
+    const combo = lock === 'unlock-combo-drip';
+    const placed = Object.values(picks).filter((p) => p.metric_id === 'combodrip').length;
+    const curMid = picks[key]?.metric_id;
+    const needsArm = combo ? !(curMid === 'combodrip' || comboQty > placed) : !unlocks.has(lock);
+    if (!needsArm) { setSlot(key, { metric_id: mid }); return; }
+    if (puLocked(lock)) { markGatedAttempt('powerup:' + lock); setErr(upgradeMsg); return; }
+    const owned = inventory[lock] ?? 0;
+    const name = powerupById(lock)?.name ?? lock;
+    if (owned < 1) { setErr(`You don’t own ${name} — buy it in the 🛒 shop first. It goes to your hand and never expires.`); return; }
+    Alert.alert(`Use 1 × ${name}?`, `Arms it for this week${combo ? ' (one slot per card)' : ''}. You own ${owned}. No refunds.`, [
+      { text: 'CANCEL', style: 'cancel' },
+      { text: 'USE', onPress: () => { void (async () => {
+        setBuffBusy(lock); setErr(null);
+        try {
+          const r = await armUnlock(matchup.id, lock);
+          if (r.ok) {
+            if (r.unlocks) setUnlocks(new Set(r.unlocks));
+            if (combo && typeof r.comboQty === 'number') setComboQty(r.comboQty);
+            setInventory((inv) => ({ ...inv, [lock]: Math.max(0, (inv[lock] ?? 1) - 1) }));
+            setSlot(key, { metric_id: mid });
+          } else setErr(r.error === 'not owned' ? `You don’t own ${name} — buy it in the 🛒 shop first.` : (r.error ?? 'Could not use that card.'));
+        } catch (e) { setErr(e instanceof Error ? e.message : 'Could not use that card.'); }
+        finally { setBuffBusy(null); }
+      })(); } },
+    ]);
   };
 
   const toggleAi = async () => {
@@ -1084,12 +1074,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     pick={pick}
                     resolve={(id) => playersBySlug[id]}
                     lockPlayer={wLocked}
-                    // Locked metrics only become pickable once their unlock is
-                    // armed — same rule as the web's metricsFor().
-                    metricFilter={(m) => !m.lock || unlocks.has(m.lock)}
+                    // A locked metric is pickable when its unlock is armed OR
+                    // an owned card sits in the hand (0256 — picking it then
+                    // confirms and uses the card).
+                    metricFilter={(m) => !m.lock || unlocks.has(m.lock) || (inventory[m.lock] ?? 0) > 0}
                     hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
-                    onPickMetric={(mid) => { if (!wLocked) setSlot(s.key, { metric_id: mid }); }}
+                    onPickMetric={(mid) => { if (!wLocked) pickMetricWithCard(s.key, mid); }}
                     onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
                     onScout={oppPool.length ? () => setScoutWin(w) : undefined}
                   />
@@ -1328,15 +1319,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           // Preseason weeks are practice: the server charges nothing, so the
           // shop must not imply the season wallet moves.
           practice={isPreseasonWeek(matchup.week)}
-          // Metric unlocks buy-and-arm inside the shop rather than becoming
-          // cards — see the note on these props in ShopModal.
-          unlocks={unlocks}
-          comboQty={comboQty}
-          unlockBusy={buffBusy}
+          // Metric unlocks are plain cards now (0256): the shop sells them into
+          // the hand; USING one happens in the metric picker, behind a confirm.
           unlockLocked={puLocked}
-          armsClosed={locked}
-          onToggleUnlock={toggleUnlock}
-          onDisarmCombo={disarmComboOne}
           onClose={() => setShopOpen(false)}
           // Trust the server's balance rather than deducting locally — on a
           // practice week nothing is actually charged.
