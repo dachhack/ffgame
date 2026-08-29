@@ -18,6 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.8 — the game strip gets readable
+
+Founder, first minutes on the browser: "can we make the text of the top
+strip a bit bigger..I can't read all the games." Strip chips on both hosts
+go 9 → 12 with matching padding and a 7px live dot (web BoxScoreCard,
+mobile BoxScoreSheet). Mobile rides the next APK.
+
 ### v0.369.7 — the box score becomes the week's box-score browser
 
 Founder: "Let's make the box score have all the games. list all the games

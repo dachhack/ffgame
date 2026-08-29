@@ -413,12 +413,12 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
           {games.map((g) => (
             <Pressable key={g.key} onPress={() => setSel(g.key)}
               style={{
-                flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6,
+                flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 6,
                 borderWidth: StyleSheet.hairlineWidth, borderColor: g.key === cur.key ? t.you : t.bd,
                 backgroundColor: g.key === cur.key ? alpha(t.you, 0.12) : t.bg,
               }}>
-              {g.state === 'live' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
-              <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: g.state === 'final' ? t.faint : t.text }}>{g.key}</Text>
+              {g.state === 'live' && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: t.opp }} />}
+              <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: g.state === 'final' ? t.faint : t.text }}>{g.key}</Text>
             </Pressable>
           ))}
         </ScrollView>
