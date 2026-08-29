@@ -14,7 +14,7 @@
 // Run: npx tsx scripts/check-box-game.mjs
 import { gameBoxScore } from '../packages/core/src/engine/boxScore.ts';
 import { setLivePlays, clearLivePlays } from '../packages/core/src/data/realPbp.ts';
-import { setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek } from '../packages/core/src/data/gameFeed.ts';
+import { setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek, weekBoxGames } from '../packages/core/src/data/gameFeed.ts';
 import { setSlugMetaOverrides } from '../packages/core/src/data/slugMeta.ts';
 import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam.ts';
 
@@ -152,6 +152,15 @@ ok(awaySlugs.includes('moved-qb') && !homeSlugs.includes('moved-qb'),
   const wrT = [...box.home, ...box.away].find((r) => r.slug === 'wr-tackler');
   ok(wrT?.pos === 'WR' && wrT?.side === 'off',
     `a KNOWN WR with a lone tackle keeps the two-way treatment — the inference keys on the default (got ${wrT?.pos}/${wrT?.side})`);
+}
+
+// ── weekBoxGames (v0.369.7): the box-score browser's strip ────────────────
+// Week 901 has no slate, so the list is the feeds alone — two games, both
+// carrying plays with an 'in' state, so both read live.
+{
+  const strip = weekBoxGames(WEEK);
+  ok(strip.length === 2 && strip.every((g) => g.state === 'live'),
+    `the strip lists every feed game with its state (got ${strip.map((g) => `${g.key}:${g.state}`).join(', ')})`);
 }
 
 // No feed installed at all → membership is unknowable → pure team rule.

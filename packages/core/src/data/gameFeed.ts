@@ -6,6 +6,7 @@
 // lazily per week, so it costs nothing until a field is actually opened.
 import { REAL_WEEKS } from './realWeeks';
 import { normTeam } from './slugMeta';
+import { windowsForWeek, gamesInWindow } from './nflSlate';
 import { platform } from '../platform';
 
 export interface GamePlay {
@@ -271,6 +272,53 @@ export function feedClockLabel(week: number, team?: string | null): string | nul
     if (Number.isFinite(c) && c >= best) best = c;
   }
   return best < 0 ? null : fmtQuarterClock(best);
+}
+
+/** ── THE WEEK'S GAMES, AS THE BOX-SCORE BROWSER LISTS THEM (v0.369.7) ──────
+ *  Founder: "make the box score have all the games... Red dot for active,
+ *  Grey text for final, Black text for upcoming." One list for both hosts:
+ *  the full slate in kickoff order, each game carrying its feed when one
+ *  exists and a three-state status — 'final' only when the feed SAYS post,
+ *  'live' for a feed with plays or an 'in' state (the board sim writes no
+ *  state, so plays alone must count), 'pre' when no feed exists yet. Feed
+ *  games the slate doesn't know are appended rather than dropped — a game
+ *  that is being played is on the card whatever the schedule says. */
+export interface WeekBoxGame { key: string; away: string; home: string; kickoff: number | null; state: 'pre' | 'live' | 'final'; feed: TeamGameFeed | null }
+export function weekBoxGames(week: number): WeekBoxGame[] {
+  const feeds = new Map<string, TeamGameFeed>();
+  for (const f of allGameFeeds(week)) feeds.set(`${normTeam(f.away)}@${normTeam(f.home)}`, f);
+  const out: WeekBoxGame[] = [];
+  const seen = new Set<string>();
+  for (const w of windowsForWeek(week)) {
+    for (const g of gamesInWindow(week, w.id)) {
+      const key = `${normTeam(g.away)}@${normTeam(g.home)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const f = feeds.get(key) ?? null;
+      out.push({
+        key, away: normTeam(g.away), home: normTeam(g.home), kickoff: g.kickoff ?? null,
+        state: f?.st === 'post' ? 'final' : f && (f.st === 'in' || f.plays.length > 0) ? 'live' : 'pre',
+        feed: f,
+      });
+    }
+  }
+  for (const [key, f] of feeds) {
+    if (seen.has(key)) continue;
+    out.push({ key, away: normTeam(f.away), home: normTeam(f.home), kickoff: null, state: f.st === 'post' ? 'final' : 'live', feed: f });
+  }
+  return out;
+}
+
+/** The latest released play of a feed — the score and clock a game strip
+ *  shows. Latest by `c`, ties to the later entry (the revised copy), the same
+ *  rule as slateScores. */
+export function latestPlay(plays: GamePlay[] | null | undefined): GamePlay | null {
+  let best: GamePlay | null = null;
+  for (const p of plays ?? []) {
+    if (!p || !Number.isFinite(Number(p.c))) continue;
+    if (best === null || Number(p.c) >= Number(best.c)) best = p;
+  }
+  return best;
 }
 
 export function feedPossFor(week: number, team?: string | null): number[][] {
