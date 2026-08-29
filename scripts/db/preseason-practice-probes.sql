@@ -573,4 +573,25 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '13l cleanup');
 end $$;
 
+-- ── 14. targeted power-ups work on a practice board (0258) ──────────────────
+-- 0086's entitlement gate reads coin_ledger purchases; practice never ledgers
+-- (5g), so every practice apply read 0 bought and refused 'not owned'. The
+-- gate now skips practice weeks — the throwaway purse can't touch the real
+-- economy, and the per-play caps still bound the sandbox.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '14a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id)
+    values (mid, '00000000-0000-0000-0000-000000000101', 'w1', '0', 'probe-runner', 'rush');
+  r := apply_targeted(mid, 'lead-change', jsonb_build_object('win', 'w1', 'slot', '0'));
+  perform assert_ok(r, '14b a practice-week targeted apply is no longer refused');
+  r := apply_targeted(mid, 'lead-change', jsonb_build_object('win', 'w1', 'slot', '0'));
+  perform assert_err(r, 'already armed', '14c the per-play caps still bound the sandbox');
+  perform assert_ok(set_preseason_practice(lid, false), '14d cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

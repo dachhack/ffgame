@@ -399,9 +399,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const keyParts = (k: string) => ({ win: k.split('#')[0], slot: k.split('#')[1] });
   const liveTargeted = (id: string, payload: Record<string, unknown>) => {
     if (!liveCtx) return;
+    // A refused apply must be LOUD (v0.372.1): the local board had already
+    // drawn the play, so a console-only warn meant the official resolver and
+    // the player's screen quietly disagreed for the rest of the week.
     applyTargeted(liveCtx.matchupId, id, payload)
-      .then((r) => { if (!r.ok) console.warn('[live] apply_targeted', id, r.error); })
-      .catch((e) => console.warn('[live] apply_targeted', id, e));
+      .then((r) => { if (!r.ok) window.alert(`${powerupById(id)?.name ?? id} did NOT apply server-side: ${friendlyError(r.error ?? 'apply failed')}. The official score won't count it — back it out and try again.`); })
+      .catch((e) => window.alert(`${powerupById(id)?.name ?? id} did NOT apply server-side: ${friendlyError(e)}.`));
   };
   const liveClearTargeted = (id: string, payload?: Record<string, unknown>) => {
     if (!liveCtx) return;
@@ -1212,7 +1215,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       blocked = `Amp limit ${ampCapacity(armedSet)} — arm ${armedSet.has('amp-2') ? 'Third' : 'Second'} Amp to run more`;
     }
     return { p, ok, deadline, action, blocked };
-  }).filter((x) => x.ok);
+  })
+    // The hand shows EVERY owned card (founder: "use the card hand for applying
+    // all power ups") — a card whose moment isn't now stays visible, dimmed,
+    // wearing its window as the reason. Only its actions are withheld.
+    .map((x) => x.ok ? x : { ...x, blocked: x.blocked ?? `⏳ ${x.deadline}` });
+  const playableNow = appliable.filter((x) => x.ok && !x.blocked).length;
 
   // ── setup interactions ──
   // Keep each window's spots filled top-down: collapse any gap so a filled spot
@@ -1875,7 +1883,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                       ◈ ACTIVE{activeEffects.length > 0 ? ` · ${activeEffects.length}` : ''}
                     </button>
                     <button onClick={() => setPuView('apply')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '7px 11px' }}>
-                      ✦ APPLY{appliable.length > 0 ? ` · ${appliable.length}` : ''}
+                      ✦ APPLY{playableNow > 0 ? ` · ${playableNow}` : ''}
                     </button>
                     {/* THE COIN, BESIDE THE SHOP (v0.290.0, founder). It used to
                         sit up in the header, which on a phone put a balance in
@@ -2163,9 +2171,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         <>
           <div style={{ height: 104 }} />
           <PowerupHand
-            cards={appliable.map(({ p, deadline, action, blocked }) => ({
+            cards={appliable.map(({ p, ok, deadline, action, blocked }) => ({
               id: p.id, name: p.name, icon: p.icon, qty: inventory[p.id] ?? 0,
               action, deadline, blurb: p.blurb, note: blocked ?? (action === 'hint' ? POWERUP_HINT[p.id] : undefined),
+              usable: ok && !blocked,
             }))}
             pendingId={pendingApply}
             onArm={(id) => armBuff(week, id)}
@@ -2501,9 +2510,9 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
     // Card-table leagues: your usable power-ups dealt on the felt. Tap to ARM a
     // buff in place or enter APPLY target mode; hint cards carry their how-to.
     return (
-      <PuShell title="✦ Play a Card" subtitle="YOUR HAND — PLAY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
+      <PuShell title="✦ Play a Card" subtitle="YOUR WHOLE HAND — EACH CARD PLAYS IN ITS OWN WINDOW" accent="var(--warn)" onClose={onClose}>
         <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
-          {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— no cards to play right now —<br />bought cards appear here while their window is open</div>}
+          {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: '#93A594', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— your hand is empty —<br />buy power-ups in the 🛒 SHOP and they land here</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {items.map(({ p, deadline, action, blocked }, i) => (
               <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
@@ -2519,8 +2528,8 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
     );
   }
   return (
-    <PuShell title="✦ Apply Power-Ups" subtitle="USABLE NOW — APPLY EACH BEFORE ITS WINDOW CLOSES" accent="var(--warn)" onClose={onClose}>
-      {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— nothing to apply right now —<br />power-ups appear here while their window is open</div>}
+    <PuShell title="✦ Apply Power-Ups" subtitle="EVERYTHING YOU OWN — EACH APPLIES IN ITS OWN WINDOW" accent="var(--warn)" onClose={onClose}>
+      {items.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>— you own nothing yet —<br />buy power-ups in the 🛒 SHOP and they land here</div>}
       {items.map(({ p, deadline, action, blocked }) => {
         const qty = inventory[p.id] ?? 0;
         return (
@@ -2534,12 +2543,12 @@ function ApplyPowerupsModal({ items, inventory, onArm, onApply, onClose, cards =
               </div>
               <div style={{ fontSize: 10, lineHeight: 1.45, color: 'var(--dim)', marginTop: 2 }}>{p.blurb}</div>
               {action === 'hint' && POWERUP_HINT[p.id] && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {POWERUP_HINT[p.id]}</div>}
-              {action === 'arm' && blocked && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {blocked}</div>}
+              {blocked && <div className="mono" style={{ fontSize: 8.5, color: 'var(--warn)', marginTop: 3 }}>↳ {blocked}</div>}
             </div>
             {action === 'arm' ? (
               <button onClick={() => onArm(p.id)} disabled={qty <= 0 || !!blocked} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: blocked ? 'not-allowed' : 'pointer', border: '1px solid var(--you)', color: 'var(--on-accent)', background: 'var(--you)', opacity: blocked ? 0.45 : 1 }}>ARM</button>
             ) : action === 'apply' ? (
-              <button onClick={() => onApply(p.id)} disabled={qty <= 0} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)' }}>APPLY</button>
+              <button onClick={() => onApply(p.id)} disabled={qty <= 0 || !!blocked} className="mono" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: blocked ? 'not-allowed' : 'pointer', border: '1px solid var(--warn)', color: 'var(--on-accent)', background: 'var(--warn)', opacity: blocked ? 0.45 : 1 }}>APPLY</button>
             ) : (
               <span className="mono" title="No arming needed — ready to use" style={{ flex: 'none', alignSelf: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', border: '1px solid var(--ok, #3fb950)', color: 'var(--ok, #3fb950)', background: 'transparent' }}>READY</span>
             )}
