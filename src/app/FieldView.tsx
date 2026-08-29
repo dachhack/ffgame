@@ -15,7 +15,7 @@ import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 
@@ -553,7 +553,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
 function boxName(slug: string): string {
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
-  return slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  return stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 }
 
 /** All of a game's players and their lines, by team (v0.336.0). */

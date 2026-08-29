@@ -13,6 +13,7 @@
 // isn't on any roster yet. Names are prettified slugs; close enough to find
 // anyone, and the flag renders with the real name wherever the player appears.
 import { useEffect, useMemo, useState } from 'react';
+import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useStore } from './store';
 import { setLeagueNote, setPlayerFlag, setPlayerFlagsBulk, playerFlags, leagueGameMode, leagueNote, leagueScoringGet, leagueScoringSet, friendlyError, type PlayerFlagRow, type FlagRulesRaw } from '@drip/core/data/liveApi';
 import { SCORING_BOUNDS, DEFAULT_SCORING, scoringIsDefault, scoringLabel, scopedRuleLabel, parseScoring, type LeagueScoring, type ScopedBonus } from '@drip/core/engine/leagueScoring';
@@ -29,7 +30,7 @@ const ghostBtn: React.CSSProperties = { ...btn, color: 'var(--text)', background
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer', padding: '2px 4px' };
 
 const prettify = (slug: string) =>
-  slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 
 // Directory-filter axes for bulk flagging + scoped bonuses (0145): position
 // and team straight off the bio bake, tenure from accrued seasons.

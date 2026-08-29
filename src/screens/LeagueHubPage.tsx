@@ -11,6 +11,7 @@
 //
 // (Not to be confused with screens/LeagueHub.tsx, the demo-era portfolio.)
 import { Ev, track } from '@drip/core/analytics';
+import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Img, Sheet } from '../app/ui';
@@ -424,7 +425,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
 // ── every team's roster, expanded in place ──────────────────────────────────
 interface TeamGroup { rid: number; name: string; mine: boolean; players: { slug: string; name: string; pos: string; team: string }[]; }
 const POS_ORDER: Record<string, number> = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5 };
-const prettify = (slug: string) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+const prettify = (slug: string) => stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 
 function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: number }) {
   const [groups, setGroups] = useState<TeamGroup[] | null>(null);

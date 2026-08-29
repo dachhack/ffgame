@@ -19,7 +19,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel } from '@drip/core/data/gameFeed';
@@ -121,7 +121,7 @@ const card: React.CSSProperties = { background: 'var(--surface)', border: '1px s
 const prettySlug = (slug: string): string => {
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
-  return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+  return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 
 /** "Sun 1:00 PM" — the player row's game line. Local to the reader, because

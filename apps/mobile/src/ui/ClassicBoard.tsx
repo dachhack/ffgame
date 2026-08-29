@@ -14,7 +14,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds } from '@drip/core/data/slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -305,7 +305,7 @@ const mkPlayer = (slug: string) => {
 const prettySlug = (slug: string): string => {
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
-  return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+  return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 /** "Sun 1:00 PM" — the row's game line, in the reader's own timezone. */

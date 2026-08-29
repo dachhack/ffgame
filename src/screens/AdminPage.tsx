@@ -37,7 +37,7 @@ import { CommishToolsPanel } from '../app/commishKit';
 import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
@@ -2913,7 +2913,7 @@ function Users({ onLeaveAdmin }: { onLeaveAdmin?: () => void }) {
 
 // "patrick-mahomes-10" → "Patrick Mahomes"
 const fmtSlug = (slug: string) =>
-  slug.replace(/-\d+$/, '').split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  stripSlugTag(slug).split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 function PickPills({ picks }: { picks: BoardPick[] }) {
   if (!picks.length) return null;
