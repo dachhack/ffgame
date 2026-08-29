@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.5 — the box column reads the current team, not the 2025 tag
+
+Founder: "Tua is on the falcons. How hard would it be to actually use a
+player id?" — the ids were already in use (game membership by game_id,
+plays by ESPN athlete id), but the box COLUMN still trusted slugMeta's
+team, which answers from the baked 2025 play stream first (kept
+deliberately, for baked-play possession scoring) — so an offseason mover
+sat in his OLD team's column whenever that team was in the game (Tua,
+MIA→ATL, in ATL@MIA). The current team already exists id-keyed on the
+client: the worker diffs Sleeper's directory into player_team_override
+daily and the bio bake carries the rest (bio already had Tua on ATL) —
+teamFor reads exactly that chain, and gameBoxScore's column now goes
+through it, baked tag as last resort. Pinned (moved-qb, 19 assertions).
+
 ### v0.369.4 — the namesake tag never reaches a name
 
 Founder: '"Josh Johnson QB"' — the worker mints namesake slugs with a

@@ -16,6 +16,7 @@ import { gameBoxScore } from '../packages/core/src/engine/boxScore.ts';
 import { setLivePlays, clearLivePlays } from '../packages/core/src/data/realPbp.ts';
 import { setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek } from '../packages/core/src/data/gameFeed.ts';
 import { setSlugMetaOverrides } from '../packages/core/src/data/slugMeta.ts';
+import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -41,6 +42,7 @@ setSlugMetaOverrides([
   { slug: 'gid-member', pos: 'RB', team: 'MIA' },         // gid says E1 though pid/clock match nothing
   { slug: 'sim-flat', pos: 'RB', team: 'MIA' },           // gid 'SIM' names no feed game → fallback rules
   { slug: 'wr-tackler', pos: 'WR', team: 'MIA' },         // KNOWN WR with a lone tackle: two-way, not re-typed
+  { slug: 'moved-qb', pos: 'QB', team: 'MIA' },           // STALE tag says MIA; the current-team table says NYG
   // 'unknown-corner' and 'unknown-qb' are deliberately NOT here — they must
   // take the WR/'' default for the stat-shape inference (v0.369.3) to fire.
 ]);
@@ -99,7 +101,15 @@ setLivePlays(WEEK, {
   // An unknown QB (the founder's "WR Josh Johnson Qb · 0/0 rec"): passing
   // stats make him a QB, so his line reads C/ATT + yards, not empty receiving.
   'unknown-qb': [{ c: 150, pid: 6, k: 'pass', y: 7, td: 0, ca: 0, tg: 0, cp: 1 }],
+  // THE OFFSEASON MOVER (v0.369.5, founder: "Tua is on the falcons"): his
+  // stale tag (MIA) names a team IN this game, so the old column rule seated
+  // him there — the id-keyed current-team table (player_team_override) says
+  // NYG, and that must win the column.
+  'moved-qb': [{ c: 60, pid: 3, k: 'pass', y: 12, td: 0, ca: 0, tg: 0, cp: 1 }],
 });
+// The worker's daily Sleeper diff, as the client loads it (0142): moved-qb
+// plays for NYG now, whatever the 2025 tag says.
+setTeamOverrides([{ slug: 'moved-qb', team: 'NYG' }]);
 
 const box = gameBoxScore(WEEK, 'MIA', 'NYG', 3600);
 const homeSlugs = box.home.map((r) => r.slug), awaySlugs = box.away.map((r) => r.slug);
@@ -127,6 +137,8 @@ ok(homeSlugs.includes('gid-member'),
   'a play whose game id names THIS game is seated, whatever the pid/clock heuristics think');
 ok(homeSlugs.includes('sim-flat'),
   "a flat sim gid ('SIM') names no feed game — the pid/clock rules still decide, and his play is genuine");
+ok(awaySlugs.includes('moved-qb') && !homeSlugs.includes('moved-qb'),
+  'v0.369.5 THE POINT: an offseason mover sits in his CURRENT team\'s column — the id-keyed override outvotes the 2025 tag');
 {
   // v0.369.3: the unknown player's position comes from his stats.
   const corner = [...box.home, ...box.away].find((r) => r.slug === 'unknown-corner');
@@ -152,5 +164,6 @@ ok(!bare.home.some((r) => r.slug === 'new-arrival'),
 
 clearLivePlays();
 clearLiveGameFeeds();
+clearTeamOverrides();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL BOX-GAME ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
