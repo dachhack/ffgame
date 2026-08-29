@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.3 — the unknown player's box-score position comes from his stats
+
+Founder, over ATL@MIA and CIN@PHI boxes: "Looks like some mix up def vs off
+on Miami." Every wrong-tab/wrong-column man wore the WR chip: real corners
+and edges the bio bake has never heard of (CJ Henderson, AJ Terrell, Zach
+Harrison, Maason Smith, Bralen Trice — verified absent from the bake, which
+is fantasy-skewed) take slugMeta's WR/'' default — filed on the offense side
+AND skipping the defender column flip, so an ATL corner tackling on MIA's
+snaps landed in MIA's column. Plus "WR Josh Johnson Qb · 0/0 rec": an
+unknown QB rendered as an empty receiving line. Fix in gameBoxScore: for a
+man NOTHING knows, the line itself says what he is — passing stats → QB,
+purely defensive line → generic DB (right tab, right column via the DEF
+flip, stats phrased in their own vocabulary). Known players untouched: a
+real WR with a lone tackle keeps the v0.343.2 two-way treatment. Four new
+box-game pins (18 total). Known defenders showing small offensive lines
+(Dodson 1 car, Ojabo 1 rec) are the worker resolver's attributions
+surfacing through the intended two-way rule — server-side, watch item.
+
 ### v0.369.2 — pull-to-refresh inside All-fields too
 
 Founder: "pull down to refresh on the matchup board and all fields should

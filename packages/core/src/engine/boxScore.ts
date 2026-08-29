@@ -179,6 +179,8 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     const team = normTeam(meta.team ?? '');
     const plays = realRawPlays(slug, week);
     if (!plays || !plays.length) continue;
+    const line = statlineFrom(plays, clock);
+    if (!hasStats(line)) continue;
     const withPid = plays.filter((p) => p.pid != null);
     // true = his plays are in this game; false = provably elsewhere; null = no
     // pid data on one side or the other, membership unknowable → team rule.
@@ -190,7 +192,22 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
       : pidTm.size && withPid.length ? matchedPlays.length * 2 > withPid.length : null;
     if (inGame === false) continue;
     if (inGame === null && team !== H && team !== A) continue;
-    const pos = (meta.pos ?? 'WR') as Pos;
+    let pos = (meta.pos ?? 'WR') as Pos;
+    // THE UNKNOWN PLAYER'S POSITION COMES FROM HIS STATS (v0.369.3, founder:
+    // "some mix up def vs off on Miami"). The bio bake is fantasy-skewed and
+    // thin on fringe men, so a corner it has never heard of takes the WR/''
+    // default — which filed his tackles on the OFFENSE side of the split and,
+    // worse, skipped the defender column flip: an ATL corner tackling on
+    // MIA's snaps landed in MIA's column wearing a WR chip. And an unknown
+    // QB's line rendered as "0/0 rec · 0 rec yd". For a man NOTHING knows,
+    // the line itself says what he is: passing stats make him a QB, a purely
+    // defensive line makes him a generic DB — right tab, right column, stats
+    // phrased in their own vocabulary. Known players are untouched, so a real
+    // WR whose only stat is a tackle keeps the v0.343.2 two-way treatment.
+    if (!team && pos === 'WR') {
+      if (line.att > 0 || line.passYds !== 0 || line.sacked > 0 || line.passTds > 0 || line.passInts > 0) pos = 'QB';
+      else if (defInvolved(line) && !offInvolved(line)) pos = 'DB';
+    }
     let col = team === H ? H : team === A ? A : null;
     if (!col) {
       // In the game, but the tag names neither team: majority offense of his
@@ -204,8 +221,6 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
       col = mine === H ? H : mine === A ? A : null;
       if (!col) continue;
     }
-    const line = statlineFrom(plays, clock);
-    if (!hasStats(line)) continue;
     (col === H ? out.home : out.away).push({
       slug, pos, team: col, line, weight: weigh(line), stat: fmtStat(pos, line),
       yards: scrimmageYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',

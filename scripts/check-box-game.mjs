@@ -40,6 +40,9 @@ setSlugMetaOverrides([
   { slug: 'ward-case', pos: 'RB', team: 'MIA' },          // opening kickoff: pid AND clock collide; gid says E2
   { slug: 'gid-member', pos: 'RB', team: 'MIA' },         // gid says E1 though pid/clock match nothing
   { slug: 'sim-flat', pos: 'RB', team: 'MIA' },           // gid 'SIM' names no feed game → fallback rules
+  { slug: 'wr-tackler', pos: 'WR', team: 'MIA' },         // KNOWN WR with a lone tackle: two-way, not re-typed
+  // 'unknown-corner' and 'unknown-qb' are deliberately NOT here — they must
+  // take the WR/'' default for the stat-shape inference (v0.369.3) to fire.
 ]);
 // The NYG@MIA feed knows plays 1-6; plays 100+ belong to some other game.
 // game_id rides the rows (v0.369.0): E1 is this game, E2 the other one on
@@ -84,6 +87,18 @@ setLivePlays(WEEK, {
   'ward-case': [{ c: 0, pid: 1, gid: 'E2', k: 'return', y: 30, td: 0, ca: 0, tg: 0 }],
   'gid-member': [{ c: 999, pid: 777, gid: 'E1', k: 'rush', y: 9, td: 0, ca: 1, tg: 0 }],
   'sim-flat': [{ c: 120, pid: 5, gid: 'SIM', k: 'rush', y: 8, td: 0, ca: 1, tg: 0 }],
+  // THE UNKNOWN DEFENDER (v0.369.3, founder: "some mix up def vs off on
+  // Miami"). No slugMeta override on purpose — he takes the WR/'' default.
+  // His only stat is a tackle on NYG's snap (pid 4), so he is a MIA defender:
+  // the purely-defensive line must flip him to DB, which lands him in MIA's
+  // column via the defender flip instead of NYG's via raw possession.
+  'unknown-corner': [{ c: 90, pid: 4, k: 'tackle', y: 0, td: 0, ca: 1, tg: 0 }],
+  // …while a KNOWN WR whose only stat is a tackle keeps his listed position
+  // (the v0.343.2 two-way treatment) — the inference keys on the default.
+  'wr-tackler': [{ c: 120, pid: 5, k: 'tackle', y: 0, td: 0, ca: 1, tg: 0 }],
+  // An unknown QB (the founder's "WR Josh Johnson Qb · 0/0 rec"): passing
+  // stats make him a QB, so his line reads C/ATT + yards, not empty receiving.
+  'unknown-qb': [{ c: 150, pid: 6, k: 'pass', y: 7, td: 0, ca: 0, tg: 0, cp: 1 }],
 });
 
 const box = gameBoxScore(WEEK, 'MIA', 'NYG', 3600);
@@ -112,6 +127,20 @@ ok(homeSlugs.includes('gid-member'),
   'a play whose game id names THIS game is seated, whatever the pid/clock heuristics think');
 ok(homeSlugs.includes('sim-flat'),
   "a flat sim gid ('SIM') names no feed game — the pid/clock rules still decide, and his play is genuine");
+{
+  // v0.369.3: the unknown player's position comes from his stats.
+  const corner = [...box.home, ...box.away].find((r) => r.slug === 'unknown-corner');
+  ok(corner?.pos === 'DB' && corner?.side === 'def',
+    `an unknown man with a purely defensive line is a DB on the defense side (got ${corner?.pos}/${corner?.side})`);
+  ok(homeSlugs.includes('unknown-corner'),
+    'and the defender column flip applies: tackling on NYG snaps seats him in the MIA column');
+  const uqb = [...box.home, ...box.away].find((r) => r.slug === 'unknown-qb');
+  ok(uqb?.pos === 'QB' && uqb.stat.includes('pass'),
+    `an unknown man with passing stats is a QB, phrased as one (got ${uqb?.pos}: ${uqb?.stat})`);
+  const wrT = [...box.home, ...box.away].find((r) => r.slug === 'wr-tackler');
+  ok(wrT?.pos === 'WR' && wrT?.side === 'off',
+    `a KNOWN WR with a lone tackle keeps the two-way treatment — the inference keys on the default (got ${wrT?.pos}/${wrT?.side})`);
+}
 
 // No feed installed at all → membership is unknowable → pure team rule.
 clearLiveGameFeeds();
