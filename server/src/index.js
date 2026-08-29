@@ -438,10 +438,11 @@ async function tickContext(ctx, season) {
     const rctx = await prefetchTick(live, week);
     const nowMs = Date.now();
     // TWO clocks on purpose (v0.341.1): the fill/seal set runs on LOCK time
-    // (kickoff − 1h, matching enforce_window_lock and the reveal), so fills
-    // land already sealed and the opponent appears the moment editing ends;
-    // startedWins stays on KICKOFF for the resolver, so matchup_state never
-    // publishes rows for a window that hasn't actually started.
+    // (kickoff − 1h, matching enforce_window_lock), so fills land already
+    // sealed the moment editing ends; startedWins stays on KICKOFF for the
+    // resolver, so matchup_state never publishes rows for a window that
+    // hasn't actually started — and since 0262 the sealed_select RLS holds
+    // the opponent's read to that same kickoff, so nothing reveals early.
     const startedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] <= nowMs)) : null;
     const lockedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] - LOCK_LEAD_MS <= nowMs)) : null;
     // Fill-only auto-lineups (0170.8): later windows of an ALREADY-live week

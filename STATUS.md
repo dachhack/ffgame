@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.375.2 — reveal at kickoff, not at lock (0262) + Search Console file
+
+Founder (screenshot): "The app just revealed the opposing pick, but that
+shouldn't happen until kick off." Since 0260 the pick clock locks at
+kickoff − 1h and the worker's seal rides it — but sealed_pick.locked was
+ALSO the reveal flag (v0.341.1 coupled them), so both boards handed each
+side the other's lineup an hour early. 0262 splits the clocks: locked
+stays the edit seal; the sealed_select RLS now gates the opponent's read
+on window_kickoff (new window_revealed helper; null slate falls back to
+reveal-at-lock so sims/probes lose nothing). No client changes needed —
+both boards already render the hidden hour as SEALED card backs, and
+matchup_state was already kickoff-gated (startedWins). Probe section 17
+pins owner-reads-own / opponent-blind-during-lock-hour / reveals-at-
+kickoff / slateless-fallback. Also: Google Search Console verification
+file at site root (public/google8d5701b5986e8447.html).
+
 ### v0.375.1 — app: ⚡N chip on buffed cards; the hand hugs the room bar
 
 Founder (four screenshots): "I don't see any power ups on Keenum. Let's

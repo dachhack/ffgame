@@ -38,6 +38,13 @@ begin
   perform set_config('app.uid', '00000000-0000-0000-0000-00000000010' || u, false);
   perform set_config('app.email', 'p' || u || '@test.dev', false);
 end $$;
+-- The worker's identity: owner role past RLS AND a null auth.uid() past the
+-- window-lock trigger — staging states only the seal sweep could produce.
+create or replace function probe_as_server() returns void language plpgsql as $$
+begin
+  perform set_config('app.uid', '', false);
+  perform set_config('app.email', '', false);
+end $$;
 
 -- ── fixtures ─────────────────────────────────────────────────────────────────
 -- p1 = commissioner (also the home seat), p2 = a plain member (away seat),
@@ -668,6 +675,64 @@ begin
   -- delete on a locked window.
   delete from nfl_slate where season = '2026' and week = wk and home = 'ZZT';
   perform assert_ok(set_preseason_practice(lid, false), '16d cleanup');
+end $$;
+
+-- ── 17. locked ≠ revealed: the opponent reads a pick at KICKOFF (0262) ───────
+-- "The app just revealed the opposing pick, but that shouldn't happen until
+-- kick off": 0260 moved the seal to kickoff − 1h, and `locked` was also the
+-- reveal flag — so the reveal rode the seal an hour early. The opponent's
+-- read now waits for the window's real kickoff; the owner always reads their
+-- own row; a window with no slate row keeps the old reveal-at-lock answer.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; wk int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '17a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  -- A window inside its final hour: LOCKED (kickoff − 1h has passed), not yet
+  -- kicked — the exact hour the founder's screenshot caught.
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', wk, 'ZZV', 'ZZW', 'w4', now() + interval '30 minutes') on conflict do nothing;
+  -- The pick lands sealed the only way it can on a locked window: as the
+  -- worker's sweep does — owner role past RLS, no auth uid past the trigger.
+  reset role; perform probe_as_server();
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id, locked)
+    values (mid, '00000000-0000-0000-0000-000000000101', 'w4', '0', 'probe-runner', 'rush', true);
+
+  set local role authenticated;
+  perform probe_as('1');
+  perform assert_true((select count(*) from sealed_pick where matchup_id = mid and game_window = 'w4') = 1,
+    '17b the owner reads their own sealed pick');
+  perform probe_as('2');
+  perform assert_true((select count(*) from sealed_pick where matchup_id = mid and game_window = 'w4') = 0,
+    '17c the opponent reads NOTHING during the lock hour');
+
+  -- Kickoff passes → the same row opens.
+  reset role;
+  update nfl_slate set kickoff = now() - interval '5 minutes'
+    where season = '2026' and week = wk and home = 'ZZV';
+  set local role authenticated;
+  perform probe_as('2');
+  perform assert_true((select count(*) from sealed_pick where matchup_id = mid and game_window = 'w4') = 1,
+    '17d the opponent reads the pick from kickoff');
+
+  -- No slate row (a synthetic window): locked keeps meaning revealed, the
+  -- pre-0262 rule — sims and unsynced weeks lose nothing.
+  reset role; perform probe_as_server();
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id, locked)
+    values (mid, '00000000-0000-0000-0000-000000000101', 'w5', '0', 'probe-runner', 'rush', true);
+  set local role authenticated;
+  perform probe_as('2');
+  perform assert_true((select count(*) from sealed_pick where matchup_id = mid and game_window = 'w5') = 1,
+    '17e a slateless window still reveals at lock');
+
+  -- Unlock w4 before teardown (0178's trigger refuses authed deletes on a
+  -- locked window — the same footgun 16d hit).
+  reset role;
+  delete from nfl_slate where season = '2026' and week = wk and home = 'ZZV';
+  set local role authenticated; perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, false), '17f cleanup');
 end $$;
 
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

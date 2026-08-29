@@ -160,15 +160,13 @@ export function dueWindows(winKicks, now) {
   if (!winKicks) return null;
   // A window is DUE at its LOCK — kickoff minus the shared LOCK_LEAD_MS hour —
   // not at kickoff (v0.341.1). The DB's enforce_window_lock (0178, the same
-  // hour as an SQL interval) refuses every edit from that moment, and `locked`
-  // is ALSO the reveal flag (sealed_select RLS), so sealing an hour later
-  // than the edit cutoff created a blind hour: neither side could edit,
-  // neither side could SEE, and the board filled the vacuum with
-  // "NOT MATCHED UP" over an opponent who was fully set and merely hidden —
-  // which the founder read, reasonably, as yet another unopposed bug. Sealing
-  // at the true lock closes the gap: the auto-fill lands already sealed, the
-  // reveal happens the moment editing ends, and a locked window shows the
-  // real matchup.
+  // hour as an SQL interval) refuses every edit from that moment, so the
+  // auto-fill lands already sealed and a locked window holds its final
+  // lineup. `locked` used to ALSO be the reveal flag, which leaked the
+  // opponent's lineup an hour before kickoff once the seal moved to the lock
+  // clock — since 0262 the sealed_select RLS gates the opponent's read on
+  // the window's real KICKOFF, and the boards render the locked hour as
+  // SEALED card backs.
   const t = now.getTime();
   return new Set(Object.keys(winKicks).filter((w) => Number.isFinite(winKicks[w]) && winKicks[w] - LOCK_LEAD_MS <= t));
   // NOTE: 'wk' is deliberately NOT added here any more (0178). A classic
