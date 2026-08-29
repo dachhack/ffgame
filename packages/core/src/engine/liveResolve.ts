@@ -100,13 +100,23 @@ function sideLens(side: 'home' | 'away'): SideLens<SlotRes> {
 // economy by construction, not by hand-sync: the parity check caught the
 // hand-synced copies apart twice (a phantom week-1 stipend, a turnover swing
 // the wallet never paid) before v0.340.0 deleted them.
-function coinFor(slots: SlotRes[], side: 'home' | 'away', week: number, turnoverCoin: number): number {
+function coinFor(slots: SlotRes[], side: 'home' | 'away', week: number, turnoverCoin: number | ((win: string) => number)): number {
   const lens = sideLens(side);
-  const b = coinBreakdown(slots.map((s) => ({
-    player: lens.player(s), metricId: lens.metric(s), opp: lens.opp(s),
-    events: s.events, evSide: (side === 'home' ? 'you' : 'their') as 'you' | 'their',
-  })), week, turnoverCoin);
-  return Math.round(b.subtotal);
+  // Ball Hawk went scope-2 (0260): a mid-week arm boosts only windows locking
+  // after it, so the turnover swing can be per-WINDOW — group and sum, rounding
+  // once so a scalar caller's total is unchanged.
+  const rate = typeof turnoverCoin === 'number' ? () => turnoverCoin : turnoverCoin;
+  const wins = [...new Set(slots.map((s) => s.win))];
+  // The stipend is a flat per-week credit — take it once, not once per window.
+  let subtotal = coinBreakdown([], week, 0).subtotal;
+  for (const w of wins) {
+    const b = coinBreakdown(slots.filter((s) => s.win === w).map((s) => ({
+      player: lens.player(s), metricId: lens.metric(s), opp: lens.opp(s),
+      events: s.events, evSide: (side === 'home' ? 'you' : 'their') as 'you' | 'their',
+    })), week, rate(w));
+    subtotal += b.subtotal - b.stipend;
+  }
+  return Math.round(subtotal);
 }
 
 /** Pre-match team buffs each side has armed (overtime / ot-shield / momentum /
@@ -529,8 +539,8 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   const result: LiveResult = { states, slots: slotScores, home: round(home), away: round(away), coin: {
     // Turnover swing at each side's own rate: 25 with its Turnover Boost armed,
     // else the flat 10 — exactly the turnoverCoin the web passes weekEarnings.
-    home: coinFor(slots, 'home', week, homeBuffs.has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpHome,
-    away: coinFor(slots, 'away', week, awayBuffs.has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpAway,
+    home: coinFor(slots, 'home', week, (w) => buffsForWindow(homeBuffs, buffs.homeBuffsAt, week, w).has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpHome,
+    away: coinFor(slots, 'away', week, (w) => buffsForWindow(awayBuffs, buffs.awayBuffsAt, week, w).has('turnover-boost') ? TURNOVER_COIN_BOOSTED : TURNOVER_COIN) + mvpAway,
   } };
   if (buffs.captureEvents) result.slotEvents = slots.map((s) => ({ win: s.win, slot: s.slot, events: s.events }));
   return result;

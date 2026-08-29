@@ -24,17 +24,19 @@ export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string;
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
-import { windowForTeam, windowsForWeek, gamesInWindow, windowKickoffMs } from '../data/nflSlate';
+import { windowForTeam, windowsForWeek, gamesInWindow, windowKickoffMs, testTimelineOn, LOCK_LEAD_MS, TEST_LOCK_LEAD_MS } from '../data/nflSlate';
 
 /** Which of a side's armed buffs count for one WINDOW (v0.373.0): a buff armed
- *  mid-week only counts windows that kick off AFTER it was armed — arming Hail
- *  Mary after watching Thursday's TD land must not score Thursday. No arm-time
- *  map (legacy payloads, the opponent's set, demo pre-arm) = the full set. */
+ *  mid-week only counts windows that LOCK after it was armed — one clock with
+ *  picks (kickoff − 1h; founder ruling, 0260) — so arming Hail Mary after
+ *  watching Thursday's TD land can't score Thursday. No arm-time map (legacy
+ *  payloads, the opponent's set, demo pre-arm) = the full set. */
 export function buffsForWindow(all: Set<string>, at: Record<string, number> | undefined, week: number, win: string): Set<string> {
   if (!at || all.size === 0) return all;
   const k = windowKickoffMs(week, win as WindowId);
   if (k == null) return all;
-  const out = new Set([...all].filter((b) => at[b] == null || at[b] < k));
+  const lock = k - (testTimelineOn() ? TEST_LOCK_LEAD_MS : LOCK_LEAD_MS);
+  const out = new Set([...all].filter((b) => at[b] == null || at[b] < lock));
   return out.size === all.size ? all : out;
 }
 import { injuryFor } from '../data/injuries';

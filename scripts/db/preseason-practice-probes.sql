@@ -569,7 +569,7 @@ begin
   -- A finished matchup refuses the use outright.
   update matchup set status = 'final' where id = mid;
   r := apply_underdog(mid, 'w1', '1');
-  perform assert_err(r, 'window already kicked off', '13k a FINAL matchup refuses');
+  perform assert_err(r, 'window already locked', '13k a FINAL matchup refuses');
   perform assert_ok(set_preseason_practice(lid, false), '13l cleanup');
 end $$;
 
@@ -625,7 +625,14 @@ begin
   insert into nfl_slate (season, week, home, away, win, kickoff)
     values ('2026', wk, 'ZZP', 'ZZQ', 'wpast', now() - interval '2 hours') on conflict do nothing;
   r := apply_targeted(mid, 'jinx', jsonb_build_object('win', 'wpast', 'slot', '0'));
-  perform assert_err(r, 'window already kicked off', '15g a kicked window refuses');
+  perform assert_err(r, 'window already locked', '15g a locked window refuses (kickoff − 1h — one clock with picks, 0260)');
+  -- The distinguishing case for the lock clock: kickoff still 30 min away, so
+  -- the window has NOT kicked — but it locked 30 min ago, and cards close with
+  -- the lock, exactly like picks.
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', wk, 'ZZR', 'ZZS', 'wsoon', now() + interval '30 minutes') on conflict do nothing;
+  r := apply_targeted(mid, 'jinx', jsonb_build_object('win', 'wsoon', 'slot', '0'));
+  perform assert_err(r, 'window already locked', '15g2 inside the final hour is locked, kicked or not');
   -- FINAL closes the arms.
   update matchup set status = 'final' where id = mid;
   perform assert_err(hero_set_buffs(mid, '["momentum"]'::jsonb), 'locked', '15h a final matchup refuses');
