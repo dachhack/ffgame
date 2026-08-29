@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.374.2 — Sleeper-style stat lines
+
+Founder (Sleeper screenshot): "I like how compact it is" + "If someone
+has no targets we don't need a receptions stat. if they have no catches
+we don't need receiving yards. if no carries, no rush yards." fmtStat
+rewritten: every zero stat drops (even a QB's 0 TD), yards lose their
+rush/rec prefix (the count before them says which), each block's TDs
+ride the block, empty lines read "—". Applies everywhere fmtStat renders
+(box scores web+app, board cards). check-box-game QB-phrasing pin
+updated. Return yards were already captured — just buried in zeros.
+
 ### v0.374.1 — a player swap lands whole (0261)
 
 Founder: swapped Dobbs out with Player Swap; the spot then read NO
