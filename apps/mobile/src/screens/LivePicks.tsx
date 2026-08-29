@@ -24,7 +24,7 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import {
   myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
-  myUnlocks, armUnlock, myComboQty,
+  myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState,
   ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
@@ -141,6 +141,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [buffs, setBuffs] = useState<Set<string>>(new Set());
   const [unlocks, setUnlocks] = useState<Set<string>>(new Set());
   const [comboQty, setComboQty] = useState(0);
+  const [targeted, setTargeted] = useState<TargetedState>({});
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
@@ -267,6 +268,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           liveSlate(m.week).catch(() => []), myComboQty(m.id, userId).catch(() => 0),
         ]);
         myInventory(m.id).then((inv) => setInventory(inv ?? {})).catch(() => {});
+        // Applied targeted plays — so a slot card can WEAR what's attached to
+        // it (v0.375.0, founder: "we don't get to see which power ups are
+        // assigned to Keenum on his card"). Display-only until targeted
+        // applies port to the app; the web is the apply surface meanwhile.
+        myTargeted(m.id, userId).then((tg) => { if (alive) setTargeted(tg ?? {}); }).catch(() => {});
         // The week's NFL injury report. Cleared first so a league or week switch
         // can never show the previous board's designations against this pool.
         // Off the critical path on purpose — it swallows its own failures and
@@ -690,6 +696,29 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       };
     });
 
+  // What's ATTACHED to one slot (v0.375.0): the targeted payload's lists are
+  // keyed 'win|slot'; each hit becomes an icon chip the slot card wears —
+  // matching the web board, where the founder applies these plays.
+  const appliedFor = (win: string, slot: string): { icon: string; name: string }[] => {
+    const k = `${win}|${slot}`;
+    const out: { icon: string; name: string }[] = [];
+    const add = (id: string) => { const p = powerupById(id); out.push({ icon: p?.icon ?? '✦', name: p?.name ?? id }); };
+    if (targeted.don?.win === win && targeted.don?.slot === slot) add('double-or-nothing');
+    if (targeted.byeSteal?.win === win && targeted.byeSteal?.slot === slot) add('bye-steal');
+    const lists: [string, string[] | undefined][] = [
+      ['lead-change', targeted.leadChange], ['grudge', targeted.grudge], ['red-herring', targeted.redHerring],
+      ['unlock-underdog', targeted.underdog], ['ghost', targeted.ghost], ['clutch-don', targeted.clutchDon],
+    ];
+    for (const [id, arr] of lists) if (arr?.includes(k)) add(id);
+    const maps: [string, Record<string, number> | undefined][] = [
+      ['surge', targeted.surge], ['bunker', targeted.bunker], ['clutch-encore', targeted.clutchEncore], ['clutch-counter', targeted.clutchCounter],
+    ];
+    for (const [id, rec] of maps) if (rec && k in rec) add(id);
+    const sw = targeted.swaps?.[k];
+    if (sw) add(sw.kind === 'player-swap' ? 'player-swap' : sw.kind === 'mulligan' ? 'mulligan' : 'metric-swap');
+    return out;
+  };
+
   // Unlocks are CARDS (0256, founder): the shop only ever sells them into the
   // hand; picking a locked metric here USES one — behind this confirm. Nothing
   // expires, no refunds. Non-combo cards arm once for the whole week; Combo
@@ -1077,6 +1106,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     // an owned card sits in the hand (0256 — picking it then
                     // confirms and uses the card).
                     metricFilter={(m) => !m.lock || unlocks.has(m.lock) || (inventory[m.lock] ?? 0) > 0}
+                    applied={appliedFor(s.win, s.slot)}
                     hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) pickMetricWithCard(s.key, mid); }}

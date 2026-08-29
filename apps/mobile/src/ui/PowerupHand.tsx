@@ -18,12 +18,13 @@
 // above with the ARM / DISARM action. At most MAX_HAND fan, the rest sit behind
 // a "+N MORE" tile that opens the full list.
 //
-// The hand is STOWED by default and rises when you tap the POWER UPS tab. It
-// used to sit permanently open, which cost 170pt of a phone screen — the board
-// had to reserve that much bottom padding whether or not you were thinking
-// about cards, and on the setup board you mostly are not: you are filling
-// slots. A tab costs 40pt and says how many cards are waiting, which is the
-// part you need at a glance. Dealing it out is the deliberate act.
+// ALWAYS DEALT (v0.375.0, founder: "power up rail on mobile floats in an
+// awkward spot. it would be better to just replicate the hand from the web").
+// The stowed POWER UPS tab is gone: the fan sits sunk against the bottom edge
+// exactly like the web's — only the top of each card peeks, the board scrolls
+// behind it (box-none), and tapping a card lifts it out with its tip. The
+// peek costs ~70pt of reserved padding, which the tab experiment showed is
+// cheaper than a bar that reads as UI chrome floating over the felt.
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,19 +46,16 @@ export interface HandCard {
 const CARD_W = 78;
 const CARD_H = 106;
 const MAX_HAND = 6;
-/** The stowed tab's height — and so the only bottom padding the board owes the
- *  hand. Exported so LivePicks reserves exactly this and not a card's worth. */
-export const HAND_TAB_H = 40;
+/** How much of the always-dealt fan peeks above the bottom edge — the bottom
+ *  padding the board owes the hand. (The name survives from the stowed-tab
+ *  era so callers didn't have to move.) */
+export const HAND_TAB_H = 74;
 /** Card stock: the web's dark leather. RN has no radial-gradient, so this is the
  *  gradient's midpoint as a flat fill — the dot texture reads as noise at 78px
  *  anyway, and the black rim + hard shadow are what actually sell it. */
 const STOCK = '#2A2115';
 const STOCK_EDGE = '#000';
 const INK = '#EFE4C8';
-/** The tab's ground. Card stock rather than a theme surface: it reads as the
- *  edge of the deck the cards come out of, and it has to stay legible against
- *  every theme's background, six of which the picker can swap under it. */
-const FELT_BAR = '#1C160C';
 
 export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
   cards: HandCard[];
@@ -75,10 +73,10 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
   const insets = useSafeAreaInsets();
   const [raised, setRaised] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  const [open, setOpen] = useState(false);
   const rise = useRef(new Animated.Value(0)).current;
 
-  const dealt = open && cards.length > 0;
+  // Always dealt (v0.375.0): the fan rises once when cards exist and stays.
+  const dealt = cards.length > 0;
   useEffect(() => {
     Animated.timing(rise, { toValue: dealt ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [dealt, rise]);
@@ -88,12 +86,6 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
   useEffect(() => {
     if (raised && !cards.some((c) => c.id === raised)) setRaised(null);
   }, [cards, raised]);
-
-  // Playing your last card stows the hand rather than leaving an empty fan open
-  // over the board.
-  useEffect(() => {
-    if (!cards.length && open) setOpen(false);
-  }, [cards.length, open]);
 
   if (!cards.length) return null;
 
@@ -126,7 +118,12 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
       <Animated.View
         pointerEvents={dealt ? 'box-none' : 'none'}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + lift + HAND_TAB_H + 6, height: CARD_H + 40,
+          // Sunk against the bottom edge like the web's hand: the container's
+          // base sits at the safe-area line and the cards' translateY(26)
+          // leaves ~HAND_TAB_H of card peeking. Raising a card lifts it clear.
+          // (cards sit at bottom:0 with translateY 26, so their tops peek
+          // CARD_H − 26 − 6 ≈ HAND_TAB_H above the safe-area line)
+          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + lift - 6, height: CARD_H + 40,
           opacity: rise,
           transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [CARD_H + 60, 0] }) }],
         }}
@@ -214,33 +211,12 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
         )}
       </Animated.View>
 
-      {/* The tab. Always there, always the same place, and it carries the count
-          so a stowed hand still tells you what you're holding. */}
-      <Pressable
-        onPress={() => { setOpen((o) => !o); setRaised(null); }}
-        style={{
-          position: 'absolute', left: 0, right: 0, bottom: lift,
-          height: HAND_TAB_H + insets.bottom, paddingBottom: insets.bottom,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-          backgroundColor: FELT_BAR,
-          borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#000',
-        }}
-      >
-        <Text style={{ fontSize: 13 }}>🃏</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 1.2, color: INK }}>
-          POWER UPS · {total}
-        </Text>
-        {/* Which way the hand will move, not which way it is now — the arrow is
-            the affordance, so it points at the outcome of pressing. */}
-        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.faint }}>{dealt ? '▾' : '▴'}</Text>
-      </Pressable>
-
       {/* The tip. The web anchors it to the card; here it is anchored to the
           hand so an outer card's tip can't run off the screen edge. */}
       <Overlay
         visible={!!tip}
         title={tipPu?.name ?? ''}
-        subtitle={tipPu ? (tipPu.kind === 'metric' ? 'METRIC · 1 WK' : tipPu.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME') : undefined}
+        subtitle={tipPu ? (tipPu.kind === 'metric' ? 'METRIC' : tipPu.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME') : undefined}
         titleLeft={<Text style={{ fontSize: 28 }}>{tipPu?.icon ?? '◈'}</Text>}
         onClose={() => setRaised(null)}
         footer={tip ? (
