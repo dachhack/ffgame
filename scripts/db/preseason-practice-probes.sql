@@ -477,4 +477,27 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '11r cleanup');
 end $$;
 
+-- ── 12. metric unlocks arm mid-week (0254) ──────────────────────────────────
+-- "I can't buy anything 'metric - 1 week'": arm_unlock refused any matchup past
+-- 'scheduled', closing the shop at the week's FIRST kickoff even though 0058
+-- keeps later windows' picks editable until their own. The gate is now final-only.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '12a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  -- The week is underway (an earlier window kicked off) — the shop stays open.
+  update matchup set status = 'live' where id = mid;
+  r := arm_unlock(mid, 'unlock-return');
+  perform assert_ok(r, '12b unlock arms mid-week (window locks guard picks, not the shop)');
+  perform assert_eq((r ->> 'charged')::numeric, powerup_price('unlock-return'), '12c charged the real price');
+  -- A finished matchup still refuses — there is nothing left to field it on.
+  update matchup set status = 'final' where id = mid;
+  r := arm_unlock(mid, 'unlock-underdog');
+  perform assert_err(r, 'locked', '12d a FINAL matchup still refuses');
+  perform assert_ok(set_preseason_practice(lid, false), '12e cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;
