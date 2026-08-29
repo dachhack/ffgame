@@ -694,8 +694,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       };
     });
 
+  // Purchases are never blocked (0255, founder) — arming an unlock is a buy, so
+  // the week being locked no longer gates it client-side; the usage gates
+  // (window locks, the metric picker) still hold. Disarm attempts on a locked
+  // week get the server's answer in the error line.
   const toggleUnlock = async (id: string) => {
-    if (!matchup || locked || buffBusy) return;
+    if (!matchup || buffBusy) return;
     const combo = id === 'unlock-combo-drip';
     const armed = unlocks.has(id) && !combo; // combo: every tap buys another
     if (!armed && puLocked(id)) { markGatedAttempt('powerup:' + id); setErr(upgradeMsg); return; }
