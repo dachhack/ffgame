@@ -1,5 +1,10 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; height: 100%; }
+/* The BROWSER's pull-to-refresh reloads the SPA, which lands on the default
+   screen — so pulling down on a matchup board "kicked you back to your
+   leagues" (founder, v0.369.1). Overscroll is ours now: the boards implement
+   their own pull-to-refresh (usePullRefresh) that reloads DATA in place. */
+html, body { overscroll-behavior-y: none; }
 body {
   background: #1C1A13;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;

@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.1 — pull down refreshes the board, not the page
+
+Founder: "we need pull down to refresh the matchup board on web. right now
+pull down kicks you back to your leagues." The browser's native
+pull-to-refresh reloads the SPA, which boots to the default screen.
+styles.css claims overscroll (`overscroll-behavior-y: none` — no screen can
+be reload-kicked any more), and a new `usePullRefresh` hook (app/ui) is the
+replacement: a >90px mostly-vertical pull that BEGINS at the top of the
+page fires on release. ClassicBoard wires it to its loader counter (same
+"re-run the whole load" the SimStrip's ▶/⏹ bump), disabled while any card
+is over the board, with a fixed "↻ RELEASE TO REFRESH" hint while past the
+threshold. The drip board keeps its realtime polling; the hook is there
+when it wants the gesture.
+
 ### v0.369.0 — box-score membership joins on the GAME ID
 
 Founder: "Jonathan Ward still in two places. Don't we have player IDs to
