@@ -19,7 +19,7 @@ import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/dat
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { consumeShopOnBoard } from './LeagueHubPage';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
 import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
@@ -2035,27 +2035,43 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       </div>
 
       {swapTarget && (() => {
-        const cur = effYouPicks[swapTarget.key];
+        // The EFFECTIVE identity of the spot (v0.374.1): a prior swap lives in
+        // the `swaps` overlay, not in picks — reading picks alone showed the
+        // swapped-OUT player and his old metric list here.
+        const base = effYouPicks[swapTarget.key];
+        const sw = swaps[swapTarget.key];
+        const cur = base ? { playerId: sw?.toPlayerId ?? base.playerId, metricId: sw?.toMetricId ?? base.metricId } : undefined;
         const curPlayer = cur ? getPlayer(cur.playerId) : null;
         if (!curPlayer) return null;
+        const effMetric = cur!.metricId && metricById(curPlayer.pos, cur!.metricId) ? cur!.metricId : null;
         const slottedIds = new Set(
-          Array.from({ length: slotsFor(swapTarget.win, week, extraSlots) }, (_, i) => effYouPicks[slotKey(swapTarget.win, i)]?.playerId).filter(Boolean) as string[],
+          Array.from({ length: slotsFor(swapTarget.win, week, extraSlots) }, (_, i) => {
+            const k = slotKey(swapTarget.win, i);
+            return swaps[k]?.toPlayerId ?? effYouPicks[k]?.playerId;
+          }).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
         const atClock = effWinClock(swapTarget.win); // live board: the window's current real position
         // Stamp activation with the REAL time at the feed's current position, so
         // the swap can't retroactively grab a play already final in real time.
-        const atRt = realTimeAt(curPlayer, week, atClock, cur!.metricId ?? undefined);
+        const atRt = realTimeAt(curPlayer, week, atClock, effMetric ?? undefined);
         return (
           <SwapMenu
             player={curPlayer}
-            metricId={cur!.metricId}
+            metricId={effMetric}
             atClock={atClock}
             bench={bench}
             metricQty={inventory['metric-swap'] ?? 0}
             playerQty={inventory['player-swap'] ?? 0}
             onMetric={(m) => { if (applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
-            onPlayer={(pid) => { if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, atClock, atRt }); setSwapTarget(null); }}
+            onPlayer={(pid) => {
+              // A cross-position swap lands on the new position's default
+              // metric; a same-position swap keeps the current one.
+              const np = getPlayer(pid);
+              const toMetric = np ? swapMetricFor(np, effMetric) : undefined;
+              if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid, toMetric)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, toMetric, atClock, atRt });
+              setSwapTarget(null);
+            }}
             onClose={() => setSwapTarget(null)}
           />
         );

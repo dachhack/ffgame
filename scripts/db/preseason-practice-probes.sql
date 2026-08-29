@@ -639,4 +639,35 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '15i cleanup');
 end $$;
 
+-- ── 16. a player swap lands with a metric (0261) ─────────────────────────────
+-- "The player swap also loaded no metric": the swap entry now carries the
+-- landing metric; the engines default it per position when absent.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '16a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  update matchup set status = 'live' where id = mid;
+  -- The bench pool the swap draws from, and a pick to swap (inserted while the
+  -- window has no slate row, i.e. before it "exists" — then the slate row lands
+  -- with a past kickoff so the window reads LIVE for the swap gate).
+  insert into sleeper_lineup (league_id, week, roster_id, starters_json)
+    values (lid, wk, 1, '[{"slot": "s1", "player_slug": "probe-back"}]'::jsonb)
+    on conflict (league_id, week, roster_id) do update set starters_json = excluded.starters_json;
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id)
+    values (mid, '00000000-0000-0000-0000-000000000101', 'w3', '0', 'probe-runner', 'rush');
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', wk, 'ZZT', 'ZZU', 'w3', now() - interval '2 hours') on conflict do nothing;
+  r := apply_targeted(mid, 'player-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toPlayer', 'probe-back', 'toMetric', 'recyd', 'atClock', 600));
+  perform assert_ok(r, '16b the live player swap lands');
+  perform assert_eq((r -> 'targeted' -> 'swaps' -> 'w3|0' ->> 'toMetric' = 'recyd')::int::numeric, 1, '16c the landing metric rides the entry');
+  -- Unlock w3 before cleanup: the practice teardown cascades a DELETE through
+  -- the w3 pick, and 0178's window-lock trigger (rightly) refuses an authed
+  -- delete on a locked window.
+  delete from nfl_slate where season = '2026' and week = wk and home = 'ZZT';
+  perform assert_ok(set_preseason_practice(lid, false), '16d cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;
