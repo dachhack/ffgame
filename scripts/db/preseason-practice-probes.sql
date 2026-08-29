@@ -477,10 +477,13 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '11r cleanup');
 end $$;
 
--- ── 12. metric unlocks arm mid-week (0254) ──────────────────────────────────
+-- ── 12. purchases are never blocked (0254/0255) ──────────────────────────────
 -- "I can't buy anything 'metric - 1 week'": arm_unlock refused any matchup past
 -- 'scheduled', closing the shop at the week's FIRST kickoff even though 0058
--- keeps later windows' picks editable until their own. The gate is now final-only.
+-- keeps later windows' picks editable until their own. Then the principle,
+-- stated by the founder: "we shouldn't ever block purchases, just power up
+-- usages" — so the shop has NO status gate at all; enforce_window_lock and
+-- enforce_locked_metric keep guarding the picks themselves.
 do $$
 declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
 begin
@@ -493,11 +496,16 @@ begin
   r := arm_unlock(mid, 'unlock-return');
   perform assert_ok(r, '12b unlock arms mid-week (window locks guard picks, not the shop)');
   perform assert_eq((r ->> 'charged')::numeric, powerup_price('unlock-return'), '12c charged the real price');
-  -- A finished matchup still refuses — there is nothing left to field it on.
+  -- Even a finished matchup sells — a useless buy is the buyer's call, and the
+  -- board it could land on is gated elsewhere.
   update matchup set status = 'final' where id = mid;
   r := arm_unlock(mid, 'unlock-underdog');
-  perform assert_err(r, 'locked', '12d a FINAL matchup still refuses');
-  perform assert_ok(set_preseason_practice(lid, false), '12e cleanup');
+  perform assert_ok(r, '12d even a FINAL matchup never blocks the purchase');
+  -- The extra slot keeps its pre-match rule: buying it IS applying it — it
+  -- restructures every window for both players, so it is a usage, not a buy.
+  r := buy_extra_slot(mid);
+  perform assert_err(r, 'locked', '12e extra slot stays a pre-match usage');
+  perform assert_ok(set_preseason_practice(lid, false), '12f cleanup');
 end $$;
 
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;
