@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.2 — pull-to-refresh inside All-fields too
+
+Founder: "pull down to refresh on the matchup board and all fields should
+refresh the board or fields, not kick you back to leagues." v0.369.1
+covered the board; the All-fields overlay is its OWN fixed scroller, where
+window.scrollY never moves — so usePullRefresh gains an optional scrollTop
+reader, FieldBoard gains onRefresh (pull reads its own scroller, shows the
+same ↻ hint, and the container takes overscrollBehaviorY 'contain' so the
+pull can never chain out to the browser gesture). Both boards wire it to
+their live poll's own load() via a ref — fresh plays + feeds now, without
+tearing the overlay down: classic (10s/60s cadence) and the drip board
+(15s cadence, live matchups only).
+
 ### v0.369.1 — pull down refreshes the board, not the page
 
 Founder: "we need pull down to refresh the matchup board on web. right now

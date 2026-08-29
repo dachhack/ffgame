@@ -54,26 +54,32 @@ export function Crest({ crest, size = 32, radius = 7 }: {
  *  sheet still reads window.scrollY = 0 and would fire a refresh under it.
  *  Listeners are passive and window-level: they observe, never preventDefault,
  *  so scrolling itself is untouched. */
-export function usePullRefresh(onRefresh: () => void, enabled = true): boolean {
+export function usePullRefresh(onRefresh: () => void, enabled = true, scrollTop?: () => number): boolean {
   const [armed, setArmed] = useState(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const armedRef = useRef(false);
   const cb = useRef(onRefresh); cb.current = onRefresh;
   const en = useRef(enabled); en.current = enabled;
+  // The scroller whose "am I at the top?" this pull reads. The page by
+  // default; an OVERLAY with its own scroll container (the All-fields board)
+  // passes its element's scrollTop, because window.scrollY never moves inside
+  // a fixed-position sheet.
+  const top = useRef(scrollTop); top.current = scrollTop;
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const atTop = () => (top.current ? top.current() : window.scrollY) <= 0;
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      // Only a pull that BEGINS at the top of the page counts — mid-scroll
+      // Only a pull that BEGINS at the top of the scroller counts — mid-scroll
       // drags are scrolling, and must never fire a surprise reload.
-      start.current = en.current && window.scrollY <= 0 && t ? { x: t.clientX, y: t.clientY } : null;
+      start.current = en.current && atTop() && t ? { x: t.clientX, y: t.clientY } : null;
       armedRef.current = false; setArmed(false);
     };
     const onMove = (e: TouchEvent) => {
       const s = start.current; const t = e.touches[0];
       if (!s || !t) return;
       // 90px down, mostly vertical, still at the top: the classic PTR shape.
-      const on = t.clientY - s.y > 90 && Math.abs(t.clientX - s.x) < 60 && window.scrollY <= 0;
+      const on = t.clientY - s.y > 90 && Math.abs(t.clientX - s.x) < 60 && atTop();
       if (on !== armedRef.current) { armedRef.current = on; setArmed(on); }
     };
     const onEnd = () => {
