@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.370.0 — commissioner coin grants follow the board (0253)
+
+Founder, after a preseason grant "didn't take": "Let's set coin to the
+regular season wallet after the preseason is over. So adjustments now
+take, but they wipe after this week. Let's have a note in the commish
+screen in leagues with preseason active." New league_practice_week
+(earliest non-final week > 100) routes commish_seed_coin into that
+week's throwaway practice wallet (clamped at 0 on claw-backs, flagged
+{practice, week}); admin_league_wallets and admin_league_members' coin
+column show the same purse (un-seeded seats read the 120 budget). All
+final → season path exactly as before. Preseason note added to the web
+COIN tab and the app's DRIP COIN BY TEAM (rides next APK). Probes:
+preseason-practice section 11 (11a–11r).
+
 ### v0.369.9 — the box-score rows get readable too
 
 Founder (screenshot on phone): "we need to increase the font size on

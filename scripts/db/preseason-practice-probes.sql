@@ -422,4 +422,59 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '10d cleanup');
 end $$;
 
+-- ── 11. commissioner grants follow the board (0253) ─────────────────────────
+-- "Granted myself drip coin but it didn't take": grants used to pay team_wallet
+-- while a practice board read the throwaway purse. Now, while a practice week is
+-- in play, commish_seed_coin credits THAT week's practice wallet (and the admin
+-- tables show it); once every practice week is final, the season path is back.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; r jsonb; bal numeric; pw int;
+begin
+  insert into league (id, sleeper_league_id, season, name, commissioner_id)
+  values (lid, 'PRESEASON-PROBE-5', '2026', 'Grant Routing League', '00000000-0000-0000-0000-000000000101');
+  insert into league_membership (league_id, sleeper_roster_id, app_user_id, enrolled, team_name) values
+    (lid, 1, '00000000-0000-0000-0000-000000000101', true, 'Home'),
+    (lid, 2, '00000000-0000-0000-0000-000000000102', true, 'Away');
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '11a practice opens');
+  pw := league_practice_week(lid);
+  perform assert_true(pw is not null and is_practice_week(pw), '11b a practice week is in play');
+  -- The grant lands on the practice purse: budget + grant, season wallet untouched.
+  r := commish_seed_coin(lid, 2, 500);
+  perform assert_ok(r, '11c practice-time grant ok');
+  perform assert_true(coalesce((r ->> 'practice')::boolean, false), '11d grant says practice');
+  perform assert_eq((r ->> 'week')::numeric, pw, '11e grant names the week in play');
+  perform assert_eq((r ->> 'balance')::numeric, practice_budget() + 500, '11f practice balance = budget + grant');
+  select coins into bal from team_wallet where league_id = lid and roster_id = 2;
+  perform assert_eq(coalesce(bal, 0), 0, '11g season wallet untouched by a practice grant');
+  -- A claw-back clamps the throwaway purse at 0 rather than going negative.
+  r := commish_seed_coin(lid, 1, -999);
+  perform assert_eq((r ->> 'balance')::numeric, 0, '11h claw-back clamps at 0');
+  -- The admin tables show the purse the grants move; un-seeded seats read the
+  -- full budget. (Seat 1 was seeded by its claw-back; a fresh league shows 120.)
+  r := admin_league_wallets(lid);
+  select (e ->> 'coins')::numeric into bal from jsonb_array_elements(r) e where (e ->> 'roster_id')::int = 2;
+  perform assert_eq(bal, practice_budget() + 500, '11i admin wallets show the practice purse');
+  r := admin_league_members(lid);
+  select (e ->> 'coin')::numeric into bal from jsonb_array_elements(r) e where (e ->> 'roster_id')::int = 2;
+  perform assert_eq(bal, practice_budget() + 500, '11j admin members coin follows too');
+  -- An outsider learns nothing from the routing predicate.
+  perform probe_as('3');
+  perform assert_true(league_practice_week(lid) is null, '11k outsider reads null');
+  perform probe_as('1');
+  -- Preseason over (every practice week final) → the season path is back.
+  update matchup set status = 'final' where league_id = lid and is_practice_week(week);
+  perform assert_true(league_practice_week(lid) is null, '11l no week in play once all are final');
+  r := commish_seed_coin(lid, 2, 40);
+  perform assert_ok(r, '11m season grant ok');
+  perform assert_true(coalesce((r ->> 'practice')::boolean, false) is false, '11n not flagged practice');
+  perform assert_eq((r ->> 'balance')::numeric, 40, '11o season balance credited');
+  select coins into bal from team_wallet where league_id = lid and roster_id = 2;
+  perform assert_eq(bal, 40, '11p team_wallet holds it');
+  r := admin_league_wallets(lid);
+  select (e ->> 'coins')::numeric into bal from jsonb_array_elements(r) e where (e ->> 'roster_id')::int = 2;
+  perform assert_eq(bal, 40, '11q admin wallets back on the season purse');
+  perform assert_ok(set_preseason_practice(lid, false), '11r cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

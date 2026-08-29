@@ -16,7 +16,7 @@ import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, Scr
 import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
-  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -622,8 +622,15 @@ function CoinByTeam({ leagueId }: { leagueId: string }) {
   const [note, setNote] = useState<string | null>(null);
   const [target, setTarget] = useState<AdminMember | null>(null);
 
+  // Preseason routing (0253): while a practice week is in play, the balances
+  // and grants here are that week's throwaway purse — the note says so.
+  const [practiceWeek, setPracticeWeek] = useState<number | null>(null);
   const load = () => adminLeagueMembers(leagueId).then(setSeats).catch((e) => setNote(friendlyError(e)));
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  useEffect(() => {
+    void load();
+    leaguePracticeWeek(leagueId).then(setPracticeWeek).catch(() => setPracticeWeek(null));
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leagueId]);
 
   const grant = async (m: AdminMember, amount: number) => {
     if (busy) return;
@@ -649,6 +656,11 @@ function CoinByTeam({ leagueId }: { leagueId: string }) {
   return (
     <Card>
       <Mono size={9} tone="faint" track={0.12}>DRIP COIN BY TEAM</Mono>
+      {practiceWeek != null && (
+        <Mono size={9.5} tone="warn" style={{ marginTop: 6, lineHeight: fs(15) }}>
+          🏈 PRESEASON — these balances and grants are this practice week's coin. Grants hit the boards now, and the purse wipes when the week ends. Season wallets sit untouched until the preseason is over.
+        </Mono>
+      )}
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       {!seats ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>
         : rows.length === 0 ? <Mono size={10} tone="faint" style={{ marginTop: 8 }}>No teams yet.</Mono> : (
