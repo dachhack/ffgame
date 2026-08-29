@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.375.3 — box-score names open player cards
+
+Founder: "can we open up player cards by clicking names on the box
+score?" Web + app box sheets: every player name is now a tap target
+opening the standard player card (openPlayerCard with slug/pos/team/
+week; dotted underline as the affordance). D/ST and K composite rows
+stay plain — they're units, not players with cards. Opening a card from
+inside the box Overlay follows PlayerPicker's precedent. App half rides
+the next APK.
+
 ### v0.375.2 — reveal at kickoff, not at lock (0262) + Search Console file
 
 Founder (screenshot): "The app just revealed the opposing pick, but that

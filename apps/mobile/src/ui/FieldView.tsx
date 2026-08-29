@@ -33,6 +33,7 @@ import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix, fs } from '../theme.native';
 import { Overlay } from './Overlay';
+import { openPlayerCard } from './PlayerCardSheet';
 
 // Geometry (SVG user units) — identical to the web's.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -385,15 +386,25 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
         </View>
         {shown.length === 0
           ? <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint }}>— nothing yet —</Text>
-          : shown.map((r) => (
+          : shown.map((r) => {
+            // A name opens the player card (founder: "can we open up player
+            // cards by clicking names on the box score?") — except the D/ST
+            // and K composites, which are units, not players with cards.
+            const carded = !r.slug.endsWith('-dst') && !r.slug.endsWith('-k');
+            return (
             <View key={r.slug} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(13), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+                <Text numberOfLines={1}
+                  onPress={carded ? () => openPlayerCard({ slug: r.slug, name: boxName(r.slug), pos: r.pos, team: label, week }) : undefined}
+                  style={{ flex: 1, fontSize: fs(13), fontWeight: '600', color: t.text, textDecorationLine: carded ? 'underline' : 'none', textDecorationStyle: 'dotted', textDecorationColor: alpha(t.dim, 0.55) }}>
+                  {boxName(r.slug)}
+                </Text>
               </View>
               <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.dimstrong, lineHeight: fs(10.5) * 1.35 }}>{r.stat}</Text>
             </View>
-          ))}
+            );
+          })}
       </View>
     );
   };

@@ -18,6 +18,7 @@ import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
+import { openPlayerCard } from './playerCard';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -591,15 +592,27 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
       </div>
       {shown.length === 0
         ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>— nothing yet —</div>
-        : shown.map((r) => (
+        : shown.map((r) => {
+          // A name opens the player card (founder: "can we open up player
+          // cards by clicking names on the box score?") — except the D/ST
+          // and K composites, which are units, not players with cards.
+          const carded = !r.slug.endsWith('-dst') && !r.slug.endsWith('-k');
+          return (
           <div key={r.slug} style={{ padding: '4px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
               <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boxName(r.slug)}</span>
+              <span
+                onClick={carded ? () => openPlayerCard({ slug: r.slug, name: boxName(r.slug), pos: r.pos, team: label, week }) : undefined}
+                role={carded ? 'button' : undefined}
+                title={carded ? `${boxName(r.slug)} — player card` : undefined}
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: carded ? 'pointer' : undefined, textDecoration: carded ? 'underline dotted color-mix(in srgb, var(--dim) 55%, transparent)' : undefined, textUnderlineOffset: 3 }}>
+                {boxName(r.slug)}
+              </span>
             </div>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--dimstrong)', lineHeight: 1.35 }}>{r.stat}</div>
           </div>
-        ))}
+          );
+        })}
     </div>
     );
   };
