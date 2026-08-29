@@ -1223,9 +1223,18 @@ export const adminDeleteLeague = (leagueId: string) =>
  *  Call once per roster to claim multiple teams. */
 export const commishClaimRoster = (leagueId: string, rosterId: number) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('commish_claim_roster', { p_league_id: leagueId, p_roster_id: rosterId });
-/** Commissioner/admin grants drip coin to a team (additive). */
+/** Commissioner/admin grants drip coin to a team (additive). During an active
+ *  practice week the grant lands on THAT week's throwaway practice wallet
+ *  (practice: true, week) and wipes with it; otherwise the season wallet (0253). */
 export const commishSeedCoin = (leagueId: string, rosterId: number, amount: number) =>
-  rpc<{ ok: boolean; error?: string; balance?: number }>('commish_seed_coin', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+  rpc<{ ok: boolean; error?: string; balance?: number; practice?: boolean; week?: number }>('commish_seed_coin', { p_league_id: leagueId, p_roster_id: rosterId, p_amount: amount });
+/** The league's practice week currently in play (earliest non-final week > 100),
+ *  null once the preseason is over or was never opened. Drives the commish coin
+ *  sheet's preseason note + routing awareness (0253). */
+export const leaguePracticeWeek = async (leagueId: string): Promise<number | null> => {
+  const w = await rpc<number | null>('league_practice_week', { p_league_id: leagueId }).catch(() => null);
+  return typeof w === 'number' ? w : null;
+};
 /** Commissioner/admin moves EVERY team's balance by the same signed amount (0131). */
 export const commishBulkCoin = (leagueId: string, amount: number) =>
   rpc<{ ok: boolean; error?: string; teams?: number }>('commish_bulk_coin', { p_league_id: leagueId, p_amount: amount });

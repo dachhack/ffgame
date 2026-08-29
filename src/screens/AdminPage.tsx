@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -1005,6 +1005,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [members, setMembers] = useState<AdminMember[] | null>(null);
   const [joiners, setJoiners] = useState<LeagueJoiner[]>([]);
   const [wallets, setWallets] = useState<Record<number, number>>({});
+  const [practiceWeek, setPracticeWeek] = useState<number | null>(null);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
   // HUB-FIRST on phones (v0.259.0), and the hub NEVER LEAVES (v0.296.3): a
@@ -1111,6 +1112,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     setMembers(rows);
     adminLeagueJoiners(l.league_id).then(setJoiners).catch(() => setJoiners([]));
     adminLeagueWallets(l.league_id).then((ws) => setWallets(Object.fromEntries((ws ?? []).map((w) => [w.roster_id, w.coins])))).catch(() => setWallets({}));
+    // Preseason routing (0253): while a practice week is in play, the balances
+    // and grants on the COIN tab are that week's throwaway purse — the note
+    // below the table says so, keyed off this.
+    leaguePracticeWeek(l.league_id).then(setPracticeWeek).catch(() => setPracticeWeek(null));
     return rows;
   };
   // Commissioner grants drip coin to a team; refresh balances after.
@@ -1503,6 +1508,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'coin' && (
         <div style={{ marginTop: 12 }}>
           <WeeklyBudget l={l} onGranted={() => { loadMembers().catch(() => {}); }} />
+          {/* Preseason routing note (0253, founder): "adjustments now take, but
+              they wipe after this week." While a practice week is in play the
+              table + grants below are THAT week's throwaway purse. */}
+          {practiceWeek != null && (
+            <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)', lineHeight: 1.55, marginTop: 12, padding: '8px 10px', background: 'color-mix(in srgb, var(--warn) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 35%, transparent)', borderRadius: RADIUS }}>
+              🏈 PRESEASON — the balances and grants below are this practice week's coin. Grants hit the boards now, and the whole purse wipes when the week ends. Season wallets sit untouched until the preseason is over; the weekly allowance above always pays the season wallet.
+            </div>
+          )}
           {/* Per-team balances + grants (v0.213.2). The commissioner's two coin
               questions are "who has what" and "give this team some" — both were
               only answerable by scrolling the MEMBERS list, one team at a time,
