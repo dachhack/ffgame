@@ -17,7 +17,7 @@ import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha, type Theme } from './src/theme.native';
-import { ScrollChromeCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
+import { ScrollChromeCtx, ScrollShiftCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
@@ -363,6 +363,7 @@ export function App() {
             list became the landing screen; before that a league was always open
             by the time you could reach the gear. */}
         <ScrollChromeCtx.Provider value={chromeDrv.handlers}>
+        <ScrollShiftCtx.Provider value={chromeDrv.shift}>
         {view === 'admin' ? (
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'board' ? (
@@ -453,6 +454,7 @@ export function App() {
             }}
           />
         )}
+        </ScrollShiftCtx.Provider>
         </ScrollChromeCtx.Provider>
         {/* THE ROOM BAR (v0.356.0): the league's rooms along the bottom,
             LinkedIn-style — it ducks out of the way as a screen scrolls
@@ -536,6 +538,10 @@ function LeagueBottomBar({ theme, light, shift, items, active, leagueId, onGo }:
       position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row',
       backgroundColor: theme.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.bd,
       paddingTop: 4, paddingBottom: Math.max(insets.bottom, 6),
+      // Over the power-up hand's sunk card bottoms (v0.375.1): the hand tucks
+      // its cards INTO this bar, and the cards carry elevation of their own,
+      // so the bar has to outrank them or Android draws card feet on the rail.
+      zIndex: 40, elevation: 70,
       transform: [{ translateY: shift.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_H + insets.bottom + 12] }) }],
     }}>
       {/* Bigger items in the same rail (v0.356.3, founder: "make the bottom

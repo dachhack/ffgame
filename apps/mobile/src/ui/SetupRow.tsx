@@ -22,9 +22,11 @@ import { teamLogo } from '@drip/core/data/media';
 
 export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
-  /** Targeted power-ups attached to THIS slot (v0.375.0) — worn as icon chips
-   *  on the card's shoulder, like the web board's applied chips. */
-  applied?: { icon: string; name: string }[];
+  /** Power-ups attached to THIS slot — targeted plays plus armed team buffs
+   *  that matter to it (v0.375.1). Worn as one ⚡N chip on the card's
+   *  shoulder; tapping it lists them (founder: "click the chip to see what
+   *  power ups apply"). */
+  applied?: { icon: string; name: string; blurb: string }[];
   /** Deal order within the window. */
   idx?: number;
   /** Opens the opponent's window pool. Absent when there is nothing to scout. */
@@ -45,6 +47,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hyd
   const player = pick ? resolve(pick.playerId) ?? null : null;
   const metric = player && pick?.metricId ? metricById(player.pos, pick.metricId) : null;
   const [metricOpen, setMetricOpen] = useState(false);
+  const [puOpen, setPuOpen] = useState(false);
   // Read per render, like the deck art — Settings lives above this in the tree,
   // so changing it re-renders the board and the new size lands with it.
   const cardSize = loadCardSize();
@@ -109,17 +112,15 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hyd
             </>
           ))}
         />
-        {/* Attached plays ride the card's shoulder — gold pips, like the ×N
-            badge on a hand card, one per targeted power-up on this slot. */}
+        {/* Attached power-ups ride the card's shoulder as ONE gold ⚡N chip —
+            a row of pips ran off the card once buffs joined the targeted
+            plays. Tapping it lists what's on the card. */}
         {!!applied?.length && (
-          <View pointerEvents="none" style={{ position: 'absolute', top: -7, left: -5, flexDirection: 'row', gap: 3, zIndex: 5 }}>
-            {applied.map((a) => (
-              <View key={a.name} accessibilityLabel={a.name}
-                style={{ backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#E9B959', borderRadius: 999, paddingHorizontal: 4, paddingVertical: 1 }}>
-                <Text style={{ fontSize: 11 }}>{a.icon}</Text>
-              </View>
-            ))}
-          </View>
+          <Pressable onPress={() => setPuOpen(true)} hitSlop={6} accessibilityLabel={`${applied.length} power-ups on this card`}
+            style={{ position: 'absolute', top: -7, left: -5, zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#E9B959', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 11 }}>⚡</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: '#E9B959' }}>{applied.length}</Text>
+          </Pressable>
         )}
         </View>
       ) : (
@@ -127,6 +128,26 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hyd
       )}
 
       <CardBack size={cardSize} idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
+
+      {/* The chip's detail sheet: what's on this card and what each one does. */}
+      <Overlay
+        visible={puOpen}
+        title="Power-ups on this card"
+        subtitle={player ? `${player.name.toUpperCase()} · ${player.pos}` : undefined}
+        onClose={() => setPuOpen(false)}
+      >
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+          {(applied ?? []).map((a, i) => (
+            <View key={`${a.name}-${i}`} style={{ flexDirection: 'row', gap: 10, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 20 }}>{a.icon}</Text>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{a.name}</Text>
+                {!!a.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{a.blurb}</Text>}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </Overlay>
 
       <MetricModal
         visible={metricOpen}

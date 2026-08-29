@@ -10,7 +10,7 @@ import { PlayerImg, InjuryBadge, FlagChip, useIsMobile, ModalBackdrop } from '..
 import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
-import { powerupById } from '@drip/core/data/powerups';
+import { powerupById, buffAppliesToSpot } from '@drip/core/data/powerups';
 import { getPlayer } from '@drip/core/data/league';
 import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
@@ -269,20 +269,9 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
   );
 }
 
-// Which armed team buffs are relevant to a given spot — drives the on-spot
-// highlight so you can see what a powerup applies to in your lineup.
-export function buffAppliesToSpot(id: string, pos: Pos, metricId: string | null): boolean {
-  const drip = metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush');
-  switch (id) {
-    case 'unlock-carries-wipe': return pos === 'WR' || pos === 'TE';
-    case 'hail-mary': return pos === 'QB';
-    case 'pick-six': return pos === 'DEF';
-    case 'trick-play': return pos !== 'QB';
-    case 'momentum': case 'floodgates': case 'overtime': return drip;
-    case 'garbage-time': case 'counter-nuke': case 'insurance': case 'turnover-boost': return true;
-    default: return false;
-  }
-}
+// Which armed team buffs are relevant to a given spot — the one definition
+// lives in core (v0.375.1) so the app's chip can't drift from the web's.
+export { buffAppliesToSpot };
 
 // ── Setup row ──
 // Marks the two Field General QBs that are paired under the Twin Generals power-up

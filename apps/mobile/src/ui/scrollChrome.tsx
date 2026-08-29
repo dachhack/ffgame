@@ -44,6 +44,12 @@ export interface ScrollChromeHandlers {
 
 export const ScrollChromeCtx = createContext<ScrollChromeHandlers | null>(null);
 
+/** The fold value itself (0 = chrome home, 1 = folded), for things that must
+ *  move WITH the room bar rather than merely reserve space for it — the
+ *  power-up hand rides the bar's duck (v0.375.1, founder: the cards should
+ *  "go down with the bottom menu"). Null outside the shell. */
+export const ScrollShiftCtx = createContext<Animated.Value | null>(null);
+
 /** The handlers a league screen spreads onto its main ScrollView. Empty when
  *  no chrome driver is mounted above (e.g. web preview, tests). */
 export function useLeagueScroll(): Partial<ScrollChromeHandlers> {
