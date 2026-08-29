@@ -1202,10 +1202,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
-      if (p.id === 'spy') { ok = preKickPhase || openWins.length > 0; deadline = 'Before a window kicks off'; }
-      else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase || openWins.length > 0; deadline = 'Any time before its window kicks off'; }
+      if (p.id === 'spy') { ok = preKickPhase || openWins.length > 0; deadline = 'Before a window locks'; }
+      else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase || openWins.length > 0; deadline = 'Before its window locks'; }
+      // Extra Slot is SCOPE 1 (founder ruling, 0260): it reshapes windows for
+      // BOTH sides, so it closes with the week's first lock and never returns.
+      else if (p.id === 'extra-slot') { ok = liveCtx ? openWins.length === windowsForWeek(week).length : phase === 'setup'; deadline = 'Before the week’s first lock'; }
       else if (phase === 'setup') { ok = true; deadline = 'Before lock-in'; }
-      else { ok = openWins.length > 0; deadline = ok ? `Counts the ${openWins.length} window${openWins.length === 1 ? '' : 's'} still to kick` : 'Before lock-in'; }
+      else { ok = openWins.length > 0; deadline = ok ? `Counts the ${openWins.length} window${openWins.length === 1 ? '' : 's'} still to lock` : 'Before lock-in'; }
     } else {
       ok = liveWins.length > 0;
       deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';

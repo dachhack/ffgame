@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.374.0 — the three scopes, ruled and enforced (0260)
+
+Founder's ruling on the scope review: (1) LOCKED — every card gate and
+the buffsForWindow stamp comparison move to the pick clock (kickoff −
+1h; new window_locks_at in SQL, LOCK_LEAD_MS in core, test-lead aware);
+(2) Extra Slot is scope 1 (before the week's first lock — server already
+enforced via lock_at; client appliable re-pinned); (3) Ball Hawk is
+scope 2 — coinFor computes the turnover swing per WINDOW (boosted only
+where the arm preceded the lock; stipend taken once, not per window).
+Probes: 13k/15g re-pinned to 'window already locked' + 15g2 (inside the
+final hour is locked, kicked or not).
+
 ### v0.373.0 — cards play mid-week, per window (0259)
 
 Founder, hand full of "Before lock-in" cards on PRE 4 Saturday: "still
