@@ -586,18 +586,18 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
     const shown = boxTabRows(rows, tab);
     return (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
-        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={14} height={14} style={{ display: 'block' }} />}{label}
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
+        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
       </div>
       {shown.length === 0
-        ? <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>— nothing yet —</div>
+        ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>— nothing yet —</div>
         : shown.map((r) => (
-          <div key={r.slug} style={{ padding: '3px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
+          <div key={r.slug} style={{ padding: '4px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boxName(r.slug)}</span>
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boxName(r.slug)}</span>
             </div>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--dimstrong)', lineHeight: 1.35 }}>{r.stat}</div>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dimstrong)', lineHeight: 1.35 }}>{r.stat}</div>
           </div>
         ))}
     </div>
@@ -605,7 +605,7 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   };
   const tabBtn = (id: 'off' | 'def', label: string) => (
     <button onClick={() => setTab(id)} className="mono"
-      style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: tab === id ? 'var(--text)' : 'var(--dim)', background: tab === id ? 'var(--bd)' : 'transparent' }}>{label}</button>
+      style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: tab === id ? 'var(--text)' : 'var(--dim)', background: tab === id ? 'var(--bd)' : 'transparent' }}>{label}</button>
   );
   return (
     <ModalBackdrop onClick={onClose} zIndex={80}>

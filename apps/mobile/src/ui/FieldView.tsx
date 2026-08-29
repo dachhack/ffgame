@@ -380,18 +380,18 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
     return (
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
-          {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 14, height: 14, borderRadius: 2 }} />}
-          <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
+          {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+          <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
         </View>
         {shown.length === 0
-          ? <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}>— nothing yet —</Text>
+          ? <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint }}>— nothing yet —</Text>
           : shown.map((r) => (
-            <View key={r.slug} style={{ paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
+            <View key={r.slug} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5) }}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.pos?.[r.pos]?.fg ?? t.faint }}>{r.pos}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(13), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
               </View>
-              <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dimstrong, lineHeight: fs(8.5) * 1.35 }}>{r.stat}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.dimstrong, lineHeight: fs(10.5) * 1.35 }}>{r.stat}</Text>
             </View>
           ))}
       </View>
@@ -400,7 +400,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   const tabBtn = (id: 'off' | 'def', label: string) => (
     <Pressable onPress={() => setTab(id)}
       style={{ flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 4, backgroundColor: tab === id ? t.bd : 'transparent' }}>
-      <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', letterSpacing: 1, color: tab === id ? t.text : t.dim }}>{label}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', letterSpacing: 1, color: tab === id ? t.text : t.dim }}>{label}</Text>
     </Pressable>
   );
   return (
