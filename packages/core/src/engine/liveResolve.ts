@@ -31,7 +31,7 @@ import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { flagRulesFor } from '../data/commish';
 import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
-import { banksAtClock, slotsFor, buffsForWindow } from './matchup';
+import { banksAtClock, slotsFor, buffsForWindow, swapMetricFor } from './matchup';
 import {
   WINDOW_MVP_COIN_PER_SLOT, TURNOVER_COIN, TURNOVER_COIN_BOOSTED,
   battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
@@ -394,7 +394,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       // slot — vanishingly rare — each final comes from its own side's split).
       const hSwap = hx.swaps?.[`${wid}|${slot}`];
       if (hSwap && hp) {
-        const newYou: SlotInput = { player: hSwap.toPlayer ?? hp.player, metricId: hSwap.toMetricId ?? hp.metricId };
+        const newYou: SlotInput = { player: hSwap.toPlayer ?? hp.player, metricId: swapMetricFor(hSwap.toPlayer ?? hp.player, hSwap.toMetricId ?? hp.metricId) };
         const sres = resolveSlot(newYou, them, week, label, slotOpts);
         const C = hSwap.atRt != null ? clockAtRealTime(hp.player, week, hSwap.atRt, hp.metricId) : hSwap.atClock;
         const base = banksAtClock(res.events, C);
@@ -406,7 +406,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       }
       const aSwap = ax.swaps?.[`${wid}|${slot}`];
       if (aSwap && ap) {
-        const newThem: SlotInput = { player: aSwap.toPlayer ?? ap.player, metricId: aSwap.toMetricId ?? ap.metricId };
+        const newThem: SlotInput = { player: aSwap.toPlayer ?? ap.player, metricId: swapMetricFor(aSwap.toPlayer ?? ap.player, aSwap.toMetricId ?? ap.metricId) };
         const sres = resolveSlot(you, newThem, week, label, slotOpts);
         const C = aSwap.atRt != null ? clockAtRealTime(ap.player, week, aSwap.atRt, ap.metricId) : aSwap.atClock;
         const base = banksAtClock(res.events, C);

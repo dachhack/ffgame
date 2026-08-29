@@ -214,7 +214,7 @@ interface Store {
   /** Real-time Metric Swap on a slot, effective from real time `atRt` (consumes one). */
   applyMetricSwap: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Real-time Player Swap on a slot, effective from real time `atRt` (consumes one). */
-  applyPlayerSwap: (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string) => boolean;
+  applyPlayerSwap: (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string, toMetricId?: string) => boolean;
   /** Manually point a backup slot at a starter to replace (empty target = auto). */
   setBackupTarget: (week: number, backupKey: string, targetKey: string | null) => void;
   /** Persist your lineup edits for a week (deltas over the default) so the FINAL
@@ -749,8 +749,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyMetricSwap = (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string): boolean =>
     consumeAndApply('metric-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toMetricId } } }));
 
-  const applyPlayerSwap = (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string): boolean =>
-    consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toPlayerId } } }));
+  // toMetricId rides along (v0.374.1): a cross-position swap lands on the new
+  // position's default metric instead of carrying one it can't score.
+  const applyPlayerSwap = (week: number, slotKey: string, atClock: number, atRt: number, toPlayerId: string, toMetricId?: string): boolean =>
+    consumeAndApply('player-swap', week, (cur) => ({ ...cur, swaps: { ...cur.swaps, [slotKey]: { ...cur.swaps[slotKey], atClock, atRt, toPlayerId, ...(toMetricId ? { toMetricId } : {}) } } }));
 
   const setBackupTarget = (week: number, backupKey: string, targetKey: string | null): void => {
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };

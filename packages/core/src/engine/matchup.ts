@@ -1,5 +1,5 @@
 import type { Player, WindowId, GameWindow, Pick, PbpEvent, BuffFx } from '../types';
-import { METRICS } from '../data/metrics';
+import { METRICS, metricById, defaultMetric } from '../data/metrics';
 import { capAmplifiers, isAmplifier } from '../data/powerups';
 import { teamRoster, getPlayer } from '../data/league';
 import { hashStr } from '../data/players';
@@ -31,6 +31,14 @@ import { windowForTeam, windowsForWeek, gamesInWindow, windowKickoffMs, testTime
  *  picks (kickoff − 1h; founder ruling, 0260) — so arming Hail Mary after
  *  watching Thursday's TD land can't score Thursday. No arm-time map (legacy
  *  payloads, the opponent's set, demo pre-arm) = the full set. */
+/** The metric a swapped-in player actually runs (v0.374.1): keep the carried
+ *  metric when the new position can score it, else the position's default —
+ *  a cross-position Player Swap (QB → RB) used to keep the QB metric, which
+ *  the RB can't score: the slot read NO METRIC and banked 0. */
+export function swapMetricFor(player: Player, metricId: string | null | undefined): string {
+  return metricId && metricById(player.pos, metricId) ? metricId : defaultMetric(player.pos).id;
+}
+
 export function buffsForWindow(all: Set<string>, at: Record<string, number> | undefined, week: number, win: string): Set<string> {
   if (!at || all.size === 0) return all;
   const k = windowKickoffMs(week, win as WindowId);
@@ -560,7 +568,8 @@ export function buildMatchup(
         const swap = you ? swaps[key] : undefined;
         if (swap) {
           const swapped = getPlayer(swap.toPlayerId ?? '') ?? you!.player;
-          const newYIn: SlotInput = { player: swap.toPlayerId ? swapped : you!.player, metricId: swap.toMetricId ?? you!.metricId };
+          const newP = swap.toPlayerId ? swapped : you!.player;
+          const newYIn: SlotInput = { player: newP, metricId: swapMetricFor(newP, swap.toMetricId ?? you!.metricId) };
           const sres = resolveSlot(newYIn, tIn, week, gameLabel, opts);
           // Cut over on the REAL-TIME stamp: map it back to this game's clock
           // along the pre-swap player's timeline. With no baked timestamps this

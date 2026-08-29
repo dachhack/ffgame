@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.374.1 — a player swap lands whole (0261)
+
+Founder: swapped Dobbs out with Player Swap; the spot then read NO
+METRIC · 0.0 (kept the QB metric an RB can't score) and the metric-swap
+modal still showed Dobbs (read pre-swap picks; swaps are an overlay).
+Fixes: swap entries carry toMetric (client keeps the metric when the
+new position scores it, else defaultMetric(pos); server records it with
+the locked-metric gate); both engines fall back via new swapMetricFor
+so legacy no-metric swaps score the position default; the SwapMenu now
+resolves the post-swap identity (player, metric, bench exclusions).
+Probe 16 (swap entry carries the landing metric). Founder's live PRE 4
+swap self-corrects on the next resolve.
+
 ### v0.374.0 — the three scopes, ruled and enforced (0260)
 
 Founder's ruling on the scope review: (1) LOCKED — every card gate and
