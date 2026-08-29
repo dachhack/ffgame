@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.372.1 — the hand is the whole apply surface (0258)
+
+Founder: "can we use the card hand on the web for applying all power
+ups." The web hand (and ✦ APPLY modal) now shows EVERY owned card, not
+just ones playable this instant — off-window cards sit dimmed wearing
+their window as the note (⏳ deadline), actions withheld. A refused
+server apply is now a loud alert instead of a console warn — which
+exposed 0086's entitlement gate refusing ALL targeted applies on
+practice boards (practice never ledgers, so purchases read 0): 0258
+skips the ledger gate on practice weeks (throwaway purse; per-play caps
+still bound it). Probes 14a–14d.
+
 ### v0.372.0 — Underdog is a modifier, not a metric (0257)
 
 Founder: "under dog isn't a scoring metric." It left the picker: the

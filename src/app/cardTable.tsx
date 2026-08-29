@@ -769,6 +769,10 @@ export interface HandCard {
   id: string; name: string; icon?: string; qty: number;
   action: 'arm' | 'apply' | 'hint';
   deadline: string; blurb?: string; note?: string;
+  /** False = the card's moment isn't now (wrong phase, amp cap, …): it stays
+   *  in the fan, dimmed, its note saying when — but its actions are withheld.
+   *  Every owned card is always in the hand (v0.372.1). */
+  usable?: boolean;
 }
 
 /** The fanned power-up hand, pinned to the bottom of the screen. Cards you own
@@ -817,7 +821,7 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOver
         const hr = (i - (n - 1) / 2) * 4;
         const isPending = pendingId === c.id;
         const isRaised = isPending || raised === c.id;
-        const blocked = !!c.note && c.action === 'arm';
+        const blocked = c.usable === false || (!!c.note && c.action === 'arm');
         return (
           <div key={c.id}
             className={`ct-hcard${isRaised ? ' raised' : ''}${blocked ? ' dim' : ''}`}
@@ -837,7 +841,7 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOver
                 {c.blurb}
                 {c.note && <span className="ct-hnote">↳ {c.note}</span>}
                 {c.action === 'arm' && !blocked && <button className="ct-hact" onClick={() => { setRaised(null); onArm(c.id); }}>ARM</button>}
-                {c.action === 'apply' && <button className="ct-hact" onClick={() => { setRaised(null); onApply(c.id); }}>APPLY → PICK TARGET</button>}
+                {c.action === 'apply' && !blocked && <button className="ct-hact" onClick={() => { setRaised(null); onApply(c.id); }}>APPLY → PICK TARGET</button>}
               </div>
             )}
           </div>
