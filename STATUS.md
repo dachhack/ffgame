@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.370.2 — purchases are never blocked (0255)
+
+Founder: "we shouldn't ever block purchases, just power up usages."
+arm_unlock's status gate removed entirely (0254 had left final-only) —
+the shop never second-guesses timing; enforce_window_lock (0058) and
+enforce_locked_metric (0024) keep guarding the picks. Extra slot keeps
+its pre-match rule (buying IS applying — it restructures every window
+for both players). Probe 12 re-pinned: final matchup still sells an
+unlock, extra slot still refuses.
+
 ### v0.370.1 — metric unlocks arm mid-week (0254)
 
 Founder, PRE 4 Friday with 645 practice coin: "I can't buy anything
