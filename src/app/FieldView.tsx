@@ -10,12 +10,12 @@
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames } from '@drip/core/data/gameFeed';
-import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
+import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
+import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
-import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
+import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 
@@ -560,7 +560,23 @@ function boxName(slug: string): string {
 function BoxScoreCard({ week, home, away, clock, onClose }: {
   week: number; home: string; away: string; clock: number; onClose: () => void;
 }) {
-  const box = useMemo(() => gameBoxScore(week, home, away, clock), [week, home, away, clock]);
+  // ── EVERY GAME, ONE SHEET (v0.369.7, founder: "make the box score have all
+  // the games. list all the games at the top and you can horizontal scroll
+  // through them.") — the sheet opens on the game whose BOX SCORE chip you
+  // tapped, and the strip walks the whole slate: red dot live, grey final,
+  // plain text upcoming. Selection is local; the field behind doesn't move.
+  const originKey = `${normTeam(away)}@${normTeam(home)}`;
+  const [sel, setSel] = useState(originKey);
+  // `clock` ticks with the opener's poll, which is what refreshes the strip's
+  // scores and the rows for every game (the feeds are a module cache).
+  const games = useMemo(() => weekBoxGames(week), [week, clock]);
+  const cur = games.find((g) => g.key === sel) ?? games.find((g) => g.key === originKey) ?? games[0]
+    ?? { key: originKey, away: normTeam(away), home: normTeam(home), kickoff: null, state: 'live' as const, feed: null };
+  // The origin game keeps the log's scrub position; every other game shows
+  // its latest — a strip you browse is asking "where do things stand".
+  const effClock = cur.key === originKey ? clock : Number.MAX_SAFE_INTEGER;
+  const box = useMemo(() => gameBoxScore(week, cur.home, cur.away, effClock), [week, cur.home, cur.away, effClock, clock]);
+  const last = latestPlay(cur.feed?.plays);
   // OFFENSE / DEFENSE tabs (v0.365.1, founder) — matching the app's box sheet:
   // the single list ran long and "how did the defense do" meant scrolling past
   // every receiver. Membership is core's boxTabRows (stat-driven), so a two-way
@@ -594,17 +610,51 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   return (
     <ModalBackdrop onClick={onClose} zIndex={80}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', minWidth: 0, maxWidth: 560, margin: 'auto 0', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>▤ {away} @ {home}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>▤ BOX SCORES</span>
           <button onClick={onClose} aria-label="close the box score" className="mono"
             style={{ fontSize: 13, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+        </div>
+        {/* The game strip — every game this week, horizontally scrollable.
+            Red dot = on now · grey = final · plain = yet to kick. */}
+        {games.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 8 }}>
+            {games.map((g) => (
+              <button key={g.key} onClick={() => setSel(g.key)} className="mono"
+                style={{
+                  flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
+                  border: `1px solid ${g.key === cur.key ? 'var(--you)' : 'var(--bd)'}`,
+                  background: g.key === cur.key ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)',
+                  fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
+                  color: g.state === 'final' ? 'var(--faint)' : 'var(--text)',
+                }}>
+                {g.state === 'live' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4F62', flex: 'none' }} />}
+                {g.key}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* The selected game's own line: teams, score, where its clock stands. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 10 }}>
+          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
+            {teamLogo(cur.away) && <img src={teamLogo(cur.away)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{cur.away}
+          </span>
+          {last
+            ? <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>{last.as} — {last.hs}</span>
+            : <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)' }}>@</span>}
+          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
+            {cur.home}{teamLogo(cur.home) && <img src={teamLogo(cur.home)!} alt="" width={16} height={16} style={{ display: 'block' }} />}
+          </span>
+          <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: cur.state === 'live' ? '#FF4F62' : 'var(--faint)' }}>
+            {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
+          </span>
         </div>
         {/* Offense / Defense tab bar — matches the app; stays put above the list. */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 3, borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)' }}>
           {tabBtn('off', 'OFFENSE')}
           {tabBtn('def', 'DEFENSE')}
         </div>
-        <div style={{ display: 'flex', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</div>
+        <div style={{ display: 'flex', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</div>
         {/* Said plainly: an empty column is a player who has not touched the
             ball, not a player the box score forgot. */}
         <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>

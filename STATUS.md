@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.7 — the box score becomes the week's box-score browser
+
+Founder: "Let's make the box score have all the games. list all the games
+at the top and you can horizontal scroll through them. Red dot for active,
+Grey text for final, Black text for upcoming. Have the game info directly
+under that then the player box score. When you click on the box score for
+a game, it opens the box score view to that game." Built on both hosts:
+new core weekBoxGames(week) (gameFeed) lists the full slate in kickoff
+order with a three-state status (final only when the feed SAYS post; a
+feed with plays and no state is live — the board sim writes none; no feed
+is upcoming; feed games the slate doesn't know are appended) + latestPlay
+(the strip's score/clock, latest-by-c, revisions win ties). The web
+BoxScoreCard and the app's BoxScoreSheet both open on the game whose BOX
+SCORE chip was tapped, with a horizontally scrolling game strip (red dot
+live · faint final · plain upcoming), the selected game's score + clock /
+FINAL / kickoff line under it, then the offense/defense box. The origin
+game follows the log's scrub clock; every other game shows its latest.
+Pinned in check-box-game (20 assertions). App side rides the next APK.
+
 ### v0.369.6 — namesake plays resolve by role, and the named kicker scores
 
 Founder: "still some defense guys on the offense tab and folk is the

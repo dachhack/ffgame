@@ -21,10 +21,11 @@
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { stripSlugTag } from '@drip/core/data/slugMeta';
+import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
-import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
+import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
+import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
@@ -354,8 +355,19 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   visible: boolean; week: number; home: string; away: string; clock: number; onClose: () => void;
 }) {
   const t = useTheme();
-  const box = useMemo(() => (visible ? gameBoxScore(week, home, away, clock) : { home: [], away: [] }),
-    [visible, week, home, away, clock]);
+  // ── EVERY GAME, ONE SHEET (v0.369.7, founder) — the web's strip, native:
+  // all the week's games across the top, red dot live, faint final, plain
+  // upcoming; the sheet opens on the game whose BOX SCORE chip was tapped.
+  const originKey = `${normTeam(away)}@${normTeam(home)}`;
+  const [sel, setSel] = useState(originKey);
+  useEffect(() => { if (visible) setSel(originKey); }, [visible, originKey]);
+  const games = useMemo(() => (visible ? weekBoxGames(week) : []), [visible, week, clock]);
+  const cur = games.find((g) => g.key === sel) ?? games.find((g) => g.key === originKey) ?? games[0]
+    ?? { key: originKey, away: normTeam(away), home: normTeam(home), kickoff: null, state: 'live' as const, feed: null };
+  const effClock = cur.key === originKey ? clock : Number.MAX_SAFE_INTEGER;
+  const box = useMemo(() => (visible ? gameBoxScore(week, cur.home, cur.away, effClock) : { home: [], away: [] }),
+    [visible, week, cur.home, cur.away, effClock, clock]);
+  const last = latestPlay(cur.feed?.plays);
   // OFFENSE / DEFENSE tabs (v0.343.2, founder): the single list ran past the
   // sheet's cap and clipped — see the ScrollView note below — and even scrolled,
   // "how did the defense do" meant paging past every receiver. Membership is
@@ -392,7 +404,38 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
     </Pressable>
   );
   return (
-    <Overlay visible={visible} title={`▤ ${away} @ ${home}`} onClose={onClose}>
+    <Overlay visible={visible} title="▤ BOX SCORES" onClose={onClose}>
+      {/* The game strip — every game this week, horizontally scrollable.
+          Red dot = on now · faint = final · plain = yet to kick. */}
+      {games.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
+          {games.map((g) => (
+            <Pressable key={g.key} onPress={() => setSel(g.key)}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6,
+                borderWidth: StyleSheet.hairlineWidth, borderColor: g.key === cur.key ? t.you : t.bd,
+                backgroundColor: g.key === cur.key ? alpha(t.you, 0.12) : t.bg,
+              }}>
+              {g.state === 'live' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
+              <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: g.state === 'final' ? t.faint : t.text }}>{g.key}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+      {/* The selected game's own line: teams, score, where its clock stands. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+        {!!teamLogo(cur.away) && <Image source={{ uri: teamLogo(cur.away)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.away}</Text>
+        {last
+          ? <Text style={{ fontFamily: MONO, fontSize: fs(14), fontWeight: '800', color: t.text }}>{last.as} — {last.hs}</Text>
+          : <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.faint }}>@</Text>}
+        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.home}</Text>
+        {!!teamLogo(cur.home) && <Image source={{ uri: teamLogo(cur.home)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: cur.state === 'live' ? t.opp : t.faint }}>
+          {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
+        </Text>
+      </View>
       {/* The tab bar stays put; only the list scrolls. */}
       <View style={{ flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
         {tabBtn('off', 'OFFENSE')}
@@ -403,7 +446,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
           the founder's screenshot ended mid-linebacker with no way to reach
           the rest. The Overlay's flexShrink body needs the scroll INSIDE. */}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12 }}>
-        <View style={{ flexDirection: 'row', gap: 14 }}>{col(away, box.away)}{col(home, box.home)}</View>
+        <View style={{ flexDirection: 'row', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</View>
         {/* Said plainly: an empty column is a player who has not touched the
             ball, not a player the box score forgot. */}
         <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 10, lineHeight: fs(8) * 1.5 }}>
