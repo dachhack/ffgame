@@ -31,6 +31,8 @@ export const POWERUPS: Powerup[] = [
   { id: 'unlock-carries-wipe', name: 'WR/TE Carries', blurb: 'Arm before kickoff: all week, every carry by a WR or TE in your starting spots wipes its matched opponent to 0 — a plus-up on TOP of whatever metric that slot is scoring.', kind: 'action', timing: 'pre', price: 70, icon: '💥' },
   { id: 'unlock-combo-drip', name: 'Combo Drip', blurb: 'This week only: unlock a Rush + Receiving combo drip for ONE player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min). One slot per purchase: buy it again to field another.', kind: 'metric', timing: 'pre', price: 65, icon: '🌀' },
   { id: 'unlock-pass-td10', name: 'Air Raid', blurb: 'This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase.', kind: 'metric', timing: 'pre', price: 40, icon: '🚀' },
+  // (buffAppliesToSpot lives at the bottom of this file — the one definition
+  // of "which armed team buffs matter to THIS spot", shared by both hosts.)
   // Underdog was a metric until 0257 ("under dog isn't a scoring metric" —
   // founder). Now a slot MODIFIER: the slot keeps its chosen metric, and while
   // it trails its duel every score banks ×1.5. Same id so owned cards carry over.
@@ -119,4 +121,20 @@ export function capAmplifiers(buffs: ReadonlySet<string>): Set<string> {
   const out = new Set<string>();
   for (const b of buffs) if (!isAmplifier(b) || keep.has(b)) out.add(b);
   return out;
+}
+
+/** Which armed team buffs are relevant to a given spot — drives the on-spot
+ *  chips on both hosts (moved here from the web's boardParts in v0.375.1 so
+ *  the app's chip can't drift from the web's). */
+export function buffAppliesToSpot(id: string, pos: string, metricId: string | null): boolean {
+  const drip = metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush');
+  switch (id) {
+    case 'unlock-carries-wipe': return pos === 'WR' || pos === 'TE';
+    case 'hail-mary': return pos === 'QB';
+    case 'pick-six': return pos === 'DEF';
+    case 'trick-play': return pos !== 'QB';
+    case 'momentum': case 'floodgates': case 'overtime': return drip;
+    case 'garbage-time': case 'counter-nuke': case 'insurance': case 'turnover-boost': return true;
+    default: return false;
+  }
 }

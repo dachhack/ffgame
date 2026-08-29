@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.375.1 — app: ⚡N chip on buffed cards; the hand hugs the room bar
+
+Founder (four screenshots): "I don't see any power ups on Keenum. Let's
+actually have a chip on players in the app when tgey have power ups.
+click the chip to see what power ups apply. Can we have the cards hug
+the bottom more like on web, and go down with the bottom menu?" The
+v0.375.0 pips only showed TARGETED plays — Keenum wore team buffs, which
+the web's spot chips include via buffAppliesToSpot. That predicate moved
+to core (one definition; web re-exports it) and the app's appliedFor now
+adds armed buffs that matter to the slot's pos/metric. The pip row is
+one tappable gold ⚡N chip → Overlay sheet listing icon/name/blurb per
+power-up. Hand geometry: label gone, cards sink their feet under the
+room bar (SINK 44, lift 50 = BAR_H), and the whole fan rides the bar's
+scroll-duck via new ScrollShiftCtx — menu folds away, hand goes with it.
+Bar got zIndex/elevation to outrank the sunk card feet. APK 36914.
+
 ### v0.375.0 — the app's hand is always dealt, and slots wear their plays
 
 Founder: "power up rail on mobile floats in an awkward spot. it would

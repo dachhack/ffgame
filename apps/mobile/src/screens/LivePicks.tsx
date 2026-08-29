@@ -18,7 +18,7 @@ import { teamLogo } from '@drip/core/data/media';
 import { srvBoardTotals } from '@drip/core/engine/liveScore';
 import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { powerupById, POWERUPS, isAmplifier, ampCapacity } from '@drip/core/data/powerups';
+import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
@@ -696,13 +696,14 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       };
     });
 
-  // What's ATTACHED to one slot (v0.375.0): the targeted payload's lists are
-  // keyed 'win|slot'; each hit becomes an icon chip the slot card wears —
-  // matching the web board, where the founder applies these plays.
-  const appliedFor = (win: string, slot: string): { icon: string; name: string }[] => {
+  // What's ATTACHED to one slot: targeted plays (keyed 'win|slot' in the
+  // payload) PLUS armed team buffs that matter to this spot — the same two
+  // sources the web board's chips draw from (v0.375.1; targeted-only missed
+  // buffed players entirely).
+  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null): { icon: string; name: string; blurb: string }[] => {
     const k = `${win}|${slot}`;
-    const out: { icon: string; name: string }[] = [];
-    const add = (id: string) => { const p = powerupById(id); out.push({ icon: p?.icon ?? '✦', name: p?.name ?? id }); };
+    const out: { icon: string; name: string; blurb: string }[] = [];
+    const add = (id: string) => { const p = powerupById(id); out.push({ icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
     if (targeted.don?.win === win && targeted.don?.slot === slot) add('double-or-nothing');
     if (targeted.byeSteal?.win === win && targeted.byeSteal?.slot === slot) add('bye-steal');
     const lists: [string, string[] | undefined][] = [
@@ -716,6 +717,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     for (const [id, rec] of maps) if (rec && k in rec) add(id);
     const sw = targeted.swaps?.[k];
     if (sw) add(sw.kind === 'player-swap' ? 'player-swap' : sw.kind === 'mulligan' ? 'mulligan' : 'metric-swap');
+    if (pos) for (const id of buffs) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id);
     return out;
   };
 
@@ -1106,7 +1108,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     // an owned card sits in the hand (0256 — picking it then
                     // confirms and uses the card).
                     metricFilter={(m) => !m.lock || unlocks.has(m.lock) || (inventory[m.lock] ?? 0) > 0}
-                    applied={appliedFor(s.win, s.slot)}
+                    applied={appliedFor(s.win, s.slot, pick ? playersBySlug[pick.playerId]?.pos : undefined, pick?.metricId)}
                     hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) pickMetricWithCard(s.key, mid); }}
@@ -1390,7 +1392,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     </ScrollView>
 
     <PowerupHand
-      lift={58}
+      // BAR_H: the fan's base tucks just behind the room bar's top edge so
+      // the card feet hide under the rail (v0.375.1 — at 58 it floated).
+      lift={50}
       cards={hand}
       busyId={buffBusy}
       onArm={armFromHand}

@@ -22,16 +22,24 @@
 // awkward spot. it would be better to just replicate the hand from the web").
 // The stowed POWER UPS tab is gone: the fan sits sunk against the bottom edge
 // exactly like the web's — only the top of each card peeks, the board scrolls
-// behind it (box-none), and tapping a card lifts it out with its tip. The
-// peek costs ~70pt of reserved padding, which the tab experiment showed is
-// cheaper than a bar that reads as UI chrome floating over the felt.
-import { useEffect, useRef, useState } from 'react';
+// behind it (box-none), and tapping a card lifts it out with its tip.
+//
+// HUGS THE ROOM BAR (v0.375.1, founder: "have the cards hug the bottom more
+// like on web, and go down with the bottom menu"). v0.375.0 parked the fan
+// above the bar with a label over it — it read as a floating strip, the very
+// thing the port was for. Now the card feet tuck INTO the bar (the bar
+// outranks them, so it clips the feet the way the web's viewport edge does),
+// the label is gone (it collided with board text), and the whole hand rides
+// the bar's scroll-duck via ScrollShiftCtx — menu folds away, hand goes with
+// it; menu comes home, cards rise with it.
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { powerupById } from '@drip/core/data/powerups';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
+import { ScrollShiftCtx } from './scrollChrome';
 
 export interface HandCard {
   id: string;
@@ -46,10 +54,14 @@ export interface HandCard {
 const CARD_W = 78;
 const CARD_H = 106;
 const MAX_HAND = 6;
-/** How much of the always-dealt fan peeks above the bottom edge — the bottom
- *  padding the board owes the hand. (The name survives from the stowed-tab
- *  era so callers didn't have to move.) */
-export const HAND_TAB_H = 74;
+/** How deep the unraised cards sink below the container's base — deeper than
+ *  the web's because the feet hide under the room bar, not a viewport edge. */
+const SINK = 44;
+/** How much of the always-dealt fan peeks above the room bar — the bottom
+ *  padding the board owes the hand: CARD_H − SINK − the 6pt base tuck.
+ *  (The name survives from the stowed-tab era so callers didn't have to
+ *  move.) */
+export const HAND_TAB_H = CARD_H - SINK - 6;
 /** Card stock: the web's dark leather. RN has no radial-gradient, so this is the
  *  gradient's midpoint as a flat fill — the dot texture reads as noise at 78px
  *  anyway, and the black rim + hard shadow are what actually sell it. */
@@ -71,6 +83,10 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
   // against the screen edge — which makes clearing the home indicator this
   // component's job, exactly as env(safe-area-inset-bottom) is on the web.
   const insets = useSafeAreaInsets();
+  // The shell's chrome fold (0 home → 1 folded) — the hand rides the room
+  // bar's duck so the two move as one piece of furniture. Null outside the
+  // shell (tests, previews): the hand just stays put.
+  const shift = useContext(ScrollShiftCtx);
   const [raised, setRaised] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const rise = useRef(new Animated.Value(0)).current;
@@ -116,22 +132,26 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
           untouchable — all three, because a card that is merely off-screen still
           catches touches at the edge on Android. */}
       <Animated.View
+        pointerEvents="box-none"
+        style={{
+          // The container's base sits ~6pt behind the room bar's top edge and
+          // the cards' translateY(SINK) tucks their feet under the bar, so
+          // ~HAND_TAB_H of each card peeks above the rail — the web's sunk
+          // hand, with the bar standing in for the viewport edge.
+          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + lift - 6, height: CARD_H + 16,
+          // "Go down with the bottom menu": the same travel LeagueBottomBar's
+          // own duck runs (BAR_H 50 + insets.bottom + 12), on the same value.
+          transform: shift ? [{ translateY: shift.interpolate({ inputRange: [0, 1], outputRange: [0, 62 + insets.bottom] }) }] : undefined,
+        }}
+      >
+      <Animated.View
         pointerEvents={dealt ? 'box-none' : 'none'}
         style={{
-          // Sunk against the bottom edge like the web's hand: the container's
-          // base sits at the safe-area line and the cards' translateY(26)
-          // leaves ~HAND_TAB_H of card peeking. Raising a card lifts it clear.
-          // (cards sit at bottom:0 with translateY 26, so their tops peek
-          // CARD_H − 26 − 6 ≈ HAND_TAB_H above the safe-area line)
-          position: 'absolute', left: 0, right: 0, bottom: insets.bottom + lift - 6, height: CARD_H + 40,
+          position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
           opacity: rise,
           transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [CARD_H + 60, 0] }) }],
         }}
       >
-        <Mono size={8.5} tone="faint" track={0.24} style={{ textAlign: 'center', marginBottom: 4 }}>
-          YOUR HAND · {total} CARD{total === 1 ? '' : 'S'}
-        </Mono>
-
         {shown.map((c, i) => {
           const p = powerupById(c.id);
           const off = i - (n - 1) / 2;
@@ -146,10 +166,11 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
                 width: CARD_W, height: CARD_H,
                 marginLeft: -CARD_W / 2,
                 // Raised: straighten, lift clear of its neighbours. Unraised:
-                // rake from the centre and sink so only the top two-thirds show.
+                // rake from the centre and sink the feet under the room bar
+                // so only the top half shows.
                 transform: isRaised
                   ? [{ translateX: off * spread }, { translateY: -14 }, { rotate: '0deg' }, { scale: 1.07 }]
-                  : [{ translateX: off * spread }, { translateY: 26 }, { rotate: `${off * 4}deg` }],
+                  : [{ translateX: off * spread }, { translateY: SINK }, { rotate: `${off * 4}deg` }],
                 zIndex: isRaised ? 60 : 10 + i,
                 elevation: isRaised ? 60 : 10 + i,
                 opacity: busyId === c.id ? 0.5 : dim && !isRaised ? 0.55 : 1,
@@ -195,7 +216,7 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
               width: CARD_W, height: CARD_H, marginLeft: -CARD_W / 2,
               transform: [
                 { translateX: (shown.length - (n - 1) / 2) * spread },
-                { translateY: 26 },
+                { translateY: SINK },
                 { rotate: `${(shown.length - (n - 1) / 2) * 4}deg` },
               ],
               zIndex: 10 + shown.length, elevation: 10 + shown.length,
@@ -209,6 +230,7 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
             </View>
           </Pressable>
         )}
+      </Animated.View>
       </Animated.View>
 
       {/* The tip. The web anchors it to the card; here it is anchored to the
