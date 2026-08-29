@@ -905,7 +905,9 @@ export async function matchupTeams(leagueId: string, rosterIds: number[]): Promi
   return out;
 }
 
-/** Sealed picks visible under RLS: always yours; the opponent's only once locked.
+/** Sealed picks visible under RLS: always yours; the opponent's only once
+ *  locked AND the window has kicked off (0262 — locked alone is the edit
+ *  seal at kickoff − 1h, not the reveal).
  *
  *  Passed through the SAME seat-assignment rule the worker's resolver runs
  *  (assignSealedRows): rows outlive a seat reassignment — they key on the
