@@ -167,7 +167,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlocks, comb
               <Pressable
                 key={p.id}
                 onPress={() => (isUnlock ? onToggleUnlock(p.id) : buy(p.id, p.price))}
-                disabled={!!busy || (isUnlock && (!!unlockBusy || !!armsClosed || gated || !afford))}
+                disabled={!!busy || (isUnlock && (!!unlockBusy || gated || !afford))}
                 style={{
                   width: '48%',
                   backgroundColor: lit ? alpha(t.you, 14) : '#241E15',

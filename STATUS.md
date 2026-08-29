@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.370.3 — the web shop tells the truth about unlocks
+
+Founder, after 0255: "still can buy 'metric 1 week' power ups" — the web
+shop had NO armed state and swallowed every server error, so an armed
+unlock looked buyable forever and a refusal looked like a dead button.
+Web ShopModal now shows ARMED / ✓ DISARM (combo: ARMED ×N + buy-again +
+remove-one), surfaces buy/disarm errors in a red line (onBuy/onDisarm
+resolve true|errorString), and Matchup grew disarmUnlockLive (refund,
+mirrors server-side pick clearing via LOCKED_METRIC_UNLOCK). App: the
+stale client gates on unlock buys (armsClosed / week-locked) dropped to
+match 0255 — server decides. App changes ride the next APK.
+
 ### v0.370.2 — purchases are never blocked (0255)
 
 Founder: "we shouldn't ever block purchases, just power up usages."
