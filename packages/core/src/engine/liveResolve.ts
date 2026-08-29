@@ -31,7 +31,7 @@ import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { flagRulesFor } from '../data/commish';
 import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
-import { banksAtClock, slotsFor } from './matchup';
+import { banksAtClock, slotsFor, buffsForWindow } from './matchup';
 import {
   WINDOW_MVP_COIN_PER_SLOT, TURNOVER_COIN, TURNOVER_COIN_BOOSTED,
   battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
@@ -117,6 +117,10 @@ function coinFor(slots: SlotRes[], side: 'home' | 'away', week: number, turnover
  *  team buffs; their flat awards resolve here (see awardFor). */
 export interface LiveBuffs {
   homeBuffs?: Set<string>; awayBuffs?: Set<string>;
+  /** Per-buff arm times (epoch ms, hero_set_buffs stamps them — 0259). A buff
+   *  armed mid-week counts only windows kicking after its stamp; absent map or
+   *  absent stamp = the pre-lock arm, i.e. the full week (v0.373.0). */
+  homeBuffsAt?: Record<string, number>; awayBuffsAt?: Record<string, number>;
   /** Combo-Drip unlocks purchased this week, per side (one combodrip slot per
    *  purchase). Defaults to 1 — the single-unlock loadout every legacy caller
    *  (playtester, forceResolve) represents with a plain `unlocks` set. */
@@ -198,13 +202,15 @@ export { BYE_STEAL_CAP };
 
 // Armed flat-award buffs (mirrors buildMatchup's award()): scans a side's fielded
 // players for a trigger and returns the payout, credited to the triggering slot.
-function awardFor(buffs: Set<string>, picks: LivePick[], week: number): { pick: LivePick; pts: number }[] {
+function awardFor(buffs: Set<string>, picks: LivePick[], week: number, at?: Record<string, number>): { pick: LivePick; pts: number }[] {
   // The award table (amount + trigger) is scoringRules.BUFF_AWARDS — shared
   // with the board's bonus list, so an amount can never drift between them.
   const out: { pick: LivePick; pts: number }[] = [];
   for (const a of BUFF_AWARDS) {
     if (!buffs.has(a.id)) continue;
-    const pk = picks.find((x) => a.hit(x.player, week));
+    // Mid-week arm (v0.373.0): the award only pays from a pick whose window
+    // kicked off after the buff was armed.
+    const pk = picks.find((x) => buffsForWindow(buffs, at, week, x.win).has(a.id) && a.hit(x.player, week));
     if (pk) out.push({ pick: pk, pts: a.pts });
   }
   return out;
@@ -309,12 +315,15 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     const awayIns: SlotInput[] = awayPicks.filter((p) => p.win === wid).map((p) => ({ player: p.player, metricId: p.metricId }));
     // Field General builds its multiplier from every filled slot on its side.
     // Overtime carries the multiplier past regulation; fg-stack stacks twin Generals.
-    const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeBuffs.has('overtime'), stack: homeBuffs.has('fg-stack') });
-    const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayBuffs.has('overtime'), stack: awayBuffs.has('fg-stack') });
+    // Buffs armed mid-week only count windows kicking after the arm (v0.373.0).
+    const homeWinBuffs = buffsForWindow(homeBuffs, buffs.homeBuffsAt, week, wid);
+    const awayWinBuffs = buffsForWindow(awayBuffs, buffs.awayBuffsAt, week, wid);
+    const homeMult = windowFgMult(homeIns, week, { reg, carryOT: homeWinBuffs.has('overtime'), stack: homeWinBuffs.has('fg-stack') });
+    const awayMult = windowFgMult(awayIns, week, { reg, carryOT: awayWinBuffs.has('overtime'), stack: awayWinBuffs.has('fg-stack') });
     // Field Marshal (DEF): a defensive general builds a window-wide shield that
     // blunts opposing nukes/erases against its own side's slots in this window.
-    const homeShield = windowShield(homeIns, week, { reg, carryOT: homeBuffs.has('overtime') });
-    const awayShield = windowShield(awayIns, week, { reg, carryOT: awayBuffs.has('overtime') });
+    const homeShield = windowShield(homeIns, week, { reg, carryOT: homeWinBuffs.has('overtime') });
+    const awayShield = windowShield(awayIns, week, { reg, carryOT: awayWinBuffs.has('overtime') });
     // TE-TD 8-PT NUKE clocks: a side's TE TDs knock the OPPONENT's drips.
     const homeTeTd = teTdNukeClocks(homeIns, week).map((n) => n.c);
     const awayTeTd = teTdNukeClocks(awayIns, week).map((n) => n.c);
@@ -337,7 +346,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
       youMult: homeMult, theirMult: awayMult,
       youShield: homeShield, theirShield: awayShield,
       youDripNukeClocks: awayTeTd, theirDripNukeClocks: homeTeTd,
-      youBuffs: homeBuffs, theirBuffs: awayBuffs,
+      youBuffs: homeWinBuffs, theirBuffs: awayWinBuffs,
       youEmpFreeze: awayEmpAt != null ? [awayEmpAt, awayEmpAt + EMP_SECONDS] as [number, number] : undefined,
       theirEmpFreeze: homeEmpAt != null ? [homeEmpAt, homeEmpAt + EMP_SECONDS] as [number, number] : undefined,
     };
@@ -442,7 +451,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
     suppress, banker,
     don: x.don ? `${x.don.win}#${x.don.slot}` : undefined,
     clutchDon: x.clutchDon?.map(canon),
-    awards: awardFor(buffsSet, picks, week).map((a) => ({ key: `${a.pick.win}#${a.pick.slot}`, pts: a.pts })),
+    awards: awardFor(buffsSet, picks, week, side === 'home' ? buffs.homeBuffsAt : buffs.awayBuffsAt).map((a) => ({ key: `${a.pick.win}#${a.pick.slot}`, pts: a.pts })),
     rivalry: x.rivalry,
     redHerring: x.redHerring?.map(canon),
     leadChange: x.leadChange?.map(canon),

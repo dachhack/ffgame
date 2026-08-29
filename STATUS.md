@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.373.0 — cards play mid-week, per window (0259)
+
+Founder, hand full of "Before lock-in" cards on PRE 4 Saturday: "still
+can't play cards." Whole-week lock predated late swap. Now: team buffs
+arm until FINAL, mid-week arms stamped (buffsAt) and both engines count
+a stamped buff only in windows kicking AFTER the stamp (buffsForWindow
+in matchup.ts + liveResolve per-window sets + award filters + worker
+resolve.js parse) — arming Hail Mary after Thursday's TD can't score
+Thursday. Pre targeted plays (DoN/ByeSteal/Rivalry/Ghost/LeadChange/
+Grudge/Jinx/RedHerring) gate on their TARGET window's kickoff; moving a
+DoN/ByeSteal stake off a playing window refused. Web appliable offers
+pre cards while any window is un-kicked ("Counts the N windows still to
+kick"). Probes 15a–15i.
+
 ### v0.372.1 — the hand is the whole apply surface (0258)
 
 Founder: "can we use the card hand on the web for applying all power

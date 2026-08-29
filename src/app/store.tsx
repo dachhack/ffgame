@@ -24,6 +24,7 @@ export interface AppliedWeek {
   swaps: Record<string, SlotSwap>;               // slotKey -> real-time swap (metric and/or player)
   backups: Record<string, string>;               // backup slotKey -> target starter slotKey (manual best-ball)
   buffs?: Record<string, true>;                  // armed pre-match team buffs, keyed by powerup id
+  buffsAt?: Record<string, number>;              // per-buff arm time (epoch ms) — a mid-week arm only counts windows kicking after it (0259)
   doubleOrNothing?: string;                      // your slotKey staked (×2 if it wins, 0 if it loses)
   spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null }; // a slate slot peeked pre-kickoff; `value` = the server's live reveal (use_spy)
   byeSteal?: { slotKey: string; playerId: string }; // a bye player fielded for a flat projected score
@@ -626,7 +627,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const armed = new Set(armedBuffs(week));
     if (id === 'amp-3' && !armed.has('amp-2')) return false;
     if (isAmplifier(id) && [...armed].filter(isAmplifier).length >= ampCapacity(armed)) return false;
-    const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true } }));
+    // Stamp the arm time (0259): a stamp before the week's first kickoff
+    // filters nothing (every window kicks after it), so pre-lock arms keep
+    // full-week meaning; a mid-week arm only counts windows still to kick.
+    const ok = consumeAndApply(id, week, (cur) => ({ ...cur, buffs: { ...cur.buffs, [id]: true }, buffsAt: { ...cur.buffsAt, [id]: Date.now() } }));
     if (ok) pushBuffs([...armedBuffs(week), id]);
     return ok;
   };
@@ -648,8 +652,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     setApplied((prev) => {
       const cur = prev[week]; if (!cur?.buffs?.[id]) return prev;
-      const buffs = { ...cur.buffs }; for (const b of drop) delete buffs[b];
-      return { ...prev, [week]: { ...cur, buffs } };
+      const buffs = { ...cur.buffs }; const buffsAt = { ...cur.buffsAt };
+      for (const b of drop) { delete buffs[b]; delete buffsAt[b]; }
+      return { ...prev, [week]: { ...cur, buffs, buffsAt } };
     });
     setInventory((prev) => { const next = { ...prev }; for (const b of drop) next[b] = (next[b] ?? 0) + 1; return next; });
     for (const b of drop) syncInv(b, 1);

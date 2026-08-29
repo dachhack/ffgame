@@ -594,4 +594,42 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '14d cleanup');
 end $$;
 
+-- ── 15. pre-match plays go per-window (0259) ─────────────────────────────────
+-- "still can't play cards": the whole-week lock predates late swap. Buffs now
+-- arm until FINAL with mid-week arms stamped (buffsAt — the resolvers count a
+-- stamped buff only in windows kicking after it); pre targeted plays gate on
+-- their TARGET window's kickoff, not week status.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '15a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  -- Mid-week (status past scheduled): the arm lands, stamped.
+  update matchup set status = 'live' where id = mid;
+  r := hero_set_buffs(mid, '["momentum"]'::jsonb);
+  perform assert_ok(r, '15b a buff arms mid-week');
+  perform assert_true((r -> 'buffsAt') ? 'momentum', '15c the mid-week arm is stamped');
+  -- A retained buff keeps its stamp; a pre-lock arm carries none (= full week).
+  update matchup set status = 'scheduled' where id = mid;
+  r := hero_set_buffs(mid, '["momentum", "overtime"]'::jsonb);
+  perform assert_ok(r, '15d pre-lock re-set ok');
+  perform assert_true(((r -> 'buffsAt') ? 'momentum') and not ((r -> 'buffsAt') ? 'overtime'),
+    '15e retained stamp kept, pre-lock arm unstamped');
+  -- Pre targeted plays: an un-kicked window accepts mid-week…
+  update matchup set status = 'live' where id = mid;
+  r := apply_targeted(mid, 'jinx', jsonb_build_object('win', 'w2', 'slot', '0'));
+  perform assert_ok(r, '15f a pre play lands on an un-kicked window mid-week');
+  -- …a window already playing refuses.
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', wk, 'ZZP', 'ZZQ', 'wpast', now() - interval '2 hours') on conflict do nothing;
+  r := apply_targeted(mid, 'jinx', jsonb_build_object('win', 'wpast', 'slot', '0'));
+  perform assert_err(r, 'window already kicked off', '15g a kicked window refuses');
+  -- FINAL closes the arms.
+  update matchup set status = 'final' where id = mid;
+  perform assert_err(hero_set_buffs(mid, '["momentum"]'::jsonb), 'locked', '15h a final matchup refuses');
+  perform assert_ok(set_preseason_practice(lid, false), '15i cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

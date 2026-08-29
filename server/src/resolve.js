@@ -376,7 +376,9 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const load = await loadout(matchup.id, mem?.app_user_id, ctx);
       const unlocks = Array.isArray(load.unlocks) ? load.unlocks : [];
       const comboQty = Number(load.unlockQty?.['unlock-combo-drip'] ?? (unlocks.includes('unlock-combo-drip') ? 1 : 0));
-      return { picks, buffs: Array.isArray(load.buffs) ? load.buffs : [], targeted: load.targeted, comboQty };
+      // buffsAt (0259): per-buff arm stamps (epoch ms) — a mid-week arm only
+      // counts windows kicking after it (liveResolve.buffsForWindow).
+      return { picks, buffs: Array.isArray(load.buffs) ? load.buffs : [], buffsAt: load.buffsAt, targeted: load.targeted, comboQty };
     }
     if (!mem?.enrolled || !mem?.app_user_id) return aiSide(rosterId, mem);
     if (policy === 'empty') return { picks: null, buffs: [] };
@@ -562,6 +564,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     setLeagueFlags(matchup.league_id, flagRows); // flags ride the same isolation rule
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
       { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs),
+        homeBuffsAt: home.buffsAt, awayBuffsAt: away.buffsAt,
         homeComboQty: home.comboQty, awayComboQty: away.comboQty },
       { home: toExtras(homeTargeted), away: toExtras(awayTargeted) });
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
