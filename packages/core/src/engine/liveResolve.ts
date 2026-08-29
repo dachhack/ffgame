@@ -172,6 +172,9 @@ export interface LiveExtras {
   jinx?: string[];
   /** Red Herring: this side's decoy slots (`win|slot`) — cap opposing same-position players in that window to the decoy's total. */
   redHerring?: string[];
+  /** Underdog (0257): this side's slots (`win|slot`) armed — the slot keeps its
+   *  metric; while trailing its head-to-head every score banks ×1.5. */
+  underdog?: string[];
   /** Live tactical power-ups: slot (`win|slot`) → fire game-clock. Surge/Bunker on
    *  your own slot; Cold Snap on an opponent slot (freezes them). */
   surge?: Record<string, number>;
@@ -234,6 +237,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
         delKeys(x.coldSnap, opp); delKeys(x.napalm, opp);
         x.ghost = filt(x.ghost, own); x.leadChange = filt(x.leadChange, own);
         x.grudge = filt(x.grudge, own); x.redHerring = filt(x.redHerring, own);
+        x.underdog = filt(x.underdog, own);
         x.clutchDon = filt(x.clutchDon, own); x.jinx = filt(x.jinx, opp);
         if (x.don && own.has(`${x.don.win}|${x.don.slot}`)) delete x.don;
         if (x.byeSteal && own.has(`${x.byeSteal.win}|${x.byeSteal.slot}`)) delete x.byeSteal;
@@ -355,6 +359,7 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
         theirFreeze: win10(hx.coldSnap?.[jinxKey]), youFreeze: win10(ax.coldSnap?.[jinxKey]),
         theirNapalm: win10(hx.napalm?.[jinxKey]), youNapalm: win10(ax.napalm?.[jinxKey]),
         youBunkerFrom: hx.bunker?.[jinxKey], theirBunkerFrom: ax.bunker?.[jinxKey],
+        youUnderdog: hx.underdog?.includes(jinxKey), theirUnderdog: ax.underdog?.includes(jinxKey),
         // CLUTCH: Encore (+12 on the next TD after the arm clock) and
         // Counter-Wipe (negate the opponent nuke at the recorded clock).
         youDoubleTd: hx.clutchEncore?.[jinxKey], theirDoubleTd: ax.clutchEncore?.[jinxKey],

@@ -29,7 +29,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -192,7 +192,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, underdog: aw?.underdog, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   useEffect(() => {
     if (demo) { setClassicMode(false); return; }
@@ -414,6 +414,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
     else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring' || pendingApply === 'ghost') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
+    else if (pendingApply === 'unlock-underdog') {
+      // UNDERDOG modifier (0257): confirm-then-attach — apply_underdog consumes
+      // the owned card server-side; the slot keeps its metric. No refunds.
+      if (window.confirm('Attach Underdog to this spot? While he trails his duel, every score he banks counts ×1.5. Uses 1 card. No refunds.')) {
+        void (async () => {
+          if (liveCtx) {
+            const kp = keyParts(key);
+            const r = await applyUnderdog(liveCtx.matchupId, kp.win, kp.slot).catch(() => null);
+            if (!r?.ok) { window.alert(friendlyError(r?.error ?? 'that didn’t work — try again')); return; }
+            setSrvInv((prev) => ({ ...(prev ?? {}), 'unlock-underdog': Math.max(0, ((prev ?? {})['unlock-underdog'] ?? 0) - 1) }));
+          }
+          applySlotListPu('unlock-underdog', week, key);
+        })();
+      }
+      setPendingApply(null);
+    }
     else if (pendingApply === 'surge' || pendingApply === 'cold-snap' || pendingApply === 'napalm' || pendingApply === 'bunker') { const clock = effWinClock(key.split('#')[0]); if (applyLiveSlotPu(pendingApply, week, key, clock)) liveTargeted(pendingApply, { ...keyParts(key), clock }); setPendingApply(null); } // live: fire from the slot's current clock
   }
   function applyToWindow(win: WindowId) {
@@ -1164,7 +1180,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   for (const [win, c] of Object.entries(aw?.emp ?? {})) if (c != null) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'emp-' + win, id: 'emp', icon: '💥', name: 'EMP', detail: `Fired on ${wl}` }); }
   for (const [win, on] of Object.entries(aw?.rivalry ?? {})) if (on) { const wl = windowsForWeek(week).find((w) => w.id === win)?.label ?? win; activeEffects.push({ key: 'riv-' + win, id: 'rivalry', icon: '⚔️', name: 'Rivalry', detail: `Armed on ${wl}`, onRemove: phase === 'setup' ? () => { removeRivalry(week, win as WindowId); liveClearTargeted('rivalry', { win }); } : undefined }); }
   const slotPuName = (key: string) => { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === key); const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; return s?.you?.player.name ? `${s.you.player.name} · ${wl}` : wl; };
-  const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring]];
+  const slotPuLists: [string, string[] | undefined][] = [['lead-change', aw?.leadChange], ['grudge', aw?.grudge], ['jinx', aw?.jinx], ['red-herring', aw?.redHerring], ['unlock-underdog', aw?.underdog]];
   for (const [id, keys] of slotPuLists) for (const key of keys ?? []) activeEffects.push({ key: id + '-' + key, id, icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id, detail: (id === 'jinx' ? 'Hex opp at ' : 'On ') + slotPuName(key), onRemove: phase === 'setup' ? () => { removeSlotListPu(id, week, key); liveClearTargeted(id, keyParts(key)); } : undefined });
   for (const key of aw?.ghost ?? []) { const wl = windowsForWeek(week).find((w) => w.id === key.split('#')[0])?.label ?? key.split('#')[0]; activeEffects.push({ key: 'ghost-' + key, id: 'ghost', icon: '👻', name: 'Ghost Player', detail: `Fielded on ${wl}`, onRemove: phase === 'setup' ? () => { removeSlotListPu('ghost', week, key); liveClearTargeted('ghost', keyParts(key)); } : undefined }); }
   const liveSlotPu: [string, Record<string, number> | undefined][] = [['surge', aw?.surge], ['cold-snap', aw?.coldSnap], ['napalm', aw?.napalm], ['bunker', aw?.bunker], ['clutch-encore', aw?.clutchEncore], ['clutch-counter', aw?.clutchCounter]];
@@ -2411,7 +2427,7 @@ const POWERUP_HINT: Record<string, string> = {
   'unlock-return': 'Pick the ◈ metric on a spot.',
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
-  'unlock-underdog': 'Pick the ◈ metric on a spot — up to kickoff.',
+  'unlock-underdog': 'Attach to one of your spots — up to its window’s kickoff.',
   'double-or-nothing': 'Stake a spot in the panel below.',
   'lead-change': 'Arm on one of your spots below.',
   'grudge': 'Stake one of your spots below.',
@@ -2430,7 +2446,7 @@ const POWERUP_HINT: Record<string, string> = {
 
 // Targeted power-ups applied by tapping a spot/window (vs. whole-field buffs
 // that just arm). Each enters apply-mode, then the tap finishes it.
-const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'bye-steal', 'ghost', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'napalm', 'bunker']);
+const SPOT_APPLY = new Set(['double-or-nothing', 'lead-change', 'grudge', 'jinx', 'red-herring', 'unlock-underdog', 'bye-steal', 'ghost', 'spy', 'mulligan', 'emp', 'metric-swap', 'player-swap', 'surge', 'cold-snap', 'napalm', 'bunker']);
 
 // Shared modal shell for the two power-up cards.
 function PuShell({ title, subtitle, accent, onClose, children }: { title: ReactNode; subtitle: string; accent: string; onClose: () => void; children: ReactNode }) {
@@ -2662,7 +2678,7 @@ function WindowSectionInner(props: {
   turnoverCoin: number;
   backups: Record<string, string>;
   slotName: Record<string, string>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
   onArmClutch: (o: ClutchOffer) => void;
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
@@ -2930,7 +2946,7 @@ function WindowSectionInner(props: {
             const setupRow = (
               <SetupRow
                 key={key} slotKeyStr={key} winId={w.id} week={week} pick={picks[key]} selected={selSlot === key} inventory={inventory} unlocks={unlocks} comboOpen={comboOpen} armed={armed} twinLink={twinLinked.has(key)}
-                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.ghost?.includes(key) ? ['ghost'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : [])]}
+                appliedPu={[...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []), ...(aw?.ghost?.includes(key) ? ['ghost'] : []), ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []), ...(aw?.jinx?.includes(key) ? ['jinx'] : []), ...(aw?.redHerring?.includes(key) ? ['red-herring'] : []), ...(aw?.underdog?.includes(key) ? ['unlock-underdog'] : [])]}
                 applyMode={applyMode} onApplyToSpot={() => onApplyToSpot(key)}
                 onOpenPicker={() => onOpenPicker(key, w.id)} onPickMetric={(m) => pickMetricFor(key, m)}
                 onClearSlot={() => onClearSlot(key)}

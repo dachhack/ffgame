@@ -316,7 +316,7 @@ export function SetupRow(props: {
    *  caller whose picks are present from the first render. */
   hydrated?: boolean;
 }) {
-  const { winId, week, pick, selected, inventory, unlocks, comboOpen, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, preKick, hydrated = true } = props;
+  const { winId, week, pick, selected, inventory, unlocks, comboOpen, armed, twinLink, appliedPu, applyMode, onApplyToSpot, onOpenPicker, onPickMetric, onClearSlot, onDropPlayer, onScout, lockPlayer, resolve, hideScout, hydrated = true } = props;
   // Is a locked metric offerable in this slot? Live board (unlocks provided):
   // armed, OR an owned card in the hand (0256 — picking it confirms + uses).
   // the four booleans arm once and field anywhere (armed-set membership); Combo
@@ -327,10 +327,9 @@ export function SetupRow(props: {
     if (lock === 'unlock-combo-drip') return pick?.metricId === 'combodrip' || !!comboOpen || (inventory[lock] ?? 0) > 0;
     return unlocks.has(lock) || (inventory[lock] ?? 0) > 0;
   };
-  // Pre-kick, the metric door stays open ONLY for the Underdog flip — and only
-  // when the unlock is actually owned (or the slot already flipped).
-  const underdogDoor = !!preKick && (metricUnlocked('unlock-underdog') || pick?.metricId === 'underdog');
-  const metricLocked = !!lockPlayer && !underdogDoor;
+  // Underdog left the metric picker in 0257 (it's a slot modifier applied from
+  // the hand now), so the pre-kick metric door went with it.
+  const metricLocked = !!lockPlayer;
   const isMobile = useIsMobile();
   const { bigText, cardSkin } = useStore();
   const photoSkin = PHOTO_SKINS.includes(cardSkin); // a full-image card back → SEALED/SCOUT go in a bottom ribbon
@@ -463,7 +462,7 @@ export function SetupRow(props: {
 
           {/* change controls — pinned to the bottom of the spot */}
           <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4 }}>
-            {pick?.metricId && !metricLocked && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>{preKick ? '🐕 UNDERDOG?' : '↻ METRIC'}</button>}
+            {pick?.metricId && !metricLocked && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>}
             {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
           </div>
         </div>
@@ -526,7 +525,6 @@ export function SetupRow(props: {
           </div>
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '60vh', overflow: 'auto' }}>
             {METRICS[player.pos].filter((m) => !m.lock || metricUnlocked(m.lock) || m.id === pick?.metricId)
-              .filter((m) => !preKick || m.id === pick?.metricId || m.id === 'underdog') // lock period: only the comeback flip
               .map((m) => {
               const cur = m.id === pick?.metricId;
               return (

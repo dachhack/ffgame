@@ -532,4 +532,45 @@ begin
   perform assert_ok(set_preseason_practice(lid, false), '12n cleanup');
 end $$;
 
+-- ── 13. underdog is a modifier (0257) ────────────────────────────────────────
+-- "under dog isn't a scoring metric": the card now attaches to one of YOUR
+-- slots before its window kicks off, consuming one owned card (0256 model —
+-- works in practice weeks, where the coin ledger has no purchase rows). The
+-- slot keeps its metric; the engine reads the targeted `underdog` list.
+do $$
+declare lid uuid := '00000000-0000-0000-0000-0000000009f5'; mid uuid; r jsonb; wk int; q int;
+begin
+  perform probe_as('1');
+  perform assert_ok(set_preseason_practice(lid, true), '13a practice re-opens');
+  select min(week) into wk from matchup where league_id = lid and is_practice_week(week);
+  select id into mid from matchup where league_id = lid and week = wk limit 1;
+  -- The old roads are closed: no arm, no metric mapping.
+  perform assert_err(arm_unlock(mid, 'unlock-underdog'), 'unknown unlock', '13b the arm path is closed');
+  perform assert_true(locked_metric_unlock('underdog') is null, '13c the metric map dropped underdog');
+  -- A modifier needs a pick to sit on. (Window 'w1' has no slate rows, so
+  -- window_kickoff is null — the pre-slate door is open, like 8b's picks.)
+  r := apply_underdog(mid, 'w1', '0');
+  perform assert_err(r, 'no pick at slot', '13d nothing to modify refuses');
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, metric_id)
+    values (mid, '00000000-0000-0000-0000-000000000101', 'w1', '0', 'probe-runner', 'rush');
+  -- No card, no attach.
+  r := apply_underdog(mid, 'w1', '0');
+  perform assert_err(r, 'not owned', '13e no card refuses');
+  -- Buy the card (practice purse), attach it: card consumed, list written.
+  perform assert_ok(wallet_buy_powerup(mid, 'unlock-underdog'), '13f the card sells');
+  r := apply_underdog(mid, 'w1', '0');
+  perform assert_ok(r, '13g the owned card attaches');
+  perform assert_true((r->'underdog') @> to_jsonb(array['w1|0']), '13h the slot is on the underdog list');
+  select coalesce(qty, 0) into q from practice_inventory
+    where league_id = lid and roster_id = 1 and week = wk and powerup_id = 'unlock-underdog';
+  perform assert_eq(q, 0, '13i the card was consumed');
+  r := apply_underdog(mid, 'w1', '0');
+  perform assert_err(r, 'already armed', '13j the same slot never double-arms');
+  -- A finished matchup refuses the use outright.
+  update matchup set status = 'final' where id = mid;
+  r := apply_underdog(mid, 'w1', '1');
+  perform assert_err(r, 'window already kicked off', '13k a FINAL matchup refuses');
+  perform assert_ok(set_preseason_practice(lid, false), '13l cleanup');
+end $$;
+
 select 'ALL PRESEASON PRACTICE PROBES PASS' as result;

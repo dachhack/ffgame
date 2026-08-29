@@ -422,7 +422,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -529,7 +529,10 @@ export function buildMatchup(
         // post-arm TD) and Counter-Wipe (negate a nuke at its recorded clock).
         const youDoubleTd = extras.clutchEncore?.[key];
         const youCounterWipe = extras.clutchCounter?.[key];
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, theirNapalm, youBunkerFrom, youDoubleTd, youCounterWipe, realResolve };
+        // UNDERDOG modifier (0257): armed from the hand on YOUR slot — the slot
+        // keeps its metric; trailing scores bank ×1.5 (resolveSlot applies it).
+        const youUnderdog = extras.underdog?.includes(key);
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, theirNapalm, youBunkerFrom, youDoubleTd, youCounterWipe, youUnderdog, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
         if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
         if (youDoubleTd != null && you) youEncore = res.events.some((e) => e.effect?.text.includes('ENCORE'));

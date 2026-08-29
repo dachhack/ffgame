@@ -34,6 +34,7 @@ export interface AppliedWeek {
   grudge?: string[];                             // your slotKeys staked with Grudge Match (win by 10+ → +25, lose → −25)
   jinx?: string[];                               // slotKeys where you jinx the opponent's first TD
   redHerring?: string[];                         // your decoy slotKeys (cap opposing same-position players in the window)
+  underdog?: string[];                           // your slotKeys armed with Underdog (trailing scores bank ×1.5; keeps its metric)
   surge?: Record<string, number>;               // live: your slotKey -> fire game-clock (×2 for 10 min)
   coldSnap?: Record<string, number>;            // live: opponent slotKey -> fire game-clock (freeze all scoring 10 min)
   napalm?: Record<string, number>;              // live: opponent slotKey -> fire game-clock (hot drip burns negative 10 min)
@@ -530,7 +531,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
             ghost: b.ghost,
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
-            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring,
+            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring, underdog: b.underdog,
             surge: b.surge, coldSnap: b.coldSnap, napalm: b.napalm, bunker: b.bunker,
             clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
@@ -703,7 +704,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applied[week]?.rivalry?.[win] ? false : consumeAndApply('rivalry', week, (cur) => ({ ...cur, rivalry: { ...cur.rivalry, [win]: true } }));
   // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
   // arm toggles a slotKey into the week's list, spending one consumable.
-  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring', 'ghost': 'ghost' };
+  const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring', 'ghost': 'ghost', 'unlock-underdog': 'underdog' };
   const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
     const key = SLOT_LIST_PU[id];
     if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;
