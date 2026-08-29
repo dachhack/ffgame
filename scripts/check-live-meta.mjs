@@ -17,7 +17,7 @@
 // Run: npx tsx scripts/check-live-meta.mjs
 import { poolMetaRows } from '../packages/core/src/data/liveBoard.ts';
 import {
-  slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides, slugSleeperId,
+  slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides, slugSleeperId, stripSlugTag,
 } from '../packages/core/src/data/slugMeta.ts';
 import { BAKED_SLUGS } from '../packages/core/src/data/bakedSlugs.ts';
 
@@ -93,6 +93,17 @@ ok(slugMeta('matthew-zzz-nobody').pos === 'WR' && slugMeta('matthew-zzz-nobody')
 setSlugMetaOverrides(poolMetaRows([{ slug: 'matthew-hibner', pos: 'RB', team: 'KC' }]));
 ok(slugMeta('matthew-hibner').pos === 'RB',
   'an exact-slug overlay beats the variant fallback (it only fills true unknowns)');
+
+// ── 8. THE NAMESAKE TAG NEVER REACHES A NAME (v0.369.4) ────────────────────
+// The worker mints `josh-johnson-qb` / `-<sleeperId>` for namesakes, and every
+// prettifier title-cased the whole slug — the founder's "Josh Johnson Qb".
+ok(stripSlugTag('josh-johnson-qb') === 'josh-johnson', 'a position tag strips for display');
+ok(stripSlugTag('aj-green-cb') === 'aj-green' && stripSlugTag('some-guy-8122') === 'some-guy',
+  'CB and sleeper-id tags strip too');
+ok(stripSlugTag('bal-k') === 'bal-k' && stripSlugTag('atl-dst') === 'atl-dst',
+  'team units keep their tag — the head must still hold a first + last name');
+ok(stripSlugTag('ha-ha-clinton-dix') === 'ha-ha-clinton-dix' && stripSlugTag('justin-watson') === 'justin-watson',
+  'ordinary names, hyphenated surnames included, are untouched');
 
 clearSlugMetaOverrides();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-META ASSERTIONS PASSED');

@@ -22,6 +22,24 @@ export function normTeam(t: string): string {
   return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u === 'AZ' ? 'ARI' : u;
 }
 
+/** Strip the worker's namesake DISAMBIGUATOR off a slug, for display (0199.4
+ *  mints `josh-johnson-qb` / `aj-green-cb` — the lowercased position — or
+ *  `-<sleeperId>` when two men share a name, and every prettifier title-cased
+ *  the whole slug: the founder's box score read "Josh Johnson Qb"). Display
+ *  only — the suffixed slug stays the storage key everywhere. Strips ONE
+ *  trailing token, only when it is a position tag or all digits AND a first +
+ *  last name remain; team units (`bal-k`, `atl-dst`) survive untouched
+ *  because their head has no hyphen (and callers branch on them first). */
+const SLUG_TAGS = new Set(['qb', 'rb', 'fb', 'hb', 'wr', 'te', 'k', 'p', 'ol', 't', 'g', 'c', 'dl', 'de', 'dt', 'nt', 'lb', 'olb', 'ilb', 'mlb', 'db', 'cb', 's', 'fs', 'ss', 'ls', 'def', 'dst', 'edge', 'hc']);
+export function stripSlugTag(slug: string): string {
+  const i = slug.lastIndexOf('-');
+  if (i <= 0) return slug;
+  const head = slug.slice(0, i);
+  if (!head.includes('-')) return slug; // must leave a first + last name
+  const last = slug.slice(i + 1);
+  return /^\d+$/.test(last) || SLUG_TAGS.has(last) ? head : slug;
+}
+
 // Runtime overlay (0200.1) — live meta for players the BAKE doesn't know.
 // The bake covers the 2025 demo names; a 2026 fringe rookie (the 8/15 case:
 // Ian Wheeler, an RB the founder fielded) fell through to the WR/'' fallback

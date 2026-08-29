@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useStore } from '../app/store';
 import { ClassicBoard } from './ClassicBoard';
 import type { Phase, LiveCtx, Route } from '../app/store';
@@ -2556,7 +2557,7 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
   // Live pilot: `value` is the SERVER's reveal of the real sealed pick (use_spy,
   // a player slug or metric id) — the local oppPicks are only the AI's guess
   // there, so the server value always wins when present.
-  const pretty = (s: string) => s.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  const pretty = (s: string) => stripSlugTag(s).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
   const metricName = (id: string) => { for (const list of Object.values(METRICS)) { const m = list.find((x) => x.id === id); if (m) return m.name; } return id; };
   const val = sp.value !== undefined
     ? (sp.value === null ? '— no pick sealed yet —' : sp.reveal === 'player' ? pretty(sp.value) : metricName(sp.value))

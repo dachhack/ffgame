@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.4 — the namesake tag never reaches a name
+
+Founder: '"Josh Johnson QB"' — the worker mints namesake slugs with a
+disambiguator (the lowercased position, `josh-johnson-qb` / `aj-green-cb`,
+or the Sleeper id) and all ten slug prettifiers across both hosts
+title-cased the whole slug, tag included. New core `stripSlugTag` (in
+slugMeta): strips ONE trailing token, only when it's a position tag or all
+digits AND a first + last name remain — team units (`bal-k`, `atl-dst`)
+survive because their head has no hyphen. Display-only; the suffixed slug
+stays the storage key everywhere. All ten prettifiers (web box score,
+ClassicBoard, Matchup, FeedSheet, AdminPage, LeagueHub, LeagueInfo,
+commishKit; app box score + ClassicBoard) now route through it. Pinned in
+check-live-meta.
+
 ### v0.369.3 — the unknown player's box-score position comes from his stats
 
 Founder, over ATL@MIA and CIN@PHI boxes: "Looks like some mix up def vs off

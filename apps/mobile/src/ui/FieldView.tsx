@@ -21,6 +21,7 @@
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
@@ -415,5 +416,5 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
 
 /** A slug as a readable name — the app's copy of the web's `boxName`. */
 function boxName(slug: string): string {
-  return slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  return stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 }

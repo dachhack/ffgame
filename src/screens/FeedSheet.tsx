@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminMatchupPicks, weekLivePlays, type MatchupPicks } from '@drip/core/data/liveApi';
 import { loadRealWeek, realPbpFor, realPointsFor, setLivePlays, liveRowsToPbp, type RealPlay } from '@drip/core/data/realPbp';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 import { PlayerImg } from '../app/ui';
 import type { Pos } from '@drip/core/types';
 
@@ -24,7 +24,7 @@ const ctlBtn = (active = false): React.CSSProperties => ({ fontSize: 12.5, fontW
 const round = (n: number) => Math.round(n * 10) / 10;
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const fmtSlug = (slug: string) =>
-  slug.replace(/-\d+$/, '').split('-').map((w) => (w.length <= 2 ? w.toUpperCase() : w.startsWith('mc') ? 'Mc' + w[2].toUpperCase() + w.slice(3) : w[0].toUpperCase() + w.slice(1))).join(' ');
+  stripSlugTag(slug).split('-').map((w) => (w.length <= 2 ? w.toUpperCase() : w.startsWith('mc') ? 'Mc' + w[2].toUpperCase() + w.slice(3) : w[0].toUpperCase() + w.slice(1))).join(' ');
 
 const KIND: Record<string, string> = { pass: 'pass', rush: 'rush', rec: 'catch', fg: 'field goal', xp: 'XP', sack: 'sack', int: 'INT', fumrec: 'fum rec', dst_td: 'DEF TD', safety: 'safety', incomplete: 'incomplete', fgmiss: 'FG miss', xpmiss: 'XP miss', return: 'return', tackle: 'tackle' };
 

@@ -15,7 +15,7 @@ import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } f
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { shortName } from '@drip/core/data/players';
-import { slugMeta } from '@drip/core/data/slugMeta';
+import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 
 const panel: React.CSSProperties = {
   background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8,
@@ -35,7 +35,7 @@ const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const prettySlug = (slug: string): string => {
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
-  return shortName(slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+  return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 
 /** A flag's rules (0144) in plain English — scoring first, then what he may
