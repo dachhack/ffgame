@@ -1541,6 +1541,11 @@ export const myHeroApplied = (matchupId: string) => rpc<Record<string, unknown>>
 // inventory), except use_spy which consumes a purchased Spy itself.
 export const applyTargeted = (matchupId: string, powerupId: string, payload: Record<string, unknown>) =>
   rpc<{ ok: boolean; error?: string }>('apply_targeted', { p_matchup_id: matchupId, p_powerup_id: powerupId, p_payload: payload });
+/** Underdog modifier (0257): attach the owned card to one of YOUR slots before
+ *  its window kicks off — the slot keeps its metric; trailing scores bank ×1.5.
+ *  Consumes one card server-side (0256 model). No clear path — no refunds. */
+export const applyUnderdog = (matchupId: string, win: string, slot: string) =>
+  rpc<{ ok: boolean; error?: string; underdog?: string[] }>('apply_underdog', { p_matchup_id: matchupId, p_win: win, p_slot: slot });
 export const clearTargeted = (matchupId: string, powerupId: string, payload?: Record<string, unknown>) =>
   // 2-arg form drops a single-entry key (don/byeSteal, 0060); the 3-arg overload
   // (0085) removes ONE entry from a battle-play list (rivalry/ghost/slot bets).

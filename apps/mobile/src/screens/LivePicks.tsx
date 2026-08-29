@@ -670,12 +670,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   /** The hand: everything owned, plus anything currently armed (an armed card
    *  has left the inventory, so it would otherwise vanish from view). */
   const hand: HandCard[] = POWERUPS
-    // Metric unlocks are NOT cards. They arm through arm_unlock and the metric
-    // picker gates on `unlocks`; a card played from the hand arms into `buffs`,
-    // which nothing reads for these. Left in, a stray inventory row from before
-    // the shop stopped selling them would deal a card that costs a card and
-    // unlocks nothing.
-    .filter((p) => p.kind !== 'metric')
+    // Metric unlock cards use through the metric PICKER (pickMetricWithCard),
+    // not the hand — played from here they'd arm into `buffs`, which nothing
+    // reads for them. Underdog (0257, a slot-targeted modifier) is likewise
+    // excluded until the app grows targeted applies: playable on web meanwhile.
+    .filter((p) => p.kind !== 'metric' && p.id !== 'unlock-underdog')
     .filter((p) => (inventory[p.id] ?? 0) > 0 || buffs.has(p.id))
     .map((p) => {
       const armed = buffs.has(p.id);

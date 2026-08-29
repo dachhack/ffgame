@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.372.0 — Underdog is a modifier, not a metric (0257)
+
+Founder: "under dog isn't a scoring metric." It left the picker: the
+Underdog card now attaches to one of YOUR slots (✦ APPLY → tap the spot,
+confirm) before that window's kickoff; the slot KEEPS its chosen metric
+and every score it banks while TRAILING its duel counts ×1.5. New
+apply_underdog RPC consumes the owned card (0256 model, practice-safe);
+arm path + metric map dropped underdog (legacy sealed picks still score
+via the kept metricId path). Engine: resolveSlot youUnderdog/
+theirUnderdog opts wired through buildMatchup extras + liveResolve +
+worker resolve.js. Mobile hand excludes the card until targeted applies
+port (usable on web). Probes 13a–13l.
+
 ### v0.371.0 — metric unlocks are cards (0256)
 
 Founder: "Purchase goes to your power up hand and then when you can use

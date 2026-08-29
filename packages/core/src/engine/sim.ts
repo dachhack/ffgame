@@ -633,7 +633,7 @@ function offSecs(intervals: number[][], t0: number, t1: number): number {
  * `opts.youMult` / `opts.theirMult` apply a per-clock multiplier to that
  * side's scoring (used by the QB Field General window multiplier).
  */
-export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youNapalm?: [number, number]; theirNapalm?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
+export function resolveSlot(you: SlotInput, their: SlotInput, week: number, gameLabel: string, opts: { youMult?: (clock: number) => number; theirMult?: (clock: number) => number; youShield?: (clock: number) => number; theirShield?: (clock: number) => number; youDripNukeClocks?: number[]; theirDripNukeClocks?: number[]; youBuffs?: Set<string>; theirBuffs?: Set<string>; youEmpFreeze?: [number, number]; theirEmpFreeze?: [number, number]; youJinx?: boolean; theirJinx?: boolean; youSurge?: [number, number]; theirSurge?: [number, number]; youFreeze?: [number, number]; theirFreeze?: [number, number]; youNapalm?: [number, number]; theirNapalm?: [number, number]; youBunkerFrom?: number; theirBunkerFrom?: number; youDoubleTd?: number; theirDoubleTd?: number; youCounterWipe?: number; theirCounterWipe?: number; youUnderdog?: boolean; theirUnderdog?: boolean; realResolve?: boolean; projection?: boolean } = {}): SlotResolution & { gameLabel: string; real: boolean; maxClock: number; youTds: number; theirTds: number; youBankerXp: number; theirBankerXp: number; youDead: boolean; theirDead: boolean } {
   // Pre-match team buffs active on each side (Momentum / Garbage Time /
   // Floodgates / Overtime). Only the human side carries buffs in the demo.
   const youBuffs = opts.youBuffs ?? new Set<string>();
@@ -663,12 +663,14 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   const theirFam = familyOf(their.player.pos, their.metricId);
 
   // ── UNDERDOG ───────────────────────────────────────────────────────────────
-  // The anti-snowball metric: flat yardage base, but while you're TRAILING in the
-  // slot every scoring play banks ×UNDERDOG_MULT. Fall behind → you punch above
-  // your weight and claw back; pull ahead → the boost switches off (you can't run
-  // up the score). It rewards comebacks, not a rich-get-richer lead.
-  const underdogYou = you.metricId === 'underdog';
-  const underdogTheir = their.metricId === 'underdog';
+  // The anti-snowball play: while you're TRAILING in the slot every scoring play
+  // banks ×UNDERDOG_MULT. Fall behind → you punch above your weight and claw
+  // back; pull ahead → the boost switches off (you can't run up the score).
+  // Since 0257 it is a slot MODIFIER (opts.*Underdog, applied from the hand) —
+  // the slot keeps its real metric. The metricId === 'underdog' path is the
+  // LEGACY metric form, kept so picks sealed before 0257 still score.
+  const underdogYou = you.metricId === 'underdog' || !!opts.youUnderdog;
+  const underdogTheir = their.metricId === 'underdog' || !!opts.theirUnderdog;
 
   // Drip metrics: WR Receiving Yards (built by catches) and RB Rush Yards
   // (built by carries). A drip play raises a permanent rate (yds × 0.01
