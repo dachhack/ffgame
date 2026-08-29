@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.6 — namesake plays resolve by role, and the named kicker scores
+
+Founder: "still some defense guys on the offense tab and folk is the
+Atlanta kicker." Two worker-side attribution fixes in the ESPN adapter:
+(1) buildRoster kept ONE athlete per play-text abbreviation (first-write-
+wins) — two men abbreviating identically ("T.Dodson") meant one owned every
+mention, which is how four defenders wore rushing/receiving lines. The
+roster now keeps every candidate (with team + boxscore side), and resolve
+is role-aware: offense team for runners/passers/receivers/kickers, defense
+for tacklers/interceptors/forcers, the receiving side for returners, with
+boxscore side as the same-team tiebreak — preferences narrow, never
+exclude, so a lone candidate still resolves (fakes are real). (2) Kicks
+were written only to the team pseudo-player, so the human kicker sat with
+an empty line while "ATL K" held his points (and a league rostering the
+man scored him 0): the named kicker now gets the same fg/xp/fgmiss/xpmiss
+rows alongside the pseudo, and the box score drops the pseudo row when a
+human kicker with kicking stats is in the column (legacy rows keep it).
+New server/test/espn-attr.mjs (7 assertions, synthetic summary, including
+one play where one abbreviation is both the runner AND the tackler).
+Worker redeploys on merge; mid-game polls reconcile the full play set, so
+running games self-correct on the next poll.
+
 ### v0.369.5 — the box column reads the current team, not the 2025 tag
 
 Founder: "Tua is on the falcons. How hard would it be to actually use a

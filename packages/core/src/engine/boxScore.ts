@@ -238,6 +238,18 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
       yards: scrimmageYards(line), side: DEF_POS.has(pos) ? 'def' : 'off',
     });
   }
+  // THE PSEUDO-KICKER YIELDS TO THE MAN (v0.369.6, founder: "folk is the
+  // Atlanta kicker"). The worker writes every kick to the team pseudo-player
+  // AND, since v0.369.6, to the named kicker — the same plays twice, so a
+  // column holding both showed "Nick Folk" and "ATL K" splitting one job.
+  // When a human kicker with kicking stats is in the column, the pseudo row
+  // is redundant and goes; rows written before the named-kicker change keep
+  // their pseudo (the only row holding the numbers).
+  for (const col of [out.home, out.away]) {
+    if (!col.some((r) => r.pos === 'K' && !r.slug.endsWith('-k') && (r.line.fg > 0 || r.line.xp > 0))) continue;
+    const i = col.findIndex((r) => r.slug.endsWith('-k'));
+    if (i >= 0) col.splice(i, 1);
+  }
   out.home.sort(boxRowOrder); out.away.sort(boxRowOrder);
   return out;
 }
