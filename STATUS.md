@@ -18,6 +18,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.369.9 — the box-score rows get readable too
+
+Founder (screenshot on phone): "we need to increase the font size on
+mobile web for the box score." Player rows on both hosts scale up: name
+11 → 13, statline 8.5 → 10.5, pos tag 7.5 → 9, team header 10 → 12 with
+16px crest, OFFENSE/DEFENSE tabs 9 → 11. Web BoxScoreCard + native
+BoxScoreSheet; native change is in APK 36909.
+
 ### v0.369.8 — the game strip gets readable
 
 Founder, first minutes on the browser: "can we make the text of the top
