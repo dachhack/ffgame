@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.371.0 — metric unlocks are cards (0256)
+
+Founder: "Purchase goes to your power up hand and then when you can use
+it is gated. Nothing expires. No refunds. Maybe just a confirm before
+you use the power up." Shop sells unlocks like any other power-up (a
+card into the week's inventory, no auto-arm); arm_unlock consumes ONE
+OWNED CARD instead of coin ('not owned' otherwise; final-only usage
+gate); disarm_unlock returns the card, never coin (old-APK safe). Both
+pickers offer a locked metric when armed OR owned and picking it shows
+a confirm ("Use 1 × Return Yards? … No refunds") before consuming.
+Probe 12 rewritten (12a–12n). Mobile rides APK 36910.
+
 ### v0.370.3 — the web shop tells the truth about unlocks
 
 Founder, after 0255: "still can buy 'metric 1 week' power ups" — the web
