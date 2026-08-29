@@ -24,6 +24,7 @@ import { statlineFrom, realRawPlays, fmtStat, type StatLine } from './sim';
 import { realPbpSlugs } from '../data/realPbp';
 import { gameFeedFor, allGameFeeds } from '../data/gameFeed';
 import { slugMeta, normTeam } from '../data/slugMeta';
+import { teamFor } from '../data/playerTeam';
 import type { Pos } from '../theme';
 
 export interface BoxRow {
@@ -176,7 +177,18 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
 
   for (const slug of realPbpSlugs(week)) {
     const meta = slugMeta(slug);
-    const team = normTeam(meta.team ?? '');
+    // THE COLUMN READS THE CURRENT TEAM, NOT THE 2025 TAG (v0.369.5, founder:
+    // "Tua is on the falcons. How hard would it be to actually use a player
+    // id?"). slugMeta answers from the baked play stream FIRST — its team is
+    // the player's majority 2025 club, kept deliberately so baked plays keep
+    // scoring under the possession rules they were written against — which
+    // seated an offseason mover in his OLD team's column whenever that team
+    // happened to be in the game (Tua, MIA→ATL, in ATL@MIA). The current
+    // team already exists id-keyed on this client: the worker diffs Sleeper's
+    // directory into player_team_override daily, and the bio bake carries the
+    // rest — `teamFor` reads exactly that chain. The baked tag is only the
+    // last resort, for a man neither knows.
+    const team = normTeam(teamFor(slug) ?? meta.team ?? '');
     const plays = realRawPlays(slug, week);
     if (!plays || !plays.length) continue;
     const line = statlineFrom(plays, clock);
