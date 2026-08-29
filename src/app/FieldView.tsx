@@ -622,13 +622,13 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
             {games.map((g) => (
               <button key={g.key} onClick={() => setSel(g.key)} className="mono"
                 style={{
-                  flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
+                  flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 6, cursor: 'pointer',
                   border: `1px solid ${g.key === cur.key ? 'var(--you)' : 'var(--bd)'}`,
                   background: g.key === cur.key ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)',
-                  fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
+                  fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
                   color: g.state === 'final' ? 'var(--faint)' : 'var(--text)',
                 }}>
-                {g.state === 'live' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4F62', flex: 'none' }} />}
+                {g.state === 'live' && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FF4F62', flex: 'none' }} />}
                 {g.key}
               </button>
             ))}
