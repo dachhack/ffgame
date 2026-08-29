@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.370.1 — metric unlocks arm mid-week (0254)
+
+Founder, PRE 4 Friday with 645 practice coin: "I can't buy anything
+'metric - 1 week'." arm_unlock still had the pre-0058 whole-week gate
+(refuse unless status='scheduled'), closing the shop at the week's first
+kickoff even though 0058's late swap keeps later windows' picks editable
+until their own kickoff. Gate is now final-only; 0058's window trigger
+keeps guarding the picks themselves. Probe: preseason-practice section 12.
+
 ### v0.370.0 — commissioner coin grants follow the board (0253)
 
 Founder, after a preseason grant "didn't take": "Let's set coin to the
