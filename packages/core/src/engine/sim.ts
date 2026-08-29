@@ -1369,67 +1369,47 @@ export function boardStatline(player: Player, week: number, compact = false): st
 }
 
 export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
-  // Compact (mobile): collapse "N car · M rush yd" → "N-M ru" and
-  // "R/T rec · Y rec yd" → "R/T-Y rec" so the line fits without ellipsing.
-  if (compact) {
-    if (pos === 'QB') {
-      // C/ATT rides the yards ("18/25-230 pass") and INT/sk appear when they
-      // happened (v0.368.3): the compact line used to drop exactly the stats
-      // that explain a bad QB score, and an INT you cannot see is the one a
-      // manager goes looking for.
-      const p = [s.att ? `${s.comp}/${s.att}-${s.passYds} pass` : `${s.passYds} pass`, `${s.passTds} TD`];
+  // SLEEPER-STYLE LINES (v0.374.2, founder: "I like how compact it is"):
+  // every ZERO stat stays off the line — no targets, no rec stat; no catches,
+  // no rec yards; no carries, no rush yards; even a QB's 0 TD is silence. The
+  // yards drop their rush/rec prefix because the count right before them says
+  // which they are ("17 car · 100 yd · 2/4 rec · 12 yd"), and each block's TDs
+  // ride that block. The zeros were burying the stats that matter ("0 car ·
+  // 0 rush yd · 0/0 rec · 0 rec yd · 24 ret yd" was a return line in decoys).
+  // `compact` keeps the mobile card collapse ("9-57 ru", "2/4-12 rec").
+  const ru: string[] = [];
+  if (s.carries > 0 || s.rushYds !== 0) {
+    if (compact) ru.push(`${s.carries}-${s.rushYds} ru`);
+    else { ru.push(`${s.carries} car`); if (s.rushYds !== 0) ru.push(`${s.rushYds} yd`); }
+    if (s.rushTds && pos !== 'QB') ru.push(`${s.rushTds} TD`);
+  }
+  const rc: string[] = [];
+  if (s.targets > 0 || s.rec > 0) {
+    if (compact) rc.push(`${s.rec}/${s.targets}${s.rec > 0 ? `-${s.recYds}` : ''} rec`);
+    else { rc.push(`${s.rec}/${s.targets} rec`); if (s.rec > 0 && s.recYds !== 0) rc.push(`${s.recYds} yd`); }
+    if (s.recTds) rc.push(`${s.recTds} TD`);
+  }
+  const ret = s.retYds ? [compact ? `${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}` : `${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`] : [];
+  if (pos === 'QB') {
+    // C/ATT carries the passing block; INT and sacks appear when they happened
+    // (v0.368.3) — the stats that explain a bad QB score must never be the
+    // ones dropped for space.
+    const p: string[] = [];
+    if (s.att || s.passYds || s.passTds || s.passInts || s.sacked) {
+      if (compact) p.push(s.att ? `${s.comp}/${s.att}-${s.passYds} pass` : `${s.passYds} pass`);
+      else { if (s.att) p.push(`${s.comp}/${s.att}`); p.push(`${s.passYds} yd`); }
+      if (s.passTds) p.push(`${s.passTds} TD`);
       if (s.passInts) p.push(`${s.passInts} INT`);
       if (s.sacked) p.push(`${s.sacked} sk`);
-      if (s.carries || s.rushYds) p.push(`${s.carries}-${s.rushYds} ru`);
-      return p.join(' · ');
     }
-    if (pos === 'RB') {
-      const p = [`${s.carries}-${s.rushYds} ru`, `${s.rec}/${s.targets}-${s.recYds} rec`];
-      const td = s.rushTds + s.recTds;
-      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
-      return p.join(' · ');
-    }
-    if (pos === 'WR' || pos === 'TE') {
-      const p = [`${s.rec}/${s.targets}-${s.recYds} rec`];
-      if (s.carries) p.push(`${s.carries}-${s.rushYds} ru`);
-      const td = s.rushTds + s.recTds;
-      if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-      if (s.retYds) p.push(`${s.retYds} ret${s.retTds ? `·${s.retTds}TD` : ''}`);
-      return p.join(' · ');
-    }
-    // K / DEF lines are already short — fall through to the full format.
+    p.push(...ru);
+    if (s.rushTds) p.push(compact ? `${s.rushTds} ruTD` : `${s.rushTds} rush TD`);
+    return p.length ? p.join(' · ') : '—';
   }
-  if (pos === 'QB') {
-    // Full passing line: C/ATT (when the flags are present), yards, TDs, INTs
-    // thrown, sacks taken — then the whole rushing line, so a QB who scrambles
-    // for a score shows the carries and the rush TD, not just loose rush yards.
-    const p: string[] = [];
-    if (s.att) p.push(`${s.comp}/${s.att}`);
-    p.push(`${s.passYds} pass yd`, `${s.passTds} TD`);
-    if (s.passInts) p.push(`${s.passInts} INT`);
-    if (s.sacked) p.push(`${s.sacked} sk`);
-    if (s.carries || s.rushYds) {
-      p.push(`${s.carries} car`, `${s.rushYds} rush yd`);
-      if (s.rushTds) p.push(`${s.rushTds} rush TD`);
-    }
-    return p.join(' · ');
-  }
-  if (pos === 'RB') {
-    // Full line: rushing AND receiving, every week. TDs split when both happen.
-    const p = [`${s.carries} car`, `${s.rushYds} rush yd`, `${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
-    const td = s.rushTds + s.recTds;
-    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
-    return p.join(' · ');
-  }
-  if (pos === 'WR' || pos === 'TE') {
-    const p = [`${s.rec}/${s.targets} rec`, `${s.recYds} rec yd`];
-    if (s.carries) p.push(`${s.carries} car`, `${s.rushYds} rush yd`); // jet sweeps / end-arounds
-    const td = s.rushTds + s.recTds;
-    if (td) p.push(s.rushTds && s.recTds ? `${s.rushTds}+${s.recTds} TD` : `${td} TD`);
-    if (s.retYds) p.push(`${s.retYds} ret yd${s.retTds ? ` · ${s.retTds} ret TD` : ''}`);
-    return p.join(' · ');
+  if (pos === 'RB' || pos === 'WR' || pos === 'TE') {
+    // RB reads rushing-first, WR/TE receiving-first — same blocks either way.
+    const p = pos === 'RB' ? [...ru, ...rc, ...ret] : [...rc, ...ru, ...ret];
+    return p.length ? p.join(' · ') : '—';
   }
   if (pos === 'K') return `${s.fg} FG · ${s.xp} XP`;
   if (pos === 'DEF') {

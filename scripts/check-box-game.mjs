@@ -147,7 +147,9 @@ ok(awaySlugs.includes('moved-qb') && !homeSlugs.includes('moved-qb'),
   ok(homeSlugs.includes('unknown-corner'),
     'and the defender column flip applies: tackling on NYG snaps seats him in the MIA column');
   const uqb = [...box.home, ...box.away].find((r) => r.slug === 'unknown-qb');
-  ok(uqb?.pos === 'QB' && uqb.stat.includes('pass'),
+  // Sleeper-style lines (v0.374.2) dropped the "pass" word — a QB line is the
+  // C/ATT block with no receiving phrasing.
+  ok(uqb?.pos === 'QB' && /^\d+\/\d+/.test(uqb?.stat ?? '') && !(uqb?.stat ?? '').includes('rec'),
     `an unknown man with passing stats is a QB, phrased as one (got ${uqb?.pos}: ${uqb?.stat})`);
   const wrT = [...box.home, ...box.away].find((r) => r.slug === 'wr-tackler');
   ok(wrT?.pos === 'WR' && wrT?.side === 'off',
