@@ -1562,6 +1562,22 @@ export interface TargetedState {
   spy?: { win: string; slot: string; reveal: 'player' | 'metric' }[];
   /** Manual backup assignments (0137): "win#slot" backup → "win#slot" starter. */
   backups?: Record<string, string>;
+  /** Battle plays, all keyed 'win|slot' (the payload the apply RPCs write —
+   *  surfaced so the app can SHOW what's attached even before it can apply). */
+  rivalry?: string[];
+  ghost?: string[];
+  leadChange?: string[];
+  grudge?: string[];
+  jinx?: string[];
+  redHerring?: string[];
+  underdog?: string[];
+  clutchDon?: string[];
+  surge?: Record<string, number>;
+  coldSnap?: Record<string, number>;
+  napalm?: Record<string, number>;
+  bunker?: Record<string, number>;
+  clutchEncore?: Record<string, number>;
+  clutchCounter?: Record<string, number>;
 }
 
 /** Record (or clear, with a null target) a manual backup assignment (0137).

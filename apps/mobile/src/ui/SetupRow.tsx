@@ -20,8 +20,11 @@ import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
+  /** Targeted power-ups attached to THIS slot (v0.375.0) — worn as icon chips
+   *  on the card's shoulder, like the web board's applied chips. */
+  applied?: { icon: string; name: string }[];
   /** Deal order within the window. */
   idx?: number;
   /** Opens the opponent's window pool. Absent when there is nothing to scout. */
@@ -78,6 +81,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
       {/* Your card, then the opponent's face-down one — the pairing IS the
           game's premise, so they sit at matched size on the felt. */}
       {player ? (
+        <View>
         <CardFace
           size={cardSize}
           slug={player.id}
@@ -105,6 +109,19 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, hydrated = t
             </>
           ))}
         />
+        {/* Attached plays ride the card's shoulder — gold pips, like the ×N
+            badge on a hand card, one per targeted power-up on this slot. */}
+        {!!applied?.length && (
+          <View pointerEvents="none" style={{ position: 'absolute', top: -7, left: -5, flexDirection: 'row', gap: 3, zIndex: 5 }}>
+            {applied.map((a) => (
+              <View key={a.name} accessibilityLabel={a.name}
+                style={{ backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#E9B959', borderRadius: 999, paddingHorizontal: 4, paddingVertical: 1 }}>
+                <Text style={{ fontSize: 11 }}>{a.icon}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        </View>
       ) : (
         <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}

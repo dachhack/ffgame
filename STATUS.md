@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.375.0 — the app's hand is always dealt, and slots wear their plays
+
+Founder: "power up rail on mobile floats in an awkward spot. it would
+be better to just replicate the hand from the web. We also don't get to
+see which power ups are assigned to Keenum on his card like on mobile
+web." App PowerupHand: the stowed POWER UPS tab is gone — the fan sits
+sunk against the bottom edge like the web's, always dealt, board
+scrolls behind it (HAND_TAB_H now = the peek). SetupRow cards wear
+gold icon pips for every targeted play attached to the slot (myTargeted
+fetch; TargetedState type grew the battle-play lists). Display-only —
+applying targeted plays stays on web until that flow ports. APK 36913.
+
 ### v0.374.2 — Sleeper-style stat lines
 
 Founder (Sleeper screenshot): "I like how compact it is" + "If someone
