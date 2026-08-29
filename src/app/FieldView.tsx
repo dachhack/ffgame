@@ -17,7 +17,7 @@ import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/p
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
-import { useIsMobile, ModalBackdrop } from './ui';
+import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -107,8 +107,18 @@ export function SlotFieldViews({ week, youTeam, theirTeam, youClock, theirClock 
 // its side is sampled at (mirrors the slot rows), and those outcome pids.
 export interface FieldBoardEntry { playerId: string; team?: string | null; side: 'you' | 'their'; clock: number; pids?: number[]; }
 
-export function FieldBoard({ week, entries, onClose }: { week: number; entries: FieldBoardEntry[]; onClose: () => void }) {
+export function FieldBoard({ week, entries, onClose, onRefresh }: {
+  week: number; entries: FieldBoardEntry[]; onClose: () => void;
+  /** Pull-to-refresh inside the overlay (v0.369.2, founder: "pull down …
+   *  all fields should refresh the … fields"). The board that opened this
+   *  passes its own live re-poll; without one the gesture stays off. */
+  onRefresh?: () => void;
+}) {
   const feedLoaded = useGameFeedWeek(week);
+  // The overlay is its own scroller (fixed, overflow auto), so the pull reads
+  // ITS scrollTop — window.scrollY never moves inside a fixed sheet.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pullArmed = usePullRefresh(() => onRefresh?.(), !!onRefresh, () => scrollRef.current?.scrollTop ?? 0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -173,7 +183,16 @@ export function FieldBoard({ week, entries, onClose }: { week: number; entries: 
     </span>
   );
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'var(--bg)', overflow: 'auto', padding: '14px 14px 30px' }}>
+    // overscrollBehaviorY 'contain': reaching this scroller's top must not
+    // chain the pull out to the browser's own gesture (a page reload that
+    // boots to the default screen — the founder's "kicks you back to your
+    // leagues"). The board's own pull-to-refresh handles the intent instead.
+    <div ref={scrollRef} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'var(--bg)', overflow: 'auto', overscrollBehaviorY: 'contain', padding: '14px 14px 30px' }}>
+      {pullArmed && (
+        <div className="mono" style={{ position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 90, background: 'var(--surface)', border: '1px solid var(--bdh, var(--bd))', borderRadius: 14, padding: '5px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', boxShadow: '0 6px 18px rgba(0,0,0,0.35)' }}>
+          ↻ RELEASE TO REFRESH
+        </div>
+      )}
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
           <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}` : `WEEK ${week}`}</span>

@@ -499,6 +499,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // board resolves the REAL game (DNP 0 pre-kickoff, accruing as plays land).
   // Bumps livePbpVer so the resolution memo recomputes on each refresh.
   const [livePbpVer, setLivePbpVer] = useState(0);
+  // The poll's own load(), held for the All-fields overlay's pull-to-refresh
+  // (v0.369.2) — a pull there wants fresh feeds NOW, between the 15s beats.
+  const reloadLive = useRef<(() => Promise<void>) | null>(null);
   useEffect(() => {
     if (!liveCtx) return;
     let alive = true;
@@ -529,12 +532,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       } catch { /* keep prior */ }
     };
     load();
+    reloadLive.current = load;
     const t = setInterval(load, 15000); // ~worker poll cadence
     // Refresh immediately when the tab returns to the foreground (a hidden-tab
     // interval tick was skipped, so pull the latest right away).
     const onVis = () => { if (!document.hidden) load(); };
     document.addEventListener('visibilitychange', onVis);
-    return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+    return () => { alive = false; reloadLive.current = null; clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The AI scouts which players you CAN field each window (the pool, not your spot
@@ -2121,7 +2125,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       )}
       {showRules && <Rulebook onClose={() => setShowRules(false)} />}
       {fieldsOpen && (
-        <FieldBoard week={week} onClose={() => setFieldsOpen(false)} entries={(() => {
+        <FieldBoard week={week} onClose={() => setFieldsOpen(false)}
+          onRefresh={liveCtx ? () => void reloadLive.current?.() : undefined}
+          entries={(() => {
           // One entry per slotted player: its team locates the NFL game, its
           // side drives the play tinting, and its clock mirrors the slot rows
           // (per-game real-time position in wall modes, shared window clock in

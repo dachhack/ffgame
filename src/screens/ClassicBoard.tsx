@@ -521,6 +521,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // The live injury report is a MODULE cache React cannot see; this is the
   // re-render signal, same shape as flagsVer above.
   const [injuryVer, setInjuryVer] = useState(0);
+  // The live poll's own load(), held for the All-fields overlay's
+  // pull-to-refresh (v0.369.2): a pull there wants FRESH FEEDS now, without
+  // tearing the overlay down the way the full loader re-run would.
+  const reloadLive = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -702,10 +706,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
       } catch { /* transient — next tick retries */ }
     };
     void load();
+    reloadLive.current = load;
     // A rehearsal moves at 10-40× real time — the production minute cadence
     // reads as a dead board there. 10s under LIVE TEST, the usual 60s outside.
     const t = window.setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
-    return () => { stop = true; window.clearInterval(t); };
+    return () => { stop = true; reloadLive.current = null; window.clearInterval(t); };
   }, [matchup, userId, ros, testLive]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
@@ -1627,7 +1632,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
           starters. Same component, so follow mode and the flip memory ride
           along for free. */}
       {fieldsOpen && matchup && (
-        <FieldBoard week={matchup.week} entries={fieldEntries} onClose={() => setFieldsOpen(false)} />
+        <FieldBoard week={matchup.week} entries={fieldEntries} onClose={() => setFieldsOpen(false)}
+          onRefresh={() => void reloadLive.current?.()} />
       )}
 
       {/* ── ONE GAME'S FIELD + PLAY LOG, as a card over the board ──────────
