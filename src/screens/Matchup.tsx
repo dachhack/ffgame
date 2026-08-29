@@ -192,7 +192,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const backupAssign = applied[week]?.backups ?? EMPTY_REC;
   const aw = applied[week];
   const rivalryWins = aw?.rivalry ? (Object.keys(aw.rivalry).filter((w) => aw.rivalry![w as WindowId]) as WindowId[]) : undefined;
-  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, underdog: aw?.underdog, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
+  const extras = demo ? {} : { doubleOrNothing: aw?.doubleOrNothing, byeSteal: aw?.byeSteal, ghost: aw?.ghost, emp: aw?.emp, rivalry: rivalryWins, leadChange: aw?.leadChange, grudge: aw?.grudge, jinx: aw?.jinx, redHerring: aw?.redHerring, underdog: aw?.underdog, buffsAt: aw?.buffsAt, surge: aw?.surge, coldSnap: aw?.coldSnap, napalm: aw?.napalm, bunker: aw?.bunker, clutchDon: aw?.clutchDon, clutchEncore: aw?.clutchEncore, clutchCounter: aw?.clutchCounter };
   const extrasKey = JSON.stringify(extras);
   useEffect(() => {
     if (demo) { setClassicMode(false); return; }
@@ -1193,13 +1193,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Owned power-ups you can still apply right now, scoped to open windows. 'pre'
   // power-ups lock at the first kickoff; 'live' ones need a running window.
   const armedSet = new Set(Object.keys(buffs).filter((k) => buffs[k]));
+  // Windows this week that haven't kicked off yet (live board). While ANY
+  // remain, pre-match cards stay playable (0259): buffs count only windows
+  // kicking after the arm (buffsAt stamps), and targeted plays aim at an
+  // un-kicked window — the server gates per target window.
+  const openWins = liveCtx ? windowsForWeek(week).filter((w) => winRt(w.id) === 'setup') : [];
   const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0).map((p) => {
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
-      if (p.id === 'spy') { ok = preKickPhase; deadline = 'After lock, before kickoff'; }
-      else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase; deadline = 'Any time before kickoff'; } // the comeback flip stays open through the lock period
-      else { ok = phase === 'setup'; deadline = 'Before lock-in'; }
+      if (p.id === 'spy') { ok = preKickPhase || openWins.length > 0; deadline = 'Before a window kicks off'; }
+      else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase || openWins.length > 0; deadline = 'Any time before its window kicks off'; }
+      else if (phase === 'setup') { ok = true; deadline = 'Before lock-in'; }
+      else { ok = openWins.length > 0; deadline = ok ? `Counts the ${openWins.length} window${openWins.length === 1 ? '' : 's'} still to kick` : 'Before lock-in'; }
     } else {
       ok = liveWins.length > 0;
       deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';

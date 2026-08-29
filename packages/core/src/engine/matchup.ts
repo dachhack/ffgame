@@ -24,7 +24,19 @@ export interface SlotSwap { atClock: number; atRt?: number; toMetricId?: string;
 export type SlotSwaps = Record<string, SlotSwap>; // slotKey -> swap
 import { resolveSlot, projectedPoints, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, turnoversCommitted, clockAtRealTime, statlineAt, fmtClock, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
 import { REAL_WEEKS } from '../data/realPbp';
-import { windowForTeam, windowsForWeek, gamesInWindow } from '../data/nflSlate';
+import { windowForTeam, windowsForWeek, gamesInWindow, windowKickoffMs } from '../data/nflSlate';
+
+/** Which of a side's armed buffs count for one WINDOW (v0.373.0): a buff armed
+ *  mid-week only counts windows that kick off AFTER it was armed — arming Hail
+ *  Mary after watching Thursday's TD land must not score Thursday. No arm-time
+ *  map (legacy payloads, the opponent's set, demo pre-arm) = the full set. */
+export function buffsForWindow(all: Set<string>, at: Record<string, number> | undefined, week: number, win: string): Set<string> {
+  if (!at || all.size === 0) return all;
+  const k = windowKickoffMs(week, win as WindowId);
+  if (k == null) return all;
+  const out = new Set([...all].filter((b) => at[b] == null || at[b] < k));
+  return out.size === all.size ? all : out;
+}
 import { injuryFor } from '../data/injuries';
 
 // A roster grouped into the 5 windows by each player's REAL NFL game time slot
@@ -422,7 +434,7 @@ export function buildMatchup(
   swaps: SlotSwaps = {},
   backupAssign: Record<string, string> = {},
   buffs: Record<string, boolean> = {},
-  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> } = {},
+  extras: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; rivalry?: WindowId[]; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; surge?: Record<string, number>; coldSnap?: Record<string, number>; napalm?: Record<string, number>; bunker?: Record<string, number>; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; buffsAt?: Record<string, number> } = {},
   realResolve = false, // resolve cross-game effects (TE-TD drip nuke) in real-time order
   oppBuffs?: string[], // live H2H: the opponent's REAL armed buffs (revealed at lock); AI default when omitted
 ): ResolvedMatchup {
@@ -467,11 +479,13 @@ export function buildMatchup(
       if (t) theirIns.push({ player: t.player, metricId: t.metricId });
     }
     const reg = REAL_WEEKS.has(week) ? 3600 : 3300;
-    const youMult = windowFgMult(youIns, week, { reg, carryOT: youBuffSet.has('overtime'), stack: youBuffSet.has('fg-stack') });
+    // Buffs armed mid-week only count windows kicking after the arm (v0.373.0).
+    const youWinBuffs = buffsForWindow(youBuffSet, extras.buffsAt, week, w.id);
+    const youMult = windowFgMult(youIns, week, { reg, carryOT: youWinBuffs.has('overtime'), stack: youWinBuffs.has('fg-stack') });
     const theirMult = windowFgMult(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime'), stack: theirBuffSet.has('fg-stack') });
     // Field Marshal (DEF): a defensive general builds a window-wide shield that
     // blunts opposing nukes/erases against this side's whole window.
-    const youShield = windowShield(youIns, week, { reg, carryOT: youBuffSet.has('overtime') });
+    const youShield = windowShield(youIns, week, { reg, carryOT: youWinBuffs.has('overtime') });
     const theirShield = windowShield(theirIns, week, { reg, carryOT: theirBuffSet.has('overtime') });
     // TE TD nukes reach across the window: your TEs' TD clocks knock down the
     // opponents' drips, and vice-versa.
@@ -532,7 +546,7 @@ export function buildMatchup(
         // UNDERDOG modifier (0257): armed from the hand on YOUR slot — the slot
         // keeps its metric; trailing scores bank ×1.5 (resolveSlot applies it).
         const youUnderdog = extras.underdog?.includes(key);
-        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youBuffSet, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, theirNapalm, youBunkerFrom, youDoubleTd, youCounterWipe, youUnderdog, realResolve };
+        const opts = { youMult, theirMult, youShield, theirShield, youDripNukeClocks: nukeClocks(theirTeTd, yIn), theirDripNukeClocks: nukeClocks(youTeTd, tIn), youBuffs: youWinBuffs, theirBuffs: theirBuffSet, theirEmpFreeze: empClock != null ? [empClock, empClock + 600] as [number, number] : undefined, theirJinx, youSurge, theirFreeze, theirNapalm, youBunkerFrom, youDoubleTd, youCounterWipe, youUnderdog, realResolve };
         let res = resolveSlot(yIn, tIn, week, gameLabel, opts);
         if (theirJinx && their) theirJinxed = res.events.some((e) => e.effect?.text.includes('JINXED'));
         if (youDoubleTd != null && you) youEncore = res.events.some((e) => e.effect?.text.includes('ENCORE'));
@@ -616,6 +630,10 @@ export function buildMatchup(
       if (!buffSet.has(a.id)) continue;
       const slot = all.find((sl) => {
         const p = side === 'you' ? sl.you : sl.their;
+        // Mid-week arm: the award only pays from windows kicking after it
+        // (only YOUR arm times are known here; the opponent's come from the
+        // official resolver).
+        if (side === 'you' && !buffsForWindow(buffSet, extras.buffsAt, week, sl.win).has(a.id)) return false;
         return p && a.hit(p.player, week);
       });
       if (!slot) continue;
