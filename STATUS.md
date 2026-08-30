@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.379.1 — Tier-2 CVD audit: color is never the only channel
+
+Founder: "let's do the tier 2 audit." Swept BOTH hosts for the tell —
+identical glyphs whose meaning differs only by you/opp color — via
+every `you : opp` ternary and every bare meaning-dot. VERDICT: the
+codebase was already disciplined almost everywhere, and this audit
+RECORDS that so it isn't re-derived: window battles say ★ WON / LOST /
+YOU LEAD / EVEN in words; the week banner says YOU WON; W/L letters on
+the feeding log; VICTORY/DEFEAT on the final; LOCKED/SETUP,
+DRAFTING, LIVE, REAL CLOCK chips all pair their dot with a word;
+NUKED prints on both hosts' cards; deltas carry signs; ✓-notes carry
+the glyph; pos chips carry letters; the chopping block carries 🔪 and
+BYE; side accents ride position (you left, theirs right); the app's
+unread dot had already collapsed to one meaning. THE ONE REAL DEFECT:
+the web chat's compact bell — mention (opp-red) vs plain unread
+(you-green) as the same bare 8px dot. A mention now wears a tiny @
+badge; the plain dot keeps its single meaning. Web-only fix; nothing
+rides an APK.
+
 ### v0.379.0 — True Colors + Plain Sight: the colorblind-accessible themes
 
 Founder: "what would we need to do to create a color blind accessable
