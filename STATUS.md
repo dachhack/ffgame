@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.378.0 — the coven: vampires don't draft, may own the wire (0268)
+
+Founder: "vampire shouldnt get to draft players. Vampire leagues should
+have the option to lock the waivers to any non-vampire team. Let's also
+have the number of vampires in the league customizable." The classic
+vampire ruleset, in three moves (0268): (1) vampire seats appointed
+BEFORE the draft are excluded from the draft order (_start_draft_now,
+0219's body + the exclusion — snake/linear/auction alike, and the coven
+queues behind the drafting teams in waiver priority); the 0221 seat
+guard FLIPS — the vampire may now work the wire, because the leftover
+pool is its only cradle. (2) settings_json.vampire_wire_lock (off by
+default): ON blocks every NON-vampire FA add and waiver claim at the
+same roster-door trigger. (3) settings_json.vampire_rosters is a list —
+set_vampires appoints the coven (at least one team must remain to
+draft; legacy set_vampire delegates, legacy vampire_roster key still
+reads); steals are one-per-win PER VAMPIRE (uniqueness index grows the
+vampire column; vampire_steal grows p_vampire — the 3-arg original is
+DROPPED, PostgREST would see two overloads as ambiguous, and the old
+APK's named call binds the new default). vampire_state answers the
+whole coven under `vampires` (one chair each via _vampire_seat_state)
+with the legacy single-vampire fields kept on the caller's own seat.
+App: COMMISH format card appoints by toggle chips + wire-lock chip;
+the league-home card renders each chair's window and feeding log.
+Probes: vampire-coven-probes.sql (draft exclusion end-to-end through
+an AI autodraft, guards, independent feeding, legacy surface) + the
+format suite's old "wire closed to the vampire" probe rewritten as the
+wire-lock pair. Rides the next APK (36916).
+
 ### v0.377.0 — the chopping block + the feeding log (0267)
 
 Founder: "in the league home for guillotine leagues we need a chopping

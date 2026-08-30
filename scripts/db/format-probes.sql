@@ -162,15 +162,22 @@ begin
   perform probe_as('a');
   perform assert_ok(set_vampire(lid, 2), 'f3d seat 2 is the vampire');
 
-  -- the wire is closed to the vampire
+  -- 0268: the vampire BUILDS from the pool (it doesn't draft) — the wire is
+  -- open to it by default…
   perform probe_as('b');
+  perform assert_ok(add_free_agent(lid, 2, 'vp-7', null), 'f3e the vampire signs from the pool (0268)');
+  -- …and the OPTIONAL lock closes it to everyone else instead.
+  perform probe_as('a');
+  perform assert_ok(set_vampires(lid, '[2]'::jsonb, null, true), 'f3e2 the wire locks to the coven');
   begin
-    perform add_free_agent(lid, 2, 'vp-7', null);
-    raise exception 'PROBE FAIL f3e the vampire signed a free agent';
+    perform add_free_agent(lid, 1, 'vp-8', null);
+    raise exception 'PROBE FAIL f3e3 a non-vampire worked the locked wire';
   exception when others then
     msg := sqlerrm;
-    if position('feeds on wins' in msg) = 0 then raise; end if;
+    if position('wire belongs to the vampire' in msg) = 0 then raise; end if;
   end;
+  perform assert_ok(set_vampires(lid, '[2]'::jsonb, null, false), 'f3e4 …and unlocks again');
+  perform probe_as('b');
 
   perform assert_err(vampire_steal(lid, 'vp-1', 'vp-4'), 'no completed week', 'f3f no blood before a final');
   -- week 1: seat 2 (vampire) WINS — away_final formula gives seat 1 less? Use

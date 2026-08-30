@@ -142,7 +142,7 @@ export interface FormatNote {
 /** How the season ENDS differently. */
 export const FORMAT_NOTES: FormatNote[] = [
   { name: 'Guillotine', line: 'The lowest score each week is eliminated and their whole roster hits the wire. Last team standing takes it.' },
-  { name: 'Vampire', line: 'One seat is the vampire. Win the week and they take a player from anybody, giving one back.' },
+  { name: 'Vampire', line: 'Vampires skip the draft and live off the pool. Win the week and they bite: one of yours for one of theirs.' },
   { name: 'Golf', line: 'The lowest weekly total wins. Every scoring value stays exactly the same — only the target moves.' },
 ];
 

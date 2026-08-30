@@ -489,7 +489,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {format === 'guillotine'
                   ? 'Each week the lowest-scoring team is ELIMINATED and its whole roster hits waivers — a $1000 FAAB frenzy (preset). Last team standing wins. It plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, the field that reaches one survivor on the final week; fewer teams simply finish earlier.'
-                  : 'One team is the Vampire: no waivers, no free agents — when it wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the vampire seat in COMMISH after creating, where you can also require your approval per steal.'}
+                  : 'Vampire seats DON’T DRAFT — they sit the draft out and build from the leftover pool. When a vampire wins a matchup it STEALS a player from the loser’s active roster (giving one back). Appoint the coven (any number of vampires) in COMMISH before the draft; there you can also lock the wire to vampires only and require your approval per steal.'}
               </div>
             )}
             <div style={{ height: 16 }} />
