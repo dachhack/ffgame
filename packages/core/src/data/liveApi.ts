@@ -2355,6 +2355,23 @@ export interface VampireState {
   steals?: { id: number; week: number; vampire?: number; victim: number; victim_team?: string | null; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
 }
 export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
+/** 🧛 THE FEEDING BELL — non-null when THIS seat is a vampire whose win is
+ *  fresh: it won the latest fully-final week and hasn't fed on it. The matchup
+ *  boards ring it ("YOU WON — TIME TO FEED"); the bite itself lives in the
+ *  league tab's vampire card. Pure over a vampire_state answer, shared by both
+ *  boards so they can never disagree with the card about whether the window is
+ *  open. Falls back to the legacy single-vampire fields for a pre-0268 server. */
+export const feedingBell = (st: VampireState | null | undefined, rosterId: number | null | undefined):
+  { week: number; victim: string } | null => {
+  if (!st?.vampire || rosterId == null || st.week == null) return null;
+  const chairs: VampireChair[] = st.vampires ?? (st.seat != null
+    ? [{ seat: st.seat, seat_team: st.seat_team ?? null, won: !!st.won, victim: st.victim ?? null, fed: !!st.fed, weeks: st.weeks }]
+    : []);
+  const c = chairs.find((x) => x.seat === rosterId);
+  if (!c?.won || c.fed) return null;
+  const wk = (c.weeks ?? []).find((w) => w.week === st.week);
+  return { week: st.week, victim: wk?.opp_team ?? (c.victim != null ? `seat ${c.victim}` : 'the beaten team') };
+};
 /** Seed the draftable player universe (commissioner, pre-draft only). */
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */

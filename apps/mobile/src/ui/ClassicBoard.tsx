@@ -27,6 +27,7 @@ import {
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
+  vampireState, feedingBell, type VampireState,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
@@ -389,6 +390,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [byeWeek, setByeWeek] = useState<number | null>(null);
   // The live injury report is a module cache React can't see; this redraws.
   const [injuryVer, setInjuryVer] = useState(0);
+  // 🧛 THE FEEDING BELL (v0.382.0, founder: "you won! time to feed!"). The win
+  // HAPPENS here on the matchup view, but the bite lives in the LEAGUE tab —
+  // so a fresh, unfed win rings a banner on this board. One probe answers
+  // `vampire:false` for every other format and the poll never starts.
+  const [vamp, setVamp] = useState<VampireState | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -503,6 +509,23 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     const id = setInterval(() => setNowTs(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  // The bell's poll — 20s, the vampire card's cadence, so a SIM'd win rings
+  // while the founder watches. Vampire leagues only: the first probe decides
+  // whether the interval exists at all.
+  useEffect(() => {
+    let stop = false; let id: ReturnType<typeof setInterval> | null = null;
+    const probe = async () => {
+      const r = await vampireState(leagueId).catch(() => null);
+      if (!stop) setVamp(r?.vampire ? r : null);
+      return r?.vampire === true;
+    };
+    void probe().then((isVamp) => {
+      if (!stop && isVamp) id = setInterval(() => void probe(), 20_000);
+    });
+    return () => { stop = true; if (id) clearInterval(id); };
+  }, [leagueId]);
+  const bell = useMemo(() => feedingBell(vamp, rosterId), [vamp, rosterId]);
 
   // The opponent's lineup + roster + the week's live plays. Since 0178 a
   // classic league's lineups are OPEN — sealed_pick's policy hands them over
@@ -1015,6 +1038,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           something about a lineup that can still change. */}
       {board && (
         <>
+        {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
+            week and hasn't fed — the one moment the vampire format exists for,
+            rung where the win shows. The bite itself is in the LEAGUE tab. */}
+        {bell && (
+          <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
+            <Mono size={11} tone="opp" weight="700" track={0.08}>🧛 YOU WON — TIME TO FEED! 🩸</Mono>
+            <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
+              Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Sink the teeth in the LEAGUE tab — the window closes when the next week goes final.
+            </Mono>
+          </View>
+        )}
         {/* 🧪 SIM STRIP (v0.381.0): the web rehearsal controls, on this board —
             server-gated, so it renders for a super-admin on a LIVE TEST league
             and for nobody else. */}
