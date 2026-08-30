@@ -20,7 +20,7 @@ import { BAKED_SLUGS } from './bakedSlugs';
 import { STAT_PLAYERS, normName } from './players';
 import { NFL_CODES } from './kdst';
 import { ADP_2026 } from './adp2026';
-import { loadPlayerDirectory } from './sleeperPlayers';
+import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 
 export interface DraftPoolEntry {
@@ -225,5 +225,65 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   rows.sort((a, b) => a.score - b.score || (a.srank ?? Infinity) - (b.srank ?? Infinity) || a.slug.localeCompare(b.slug));
   // Extras widen the universe — let the pool grow to the server's ceiling.
   const cap = extras.length ? 2000 : POOL_CAP;
-  return rows.slice(0, cap).map(({ score: _score, srank: _srank, ...r }) => r);
+  // THE CALL 0205 WAS BUILT FOR, which only the baked FALLBACK ever made
+  // (v0.376.2's ghost hunt found it missing here): without it, two same-name
+  // directory players reach seed_league_pool under ONE slug and the server's
+  // `on conflict do nothing` silently drops whichever sorted second — for
+  // Kenneth Walker that was the actual RB, beaten to the clean slug by his
+  // retired WR name-twin. After the slice, so a renamed row can't be one the
+  // cap was about to discard anyway.
+  return disambiguateSlugs(rows.slice(0, cap).map(({ score: _score, srank: _srank, ...r }) => r));
+}
+
+/** ── THE POOL DOCTOR (v0.376.3) ───────────────────────────────────────────
+ *  A pool seeded before the inactive filter (v0.376.2) can hold a GHOST: a
+ *  row whose sleeper_id belongs to a retired player who inherited an active
+ *  name-twin's slug — "Kenneth Walker · WR · FA", drafted as if he were the
+ *  RB, wearing a permanent BYE. The twin himself is usually GONE (the missing
+ *  disambiguation above meant `on conflict do nothing` ate him), so the fix
+ *  is not a swap but a rewrite: put the ACTIVE same-slug directory player's
+ *  identity onto the row the rosters already reference.
+ *
+ *  SQL cannot know who is retired — the directory can. So diagnosis is
+ *  client-side and pure: given the pool and the directory, return the rewrite
+ *  for every ghost that has exactly one obvious living owner of its slug.
+ *  A ghost with no active same-slug player (truly retired, no twin) is
+ *  reported, not guessed at. Team pseudo-players (no sleeper_id) are skipped. */
+export interface PoolGhostFix {
+  slug: string;
+  was: { full: string; pos: string; team: string };
+  fix: DraftPoolEntry;                                  // the identity to write
+}
+export function diagnosePoolGhosts(
+  pool: { slug: string; full_name: string; pos: string; team: string; sleeper_id?: string | null }[],
+  dir: Map<string, PlayerMeta>,
+): { fixes: PoolGhostFix[]; unfixable: { slug: string; full: string }[] } {
+  // slug → active directory players, best search_rank first.
+  const bySlug = new Map<string, PlayerMeta[]>();
+  for (const p of dir.values()) {
+    if (p.active === false) continue;
+    const s = slugFor(p.full);
+    if (!s) continue;
+    const arr = bySlug.get(s);
+    if (arr) arr.push(p); else bySlug.set(s, [p]);
+  }
+  for (const arr of bySlug.values()) arr.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+
+  const inPool = new Set(pool.map((r) => r.sleeper_id).filter(Boolean) as string[]);
+  const fixes: PoolGhostFix[] = [];
+  const unfixable: { slug: string; full: string }[] = [];
+  for (const row of pool) {
+    if (!row.sleeper_id) continue;                       // team pseudo-players
+    const meta = dir.get(row.sleeper_id);
+    if (!meta || meta.active !== false) continue;        // not a ghost
+    const live = (bySlug.get(row.slug) ?? []).find((p) => !inPool.has(p.id));
+    if (!live) { unfixable.push({ slug: row.slug, full: row.full_name }); continue; }
+    inPool.add(live.id);
+    fixes.push({
+      slug: row.slug,
+      was: { full: row.full_name, pos: row.pos, team: row.team },
+      fix: { slug: row.slug, full: live.full, pos: live.pos, team: live.team ?? 'FA', espnId: live.espnId, exp: live.exp, sleeperId: live.id },
+    });
+  }
+  return { fixes, unfixable };
 }

@@ -13,7 +13,7 @@ import {
   adminUserState, type ViewAsState,
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
-  convertLeagueToNative, type ConvertSummary,
+  convertLeagueToNative, type ConvertSummary, commishRepairPoolRow,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   keeperState, rolloverLeague, type KeeperState,
@@ -28,7 +28,8 @@ import {
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
-import { buildDraftPool } from '@drip/core/data/nativeLeague';
+import { buildDraftPool, diagnosePoolGhosts } from '@drip/core/data/nativeLeague';
+import { loadPlayerDirectory } from '@drip/core/data/sleeperPlayers';
 import { forceResolve } from '@drip/core/data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar, Sheet } from '../app/ui';
@@ -1205,6 +1206,30 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     } catch (e) { setBusy(errMsg(e, 'convert failed')); }
   };
 
+  // THE POOL DOCTOR (0265): find pool rows whose player is RETIRED — a
+  // name-twin ghost squatting on a drafted slug (K. Walker · WR · FA) — and
+  // rewrite each to the live same-name player. Diagnosis needs the player
+  // directory, which only the client holds; the RPC is just the pen.
+  const poolDoctor = async () => {
+    if (busy === 'doctor') return;
+    setBusy('doctor');
+    try {
+      const [dir, pool] = await Promise.all([loadPlayerDirectory(), leaguePool(l.league_id)]);
+      const { fixes, unfixable } = diagnosePoolGhosts(pool, dir);
+      if (!fixes.length && !unfixable.length) { setBusy('✓ pool looks healthy — every player is active'); return; }
+      let done = 0; const errs: string[] = [];
+      for (const f of fixes) {
+        const r = await commishRepairPoolRow(l.league_id, f.slug, f.fix);
+        if (r.ok) done++; else errs.push(`${f.slug}: ${r.error ?? 'failed'}`);
+      }
+      const parts: string[] = [];
+      if (done) parts.push(`✓ repaired ${done}: ${fixes.slice(0, 5).map((f) => `${f.fix.full} → ${f.fix.pos} · ${f.fix.team}`).join(', ')}${fixes.length > 5 ? '…' : ''}`);
+      if (unfixable.length) parts.push(`⚠ retired with no live match (left alone): ${unfixable.map((u) => u.full).join(', ')}`);
+      if (errs.length) parts.push(`⚠ ${errs.join('; ')}`);
+      setBusy(parts.join(' · '));
+    } catch (e) { setBusy(errMsg(e, 'pool check failed')); }
+  };
+
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
     const r = await adminRegenCode(l.league_id, which);
@@ -1370,7 +1395,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {open && <>
 
       {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
-      {busy && busy !== 'sync' && busy !== 'members' && busy !== 'convert' && busy !== 'convert-preview' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+      {busy && busy !== 'sync' && busy !== 'members' && busy !== 'convert' && busy !== 'convert-preview' && busy !== 'doctor' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       {/* Desktop gets the grouped RAIL, narrow screens the grouped HUB — both
           driving the same `tab` state, so a destination behaves identically
@@ -1524,6 +1549,18 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                 </div>
               </div>
             )}
+          </div>
+          )}
+          {/* THE POOL DOCTOR (0265): repair retired name-twin ghosts in the
+              player pool — the row keeps its slug, the person behind it is
+              rewritten to the live player. */}
+          {l.provider === 'native' && (
+          <div>
+            <div style={subhead}>PLAYER IDENTITIES</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={poolDoctor} disabled={busy === 'doctor'} className="mono" style={btn(false)} title="find pool players who are actually retired name-twins (drafted as WR · FA with a permanent BYE) and rewrite them to the live player">{busy === 'doctor' ? 'checking…' : '🩺 check player identities'}</button>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>fixes a retired name-twin squatting on a drafted player’s slug — e.g. K. Walker showing WR · FA on a BYE</span>
+            </div>
           </div>
           )}
           {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into

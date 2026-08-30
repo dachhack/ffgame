@@ -153,3 +153,5 @@ $RUN -f scripts/db/stamp-week-probes.sql | grep -E "SW. FAIL|PROBE FAIL|ALL STAM
 $RUN -f scripts/db/sim-run-probes.sql | grep -E "SR. FAIL|PROBE FAIL|ALL SIM-RUN PROBES" || { echo "SIM-RUN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/convert-league-probes.sql | grep -E "PROBE FAIL|ALL CONVERT-LEAGUE PROBES" || { echo "CONVERT-LEAGUE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/pool-twin-repair-probes.sql | grep -E "PROBE FAIL|ALL POOL-TWIN-REPAIR PROBES" || { echo "POOL-TWIN-REPAIR PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/pool-doctor-probes.sql | grep -E "PROBE FAIL|ALL POOL-DOCTOR PROBES" || { echo "POOL-DOCTOR PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/sim-percent-probes.sql | grep -E "PROBE FAIL|ALL SIM-PERCENT PROBES" || { echo "SIM-PERCENT PROBES FAILED"; exit 1; }
