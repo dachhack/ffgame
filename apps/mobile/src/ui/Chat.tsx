@@ -258,12 +258,17 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
   return (
     <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
       {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+        {/* multiline so a long draft WRAPS and the box grows (capped ~5 lines,
+            then it scrolls inside) — the founder could not see what they were
+            typing past one line. Return still SENDS (submitBehavior keeps the
+            single-line submit semantics on a multiline field). */}
         <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={onSend}
           placeholder={placeholder} placeholderTextColor={t.faint} returnKeyType="send"
-          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+          multiline submitBehavior="blurAndSubmit"
+          style={{ flex: 1, maxHeight: 110, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
         <Pressable disabled={busy || !draft.trim()} onPress={() => { tap(); onSend(); }}
-          style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 14, justifyContent: 'center', opacity: busy || !draft.trim() ? 0.5 : 1 }}>
+          style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9, justifyContent: 'center', opacity: busy || !draft.trim() ? 0.5 : 1 }}>
           <Text style={{ fontSize: 14, color: t.onAccent }}>➤</Text>
         </Pressable>
       </View>
@@ -458,22 +463,28 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
             ))}
           </View>
         )}
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        {/* alignItems flex-end: the input GROWS upward as the draft wraps
+            (v0.376.1), so the buttons anchor to its bottom edge, WhatsApp-
+            style, instead of floating mid-box. */}
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
           {canModerate && (
-            <Pressable hitSlop={6} onPress={() => { tap(); setPollOpen((v) => !v); setGifOpen(false); }}>
+            <Pressable hitSlop={6} onPress={() => { tap(); setPollOpen((v) => !v); setGifOpen(false); }}
+              style={{ paddingVertical: 7 }}>
               <Text style={{ fontSize: 15 }}>📊</Text>
             </Pressable>
           )}
           {!!GIF && (
-            <Pressable hitSlop={6} onPress={() => { tap(); setGifOpen((v) => !v); setPollOpen(false); }}>
+            <Pressable hitSlop={6} onPress={() => { tap(); setGifOpen((v) => !v); setPollOpen(false); }}
+              style={{ paddingVertical: 11 }}>
               <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>GIF</Text>
             </Pressable>
           )}
           <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => void sendBody(draft.trim())}
             placeholder="message the league… (@ to mention)" placeholderTextColor={t.faint} returnKeyType="send"
-            style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            multiline submitBehavior="blurAndSubmit"
+            style={{ flex: 1, maxHeight: 110, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
           <Pressable disabled={busy || !draft.trim()} onPress={() => { tap(); void sendBody(draft.trim()); }}
-            style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 14, justifyContent: 'center', opacity: busy || !draft.trim() ? 0.5 : 1, alignSelf: 'stretch' }}>
+            style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9, justifyContent: 'center', opacity: busy || !draft.trim() ? 0.5 : 1 }}>
             <Text style={{ fontSize: 14, color: t.onAccent }}>➤</Text>
           </Pressable>
         </View>

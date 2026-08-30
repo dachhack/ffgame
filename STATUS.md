@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.376.1 — app: chat drafts wrap and the box grows
+
+Founder (screenshot, mid-league-chat): "Need the chat to wrap and the
+box get bigger so you can see what you are typing." Both app composers
+— the league chat's inline one and the shared Composer the DM threads
+use — were single-line TextInputs, so a long draft scrolled off
+horizontally. Now multiline: the draft wraps, the box grows to ~5 lines
+(maxHeight 110) then scrolls inside, the row aligns flex-end so the
+📊/GIF/send controls anchor to the bottom edge as it grows, and
+submitBehavior="blurAndSubmit" keeps the return key SENDING (multiline
+would otherwise turn it into a newline key). App-only; rides the next
+APK (versionCode 36915+).
+
 ### v0.376.0 — GO NATIVE: imported leagues convert in place (0263)
 
 Founder: "let commissioners migrate their leagues added from other
