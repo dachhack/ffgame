@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.382.0 — 🧛 the feeding bell: "YOU WON — TIME TO FEED!" on the matchup view
+
+Founder: "can we add a 'you won! time to feed!' banner to the matchup view
+when the vampire wins?" The win happens on the matchup board, but the bite
+lives in the LEAGUE tab's vampire card — so a vampire could win, never
+notice the window, and lose the steal when the next week finals. Now a
+blood-red banner rings on BOTH matchup boards (app ClassicBoard + web twin)
+when the viewing seat is a vampire chair whose win is fresh: it won the
+latest fully-final week and hasn't fed on it. Names the beaten team and the
+week, points at the LEAGUE tab, and says when the window closes.
+
+The condition is ONE shared helper, `feedingBell(vampireState, rosterId)`
+in core's liveApi (pure, legacy single-vampire fallback for pre-0268
+answers), so the boards and the vampire card can never disagree about
+whether the window is open. Each board probes `vampire_state` once — every
+other format answers `vampire:false` and no poll starts; vampire leagues
+poll at 20s (the vampire card's cadence) so a SIM'd win rings while the
+founder watches. No DB, no server change. APK 36923.
+
 ### v0.381.2 — the app board polls at rehearsal speed under LIVE TEST
 
 Founder (screenshot, Vamp T mid-sim): "scoring is not flowing through in

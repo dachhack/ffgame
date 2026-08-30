@@ -30,6 +30,7 @@ import {
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
+  vampireState, feedingBell, type VampireState,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
@@ -501,6 +502,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // old scores up for the rest of a poll interval. Pull-to-refresh (v0.369.1)
   // bumps the same counter: both mean "re-run the whole load, now".
   const [simVer, setSimVer] = useState(0);
+  // 🧛 THE FEEDING BELL (v0.382.0, founder: "you won! time to feed!"). The win
+  // HAPPENS here on the matchup view, but the bite lives in the league tab —
+  // so a fresh, unfed win rings a banner on this board. One probe answers
+  // `vampire:false` for every other format and the poll never starts.
+  const [vamp, setVamp] = useState<VampireState | null>(null);
   // ↓ PULL TO REFRESH (v0.369.1, founder: "right now pull down kicks you back
   // to your leagues"). The browser's native gesture is off (styles.css); a
   // pull from the top of the board re-runs the loader in place. Disabled
@@ -712,6 +718,24 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
     const t = window.setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
     return () => { stop = true; reloadLive.current = null; window.clearInterval(t); };
   }, [matchup, userId, ros, testLive]);
+
+  // The bell's poll — 20s, the app vampire card's cadence, so a SIM'd win
+  // rings while the founder watches. Vampire leagues only: the first probe
+  // decides whether the interval exists at all.
+  useEffect(() => {
+    if (!ros) return;
+    let stop = false; let id: number | null = null;
+    const probe = async () => {
+      const r = await vampireState(ros.leagueId).catch(() => null);
+      if (!stop) setVamp(r?.vampire ? r : null);
+      return r?.vampire === true;
+    };
+    void probe().then((isVamp) => {
+      if (!stop && isVamp) id = window.setInterval(() => void probe(), 20_000);
+    });
+    return () => { stop = true; if (id != null) window.clearInterval(id); };
+  }, [ros]);
+  const bell = useMemo(() => feedingBell(vamp, ros?.rosterId), [vamp, ros]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
   // has a settings_json home and a catalog home, and a bare `{...scoring,
@@ -1216,6 +1240,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         </div>
       </div>
 
+      {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
+          week and hasn't fed — the one moment the vampire format exists for,
+          rung where the win shows. The bite itself runs from the app's LEAGUE
+          tab (the web has no steal UI yet). */}
+      {bell && (
+        <div className="mono" style={{ marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🧛 YOU WON — TIME TO FEED! 🩸</div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+            Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Sink the teeth from the LEAGUE tab in the app — the window closes when the next week goes final.
+          </div>
+        </div>
+      )}
       {/* The dress rehearsal's steering wheel (0251) — same strip as the drip
           board: admin-only (it self-gates on the server's forbidden), LIVE TEST
           leagues only. ▶ drives THIS board through the real feed + resolver —
