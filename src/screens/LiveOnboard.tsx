@@ -8,7 +8,7 @@ import {
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, myMatchupFrom, matchupTeams, leagueResults, defaultOpenWeek, chatUnread,
+  myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, chatUnread,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
@@ -1335,6 +1335,18 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
     return () => { ok = false; };
   }, [leagueId]);
   const name = (rid: number) => teams[rid]?.team_name ?? `Roster ${rid}`;
+  // 0269: which seats are vampires — the fang rides every team name on this
+  // board, so the format is legible from the standings, not just the rules.
+  const [vamp, setVamp] = useState<Record<number, boolean>>({});
+  useEffect(() => {
+    let ok = true;
+    leagueStandings(leagueId).then((rows) => {
+      if (!ok || !Array.isArray(rows)) return;
+      setVamp(Object.fromEntries(rows.filter((r) => r.vampire).map((r) => [r.roster_id, true])));
+    }).catch(() => {});
+    return () => { ok = false; };
+  }, [leagueId]);
+  const fang = (rid: number) => (vamp[rid] ? '🧛 ' : '');
 
   const [sortBy, setSortBy] = useState<'record' | 'pf' | 'diff'>('record');
   const standings = useMemo(() => {
@@ -1388,7 +1400,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
                   return (
                     <div key={s.rid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
                       <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
-                      <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(s.rid)}</span>
+                      <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fang(s.rid)}{name(s.rid)}</span>
                       <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{s.w}-{s.l}{s.t ? `-${s.t}` : ''}</span>
                       <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 56, textAlign: 'right' }}>{Math.round(s.pf)} PF</span>
                       <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: d > 0 ? 'var(--you)' : d < 0 ? 'var(--opp)' : 'var(--dim)', width: 48, textAlign: 'right' }}>{d > 0 ? '+' : ''}{d}</span>
@@ -1409,11 +1421,11 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
                   const awayWon = fin && Number(r.away_final) > Number(r.home_final);
                   return (
                     <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
-                      <span style={{ flex: 1, fontSize: 12, fontWeight: homeWon ? 700 : 400, color: homeWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{name(r.home_roster_id)}</span>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: homeWon ? 700 : 400, color: homeWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{fang(r.home_roster_id)}{name(r.home_roster_id)}</span>
                       <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.home_final)) : '—'}</span>
                       <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>·</span>
                       <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', width: 30, textAlign: 'center' }}>{fin ? Math.round(Number(r.away_final)) : '—'}</span>
-                      <span style={{ flex: 1, fontSize: 12, fontWeight: awayWon ? 700 : 400, color: awayWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r.away_roster_id)}</span>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: awayWon ? 700 : 400, color: awayWon ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fang(r.away_roster_id)}{name(r.away_roster_id)}</span>
                       <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: fin ? 'var(--dim)' : r.status === 'live' ? '#FF4F62' : 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 5px', flexShrink: 0 }}>{fin ? 'FINAL' : r.status === 'live' ? 'LIVE' : 'SCHED'}</span>
                     </div>
                   );

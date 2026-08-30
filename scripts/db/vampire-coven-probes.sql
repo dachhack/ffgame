@@ -171,6 +171,28 @@ begin
   perform vc_true((r -> 'steals' -> 0 ->> 'vampire') is not null,
     'vc10e steal rows say whose bite it was');
 
+  -- ══ 5 · 0269: THE COVEN WEARS ITS FANGS ═══════════════════════════════════
+  -- draft_state names who sits out (league 1's draft excluded seat 4)…
+  r := draft_state(lid);
+  perform vc_true(jsonb_array_length(r -> 'vampires') = 1
+      and (r -> 'vampires' -> 0 ->> 'roster_id')::int = 4
+      and (r -> 'vampires' -> 0 ->> 'team') is not null,
+    'vc11 draft_state names the seat that sits the draft out');
+  -- …standings and member rows wear the flag exactly on the coven (league 2)…
+  r := league_standings(lid2);
+  perform vc_true((select bool_and((e ->> 'vampire')::boolean = ((e ->> 'roster_id')::int in (3, 4)))
+      from jsonb_array_elements(r) e),
+    'vc12 standings rows wear the fang exactly on the coven');
+  r := admin_league_members(lid2);
+  perform vc_true((select bool_and((e ->> 'vampire')::boolean = ((e ->> 'roster_id')::int in (3, 4)))
+      from jsonb_array_elements(r) e),
+    'vc13 member rows wear it too');
+  -- …and the flag is FORMAT-gated: back on standard, stale seats show nothing.
+  perform vc_ok(set_league_format(lid2, 'standard'), 'vc14 format back to standard');
+  r := league_standings(lid2);
+  perform vc_true((select bool_and(not (e ->> 'vampire')::boolean) from jsonb_array_elements(r) e),
+    'vc14a …and no row wears a fang despite the stale seats key');
+
   raise notice 'vampire-coven probes done';
 end $$;
 

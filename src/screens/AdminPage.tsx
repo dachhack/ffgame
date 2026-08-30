@@ -1686,7 +1686,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                         whoever still holds the Drip seat — two different people.
                         Say "seat held by" there so the row can't be misread as one
                         person who is somehow mismatched with themselves. */}
-                    <div style={{ fontSize: 13.5, color: 'var(--text)' }}>{m.team}</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--text)' }}>{m.vampire ? '🧛 ' : ''}{m.team}</div>
                     <div className="mono" style={{ ...mono, fontSize: 11.5, color: m.drifted ? 'var(--warn)' : 'var(--faint)' }}>
                       {m.enrolled
                         ? m.drifted
