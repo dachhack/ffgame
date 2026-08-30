@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.376.3 — the pool doctor (0265) + rehearsal in percent at 100× (0266)
+
+Two founder asks. FIRST, the K. Walker ghost's real anatomy: 0264's
+pair-repair reported {fixed: 0} in production — the tell. buildDraftPool
+never ran 0205's disambiguation on the directory path (only the baked
+fallback did), so the retired twin and the live RB reached
+seed_league_pool under ONE slug and `on conflict do nothing` silently
+ATE the RB — the ghost row stands alone, no twin to swap with. Fixes:
+the missing disambiguateSlugs call is restored (post-slice), and since
+only the client's directory knows who is retired, diagnosis is now
+client-side — diagnosePoolGhosts (core) finds pool rows whose
+sleeper_id is an inactive player and resolves the live same-slug
+player; commish_repair_pool_row (0265) is the pen, rewriting one row's
+identity in place (slug unchanged — rosters/picks keep referencing it;
+an unreferenced duplicate row holding the new id is absorbed, a
+rostered one refuses). AdminPage MODE tab: "🩺 check player identities".
+
+SECOND (founder: "have the feed show at % rather than time. We can go
+100x rather than 20x"): sim_run grows feed_len, stamped by the worker's
+sweep — the only thing that knows the feed's end — and sim_run_state
+answers pct (capped 100; null for the first tick, strip falls back to
+the clock). admin_sim_start's default speed is 100× (0252's body, two
+20s changed): a full rehearsal week in ~2 minutes. SimStrip shows
+"feed 47% · 100×". Probes: pool-doctor + sim-percent suites wired in.
+
 ### v0.376.2 — the retired name-twin ghost (K. Walker WR · FA) (0264)
 
 Founder (screenshot, bench card "K. Walker · WR · FA · BYE"): "Walker is

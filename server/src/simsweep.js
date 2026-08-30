@@ -119,11 +119,13 @@ export async function sweepSim(log, playerIndex) {
           try { await resolveMatchup({ ...m, status: 'final' }, playerIndex, ctx.lineups.get(m.id)); }
           catch (e) { log('sim finalize', m.id, e.message); }
         }
-        await db().from('sim_run').update({ status: 'done', cursor_at: ctx.maxAt }).eq('league_id', run.league_id);
+        await db().from('sim_run').update({ status: 'done', cursor_at: ctx.maxAt, feed_len: ctx.maxAt }).eq('league_id', run.league_id);
         finished += 1;
         log(`sim done · league ${run.league_id} week ${run.week} — feed exhausted, matchups FINAL`);
       } else {
-        await db().from('sim_run').update({ cursor_at: clk }).eq('league_id', run.league_id);
+        // feed_len rides every cursor write (0266): only this sweep knows the
+        // feed's end, and sim_run_state needs it to answer in percent.
+        await db().from('sim_run').update({ cursor_at: clk, feed_len: ctx.maxAt }).eq('league_id', run.league_id);
       }
     } catch (e) { log('sim run', run.league_id, e.message); }
   }

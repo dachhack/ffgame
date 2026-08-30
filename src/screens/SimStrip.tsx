@@ -75,7 +75,10 @@ export function SimStrip({ leagueId, week, onChanged }: { leagueId: string; week
       {run ? (
         <span>
           week {run.week} · {run.status === 'running'
-            ? <>LIVE · feed at {fmtClock(Number(run.clock))} · {run.speed}× — the worker is driving; watch the windows</>
+            // Percent over feed-clock time (founder): a minute count means
+            // nothing without the feed's length. pct is null for one worker
+            // tick at the start of a run — the clock covers that gap.
+            ? <>LIVE · feed {run.pct != null ? `${run.pct}%` : `at ${fmtClock(Number(run.clock))}`} · {run.speed}× — the worker is driving; watch the windows</>
             : 'DONE — the week resolved to FINAL through the live path'}
         </span>
       ) : (

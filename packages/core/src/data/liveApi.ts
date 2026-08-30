@@ -1266,7 +1266,14 @@ export const adminSimStart = (leagueId: string, week?: number | null, src?: numb
     'admin_sim_start', { p_league_id: leagueId, p_week: week ?? null, p_src: src ?? null, p_speed: speed ?? 20 });
 export const adminSimReset = (leagueId: string, week?: number | null) =>
   rpc<{ ok: boolean; error?: string; week?: number }>('admin_sim_reset', { p_league_id: leagueId, p_week: week ?? null });
-export interface SimRun { week: number; src: number; speed: number; status: 'running' | 'done'; started_at: string; cursor_at: number; clock: number }
+export interface SimRun {
+  week: number; src: number; speed: number; status: 'running' | 'done'; started_at: string; cursor_at: number; clock: number;
+  /** The feed's final release time — stamped by the worker's first sweep tick
+   *  of a run (0266); null before that, so pct is a fallback-aware read. */
+  feed_len?: number | null;
+  /** 0–100, server-computed from clock ÷ feed_len; null until feed_len lands. */
+  pct?: number | null;
+}
 export const simRunState = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; run?: SimRun | null }>('sim_run_state', { p_league_id: leagueId });
 
@@ -2341,6 +2348,16 @@ export const seedLeaguePool = (leagueId: string, players: { slug: string; full: 
     p_players: players.map(({ espnId, exp, sleeperId, ...p }) =>
       ({ ...p, espn_id: espnId ?? null, exp: exp ?? null, sleeper_id: sleeperId ?? null })),
   });
+
+/** Commissioner (0265): rewrite ONE pool row's identity in place — the slug
+ *  rosters and picks reference stays; the person behind it changes. The pen
+ *  half of the pool doctor; diagnosis is diagnosePoolGhosts (nativeLeague). */
+export const commishRepairPoolRow = (leagueId: string, slug: string,
+  fix: { full: string; pos: string; team: string; espnId?: string; exp?: number; sleeperId?: string }) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_repair_pool_row', {
+    p_league_id: leagueId, p_slug: slug, p_full: fix.full, p_pos: fix.pos, p_team: fix.team,
+    p_espn_id: fix.espnId ?? null, p_exp: fix.exp ?? null, p_sleeper_id: fix.sleeperId ?? null,
+  }), 'commish_repair_pool_row');
 
 // ── The league's slug → Sleeper id map (0205) ──────────────────────────────
 // Only the PROJECTION path needs it, so it rides its own small call rather
