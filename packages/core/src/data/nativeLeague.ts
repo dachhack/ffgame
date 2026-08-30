@@ -162,8 +162,15 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   };
 
   const ppr = pprBySlug();
-  const best = new Map<string, DraftPoolEntry & { score: number }>();
+  const best = new Map<string, DraftPoolEntry & { score: number; srank?: number }>();
   for (const p of dir.values()) {
+    // Retired / out-of-the-league players never belong in a pool. Without this
+    // an inactive NAME-TWIN of a ranked player inherits his slug-keyed ADP
+    // below, sails past the no-team filter, TIES his score — and stable sort
+    // then let directory order decide who keeps the clean slug. That is how
+    // "Kenneth Walker" (a retired WR, no team) beat Kenneth Walker III to
+    // `kenneth-walker` and drafted as WR · FA with a permanent BYE card.
+    if (p.active === false) continue;
     const isIdp = p.pos === 'DL' || p.pos === 'LB' || p.pos === 'DB';
     if (isIdp && !wantIdp) continue;
     if (p.pos === 'FB' && !wantFb) continue;
@@ -196,7 +203,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
       // headshots for players outside the baked 2025 map (i.e. rookies).
       // exp (0172) rides along too — league_pool stores it so per-slot tenure
       // filters can check eligibility at lineup time.
-      best.set(p.id, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, sleeperId: p.id, score });
+      best.set(p.id, { slug, full: p.full, pos: p.pos, team: p.team ?? 'FA', espnId: p.espnId, exp: p.exp, sleeperId: p.id, score, srank: p.rank });
     }
   }
   // K / D-ST / HC / P are TEAM-KEYED pseudo-players: one per NFL club, with no
@@ -210,9 +217,13 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   const tenureFiltered = minExp != null || maxExp != null;
   const pseudo = (tenureFiltered ? [] : [...kdstEntries(), ...hcPuntEntries(extras)])
     .filter((e) => !teams || teams.has(e.team.toUpperCase()));
-  const rows = [...best.values(), ...pseudo];
-  rows.sort((a, b) => a.score - b.score || a.slug.localeCompare(b.slug));
+  const rows: (DraftPoolEntry & { score: number; srank?: number })[] = [...best.values(), ...pseudo];
+  // search_rank breaks score TIES before the slug does: two active name-twins
+  // share a slug-keyed ADP, and the one Sleeper considers relevant must rank
+  // first — sorted-best-first is what disambiguateSlugs uses to decide who
+  // keeps the clean slug (and with it every slug-keyed bake).
+  rows.sort((a, b) => a.score - b.score || (a.srank ?? Infinity) - (b.srank ?? Infinity) || a.slug.localeCompare(b.slug));
   // Extras widen the universe — let the pool grow to the server's ceiling.
   const cap = extras.length ? 2000 : POOL_CAP;
-  return rows.slice(0, cap).map(({ score: _score, ...r }) => r);
+  return rows.slice(0, cap).map(({ score: _score, srank: _srank, ...r }) => r);
 }
