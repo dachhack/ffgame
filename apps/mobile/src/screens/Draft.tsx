@@ -442,6 +442,20 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
 
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
 
+      {/* 0269: the coven, named — without this the room just shows fewer
+          seats than the league has teams and nobody knows why. */}
+      {(st.vampires ?? []).length > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 10 }}>
+          <Text style={{ fontSize: 12 }}>🧛</Text>
+          <Mono size={9} tone="dim" style={{ flex: 1, lineHeight: 14 }}>
+            {(st.vampires ?? []).map((v) => v.team ?? `Team ${v.roster_id}`).join(', ')}
+            {(st.vampires ?? []).length === 1
+              ? ' is the vampire — it sits this draft out with no picks, and builds its roster from whatever the draft leaves in the pool.'
+              : ' are the vampires — they sit this draft out with no picks, and build their rosters from whatever the draft leaves in the pool.'}
+          </Mono>
+        </View>
+      )}
+
       {st.status === 'pending' && (
         <Card>
           <Display size={15}>Waiting to start</Display>

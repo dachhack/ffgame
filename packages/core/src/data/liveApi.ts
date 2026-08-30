@@ -996,7 +996,7 @@ export interface AdminUser { id: string; email: string | null; sleeper_username:
  *  only, and never set for hand-assigned seats (those carry claim_email and are
  *  deliberately independent of Sleeper). Advisory: a refresh flags it, it never
  *  clears the seat on its own. */
-export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; /** Division label (0215). */ division?: string | null; }
+export interface AdminMember { roster_id: number; team: string; owner: string | null; enrolled: boolean; email: string | null; sleeper: string | null; controller?: Controller; avatar?: string | null; claim_email?: string | null; drifted?: boolean; /** Drip-coin balance (0130); 0 for a wallet never minted. */ coin?: number; /** Division label (0215). */ division?: string | null; /** This seat is a vampire (0269). */ vampire?: boolean; }
 export interface AdminAdmin { email: string; note: string | null; }
 export interface MemberRow { roster_id: number; owner_id: string | null; team_name: string; }
 export interface MatchupRow { sleeper_matchup_id: number | null; home_roster_id: number; away_roster_id: number; }
@@ -2122,7 +2122,7 @@ export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: numb
   }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
-export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; }
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; /** This seat is a vampire (0269) — badge it wherever the row renders. */ vampire?: boolean; }
 export interface PlayoffMatchup {
   id: string; week: number; round: number; pos: number; label: string | null; status: string;
   /** Consolation-ladder game (never blocks bracket advancement). */
@@ -2533,6 +2533,9 @@ export interface DraftState {
   /** True ⇒ the on-clock seat is vacant/AI/autodraft — a draft_tick will act now. */
   on_clock_auto: boolean | null;
   deadline_at: string | null; server_now: string; picks: DraftPickRow[];
+  /** Vampire seats (0269): they sit the draft out — no picks, no order slot —
+   *  and build from the leftover pool. Named so the room can SAY it. */
+  vampires?: { roster_id: number; team: string | null }[];
   budget: number | null;
   lot_seconds: number;
   /** Auction: up to max_lots lots run in parallel. my_proxy/my_max are the

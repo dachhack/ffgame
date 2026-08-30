@@ -78,7 +78,7 @@ export function Standings({ leagueId, myRoster }: { leagueId: string; myRoster: 
             <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
               <Mono size={9} tone="faint" style={{ width: 18 }}>{label}</Mono>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: me ? t.you : t.text, fontWeight: me ? '700' : '400' }}>
-                {r.team ?? `Roster ${r.roster_id}`}{leader ? ' ★' : ''}
+                {r.vampire ? '🧛 ' : ''}{r.team ?? `Roster ${r.roster_id}`}{leader ? ' ★' : ''}
               </Text>
               <Mono size={9.5} weight="700" style={{ width: 44, textAlign: 'right' }}>
                 {r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}

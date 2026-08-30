@@ -1285,6 +1285,19 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
         )}
       </div>
 
+      {/* 0269: the coven, named — without this the room just shows fewer
+          columns than the league has teams and nobody knows why. */}
+      {(st.vampires ?? []).length > 0 && (
+        <div className="mono" style={{ display: 'flex', alignItems: 'flex-start', gap: 7, flexWrap: 'wrap', fontSize: 10, color: 'var(--dim)', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))', border: '1px dashed var(--bd)', borderRadius: 6, padding: '7px 10px', marginBottom: 12, lineHeight: 1.5 }}>
+          <span style={{ fontSize: 12 }}>🧛</span>
+          <span style={{ flex: 1, minWidth: 200 }}>
+            <b style={{ color: 'var(--text)' }}>{(st.vampires ?? []).map((v) => v.team ?? `Team ${v.roster_id}`).join(', ')}</b>
+            {(st.vampires ?? []).length === 1
+              ? ' is the vampire — it sits this draft out with no picks, and builds its roster from whatever the draft leaves in the pool.'
+              : ' are the vampires — they sit this draft out with no picks, and build their rosters from whatever the draft leaves in the pool.'}
+          </span>
+        </div>
+      )}
       {st.status === 'pending' && (
         <div style={{ ...card, marginBottom: 12 }}>
           <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Waiting to start</div>

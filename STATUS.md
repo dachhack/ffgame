@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.380.0 — the coven wears its fangs (0269)
+
+Founder: "let's make it clear in the draft which teams are vampires and
+won't get picks. Also make it clear throughout the app/web experience."
+0268's draft exclusion was correct and silent — a room with fewer
+columns than the league has teams, unexplained. 0269 (bodies copied
+from the live 0193/0249/0253 definitions): draft_state gains
+`vampires` [{roster_id, team}]; league_standings and
+admin_league_members rows gain `vampire` — every flag gated on
+league_format='vampire' so stale seats keys show nothing (probed).
+Both draft rooms (web DraftRoom, app Draft) render a 🧛 banner naming
+who sits the draft out and why ("builds its roster from whatever the
+draft leaves in the pool"); standings rows on both hosts, the web
+league results scoreboard, the web admin members table and the app's
+commish seat list all wear a 🧛 prefix on vampire team names. The
+league-home vampire card (0268) already named the coven. Probes: coven
+suite section 5 (draft_state naming, exact-coven flags on standings +
+members, the format gate). App half rides the next APK (36919).
+
 ### v0.379.1 — Tier-2 CVD audit: color is never the only channel
 
 Founder: "let's do the tier 2 audit." Swept BOTH hosts for the tell —
