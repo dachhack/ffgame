@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.376.2 — the retired name-twin ghost (K. Walker WR · FA) (0264)
+
+Founder (screenshot, bench card "K. Walker · WR · FA · BYE"): "Walker is
+an RB." Sleeper's directory carries a RETIRED Kenneth Walker (WR, no
+team, inactive) beside Kenneth Walker III, and buildDraftPool's ADP
+lookup is slug-keyed — the ghost inherited the RB's ADP through the
+shared `kenneth-walker` slug, survived the no-team filter, TIED the
+RB's score, and stable sort let directory order hand him the clean slug
+(the RB got `-8151`, 0205). Drafting the clean slug bought a ghost:
+WR · FA, permanent BYE. Two-part fix: (client) inactive directory
+players never enter a pool, and score ties break by search_rank before
+slug order, so the relevant twin keeps the clean slug and its bakes;
+(0264) repair_pool_fa_twins() moves the twin's identity onto the clean
+slug already on rosters, deletes the twin row, rematerializes scheduled
+weeks — guarded to never touch a twin someone deliberately drafted, and
+run once by the migration itself. Probes: pool-twin-repair-probes.sql
+wired into the runner.
+
 ### v0.376.1 — app: chat drafts wrap and the box grows
 
 Founder (screenshot, mid-league-chat): "Need the chat to wrap and the
