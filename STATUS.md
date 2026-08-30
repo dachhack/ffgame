@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.377.0 — the chopping block + the feeding log (0267)
+
+Founder: "in the league home for guillotine leagues we need a chopping
+block view … I need to be able to see how this works in a sim. We also
+need a vampire view … the vampire's wins and who they took." Both
+format cards existed (0221/0222) but couldn't show a week IN FLIGHT:
+guillotine_state.alive.pts reads finals (null mid-week — and mid-SIM),
+so every survivor rendered scoreless. 0267 (bodies copied from the live
+0247/0222 definitions): alive rows gain `live` (the seat's
+matchup_state per-window banks summed — the same rows the boards read)
+and an honest `bye` (no-matchup test, not "no final yet"); the cutline
+sorts final-else-live, byes last; fallen rows gain `pts` (the score the
+blade fell on). vampire_state gains seat_team, `record` (a tie is not
+a win) and `weeks` — every finaled week from the vampire's chair with
+the opponent named; steals gain victim_team. App league home: 🔪 THE
+CHOPPING BLOCK (live ~totals, blade on the floor, list scales down as
+teams die, 🪓 CHOPPED week-by-week with fatal scores) and 🧛 gains the
+record line + 🩸 THE FEEDING LOG (W/L per week, took X · gave Y,
+vetoed / never-fed noted). Both cards poll at 20s and re-poke the
+idempotent tick, so a sim's eliminations land while you watch — the
+worker's sweep (0249) already drops the blade when a simmed week
+finals. Vampire drafts stay ordinary: the vampire is a normal draft
+seat; only its season is different (no FA/waivers — steals off wins,
+one per fresh win, optional commish review). Rides the next APK.
+Probes: chopping-block-probes.sql (+ the existing format suite caught a
+plpgsql alias collision in review — mu the variable vs mu the table).
+
 ### v0.376.3 — the pool doctor (0265) + rehearsal in percent at 100× (0266)
 
 Two founder asks. FIRST, the K. Walker ghost's real anatomy: 0264's

@@ -2290,10 +2290,13 @@ export interface GuillotineState {
   guillotine: boolean;
   week?: number | null;
   champion?: number | null;
-  /** `pts` is null and `bye` true for a seat with no matchup that week (0247):
-   *  a bye is not a zero, and a team on bye cannot be eliminated. */
-  alive?: { roster_id: number; team: string | null; pts: number | null; bye?: boolean }[];
-  fallen?: { roster_id: number; team: string | null; week: number }[];
+  /** `pts` is the FINAL score (null until the week finals); `live` is the
+   *  in-flight matchup_state total (0267) — the chopping block's mid-week
+   *  number, null on a true bye. `bye` is now a real no-matchup test (0267),
+   *  not "no final yet". Sorted by what is known: final, else live; byes last. */
+  alive?: { roster_id: number; team: string | null; pts: number | null; live?: number | null; bye?: boolean }[];
+  /** `pts` (0267): the score the blade fell on in that team's fatal week. */
+  fallen?: { roster_id: number; team: string | null; week: number; pts?: number | null }[];
   /** The frenzy: released players still clearing waivers, best rank first. */
   frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];
 }
@@ -2321,7 +2324,12 @@ export interface VampireState {
   victim?: number | null;
   /** This week's steal is already declared or executed. */
   fed?: boolean;
-  steals?: { id: number; week: number; victim: number; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
+  /** The vampire's seat name + season line (0267). A tie is not a win. */
+  seat_team?: string | null;
+  record?: { wins: number; losses: number } | null;
+  /** Every finaled week from the vampire's chair, newest first (0267). */
+  weeks?: { week: number; opp: number; opp_team: string | null; for: number; against: number; won: boolean }[];
+  steals?: { id: number; week: number; victim: number; victim_team?: string | null; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
 }
 export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
 /** Seed the draftable player universe (commissioner, pre-draft only). */
