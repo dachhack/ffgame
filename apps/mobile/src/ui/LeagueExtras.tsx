@@ -374,43 +374,58 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
   const t = useTheme();
   const [st, setSt] = useState<GuillotineState | null>(null);
 
+  // Poll, don't just load (v0.377.0): the founder watches the blade fall in a
+  // SIM, where a whole week finals in minutes — a mount-once card is a lie
+  // within one. The tick is idempotent, so re-poking each pass is free.
   useEffect(() => {
-    guillotineTick(leagueId).catch(() => {})
-      .then(() => guillotineState(leagueId)).then(setSt)
-      .catch(() => setSt({ guillotine: false }));
+    let on = true;
+    const load = () =>
+      guillotineTick(leagueId).catch(() => {})
+        .then(() => guillotineState(leagueId)).then((s) => { if (on) setSt(s); })
+        .catch(() => { if (on) setSt((p) => p ?? { guillotine: false }); });
+    void load();
+    const id = setInterval(() => void load(), 20_000);
+    return () => { on = false; clearInterval(id); };
   }, [leagueId]);
 
   if (!st?.guillotine) return null;
   const alive = st.alive ?? [];
   const fallen = st.fallen ?? [];
   const frenzy = st.frenzy ?? [];
+  const fmt1 = (n: number) => Math.round(n * 10) / 10;
   return (
     <Card>
-      <LabelInfo label="🔪 THE CUTLINE"
-        info={'Guillotine rules: each week, the lowest-scoring team still alive is ELIMINATED — its whole roster is released to waivers (the frenzy), where the big FAAB budget decides who lands the spoils.\n\nThere are no head-to-head stakes; the only standing that matters is staying off the floor. A tie at the bottom dies by the weaker season. The last team standing wins.\n\nEliminated teams keep their seat at the table — chat, the pots — but can never add a player again.'} />
+      <LabelInfo label="🔪 THE CHOPPING BLOCK"
+        info={'Guillotine rules: each week, the lowest-scoring team still alive is ELIMINATED — its whole roster is released to waivers (the frenzy), where the big FAAB budget decides who lands the spoils.\n\nThere are no head-to-head stakes; the only standing that matters is staying off the floor. A tie at the bottom dies by the weaker season. The last team standing wins.\n\nWhile a week is in flight the block shows LIVE totals (~) — the order is who falls if it ended now. Eliminated teams keep their seat at the table — chat, the pots — but can never add a player again.'} />
       {st.champion != null ? (
         <Mono size={11} weight="700" tone="you" style={{ marginTop: 6 }}>
           🏆 {alive[0]?.team ?? `Roster ${st.champion}`} — the last one standing
         </Mono>
       ) : (
         <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
-          {alive.length} alive · week {st.week ?? '—'} · the lowest score falls
+          {alive.length} left · week {st.week ?? '—'} · the lowest score falls
         </Mono>
       )}
+      {/* the survivors, nearest the blade first — the list itself shrinks as
+          the season chops, so the view always scales to who's left */}
       <View style={{ marginTop: 8 }}>
         {alive.map((a, i) => {
           // 0247: a byed seat has no score and cannot fall this week, so it is
           // never the one under the blade — however the list happens to sort.
           const doomed = st.champion == null && i === 0 && !a.bye;
           const mine = a.roster_id === myRoster;
+          const liveNow = a.pts == null && a.live != null;
           return (
             <View key={a.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
               <Text style={{ fontSize: fs(12), width: 18, textAlign: 'center' }}>{doomed ? '🔪' : ''}</Text>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: mine ? t.you : doomed ? t.opp : t.text, fontWeight: mine || doomed ? '700' : '400' }}>
                 {a.team ?? `Roster ${a.roster_id}`}
               </Text>
-              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : a.bye ? 'faint' : undefined}>
-                {a.bye || a.pts == null ? 'BYE' : Math.round(a.pts * 10) / 10}
+              <Mono size={9.5} weight="700" tone={doomed ? 'opp' : a.bye ? 'faint' : liveNow ? 'dim' : undefined}>
+                {a.bye ? 'BYE'
+                  : a.pts != null ? fmt1(a.pts)
+                  : liveNow ? `~${fmt1(a.live!)}`
+                  : '—'}
               </Mono>
             </View>
           );
@@ -428,10 +443,20 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
           {frenzy.length > 12 && <Mono size={8.5} tone="faint">…and {frenzy.length - 12} more on the wire</Mono>}
         </View>
       )}
+      {/* the chopped, week by week — the season's record of the blade */}
       {fallen.length > 0 && (
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-          Fallen: {fallen.map((f) => `${f.team ?? `Roster ${f.roster_id}`} (wk ${f.week})`).join(' · ')}
-        </Mono>
+        <View style={{ marginTop: 10 }}>
+          <Mono size={9} tone="opp" weight="700" track={0.12}>🪓 CHOPPED</Mono>
+          {[...fallen].reverse().map((f) => (
+            <View key={f.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Mono size={8.5} tone="faint" style={{ width: 38 }}>WK {f.week}</Mono>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: f.roster_id === myRoster ? t.you : t.text }}>
+                {f.team ?? `Roster ${f.roster_id}`}
+              </Text>
+              <Mono size={9} tone="faint">{f.pts != null ? fmt1(f.pts) : ''}</Mono>
+            </View>
+          ))}
+        </View>
       )}
     </Card>
   );
@@ -453,7 +478,14 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
     leaguePool(leagueId).then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p])))).catch(() => {}),
     nativeRosters(leagueId).then((rs) => setRosters(rs.map((r) => ({ roster_id: r.roster_id, slug: r.slug })))).catch(() => {}),
   ]).catch(() => setSt({ vampire: false }));
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  // Poll like the chopping block (v0.377.0): a SIM finals weeks in minutes,
+  // and the feeding log should fill in while the founder watches.
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 20_000);
+    return () => clearInterval(id);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leagueId]);
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done?: string) => {
     if (busy) return;
@@ -477,7 +509,7 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
         info={'Vampire rules: one seat lives off wins alone. The vampire can\'t sign free agents or claim waivers — but when it WINS a matchup, it steals one player from the beaten team\'s active roster, giving one of its own back.\n\nOne steal per win, and only while the win is fresh (the latest completed week). When the commissioner has steal approval on, each steal parks as PENDING until they rule.\n\nEvery bite prints in the league register.'} />
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
         {st.seat == null ? 'No vampire appointed yet — the commissioner picks the seat in ⚑ COMMISH.'
-          : `Seat ${st.seat} feeds on wins${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
+          : `${st.seat_team ?? `Seat ${st.seat}`} feeds on wins${st.record ? ` · ${st.record.wins}–${st.record.losses}` : ''}${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
       </Mono>
       {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
       {/* the bite: vampire won the latest completed week and hasn't fed */}
@@ -520,10 +552,42 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
           </View>
         </View>
       ))}
-      {(st.steals ?? []).length > 0 && (
-        <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(13) }}>
-          Feeding history: {(st.steals ?? []).map((s) => `wk${s.week} ${nameOf(s.take)} (${s.status})`).join(' · ')}
-        </Mono>
+      {/* 🩸 THE FEEDING LOG (v0.377.0): every finaled week from the vampire's
+          chair — the win, the victim, and who was taken for whom. */}
+      {(st.weeks ?? []).length > 0 && (
+        <View style={{ marginTop: 10 }}>
+          <Mono size={9} tone="warn" weight="700" track={0.12}>🩸 THE FEEDING LOG</Mono>
+          {(st.weeks ?? []).map((w) => {
+            const s = (st.steals ?? []).find((x) => x.week === w.week && x.status !== 'vetoed');
+            const vetoed = (st.steals ?? []).find((x) => x.week === w.week && x.status === 'vetoed');
+            return (
+              <View key={w.week} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mono size={8.5} tone="faint" style={{ width: 38 }}>WK {w.week}</Mono>
+                  <Mono size={9.5} weight="700" tone={w.won ? 'you' : 'opp'}>{w.won ? 'W' : 'L'}</Mono>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
+                    {Math.round(w.for * 10) / 10}–{Math.round(w.against * 10) / 10} vs {w.opp_team ?? `Roster ${w.opp}`}
+                  </Text>
+                </View>
+                {s && (
+                  <Mono size={8.5} tone="dim" style={{ marginTop: 2, marginLeft: 46 }}>
+                    🧛 took {nameOf(s.take)} · gave {nameOf(s.give)}{s.status === 'pending' ? ' (awaiting the ruling)' : ''}
+                  </Mono>
+                )}
+                {!s && vetoed && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 2, marginLeft: 46 }}>
+                    steal vetoed — {nameOf(vetoed.take)} stays put
+                  </Mono>
+                )}
+                {/* the latest week's open window is the bite UI's story, not
+                    the log's — "never fed" is only true once the win expired */}
+                {!s && !vetoed && w.won && w.week !== st.week && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 2, marginLeft: 46 }}>won, never fed</Mono>
+                )}
+              </View>
+            );
+          })}
+        </View>
       )}
     </Card>
   );

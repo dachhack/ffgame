@@ -67,7 +67,11 @@ for (const f of ['src/screens/Matchup.tsx', 'src/screens/MatchupFinal.tsx']) {
 // that could not be eliminated still looked like the one about to be.
 {
   const ex = read('apps/mobile/src/ui/LeagueExtras.tsx');
-  ok('a byed seat prints BYE, not a number', /a\.bye \|\| a\.pts == null \? 'BYE'/.test(ex));
+  // 0267: bye is a REAL no-matchup flag from the server now, so the client
+  // tests it alone — and a live (un-final) total prints as provisional (~),
+  // never as a number that reads like a final.
+  ok('a byed seat prints BYE, not a number', /a\.bye \? 'BYE'/.test(ex));
+  ok('…a live total is marked provisional, not passed off as final', /`~\$\{fmt1\(a\.live!\)\}`/.test(ex));
   ok('…and is never marked as the one under the blade', /i === 0 && !a\.bye/.test(ex));
 
   const mig = read('supabase/migrations/0247_bye_week.sql');

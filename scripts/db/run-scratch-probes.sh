@@ -155,3 +155,4 @@ $RUN -f scripts/db/convert-league-probes.sql | grep -E "PROBE FAIL|ALL CONVERT-L
 $RUN -f scripts/db/pool-twin-repair-probes.sql | grep -E "PROBE FAIL|ALL POOL-TWIN-REPAIR PROBES" || { echo "POOL-TWIN-REPAIR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/pool-doctor-probes.sql | grep -E "PROBE FAIL|ALL POOL-DOCTOR PROBES" || { echo "POOL-DOCTOR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/sim-percent-probes.sql | grep -E "PROBE FAIL|ALL SIM-PERCENT PROBES" || { echo "SIM-PERCENT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/chopping-block-probes.sql | grep -E "PROBE FAIL|ALL CHOPPING-BLOCK PROBES" || { echo "CHOPPING-BLOCK PROBES FAILED"; exit 1; }
