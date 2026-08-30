@@ -1,7 +1,15 @@
 // Design tokens from the Gridiron Clash handoff. Three interchangeable themes,
 // applied as CSS custom properties on the app root. Default = "prime".
 
-export type ThemeName = 'tactical' | 'neon' | 'prime' | 'daylight' | 'arctic' | 'slate' | 'dusk';
+export type ThemeName = 'tactical' | 'neon' | 'prime' | 'daylight' | 'arctic' | 'slate' | 'dusk' | 'clarity' | 'lumen';
+
+/** Themes built to be COLORBLIND-ACCESSIBLE (v0.379.0): you/opp/warn anchored
+ *  on the Okabe-Ito colorblind-safe palette (sky blue vs vermillion vs yellow)
+ *  and separated by LUMINANCE as well as hue, so the pairs survive protanopia,
+ *  deuteranopia, tritanopia — and grayscale. scripts/check-themes.mjs holds
+ *  every theme listed here to contrast + simulated-CVD distance floors; add a
+ *  theme to this list and the battery starts enforcing it. */
+export const ACCESSIBLE_THEMES: ThemeName[] = ['clarity', 'lumen'];
 
 export interface Theme {
   bg: string;
@@ -183,6 +191,62 @@ export const THEMES: Record<ThemeName, Theme> = {
       HC: { bg: '#241212', fg: '#D67E7E', bd: '#471F1F' },
       P: { bg: '#12202A', fg: '#7EB8E0', bd: '#1F3A4A' },
       RET: { bg: '#241224', fg: '#D67ED6', bd: '#471F47' },
+    },
+  },
+
+  // ── Colorblind-accessible themes (v0.379.0) ───────────────────────────────
+  // The whole game runs on you-vs-opp, and every theme above says it in
+  // green-vs-red — the one pair ~8% of men can't tell apart. These two say it
+  // in SKY BLUE vs VERMILLION (the Okabe-Ito safe pair), with warn as a
+  // yellow a full luminance step away, so the opposition reads under every
+  // common CVD type and in grayscale. Position chips keep their letters as
+  // the real channel; their colors here are spread by brightness, not just
+  // hue. check-themes.mjs enforces all of it.
+  clarity: {
+    bg: '#171A20', surface: '#20242C', sh: '#292E38', bd: '#303645', bdh: '#404859',
+    text: '#F1F4F9', dim: '#9AA3B3', faint: '#6B7382', mid: '#B9C1CF', dimstrong: '#DCE1EA',
+    you: '#56B4E9', opp: '#E8702E', warn: '#F0D048', onAccent: '#12151B',
+    fx: { nuke: '#E8702E', erase: '#E8702E', reset: '#E69F00', streak: '#CC79A7', mult: '#56B4E9', compression: '#37C9A0', stop: '#9AA3B3', sys: '#7C8494' },
+    pos: {
+      QB: { bg: '#12283C', fg: '#6FBEF5', bd: '#1F425F' },
+      RB: { bg: '#0F2B24', fg: '#46D3AC', bd: '#1C4A3E' },
+      WR: { bg: '#241A3E', fg: '#C9A4F5', bd: '#3E2C68' },
+      TE: { bg: '#31220C', fg: '#EFB040', bd: '#57401C' },
+      K: { bg: '#33190C', fg: '#F08A57', bd: '#5A2F18' },
+      DEF: { bg: '#20222A', fg: '#B8BFCB', bd: '#363B47' },
+      DL: { bg: '#2C1D10', fg: '#DDA36A', bd: '#4E3520' },
+      LB: { bg: '#0F2724', fg: '#6BD3C4', bd: '#1D453F' },
+      DB: { bg: '#1D1A33', fg: '#ACA4E8', bd: '#332D58' },
+      FB: { bg: '#232A10', fg: '#C9D46A', bd: '#3F4A20' },
+      HC: { bg: '#2B1616', fg: '#DE8B8B', bd: '#4C2727' },
+      P: { bg: '#12222E', fg: '#7FBBDF', bd: '#203B4E' },
+      RET: { bg: '#261326', fg: '#DB8BD3', bd: '#442544' },
+    },
+  },
+  lumen: {
+    bg: '#EDF0F5', surface: '#FCFDFF', sh: '#E2E6EE', bd: '#D3D9E4', bdh: '#B8C1D2',
+    text: '#1D222B', dim: '#5D6675', faint: '#8A93A3', mid: '#3F4959', dimstrong: '#2B323E',
+    // warn is a deep VIOLET, not amber: on a light ground all three accents
+    // must run dark (one shared onAccent = white), and at those luminances a
+    // yellow collapses into the vermillion under protan/deutan — the violet
+    // separates from both by ΔE ≥ 26 in every simulation (check-themes.mjs
+    // holds it there).
+    you: '#0072B2', opp: '#9A3800', warn: '#4A2E66', onAccent: '#FFFFFF',
+    fx: { nuke: '#9A3800', erase: '#9A3800', reset: '#8A6100', streak: '#7A46A8', mult: '#0072B2', compression: '#00775C', stop: '#5D6675', sys: '#707888' },
+    pos: {
+      QB: { bg: '#D9E9FA', fg: '#155E9E', bd: '#AACBEE' },
+      RB: { bg: '#D6F1E8', fg: '#00745C', bd: '#A4DCCB' },
+      WR: { bg: '#E7E0F8', fg: '#5F44B0', bd: '#C8BCEC' },
+      TE: { bg: '#F8E9D0', fg: '#8A5E14', bd: '#EACFA0' },
+      K: { bg: '#FADFD0', fg: '#A84A12', bd: '#F0BEA2' },
+      DEF: { bg: '#E5E8ED', fg: '#535E6D', bd: '#CBD2DB' },
+      DL: { bg: '#F8E7D6', fg: '#8F561F', bd: '#EACAA8' },
+      LB: { bg: '#D6F0EC', fg: '#0B7264', bd: '#A4DBD2' },
+      DB: { bg: '#E6DFF8', fg: '#5940AE', bd: '#C7BAEC' },
+      FB: { bg: '#EEF4D4', fg: '#5C7218', bd: '#D6E6A2' },
+      HC: { bg: '#FAD9D9', fg: '#993030', bd: '#EFB2B2' },
+      P: { bg: '#D8EAF7', fg: '#20618F', bd: '#A9CDE8' },
+      RET: { bg: '#F5DBF2', fg: '#8A3480', bd: '#E8B5E2' },
     },
   },
 };

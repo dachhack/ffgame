@@ -10,7 +10,7 @@ Instead of accumulating raw points, you assign each roster player to a game-time
 
 ## What's in the demo
 
-Four screens, fully navigable, in seven switchable themes (`tactical` / `neon` / `prime` / `daylight` / `arctic` / `slate` / `dusk`):
+Four screens, fully navigable, in nine switchable themes (`tactical` / `neon` / `prime` / `daylight` / `arctic` / `slate` / `dusk`, plus the colorblind-accessible pair `clarity` / `lumen` — blue-vs-orange instead of green-vs-red, validated for protanopia/deuteranopia/tritanopia and grayscale by `scripts/check-themes.mjs`):
 
 1. **League Hub** — your Sleeper dynasty portfolio.
 2. **League Overview** — Drip Test League standings, your week matchup, full-season schedule, every team's roster, and the waiver wire (all real 2025 NFL data).
