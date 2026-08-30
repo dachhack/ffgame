@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.381.1 — the sim really runs fast now: the 20× override + 600× (0270)
+
+Founder (screenshot): "mobile web still has time and not % complete.
+Also says 20x." The 20× was OURS: liveApi's adminSimStart sent
+`p_speed: speed ?? 20` — a client literal silently overriding the
+server default on every strip-armed run, so 0266's 100× never applied.
+Now `?? null`: the SERVER owns the default. The time-not-% readout was
+the documented first-tick window (feed_len stamps on the worker's first
+sweep; the screenshot was ~10s into a 20× run) — made moot by the rest.
+Then: "I want the feed to take like 20 sec." The feed spans one full
+broadcast (~11,500 game-seconds), so ~20s ≈ 600×. 0270 (0266's body,
+two literals): default 600×, cap 200 → 2000. Known shape: the worker
+sweeps sims every 25s, so at 600× a week completes in one or two ticks
+— scheduled → FINAL in a jump, which is what a testing loop wants;
+spectacle runs can still pass a lower explicit speed (playLive's 300×
+untouched). sim-percent probes re-pinned to 600. Rides APK 36921
+(36920 was built but never shipped — the 20× was baked in).
+
 ### v0.381.0 — app: the sim strip (rehearsals run from the phone)
 
 Founder: "can I run the sim on the app?" → "yes add the sim strip to
