@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.381.0 — app: the sim strip (rehearsals run from the phone)
+
+Founder: "can I run the sim on the app?" → "yes add the sim strip to
+the app." The app could WATCH a rehearsal (v0.367.2 feed-is-truth
+override) but only the web could arm one. New
+apps/mobile/src/ui/SimStrip.tsx mirrors the web strip over the same
+three RPCs (adminSimStart / adminSimReset / simRunState, % readout
+included): ▶ SIM WEEK N, ⏹ RESET (Alert-confirmed), 10s poll, "the
+worker is driving" line — server-gated exactly like the web (the
+sim_run_state probe answers forbidden to non-admins and the strip
+renders nothing). Mounted on BOTH app boards: ClassicBoard (gated on
+its testLive read) and LivePicks/the drip board (unconditional mount,
+self-hiding — one probe RPC); both wire onChanged to their
+pull-refresh so a reset repaints immediately. The whole vampire drill
+— arm, watch, feed, reset — now runs from one phone. Rides APK 36920.
+
 ### v0.380.0 — the coven wears its fangs (0269)
 
 Founder: "let's make it clear in the draft which teams are vampires and

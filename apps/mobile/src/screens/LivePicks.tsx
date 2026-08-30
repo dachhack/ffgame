@@ -44,6 +44,7 @@ import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
 import { SetupRow } from '../ui/SetupRow';
+import { SimStrip } from '../ui/SimStrip';
 import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
 import { ShopModal } from '../ui/ShopModal';
@@ -863,6 +864,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       contentContainerStyle={{ padding: 12, paddingBottom: (hand.length ? HAND_TAB_H + 24 : 40) + 64 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}
     >
+      {/* 🧪 SIM STRIP (v0.381.0): the web rehearsal controls on the drip board
+          too — server-gated, renders for a super-admin on a LIVE TEST league
+          and for nobody else. */}
+      {matchup && week > 0 && leagueId && (
+        <SimStrip leagueId={leagueId} week={week} onChanged={() => void onPullRefresh()} />
+      )}
       {/* Week + score on ONE line — the web's slim strip. This was a full card
           headed THIS WEEK with two 38px numerals, which is a lot of screen for
           "0 vs 0" on a Wednesday. The score matters most when it's moving, and
