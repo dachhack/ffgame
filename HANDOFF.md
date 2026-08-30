@@ -1,13 +1,120 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-21 · Build `v0.337.0` · migrations through `0212`_
+_Last updated: 2026-08-29 · Build `v0.375.3` · migrations through `0262`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
 > limits, the bug classes, and what to pick up. This file is the long tail
-> behind it, newest section first. Everything below the v0.337.0 section dates
-> from v0.263.0 and earlier; its design decisions still hold, but its "NEXT
-> SESSION" list does not — use the one in the kickoff prompt.
+> behind it, newest section first. Everything below the v0.375.3 section's
+> design decisions still hold, but only the kickoff prompt's pick-up list is
+> current.
+
+## The preseason live-fire arc (v0.338 → v0.375.3, Aug 22–29)
+
+Driven screenshot-by-screenshot while the founder played real preseason games
+(PRE 4, Aug 27–29) in a live league. `STATUS.md` carries per-version
+reasoning; what follows is the design decisions worth not re-deriving.
+
+### The economy rules the founder set, in their words
+
+- **"Adjustments now take, but they wipe after this week."** Practice weeks
+  (101+) run a throwaway 120/wk purse — `practice_wallet` +
+  `practice_inventory` keyed (league, roster, week). They NEVER touch
+  `team_wallet`/`coin_ledger` (`adjust_wallet` refuses practice; probe 5g pins
+  "no ledger row for practice"). Commish grants during preseason land on the
+  CURRENT practice week's purse (0253); the season wallet takes over after.
+  `league_practice_week(lid)` is the one predicate.
+- **"We shouldn't ever block purchases, just power up usages."** The shop
+  never refuses a sale (0254/0255). Every gate lives at the point of USE.
+- **"Purchase goes to your power up hand and then when you can use it is
+  gated. Nothing expires. No refunds."** Unlocks are CARDS (0256):
+  `wallet_buy_powerup` → inventory; using one consumes it (arm shows a
+  confirm — "Use 1 × …? No refunds"); disarm returns the CARD, never coin.
+- **The three timing scopes** (founder-ruled "1. Locked, 2. scope 1,
+  3. scope 2"): everything gates on the PICK CLOCK — `window_locks_at(week,
+  win)` = kickoff − 1h (0260), error string 'window already locked'. Scope 1
+  (before the week's FIRST lock): Extra Slot only. Scope 2 (any window not yet
+  locked): all other pre cards; mid-week arms are stamped (`buffsAt`, 0259) so
+  the resolvers count a stamped buff only in windows kicking after it —
+  `buffsForWindow(all, at, week, win)` in `engine/matchup.ts` is the shared
+  filter. Scope 3 (live windows): tacticals, unchanged.
+
+### Locked ≠ revealed (0262 — the clock-split to remember)
+
+0260 moved the seal to kickoff − 1h, and `sealed_pick.locked` was ALSO the
+reveal flag in the `sealed_select` RLS (v0.341.1 coupled them when the seal
+ran AT kickoff). Result: both boards handed each side the other's lineup an
+hour early — founder caught it live ("that shouldn't happen until kick off").
+0262 splits the clocks: `locked` = edit seal; the opponent's read waits on
+`window_revealed()` (kickoff; NULL slate falls back to reveal-at-lock so sims
+and probes lose nothing). Neither client changed: both already render the
+hidden hour as SEALED card backs, and `matchup_state` was already
+kickoff-gated (`startedWins` in `server/src/index.js` — the two-clock comment
+there is current). If a reveal-timing bug ever recurs, start at the
+`sealed_select` policy and probe section 17 of
+`scripts/db/preseason-practice-probes.sql`.
+
+### Underdog is a slot MODIFIER, not a metric (0257)
+
+The founder: "under dog isn't a scoring metric." The `underdog` metric is
+gone from `data/metrics.ts`; `unlock-underdog` is now an action card applied
+to YOUR slot (`apply_underdog` RPC; ×1.5 banked while trailing). It flows as
+`extras.underdog: string[]` ('win|slot' keys) through `buildMatchup`,
+`liveResolve` (`youUnderdog`/`theirUnderdog` per jinx key), and the worker's
+targeted-list parse. The slot keeps its real metric.
+
+### Player Swap lands WITH a metric (0261)
+
+A swapped-in player gets `toMetric` (validated, locked-metric gated) or the
+engine's `swapMetricFor(player, metricId)` fallback — defaultMetric per
+position, self-correcting for legacy swap entries. The web swap modal resolves
+the POST-swap identity (swaps overlay current player/metric before rendering).
+
+### Presentation rules now canonical
+
+- **Stat lines are Sleeper-style** (`fmtStat` in `engine/sim.ts`, v0.374.2):
+  every zero block drops (no targets → no rec line; QB 0 TD silent), yards
+  lose their rush/rec prefix, per-block TDs, '—' fallback.
+  `check-box-game.mjs` pins the phrasing.
+- **The box score browses the whole slate** (v0.369.7): one sheet, all games
+  in a horizontal strip (red dot live / grey final), OFFENSE|DEFENSE tabs,
+  and every name opens the player card (v0.375.3) except -dst/-k composites.
+- **The app's hand is the web's hand** (v0.375.0/.1): always dealt, fanned,
+  card feet tucked under the room bar (bar has zIndex/elevation to outrank
+  them), riding the bar's scroll-duck via `ScrollShiftCtx`
+  (`ui/scrollChrome.tsx`). Slot cards wear ONE tappable ⚡N chip → sheet
+  listing targeted plays AND armed team buffs; the relevance predicate
+  `buffAppliesToSpot` lives in core (`data/powerups.ts`), re-exported by
+  `boardParts.tsx` so web and app cannot drift.
+
+### Traps this arc paid for
+
+- **A bare re-export doesn't bind a local name.** `export { x } from '…'` in
+  a module that also CALLS x locally needs the import too.
+- **`enforce_window_lock` fires on DELETE.** Probe teardowns that cascade
+  through a locked window's picks must delete the synthetic slate row first
+  (sections 16d, 17f).
+- **Per-window coin splitting double-pays the stipend** unless you take
+  `coinBreakdown([], week, 0).subtotal` once and add per-window
+  `subtotal - stipend` (liveResolve's `coinFor`).
+- **`git cherry-pick -q` is not a flag.** The ship ritual's cherry-pick step
+  takes no `-q`.
+- **Probe fixture ids collide silently** — league uuid AND sleeper id must
+  both be fresh per fixture (9f5 / 'PRESEASON-PROBE-5').
+
+### Also this arc
+
+- Google Search Console verification file at the site root
+  (`public/google8d5701b5986e8447.html`); sitemap is
+  `https://dripfantasy.com/sitemap.xml` (two public URLs — landing +
+  rulebook — by design; add public pages when they exist).
+- **PII audit answer** (founder asked): Google login uses default scopes
+  only. We hold: email (Supabase `auth.users` + `app_user`), Google's
+  name/avatar in `raw_user_meta_data` (stored by Supabase, never read by
+  code), `claim_email`, push tokens — and both hosts send `email` to PostHog
+  as an identify trait (web `LiveOnboard.tsx:106`, app `App.tsx:216`). No
+  contacts/Gmail/calendar/phone/payment data.
+- APKs this window: 36909–36914 (sequential now, NOT version × 100).
 
 ## Where this arc left off (v0.264.0 → v0.337.0)
 
