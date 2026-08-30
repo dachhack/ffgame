@@ -13,6 +13,7 @@ import {
   adminUserState, type ViewAsState,
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
+  convertLeagueToNative, type ConvertSummary,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   keeperState, rolloverLeague, type KeeperState,
@@ -27,6 +28,7 @@ import {
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
+import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { forceResolve } from '@drip/core/data/forceResolve';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { Avatar, Sheet } from '../app/ui';
@@ -1173,6 +1175,36 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       reload();
     } catch (e) { setBusy(errMsg(e, 'member refresh failed')); }
   };
+  // GO NATIVE (0263): convert this imported league in place. Preview first —
+  // the dry run IS the conversion (rolled back server-side), so what the
+  // panel shows is exactly what commit does. buildDraftPool() is the same
+  // pool creation seeds, so a converted league gets the native "everything
+  // draftable scores" guarantee, with the imported rosters appended where
+  // the directory pool didn't know a player.
+  const [convert, setConvert] = useState<ConvertSummary | null>(null);
+  const previewConvert = async () => {
+    if (busy === 'convert-preview') return;
+    setBusy('convert-preview');
+    try {
+      const r = await convertLeagueToNative(l.league_id, await buildDraftPool(), true);
+      if (!r.ok) { setBusy(r.error ?? 'preview failed'); return; }
+      setConvert(r); setBusy(null);
+    } catch (e) { setBusy(errMsg(e, 'preview failed')); }
+  };
+  const goNative = async () => {
+    if (busy === 'convert') return;
+    const src = l.provider === 'espn' ? 'ESPN' : 'Sleeper';
+    if (!confirm(`Convert ${l.name} to a native league?\n\nSyncing from ${src} stops for good — rosters, waivers and trades are managed in Drip from now on. This cannot be undone.`)) return;
+    setBusy('convert');
+    try {
+      const r = await convertLeagueToNative(l.league_id, await buildDraftPool(), false);
+      if (!r.ok) { setBusy(r.error ?? 'convert failed'); return; }
+      setConvert(null);
+      setBusy(`✓ native — ${r.rostered} players across ${r.teams} rosters, cap ${r.rounds}`);
+      reload();
+    } catch (e) { setBusy(errMsg(e, 'convert failed')); }
+  };
+
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
     const r = await adminRegenCode(l.league_id, which);
@@ -1338,7 +1370,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {open && <>
 
       {/* 'sync' / 'members' are in-progress sentinels shown on their own buttons. */}
-      {busy && busy !== 'sync' && busy !== 'members' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
+      {busy && busy !== 'sync' && busy !== 'members' && busy !== 'convert' && busy !== 'convert-preview' && <div className="mono" style={{ ...mono, fontSize: 12, color: busy.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{busy}</div>}
 
       {/* Desktop gets the grouped RAIL, narrow screens the grouped HUB — both
           driving the same `tab` state, so a destination behaves identically
@@ -1457,6 +1489,41 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
               <button onClick={refreshMembers} disabled={busy === 'members'} className="mono" style={btn(false)} title="re-pull each roster's owner + team name from Sleeper">{busy === 'members' ? 'refreshing…' : '⟳ refresh members'}</button>
               <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>re-pulls owners + team names from Sleeper; never un-enrolls anyone who already joined</span>
             </div>
+          </div>
+          )}
+          {/* GO NATIVE (0263): the one-way door out of the import. Pre-season
+              only (the RPC refuses once a matchup has locked); preview and
+              commit are the same server code path. */}
+          {l.provider !== 'native' && (
+          <div>
+            <div style={subhead}>GO NATIVE</div>
+            {!convert ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button onClick={previewConvert} disabled={busy === 'convert-preview'} className="mono" style={btn(false)} title="dry-run the conversion and show what it would do — changes nothing">{busy === 'convert-preview' ? 'previewing…' : '⛏ preview conversion'}</button>
+                <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>make this league native: rosters move in from the last sync, then waivers, trades and everything else run in Drip — and syncing from {l.provider === 'espn' ? 'ESPN' : 'Sleeper'} stops for good</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span className="mono" style={{ ...mono, fontSize: 11.5 }}>
+                  {convert.teams} teams · {convert.rostered} players land on rosters (cap {convert.rounds}) · pool of {convert.pool}
+                  {' · '}{(convert.matched_by_id ?? 0) + (convert.matched_by_slug ?? 0)} matched, {convert.added_to_pool ?? 0} added to the pool
+                </span>
+                {(convert.skipped_n ?? 0) > 0 && (
+                  <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }}>
+                    ⚠ {convert.skipped_n} can’t convert (position outside the game): {(convert.skipped ?? []).map((s) => `${s.full} (${s.pos})`).join(', ')}
+                  </span>
+                )}
+                {(convert.unclaimed_seats ?? 0) > 0 && (
+                  <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--warn)' }}>
+                    ⚠ {convert.unclaimed_seats} seat{convert.unclaimed_seats === 1 ? '' : 's'} unclaimed — after converting, the invite code hands out open seats directly instead of matching {l.provider === 'espn' ? 'ESPN' : 'Sleeper'} owners. Seat everyone first (MEMBERS → assign by email), or expect walk-ins to take over those teams.
+                  </span>
+                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={goNative} disabled={busy === 'convert'} className="mono" style={{ ...btn(true), borderColor: 'var(--warn)', color: 'var(--warn)' }} title="one-way: converts the league and stops platform sync permanently">{busy === 'convert' ? 'converting…' : '⚑ convert to native'}</button>
+                  <button onClick={() => setConvert(null)} className="mono" style={linkBtn}>cancel</button>
+                </div>
+              </div>
+            )}
           </div>
           )}
           {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into
