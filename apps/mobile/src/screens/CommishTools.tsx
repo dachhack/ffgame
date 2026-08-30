@@ -27,7 +27,7 @@ import {
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   leagueContracts, setContractRules, setSalaryRules, setRookieYears, type LeagueContracts,
-  setLeagueFormat, setVampire, guillotineState, vampireState, type LeagueFormat, type VampireState,
+  setLeagueFormat, setVampires, guillotineState, vampireState, type LeagueFormat, type VampireState,
   playerFlags,
   keeperState, rolloverLeague, leaguePool, type KeeperState,
   pickAssets, type PickAssetRow,
@@ -1182,7 +1182,7 @@ function FormatCard({ leagueId }: { leagueId: string }) {
   return (
     <Card>
       <LabelInfo label="LEAGUE FORMAT"
-        info={'How the season is WON.\n\nHEAD-TO-HEAD — the standard game: weekly matchups, standings, playoffs.\n\nGUILLOTINE — each week the lowest-scoring surviving team is eliminated and its whole roster is released to a FAAB frenzy; the last team standing wins. Pick it BEFORE the draft (it changes how the season scores); it presets FAAB waivers with a $1000 budget. Bring extra teams — one falls per week.\n\nVAMPIRE — one seat lives off wins alone: no waivers or free agents, but when it wins a matchup it steals a player from the loser\'s active roster, giving one of its own back.'} />
+        info={'How the season is WON.\n\nHEAD-TO-HEAD — the standard game: weekly matchups, standings, playoffs.\n\nGUILLOTINE — each week the lowest-scoring surviving team is eliminated and its whole roster is released to a FAAB frenzy; the last team standing wins. Pick it BEFORE the draft (it changes how the season scores); it presets FAAB waivers with a $1000 budget. Bring extra teams — one falls per week.\n\nVAMPIRE — vampire seats DON\'T DRAFT: appointed before the draft, they sit it out and build their roster from what everyone left in the pool. A vampire that wins its matchup steals a player from the loser\'s active roster, giving one back. Optionally lock the wire so only vampires can make pickups.'} />
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <Chip label="HEAD-TO-HEAD" on={fmt === 'standard'} disabled={busy}
@@ -1194,18 +1194,30 @@ function FormatCard({ leagueId }: { leagueId: string }) {
       </View>
       {fmt === 'vampire' && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
-          <LabelInfo label="THE VAMPIRE'S SEAT"
-            info={'Pick which team is the Vampire. That seat can\'t sign free agents or claim waivers — its whole game is winning matchups and stealing.\n\nSTEAL APPROVAL is your hand on it: with approval on, each declared steal parks as PENDING and you approve or veto it from the card in the Standings sheet. Either ruling prints in the league register.'} />
+          <LabelInfo label="THE COVEN"
+            info={'Tap teams in and out of the coven — a league can run any number of vampires (at least one team must remain to draft). Appoint them BEFORE the draft: vampire seats sit the draft out and build their rosters from the leftover pool. A vampire appointed after the draft keeps what it drafted.\n\nWIRE LOCK: with the wire locked, only vampires can sign free agents or claim waivers — the pool is their hunting ground, and beaten teams can\'t restock around their losses.\n\nSTEAL APPROVAL is your hand on it: with approval on, each declared steal parks as PENDING and you approve or veto it from the card in the Standings sheet. Either ruling prints in the league register.'} />
+          {/* the coven: toggle chips — each tap re-appoints the whole set */}
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
-            {seats.map((m) => (
-              <Chip key={m.roster_id} label={m.team ?? `Team ${m.roster_id}`} on={vamp?.seat === m.roster_id} disabled={busy}
-                onPress={() => void act(() => setVampire(leagueId, m.roster_id), `✓ ${m.team ?? `team ${m.roster_id}`} is the vampire`)} />
-            ))}
+            {seats.map((m) => {
+              const inCoven = (vamp?.seats ?? (vamp?.seat != null ? [vamp.seat] : [])).includes(m.roster_id);
+              return (
+                <Chip key={m.roster_id} label={`${inCoven ? '🧛 ' : ''}${m.team ?? `Team ${m.roster_id}`}`} on={inCoven} disabled={busy}
+                  onPress={() => {
+                    const cur = vamp?.seats ?? (vamp?.seat != null ? [vamp.seat] : []);
+                    const next = inCoven ? cur.filter((s) => s !== m.roster_id) : [...cur, m.roster_id];
+                    void act(() => setVampires(leagueId, next),
+                      inCoven ? `✓ ${m.team ?? `team ${m.roster_id}`} is mortal again` : `✓ ${m.team ?? `team ${m.roster_id}`} joins the coven`);
+                  }} />
+              );
+            })}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <Chip label={vamp?.steal_review ? 'STEALS NEED YOUR APPROVAL' : 'STEALS EXECUTE INSTANTLY'} on={!!vamp?.steal_review}
-              disabled={busy || vamp?.seat == null}
-              onPress={() => { if (vamp?.seat != null) void act(() => setVampire(leagueId, vamp.seat!, !vamp.steal_review), vamp.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling'); }} />
+              disabled={busy || (vamp?.seats ?? []).length === 0}
+              onPress={() => { const cur = vamp?.seats ?? []; if (cur.length) void act(() => setVampires(leagueId, cur, !vamp?.steal_review, null), vamp?.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling'); }} />
+            <Chip label={vamp?.wire_lock ? '🔒 WIRE LOCKED TO THE COVEN' : 'WIRE OPEN TO EVERYONE'} on={!!vamp?.wire_lock}
+              disabled={busy || (vamp?.seats ?? []).length === 0}
+              onPress={() => { const cur = vamp?.seats ?? []; if (cur.length) void act(() => setVampires(leagueId, cur, null, !vamp?.wire_lock), vamp?.wire_lock ? '✓ the wire is open to everyone' : '✓ only the coven works the wire now'); }} />
           </View>
         </View>
       )}

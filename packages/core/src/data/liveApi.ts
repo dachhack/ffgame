@@ -2301,35 +2301,55 @@ export interface GuillotineState {
   frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];
 }
 export const guillotineState = (leagueId: string) => rpc<GuillotineState>('guillotine_state', { p_league_id: leagueId });
-/** Commissioner: appoint the vampire seat (and flip steal review). */
+/** Commissioner: appoint the vampire seat (and flip steal review). Legacy
+ *  single-seat setter — kept because shipped APKs call it; new UI uses
+ *  setVampires. */
 export const setVampire = (leagueId: string, rosterId: number, stealReview: boolean | null = null) =>
   rpc<{ ok: boolean; error?: string; vampire?: number; steal_review?: boolean }>('set_vampire',
     { p_league_id: leagueId, p_roster_id: rosterId, p_steal_review: stealReview });
+/** Commissioner (0268): appoint the COVEN — any number of vampire seats (at
+ *  least one team must remain to draft), plus steal review and the wire lock
+ *  (ON = only vampires may add FAs / claim waivers). */
+export const setVampires = (leagueId: string, rosterIds: number[], stealReview: boolean | null = null, wireLock: boolean | null = null) =>
+  rpc<{ ok: boolean; error?: string; vampires?: number[]; steal_review?: boolean; wire_lock?: boolean }>('set_vampires',
+    { p_league_id: leagueId, p_roster_ids: rosterIds, p_steal_review: stealReview, p_wire_lock: wireLock });
 /** The bite: on a fresh win, take from the beaten team's active roster and
- *  give one back. Parks for the commissioner's ruling when steal review is on. */
-export const vampireSteal = (leagueId: string, takeSlug: string, giveSlug: string) =>
+ *  give one back. Parks for the commissioner's ruling when steal review is on.
+ *  `vampire` names the feeding seat (0268) — required only when the caller
+ *  doesn't own exactly one vampire in a many-vampire league. */
+export const vampireSteal = (leagueId: string, takeSlug: string, giveSlug: string, vampire: number | null = null) =>
   rpc<{ ok: boolean; error?: string; status?: string; week?: number }>('vampire_steal',
-    { p_league_id: leagueId, p_take_slug: takeSlug, p_give_slug: giveSlug });
+    { p_league_id: leagueId, p_take_slug: takeSlug, p_give_slug: giveSlug, p_vampire: vampire });
 export const commishRuleSteal = (leagueId: string, stealId: number, approve: boolean) =>
   rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_steal',
     { p_league_id: leagueId, p_steal_id: stealId, p_approve: approve });
+/** One vampire's chair (0268): its window, record and finaled weeks. */
+export interface VampireChair {
+  seat: number; seat_team: string | null;
+  won: boolean; victim: number | null; fed: boolean;
+  record?: { wins: number; losses: number } | null;
+  weeks?: { week: number; opp: number; opp_team: string | null; for: number; against: number; won: boolean }[];
+}
 export interface VampireState {
   error?: string;
   vampire: boolean;
-  seat?: number | null;
+  /** The coven (0268): every vampire seat, and one chair each. */
+  seats?: number[];
+  vampires?: VampireChair[];
+  /** ON = only vampires may add FAs / claim waivers (0268). */
+  wire_lock?: boolean;
   steal_review?: boolean;
   week?: number | null;
-  /** The vampire won the latest completed week — the window is open. */
+  /** Legacy single-vampire surface: the caller's own seat, else the first of
+   *  the coven — shipped APKs read these. New UI reads `vampires`. */
+  seat?: number | null;
   won?: boolean;
   victim?: number | null;
-  /** This week's steal is already declared or executed. */
   fed?: boolean;
-  /** The vampire's seat name + season line (0267). A tie is not a win. */
   seat_team?: string | null;
   record?: { wins: number; losses: number } | null;
-  /** Every finaled week from the vampire's chair, newest first (0267). */
   weeks?: { week: number; opp: number; opp_team: string | null; for: number; against: number; won: boolean }[];
-  steals?: { id: number; week: number; victim: number; victim_team?: string | null; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
+  steals?: { id: number; week: number; vampire?: number; victim: number; victim_team?: string | null; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
 }
 export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
 /** Seed the draftable player universe (commissioner, pre-draft only). */

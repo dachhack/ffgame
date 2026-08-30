@@ -8,7 +8,7 @@ import {
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
   leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   guillotineTick, guillotineState, vampireState, vampireSteal, commishRuleSteal,
-  type GuillotineState, type VampireState,
+  type GuillotineState, type VampireState, type VampireChair,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
@@ -500,43 +500,49 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
 
   if (!st?.vampire) return null;
   const nameOf = (s: string) => names[s]?.full_name ?? s;
-  const iAmVampire = st.seat != null && st.seat === myRoster;
-  const windowOpen = !!st.won && !st.fed;
+  // The coven (0268): one chair per vampire. A pre-0268 answer has no
+  // `vampires` — synthesize the single chair from the legacy fields.
+  const chairs: VampireChair[] = st.vampires ?? (st.seat != null
+    ? [{ seat: st.seat, seat_team: st.seat_team ?? null, won: !!st.won, victim: st.victim ?? null, fed: !!st.fed, record: st.record, weeks: st.weeks }]
+    : []);
+  const myChair = chairs.find((c) => c.seat === myRoster) ?? null;
+  const windowOpen = !!myChair?.won && !myChair.fed;
   const pending = (st.steals ?? []).filter((s) => s.status === 'pending');
+  const teamOf = (c: VampireChair) => c.seat_team ?? `Seat ${c.seat}`;
   return (
     <Card>
-      <LabelInfo label="🧛 THE VAMPIRE"
-        info={'Vampire rules: one seat lives off wins alone. The vampire can\'t sign free agents or claim waivers — but when it WINS a matchup, it steals one player from the beaten team\'s active roster, giving one of its own back.\n\nOne steal per win, and only while the win is fresh (the latest completed week). When the commissioner has steal approval on, each steal parks as PENDING until they rule.\n\nEvery bite prints in the league register.'} />
+      <LabelInfo label={chairs.length > 1 ? '🧛 THE COVEN' : '🧛 THE VAMPIRE'}
+        info={'Vampire rules: vampire seats DON\'T DRAFT — appointed before the draft, they sit it out and build their rosters from the leftover pool. When a vampire WINS its matchup, it steals one player from the beaten team\'s active roster, giving one of its own back.\n\nOne steal per win per vampire, and only while the win is fresh (the latest completed week). The league may LOCK THE WIRE so only vampires can make pickups, and the commissioner may require approval per steal.\n\nEvery bite prints in the league register.'} />
       <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
-        {st.seat == null ? 'No vampire appointed yet — the commissioner picks the seat in ⚑ COMMISH.'
-          : `${st.seat_team ?? `Seat ${st.seat}`} feeds on wins${st.record ? ` · ${st.record.wins}–${st.record.losses}` : ''}${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
+        {chairs.length === 0 ? 'No vampire appointed yet — the commissioner picks the coven in ⚑ COMMISH.'
+          : `${chairs.length > 1 ? `${chairs.length} vampires feed on wins` : `${teamOf(chairs[0])} feeds on wins`}${st.wire_lock ? ' · 🔒 the wire is locked to the coven' : ''}${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
       </Mono>
       {!!note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
-      {/* the bite: vampire won the latest completed week and hasn't fed */}
-      {iAmVampire && windowOpen && (
+      {/* the bite: MY chair won the latest completed week and hasn't fed */}
+      {myChair && windowOpen && (
         <View style={{ marginTop: 8 }}>
-          <Mono size={9.5} weight="700" tone="you">🩸 Fresh blood — you beat seat {st.victim} in week {st.week}. Pick your steal:</Mono>
+          <Mono size={9.5} weight="700" tone="you">🩸 Fresh blood — you beat seat {myChair.victim} in week {st.week}. Pick your steal:</Mono>
           <Mono size={8} tone="faint" style={{ marginTop: 5 }}>TAKE FROM THE BEATEN TEAM</Mono>
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
-            {rosters.filter((r) => r.roster_id === st.victim).map((r) => (
+            {rosters.filter((r) => r.roster_id === myChair.victim).map((r) => (
               <Chip key={r.slug} label={nameOf(r.slug)} on={take === r.slug} onPress={() => { tap(); setTake(r.slug); }} />
             ))}
           </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5 }}>GIVE BACK</Mono>
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
-            {rosters.filter((r) => r.roster_id === st.seat).map((r) => (
+            {rosters.filter((r) => r.roster_id === myChair.seat).map((r) => (
               <Chip key={r.slug} label={nameOf(r.slug)} on={give === r.slug} onPress={() => { tap(); setGive(r.slug); }} />
             ))}
           </View>
           <View style={{ marginTop: 8 }}>
             <PrimaryButton label={busy ? '…' : '🧛 SINK THE TEETH'} disabled={busy || !take || !give}
-              onPress={() => { if (take && give) void act(() => vampireSteal(leagueId, take, give), st.steal_review ? '✓ declared — awaiting the ruling' : '✓ the steal is done'); }} />
+              onPress={() => { if (take && give) void act(() => vampireSteal(leagueId, take, give, myChair.seat), st.steal_review ? '✓ declared — awaiting the ruling' : '✓ the steal is done'); }} />
           </View>
         </View>
       )}
-      {iAmVampire && !windowOpen && st.seat != null && (
+      {myChair && !windowOpen && (
         <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>
-          {st.fed ? 'This week’s win is already fed on.' : st.week == null ? 'No completed week yet.' : 'No fresh blood — win your matchup to steal.'}
+          {myChair.fed ? 'This week’s win is already fed on.' : st.week == null ? 'No completed week yet.' : 'No fresh blood — win your matchup to steal.'}
         </Mono>
       )}
       {/* the commissioner's ruling (steal_review) */}
@@ -544,7 +550,7 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
         <View key={s.id} style={{ marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 6 }}>
           <Mono size={9} tone="warn" weight="700">⚑ PENDING STEAL — week {s.week}</Mono>
           <Mono size={9} tone="dim" style={{ marginTop: 2 }}>
-            takes {nameOf(s.take)} from seat {s.victim}, gives back {nameOf(s.give)}
+            {s.vampire != null && chairs.length > 1 ? `${teamOf(chairs.find((c) => c.seat === s.vampire) ?? { seat: s.vampire } as VampireChair)} ` : ''}takes {nameOf(s.take)} from {s.victim_team ?? `seat ${s.victim}`}, gives back {nameOf(s.give)}
           </Mono>
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 5 }}>
             <Chip label="✓ APPROVE" on disabled={busy} onPress={() => { tap(); void act(() => commishRuleSteal(leagueId, s.id, true), '✓ approved'); }} />
@@ -552,14 +558,17 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
           </View>
         </View>
       ))}
-      {/* 🩸 THE FEEDING LOG (v0.377.0): every finaled week from the vampire's
-          chair — the win, the victim, and who was taken for whom. */}
-      {(st.weeks ?? []).length > 0 && (
-        <View style={{ marginTop: 10 }}>
-          <Mono size={9} tone="warn" weight="700" track={0.12}>🩸 THE FEEDING LOG</Mono>
-          {(st.weeks ?? []).map((w) => {
-            const s = (st.steals ?? []).find((x) => x.week === w.week && x.status !== 'vetoed');
-            const vetoed = (st.steals ?? []).find((x) => x.week === w.week && x.status === 'vetoed');
+      {/* 🩸 THE FEEDING LOG (v0.377.0; per-chair since 0268): every finaled
+          week from each vampire's chair — the win, the victim, the bite. */}
+      {chairs.filter((c) => (c.weeks ?? []).length > 0).map((c) => (
+        <View key={c.seat} style={{ marginTop: 10 }}>
+          <Mono size={9} tone="warn" weight="700" track={0.12}>
+            🩸 {chairs.length > 1 ? `${teamOf(c).toUpperCase()} · ` : 'THE FEEDING LOG · '}{c.record ? `${c.record.wins}–${c.record.losses}` : ''}
+          </Mono>
+          {(c.weeks ?? []).map((w) => {
+            const mine = (st.steals ?? []).filter((x) => x.vampire == null || x.vampire === c.seat);
+            const s = mine.find((x) => x.week === w.week && x.status !== 'vetoed');
+            const vetoed = mine.find((x) => x.week === w.week && x.status === 'vetoed');
             return (
               <View key={w.week} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -588,7 +597,7 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
             );
           })}
         </View>
-      )}
+      ))}
     </Card>
   );
 }
