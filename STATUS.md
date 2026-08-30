@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.379.0 — True Colors + Plain Sight: the colorblind-accessible themes
+
+Founder: "what would we need to do to create a color blind accessable
+theme for web and app?" — then "let's do it". Every existing theme says
+you-vs-opp in green-vs-red, the one pair ~8% of men can't separate, and
+the whole game is that opposition. Two new themes in core/theme.ts —
+clarity ("True Colors", dark) and lumen ("Plain Sight", light) — say it
+in Okabe-Ito sky blue vs vermillion, separated by LUMINANCE as well as
+hue; warn sits a full step away (yellow on dark; a deep violet on
+light, because at light-theme luminances any yellow collapses into the
+vermillion under protan/deutan — measured, not guessed). One entry in
+THEMES serves both hosts (CSS vars on web, useTheme on the app); both
+pickers gain the pair. NEW BATTERY CHECK scripts/check-themes.mjs
+(check:themes, in the parity chain): themes listed in ACCESSIBLE_THEMES
+are held to WCAG contrast floors, pairwise ΔE ≥ 20 under simulated
+protanopia/deuteranopia/tritanopia (Viénot/Brettel matrices), and
+grayscale separability — it failed my first lumen draft three ways and
+drove the violet. Chromium pass found a real pre-existing bug: DemoBoard
+set var(--warn)/var(--you)/var(--dim) text ON THE FELT, which is a
+skin and always dark — a light theme's dark accents vanished into it
+(daylight/arctic were already marginal). Felt text now wears fixed
+FELT_GOLD/FELT_BLUE/FELT_DIM. Web ships on deploy; the app half rides
+the next APK (36917). Tier 2 (second-channel audit: bars, dots,
+flashes) remains open.
+
 ### v0.378.0 — the coven: vampires don't draft, may own the wire (0268)
 
 Founder: "vampire shouldnt get to draft players. Vampire leagues should

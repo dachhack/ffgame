@@ -32,6 +32,10 @@ const THEME_OPTS: { id: ThemeName; name: string }[] = [
   { id: 'prime', name: 'All Gold' },
   { id: 'daylight', name: 'Feeling Lucky' },
   { id: 'arctic', name: 'Arctic Journey' },
+  // Colorblind-accessible pair (v0.379.0): blue-vs-orange instead of
+  // green-vs-red, luminance-separated — dark and light.
+  { id: 'clarity', name: 'True Colors' },
+  { id: 'lumen', name: 'Plain Sight' },
 ];
 
 /** Nine decks, not the web's ten. `emerald` is a generated SVG weave on the web

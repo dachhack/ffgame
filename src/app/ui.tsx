@@ -392,6 +392,10 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
     { id: 'prime', name: 'All Gold' },
     { id: 'daylight', name: 'Feeling Lucky' },
     { id: 'arctic', name: 'Arctic Journey' },
+    // Colorblind-accessible pair (v0.379.0): blue-vs-orange instead of
+    // green-vs-red, luminance-separated — dark and light.
+    { id: 'clarity', name: 'True Colors' },
+    { id: 'lumen', name: 'Plain Sight' },
   ];
   // Card-deck skins: a swatch (felt ground + a peek of the sealed card back).
   const cb = (n: string) => `${import.meta.env.BASE_URL}cardbacks/${n}.jpg`;

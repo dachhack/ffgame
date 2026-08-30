@@ -52,6 +52,14 @@ export function markBootSessionChecked(): void { bootSessionChecked = true; }
 // ("More demo?" → Sleeper username) only after the payoff. All scoring is the
 // real engine on real 2025 plays.
 
+// Text set ON THE FELT (the card-table skin) wears FIXED felt colors, never
+// theme vars: every felt is dark whatever the theme, so a light theme's dark
+// warn/dim/you simply vanish into it — found by the lumen colorblind theme's
+// Chromium pass (v0.379.0), but daylight/arctic were already marginal there.
+const FELT_GOLD = '#FFD24A';
+const FELT_BLUE = '#6FBEF5';
+const FELT_DIM = '#BDC5D1';
+
 const TICK_MS = 400;
 const EMP_AT = 1800;      // EMP fires at halftime of the featured window…
 const EMP_SECONDS = 600;  // …freezing opponent drip for 10:00
@@ -670,7 +678,7 @@ export function DemoBoard() {
           // metrics exposed, before the window's first play resolves.
           <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, padding: '16px 10px 18px' }}>
             {!cardHand && <CardTableCss />}
-            <div className="mono" style={{ fontSize: fs(10.5), fontWeight: 800, letterSpacing: '0.22em', color: 'var(--warn)', textShadow: '0 0 12px color-mix(in srgb, var(--warn) 55%, transparent)' }}>
+            <div className="mono" style={{ fontSize: fs(10.5), fontWeight: 800, letterSpacing: '0.22em', color: FELT_GOLD, textShadow: `0 0 12px color-mix(in srgb, ${FELT_GOLD} 55%, transparent)` }}>
               🔓 PICKS REVEALED
             </div>
             {/* duel pairs — your card stays face-up beside the flip, so the
@@ -791,7 +799,7 @@ export function DemoBoard() {
                   // across both stages, so your card only animates once).
                   <div className="ctable" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 6px 12px', borderRadius: 8 }}>
                     {!cardHand && <CardTableCss />}
-                    <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: revealAccent ? 'var(--warn)' : 'var(--you)', textShadow: `0 0 12px color-mix(in srgb, ${revealAccent ? 'var(--warn)' : 'var(--you)'} 55%, transparent)` }}>
+                    <div className="mono" style={{ fontSize: fs(10), fontWeight: 800, letterSpacing: '0.22em', color: revealAccent ? FELT_GOLD : FELT_BLUE, textShadow: `0 0 12px color-mix(in srgb, ${revealAccent ? FELT_GOLD : FELT_BLUE} 55%, transparent)` }}>
                       {pStage === 'yours' ? '🃏 THE DUEL IS SET' : '🔓 PICKS REVEALED'}
                     </div>
                     <RevealPair you={previewSlot.you} their={theirPick} revealed={pStage === 'reveal'} flipYou armedPu={POWER_OPTIONS[0]} />
@@ -1051,7 +1059,7 @@ function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false, arm
         {you
           ? <PlayerCard slug={you.player.id} name={you.player.name} pos={you.player.pos} team={you.player.team} flip={flipYou} idx={idx} metric={met(you)} />
           : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
-        <span className="mono" style={{ ...lab, color: 'var(--you)' }}>YOUR PICK</span>
+        <span className="mono" style={{ ...lab, color: FELT_BLUE }}>YOUR PICK</span>
         {armedPu && (
           <span className="mono" title={armedPu.blurb} style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-streak, #36D399)', border: '1px solid color-mix(in srgb, var(--fx-streak, #36D399) 45%, transparent)', background: 'color-mix(in srgb, var(--fx-streak, #36D399) 10%, transparent)', borderRadius: 3, padding: '2px 6px', whiteSpace: 'nowrap' }}>
             <PuIcon id={armedPu.id} emoji={armedPu.icon} size="1.3em" /> {armedPu.name.toUpperCase()} ARMED
@@ -1065,7 +1073,7 @@ function RevealPair({ you, their, idx = 0, revealed = true, flipYou = false, arm
           : their
             ? <PlayerCard slug={their.player.id} name={their.player.name} pos={their.player.pos} team={their.player.team} opp idx={idx} metric={met(their)} />
             : <span className="mono" style={{ ...lab, color: 'var(--faint)', padding: '20px 6px' }}>— NO PICK —</span>}
-        <span className="mono" style={{ ...lab, color: revealed ? 'var(--warn)' : 'var(--dim)' }}>{revealed ? '🔓 THEIRS — REVEALED' : '❓ THEIRS — SEALED'}</span>
+        <span className="mono" style={{ ...lab, color: revealed ? FELT_GOLD : FELT_DIM }}>{revealed ? '🔓 THEIRS — REVEALED' : '❓ THEIRS — SEALED'}</span>
       </div>
     </div>
   );
