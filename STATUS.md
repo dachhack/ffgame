@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.381.2 — the app board polls at rehearsal speed under LIVE TEST
+
+Founder (screenshot, Vamp T mid-sim): "scoring is not flowing through in
+the app" — the strip read feed 57% · 600× while both totals sat at 0.00
+and every starter "yet to play". The live data path was fine; the CADENCE
+wasn't. The web board polls plays/feeds every 10s under LIVE TEST
+("the production minute cadence reads as a dead board there" — v0.368.0),
+but the app board's poll was a flat 60s: at 600× the entire live window
+(~20–50s of wall clock) fits inside one poll gap, so the board never saw a
+single live row before the week finalled — and then sat on stale zeros for
+up to another minute. Ported the web rule to
+`apps/mobile/src/ui/ClassicBoard.tsx`: `testLive != null ? 10_000 :
+60_000`, with `testLive` joining the effect deps so the fast cadence kicks
+in when the sandbox flag resolves. LivePicks needed nothing — it is
+push-driven (Supabase realtime via subscribeMatchup), not polled. No DB,
+no server change. APK 36922.
+
 ### v0.381.1 — the sim really runs fast now: the 20× override + 600× (0270)
 
 Founder (screenshot): "mobile web still has time and not % complete.
