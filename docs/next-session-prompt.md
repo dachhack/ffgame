@@ -9,12 +9,16 @@ You're continuing **Drip Fantasy** — real-time H2H fantasy football, live at
 (super admin: mlporritt@gmail.com) drives, usually from a phone, usually with a
 screenshot. Ship small, verified increments.
 
-**State at handoff: `v0.337.0`, everything merged and deployed.** Migrations
-through **0212** applied; latest APK is **versionCode 33700**. Work branch:
-`claude/dynasty-season-rollover-dt4xbk` (reset onto merged `main`).
+**State at handoff: `v0.375.3`, everything merged and deployed.** Migrations
+through **0262** applied (next: **0263**); latest APK delivered is
+**versionCode 36914** (carries v0.375.1 — the founder still needs an APK for
+v0.375.3's app-side box-score taps when they next ask). Work branch:
+`claude/whats-next-jssmqa` (reset onto merged `main`).
 
 **The forcing function: first lock is Sep 9, 2026.** Everything competes with
-that date.
+that date. The founder is live-playtesting through the NFL preseason (PRE 4
+just ran, Aug 27–29) on a real league ("Turf Warriors"), so bugs arrive as
+screenshots from real games within minutes of happening.
 
 ## The three hosts, one core
 
@@ -35,9 +39,9 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
 
 ## Non-negotiable discipline
 
-1. **Migrations**: numbered files in `supabase/migrations/` (next: **0213**).
+1. **Migrations**: numbered files in `supabase/migrations/` (next: **0263**).
    Before ANY merge, prove it with **`./scripts/db/run-scratch-probes.sh`** —
-   spins a throwaway Postgres 16, applies every migration, runs **59 probe
+   spins a throwaway Postgres 16, applies every migration, runs **~75 probe
    suites**. Every migration gets probes, and they must be **wired into the
    runner**, not just written. Traps that have bitten, more than once:
    - **All suites share ONE database.** A global assertion ("exactly 1
@@ -54,37 +58,43 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    - `is_admin()` checks the `app_admin` table by email. There is no column.
 2. **Versioning**: bump `packages/core/src/version.ts` on every deployable
    change (patch per deploy, minor per feature). Docs-only commits don't bump.
-   APK `versionCode` = version × 100: v0.337.0 → 33700.
+   APK `versionCode` is now **sequential**, not version × 100 — the convention
+   broke around v0.370 when several APKs shipped per version family. Latest is
+   36914; just increment. It lives in the **gitignored**
+   `apps/mobile/android/app/build.gradle` (this container's `android/` dir
+   persists between builds; a fresh container needs `expo prebuild` first).
 3. **The battery, before every merge**:
    ```
    npx tsc --noEmit                          # web
    (cd apps/mobile && npx tsc --noEmit)      # app
-   npm run check:parity                      # 718 assertions, 16 scripts
-   npx vite build
-   ./scripts/db/run-scratch-probes.sh        # 59 suites
-   (cd server && npm run --silent smoke)
+   npm run check:parity                      # 28 scripts
+   npx vite build                            # CHECK THE EXIT CODE
+   ./scripts/db/run-scratch-probes.sh        # ~75 suites — when DB touched
+   (cd server && npm test)                   # when worker/engine/core touched
    ```
 4. **Merge flow**: work on the `claude/…` branch → PR → squash-merge to `main`
    → `git fetch origin main && git checkout -B <branch> origin/main &&
    git push -u origin <branch> --force-with-lease`.
-5. **APK ritual** (arm64 only), when `apps/mobile` or `packages/core` changed:
+5. **APK ritual** (arm64 only), when `apps/mobile` or `packages/core` changed
+   and the founder asks ("apk please"). In a container where
+   `apps/mobile/android/` already exists (this one), it's just:
    ```
-   cd apps/mobile
-   export ANDROID_HOME=/opt/android-sdk ANDROID_VERSION_CODE=<code>
-   npx expo prebuild --platform android --no-install
-   printf 'sdk.dir=/opt/android-sdk\n' > android/local.properties
-   (cd android && ANDROID_HOME=/opt/android-sdk \
-      ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a)
+   # bump versionCode in apps/mobile/android/app/build.gradle (gitignored)
+   cd apps/mobile/android
+   export ANDROID_HOME=/opt/android-sdk
+   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
    ```
-   Verify with **build-tools 35.0.0**'s `apksigner` (36.0.0 is also installed
-   and is not the one to use). Certificate digest must be
-   `b3fb017fcaaede1fdba4f44ffdad6db821987302321e60974f814f22436649b1`; check
-   `versionCode` in `assets/app.config`; confirm the new version string is in
-   the Hermes bundle and the old one is ABSENT — **both ASCII and UTF-16-LE**.
+   (~5 min warm; a fresh container needs `npx expo prebuild --platform android
+   --no-install` + `local.properties` first, and possibly the SDK provisioning
+   in "This environment" below.) Verify before sending, all three:
+   `aapt2 dump badging` shows the new `versionCode`; `apksigner verify
+   --print-certs` shows **CN=Drip Fantasy Playtest**; the new `APP_VERSION`
+   string is in the bundled `assets/index.android.bundle` (unzip -p | grep).
    **THE TREE IS FROZEN WHILE GRADLE RUNS** — Metro bundles the working tree as
    it is, not the commit you launched from. Background the build if you like,
    but commit nothing and edit nothing until it exits. Send with
-   `SendUserFile`, then `rm` the staged copy and confirm `git status` is clean.
+   `SendUserFile` (stage a copy in the scratchpad — don't send from
+   `build/outputs`, the next build overwrites it mid-download).
 
 ## This environment
 
@@ -178,39 +188,38 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
 
 ## What to pick up
 
-1. **Live-fire the dynasty loop** on a real league before the season relies on
-   it: keeper count + rookie rounds, declare keepers, trade a pick, roll, open
-   the new league on both hosts, run the draft, confirm the traded slot lands
-   on the acquirer's clock. The probes cover the SQL end to end; **no
-   production league has ever rolled over.** Needs the founder.
-2. **Rebake `proj2026.ts` + `adp2026.ts` weekly through Sep 9** — last pulled
-   **2026-08-22** (v0.341.2; `projStats2026.ts` rides the SAME get_projections
-   call — all three or none, the proj-scoring suite fails on a split pull, and
-   check-draft-spots pins three values so a rebake forces its fixtures to be
-   revisited). ADP moves all summer, so keep the weekly pull going right
-   up to the Sep 9 lock. Auto-slot, seat agents, previews and keeper defaults
-   all rank by these numbers, so a stale bake mis-ranks every one of them.
-   Each file's header carries its own `get_projections` / `get_adp` call and
-   the join convention; `proj2026.ts` additionally documents why the stored
-   number is `ppg * games / 17` and not StatHead's `ppg` — read that before
-   changing the shape of the bake.
-3. ~~Audit server-side `injuryFor` callers~~ — DONE (v0.341.2). No worker path
-   calls core `injuryFor` (correct: it would serve the baked 2025 report).
-   Three paths read `injury_status` directly and excluded O/IR; the two DRIP
-   paths — the lock-time fill and resolve's aiSide rebuild — excluded nothing
-   and could start a ruled-out player. All five now ask ONE helper
-   (`server/src/injuries.js` ruledOutSlugs, 60s cache, stale-beats-empty on a
-   failed read).
-4. **Nobody is told when someone lands in a league's waiting room.** Offered,
-   not built (v0.326.0 added the commissioner's "League Full" close).
-5. **Reply to StatHead** about their "unknown fields are named" message not
-   firing in CSV mode (`docs/mcp-requests.md`).
-6. Dynasty polish when it earns a session: multi-year futures, draft-day pick
-   trades, resizing a ROLLED league's pending rookie draft.
+1. **Port the targeted APPLY flows to the app.** The app's slot cards wear a
+   tappable ⚡N chip listing every power-up on the card (v0.375.1), but
+   applying targeted plays (jinx, ghost, underdog, battle plays…) is still
+   web-only — the chips are display-only. The web's flow lives in
+   `Matchup.tsx` (`applyToSpot`/`SPOT_APPLY`); the app's hand
+   (`apps/mobile/src/ui/PowerupHand.tsx`) arms team buffs only. The founder
+   has acknowledged this gap; it's the biggest app-parity item left.
+2. **APK on next ask** carries v0.375.3's app-side box-score name taps (and
+   anything newer). versionCode 36915.
+3. **Rebake `proj2026.ts` + `adp2026.ts` weekly through Sep 9** — all three
+   files ride one get_projections pull (`projStats2026.ts` too); split pulls
+   fail the proj-scoring suite. Auto-slot, seat agents, previews and keeper
+   defaults all rank by these numbers.
+4. **Live-fire the dynasty loop** on a real league before the season relies on
+   it — probes cover the SQL end to end; no production league has ever rolled
+   over. Needs the founder.
+5. **Mobile lock-language copy for pre cards** rides the next APK-worthy
+   change (web got the "locks 1h before kickoff" language; app copy is
+   close but worth a pass).
+6. **PII minimization, if the founder wants it**: both hosts send `email` as a
+   PostHog identify trait (web `LiveOnboard.tsx:106`, app `App.tsx:216`).
+   Dropping it is a two-line change; the Supabase user id links sessions fine.
+   Full PII audit is in the 2026-08-29 session transcript / HANDOFF.
+7. Older backlog, still real: waiting-room notifications (offered, not
+   built); waiver-sweep wedge S2; BYE-cutline 0247 display regression;
+   golf-vs-guillotine/vampire interactions; 2027 rollover polish.
 
-_Done and merged this arc: the web's live screens now install the league pool's
-slug meta at the `buildLiveLeague` chokepoint (v0.337.2), and the app's
-commissioner map lays out in two columns (v0.337.1)._
+_Done and merged this arc (v0.338 → v0.375.3): see HANDOFF.md's top section —
+the preseason practice economy, the card model for unlocks, Underdog as a slot
+modifier, the three power-up timing scopes on the lock clock, reveal-at-kickoff
+(0262), Sleeper-style stat lines, the box-score browser with tappable names,
+and the app's always-dealt hand with ⚡N chips._
 
 ## How the founder works
 
