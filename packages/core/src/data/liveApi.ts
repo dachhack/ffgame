@@ -1263,7 +1263,10 @@ export const leagueWeeklyBudget = async (leagueId: string): Promise<number | nul
  *  week across all leagues (the SIM feed rows are week-scoped). */
 export const adminSimStart = (leagueId: string, week?: number | null, src?: number | null, speed?: number | null) =>
   rpc<{ ok: boolean; error?: string; week?: number; src?: number; matchups?: number }>(
-    'admin_sim_start', { p_league_id: leagueId, p_week: week ?? null, p_src: src ?? null, p_speed: speed ?? 20 });
+    // p_speed null on purpose: the SERVER owns the default (100× since 0266).
+    // This used to send 20, which silently overrode the server every time the
+    // strip armed a run — the founder's "says 20×" screenshot was this line.
+    'admin_sim_start', { p_league_id: leagueId, p_week: week ?? null, p_src: src ?? null, p_speed: speed ?? null });
 export const adminSimReset = (leagueId: string, week?: number | null) =>
   rpc<{ ok: boolean; error?: string; week?: number }>('admin_sim_reset', { p_league_id: leagueId, p_week: week ?? null });
 export interface SimRun {

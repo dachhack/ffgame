@@ -77,13 +77,13 @@ begin
     raise exception 'PROBE FAIL sp5 — done pct/clock come from the cursor: %', run;
   end if;
 
-  -- The 100× default (source-read; see header).
+  -- The 600× default — a ~20-second week (0270; source-read, see header).
   def := pg_get_functiondef('admin_sim_start(uuid, int, int, numeric)'::regprocedure);
-  if position('DEFAULT 100' in def) = 0 then
-    raise exception 'PROBE FAIL sp6 — admin_sim_start default speed is not 100';
+  if position('DEFAULT 600' in def) = 0 then
+    raise exception 'PROBE FAIL sp6 — admin_sim_start default speed is not 600';
   end if;
-  if position('coalesce(p_speed, 100)' in def) = 0 then
-    raise exception 'PROBE FAIL sp6a — the null-speed fallback is not 100';
+  if position('coalesce(p_speed, 600)' in def) = 0 then
+    raise exception 'PROBE FAIL sp6a — the null-speed fallback is not 600';
   end if;
 
   raise notice 'sim-percent probes done';
