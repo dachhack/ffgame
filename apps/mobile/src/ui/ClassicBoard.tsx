@@ -16,6 +16,7 @@ import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
+import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock } from '@drip/core/data/gameFeed';
@@ -1010,6 +1011,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           something about a lineup that can still change. */}
       {board && (
         <>
+        {/* 🧪 SIM STRIP (v0.381.0): the web rehearsal controls, on this board —
+            server-gated, so it renders for a super-admin on a LIVE TEST league
+            and for nobody else. */}
+        {testLive != null && matchup && (
+          <SimStrip leagueId={leagueId} week={matchup.week} onChanged={() => void onPullRefresh()} />
+        )}
         {/* ── "THIS IS NOT YOUR ROSTER" (v0.322.0) ─────────────────────────
             Weeks 101-104 hold the whole player pool by design, so every
             manager holds every player. Unsaid, that is indistinguishable from
