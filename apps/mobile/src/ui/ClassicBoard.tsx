@@ -556,9 +556,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     };
     void load();
     loadRef.current = load;
-    const id = setInterval(() => { void load(); }, 60_000);
+    // A rehearsal moves at hundreds of times real time — the production minute
+    // cadence reads as a dead board there (founder: "scoring is not flowing
+    // through in the app"; at 600× the whole live window fits inside one 60s
+    // gap). 10s under LIVE TEST, the usual 60s outside — the web twin's rule.
+    const id = setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
     return () => { stop = true; clearInterval(id); loadRef.current = null; };
-  }, [matchup, userId, leagueId, rosterId]);
+  }, [matchup, userId, leagueId, rosterId, testLive]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
   // has a settings_json home and a catalog home, and a bare `{...scoring,
