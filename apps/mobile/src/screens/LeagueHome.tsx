@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, type TeamInfo } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -45,7 +45,13 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   const [alertsOpen, setAlertsOpen] = useState(false);
   // The league's own reference sheets (v0.274.0, founder's menu list). One
   // piece of state: only ever one sheet is up, and `null` is the menu itself.
-  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit'>(null);
+  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit' | 'vampire'>(null);
+  // 🧛 (v0.382.1, founder: "I dont see the feeding option in the league tab")
+  // — the vampire card was buried inside the Standings sheet. A vampire
+  // league gets its own tile; every other format answers `vampire:false` to
+  // this one probe and no tile shows.
+  const [vampSt, setVampSt] = useState<VampireState | null>(null);
+  const probeVamp = () => vampireState(leagueId).then((v) => setVampSt(v.vampire ? v : null)).catch(() => {});
   // Leaving (0188) — armed on the first tap, done on the second.
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -72,6 +78,8 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
     playoffState(leagueId)
       .then((st) => { if (st.champion_team) setChampion(st.champion_team); })
       .catch(() => {});
+    void probeVamp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
   /** NO ICONS (v0.293.1, founder: "get rid of icons on the league home"). Nine
@@ -165,6 +173,12 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
       {native && tile('👥', 'Teams & rosters', "teams · rosters · owners", () => { track(Ev.hubTileOpened, { tile: 'teams' }); setTeamsOpen(true); })}
       {native && tile('', 'Draft room', 'players · board · teams · queue', () => { track(Ev.hubTileOpened, { tile: 'draft' }); onGo('draft'); })}
       {native && tile('🏆', 'Standings', 'table · playoff bracket', () => { track(Ev.hubTileOpened, { tile: 'standings' }); setSheet('standings'); })}
+      {/* 🧛 the vampire's own door (v0.382.1) — the card also still rides the
+          Standings sheet, but feeding is an ACTION and the founder couldn't
+          find it there. Badge = this seat's window is open: time to feed. */}
+      {native && vampSt && tile('🧛', 'The vampire', 'steal window · feeding log · coven',
+        () => { track(Ev.hubTileOpened, { tile: 'vampire' }); setSheet('vampire'); },
+        feedingBell(vampSt, rosterId) ? { accent: true, badge: '🩸 time to feed' } : {})}
       {native && tile('📜', 'League register', 'adds · drops · claims · trades', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
       {tile('⊞', 'Scoring settings', 'catalog · adjustments · scoped bonuses', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
       {native && tile('🧢', 'Roster settings', 'lineup · limits · waivers · free agency · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
@@ -238,6 +252,13 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
               CONTRACTS. Standings is the table again. */}
           <Standings leagueId={leagueId} myRoster={rosterId} />
           <Playoffs leagueId={leagueId} />
+        </ScrollView>
+      </Overlay>
+
+      <Overlay visible={sheet === 'vampire'} title="🧛 The vampire" subtitle="THE STEAL WINDOW · THE FEEDING LOG"
+        onClose={() => { setSheet(null); void probeVamp(); /* feeding clears the tile's badge */ }}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 12 }}>
+          <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
         </ScrollView>
       </Overlay>
 

@@ -34,6 +34,7 @@ import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 import { NoGame } from './NoGame';
 import { Overlay } from './Overlay';
+import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { openPlayerCard } from './PlayerCardSheet';
 
@@ -395,6 +396,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // so a fresh, unfed win rings a banner on this board. One probe answers
   // `vampire:false` for every other format and the poll never starts.
   const [vamp, setVamp] = useState<VampireState | null>(null);
+  // Tap the bell to feed (v0.382.1, founder): the steal card in a sheet, right
+  // here — no hunting through the LEAGUE tab with the blood cooling.
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [vampVer, setVampVer] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -524,7 +529,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       if (!stop && isVamp) id = setInterval(() => void probe(), 20_000);
     });
     return () => { stop = true; if (id) clearInterval(id); };
-  }, [leagueId]);
+    // vampVer: bumped when the feed sheet closes, so a done bite clears the
+    // bell NOW instead of on the next 20s tick.
+  }, [leagueId, vampVer]);
   const bell = useMemo(() => feedingBell(vamp, rosterId), [vamp, rosterId]);
 
   // The opponent's lineup + roster + the week's live plays. Since 0178 a
@@ -1040,14 +1047,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         <>
         {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
             week and hasn't fed — the one moment the vampire format exists for,
-            rung where the win shows. The bite itself is in the LEAGUE tab. */}
+            rung where the win shows. Tap to feed (v0.382.1): the steal card
+            opens right here in a sheet. */}
         {bell && (
-          <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
-            <Mono size={11} tone="opp" weight="700" track={0.08}>🧛 YOU WON — TIME TO FEED! 🩸</Mono>
+          <Pressable onPress={() => { tap(); setFeedOpen(true); }}
+            style={({ pressed }) => ({ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4, opacity: pressed ? 0.85 : 1 })}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Mono size={11} tone="opp" weight="700" track={0.08} style={{ flex: 1 }}>🧛 YOU WON — TIME TO FEED! 🩸</Mono>
+              <Mono size={12} tone="opp">→</Mono>
+            </View>
             <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
-              Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Sink the teeth in the LEAGUE tab — the window closes when the next week goes final.
+              Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Tap to sink the teeth — the window closes when the next week goes final.
             </Mono>
-          </View>
+          </Pressable>
         )}
         {/* 🧪 SIM STRIP (v0.381.0): the web rehearsal controls, on this board —
             server-gated, so it renders for a super-admin on a LIVE TEST league
@@ -1141,6 +1153,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           the same way the picker and the field board do (backdrop, ✕, the same
           slide), and so stacked Modals — flaky on Android, per the note below
           — stay a thing this screen does exactly once. */}
+      {/* 🧛 tap-to-feed (v0.382.1): the same steal card the LEAGUE tab holds,
+          opened from the bell. Closing re-probes so a done bite clears the
+          bell now, not on the next 20s tick. */}
+      <Overlay
+        visible={feedOpen}
+        title="🧛 The vampire"
+        subtitle="THE STEAL WINDOW · SINK THE TEETH"
+        onClose={() => { setFeedOpen(false); setVampVer((v) => v + 1); }}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 12 }}>
+          <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={false} />
+        </ScrollView>
+      </Overlay>
+
       <Overlay
         visible={!!board && slateOpen}
         title="NFL SLATE"
