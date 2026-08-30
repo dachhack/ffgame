@@ -171,9 +171,13 @@ export function ChatButton({ leagueId, style, compact = false }: { leagueId: str
         {compact ? (
           <>
             <span style={{ fontSize: '1.35em', lineHeight: 1 }}>💬</span>
-            {unread > 0 && (
-              <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 999, background: mentioned ? 'var(--opp)' : 'var(--you)' }} />
-            )}
+            {/* Tier-2 CVD audit (v0.379.1): mention-vs-unread was the ONE spot
+                in either host where two meanings differed by color alone — the
+                same 8px dot in opp-red or you-green. A mention now wears the
+                @ itself; the plain dot keeps its single meaning, unread. */}
+            {unread > 0 && (mentioned
+              ? <span aria-hidden style={{ position: 'absolute', top: -5, right: -5, minWidth: 11, height: 11, borderRadius: 999, background: 'var(--opp)', color: 'var(--on-accent)', fontSize: 8, fontWeight: 800, lineHeight: '11px', textAlign: 'center', padding: '0 1px' }}>@</span>
+              : <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: 999, background: 'var(--you)' }} />)}
           </>
         ) : (
           <>💬 CHAT{mentioned ? ' @' : ''}{unread > 0 ? ` · ${unread > 99 ? '99+' : unread}` : ''}</>
