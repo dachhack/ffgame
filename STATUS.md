@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.382.1 — 🧛 tap the bell to feed + the vampire's own league-tab tile
+
+Founder (screenshot of the league tab): "I dont see the feeding option in
+the league tab. Let's also have click the banner to feed." Both fair: the
+vampire card was BURIED inside the Standings sheet — a card list the
+founder scrolled twice without finding it — and the new bell only pointed
+there. Two doors now:
+
+- **Tap the bell** (app matchup board): the feeding bell is a Pressable
+  that opens the steal card (VampireCard, the same one) in a sheet right
+  on the board. Closing it bumps `vampVer`, which re-runs the probe so a
+  done bite clears the bell immediately, not on the next 20s tick.
+- **🧛 The vampire tile** (league home, vampire leagues only): opens the
+  card in its own sheet; the tile wears an accent + "🩸 time to feed"
+  badge whenever `feedingBell` says this seat's window is open, and the
+  sheet's close re-probes so the badge clears after a bite. One
+  `vampire_state` probe decides the tile's existence — every other format
+  answers `vampire:false` and never shows it. The card also still rides
+  the Standings sheet.
+
+No DB, no server change. Web banner unchanged (there's no web steal UI
+yet — it points at the app). APK 36924.
+
 ### v0.382.0 — 🧛 the feeding bell: "YOU WON — TIME TO FEED!" on the matchup view
 
 Founder: "can we add a 'you won! time to feed!' banner to the matchup view
