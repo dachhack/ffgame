@@ -2351,6 +2351,33 @@ export const leaguePoolIds = (leagueId: string) =>
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
 
+// ── GO NATIVE (0263): convert an imported league in place ───────────────────
+export interface ConvertSummary {
+  ok: boolean; error?: string; dry_run?: boolean;
+  teams?: number; rounds?: number; pool?: number; rostered?: number;
+  matched_by_id?: number; matched_by_slug?: number; added_to_pool?: number;
+  skipped?: { roster_id: number; full: string; pos: string }[]; skipped_n?: number;
+  dups?: number; weeks_materialized?: number; snapshot_week?: number;
+  unclaimed_seats?: number;
+}
+/** Commissioner: convert this imported (sleeper/espn) league to a NATIVE one,
+ *  in place — same league_id, seats, schedule and history; rosters read from
+ *  the latest synced snapshot; pool from buildDraftPool() (same shape as
+ *  seedLeaguePool's). dryRun runs the whole conversion and rolls it back,
+ *  returning the summary the real run would — preview and commit are one
+ *  code path. Pre-season only (refused once any matchup has locked). */
+export const convertLeagueToNative = (
+  leagueId: string,
+  players: { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number; sleeperId?: string }[],
+  dryRun = false,
+) =>
+  tracked(rpc<ConvertSummary>('convert_league_to_native', {
+    p_league_id: leagueId,
+    p_pool: players.map(({ espnId, exp, sleeperId, ...p }) =>
+      ({ ...p, espn_id: espnId ?? null, exp: exp ?? null, sleeper_id: sleeperId ?? null })),
+    p_dry_run: dryRun,
+  }), 'convert_league_to_native');
+
 // ── Dynasty (0182): keepers + season rollover ────────────────────────────────
 
 /** Commissioner: how many players every team keeps into next season (0 clears). */

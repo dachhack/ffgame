@@ -151,3 +151,4 @@ $RUN -f scripts/db/coin-mint-probes.sql | grep -E "PROBE FAIL|ALL COIN-MINT PROB
 $RUN -f scripts/db/worker-progression-probes.sql | grep -E "PROBE FAIL|ALL WORKER-PROGRESSION PROBES" || { echo "WORKER-PROGRESSION PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/stamp-week-probes.sql | grep -E "SW. FAIL|PROBE FAIL|ALL STAMP-WEEK PROBES" || { echo "STAMP-WEEK PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/sim-run-probes.sql | grep -E "SR. FAIL|PROBE FAIL|ALL SIM-RUN PROBES" || { echo "SIM-RUN PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/convert-league-probes.sql | grep -E "PROBE FAIL|ALL CONVERT-LEAGUE PROBES" || { echo "CONVERT-LEAGUE PROBES FAILED"; exit 1; }

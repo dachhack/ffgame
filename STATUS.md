@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.376.0 — GO NATIVE: imported leagues convert in place (0263)
+
+Founder: "let commissioners migrate their leagues added from other
+platforms to native leagues." One RPC, convert_league_to_native:
+in-place (league_id, seats, schedule, wallets, history all stay),
+backfilling the three things an import never had — a league_pool
+(client-seeded from buildDraftPool, so everything draftable scores), a
+native_roster read from the LATEST sleeper_lineup snapshot (sleeper_id
+match first per 0205, then slug; unknown rostered players are APPENDED
+to the pool, not dropped; grp ir/taxi become native spots), and a draft
+row born 'complete' — inserted AFTER the rosters so 0186's register
+logs zero phantom pickups. The flip rewrites sleeper_league_id into the
+native-… namespace (worker syncWeek/cloneWeek/importLeague key on it —
+a same-season re-import now makes a fresh league instead of clobbering
+this one) and provider='native' switches off every remaining sync path
+(0204/0133/0106 all test provider). The mirrored Sleeper scoring blob
+moves off Drip's settings_json.scoring key to imported_scoring before a
+knob edit can destroy it. Pre-season gate: refused once any matchup has
+locked. Dry run performs the whole conversion inside a savepoint block
+and rolls back on a sentinel — preview ≡ commit by construction, and
+the AdminPage MODE-tab GO NATIVE panel shows it (matched/appended/
+skipped counts, unclaimed-seat warning) before the one-way confirm.
+Probes: convert-league-probes.sql, 30 assertions wired into the runner.
+
 ### v0.375.3 — box-score names open player cards
 
 Founder: "can we open up player cards by clicking names on the box
