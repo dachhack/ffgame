@@ -32,7 +32,8 @@ import {
   nativeRosters, loadLiveInjuries, playoffState,
   vampireState, feedingBell, type VampireState,
 } from '@drip/core/data/liveApi';
-import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen } from '../app/ui';
+import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
+import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
@@ -507,6 +508,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // so a fresh, unfed win rings a banner on this board. One probe answers
   // `vampire:false` for every other format and the poll never starts.
   const [vamp, setVamp] = useState<VampireState | null>(null);
+  // Click the bell to feed (v0.383.0, the app's v0.382.1 twin): the steal
+  // panel in a sheet, right on the board.
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [vampVer, setVampVer] = useState(0);
   // ↓ PULL TO REFRESH (v0.369.1, founder: "right now pull down kicks you back
   // to your leagues"). The browser's native gesture is off (styles.css); a
   // pull from the top of the board re-runs the loader in place. Disabled
@@ -734,7 +739,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
       if (!stop && isVamp) id = window.setInterval(() => void probe(), 20_000);
     });
     return () => { stop = true; if (id != null) window.clearInterval(id); };
-  }, [ros]);
+    // vampVer: bumped when the feed sheet closes, so a done bite clears the
+    // bell NOW instead of on the next 20s tick.
+  }, [ros, vampVer]);
   const bell = useMemo(() => feedingBell(vamp, ros?.rosterId), [vamp, ros]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
@@ -1242,15 +1249,25 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
 
       {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
           week and hasn't fed — the one moment the vampire format exists for,
-          rung where the win shows. The bite itself runs from the app's LEAGUE
-          tab (the web has no steal UI yet). */}
+          rung where the win shows. Click to feed (v0.383.0): the steal panel
+          opens right here in a sheet. */}
       {bell && (
-        <div className="mono" style={{ marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🧛 YOU WON — TIME TO FEED! 🩸</div>
-          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
-            Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Sink the teeth from the LEAGUE tab in the app — the window closes when the next week goes final.
+        <button className="mono" onClick={() => setFeedOpen(true)}
+          style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🧛 YOU WON — TIME TO FEED! 🩸</span>
+            <span style={{ fontSize: 13, color: 'var(--opp)' }}>→</span>
           </div>
-        </div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+            Your week {bell.week} win over {bell.victim} is fresh: one steal from their active roster, one of yours back. Click to sink the teeth — the window closes when the next week goes final.
+          </div>
+        </button>
+      )}
+      {feedOpen && ros && (
+        <Sheet title="🧛 The vampire" subtitle="THE STEAL WINDOW · SINK THE TEETH"
+          onClose={() => { setFeedOpen(false); setVampVer((v) => v + 1); }}>
+          <VampirePanel leagueId={ros.leagueId} myRoster={ros.rosterId} commish={false} />
+        </Sheet>
       )}
       {/* The dress rehearsal's steering wheel (0251) — same strip as the drip
           board: admin-only (it self-gates on the server's forbidden), LIVE TEST
