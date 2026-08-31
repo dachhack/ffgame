@@ -19,10 +19,11 @@ import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
-  leaveLeague, friendlyError, leagueTypeLine, vampireState, feedingBell,
+  leaveLeague, friendlyError, leagueTypeLine, vampireState, feedingBell, guillotineState,
   type Enrollment, type LiveMatchup, type TeamInfo, type VampireState,
 } from '@drip/core/data/liveApi';
 import { VampirePanel } from './VampirePanel';
+import { GuillotinePanel } from './GuillotinePanel';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
@@ -180,13 +181,15 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // reason a second click on the open tile closes it. 'alerts' joined in
   // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
-  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire';
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire' | 'guillotine';
   const [info, setInfo] = useState<null | InfoPanel>(null);
   // 🧛 (v0.383.0, app v0.382.1's twin): a vampire league gets its own tile —
   // every other format answers `vampire:false` to this one probe and never
   // shows it. The badge is `feedingBell`'s call: this seat's window is open.
   const [vampSt, setVampSt] = useState<VampireState | null>(null);
   const probeVamp = () => vampireState(e.league_id).then((v) => setVampSt(v.vampire ? v : null)).catch(() => {});
+  // 🔪 (v0.383.1): same rule for the guillotine — one probe decides the tile.
+  const [guill, setGuill] = useState(false);
   // Leaving (0188) — armed on the first click, done on the second.
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -232,6 +235,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       .then((st) => { if (st.champion_team) setChampion(st.champion_team); })
       .catch(() => {});
     void probeVamp();
+    guillotineState(e.league_id).then((g) => setGuill(g.guillotine === true)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e.league_id]);
 
@@ -347,6 +351,13 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             pairing of every week. */}
         <Tile icon="🏆" title="Standings" sub="table · bracket · every pairing" onClick={onResults} />
 
+        {/* 🔪 the guillotine's own door (v0.383.1) — the block, the frenzy,
+            and the season's record of the chopped, in a sheet. */}
+        {native && guill && (
+          <Tile icon="🔪" title="The chopping block" sub="the block · the frenzy · the chopped"
+            onClick={() => toggleInfo('guillotine')} />
+        )}
+
         {/* 🧛 the vampire's own door (v0.383.0) — the app league menu's twin:
             the steal window, the ruling, and the feeding log, in a sheet. */}
         {native && vampSt && (
@@ -383,6 +394,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       {rostersOpen && native && (
         <Sheet title="👥 Teams & rosters" subtitle="TAP A TEAM TO SEE WHO THEY'RE HOLDING" max={620} onClose={() => setRostersOpen(false)}>
           <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />
+        </Sheet>
+      )}
+      {info === 'guillotine' && (
+        <Sheet title="🔪 The chopping block" subtitle="WHO FALLS IF IT ENDED NOW · THE CHOPPED" max={620} onClose={() => setInfo(null)}>
+          <GuillotinePanel leagueId={e.league_id} myRoster={e.sleeper_roster_id} />
         </Sheet>
       )}
       {info === 'vampire' && (

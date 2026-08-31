@@ -22,6 +22,7 @@ import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLea
 import { PlatformTeam } from './PlatformTeam';
 import { LeagueBoard } from './LeagueBoard';
 import { LeagueHubPage, useHeroBoard, openHeroBoard } from './LeagueHubPage';
+import { GuillotinePanel } from './GuillotinePanel';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
@@ -1385,6 +1386,9 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
         : rows.length === 0 ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>No matchups scheduled yet — sync the season from Manage.</div>
         : (
           <>
+            {/* Format card first (the app's rule, v0.383.1): in a guillotine
+                league the cutline IS the standings. Renders nothing elsewhere. */}
+            <GuillotinePanel leagueId={leagueId} myRoster={null} framed />
             {standings.some((s) => s.w + s.l + s.t > 0) && (
               <div style={{ ...card, marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
