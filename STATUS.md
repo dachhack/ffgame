@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.386.0 — the vampire audit: a web coven, and telling the bitten
+
+Founder: "let's audit vampire mode as well." A full vampire season was
+walked end to end in a scratch DB — coven appointment and its refusals,
+the draft exclusion and waiver queue, the vampire building from the pool,
+the wire lock both ways, no-steal-before-a-final / after a loss / after a
+tie / on a stale win, the bad-take and bad-give refusals, the bite itself
+and its register row, one-steal-per-win, multi-vampire independence, the
+stash guard, steal review's veto and approve, late appointment, disbanding
+the coven, and every gate. **74 of 74 passed: the rules engine is sound.**
+Two CLIENT gaps, both fixed here, neither needing a migration:
+
+**1. The web could not appoint vampires AT ALL.** `setVampires` existed
+only in the app's CommishTools, so a web-only commissioner could pick
+VAMPIRE in the create wizard and then never name a vampire — the one thing
+the format needs done BEFORE the draft. `VampirePanel` (the web vampire
+room, reachable from the hub tile and the feeding bell) grows a
+commissioner-only ⚑ THE COVEN section: tap a seat to seat or unseat a
+vampire, plus the wire lock and steal-review toggles. Seats come from
+league_standings, which already answers every seat with its team name
+pre-draft, so it costs one call and only for a commissioner.
+
+**2. Nobody told the bitten.** A steal writes no push and no per-seat
+signal: a player silently left the victim's roster and a stranger arrived,
+recorded only in the register and the vampire card's log — the mirror of
+v0.385.0's chopped gap. New pure helper `bittenNotice(state, rosterId)`
+sits beside `feedingBell` in core; both boards already poll vampire_state
+for the bell, so the 🩸 BITTEN IN WEEK N banner (naming the vampire, what
+was taken and what came back) costs nothing new. A steal still awaiting a
+ruling reads "A BITE IS DECLARED" instead — nobody has moved yet.
+
+New suite `vampire-rules-probes.sql` pins the five rules the audit walked
+that nothing had pinned: a tie is not a win, only the latest finaled week
+is fresh, a stashed player is off the menu, a late-appointed vampire keeps
+what it drafted, and an emptied coven still reads and feeds nobody. 83
+suites green. APK 36927.
+
 ### v0.385.0 — tell the chopped, and refuse them politely (0272)
 
 Founder: "can you tell if everything works with guillotine leagues?" So a
