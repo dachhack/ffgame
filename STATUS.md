@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.383.0 — 🧛 the vampire comes to the web: panel, tile, click-to-feed
+
+Founder: "can we get the vampire log on web too?" Until now the web's
+whole vampire surface was fangs on names and a banner that pointed at the
+app. New `src/screens/VampirePanel.tsx` — the app VampireCard's twin, kept
+in step by hand: the coven summary, a collapsible rules explainer, the
+steal window (take / give chips + SINK THE TEETH), the commissioner's
+ruling on pending steals, and the per-chair feeding log with the same
+"won, never fed" / "steal vetoed" annotations. Same 20s poll as the app
+card so a SIM'd win fills the log while the founder watches.
+
+Two doors, both the app's (v0.382.1) mirrored:
+- **League hub tile** ("The vampire · steal window · feeding log · coven",
+  vampire leagues only via the one `vampire_state` probe) opening the
+  panel in a Sheet; accent + "🩸 time to feed" badge off `feedingBell`,
+  re-probed on close so a bite clears it.
+- **Click the feeding bell** on the web matchup board: the banner is a
+  button now, opens the same panel in a Sheet, and closing bumps
+  `vampVer` to re-probe so a done bite clears the bell immediately. The
+  banner copy stopped pointing at the app.
+
+No DB, no server, no app change — web only, so no APK (the PWA picks it
+up on deploy).
+
 ### v0.382.1 — 🧛 tap the bell to feed + the vampire's own league-tab tile
 
 Founder (screenshot of the league tab): "I dont see the feeding option in

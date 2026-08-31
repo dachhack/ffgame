@@ -19,9 +19,10 @@ import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
-  leaveLeague, friendlyError, leagueTypeLine,
-  type Enrollment, type LiveMatchup, type TeamInfo,
+  leaveLeague, friendlyError, leagueTypeLine, vampireState, feedingBell,
+  type Enrollment, type LiveMatchup, type TeamInfo, type VampireState,
 } from '@drip/core/data/liveApi';
+import { VampirePanel } from './VampirePanel';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
@@ -179,8 +180,13 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // reason a second click on the open tile closes it. 'alerts' joined in
   // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
-  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit';
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire';
   const [info, setInfo] = useState<null | InfoPanel>(null);
+  // 🧛 (v0.383.0, app v0.382.1's twin): a vampire league gets its own tile —
+  // every other format answers `vampire:false` to this one probe and never
+  // shows it. The badge is `feedingBell`'s call: this seat's window is open.
+  const [vampSt, setVampSt] = useState<VampireState | null>(null);
+  const probeVamp = () => vampireState(e.league_id).then((v) => setVampSt(v.vampire ? v : null)).catch(() => {});
   // Leaving (0188) — armed on the first click, done on the second.
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -225,6 +231,8 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
     playoffState(e.league_id)
       .then((st) => { if (st.champion_team) setChampion(st.champion_team); })
       .catch(() => {});
+    void probeVamp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e.league_id]);
 
   const guard = (fn: () => void) => () => {
@@ -339,6 +347,17 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             pairing of every week. */}
         <Tile icon="🏆" title="Standings" sub="table · bracket · every pairing" onClick={onResults} />
 
+        {/* 🧛 the vampire's own door (v0.383.0) — the app league menu's twin:
+            the steal window, the ruling, and the feeding log, in a sheet. */}
+        {native && vampSt && (
+          <Tile icon="🧛" title="The vampire" sub="steal window · feeding log · coven"
+            onClick={() => toggleInfo('vampire')}
+            accent={!!feedingBell(vampSt, e.sleeper_roster_id)}
+            badge={feedingBell(vampSt, e.sleeper_roster_id)
+              ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--opp)', borderRadius: 999, padding: '2px 7px' }}>🩸 time to feed</span>
+              : undefined} />
+        )}
+
         {/* The league's own reference sheets (v0.274.0) — what it did, and the
             rules it runs on. Read-only for everyone; the commissioner edits the
             same facts behind ⚑ Manage league. */}
@@ -364,6 +383,12 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       {rostersOpen && native && (
         <Sheet title="👥 Teams & rosters" subtitle="TAP A TEAM TO SEE WHO THEY'RE HOLDING" max={620} onClose={() => setRostersOpen(false)}>
           <TeamsRosters leagueId={e.league_id} myRoster={e.sleeper_roster_id} />
+        </Sheet>
+      )}
+      {info === 'vampire' && (
+        <Sheet title="🧛 The vampire" subtitle="THE STEAL WINDOW · THE FEEDING LOG" max={620}
+          onClose={() => { setInfo(null); void probeVamp(); /* feeding clears the tile's badge */ }}>
+          <VampirePanel leagueId={e.league_id} myRoster={e.sleeper_roster_id} commish={commish} />
         </Sheet>
       )}
       {info === 'register' && (
