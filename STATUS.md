@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.0 — the blade and the bite reach your phone (0273)
+
+Founder: "let's do the push notifications for both." v0.385.0 and v0.386.0
+gave the two format events a banner — 🪓 CHOPPED and 🩸 BITTEN — but a
+banner only lands if you happen to open the app, and these are the two
+moments in the product a manager most needs to hear about without looking:
+your season ended, or a player left your roster while you weren't
+watching. Neither had ever pushed.
+
+**0273** adds ONE kind, `format`, rather than two: both events are rare,
+high-stakes and per-format, and a manager who wants to hear about their
+own elimination wants to hear about being fed on too. The outbox's kind
+check and `_sanitize_push_prefs` (0241's body + the new key) grow by one
+entry each; muting stays per device like every other kind, and flush's
+existing `prefs?.[kind] !== false` filter means the mute works with no
+worker change.
+
+**Two detectors** in server/src/push.js, both keyed off rows that already
+carry a timestamp so the trailing-window re-scan pattern works unchanged:
+- `detectChopped` reads league_txn kind 'elimination' — the row
+  guillotine_tick writes as it drops the blade, whose note already reads
+  "week N — lowest score, 84.2". Deduped on the txn id, and the tick never
+  writes twice per seat, so one elimination can never page twice.
+- `detectBitten` reads vampire_steal where status='executed' and
+  resolved_at is fresh — so the victim hears the moment a player actually
+  leaves, never on a steal still pending or one that was vetoed. The body
+  names the vampire's team, what was taken, and what came back.
+Both skip an unmanaged seat (nobody to tell).
+
+The toggle — "🪓 chopped & 🩸 bitten" — joins the alert prefs on BOTH
+hosts (app SettingsModal, web NativeLeague). push-probes pins the new key
+through sanitize and reads the outbox's kind list off the constraint
+rather than an insert the caller's role may not make. 83 suites green.
+APK 36928.
+
 ### v0.386.0 — the vampire audit: a web coven, and telling the bitten
 
 Founder: "let's audit vampire mode as well." A full vampire season was

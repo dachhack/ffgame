@@ -3503,6 +3503,9 @@ const NOTIF_KINDS: { key: string; label: string }[] = [
   { key: 'waivers', label: '✚ waiver results' },
   { key: 'draft', label: 'draft alerts' },
   { key: 'members', label: 'new managers' },
+  // 0273: the two format events — the guillotine taking your team, a vampire
+  // feeding on you. One key, because a manager who wants one wants the other.
+  { key: 'format', label: '🪓 chopped & 🩸 bitten' },
 ];
 
 /** Push/alert preferences, per device (exported since v0.287.0 so the league
