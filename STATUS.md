@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.385.0 — tell the chopped, and refuse them politely (0272)
+
+Founder: "can you tell if everything works with guillotine leagues?" So a
+full season was walked end to end in a scratch DB — create, format, draft,
+schedule, five weekly blades, the frenzy, waivers, trades, the seat guard,
+the champion, the gate — about 60 checks. The MECHANICS are sound: the
+blade takes the low score every week, the roster releases to waivers, the
+elimination and each release print in the register, pending claims die
+with the seat, the guard refuses a dead seat by every path (raw insert,
+add_free_agent, a won claim, a trade re-pointing roster_id), the living
+keep working the wire, standings/chat/materialize/week-role all keep
+answering, the last seat is crowned and never chopped, and the worker
+fires the blade during a sim. Two gaps around the mechanics, both fixed
+here:
+
+**1. Nobody told the chopped.** `eliminated_week` was exposed on exactly
+one read — guillotine_state — so a manager whose team fell opened MATCHUP
+to a normal-looking board with an empty lineup and no explanation; the
+block's CHOPPED list was the only record and it isn't on that screen.
+0272 adds `eliminated` to league_standings (both boards already poll it
+for records) and to native_team_state (both team desks already poll it).
+Both boards and both team desks now carry a 🪓 CHOPPED IN WEEK N banner
+saying what happened, that the wire is closed, and that the seat keeps its
+chat, pots and block.
+
+**2. The refusal threw.** A dead seat's add was blocked only by the
+seat-guard trigger, which RAISES — so the client took its error path where
+every other rule in the app hands back {ok:false, error}. Same for the
+vampire wire lock. New `wire_block_reason(league, roster)` holds both
+formats' wire laws in one place; add_free_agent and submit_waiver_claim
+ask it first and answer in words. The trigger is untouched and stays the
+last line of defence — pinned by a probe that still drives it directly.
+
+All four bodies copied from their live definitions (0229, 0269, 0199).
+New suite `tell-the-chopped-probes.sql` (82 suites green); format-probes'
+wire-lock assertion moved from "it raises" to "it answers, and the trigger
+still raises behind it". APK 36926.
+
 ### v0.384.0 — 🔪 the chopping block keeps history (0271)
 
 Founder: "let's have the chopping block keep history. So you can select

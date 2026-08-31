@@ -508,6 +508,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // so a fresh, unfed win rings a banner on this board. One probe answers
   // `vampire:false` for every other format and the poll never starts.
   const [vamp, setVamp] = useState<VampireState | null>(null);
+  // 🪓 The week the guillotine took THIS seat (0272), null while it lives.
+  const [chopped, setChopped] = useState<number | null>(null);
   // Click the bell to feed (v0.383.0, the app's v0.382.1 twin): the steal
   // panel in a sheet, right on the board.
   const [feedOpen, setFeedOpen] = useState(false);
@@ -616,6 +618,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
             map[row.roster_id] = { wins: row.wins, losses: row.losses, ties: row.ties, rank: i + 1 };
           });
           setRecords(map);
+          // 🪓 THE BLADE (0272) — see the app twin: standings were already
+          // loaded for the records and now carry the week each seat fell, so a
+          // chopped manager is told instead of finding an empty lineup.
+          const me = (Array.isArray(rows) ? rows : []).find((row) => row.roster_id === r.rosterId);
+          setChopped(me?.eliminated ?? null);
         }).catch(() => {});
         const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId)]);
         setPool(pl);
@@ -1247,6 +1254,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         </div>
       </div>
 
+      {/* 🪓 CHOPPED (v0.385.0) — the app twin's banner. A manager whose team
+          fell saw a normal board with an empty lineup and nothing saying why. */}
+      {chopped != null && (
+        <div className="mono" style={{ marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🪓 CHOPPED IN WEEK {chopped}</div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+            Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
+          </div>
+        </div>
+      )}
       {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
           week and hasn't fed — the one moment the vampire format exists for,
           rung where the win shows. Click to feed (v0.383.0): the steal panel

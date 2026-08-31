@@ -2715,6 +2715,18 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           set of per-device prefs is one too many. */}
       {identityCard}
 
+      {/* 🪓 CHOPPED (v0.385.0, 0272) — the app twin's notice. The desk of a
+          team the guillotine took showed an empty roster and an open-looking
+          wire with nothing saying why. */}
+      {team.eliminated != null && (
+        <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--opp)' }}>
+          <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--opp)' }}>🪓 Chopped in week {team.eliminated}</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+            The guillotine took this team — its roster went to the frenzy, and the wire is closed to it for the rest of the season. Your seat at the table stays: the chat, the pots, and the chopping block.
+          </div>
+        </div>
+      )}
+
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--opp)' }}>

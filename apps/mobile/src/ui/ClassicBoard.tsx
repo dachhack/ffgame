@@ -391,6 +391,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [byeWeek, setByeWeek] = useState<number | null>(null);
   // The live injury report is a module cache React can't see; this redraws.
   const [injuryVer, setInjuryVer] = useState(0);
+  // 🪓 The week the guillotine took THIS seat (0272), null while it lives.
+  const [chopped, setChopped] = useState<number | null>(null);
   // 🧛 THE FEEDING BELL (v0.382.0, founder: "you won! time to feed!"). The win
   // HAPPENS here on the matchup view, but the bite lives in the LEAGUE tab —
   // so a fresh, unfed win rings a banner on this board. One probe answers
@@ -461,6 +463,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             map[row.roster_id] = { wins: row.wins, losses: row.losses, ties: row.ties, rank: i + 1 };
           });
           setRecords(map);
+          // 🪓 THE BLADE (0272). Standings were already loaded here for the
+          // records; they now carry the week the guillotine took each seat, so
+          // a chopped manager can be TOLD instead of finding an empty lineup
+          // under a normal-looking board.
+          const me = (Array.isArray(rows) ? rows : []).find((row) => row.roster_id === rosterId);
+          setChopped(me?.eliminated ?? null);
         }).catch(() => {});
         matchupTeams(leagueId, [rosterId, oppRoster]).then((tm: Record<number, TeamInfo>) => {
           setAvatars({ me: tm[rosterId]?.avatar ?? null, opp: tm[oppRoster]?.avatar ?? null });
@@ -1045,6 +1053,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           something about a lineup that can still change. */}
       {board && (
         <>
+        {/* 🪓 CHOPPED (v0.385.0). The audit's finding: a manager whose team fell
+            saw a normal board with an empty lineup and nothing saying why. The
+            block's CHOPPED list was the only record, and it isn't on this
+            screen. Now the board says it, where they actually look. */}
+        {chopped != null && (
+          <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
+            <Mono size={11} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {chopped}</Mono>
+            <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
+              Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
+            </Mono>
+          </View>
+        )}
         {/* 🧛 THE FEEDING BELL (v0.382.0): this seat won the latest completed
             week and hasn't fed — the one moment the vampire format exists for,
             rung where the win shows. Tap to feed (v0.382.1): the steal card

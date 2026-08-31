@@ -158,3 +158,4 @@ $RUN -f scripts/db/sim-percent-probes.sql | grep -E "PROBE FAIL|ALL SIM-PERCENT 
 $RUN -f scripts/db/chopping-block-probes.sql | grep -E "PROBE FAIL|ALL CHOPPING-BLOCK PROBES" || { echo "CHOPPING-BLOCK PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/vampire-coven-probes.sql | grep -E "PROBE FAIL|ALL VAMPIRE-COVEN PROBES" || { echo "VAMPIRE-COVEN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/block-history-probes.sql | grep -E "PROBE FAIL|ALL BLOCK-HISTORY PROBES" || { echo "BLOCK-HISTORY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/tell-the-chopped-probes.sql | grep -E "PROBE FAIL|ALL TELL-THE-CHOPPED PROBES" || { echo "TELL-THE-CHOPPED PROBES FAILED"; exit 1; }

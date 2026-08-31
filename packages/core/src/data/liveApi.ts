@@ -2125,7 +2125,7 @@ export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: numb
   }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
-export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; /** This seat is a vampire (0269) — badge it wherever the row renders. */ vampire?: boolean; }
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; /** This seat is a vampire (0269) — badge it wherever the row renders. */ vampire?: boolean; /** The week the guillotine took this seat (0272); null while it lives. */ eliminated?: number | null; }
 export interface PlayoffMatchup {
   id: string; week: number; round: number; pos: number; label: string | null; status: string;
   /** Consolation-ladder game (never blocks bracket advancement). */
@@ -2799,6 +2799,9 @@ export const processWaivers = (leagueId: string) =>
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
+  /** THE BLADE (0272): the week the guillotine took THIS seat, null while it
+   *  lives. The team desk says so, and closes the wire with a reason. */
+  eliminated?: number | null;
   /** ACTIVE SEATS (0199): starters + bench — what an ADD is bounded by, as
    *  distinct from `roster_cap`, which is the whole roster with its stash
    *  places. `active_held` is how many of them this manager is using. */
