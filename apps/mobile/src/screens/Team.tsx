@@ -636,6 +636,19 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {!!err && <Notice tone="opp"><Mono size={10} tone="opp">{err}</Mono></Notice>}
       {identityCard}
 
+      {/* 🪓 CHOPPED (v0.385.0, 0272). The desk of a team the guillotine took
+          showed an empty roster and an open-looking wire with nothing saying
+          why. It says so now, above the tabs — the roster IS gone, and the
+          wire will refuse (politely, since 0272) if it is worked anyway. */}
+      {team.eliminated != null && (
+        <Notice tone="opp">
+          <Mono size={10} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {team.eliminated}</Mono>
+          <Mono size={9} tone="dim" style={{ marginTop: 3, lineHeight: 13 }}>
+            The guillotine took this team — its roster went to the frenzy, and the wire is closed to it for the rest of the season. Your seat at the table stays: the chat, the pots, and the chopping block.
+          </Mono>
+        </Notice>
+      )}
+
       {/* ── The TABS (v0.268.0, founder: "My Team needs to have tabs as well.
           Default to roster but all the other areas need to be tabbed.") —
           the screen was one long scroll of everything; now one area shows at

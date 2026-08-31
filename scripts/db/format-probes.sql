@@ -169,9 +169,14 @@ begin
   -- …and the OPTIONAL lock closes it to everyone else instead.
   perform probe_as('a');
   perform assert_ok(set_vampires(lid, '[2]'::jsonb, null, true), 'f3e2 the wire locks to the coven');
+  -- 0272: the refusal ANSWERS now (it used to raise from the seat guard, so
+  -- the client took its error path where every other rule hands back an
+  -- {ok:false, error}). The trigger still stands behind it — pinned below.
+  perform assert_err(add_free_agent(lid, 1, 'vp-8', null), 'wire belongs to the vampire',
+    'f3e3 a non-vampire is refused the locked wire, in words not exceptions');
   begin
-    perform add_free_agent(lid, 1, 'vp-8', null);
-    raise exception 'PROBE FAIL f3e3 a non-vampire worked the locked wire';
+    insert into native_roster (league_id, roster_id, slug, acquired) values (lid, 1, 'vp-8', 'fa');
+    raise exception 'PROBE FAIL f3e3b the seat guard must still refuse a direct insert';
   exception when others then
     msg := sqlerrm;
     if position('wire belongs to the vampire' in msg) = 0 then raise; end if;
