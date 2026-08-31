@@ -30,7 +30,7 @@ import {
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
-  vampireState, feedingBell, type VampireState,
+  vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
@@ -750,6 +750,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
     // bell NOW instead of on the next 20s tick.
   }, [ros, vampVer]);
   const bell = useMemo(() => feedingBell(vamp, ros?.rosterId), [vamp, ros]);
+  // 🩸 The other side of the bite (v0.386.0): this seat was fed on.
+  const bitten = useMemo(() => bittenNotice(vamp, ros?.rosterId), [vamp, ros]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
   // has a settings_json home and a catalog home, and a bare `{...scoring,
@@ -1261,6 +1263,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🪓 CHOPPED IN WEEK {chopped}</div>
           <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
             Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
+          </div>
+        </div>
+      )}
+      {/* 🩸 BITTEN (v0.386.0) — the app twin. A vampire's victim lost a player
+          and gained a stranger with nothing on their own screens saying why. */}
+      {bitten && (
+        <div className="mono" style={{ marginTop: 7, border: '1px solid var(--warn)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>
+            🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN WEEK ${bitten.week}`}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+            {bitten.pending
+              ? `${bitten.vampire} beat you and has declared ${prettySlug(bitten.take)} — awaiting the commissioner's ruling. ${prettySlug(bitten.give)} would come back the other way.`
+              : `${bitten.vampire} beat you and fed: ${prettySlug(bitten.take)} is theirs, and ${prettySlug(bitten.give)} came back the other way. One steal per win — you're safe until they beat you again.`}
           </div>
         </div>
       )}

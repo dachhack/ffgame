@@ -2363,6 +2363,26 @@ export interface VampireState {
   steals?: { id: number; week: number; vampire?: number; victim: number; victim_team?: string | null; take: string; give: string; status: 'pending' | 'executed' | 'vetoed' }[];
 }
 export const vampireState = (leagueId: string) => rpc<VampireState>('vampire_state', { p_league_id: leagueId });
+/** 🩸 THE BITE MARK — non-null when THIS seat was fed on in the CURRENT window
+ *  (the latest fully-final week): a player left the roster and another arrived,
+ *  and until now nothing on the victim's own screens said why. Pure over a
+ *  vampire_state answer, like feedingBell, so the boards and the vampire card
+ *  can never disagree. Clears itself when the next week finals — the window
+ *  moves on. `pending` means declared but awaiting the commissioner's ruling,
+ *  so nobody has moved yet. */
+export const bittenNotice = (st: VampireState | null | undefined, rosterId: number | null | undefined):
+  { week: number; vampire: string; take: string; give: string; pending: boolean } | null => {
+  if (!st?.vampire || rosterId == null || st.week == null) return null;
+  const s = (st.steals ?? []).find((x) => x.victim === rosterId && x.week === st.week && x.status !== 'vetoed');
+  if (!s) return null;
+  const chairs: VampireChair[] = st.vampires ?? [];
+  const chair = s.vampire != null ? chairs.find((c) => c.seat === s.vampire) : chairs[0];
+  return {
+    week: s.week,
+    vampire: chair?.seat_team ?? (s.vampire != null ? `Seat ${s.vampire}` : 'The vampire'),
+    take: s.take, give: s.give, pending: s.status === 'pending',
+  };
+};
 /** 🧛 THE FEEDING BELL — non-null when THIS seat is a vampire whose win is
  *  fresh: it won the latest fully-final week and hasn't fed on it. The matchup
  *  boards ring it ("YOU WON — TIME TO FEED"); the bite itself lives in the

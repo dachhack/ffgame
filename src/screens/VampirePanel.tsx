@@ -4,10 +4,18 @@
 // SINK THE TEETH), the commissioner's ruling on pending steals, and the
 // per-chair feeding log. Renders bare — the hub's tile and the matchup board's
 // feeding bell both open it inside a Sheet, which is the card.
+//
+// THE COVEN PANEL (v0.386.0). An audit found the web could not appoint
+// vampires AT ALL: setVampires lived only in the app's CommishTools, so a
+// web-only commissioner could pick VAMPIRE in the create wizard and then never
+// name a vampire — the one thing the format needs done BEFORE the draft. The
+// commissioner's controls now sit at the top of the vampire's own room: who is
+// in the coven, the wire lock, and whether steals need a ruling.
 import { useEffect, useState } from 'react';
 import {
   vampireState, vampireSteal, commishRuleSteal, leaguePool, nativeRosters, friendlyError,
-  type VampireState, type VampireChair, type LeaguePoolPlayer,
+  setVampires, leagueStandings,
+  type VampireState, type VampireChair, type LeaguePoolPlayer, type StandingsRow,
 } from '@drip/core/data/liveApi';
 
 const RULES = `Vampire rules: vampire seats DON'T DRAFT — appointed before the draft, they sit it out and build their rosters from the leftover pool. When a vampire WINS its matchup, it steals one player from the beaten team's active roster, giving one of its own back.
@@ -33,9 +41,14 @@ export function VampirePanel({ leagueId, myRoster, commish }: { leagueId: string
   const [give, setGive] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // The seats to pick a coven from — standings answer every seat with its team
+  // name (and the 🧛 flag), pre-draft included, in one call this panel can
+  // afford. Commissioner-only work; everyone else never triggers it.
+  const [seats, setSeats] = useState<StandingsRow[]>([]);
 
   const load = () => Promise.all([
     vampireState(leagueId).then(setSt),
+    commish ? leagueStandings(leagueId).then((rows) => setSeats(Array.isArray(rows) ? rows : [])).catch(() => {}) : Promise.resolve(),
     leaguePool(leagueId).then((ps) => setNames(Object.fromEntries(ps.map((p) => [p.slug, p])))).catch(() => {}),
     nativeRosters(leagueId).then((rs) => setRosters(rs.map((r) => ({ roster_id: r.roster_id, slug: r.slug })))).catch(() => {}),
   ]).catch(() => setSt({ vampire: false }));
@@ -75,7 +88,7 @@ export function VampirePanel({ leagueId, myRoster, commish }: { leagueId: string
   return (
     <div>
       <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-        {chairs.length === 0 ? 'No vampire appointed yet — the commissioner picks the coven in ⚑ Manage league.'
+        {chairs.length === 0 ? (commish ? 'No vampire appointed yet — pick the coven below, before the draft.' : 'No vampire appointed yet — the commissioner names the coven before the draft.')
           : `${chairs.length > 1 ? `${chairs.length} vampires feed on wins` : `${teamOf(chairs[0])} feeds on wins`}${st.wire_lock ? ' · 🔒 the wire is locked to the coven' : ''}${st.steal_review ? ' · steals need the commissioner’s approval' : ''}`}
       </div>
       <details style={{ marginTop: 6 }}>
@@ -84,6 +97,46 @@ export function VampirePanel({ leagueId, myRoster, commish }: { leagueId: string
       </details>
       {!!note && (
         <div className="mono" style={{ fontSize: 10, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{note}</div>
+      )}
+
+      {/* ⚑ THE COVEN — commissioner only (v0.386.0). Appointed BEFORE the
+          draft: a vampire sits the draft out and builds from the leftovers, so
+          naming one afterwards is a different game (it keeps what it drew). */}
+      {commish && (
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)' }}>⚑ THE COVEN</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+            Tap a seat to seat or unseat a vampire. Appoint BEFORE the draft — a vampire sits the draft out and builds from what the others leave; one appointed later simply keeps the roster it drafted. At least one team must stay mortal.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+            {seats.map((row) => {
+              const on = (st.seats ?? []).includes(row.roster_id);
+              return (
+                <button key={row.roster_id} className="mono" disabled={busy} style={chip(on, busy)}
+                  onClick={() => {
+                    const cur = st.seats ?? [];
+                    const next = on ? cur.filter((x) => x !== row.roster_id) : [...cur, row.roster_id];
+                    void act(() => setVampires(leagueId, next), on ? '✓ seat released' : '✓ the fangs are in');
+                  }}>
+                  {on ? '🧛 ' : ''}{row.team ?? `Seat ${row.roster_id}`}
+                </button>
+              );
+            })}
+            {seats.length === 0 && <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>Loading seats…</span>}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+            <button className="mono" disabled={busy || (st.seats ?? []).length === 0} style={chip(!!st.wire_lock, busy)}
+              onClick={() => void act(() => setVampires(leagueId, st.seats ?? [], null, !st.wire_lock),
+                st.wire_lock ? '✓ the wire is open to everyone' : '✓ the wire belongs to the coven')}>
+              {st.wire_lock ? '🔒 WIRE LOCKED TO THE COVEN' : '🔓 WIRE OPEN TO ALL'}
+            </button>
+            <button className="mono" disabled={busy || (st.seats ?? []).length === 0} style={chip(!!st.steal_review, busy)}
+              onClick={() => void act(() => setVampires(leagueId, st.seats ?? [], !st.steal_review, null),
+                st.steal_review ? '✓ steals execute instantly' : '✓ steals await your ruling')}>
+              {st.steal_review ? '⚑ STEALS NEED YOUR RULING' : '⚡ STEALS EXECUTE INSTANTLY'}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* the bite: MY chair won the latest completed week and hasn't fed */}

@@ -27,7 +27,7 @@ import {
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
-  vampireState, feedingBell, type VampireState,
+  vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
@@ -541,6 +541,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     // bell NOW instead of on the next 20s tick.
   }, [leagueId, vampVer]);
   const bell = useMemo(() => feedingBell(vamp, rosterId), [vamp, rosterId]);
+  // 🩸 The other side of the bite (v0.386.0): this seat was fed on.
+  const bitten = useMemo(() => bittenNotice(vamp, rosterId), [vamp, rosterId]);
 
   // The opponent's lineup + roster + the week's live plays. Since 0178 a
   // classic league's lineups are OPEN — sealed_pick's policy hands them over
@@ -1062,6 +1064,22 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             <Mono size={11} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {chopped}</Mono>
             <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
               Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
+            </Mono>
+          </View>
+        )}
+        {/* 🩸 BITTEN (v0.386.0). The audit's finding, the mirror of the
+            chopped banner: a vampire's victim lost a player and gained a
+            stranger with nothing on their own screens saying why — only the
+            register and the vampire card carried it. */}
+        {bitten && (
+          <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.warn, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
+            <Mono size={11} tone="warn" weight="700" track={0.08}>
+              🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN WEEK ${bitten.week}`}
+            </Mono>
+            <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
+              {bitten.pending
+                ? `${bitten.vampire} beat you and has declared ${prettySlug(bitten.take)} — awaiting the commissioner's ruling. ${prettySlug(bitten.give)} would come back the other way.`
+                : `${bitten.vampire} beat you and fed: ${prettySlug(bitten.take)} is theirs, and ${prettySlug(bitten.give)} came back the other way. One steal per win — you're safe until they beat you again.`}
             </Mono>
           </View>
         )}
