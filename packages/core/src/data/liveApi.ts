@@ -2300,6 +2300,14 @@ export interface GuillotineState {
   alive?: { roster_id: number; team: string | null; pts: number | null; live?: number | null; bye?: boolean }[];
   /** `pts` (0267): the score the blade fell on in that team's fatal week. */
   fallen?: { roster_id: number; team: string | null; week: number; pts?: number | null }[];
+  /** THE SEASON, WEEK BY WEEK (0271) — one entry per fully-final regular
+   *  week, newest first, holding the field as it stood THAT week: every seat
+   *  not yet chopped going in, its final (null on a bye), and the one the
+   *  blade took. Rows sort by score ascending — the cutline order. */
+  history?: {
+    week: number; chopped: number | null; chopped_team: string | null;
+    teams: { roster_id: number; team: string | null; pts: number | null; bye: boolean; chopped: boolean }[];
+  }[];
   /** The frenzy: released players still clearing waivers, best rank first. */
   frenzy?: { slug: string; full_name: string; pos: string; team: string; rank: number; clears_at: string }[];
 }

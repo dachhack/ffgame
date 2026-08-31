@@ -157,3 +157,4 @@ $RUN -f scripts/db/pool-doctor-probes.sql | grep -E "PROBE FAIL|ALL POOL-DOCTOR 
 $RUN -f scripts/db/sim-percent-probes.sql | grep -E "PROBE FAIL|ALL SIM-PERCENT PROBES" || { echo "SIM-PERCENT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/chopping-block-probes.sql | grep -E "PROBE FAIL|ALL CHOPPING-BLOCK PROBES" || { echo "CHOPPING-BLOCK PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/vampire-coven-probes.sql | grep -E "PROBE FAIL|ALL VAMPIRE-COVEN PROBES" || { echo "VAMPIRE-COVEN PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/block-history-probes.sql | grep -E "PROBE FAIL|ALL BLOCK-HISTORY PROBES" || { echo "BLOCK-HISTORY PROBES FAILED"; exit 1; }

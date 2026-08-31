@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.384.0 — 🔪 the chopping block keeps history (0271)
+
+Founder: "let's have the chopping block keep history. So you can select
+each week and it's result." The block could only ever show NOW — `alive`
+is this week's cutline, `fallen` a names-and-fatal-score list — so "what
+did week 3 look like" had no answer, though matchup finals and
+eliminated_week have held the record all along.
+
+**0271** grows guillotine_state a `history` key: one entry per fully-final
+regular week (practice and playoff weeks excluded, league_standings' own
+rule), newest first, each holding the week's whole LIVING FIELD — every
+seat not yet chopped going in, which is exactly the field the blade chose
+from — with each seat's final, an honest `bye` (never an imputed 0), and
+`chopped` on the one that fell, sorted score-ascending so the floor reads
+first. The chopped seat is also hoisted to the entry so a client can label
+a week without walking its rows. A seat chopped in week N is IN week N and
+gone from N+1: the week you died is the week you are most worth looking
+at. Body copied from 0267, the live definition; guillotine_tick untouched.
+
+Both cards (app GuillotineCard + web GuillotinePanel) grow week chips —
+NOW · WK n … WK 1. NOW is the cutline as it stands, live `~` totals and
+all; a past week is that field, final, with 🪓 on the casualty and a line
+naming who fell. The frenzy and the 🪓 CHOPPED log belong to NOW (a past
+week names its own casualty), and each CHOPPED row is now a button into
+its week.
+
+New probe suite `block-history-probes.sql` (9 groups, wired into the
+runner, 80 suites green): a running week is not history; the field shrinks
+week over week while older weeks are never rewritten; the floor sorts
+first and is flagged; a byed seat carries bye + null score and the blade
+never takes it; the member gate holds. APK 36925.
+
 ### v0.383.1 — 🔪 the chopping block comes to the web
 
 Founder: "let's get the chopping block on web versions as well." New
