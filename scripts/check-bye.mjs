@@ -65,15 +65,20 @@ for (const f of ['src/screens/Matchup.tsx', 'src/screens/MatchupFinal.tsx']) {
 // The migration is probed against a live database; what is checked here is
 // that the CLIENT never renders a byed seat as a score, which is how a team
 // that could not be eliminated still looked like the one about to be.
-{
-  const ex = read('apps/mobile/src/ui/LeagueExtras.tsx');
+// v0.383.1: the chopping block has a WEB twin now, and the bye rules bind
+// both renderers — a rule pinned in one file and drifted in the other is the
+// exact bug this checker exists to stop.
+for (const f of ['apps/mobile/src/ui/LeagueExtras.tsx', 'src/screens/GuillotinePanel.tsx']) {
+  const ex = read(f);
+  const name = f.split('/').pop();
   // 0267: bye is a REAL no-matchup flag from the server now, so the client
   // tests it alone — and a live (un-final) total prints as provisional (~),
   // never as a number that reads like a final.
-  ok('a byed seat prints BYE, not a number', /a\.bye \? 'BYE'/.test(ex));
-  ok('…a live total is marked provisional, not passed off as final', /`~\$\{fmt1\(a\.live!\)\}`/.test(ex));
-  ok('…and is never marked as the one under the blade', /i === 0 && !a\.bye/.test(ex));
-
+  ok(`${name}: a byed seat prints BYE, not a number`, /a\.bye \? 'BYE'/.test(ex));
+  ok(`${name}: …a live total is marked provisional, not passed off as final`, /`~\$\{fmt1\(a\.live!\)\}`/.test(ex));
+  ok(`${name}: …and is never marked as the one under the blade`, /i === 0 && !a\.bye/.test(ex));
+}
+{
   const mig = read('supabase/migrations/0247_bye_week.sql');
   ok('the floor skips a seat with no score rather than imputing 0',
     /where t\.pts is not null/.test(mig) && !/limit 1\), 0\) as pts/.test(mig));

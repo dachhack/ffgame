@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.383.1 — 🔪 the chopping block comes to the web
+
+Founder: "let's get the chopping block on web versions as well." New
+`src/screens/GuillotinePanel.tsx` — the app GuillotineCard's twin, kept in
+step by hand: survivors nearest the blade first (🔪 on the doomed seat,
+BYE / final / provisional `~live` numbers), a collapsible rules explainer,
+💰 THE FRENZY (top 12 + count), and the 🪓 CHOPPED week-by-week log. Same
+poll-and-re-poke loop as the app card (guillotineTick then guillotineState
+every 20s) so the blade falls on screen during a SIM.
+
+Three placements:
+- **League hub tile** ("The chopping block · the block · the frenzy · the
+  chopped", guillotine leagues only via one `guillotine_state` probe)
+  opening the panel in a Sheet.
+- **Top of the web results page** (framed) — the app's rule: in a
+  guillotine league the cutline IS the standings. Renders nothing in any
+  other format.
+- The panel self-gates, so both mounts are safe everywhere.
+
+`scripts/check-bye.mjs` now pins the bye rendering rules against BOTH
+renderers (app LeagueExtras + web GuillotinePanel): a byed seat prints
+BYE, a live total prints `~`, and a byed seat is never the one under the
+blade. No DB, no server, no app change — web only, no APK.
+
 ### v0.383.0 — 🧛 the vampire comes to the web: panel, tile, click-to-feed
 
 Founder: "can we get the vampire log on web too?" Until now the web's
