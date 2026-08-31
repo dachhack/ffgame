@@ -3,7 +3,7 @@
 -- What must hold:
 --   • register upserts BY TOKEN and moves a token between accounts (a phone
 --     that switches users must stop notifying the old one);
---   • prefs sanitize to the four known boolean keys;
+--   • prefs sanitize to the known boolean keys (0273 adds `format`);
 --   • remove and set_push_prefs bite only the caller's own token;
 --   • the tables answer nothing to the caller role directly (worker-only).
 \set QUIET on
@@ -52,6 +52,21 @@ begin
   -- 0152: the draft mute key is a known key now
   perform assert_ok(set_push_prefs('device-token-abc123', '{"draft": false, "junk": true}'::jsonb), 'pu6a set draft pref');
   perform assert_true(my_push_tokens() -> 0 -> 'prefs' = '{"draft": false}'::jsonb, 'pu6b draft key survives sanitize');
+
+  -- 0273: the FORMAT key (the guillotine's blade, the vampire's bite) mutes
+  -- like any other kind, and the outbox accepts it as a kind.
+  perform assert_ok(set_push_prefs('device-token-abc123', '{"format": false, "junk": true}'::jsonb), 'pu6c set format pref');
+  perform assert_true(my_push_tokens() -> 0 -> 'prefs' = '{"format": false}'::jsonb, 'pu6d format key survives sanitize');
+  -- The outbox is worker-only (deny-all RLS), so its kind list is read from
+  -- the CONSTRAINT rather than probed with an insert the caller may not make.
+  perform assert_true(
+    position('format' in (select pg_get_constraintdef(oid) from pg_constraint
+                          where conname = 'push_outbox_kind_check')) > 0,
+    'pu6e the outbox accepts the format kind');
+  perform assert_true(
+    position('members' in (select pg_get_constraintdef(oid) from pg_constraint
+                           where conname = 'push_outbox_kind_check')) > 0,
+    'pu6f …without dropping the kinds that came before');
 
   -- the same phone signs into another account: the token MOVES
   perform probe_as('c');

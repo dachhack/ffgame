@@ -20,6 +20,10 @@
 //   trades  — a trade offer is created with you as the recipient.
 //   waivers — your waiver claim processed to WON or LOST.
 //   members — somebody took a seat in a league you commission (0241).
+//   format  — your league's FORMAT did something to you (0273): the guillotine
+//             took your team, or a vampire fed on you. Both are rare and
+//             high-stakes, and both had only ever been a banner you had to
+//             open the app to find.
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -434,6 +438,66 @@ async function detectLineup() {
 // other platform is an FCM device token. A row is only marked sent once at
 // least one of its devices' channels had credentials — with a channel's creds
 // absent, its devices wait in the queue rather than being burned.
+/** 🪓 THE BLADE (0273). guillotine_tick writes a league_txn row the moment it
+ *  eliminates a seat — kind 'elimination', with the week and fatal score in
+ *  its note — so that row is both the event and its timestamp. Keyed on the
+ *  txn id: the tick is idempotent and never writes a second row per seat, so
+ *  one elimination can never page twice however many sweeps see it. */
+async function detectChopped() {
+  const { data: cuts } = await db().from('league_txn')
+    .select('id, league_id, roster_id, note, created_at')
+    .eq('kind', 'elimination').gt('created_at', sinceIso());
+  if (!cuts?.length) return;
+  const owners = await ownersFor(cuts.map((c) => [c.league_id, c.roster_id]));
+  const names = await leagueNames([...new Set(cuts.map((c) => c.league_id))]);
+  await enqueue(cuts.flatMap((c) => {
+    const uid = owners.get(`${c.league_id}:${c.roster_id}`);
+    if (!uid) return [];   // an unmanaged seat has nobody to tell
+    return [{
+      app_user_id: uid, kind: 'format',
+      title: `🪓 Chopped · ${names.get(c.league_id) ?? 'your league'}`,
+      // the tick's own note reads "week N — lowest score, 84.2"
+      body: `The guillotine took your team — ${c.note || 'lowest score of the week'}. Your roster is on the wire.`,
+      data: { league_id: c.league_id, open: 'league' },
+      dedupe_key: `chopped:${c.id}`,
+    }];
+  }));
+}
+
+/** 🩸 THE BITE (0273). A steal stamps resolved_at when it EXECUTES — whether
+ *  it went straight through or waited for the commissioner's ruling — so the
+ *  victim hears the moment a player actually leaves, and never on a steal that
+ *  is still pending or was vetoed. */
+async function detectBitten() {
+  const { data: bites } = await db().from('vampire_steal')
+    .select('id, league_id, vampire, victim, take_slug, give_slug, week, status, resolved_at')
+    .eq('status', 'executed').gt('resolved_at', sinceIso());
+  if (!bites?.length) return;
+  // both sides of every bite: the victim is told, and the vampire's own team
+  // name is what the victim is told ABOUT.
+  const owners = await ownersFor(bites.flatMap((b) => [[b.league_id, b.victim], [b.league_id, b.vampire]]));
+  const names = await leagueNames([...new Set(bites.map((b) => b.league_id))]);
+  const teams = new Map();
+  for (const lid of new Set(bites.map((b) => b.league_id))) {
+    const { data } = await db().from('league_membership')
+      .select('sleeper_roster_id, team_name').eq('league_id', lid);
+    for (const m of data ?? []) teams.set(`${lid}:${m.sleeper_roster_id}`, m.team_name);
+  }
+  const pretty = (slug) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  await enqueue(bites.flatMap((b) => {
+    const uid = owners.get(`${b.league_id}:${b.victim}`);
+    if (!uid) return [];
+    const vamp = teams.get(`${b.league_id}:${b.vampire}`) || 'The vampire';
+    return [{
+      app_user_id: uid, kind: 'format',
+      title: `🩸 Bitten · ${names.get(b.league_id) ?? 'your league'}`,
+      body: `${vamp} beat you in week ${b.week} and took ${pretty(b.take_slug)}. ${pretty(b.give_slug)} came back the other way.`,
+      data: { league_id: b.league_id, open: 'team' },
+      dedupe_key: `bitten:${b.id}`,
+    }];
+  }));
+}
+
 async function flush() {
   const { data: pending } = await db().from('push_outbox')
     .select('id, app_user_id, kind, title, body, data')
@@ -513,5 +577,7 @@ export async function sweepPush() {
   await detectDraft().catch((e) => log('draft detector error', e.message));
   await detectWaivers().catch((e) => log('waivers detector error', e.message));
   await detectLineup().catch((e) => log('lineup detector error', e.message));
+  await detectChopped().catch((e) => log('chopped detector error', e.message));
+  await detectBitten().catch((e) => log('bitten detector error', e.message));
   await flush().catch((e) => log('flush error', e.message));
 }
