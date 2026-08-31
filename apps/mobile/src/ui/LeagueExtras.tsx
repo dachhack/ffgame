@@ -373,6 +373,9 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
 export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const t = useTheme();
   const [st, setSt] = useState<GuillotineState | null>(null);
+  // THE WEEKS (0271, founder: "so you can select each week and it's result").
+  // null = NOW (the live cutline); a number = that finaled week's field.
+  const [week, setWeek] = useState<number | null>(null);
 
   // Poll, don't just load (v0.377.0): the founder watches the blade fall in a
   // SIM, where a whole week finals in minutes — a mount-once card is a lie
@@ -392,12 +395,54 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
   const alive = st.alive ?? [];
   const fallen = st.fallen ?? [];
   const frenzy = st.frenzy ?? [];
+  const history = st.history ?? [];
   const fmt1 = (n: number) => Math.round(n * 10) / 10;
+  // A week that scrolled out of the answer must never strand the view on an
+  // empty list — fall back to NOW.
+  const past = week != null ? history.find((h) => h.week === week) ?? null : null;
+  const showNow = week == null || !past;
   return (
     <Card>
       <LabelInfo label="🔪 THE CHOPPING BLOCK"
         info={'Guillotine rules: each week, the lowest-scoring team still alive is ELIMINATED — its whole roster is released to waivers (the frenzy), where the big FAAB budget decides who lands the spoils.\n\nThere are no head-to-head stakes; the only standing that matters is staying off the floor. A tie at the bottom dies by the weaker season. The last team standing wins.\n\nWhile a week is in flight the block shows LIVE totals (~) — the order is who falls if it ended now. Eliminated teams keep their seat at the table — chat, the pots — but can never add a player again.'} />
-      {st.champion != null ? (
+      {/* THE WEEKS (0271). Only drawn once there is a past to look at. */}
+      {history.length > 0 && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+          <Chip label="NOW" on={showNow} onPress={() => { tap(); setWeek(null); }} />
+          {history.map((h) => (
+            <Chip key={h.week} label={`WK ${h.week}`} on={!showNow && week === h.week}
+              onPress={() => { tap(); setWeek(h.week); }} />
+          ))}
+        </View>
+      )}
+      {!showNow && (
+        <>
+          {/* ONE WEEK, AS IT STOOD (0271) — the field that played it, the
+              blade's own row flagged, everything final. */}
+          <Mono size={9} tone="dim" style={{ marginTop: 6 }}>
+            week {past!.week} · {past!.teams.length} in it · {past!.chopped != null
+              ? `🪓 ${past!.chopped_team ?? `Roster ${past!.chopped}`} fell`
+              : 'nobody fell'}
+          </Mono>
+          <View style={{ marginTop: 8 }}>
+            {past!.teams.map((p) => {
+              const mine = p.roster_id === myRoster;
+              return (
+                <View key={p.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                  <Text style={{ fontSize: fs(12), width: 18, textAlign: 'center' }}>{p.chopped ? '🪓' : ''}</Text>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: p.chopped ? t.opp : mine ? t.you : t.text, fontWeight: mine || p.chopped ? '700' : '400' }}>
+                    {p.team ?? `Roster ${p.roster_id}`}
+                  </Text>
+                  <Mono size={9.5} weight="700" tone={p.chopped ? 'opp' : p.bye ? 'faint' : undefined}>
+                    {p.bye ? 'BYE' : p.pts != null ? fmt1(p.pts) : '—'}
+                  </Mono>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
+      {showNow && (st.champion != null ? (
         <Mono size={11} weight="700" tone="you" style={{ marginTop: 6 }}>
           🏆 {alive[0]?.team ?? `Roster ${st.champion}`} — the last one standing
         </Mono>
@@ -405,11 +450,11 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
         <Mono size={9} tone="dim" style={{ marginTop: 5 }}>
           {alive.length} left · week {st.week ?? '—'} · the lowest score falls
         </Mono>
-      )}
+      ))}
       {/* the survivors, nearest the blade first — the list itself shrinks as
           the season chops, so the view always scales to who's left */}
       <View style={{ marginTop: 8 }}>
-        {alive.map((a, i) => {
+        {showNow && alive.map((a, i) => {
           // 0247: a byed seat has no score and cannot fall this week, so it is
           // never the one under the blade — however the list happens to sort.
           const doomed = st.champion == null && i === 0 && !a.bye;
@@ -431,7 +476,9 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
           );
         })}
       </View>
-      {frenzy.length > 0 && (
+      {/* The frenzy and the season's blade-record belong to NOW: a past week
+          shows its own casualty in the line above it. */}
+      {showNow && frenzy.length > 0 && (
         <View style={{ marginTop: 10 }}>
           <Mono size={9} tone="warn" weight="700" track={0.12}>💰 THE FRENZY — released to waivers</Mono>
           {frenzy.slice(0, 12).map((p) => (
@@ -443,18 +490,20 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
           {frenzy.length > 12 && <Mono size={8.5} tone="faint">…and {frenzy.length - 12} more on the wire</Mono>}
         </View>
       )}
-      {/* the chopped, week by week — the season's record of the blade */}
-      {fallen.length > 0 && (
+      {/* the chopped, week by week — the season's record of the blade, and a
+          way into each of those weeks */}
+      {showNow && fallen.length > 0 && (
         <View style={{ marginTop: 10 }}>
           <Mono size={9} tone="opp" weight="700" track={0.12}>🪓 CHOPPED</Mono>
           {[...fallen].reverse().map((f) => (
-            <View key={f.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+            <Pressable key={f.roster_id} onPress={() => { tap(); setWeek(f.week); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
               <Mono size={8.5} tone="faint" style={{ width: 38 }}>WK {f.week}</Mono>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: f.roster_id === myRoster ? t.you : t.text }}>
                 {f.team ?? `Roster ${f.roster_id}`}
               </Text>
               <Mono size={9} tone="faint">{f.pts != null ? fmt1(f.pts) : ''}</Mono>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
