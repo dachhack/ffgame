@@ -580,7 +580,7 @@ export function DemoBoard() {
   const header = (
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.4em" /> DRIP FANTASY</span>
+        <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>DRIP FANTASY</span>
         <span className="mono" title="You're in an interactive demo — sign in to play for real." style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 4, padding: '3px 7px' }}>DEMO</span>
         {phase === 'watch' && ended && (
           <button onClick={backToStart} className="mono" style={{ ...chipBtn, color: 'var(--you)', borderColor: 'color-mix(in srgb, var(--you) 45%, var(--bd))' }}>↺ BACK TO START</button>

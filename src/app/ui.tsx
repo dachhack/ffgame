@@ -11,7 +11,7 @@ import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
-import { GameIcon, UI_ART, BRAND_MARK, ICON_SETS } from './gameIcons';
+import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
 
@@ -637,7 +637,9 @@ export function Brand({ onClick, hideDataSource = false }: { onClick?: () => voi
       onClick={onClick}
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden', cursor: onClick ? 'pointer' : 'default' }}
     >
-      <GameIcon name={BRAND_MARK} emoji={<div style={{ width: 13, height: 13, background: 'var(--you)', transform: 'rotate(45deg)', flex: 'none' }} />} size={18} style={{ verticalAlign: 'middle' }} />
+      {/* No house mark beside the wordmark (v0.387.1, founder: "there is a
+          chip to the left of DRIP FANTASY — can we remove it?"). The icon-set
+          PNG read as a stray button next to the real chips. */}
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', lineHeight: 1.1 }}>
         <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           DRIP FANTASY

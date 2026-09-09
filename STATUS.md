@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.1 — no house mark beside the wordmark
+
+Founder, screenshot in hand: "There is a chip to the left of DRIP FANTASY.
+Why? Can we remove it?" It was the brand mark — the icon set's
+`brand-mark.png` drawn by `<Brand>` (and hand-rolled the same way on the
+demo board and the leagues screen) at 18px beside the wordmark. Sitting in
+the same row as the real chips (← league, DEMO, the username pill) it read
+as one more button, not a logo. Removed from all three headers; the mark
+still lives where it is an icon inside a CTA (request an invite, play this
+for real). Nothing else moves.
+
 ### v0.387.0 — the blade and the bite reach your phone (0273)
 
 Founder: "let's do the push notifications for both." v0.385.0 and v0.386.0
