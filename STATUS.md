@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.2 — last year's plays on this year's board, and the AI's guesses on the opponent's rail
+
+Founder, Wednesday opener, screenshot: "Henderson is out today. How does
+he have yards? And it's showing my opponent's selections?"
+
+**The yards were 2025's.** `live_play` / `game_feed` key on WEEK alone, no
+season. The June 24 `simulate live` runs replayed baked 2025 Week 1 into
+week 1 (`game_id 'SIM'`, `'SIM:LV@NE'`…) and no reset followed, so when the
+real 2026 Week 1 feed started landing tonight it shared the rows: every
+2025 Week-1 player carried last year's plays into this year's window
+(Henderson, OUT, "had" 5-27 rushing), New England's field showed the 2025
+Raiders game, and the worker scored the same rows. Immediate remedy is two
+SQL deletes (SIM rows only, week 1 — NOT `simulate --reset`, which also
+reverts matchups and unlocks picks). Now the worker purges a week's SIM
+rows the moment it polls a real game there, and the simulator refuses to
+run over a week that has real rows.
+
+**The struck-through lineup was the AI's.** The DB reveal is per window
+and was fine; the client stood `aiLineup` in for a human opponent whenever
+the reveal hadn't landed, and the rail struck through every "assigned"
+player once the board left setup — the first window's kickoff. Live boards
+now use the reveal only (unrevealed → empty slot; every seat, agents
+included, writes real sealed_pick rows), and the rail gates each window's
+strike-through on that window's own reveal.
+
 ### v0.387.1 — no house mark beside the wordmark
 
 Founder, screenshot in hand: "There is a chip to the left of DRIP FANTASY.

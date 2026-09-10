@@ -249,6 +249,14 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   const { data: matchups } = await db().from('matchup').select('*').eq('league_id', leagueId).eq('week', week);
   if (!matchups?.length) throw new Error(`No matchups for league ${leagueId} week ${week}. Run: cli sync-week ${leagueId} ${week}`);
   const ids = matchups.map((m) => m.id);
+  // A week that already carries REAL plays is a live week, not a rehearsal
+  // room (v0.387.2): live_play keys on week alone, so a replay here would sit
+  // beside the real feed and score last year's plays for this year's players
+  // — in every league, since these rows are not per league. The worker also
+  // purges SIM rows the moment it polls a real game, so the run would be
+  // deleted from under itself. Rehearse on a week with no real feed.
+  const { count: realRows } = await db().from('live_play').select('id', { count: 'exact', head: true }).eq('week', week).neq('game_id', 'SIM');
+  if (realRows) throw new Error(`week ${week} already has ${realRows} real (ESPN) play rows — refusing to replay a baked week over a live one. Rehearse on a week with no real feed.`);
 
   log(`LIVE · league ${leagueId} · week ${week} (plays from baked w${srcWeek}) · ${matchups.length} matchups`);
   log('locking picks + going live, clearing prior feed…');
