@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.5 — an AI-controlled opponent's picks render on the live board
+
+Founder's hidden-pick diagnostic on the Gridiron Gang and Turf Warriors
+matchups: the opponent seat was `controller='ai'` with no sealed_pick rows,
+so the reveal had nothing to show — the window bar credited the side while
+every card read "NOT MATCHED UP". Those seats never write sealed rows; the
+worker composes their lineup at resolve time and publishes it, slug and
+metric, in `matchup_state.slot_scores` for windows that have kicked off.
+The web board now fills any opponent slot the sealed reveal lacks from
+those rows (sealed reveal still wins its key; ghost / bye-steal phantoms
+are skipped). Nothing sealed leaks: the worker publishes a window's rows
+only after kickoff, which is the same moment the roster rail reveals it.
+Web only; the app's Duel already reads the rows directly.
+
 ### v0.387.4 — a backup's card shows what it would bring
 
 Founder, Stevenson's Wednesday card reading 0.0 over a log totalling 2.1:

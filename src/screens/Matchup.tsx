@@ -569,11 +569,41 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // before this, a matchup whose reveal hadn't landed rendered the AI's guessed
   // picks in the opponent's slots and struck them through on the roster rail,
   // as if they were the sealed lineup — the AI ignores injuries, so it fielded
-  // an OUT back in the founder's opponent's Wednesday slot. Every seat on a
-  // live board, agent seats included, writes real sealed_pick rows, so the
-  // reveal is the only source. Unrevealed → empty slot (the cards stay
-  // face-down until kickoff anyway). The sim/demo board keeps the AI.
-  const oppPicks = useMemo(() => (liveCtx ? (liveOppPicks ?? {}) : aiLineup(oppId, YOU, week, extraSlots)), [liveCtx, liveOppPicks, oppId, week, ready, extraKey]);
+  // an OUT back in the founder's opponent's Wednesday slot. Unrevealed → empty
+  // slot (the cards stay face-down until kickoff anyway). The sim/demo board
+  // keeps the AI.
+  //
+  // Two sources, sealed reveal first (v0.387.5). Agent seats write real
+  // sealed_pick rows, but an AI-CONTROLLED seat (league_membership.controller
+  // = 'ai') writes none: the worker composes its lineup at resolve time. Its
+  // players only ever exist in the resolver's published per-slot rows
+  // (matchup_state.slot_scores — slug AND metric ride along, and the worker
+  // publishes a window's rows only once it has kicked off, so nothing sealed
+  // leaks). Until this, the founder's board scored that opponent's slot on
+  // the window bar while the card read "NOT MATCHED UP". Keyed by the same
+  // string the sealed rows use, and a sealed row always wins its key.
+  const srvOppKey = useMemo(() => {
+    if (!liveCtx || srvHomeRoster == null) return '';
+    const theirs = liveCtx.rosterId === srvHomeRoster ? 'away' : 'home';
+    const rows: string[] = [];
+    for (const st of srvStates) {
+      for (const r of st.slot_scores ?? []) {
+        if (r.side !== theirs || !r.slug || r.slot == null || r.slot === '') continue;
+        if (r.metric === 'ghost' || r.metric === 'bye') continue; // power-up phantoms, not a pick
+        rows.push(`${st.game_window}#${r.slot}|${r.slug}|${r.metric ?? ''}`);
+      }
+    }
+    return rows.sort().join('\n');
+  }, [liveCtx, srvStates, srvHomeRoster]);
+  const oppPicks = useMemo(() => {
+    if (!liveCtx) return aiLineup(oppId, YOU, week, extraSlots);
+    const out: Record<string, Pick> = { ...(liveOppPicks ?? {}) };
+    for (const line of srvOppKey ? srvOppKey.split('\n') : []) {
+      const [key, slug, metric] = line.split('|');
+      if (!out[key]) out[key] = { playerId: slug, metricId: metric || null };
+    }
+    return out;
+  }, [liveCtx, liveOppPicks, srvOppKey, oppId, week, ready, extraKey]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
