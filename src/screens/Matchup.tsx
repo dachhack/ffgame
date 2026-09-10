@@ -3329,10 +3329,19 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
     // Live, the resolver's row for this slot if it has published one — the
     // same rule the head-to-head card takes below. An UNOPPOSED slot is exactly
     // where the two hosts were most visibly apart, since it is the whole card.
+    // A BACKUP'S CARD SHOWS WHAT IT WOULD BRING (v0.387.4). The resolver's
+    // published row for a sub-capable backup is 0 by rule — it banks nothing
+    // in place — so taking it here blanked the card all game while the log
+    // under it totalled 2.1 (founder: "let's not keep it zero, but zero it
+    // out or show the sub at the end"). Live, the card shows the running
+    // would-be bank; at final the settled would-be, struck through when it
+    // never subbed in (`negated` below) and plain when it did. The window
+    // bar and the headline keep the resolver's counted number. A backup that
+    // can never sub (a zero-bank metric) still shows the published row.
     const liveBackup = shownScore({
       final: done,
       settled: wouldBe,
-      srv: mineBackup ? srvYou : srvTheir,
+      srv: canSub ? null : (mineBackup ? srvYou : srvTheir),
       bank: mineBackup ? live.you : live.their,
     });
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
