@@ -565,7 +565,15 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // assignments — those stay sealed) and defends each window accordingly. What the
   // opponent has armed is hidden, exactly as your loadout is hidden from it. In a
   // live matchup, the opponent's revealed sealed lineup wins over the AI.
-  const oppPicks = useMemo(() => liveOppPicks ?? aiLineup(oppId, YOU, week, extraSlots), [liveOppPicks, oppId, week, ready, extraKey]);
+  // LIVE boards never stand an AI lineup in for a real opponent (v0.387.2):
+  // before this, a matchup whose reveal hadn't landed rendered the AI's guessed
+  // picks in the opponent's slots and struck them through on the roster rail,
+  // as if they were the sealed lineup — the AI ignores injuries, so it fielded
+  // an OUT back in the founder's opponent's Wednesday slot. Every seat on a
+  // live board, agent seats included, writes real sealed_pick rows, so the
+  // reveal is the only source. Unrevealed → empty slot (the cards stay
+  // face-down until kickoff anyway). The sim/demo board keeps the AI.
+  const oppPicks = useMemo(() => (liveCtx ? (liveOppPicks ?? {}) : aiLineup(oppId, YOU, week, extraSlots)), [liveCtx, liveOppPicks, oppId, week, ready, extraKey]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
@@ -1826,7 +1834,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', textAlign: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
             </div>
             {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} winEditable={liveCtx ? (id) => winRt(id) === 'setup' : undefined} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
-            {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
+            {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} winRevealed={liveCtx ? (id) => winRt(id) === 'live' || winRt(id) === 'final' : undefined} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
           </div>
         )}
 
@@ -2031,7 +2039,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <div style={{ height: 40 }} />
         </main>
 
-        {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
+        {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} winRevealed={liveCtx ? (id) => winRt(id) === 'live' || winRt(id) === 'final' : undefined} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
       </div>
 
       {swapTarget && (() => {

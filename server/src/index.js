@@ -45,6 +45,8 @@ let lastMarketPoll = 0;
 // than globally: two active week contexts (preseason beside the regular
 // season) would otherwise take turns starving each other of an hourly slot.
 const lastSeatWire = new Map();
+// Weeks whose simulator ('SIM') rows this process has already purged — see the play tick.
+const simPurgedWeeks = new Set();
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
@@ -428,6 +430,24 @@ async function tickContext(ctx, season) {
 
   // Poll live games → plays, keyed at the board week. Reuses the scoreboard above.
   const toPoll = gamesToPollFrom(games);
+  // SIMULATOR ROWS NEVER OUTLIVE THE REAL FEED (v0.387.2). live_play and
+  // game_feed key on WEEK alone — no season — so a June dress rehearsal that
+  // replayed baked 2025 Week 1 into week 1 (game_id 'SIM' / 'SIM:LV@NE') was
+  // still there when the real 2026 Week 1 feed started landing in the same
+  // rows. Every player who played in 2025 Week 1 then carried last year's
+  // plays into this year's window (TreVeyon Henderson, OUT, "had" 27 rushing
+  // yards on the Wednesday opener) and New England's field showed the 2025
+  // Raiders game. The moment there is a real game to poll for a week, the
+  // simulator's rows for that week go. Once per process per week; the
+  // simulator itself now refuses to run over a week with real rows.
+  if (toPoll.length && !simPurgedWeeks.has(week)) {
+    simPurgedWeeks.add(week);
+    try {
+      const { data: lp } = await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM').select('id');
+      const { data: gf } = await db().from('game_feed').delete().eq('week', week).like('game_id', 'SIM:%').select('game_id');
+      if (lp?.length || gf?.length) log(`[${ctx.tag}] purged simulator rows from week`, week, '·', lp?.length ?? 0, 'plays,', gf?.length ?? 0, 'game feeds');
+    } catch (e) { simPurgedWeeks.delete(week); log(`[${ctx.tag}] sim purge`, e.message); }
+  }
   let wrote = 0;
   for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); } }
   if (toPoll.length) log(`[${ctx.tag}] polled`, toPoll.length, 'games,', wrote, 'play rows');

@@ -142,7 +142,7 @@ function PoolFilterBar({ filter, setFilter, players, shown, games, compact }: {
   );
 }
 
-export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, sealed, collapsed, onToggle, bye = [], week, fluid }: {
+export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, winRevealed, sealed, collapsed, onToggle, bye = [], week, fluid }: {
   side: 'you' | 'their';
   pools: Record<WindowId, Player[]>;
   picks: Record<string, Pick>;
@@ -155,6 +155,14 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
    *  its PLAYER changed even though its metric picker still worked. Omitted on
    *  the sim/demo board, which has one global `phase`. */
   winEditable?: (winId: WindowId) => boolean;
+  /** LIVE board, opponent side: has THIS window's reveal happened (kicked off)?
+   *  The rail used to strike through every player in `picks` the moment the
+   *  board left setup — i.e. at the FIRST window's kickoff — which on a live
+   *  night showed a full struck-through "lineup" for windows still sealed by
+   *  the database (v0.387.2, founder: "it's showing my opponent's
+   *  selections?"). Omitted on the sim/demo board, which keeps one global
+   *  phase. */
+  winRevealed?: (winId: WindowId) => boolean;
   sealed?: boolean;
   collapsed: boolean;
   onToggle: () => void;
@@ -163,7 +171,13 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
   fluid?: boolean; // mobile: full-width block instead of a fixed side rail
 }) {
   const accent = side === 'you' ? 'var(--you)' : 'var(--opp)';
-  const assignedIds = new Set(Object.values(picks).map((p) => p.playerId));
+  // Assigned players PER WINDOW (pick keys are `${win}#${slot}`), so a
+  // window's strike-through can be gated on that window's own reveal.
+  const assignedByWin = new Map<string, Set<string>>();
+  for (const [k, p] of Object.entries(picks)) {
+    const win = k.split('#')[0];
+    (assignedByWin.get(win) ?? assignedByWin.set(win, new Set()).get(win)!).add(p.playerId);
+  }
   const total = (Object.values(pools) as Player[][]).reduce((n, a) => n + a.length, 0);
   // The rail lists EVERY window at once, so on a deep preseason pool it's the
   // ~1,000-player view. Filters here therefore add a window axis the modal
@@ -219,6 +233,10 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
         // own lock, not when the board (any window) first goes live. Falls back
         // to the single board phase on the sim/demo board.
         const winOpen = winEditable ? winEditable(w.id) : phase === 'setup';
+        // Opponent side: only a REVEALED window may show what they slotted.
+        // Live board → that window's own kickoff; sim/demo → the board phase.
+        const showTheirs = side === 'you' || (winRevealed ? winRevealed(w.id) : phase !== 'setup');
+        const assignedHere = assignedByWin.get(w.id) ?? new Set<string>();
         return (
         <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
@@ -227,8 +245,9 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
           </div>
           {poolFor(w.id).length === 0 && <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', padding: '0 4px' }}>{(pools[w.id] ?? []).length ? '— none match —' : '— none playing —'}</span>}
           {poolFor(w.id).map((p) => {
-            // Never reveal which players the opponent has selected during setup.
-            const assigned = assignedIds.has(p.id) && (side === 'you' || phase !== 'setup');
+            // Never reveal which players the opponent has selected before the
+            // window they sit in has kicked off.
+            const assigned = assignedHere.has(p.id) && showTheirs;
             const interactive = side === 'you' && winOpen;
             return (
               <button
