@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.4 — a backup's card shows what it would bring
+
+Founder, Stevenson's Wednesday card reading 0.0 over a log totalling 2.1:
+"let's get the score up there. Let's not keep it zero, but zero it out or
+show the sub at the end." The unopposed card took the resolver's published
+row, which for a sub-capable backup is 0 by rule (it banks nothing in
+place). Now the card shows the running would-be bank while live and the
+settled would-be at final — struck through when it never subbed in, plain
+when it did, with the chosen target shown beneath as before. The window
+bar and headline keep the counted number. Web only; the app's Duel card
+is unchanged.
+
+Same screenshot, the other half: the speedkills1 window bar credited the
+opponent 7.8 while their slot read "NOT MATCHED UP". The pick was real and
+revealed; the player just wasn't in the opponent's roster as this board
+had loaded it (the agent seat wire ran 21 transactions in that league at
+boot), and `lookup` returned null for any slug outside the pools — so the
+slot rendered empty, your player read as an unopposed backup, and the
+worker scored the same row as a contested slot. `lookup` now falls back to
+the league registry and then to a minimal player built from the slug.
+
 ### v0.387.3 — a live league's players play for their 2026 teams
 
 Founder's Wednesday screenshots after v0.387.2: Romeo Doubs sitting in a

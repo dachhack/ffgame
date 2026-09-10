@@ -2,7 +2,8 @@ import type { Player, WindowId, GameWindow, Pick, PbpEvent, BuffFx } from '../ty
 import { METRICS, metricById, defaultMetric } from '../data/metrics';
 import { capAmplifiers, isAmplifier } from '../data/powerups';
 import { teamRoster, getPlayer } from '../data/league';
-import { hashStr } from '../data/players';
+import { hashStr, shortName } from '../data/players';
+import { slugMeta } from '../data/slugMeta';
 import {
   WEEKLY_STIPEND, UNOPPOSED_COIN, SUPPRESS_COIN, TURNOVER_COIN, WINDOW_WIN_BONUS, WINDOW_MVP_COIN_PER_SLOT,
   metricCoin, coinRisk, threwTrickTd, battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
@@ -426,7 +427,32 @@ function lookup(pools: Record<WindowId, Player[]>, picks: Record<string, Pick>, 
     // `isMetricSet('')` is false, so both boards now say NO METRIC · scores 0.
     if (found) return { player: found, metricId: pk.metricId ?? '' };
   }
-  return null;
+  // A REVEALED PICK IS REAL EVEN WHEN THE ROSTER SNAPSHOT HASN'T MET THE
+  // PLAYER (v0.387.4). The pools are built from the league as this board
+  // loaded it; a seat that traded, claimed or was wired a player since (the
+  // agent seat wire ran 21 transactions in one league on opening night) can
+  // seal a pick for someone in no pool at all. Returning null here rendered
+  // that slot "NOT MATCHED UP", made YOUR player read as an unopposed backup,
+  // and left the window bar crediting the opponent 7.8 from a card nobody
+  // could see — while the worker, reading the same row, scored it as a
+  // contested slot. The league registry (any team's player) is tried next,
+  // then a minimal player from the slug: position and team from slugMeta,
+  // name from the slug. Plays key on the slug, so it scores exactly as the
+  // resolver does.
+  const reg = getPlayer(pk.playerId);
+  if (reg) return { player: reg, metricId: pk.metricId ?? '' };
+  return { player: playerFromSlug(pk.playerId), metricId: pk.metricId ?? '' };
+}
+
+/** A minimal Player for a slug the league snapshot doesn't carry. */
+function playerFromSlug(slug: string): Player {
+  const { pos, team } = slugMeta(slug);
+  const full = slug.endsWith('-dst') ? `${team} DST` : slug.endsWith('-k') ? `${team} K`
+    : slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  return {
+    id: slug, name: pos === 'DEF' || pos === 'K' ? full : shortName(full), full, pos, team,
+    stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
+  };
 }
 
 /**
