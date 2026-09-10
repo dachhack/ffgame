@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.3 — a live league's players play for their 2026 teams
+
+Founder's Wednesday screenshots after v0.387.2: Romeo Doubs sitting in a
+Wednesday slot with the GB@MIN field under him and "no plays yet", listed
+in the Sunday-4pm rail. He is a Patriot this year. The worker knew (it
+placed him from the live directory); the web board didn't: buildLeague
+took every baked player's team from BAKED_SLUGS — his MAJORITY 2025 team —
+regardless of the league's season. Right for the 2025 replay (the baked
+possession gating is written against it), wrong for a 2026 live league for
+everyone who moved (55 team changes in tonight's roster sweep alone). Now
+a league in a season after the bake takes the provider's current team,
+falling back to the bake only when the provider has none.
+
+Same family, second layer: `realPbpFor` has ignored the bake on a live
+week since the overlay existed, but `realPossFor` / `realKickoff` /
+`realWallFor` / `realGameEndClock` still answered from it — so the live
+2026 board gated tonight's drips on New England's possession from the 2025
+Raiders game. Live weeks now answer "unknown" from all four and fall
+through to the feed, which is what the worker (never loads the bake) did
+all along.
+
 ### v0.387.2 — last year's plays on this year's board, and the AI's guesses on the opponent's rail
 
 Founder, Wednesday opener, screenshot: "Henderson is out today. How does
