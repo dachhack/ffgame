@@ -12,7 +12,7 @@ import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from
 import { normName, shortName, hashStr } from './players';
 import { BAKED_SLUGS } from './bakedSlugs';
 import { SLEEPER_SLUG } from './sleeperSlug';
-import { setSyntheticWeeks, type RealPlay } from './realPbp';
+import { setSyntheticWeeks, type RealPlay, BAKED_PBP_SEASON } from './realPbp';
 import { setRuntimeHeadshots, espnHeadshot } from './media';
 import { loadPlayerDirectory } from './sleeperPlayers';
 import { REG_SEASON_WEEKS, type BuiltLeague } from './league';
@@ -36,17 +36,32 @@ function normTeam(t: string | null | undefined): string {
  *  play-by-play (incl. every team K/DST), else a synthetic id. Crosswalk order is
  *  provider-appropriate (Sleeper id → name → synth; ESPN id → name → synth), so a
  *  Sleeper player resolves exactly as before and ESPN players reuse the same slugs. */
-function resolveEngineId(p: NormPlayer, synthPrefix: string): { id: string; baked: boolean; team: string } {
+/** `liveSeason`: the league is being played in a season AFTER the bake, so
+ *  the provider's current team is the truth and the bake's is history.
+ *
+ *  A baked player used to take his team from BAKED_SLUGS — his MAJORITY 2025
+ *  team — whatever season the league was in. Right for the 2025 replay, where
+ *  the baked play stream's possession gating is written against that team,
+ *  and wrong for a 2026 live league for everyone who has moved since: Romeo
+ *  Doubs (GB → NE) sat in the Sunday-4pm rail, his Wednesday slot drew the
+ *  GB@MIN field, and he could not be hand-placed into the window his real
+ *  game was in — while the worker, reading the live directory, had him in
+ *  the right one. Tonight's roster sweep alone logged 55 team changes
+ *  (v0.387.3). */
+function resolveEngineId(p: NormPlayer, synthPrefix: string, liveSeason = false): { id: string; baked: boolean; team: string } {
   const team = normTeam(p.nflTeam);
   if (p.pos === 'DEF') return { id: `${(team || p.key).toLowerCase()}-dst`, baked: true, team: team || p.key };
   if (p.pos === 'K' && team) return { id: `${team.toLowerCase()}-k`, baked: true, team };
+  // In a live season the provider's team wins; the bake's fills in only when
+  // the provider has none (a free agent still on a roster payload, say).
+  const bakedTeam = (t: string) => (liveSeason && team ? team : t);
   // Exact id → baked slug (most reliable): Sleeper id for Sleeper players, else
   // the Sleeper id we joined in from ESPN's athlete id (the directory is the hub).
   const exact = p.sleeperId ? SLEEPER_SLUG[p.sleeperId] : undefined;
-  if (exact && BAKED_SLUGS[exact]) return { id: exact, baked: true, team: BAKED_SLUGS[exact].team };
+  if (exact && BAKED_SLUGS[exact]) return { id: exact, baked: true, team: bakedTeam(BAKED_SLUGS[exact].team) };
   // Name match; else synthesize under the provider's prefix.
   const slug = normName(p.full).replace(/\s+/g, '-');
-  if (BAKED_SLUGS[slug] && BAKED_SLUGS[slug].pos === p.pos) return { id: slug, baked: true, team: BAKED_SLUGS[slug].team };
+  if (BAKED_SLUGS[slug] && BAKED_SLUGS[slug].pos === p.pos) return { id: slug, baked: true, team: bakedTeam(BAKED_SLUGS[slug].team) };
   return { id: `${synthPrefix}-${p.key}`, baked: false, team };
 }
 
@@ -142,7 +157,7 @@ export function buildFromNormalized(
     if (cached) return cached;
     const p = norm.players[key];
     if (!p) return null;
-    const { id, baked, team } = resolveEngineId(p, norm.synthPrefix);
+    const { id, baked, team } = resolveEngineId(p, norm.synthPrefix, Number(norm.season) > BAKED_PBP_SEASON);
     const m = { eid: id, p, baked, team };
     idMap.set(key, m);
     return m;
