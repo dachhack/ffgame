@@ -83,8 +83,13 @@ begin
   -- classic implies power-ups off at every surface
   perform assert_true(not (league_live_buffs(lid) ->> 'on')::boolean, 'gm8 live_buffs reads off in classic');
   reset role;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0). This fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the REAL slate for the
+  -- matchup's week — so on a live week it starts refusing the moment the baked
+  -- season actually kicks off, and the suite fails by calendar rather than by
+  -- code. Week 90 has no slate row, so there is no kickoff to be late for.
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-  values (lid, 1, 2, 1, 'scheduled') returning id into mid;
+  values (lid, 90, 2, 1, 'scheduled') returning id into mid;
   set local role authenticated;
   perform probe_as('c');
   perform assert_err(arm_buff(mid, 'momentum'), 'turned off', 'gm9 arm refused in classic');
@@ -113,7 +118,7 @@ begin
   -- (the 0058 anti-sniping trigger, taught the classic pseudo-window)
   reset role;
   insert into nfl_slate (season, week, win, away, home, kickoff)
-  values ('2026', 1, 'tnf', 'AAA', 'BBB', now() - interval '1 hour');
+  values ('2026', 90, 'tnf', 'AAA', 'BBB', now() - interval '1 hour');
   set local role authenticated;
   perform probe_as('c');
   begin
@@ -124,7 +129,7 @@ begin
   exception when check_violation then null;
   end;
   reset role;
-  delete from nfl_slate where season = '2026' and week = 1 and away = 'AAA';
+  delete from nfl_slate where season = '2026' and week = 90 and away = 'AAA';
   set local role authenticated;
 
   -- best ball (0159): classic-only, commish-only, sanitized, member-readable
@@ -177,8 +182,9 @@ begin
   perform probe_as('b');
   perform assert_ok(set_league_classic_roster(lid, '{"QB": 1, "RB": 1}'::jsonb), 'rc6 two-starter lineup');
   reset role;
+  -- week 91, for the reason week 90 is used above
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-  values (lid, 2, 2, 1, 'scheduled') returning id into mid;
+  values (lid, 91, 2, 1, 'scheduled') returning id into mid;
   set local role authenticated;
   perform probe_as('c');
   insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)

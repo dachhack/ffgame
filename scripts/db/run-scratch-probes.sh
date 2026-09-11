@@ -77,6 +77,22 @@ for f in supabase/migrations/*.sql; do
 done
 echo "all migrations applied"
 
+# ── THE REGULAR-SEASON SLATE IS PUSHED OUT OF THE REAL CALENDAR ─────────────
+# Probe fixtures write week-1..5 lineups, and the 0178/0058 window locks read
+# the REAL slate for that week — so those suites began failing by CALENDAR
+# rather than by code on the day the baked 2026 season kicked off (10 Sep
+# 2026). The scratch DB is throwaway, so the fix belongs here rather than in a
+# dozen fixtures: shift the regular season a decade out.
+#
+# REGULAR WEEKS ONLY (1..18). Preseason weeks (101+) are deliberately left
+# where they are — preseason-practice-probes asserts which practice weeks are
+# PLAYABLE, which is a question about the real clock, and shifting those turned
+# its "3 playable" into 4. Relative order inside the regular season, which is
+# all any week logic depends on, is untouched; a suite that wants a kickoff in
+# the PAST still plants its own row and still wins the MIN the trigger reads.
+$RUN -c "update nfl_slate set kickoff = kickoff + interval '10 years' where week between 1 and 18 and kickoff is not null;" >/dev/null
+echo "regular-season slate shifted +10y (fixtures are calendar-independent)"
+
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/auction-engine-probes.sql | grep -E "PROBE FAIL|ALL AUCTION-ENGINE PROBES" || { echo "AUCTION-ENGINE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/division-probes.sql | grep -E "PROBE FAIL|ALL DIVISION PROBES" || { echo "DIVISION PROBES FAILED"; exit 1; }
@@ -160,3 +176,4 @@ $RUN -f scripts/db/vampire-coven-probes.sql | grep -E "PROBE FAIL|ALL VAMPIRE-CO
 $RUN -f scripts/db/block-history-probes.sql | grep -E "PROBE FAIL|ALL BLOCK-HISTORY PROBES" || { echo "BLOCK-HISTORY PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/tell-the-chopped-probes.sql | grep -E "PROBE FAIL|ALL TELL-THE-CHOPPED PROBES" || { echo "TELL-THE-CHOPPED PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/vampire-rules-probes.sql | grep -E "PROBE FAIL|ALL VAMPIRE-RULES PROBES" || { echo "VAMPIRE-RULES PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/invite-landing-probes.sql | grep -E "PROBE FAIL|ALL INVITE-LANDING PROBES" || { echo "INVITE-LANDING PROBES FAILED"; exit 1; }

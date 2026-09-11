@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.4 — the invite link lands on the league, not a password box (0274)
+
+Founder: "I'd love a landing page for the league invite links for external
+viewing. So someone opens the link and gets a preview of the league and
+settings before joining."
+
+Since 0206 the join screen has IDENTIFIED the league — crest, name,
+season, game tagline, and (0208) whether a seat is even left. That answers
+"which league is this?" and nothing else. What a recruit actually decides
+on — the format, the scoring, the lineup, the draft, the wire rules, who
+is already in — lived in `league_preview`, which is gated on being signed
+in AND on the league having publicly LISTED itself. Both gates are right
+for a browse-the-board stranger and wrong for someone holding an invite:
+the moment the preview is wanted is the moment before there is an
+authenticated anybody, and a private league is exactly the kind whose
+invite gets sent.
+
+**0274** adds `invite_preview(code)`, anon-callable, keyed on the code —
+the same credential `redeem_invite` and `native_join` already answer to.
+Its payload is copied from `league_preview` (0223, live) so the landing
+page and the browse card can't drift about what a rule is called, plus
+`format` and `continuity`, the two facts that change what the game IS. The
+header states exactly what it exposes to anon: identity, rules, seat count
+and TEAM NAMES — no emails, no member names, no app_user_ids, no Sleeper
+ids, no player rosters. A bad code and a rotated code get the same neutral
+refusal, so the endpoint can't sort live codes from dead ones.
+
+New `src/screens/InvitePreviewCard.tsx` renders it under the identity
+block on the signed-out join screen: seats filled, the commissioner's
+blurb, format · continuity · game, scoring (PPR in words, best-ball
+spots), the lineup as "QB 1 · RB 2 · WR 2 · FLEX 1", the draft (mode,
+rounds, clock, auction budget), the wire (waiver mode, FAAB, trade
+review), the salary cap when there is one, dues, and an expandable list of
+team names marking which seats are open.
+
+**Also fixed, unrelated and pre-existing:** the probe battery had started
+failing by CALENDAR. Fixtures write week-1..5 lineups and the 0178/0058
+window locks read the real slate, so the day the baked 2026 season kicked
+off (10 Sep) game-mode and roster-builder broke, with eight more suites
+days behind. The runner now shifts the REGULAR-season slate (weeks 1–18
+only — preseason weeks are left alone, because preseason-practice-probes
+asserts which practice weeks are playable, a real-clock question) ten
+years out in the throwaway DB, and a few fixtures that plant their own
+slate moved to weeks the real one doesn't cover. 84 suites green.
+
+Web only — no app change, so no new APK.
+
 ### v0.388.3 — a backup never covers an earlier window
 
 Founder, Thursday: the opponent's Thursday backup (Purdy, 9.4, unopposed)

@@ -218,9 +218,13 @@ begin
   perform assert_true(roster_illegal_reason(lid, bseat) is not null, 'w35 b is illegal');
   -- a fresh scheduled matchup for the pick writes (week 1 kickoff is future)
   insert into nfl_slate (season, week, home, away, win, kickoff)
-    values ('2026', 1, 'SEA', 'KC', 'snf', '2026-09-09T20:20:00-04:00') on conflict do nothing;
+    values ('2026', 94, 'SEA', 'KC', 'snf', now() + interval '3 days') on conflict do nothing;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 4, bseat, cseat, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 94, bseat, cseat, 'scheduled') returning id into mid;
 
   set local role authenticated;
 

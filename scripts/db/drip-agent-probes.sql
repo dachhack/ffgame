@@ -94,7 +94,11 @@ begin
   -- one is inserted directly. Nothing here tests the scheduler; what is under
   -- test is whether a row can be FILED for this seat at all.
   insert into matchup (league_id, week, home_roster_id, away_roster_id)
-    values (lid, 1, open_seat, (select min(sleeper_roster_id) from league_membership
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 90, open_seat, (select min(sleeper_roster_id) from league_membership
                                 where league_id = lid and sleeper_roster_id <> open_seat))
     returning id into mid;
   perform assert_true(mid is not null, 'da2 the seat has a matchup to be filled for');
