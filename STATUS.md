@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.1 — tap a field on ALL GAMES to make it big
+
+Founder, from the ALL GAMES overlay on Thursday: "click a field to make it
+show up big." Tapping a game's card now spans it across the whole grid
+(capped at 900px, centred) and moves it to the top; the others keep their
+tiles below. Tap it again, or another field, to change. The card's own
+controls (↔ flip, BOX SCORE) keep their clicks. The legend row says which
+tap does what. The field is a viewBox SVG, so it simply scales.
+
 ### v0.388.0 — a league switcher in the board header
 
 Founder, Thursday night with four leagues live: "I have to keep going back

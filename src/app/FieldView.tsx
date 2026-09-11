@@ -135,6 +135,11 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
   const lastScrollAt = useRef(0);
   const lastTarget = useRef<string | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null); // brief highlight on the followed card
+  // TAP A FIELD TO MAKE IT BIG (v0.388.1, founder: "click a field to make it
+  // show up big"). The tapped card spans the whole grid and moves to the top;
+  // the rest stay in their tiles below it. Tap again (or another field) to
+  // shrink. The field is an SVG with a viewBox, so it simply scales.
+  const [bigKey, setBigKey] = useState<string | null>(null);
 
   // THE GROUPING RULE LIVES IN CORE (v0.340.1): every game on the feed gets a
   // card, entry games are overlaid for tint + slot clock, yours sort first —
@@ -142,6 +147,7 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
   // directly instead of pinning a reimplementation). feedLoaded is a real
   // dependency: the memo must recompute when the week's feed arrives.
   const games = useMemo(() => groupFieldGames(week, entries), [entries, week, feedLoaded]);
+  const shown = useMemo(() => (bigKey ? [...games].sort((a, b) => (a.feed.key === bigKey ? -1 : b.feed.key === bigKey ? 1 : 0)) : games), [games, bigKey]);
 
   // Detect a play landing: per game, count the plays at/under its clock; when
   // that count grows, the newest of those plays just became visible. Scroll to
@@ -210,15 +216,24 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
           {dot('var(--you)', 'SCORED FOR YOU')}
           {dot('var(--opp)', 'FOR OPPONENT')}
           {dot('var(--warn)', 'BOTH')}
+          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginLeft: 'auto' }}>{bigKey ? 'TAP THE BIG FIELD TO SHRINK IT' : 'TAP A FIELD TO ENLARGE IT'}</span>
         </div>
         {games.length === 0 && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '40px 0' }}>— NO GAME FEEDS FOR THIS WEEK —</div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 350px), 1fr))', gap: 10 }}>
-          {games.map((g) => (
+          {shown.map((g) => (
             <div key={g.feed.key}
               ref={(el) => { if (el) cardRefs.current.set(g.feed.key, el); else cardRefs.current.delete(g.feed.key); }}
-              style={{ borderRadius: 6, outline: focusKey === g.feed.key ? '2px solid var(--you)' : '2px solid transparent', outlineOffset: 2, transition: 'outline-color .4s ease' }}>
+              onClick={(e) => {
+                // The card's own controls (↔ flip, BOX SCORE, the box score's
+                // close) keep their clicks; anywhere else on the card toggles.
+                if ((e.target as HTMLElement).closest('button, a, input')) return;
+                setBigKey((k) => (k === g.feed.key ? null : g.feed.key));
+              }}
+              title={bigKey === g.feed.key ? 'tap to shrink' : 'tap to enlarge'}
+              style={{ borderRadius: 6, outline: focusKey === g.feed.key ? '2px solid var(--you)' : '2px solid transparent', outlineOffset: 2, transition: 'outline-color .4s ease', cursor: 'pointer',
+                ...(bigKey === g.feed.key ? { gridColumn: '1 / -1', maxWidth: 900, width: '100%', justifySelf: 'center' } : {}) }}>
               <Field feed={g.feed} clock={g.clock} week={week} pidSide={(pid) => {
                 if (pid == null) return null;
                 const y = g.you.has(pid), t = g.their.has(pid);
