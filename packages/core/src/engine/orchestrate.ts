@@ -27,6 +27,7 @@ import type { PbpEvent } from '../types';
 import {
   bestBallBackups, suppressHalving, bankerCredit, type SideLens,
 } from './scoringRules';
+import { windowsForWeek } from '../data/nflSlate';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -186,8 +187,12 @@ function awardCredits<S>(slots: S[], me: PipelineSide<S>): void {
  *  sides, mutating slot finals in place. Battles run after this, per engine. */
 export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): void {
   const { a, b } = cfg;
-  bestBallBackups(slots, a.lens, a.backups ?? {}, { zeroed: a.hooks?.backupZeroed, subbed: a.hooks?.backupSubbed });
-  bestBallBackups(slots, b.lens, b.backups ?? {}, { zeroed: b.hooks?.backupZeroed, subbed: b.hooks?.backupSubbed });
+  // Window kickoff order for the backup rule (v0.388.3): a backup covers its
+  // own window or a later one, never one that already played.
+  const order = windowsForWeek(cfg.week).map((w) => w.id);
+  const winRank = (win: string) => order.indexOf(win);
+  bestBallBackups(slots, a.lens, a.backups ?? {}, { zeroed: a.hooks?.backupZeroed, subbed: a.hooks?.backupSubbed, winRank });
+  bestBallBackups(slots, b.lens, b.backups ?? {}, { zeroed: b.hooks?.backupZeroed, subbed: b.hooks?.backupSubbed, winRank });
   suppressHalving(slots, a.lens, b.suppress ?? 0, a.hooks?.suppressHalved);
   suppressHalving(slots, b.lens, a.suppress ?? 0, b.hooks?.suppressHalved);
   bankerCredit(slots, a.lens, a.banker ?? 0);

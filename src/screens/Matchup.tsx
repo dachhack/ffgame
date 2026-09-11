@@ -2207,6 +2207,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           // the server refuses it anyway. Assignments made before kickoff
           // stay valid and still score; they committed blind.
           .filter((s) => !liveCtx || liveWinState[s.win] === 'setup' || liveWinState[s.win] === 'locked')
+          // v0.388.3: never a window EARLIER than the backup's own — the
+          // engine (bestBallBackups) refuses that pairing, so the menu must
+          // not offer it. Same rule on the sim/demo board, which the kicked
+          // filter above skips.
+          .filter((s) => { const o = windowsForWeek(week).map((w) => w.id); const rb = o.indexOf(b.win), rs = o.indexOf(s.win); return rb < 0 || rs < 0 || rs >= rb; })
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
         return (
           <BackupMenu
