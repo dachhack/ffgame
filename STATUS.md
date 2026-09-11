@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.387.6 — a subbed-in starter's card says so while live
+
+Founder, Thursday: "Parkinson has points but no catches" — 6.9 over 0 rec
+yd at Q1 12:19, 0–0. Not a scoring bug: `phantom-drip-diag.sql` showed zero
+play rows for his slug anywhere, and the live ESPN summary run through the
+worker's own adapter has none either. The 6.9 is Stevenson's. The
+best-ball backup rule moves an unopposed backup's points onto the lowest
+beatable starter, the worker runs it on every tick, and the Wednesday card
+already said "subbed in — full points counted" — but the TARGET card only
+labelled the sub at FINAL, from when the local number first carried it.
+Live it shows the resolver's row, which carries the sub now. The card now
+labels the sub as soon as the server has published the slot ("⤴ Stevenson
+subbed in — his points count here"), "scoring" at final as before. Kyren
+Williams' 6.8 on a nuke metric in the other Turf Warriors matchup is the
+same shape. Web only.
+
 ### v0.387.5 — an AI-controlled opponent's picks render on the live board
 
 Founder's hidden-pick diagnostic on the Gridiron Gang and Turf Warriors

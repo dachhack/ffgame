@@ -3551,8 +3551,16 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
   const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock) : null;
   const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock) : null;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
+  // A SUB SHOWS THE MOMENT THE RESOLVER COUNTS IT (v0.387.6). The best-ball
+  // sub used to be labelled only at FINAL, when the local number first
+  // reflected it — but live the card shows the resolver's row, and the worker
+  // runs the backup rule on every tick: the founder's Wednesday backup
+  // (Stevenson, 6.9) was already subbed into Parkinson's Thursday slot while
+  // Parkinson stood at 0 rec yd, so the card read 6.9 over no catches with
+  // nothing to say why. Once the server has published this slot (srv row
+  // present) and the pipeline says a sub lands here, say so.
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -3631,8 +3639,8 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
 }
 
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
   /** Card-table theme: render as a face-up LiveCard on the felt (with the
    *  hot/nuked flags derived from the slot's play-by-play) instead of the
    *  compact score strip — the cards stay on the board after kickoff. */
@@ -3711,7 +3719,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const statLine = suppressSpent != null
     ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
-      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
+      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} {subLive ? 'subbed in — his points count here' : 'scoring'}</div>
       : <div className="mono" style={isMobile
           ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
           // Wrap, never truncate — desktop too. The game line's departure
