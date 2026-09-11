@@ -6,7 +6,7 @@ import type { Phase, LiveCtx, Route } from '../app/store';
 import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
-import { leagueGameMode, myEnrollments } from '@drip/core/data/liveApi';
+import { leagueGameMode, myEnrollments, type Enrollment } from '@drip/core/data/liveApi';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
@@ -17,7 +17,7 @@ import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
-import { consumeShopOnBoard } from './LeagueHubPage';
+import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
@@ -1654,6 +1654,69 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
+  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
+  // Founder, Thursday night, four leagues live: "I have to keep going back
+  // to my leagues to see my other match ups. Can we make a quick selector
+  // at the top?" The header names the league you are in and opens a list of
+  // your other seats; picking one runs the same prelude the leagues list
+  // runs (openHeroBoard) — the board rebuilds for that league on the week
+  // it is playing — so this is the leagues page's card, one tap from here.
+  const [seats, setSeats] = useState<Enrollment[] | null>(null);
+  useEffect(() => {
+    if (!liveCtx || demo) { setSeats(null); return; }
+    let dead = false;
+    myEnrollments(liveCtx.userId)
+      .then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- the seat list is per signed-in user
+  const [leagueMenu, setLeagueMenu] = useState(false);
+  const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
+  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
+  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
+  const goToLeague = async (e: Enrollment) => {
+    if (!liveCtx || switchingLeague) return;
+    setLeagueMenu(false);
+    setSwitchingLeague(e.league_id);
+    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
+    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
+  };
+  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
+  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
+    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
+      title="Switch to another of your leagues"
+      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
+      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
+    </button>
+  ) : null;
+  const leagueMenuEl = leagueMenu ? (
+    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
+          </div>
+          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {otherSeats.map((e) => (
+            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
+              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
+                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
+            </button>
+          ))}
+          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
+        </div>
+      </div>
+    </ModalBackdrop>
+  ) : null;
   // ← LEAGUE, beside it (v0.288.1). The classic board has had this door and the
   // drip board never did, so "my leagues" was the only way off it — two clicks
   // and a list to get back to the league you were already in. It only exists for
@@ -1722,6 +1785,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   return (
     <>
+      {leagueMenuEl}
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
         {liveCtx ? (
           isMobile ? (
@@ -1738,6 +1802,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
                     {liveLeagueChip}
+                    {liveSwitchChip}
                     {liveLeaguesChip}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1764,6 +1829,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
               {liveLeagueChip}
+              {liveSwitchChip}
               {liveLeaguesChip}
               {liveWeekSel}
               {liveTestChip}
