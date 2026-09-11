@@ -256,6 +256,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       .catch(() => {});
     return () => { dead = true; };
   }, [railed, liveCtx?.leagueId, liveCtx?.userId]); // eslint-disable-line react-hooks/exhaustive-deps -- the ids are the identity of the seat
+  // League switcher state (v0.388.0) — HOOKS LIVE UP HERE, above every
+  // conditional return of this component (the demo board, the classic board,
+  // the no-game screen); v0.388.0 first declared them beside the chip they
+  // feed, below those returns, and the live board blanked on the hook-order
+  // change. The chip and the sheet themselves are built beside the header.
+  const [seats, setSeats] = useState<Enrollment[] | null>(null);
+  useEffect(() => {
+    if (!liveCtx || demo) { setSeats(null); return; }
+    let dead = false;
+    myEnrollments(liveCtx.userId)
+      .then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- the seat list is per signed-in user
+  const [leagueMenu, setLeagueMenu] = useState(false);
+  const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
   // lineup you fielded (Matchup remounts per week, so this initializer is fresh).
@@ -1661,17 +1677,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // your other seats; picking one runs the same prelude the leagues list
   // runs (openHeroBoard) — the board rebuilds for that league on the week
   // it is playing — so this is the leagues page's card, one tap from here.
-  const [seats, setSeats] = useState<Enrollment[] | null>(null);
-  useEffect(() => {
-    if (!liveCtx || demo) { setSeats(null); return; }
-    let dead = false;
-    myEnrollments(liveCtx.userId)
-      .then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); })
-      .catch(() => {});
-    return () => { dead = true; };
-  }, [liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- the seat list is per signed-in user
-  const [leagueMenu, setLeagueMenu] = useState(false);
-  const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
   const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
   const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
   const goToLeague = async (e: Enrollment) => {

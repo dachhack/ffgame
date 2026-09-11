@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.2 — the live board blanked after v0.388.0 (hook order)
+
+Founder: "nothing now" — dripfantasy.com/#/matchup/1/setup rendered an
+empty page. v0.388.0 declared the league switcher's useState/useEffect
+beside the header chip they feed, which sits BELOW the component's
+conditional returns ("Loading your matchup…" while the game mode loads,
+the classic board, the no-game screen). The first render returned early
+with fewer hooks, the next render reached them, and React threw. The hooks
+now live with the rest at the top of the component; the chip and sheet
+stay where they were. Nothing else changed.
+
 ### v0.388.1 — tap a field on ALL GAMES to make it big
 
 Founder, from the ALL GAMES overlay on Thursday: "click a field to make it
