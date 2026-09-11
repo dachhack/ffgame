@@ -179,7 +179,11 @@ begin
   perform assert_ok(set_player_flag(lid, 'fr2', 'ruled ineligible', '{"no_start": true}'::jsonb), 'f18 no_start flag');
   reset role;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 5, bseat, cseat, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 95, bseat, cseat, 'scheduled') returning id into mid;
   set local role authenticated;
   perform probe_as('b');
   begin

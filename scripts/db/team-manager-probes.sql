@@ -128,9 +128,13 @@ begin
   -- a week-1 matchup, B vs C; the native probes seeded a FUTURE week-1 kickoff,
   -- so the 0058 window-lock trigger lets rows through
   insert into nfl_slate (season, week, home, away, win, kickoff)
-    values ('2026', 1, 'SEA', 'KC', 'snf', '2026-09-09T20:20:00-04:00') on conflict do nothing;
+    values ('2026', 90, 'SEA', 'KC', 'snf', now() + interval '3 days') on conflict do nothing;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 1, bseat, cseat, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 90, bseat, cseat, 'scheduled') returning id into mid;
   perform set_config('probe.tm_mid', mid::text, false);
 
   -- Everything below runs as the authenticated role, or it proves nothing.
@@ -253,15 +257,15 @@ begin
   perform probe_as('a');
   perform assert_ok(commish_set_weekly_budget(lid, 50), 'tm47 allowance set');
   reset role;                    -- the worker: service connection, no auth.uid()
-  r := auto_weekly_budget(1);
+  r := auto_weekly_budget(90);
   perform assert_true((r ->> 'ok')::boolean and (r ->> 'leagues')::int >= 1, 'tm48 league in scope');
   select coins into n from team_wallet where league_id = lid and roster_id = bseat;
   perform assert_true(n = 50, 'tm49 allowance landed (0 + 50)');
-  r := auto_weekly_budget(1);
+  r := auto_weekly_budget(90);
   select coins into n from team_wallet where league_id = lid and roster_id = bseat;
   perform assert_true(n = 50, 'tm50 next tick is a no-op');
   perform probe_as('a');
-  r := commish_grant_weekly_budget(lid, 1);
+  r := commish_grant_weekly_budget(lid, 90);
   perform assert_true((r ->> 'ok')::boolean, 'tm51 manual grant still allowed');
   select coins into n from team_wallet where league_id = lid and roster_id = bseat;
   perform assert_true(n = 50, 'tm52 manual after auto cannot double-pay');

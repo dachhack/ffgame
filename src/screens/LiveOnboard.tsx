@@ -23,6 +23,7 @@ import { PlatformTeam } from './PlatformTeam';
 import { LeagueBoard } from './LeagueBoard';
 import { LeagueHubPage, useHeroBoard, openHeroBoard } from './LeagueHubPage';
 import { GuillotinePanel } from './GuillotinePanel';
+import { InvitePreviewCard } from './InvitePreviewCard';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { PodBuilder } from './PodBuilder';
@@ -239,6 +240,9 @@ function AuthForm() {
   // is dead because the network hiccuped would turn a retry into a giving-up.
   type Preview = { st: 'loading' } | { st: 'found'; lg: LeaguePreview } | { st: 'unknown' } | { st: 'error' };
   const [preview, setPreview] = useState<Preview>({ st: 'loading' });
+  // The code itself, kept so the 0274 landing card can describe the league in
+  // full below the identity block.
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   useEffect(() => {
     let code: string | null = null;
     // Only the PLAYER invite: league_by_invite matches `invite_code`, and a
@@ -246,6 +250,7 @@ function AuthForm() {
     // with the other would report every commish link as an unknown league.
     try { code = localStorage.getItem('dripInviteCode'); } catch { /* ignore */ }
     if (!code) return;
+    setInviteCode(code);
     let dead = false;
     previewLeague(code)
       .then((lg) => { if (!dead) setPreview(lg ? { st: 'found', lg } : { st: 'unknown' }); })
@@ -378,6 +383,15 @@ function AuthForm() {
             </div>
           );
         })()}
+        {/* THE LEAGUE AND ITS SETTINGS (v0.388.0, founder: "someone opens the
+            link and gets a preview of the league and settings before joining").
+            The block above says WHICH league; this says what kind of league it
+            is — format, scoring, lineup, draft, wire, seats. Signed out, off
+            the invite code alone (0274). Renders nothing if the code is dead,
+            because the line below already says so. */}
+        {playerCtx && preview.st === 'found' && !!inviteCode && (
+          <InvitePreviewCard code={inviteCode} />
+        )}
         {/* A code that matched nothing. Said HERE rather than after the account
             is made, which is where they would otherwise find out. `error` says
             nothing at all — a hiccuped lookup is not evidence about the code. */}

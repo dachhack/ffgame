@@ -85,8 +85,13 @@ begin
 
   -- the slot cap honors the SPEC count: 3 'wk' rows in, the 4th out
   reset role;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0). This fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the REAL slate for the
+  -- matchup's week — so on a live week it starts refusing the moment the baked
+  -- season actually kicks off, and the suite fails by calendar rather than by
+  -- code. Week 90 has no slate row, so there is no kickoff to be late for.
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-  values (lid, 1, 2, 1, 'scheduled') returning id into mid;
+  values (lid, 90, 2, 1, 'scheduled') returning id into mid;
   set local role authenticated;
   perform probe_as('c');
   insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)

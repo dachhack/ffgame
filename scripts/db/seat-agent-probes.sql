@@ -54,9 +54,13 @@ begin
     values (lid, 1, commish, true), (lid, 2, null, false),
            (lid2, 1, commish, true), (lid2, 2, null, false);
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 1, 1, 2, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 90, 1, 2, 'scheduled') returning id into mid;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 2, 2, 1, 'scheduled') returning id into mid2;
+    values (lid, 91, 2, 1, 'scheduled') returning id into mid2;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
     values (lid2, 1, 1, 2, 'scheduled') returning id into other_mid;
 

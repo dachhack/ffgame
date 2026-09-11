@@ -354,6 +354,42 @@ export async function previewLeague(code: string): Promise<LeaguePreview | null>
   return (data && data[0]) || null;
 }
 
+/** THE INVITE LANDING (0274) — the whole league, to someone holding the code.
+ *
+ *  `previewLeague` above identifies the league; this one DESCRIBES it: the
+ *  rules, the lineup, the draft, the seats and the team names. Callable signed
+ *  out, and — unlike `league_preview` — it does not require the league to have
+ *  listed itself publicly, because a private league is exactly the kind whose
+ *  invite gets sent. The code is the credential. */
+export interface InviteLeaguePreview {
+  ok: boolean; error?: string;
+  league_id?: string; name?: string; season?: string; provider?: string | null;
+  avatar_url?: string | null; game_mode?: string | null;
+  /** standard | guillotine | vampire. */
+  format?: string | null;
+  /** redraft | keeper | dynasty | contract | contract_dynasty. */
+  continuity?: string | null;
+  ppr?: number | null;
+  bestball?: string[] | null;
+  /** The classic lineup as a spot→count map ({ QB: 1, RB: 2, … }). */
+  roster?: Record<string, number> | null;
+  dues?: string | null;
+  blurb?: string | null;
+  seats_total?: number | null;
+  seats_open?: number | null;
+  draft?: { status?: string; mode?: string; rounds?: number; pick_seconds?: number; budget?: number | null } | null;
+  rules?: {
+    waiver_mode?: string; faab_budget?: number | null; trade_review?: string;
+    pos_caps?: Record<string, number> | null; live_buffs?: boolean;
+  } | null;
+  contract_rules?: { salary_cap?: number | null; years_max?: number | null } | null;
+  scoring?: Record<string, unknown> | null;
+  /** Seat, team name, and whether somebody is sitting in it. No owners. */
+  teams?: { roster_id: number; team_name: string | null; taken: boolean }[] | null;
+}
+export const invitePreview = (code: string) =>
+  rpc<InviteLeaguePreview>('invite_preview', { p_code: code.trim() });
+
 export interface RedeemResult { ok: boolean; error?: string; league_id?: string; roster_id?: number; team?: string; }
 
 export interface PreviewRedeem { ok: boolean; error?: string; league?: string; team?: string; avatar?: string | null; }

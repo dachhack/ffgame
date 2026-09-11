@@ -71,8 +71,8 @@ begin
   -- The slate: BUF kick off Thursday (already gone), PHI on Sunday (still to come).
   reset role;
   insert into nfl_slate (season, week, win, home, away, kickoff) values
-    ('2026', 1, 'thu', 'NYJ', 'BUF', now() - interval '2 hours'),
-    ('2026', 1, 'sun_early', 'PHI', 'DAL', now() + interval '3 days')
+    ('2026', 90, 'thu', 'NYJ', 'BUF', now() - interval '2 hours'),
+    ('2026', 90, 'sun_early', 'PHI', 'DAL', now() + interval '3 days')
   on conflict do nothing;
   -- The league's pool places each player on a team — the join the trigger uses.
   insert into league_pool (league_id, slug, full_name, pos, team, rank) values
@@ -82,7 +82,11 @@ begin
     (lid, 'bye-man',      'Bye Man',      'WR', 'ZZZ', 4)
   on conflict do nothing;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (lid, 1, 1, 2, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+    values (lid, 90, 1, 2, 'scheduled') returning id into mid;
   set local role authenticated;
 
   -- ── VISIBILITY ────────────────────────────────────────────────────────────
@@ -241,7 +245,7 @@ begin
   perform probe_as('c'); perform assert_ok(native_join(drip_code, 'DR-C'), 'ol12 c joins the drip league');
   reset role;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-    values (drip_lid, 1, 1, 2, 'scheduled') returning id into drip_mid;
+    values (drip_lid, 90, 1, 2, 'scheduled') returning id into drip_mid;
   set local role authenticated;
   perform probe_as('c');
   insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)

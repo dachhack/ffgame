@@ -116,7 +116,11 @@ begin
   -- a stashed player cannot be started; unrostered slugs pass the trigger
   reset role;
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
-  values (lid, 1, 2, 1, 'scheduled') returning id into mid;
+  -- A WEEK THE REAL SLATE DOESN'T COVER (v0.388.0): this fixture writes a
+  -- classic lineup, and the 0178 per-player lock reads the real slate for
+  -- the matchup's week — so on a live week it starts refusing the day the
+  -- baked season kicks off, failing by calendar rather than by code.
+  values (lid, 90, 2, 1, 'scheduled') returning id into mid;
   set local role authenticated;
   perform probe_as('c');
   insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug)
