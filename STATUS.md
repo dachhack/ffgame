@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.3 — a backup never covers an earlier window
+
+Founder, Thursday: the opponent's Thursday backup (Purdy, 9.4, unopposed)
+had auto-subbed into Barner's WEDNESDAY slot — a window already FINAL at
+0.5 — "you shouldn't be able to assign a backup to a previous window."
+Manual assignment already barred kicked windows on live boards (0138);
+the engine's AUTO pass did not, scanning every starter for the lowest
+beatable one. `bestBallBackups` now takes the week's window kickoff order
+and a backup may cover only its own window or a later one, manual or
+auto; the auto pass picks per backup (the lowest starter it may still
+cover) instead of one shared pointer. Both resolvers get the order from
+orchestrate (windowsForWeek), so the board and the worker agree. The web
+assign menu applies the same rule on the sim/demo board too. Unknown
+windows (classic 'wk') are unconstrained. Pinned by
+scripts/check-backup-window.mjs (check:backupwin).
+
 ### v0.388.2 — the live board blanked after v0.388.0 (hook order)
 
 Founder: "nothing now" — dripfantasy.com/#/matchup/1/setup rendered an
