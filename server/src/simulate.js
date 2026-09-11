@@ -249,6 +249,14 @@ async function simulateLive(leagueId, week, { srcWeek, speed, tickMs, jitter, co
   const { data: matchups } = await db().from('matchup').select('*').eq('league_id', leagueId).eq('week', week);
   if (!matchups?.length) throw new Error(`No matchups for league ${leagueId} week ${week}. Run: cli sync-week ${leagueId} ${week}`);
   const ids = matchups.map((m) => m.id);
+  // A week that already carries REAL plays is a live week, not a rehearsal
+  // room (v0.387.2): live_play keys on week alone, so a replay here would sit
+  // beside the real feed and score last year's plays for this year's players
+  // — in every league, since these rows are not per league. The worker also
+  // purges SIM rows the moment it polls a real game, so the run would be
+  // deleted from under itself. Rehearse on a week with no real feed.
+  const { count: realRows } = await db().from('live_play').select('id', { count: 'exact', head: true }).eq('week', week).neq('game_id', 'SIM');
+  if (realRows) throw new Error(`week ${week} already has ${realRows} real (ESPN) play rows — refusing to replay a baked week over a live one. Rehearse on a week with no real feed.`);
 
   log(`LIVE · league ${leagueId} · week ${week} (plays from baked w${srcWeek}) · ${matchups.length} matchups`);
   log('locking picks + going live, clearing prior feed…');
@@ -351,6 +359,37 @@ async function simulateReset(leagueId, week) {
   log(`reset ${ids.length} matchups (week ${week}) → scheduled · picks unlocked · SIM feed + matchup_state cleared`);
 }
 
+// ── PURGE: drop the simulator's rows for a week, and NOTHING else. ─────────────
+// The surgical half of --reset (v0.387.2): reset also flips the league's
+// matchups back to scheduled and unlocks every pick, which cannot be done to a
+// week that is really being played. This touches only the rows the simulator
+// wrote — live_play game_id 'SIM', game_feed 'SIM:%' — across every league,
+// because those rows are keyed on week alone and are shared by every league.
+// The worker re-resolves from the remaining (real) rows on its next tick.
+async function simulatePurge(week) {
+  const { db } = await import('./supabase.js');
+  if (!week) throw new Error('usage: simulate --purge <week>');
+  const count = async (table, f) => {
+    const { count: n, error } = await f(db().from(table).select('*', { count: 'exact', head: true }).eq('week', week));
+    if (error) throw new Error(`${table} count: ${error.message}`);
+    return n ?? 0;
+  };
+  const simPlays = await count('live_play', (q) => q.eq('game_id', 'SIM'));
+  const realPlays = await count('live_play', (q) => q.neq('game_id', 'SIM'));
+  const simFeeds = await count('game_feed', (q) => q.like('game_id', 'SIM:%'));
+  const realFeeds = await count('game_feed', (q) => q.not('game_id', 'like', 'SIM:%'));
+  log(`week ${week} before: live_play SIM=${simPlays} real=${realPlays} · game_feed SIM=${simFeeds} real=${realFeeds}`);
+  if (!simPlays && !simFeeds) { log('nothing to purge'); return; }
+  const { error: e1 } = await db().from('live_play').delete().eq('week', week).eq('game_id', 'SIM');
+  if (e1) throw new Error(`live_play delete: ${e1.message}`);
+  const { error: e2 } = await db().from('game_feed').delete().eq('week', week).like('game_id', 'SIM:%');
+  if (e2) throw new Error(`game_feed delete: ${e2.message}`);
+  const afterSim = await count('live_play', (q) => q.eq('game_id', 'SIM'));
+  const afterReal = await count('live_play', (q) => q.neq('game_id', 'SIM'));
+  const afterFeeds = await count('game_feed', (q) => q.like('game_id', 'SIM:%'));
+  log(`purged week ${week}: ${simPlays} SIM plays + ${simFeeds} SIM game feeds · after: live_play SIM=${afterSim} real=${afterReal} · game_feed SIM=${afterFeeds} · real rows untouched`);
+}
+
 /** Parse `simulate` args and dispatch. Called from cli.js. */
 export async function simulate(args) {
   const flags = {};
@@ -373,6 +412,10 @@ export async function simulate(args) {
   }
   if (flags.reset) {
     await simulateReset(pos[0], Number(pos[1]));
+    return;
+  }
+  if (flags.purge) {
+    await simulatePurge(Number(flags.week ?? pos[0]));
     return;
   }
   const [leagueId, week] = pos;

@@ -94,6 +94,15 @@ export interface SideLens<S> {
 export function bestBallBackups<S>(slots: S[], lens: SideLens<S>, assign: Record<string, string> = {}, hooks?: {
   zeroed?: (b: S, wouldBe: number) => void;
   subbed?: (b: S, starter: S, score: number, from: number) => void;
+  /** Kickoff order of a window id (v0.388.3) — a backup may only cover a
+   *  starter in its OWN window or a LATER one. Founder, Thursday: the
+   *  opponent's Thursday backup (Purdy, 9.4) had subbed into a Wednesday
+   *  slot that was already FINAL at 0.5 — "you shouldn't be able to assign a
+   *  backup to a previous window." A window that has already played is not
+   *  something a later game gets to rewrite. Unknown windows (a negative or
+   *  absent rank) are unconstrained, so classic 'wk' rows and tests without a
+   *  slate behave as before. */
+  winRank?: (win: string) => number;
 }): void {
   const backups = slots.filter((s) => lens.player(s) && !lens.opp(s));
   if (!backups.length) return;
@@ -107,22 +116,26 @@ export function bestBallBackups<S>(slots: S[], lens: SideLens<S>, assign: Record
     lens.set(st, r1(wouldBe.get(b)!));
     used.add(st);
   };
+  const rank = (s: S) => hooks?.winRank?.(lens.win(s)) ?? -1;
+  const coverable = (b: S, st: S) => { const rb = rank(b), rs = rank(st); return rb < 0 || rs < 0 || rs >= rb; };
 
   const auto: S[] = [];
   for (const b of backups) {
     const targetKey = assign[lens.key(b)];
     const st = targetKey ? starters.find((s) => lens.key(s) === targetKey) : undefined;
-    if (st && !used.has(st) && wouldBe.get(b)! > lens.get(st)) doSub(b, st);
+    if (st && !used.has(st) && coverable(b, st) && wouldBe.get(b)! > lens.get(st)) doSub(b, st);
     else if (!targetKey) auto.push(b);
   }
 
+  // Auto: best backup first, each onto the LOWEST starter it may still cover.
+  // Per backup rather than one shared pointer, because the window rule means
+  // the lowest starter overall may be off-limits to this backup while a later
+  // window's is not.
   const remStarters = starters.filter((s) => !used.has(s)).sort((a, b) => lens.get(a) - lens.get(b));
   auto.sort((a, b) => wouldBe.get(b)! - wouldBe.get(a)!);
-  let si = 0;
   for (const b of auto) {
-    if (si >= remStarters.length) break;
-    const st = remStarters[si];
-    if (wouldBe.get(b)! > lens.get(st)) { doSub(b, st); si++; } else break;
+    const st = remStarters.find((s) => !used.has(s) && coverable(b, s));
+    if (st && wouldBe.get(b)! > lens.get(st)) doSub(b, st);
   }
 }
 

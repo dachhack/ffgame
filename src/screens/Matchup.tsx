@@ -6,7 +6,7 @@ import type { Phase, LiveCtx, Route } from '../app/store';
 import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
-import { leagueGameMode, myEnrollments } from '@drip/core/data/liveApi';
+import { leagueGameMode, myEnrollments, type Enrollment } from '@drip/core/data/liveApi';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
@@ -17,7 +17,7 @@ import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
-import { consumeShopOnBoard } from './LeagueHubPage';
+import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
@@ -256,6 +256,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       .catch(() => {});
     return () => { dead = true; };
   }, [railed, liveCtx?.leagueId, liveCtx?.userId]); // eslint-disable-line react-hooks/exhaustive-deps -- the ids are the identity of the seat
+  // League switcher state (v0.388.0) — HOOKS LIVE UP HERE, above every
+  // conditional return of this component (the demo board, the classic board,
+  // the no-game screen); v0.388.0 first declared them beside the chip they
+  // feed, below those returns, and the live board blanked on the hook-order
+  // change. The chip and the sheet themselves are built beside the header.
+  const [seats, setSeats] = useState<Enrollment[] | null>(null);
+  useEffect(() => {
+    if (!liveCtx || demo) { setSeats(null); return; }
+    let dead = false;
+    myEnrollments(liveCtx.userId)
+      .then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- the seat list is per signed-in user
+  const [leagueMenu, setLeagueMenu] = useState(false);
+  const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
   // lineup you fielded (Matchup remounts per week, so this initializer is fresh).
@@ -565,7 +581,45 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // assignments — those stay sealed) and defends each window accordingly. What the
   // opponent has armed is hidden, exactly as your loadout is hidden from it. In a
   // live matchup, the opponent's revealed sealed lineup wins over the AI.
-  const oppPicks = useMemo(() => liveOppPicks ?? aiLineup(oppId, YOU, week, extraSlots), [liveOppPicks, oppId, week, ready, extraKey]);
+  // LIVE boards never stand an AI lineup in for a real opponent (v0.387.2):
+  // before this, a matchup whose reveal hadn't landed rendered the AI's guessed
+  // picks in the opponent's slots and struck them through on the roster rail,
+  // as if they were the sealed lineup — the AI ignores injuries, so it fielded
+  // an OUT back in the founder's opponent's Wednesday slot. Unrevealed → empty
+  // slot (the cards stay face-down until kickoff anyway). The sim/demo board
+  // keeps the AI.
+  //
+  // Two sources, sealed reveal first (v0.387.5). Agent seats write real
+  // sealed_pick rows, but an AI-CONTROLLED seat (league_membership.controller
+  // = 'ai') writes none: the worker composes its lineup at resolve time. Its
+  // players only ever exist in the resolver's published per-slot rows
+  // (matchup_state.slot_scores — slug AND metric ride along, and the worker
+  // publishes a window's rows only once it has kicked off, so nothing sealed
+  // leaks). Until this, the founder's board scored that opponent's slot on
+  // the window bar while the card read "NOT MATCHED UP". Keyed by the same
+  // string the sealed rows use, and a sealed row always wins its key.
+  const srvOppKey = useMemo(() => {
+    if (!liveCtx || srvHomeRoster == null) return '';
+    const theirs = liveCtx.rosterId === srvHomeRoster ? 'away' : 'home';
+    const rows: string[] = [];
+    for (const st of srvStates) {
+      for (const r of st.slot_scores ?? []) {
+        if (r.side !== theirs || !r.slug || r.slot == null || r.slot === '') continue;
+        if (r.metric === 'ghost' || r.metric === 'bye') continue; // power-up phantoms, not a pick
+        rows.push(`${st.game_window}#${r.slot}|${r.slug}|${r.metric ?? ''}`);
+      }
+    }
+    return rows.sort().join('\n');
+  }, [liveCtx, srvStates, srvHomeRoster]);
+  const oppPicks = useMemo(() => {
+    if (!liveCtx) return aiLineup(oppId, YOU, week, extraSlots);
+    const out: Record<string, Pick> = { ...(liveOppPicks ?? {}) };
+    for (const line of srvOppKey ? srvOppKey.split('\n') : []) {
+      const [key, slug, metric] = line.split('|');
+      if (!out[key]) out[key] = { playerId: slug, metricId: metric || null };
+    }
+    return out;
+  }, [liveCtx, liveOppPicks, srvOppKey, oppId, week, ready, extraKey]);
   const byeYou = useMemo(() => byePlayers(YOU, week), [week]);
   const byeTheir = useMemo(() => byePlayers(oppId, week), [week, oppId]);
 
@@ -1616,6 +1670,58 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
+  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
+  // Founder, Thursday night, four leagues live: "I have to keep going back
+  // to my leagues to see my other match ups. Can we make a quick selector
+  // at the top?" The header names the league you are in and opens a list of
+  // your other seats; picking one runs the same prelude the leagues list
+  // runs (openHeroBoard) — the board rebuilds for that league on the week
+  // it is playing — so this is the leagues page's card, one tap from here.
+  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
+  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
+  const goToLeague = async (e: Enrollment) => {
+    if (!liveCtx || switchingLeague) return;
+    setLeagueMenu(false);
+    setSwitchingLeague(e.league_id);
+    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
+    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
+  };
+  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
+  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
+    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
+      title="Switch to another of your leagues"
+      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
+      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
+    </button>
+  ) : null;
+  const leagueMenuEl = leagueMenu ? (
+    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
+          </div>
+          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {otherSeats.map((e) => (
+            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
+              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
+                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
+            </button>
+          ))}
+          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
+        </div>
+      </div>
+    </ModalBackdrop>
+  ) : null;
   // ← LEAGUE, beside it (v0.288.1). The classic board has had this door and the
   // drip board never did, so "my leagues" was the only way off it — two clicks
   // and a list to get back to the league you were already in. It only exists for
@@ -1684,6 +1790,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   return (
     <>
+      {leagueMenuEl}
       <header style={{ height: 'auto', minHeight: isMobile ? 52 : 60, flex: 'none', background: 'var(--bg)', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 8, padding: isMobile ? '7px 10px' : '8px 16px', position: 'sticky', top: 0, zIndex: 40, gap: isMobile ? 12 : 10 }}>
         {liveCtx ? (
           isMobile ? (
@@ -1700,6 +1807,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
                     {liveLeagueChip}
+                    {liveSwitchChip}
                     {liveLeaguesChip}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1726,6 +1834,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
               <Brand onClick={() => navigate({ name: 'league' })} hideDataSource />
               {liveLeagueChip}
+              {liveSwitchChip}
               {liveLeaguesChip}
               {liveWeekSel}
               {liveTestChip}
@@ -1826,7 +1935,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               <button onClick={() => toggleRoster('their')} className="mono" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', textAlign: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '8px', borderRadius: 4, background: 'var(--surface)', border: `1px solid ${rosterOpen.their ? 'var(--opp)' : 'var(--bd)'}`, color: rosterOpen.their ? 'var(--opp)' : 'var(--dim)' }}>{rosterOpen.their ? '▾' : '▸'} OPPONENT ROSTER</button>
             </div>
             {rosterOpen.you && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} winEditable={liveCtx ? (id) => winRt(id) === 'setup' : undefined} collapsed={false} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} fluid />}
-            {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
+            {rosterOpen.their && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} winRevealed={liveCtx ? (id) => winRt(id) === 'live' || winRt(id) === 'final' : undefined} sealed={phase === 'setup'} collapsed={false} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} fluid />}
           </div>
         )}
 
@@ -2031,7 +2140,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           <div style={{ height: 40 }} />
         </main>
 
-        {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
+        {!isMobile && <RosterAside side="their" pools={oppPools} picks={oppPicks} phase={phase} winRevealed={liveCtx ? (id) => winRt(id) === 'live' || winRt(id) === 'final' : undefined} sealed={phase === 'setup'} collapsed={!rosterOpen.their} onToggle={() => toggleRoster('their')} bye={byeTheir} week={week} />}
       </div>
 
       {swapTarget && (() => {
@@ -2098,6 +2207,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           // the server refuses it anyway. Assignments made before kickoff
           // stay valid and still score; they committed blind.
           .filter((s) => !liveCtx || liveWinState[s.win] === 'setup' || liveWinState[s.win] === 'locked')
+          // v0.388.3: never a window EARLIER than the backup's own — the
+          // engine (bestBallBackups) refuses that pairing, so the menu must
+          // not offer it. Same rule on the sim/demo board, which the kicked
+          // filter above skips.
+          .filter((s) => { const o = windowsForWeek(week).map((w) => w.id); const rb = o.indexOf(b.win), rs = o.indexOf(s.win); return rb < 0 || rs < 0 || rs >= rb; })
           .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
         return (
           <BackupMenu
@@ -3321,10 +3435,19 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
     // Live, the resolver's row for this slot if it has published one — the
     // same rule the head-to-head card takes below. An UNOPPOSED slot is exactly
     // where the two hosts were most visibly apart, since it is the whole card.
+    // A BACKUP'S CARD SHOWS WHAT IT WOULD BRING (v0.387.4). The resolver's
+    // published row for a sub-capable backup is 0 by rule — it banks nothing
+    // in place — so taking it here blanked the card all game while the log
+    // under it totalled 2.1 (founder: "let's not keep it zero, but zero it
+    // out or show the sub at the end"). Live, the card shows the running
+    // would-be bank; at final the settled would-be, struck through when it
+    // never subbed in (`negated` below) and plain when it did. The window
+    // bar and the headline keep the resolver's counted number. A backup that
+    // can never sub (a zero-bank metric) still shows the published row.
     const liveBackup = shownScore({
       final: done,
       settled: wouldBe,
-      srv: mineBackup ? srvYou : srvTheir,
+      srv: canSub ? null : (mineBackup ? srvYou : srvTheir),
       bank: mineBackup ? live.you : live.their,
     });
     const bEvents = slot.events.filter((e) => e.clock <= bclock);
@@ -3504,8 +3627,16 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
   const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock) : null;
   const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock) : null;
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.youSub?.name : undefined} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final ? slot.theirSub?.name : undefined} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
+  // A SUB SHOWS THE MOMENT THE RESOLVER COUNTS IT (v0.387.6). The best-ball
+  // sub used to be labelled only at FINAL, when the local number first
+  // reflected it — but live the card shows the resolver's row, and the worker
+  // runs the backup rule on every tick: the founder's Wednesday backup
+  // (Stevenson, 6.9) was already subbed into Parkinson's Thursday slot while
+  // Parkinson stood at 0 rec yd, so the card read 6.9 over no catches with
+  // nothing to say why. Once the server has published this slot (srv row
+  // present) and the pipeline says a sub lands here, say so.
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -3584,8 +3715,8 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
 }
 
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
   /** Card-table theme: render as a face-up LiveCard on the felt (with the
    *  hot/nuked flags derived from the slot's play-by-play) instead of the
    *  compact score strip — the cards stay on the board after kickoff. */
@@ -3664,7 +3795,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const statLine = suppressSpent != null
     ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
-      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} scoring</div>
+      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} {subLive ? 'subbed in — his points count here' : 'scoring'}</div>
       : <div className="mono" style={isMobile
           ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
           // Wrap, never truncate — desktop too. The game line's departure

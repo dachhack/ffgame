@@ -173,7 +173,7 @@ export function App() {
           : <ProviderConnect key={route.provider} provider={route.provider} />)}
         {route.name === 'hub' && <LeagueHub />}
         {route.name === 'league' && <LeagueOverview />}
-        {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}`} week={route.week} initialPhase={route.phase} />}
+        {route.name === 'matchup' && <Matchup key={`m${route.week}-${youTeamId}-${liveCtx?.matchupId ?? ''}`} week={route.week} initialPhase={route.phase} />}
         {route.name === 'final' && <MatchupFinal key={`f${route.week}-${youTeamId}`} week={route.week} />}
         {route.name === 'classicSim' && <ClassicSim />}
       </Suspense>

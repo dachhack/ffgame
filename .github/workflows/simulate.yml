@@ -15,6 +15,10 @@ name: Simulate live feed
 #   • reset — fully reverts a live run for a league/week: matchups → scheduled,
 #             picks unlocked, SIM feed + matchup_state cleared. Touches only the
 #             sim's own SIM plays, never real ESPN rows.
+#   • purge — deletes ONLY the simulator's rows for a week (live_play 'SIM',
+#             game_feed 'SIM:%'), every league, nothing else: safe on a week
+#             that is really being played, which reset is not. Prints before /
+#             after counts. Needs only `week`.
 #
 # Secrets required for check/live (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
@@ -22,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry | check | live | reset'
+        description: 'dry | check | live | reset | purge'
         type: choice
-        options: [dry, check, live, reset]
+        options: [dry, check, live, reset, purge]
         default: dry
       league:
         description: 'pilot league id (check/live)'
@@ -79,7 +83,7 @@ jobs:
           set -uo pipefail
           SRC="${SRC:-$WEEK}"
           JITTER="${JITTER:-0}"; CORRECTIONS="${CORRECTIONS:-0}"
-          case "$MODE" in check|live|reset)
+          case "$MODE" in check|live|reset|purge)
             if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
               echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
             fi ;;
@@ -95,6 +99,8 @@ jobs:
             reset)
               if [ -z "$LEAGUE" ]; then echo "::error::reset mode needs a league id (input: league)"; exit 1; fi
               npm run --silent cli -- simulate --reset "$LEAGUE" "$WEEK" ;;
+            purge)
+              npm run --silent cli -- simulate --purge --week="$WEEK" ;;
             *)
               echo "::error::unknown mode $MODE"; exit 1 ;;
           esac

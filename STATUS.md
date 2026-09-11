@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.388.0 — the invite link lands on the league, not a password box (0274)
+### v0.388.4 — the invite link lands on the league, not a password box (0274)
 
 Founder: "I'd love a landing page for the league invite links for external
 viewing. So someone opens the link and gets a preview of the league and
@@ -64,6 +64,163 @@ years out in the throwaway DB, and a few fixtures that plant their own
 slate moved to weeks the real one doesn't cover. 84 suites green.
 
 Web only — no app change, so no new APK.
+
+### v0.388.3 — a backup never covers an earlier window
+
+Founder, Thursday: the opponent's Thursday backup (Purdy, 9.4, unopposed)
+had auto-subbed into Barner's WEDNESDAY slot — a window already FINAL at
+0.5 — "you shouldn't be able to assign a backup to a previous window."
+Manual assignment already barred kicked windows on live boards (0138);
+the engine's AUTO pass did not, scanning every starter for the lowest
+beatable one. `bestBallBackups` now takes the week's window kickoff order
+and a backup may cover only its own window or a later one, manual or
+auto; the auto pass picks per backup (the lowest starter it may still
+cover) instead of one shared pointer. Both resolvers get the order from
+orchestrate (windowsForWeek), so the board and the worker agree. The web
+assign menu applies the same rule on the sim/demo board too. Unknown
+windows (classic 'wk') are unconstrained. Pinned by
+scripts/check-backup-window.mjs (check:backupwin).
+
+### v0.388.2 — the live board blanked after v0.388.0 (hook order)
+
+Founder: "nothing now" — dripfantasy.com/#/matchup/1/setup rendered an
+empty page. v0.388.0 declared the league switcher's useState/useEffect
+beside the header chip they feed, which sits BELOW the component's
+conditional returns ("Loading your matchup…" while the game mode loads,
+the classic board, the no-game screen). The first render returned early
+with fewer hooks, the next render reached them, and React threw. The hooks
+now live with the rest at the top of the component; the chip and sheet
+stay where they were. Nothing else changed.
+
+### v0.388.1 — tap a field on ALL GAMES to make it big
+
+Founder, from the ALL GAMES overlay on Thursday: "click a field to make it
+show up big." Tapping a game's card now spans it across the whole grid
+(capped at 900px, centred) and moves it to the top; the others keep their
+tiles below. Tap it again, or another field, to change. The card's own
+controls (↔ flip, BOX SCORE) keep their clicks. The legend row says which
+tap does what. The field is a viewBox SVG, so it simply scales.
+
+### v0.388.0 — a league switcher in the board header
+
+Founder, Thursday night with four leagues live: "I have to keep going back
+to my leagues to see my other match ups. Can we make a quick selector at
+the top?" The live board's header now names the league you are in as a
+chip (next to ← league); tapping it opens YOUR MATCHUPS — every other
+seat you hold, league name, team name, CLASSIC where it applies — and
+picking one runs the leagues page's own board prelude (openHeroBoard), so
+the board rebuilds for that league on the week it is playing, one tap from
+where you were. Hidden with one league; the demo has no seats. The board's
+mount key now includes the live matchup id so switching leagues on the
+same week remounts cleanly (the two seats could share a roster number).
+
+### v0.387.6 — a subbed-in starter's card says so while live
+
+Founder, Thursday: "Parkinson has points but no catches" — 6.9 over 0 rec
+yd at Q1 12:19, 0–0. Not a scoring bug: `phantom-drip-diag.sql` showed zero
+play rows for his slug anywhere, and the live ESPN summary run through the
+worker's own adapter has none either. The 6.9 is Stevenson's. The
+best-ball backup rule moves an unopposed backup's points onto the lowest
+beatable starter, the worker runs it on every tick, and the Wednesday card
+already said "subbed in — full points counted" — but the TARGET card only
+labelled the sub at FINAL, from when the local number first carried it.
+Live it shows the resolver's row, which carries the sub now. The card now
+labels the sub as soon as the server has published the slot ("⤴ Stevenson
+subbed in — his points count here"), "scoring" at final as before. Kyren
+Williams' 6.8 on a nuke metric in the other Turf Warriors matchup is the
+same shape. Web only.
+
+### v0.387.5 — an AI-controlled opponent's picks render on the live board
+
+Founder's hidden-pick diagnostic on the Gridiron Gang and Turf Warriors
+matchups: the opponent seat was `controller='ai'` with no sealed_pick rows,
+so the reveal had nothing to show — the window bar credited the side while
+every card read "NOT MATCHED UP". Those seats never write sealed rows; the
+worker composes their lineup at resolve time and publishes it, slug and
+metric, in `matchup_state.slot_scores` for windows that have kicked off.
+The web board now fills any opponent slot the sealed reveal lacks from
+those rows (sealed reveal still wins its key; ghost / bye-steal phantoms
+are skipped). Nothing sealed leaks: the worker publishes a window's rows
+only after kickoff, which is the same moment the roster rail reveals it.
+Web only; the app's Duel already reads the rows directly.
+
+### v0.387.4 — a backup's card shows what it would bring
+
+Founder, Stevenson's Wednesday card reading 0.0 over a log totalling 2.1:
+"let's get the score up there. Let's not keep it zero, but zero it out or
+show the sub at the end." The unopposed card took the resolver's published
+row, which for a sub-capable backup is 0 by rule (it banks nothing in
+place). Now the card shows the running would-be bank while live and the
+settled would-be at final — struck through when it never subbed in, plain
+when it did, with the chosen target shown beneath as before. The window
+bar and headline keep the counted number. Web only; the app's Duel card
+is unchanged.
+
+Same screenshot, the other half: the speedkills1 window bar credited the
+opponent 7.8 while their slot read "NOT MATCHED UP". The pick was real and
+revealed; the player just wasn't in the opponent's roster as this board
+had loaded it (the agent seat wire ran 21 transactions in that league at
+boot), and `lookup` returned null for any slug outside the pools — so the
+slot rendered empty, your player read as an unopposed backup, and the
+worker scored the same row as a contested slot. `lookup` now falls back to
+the league registry and then to a minimal player built from the slug.
+
+### v0.387.3 — a live league's players play for their 2026 teams
+
+Founder's Wednesday screenshots after v0.387.2: Romeo Doubs sitting in a
+Wednesday slot with the GB@MIN field under him and "no plays yet", listed
+in the Sunday-4pm rail. He is a Patriot this year. The worker knew (it
+placed him from the live directory); the web board didn't: buildLeague
+took every baked player's team from BAKED_SLUGS — his MAJORITY 2025 team —
+regardless of the league's season. Right for the 2025 replay (the baked
+possession gating is written against it), wrong for a 2026 live league for
+everyone who moved (55 team changes in tonight's roster sweep alone). Now
+a league in a season after the bake takes the provider's current team,
+falling back to the bake only when the provider has none.
+
+Same family, second layer: `realPbpFor` has ignored the bake on a live
+week since the overlay existed, but `realPossFor` / `realKickoff` /
+`realWallFor` / `realGameEndClock` still answered from it — so the live
+2026 board gated tonight's drips on New England's possession from the 2025
+Raiders game. Live weeks now answer "unknown" from all four and fall
+through to the feed, which is what the worker (never loads the bake) did
+all along.
+
+### v0.387.2 — last year's plays on this year's board, and the AI's guesses on the opponent's rail
+
+Founder, Wednesday opener, screenshot: "Henderson is out today. How does
+he have yards? And it's showing my opponent's selections?"
+
+**The yards were 2025's.** `live_play` / `game_feed` key on WEEK alone, no
+season. The June 24 `simulate live` runs replayed baked 2025 Week 1 into
+week 1 (`game_id 'SIM'`, `'SIM:LV@NE'`…) and no reset followed, so when the
+real 2026 Week 1 feed started landing tonight it shared the rows: every
+2025 Week-1 player carried last year's plays into this year's window
+(Henderson, OUT, "had" 5-27 rushing), New England's field showed the 2025
+Raiders game, and the worker scored the same rows. Immediate remedy is two
+SQL deletes (SIM rows only, week 1 — NOT `simulate --reset`, which also
+reverts matchups and unlocks picks). Now the worker purges a week's SIM
+rows the moment it polls a real game there, and the simulator refuses to
+run over a week that has real rows.
+
+**The struck-through lineup was the AI's.** The DB reveal is per window
+and was fine; the client stood `aiLineup` in for a human opponent whenever
+the reveal hadn't landed, and the rail struck through every "assigned"
+player once the board left setup — the first window's kickoff. Live boards
+now use the reveal only (unrevealed → empty slot; every seat, agents
+included, writes real sealed_pick rows), and the rail gates each window's
+strike-through on that window's own reveal.
+
+### v0.387.1 — no house mark beside the wordmark
+
+Founder, screenshot in hand: "There is a chip to the left of DRIP FANTASY.
+Why? Can we remove it?" It was the brand mark — the icon set's
+`brand-mark.png` drawn by `<Brand>` (and hand-rolled the same way on the
+demo board and the leagues screen) at 18px beside the wordmark. Sitting in
+the same row as the real chips (← league, DEMO, the username pill) it read
+as one more button, not a logo. Removed from all three headers; the mark
+still lives where it is an icon inside a CTA (request an invite, play this
+for real). Nothing else moves.
 
 ### v0.387.0 — the blade and the bite reach your phone (0273)
 
