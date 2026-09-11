@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.0 — a league switcher in the board header
+
+Founder, Thursday night with four leagues live: "I have to keep going back
+to my leagues to see my other match ups. Can we make a quick selector at
+the top?" The live board's header now names the league you are in as a
+chip (next to ← league); tapping it opens YOUR MATCHUPS — every other
+seat you hold, league name, team name, CLASSIC where it applies — and
+picking one runs the leagues page's own board prelude (openHeroBoard), so
+the board rebuilds for that league on the week it is playing, one tap from
+where you were. Hidden with one league; the demo has no seats. The board's
+mount key now includes the live matchup id so switching leagues on the
+same week remounts cleanly (the two seats could share a roster number).
+
 ### v0.387.6 — a subbed-in starter's card says so while live
 
 Founder, Thursday: "Parkinson has points but no catches" — 6.9 over 0 rec
