@@ -14,7 +14,7 @@ import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
-import { POWERUPS, powerupById, isAmplifier, ampCapacity, type Powerup } from '@drip/core/data/powerups';
+import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
@@ -2300,7 +2300,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {/* practice: preseason board weeks charge nothing (0110), so the shop must
           neither gate on the balance nor imply one will be deducted. */}
       {shopOpen && <ShopModal onClose={() => setShopOpen(false)} coinsOverride={liveCtx ? Math.round(coinBal) : undefined} onBuy={liveCtx ? buyFromWallet : undefined} cards={cardHand} practice={!!liveCtx && preseason}
-        inventoryOverride={liveCtx ? srvInv ?? undefined : undefined} />}
+        inventoryOverride={liveCtx ? srvInv ?? undefined : undefined}
+        // THE SHOP'S CLOCK (v0.388.6): each card's sign from THIS board's
+        // windows — the live phase machine + lock clock on a live board, the
+        // sim's single phase otherwise.
+        availability={(p) => {
+          const sw: ShopWindow[] = windowsForWeek(week).map((w) => ({
+            id: w.id, label: w.label,
+            phase: liveCtx ? (liveWinState[w.id] ?? 'setup') : winPhaseFor(w.id),
+            locksAt: liveCtx ? windowLockMs(week, w.id) : null,
+          }));
+          return powerupAvailability(p, sw, { practice: !!liveCtx && preseason });
+        }} />}
       {/* Card-table hand: the same owned/usable power-ups as the Apply modal,
           fanned at the bottom. Tap a card → tip → ARM fires the buff, APPLY
           enters the existing tap-a-target flow (pendingApply); tapping the

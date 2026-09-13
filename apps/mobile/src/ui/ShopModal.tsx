@@ -19,7 +19,7 @@
 // tap either, so the only way out was the button that couldn't be pressed.
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { POWERUPS, POWERUP_CATEGORIES, powerupCategory } from '@drip/core/data/powerups';
+import { POWERUPS, POWERUP_CATEGORIES, powerupCategory, closesInLabel, type Powerup, type PowerupAvailability } from '@drip/core/data/powerups';
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { Ev, track } from '@drip/core/analytics';
 import { useTheme, MONO, alpha } from '../theme.native';
@@ -27,7 +27,7 @@ import { Mono } from './prims';
 import { commit } from './feedback';
 import { Overlay } from './Overlay';
 
-export function ShopModal({ visible, matchupId, balance, practice, unlockLocked, onClose, onChanged }: {
+export function ShopModal({ visible, matchupId, balance, practice, unlockLocked, availability, onClose, onChanged }: {
   visible: boolean;
   matchupId: string;
   balance: number;
@@ -45,6 +45,15 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
    *  the shop that message would be posted behind the modal where nobody sees
    *  it. Better to not offer the tap. */
   unlockLocked: (id: string) => boolean;
+  /** ── THE SHOP'S CLOCK (v0.388.6) ────────────────────────────────────────
+   *  Founder: "have the power ups that you can't apply because the usage
+   *  window has passed have some kind of sign so we know what we can buy and
+   *  apply last minute." The board answers, per card, from core's
+   *  powerupAvailability (its windows, its lock clock): an OPEN card wears
+   *  its countdown to the last lock it can still make, a PASSED card wears a
+   *  ⛔ and drops to the bottom of its tab. Buying is never blocked (0255 —
+   *  the card keeps), only labelled. Absent = no windows known, no sign. */
+  availability?: (p: Powerup) => PowerupAvailability | null;
   onClose: () => void;
   /** Fired after a successful buy with the server's new balance AND the freshly
    *  re-read inventory.
@@ -64,13 +73,27 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // The countdowns tick by the minute while the sheet is up.
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     if (!visible) return;
     myInventory(matchupId).then((inv) => setOwned(inv ?? {})).catch(() => {});
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
   }, [visible, matchupId]);
 
-  const shown = POWERUPS.filter((p) => tab === 'all' || powerupCategory(p) === tab);
+  const avail = (p: Powerup): PowerupAvailability | null => availability?.(p) ?? null;
+  // Catalogue order within the tab, except that a card whose week is over
+  // sinks below the ones still in play — "what we can buy and apply last
+  // minute" reads top-down.
+  const shown = POWERUPS
+    .filter((p) => tab === 'all' || powerupCategory(p) === tab)
+    .map((p, i) => ({ p, i, a: avail(p) }))
+    .sort((x, y) => Number(x.a?.state === 'passed') - Number(y.a?.state === 'passed') || x.i - y.i)
+    .map((x) => x.p);
+  const anyPassed = !!availability && POWERUPS.some((p) => avail(p)?.state === 'passed');
 
   const buy = async (id: string, price: number) => {
     if (busy) return;
@@ -134,6 +157,11 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
         </ScrollView>
 
         {!!err && <Mono size={10.5} tone="opp" style={{ paddingHorizontal: 14, paddingBottom: 6 }}>{err}</Mono>}
+        {anyPassed && (
+          <Mono size={9} tone="faint" style={{ paddingHorizontal: 14, paddingBottom: 4 }}>
+            ⛔ = this week’s window has passed{practice ? ' — practice cards don’t carry over' : ' — a card bought now keeps for next week'}
+          </Mono>
+        )}
 
         {/* Shrinks to whatever the sheet has left — see the note in Overlay.
             Left to size itself the wrapped grid would push the ✕ off the top. */}
@@ -147,6 +175,9 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
             const afford = balance >= p.price;
             const timing = isUnlock ? 'METRIC' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
             const lit = flash === p.id;
+            const a = avail(p);
+            const passed = a?.state === 'passed';
+            const closesIn = a?.state === 'open' ? closesInLabel(a.closesAt, nowMs) : null;
             return (
               <Pressable
                 key={p.id}
@@ -158,7 +189,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
                   borderWidth: StyleSheet.hairlineWidth,
                   borderColor: lit ? t.you : '#3A3122',
                   borderRadius: 10, padding: 12, gap: 7,
-                  opacity: afford ? 1 : 0.55,
+                  opacity: afford ? (passed ? 0.6 : 1) : 0.55,
                 }}
               >
                 <View style={{ alignSelf: 'center', backgroundColor: '#3A3122', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
@@ -169,8 +200,23 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
                 <Text style={{ fontSize: 13, fontWeight: '800', color: '#F0E6CC', textAlign: 'center' }}>{p.name.toUpperCase()}</Text>
                 <Text numberOfLines={4} style={{ fontSize: 10.5, color: '#B3A88C', textAlign: 'center', lineHeight: 15 }}>{p.blurb}</Text>
 
+                {/* THE SIGN. Passed: a ⛔ line the eye can't miss. Open: the
+                    countdown to the last lock it can still make. Live/waiting:
+                    where it stands, in the same slot, so cards don't jump. */}
+                {!!a && (
+                  passed
+                    ? <View style={{ alignSelf: 'center', backgroundColor: alpha(t.opp, 18), borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: t.opp }}>⛔ WINDOW PASSED</Text>
+                      </View>
+                    : a.state === 'live'
+                      ? <Mono size={8.5} tone="you" weight="700" style={{ textAlign: 'center' }}>🟢 {a.note.toUpperCase()}</Mono>
+                      : a.state === 'open'
+                        ? <Mono size={8.5} weight="700" style={{ textAlign: 'center', color: t.warn }}>⏳ {closesIn ? `LOCKS ${closesIn.toUpperCase()}` : a.note.toUpperCase()}</Mono>
+                        : <Mono size={8.5} tone="faint" style={{ textAlign: 'center' }}>⏳ {a.note}</Mono>
+                )}
+                {!!a && passed && <Mono size={8} tone="faint" style={{ textAlign: 'center' }}>{a.note}</Mono>}
                 {have > 0 && <Mono size={9} tone="you" weight="700" style={{ textAlign: 'center' }}>OWNED ×{have}</Mono>}
-                {isUnlock && <Mono size={8.5} tone="faint" style={{ textAlign: 'center' }}>to your hand — use it from a slot&rsquo;s metric picker</Mono>}
+                {isUnlock && !passed && <Mono size={8.5} tone="faint" style={{ textAlign: 'center' }}>to your hand — use it from a slot&rsquo;s metric picker</Mono>}
                 {!afford && !gated && <Mono size={9} tone="faint" style={{ textAlign: 'center' }}>↳ need ◈{p.price}</Mono>}
 
                 <View style={{ alignSelf: 'center', marginTop: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A', borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, minWidth: 78, alignItems: 'center' }}>

@@ -18,7 +18,7 @@ import { teamLogo } from '@drip/core/data/media';
 import { srvBoardTotals } from '@drip/core/engine/liveScore';
 import { setSlugMetaOverrides, liveTeamFor } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot } from '@drip/core/data/powerups';
+import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot, powerupAvailability, type ShopWindow } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
@@ -1368,6 +1368,18 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           // Metric unlocks are plain cards now (0256): the shop sells them into
           // the hand; USING one happens in the metric picker, behind a confirm.
           unlockLocked={puLocked}
+          // THE SHOP'S CLOCK (v0.388.6): each card's sign comes from this
+          // board's windows on the same lock rule the picks use — core's phase
+          // machine, plus the app's fail-safe (a window with no known kickoff
+          // reads locked once the week has started) via winLocked.
+          availability={(p) => {
+            const final = matchup.status === 'final';
+            const sw: ShopWindow[] = wins.map((w) => {
+              const ph = windowPhase(week, w.id, nowTs, { matchupFinal: final });
+              return { id: w.id, label: w.label, phase: ph === 'setup' && winLocked(w.id) ? 'locked' : ph, locksAt: winLockMs(w.id) };
+            });
+            return powerupAvailability(p, sw, { matchupFinal: final, practice: isPreseasonWeek(matchup.week) });
+          }}
           onClose={() => setShopOpen(false)}
           // Trust the server's balance rather than deducting locally — on a
           // practice week nothing is actually charged.
