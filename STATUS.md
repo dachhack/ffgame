@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.7 — a used card leaves the hand (Air Raid), and Underdog stops taking two
+
+Founder, Sunday of week 1, web card table: "I bought and played air raid
+so it shouldn't be in my hand anymore." Herbert wearing Air Raid, the
+Air Raid card still fanned below him. The live board keeps TWO copies of
+the hand — the store's `inventory` (what the card hand and Apply modal
+deal from) and Matchup's `srvInv` (what the metric picker and shop read)
+— both hydrated from my_inventory, then kept in step by hand. Buying
+bumped both. Using a metric card (arm_unlock consumes it server-side,
+0256) only took it out of srvInv, so the hand dealt a card that no
+longer existed until a reload. Underdog was worse in the other direction:
+apply_underdog took the card server-side, then the local
+applySlotListPu → consumeAndApply mirrored the consume AGAIN through
+consume_inventory — two cards per attach.
+
+Fix: `refreshHand()` in Matchup re-reads my_inventory after either RPC
+and lands it in BOTH copies (new store `hydrateInventory`), falling back
+to a local −1 on both if the read fails. consumeAndApply/applySlotListPu
+take `{ synced: true }` for the live Underdog path: record the attach and
+the local −1, skip the second server consume. Web only — the app's hand
+excludes metric cards and reads one ledger.
+
 ### v0.388.6 — the shop wears the clock: ⛔ passed, ⏳ locks in 2h, 🟢 live now
 
 Founder: "in the power up shop, let's have the power ups that you can't
