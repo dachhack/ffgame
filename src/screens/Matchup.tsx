@@ -3830,10 +3830,18 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   ) : null;
   // Statline: justified to the card's outer edge. Mobile uses a small fixed size
   // (not bumped by bigText) and wraps rather than ellipsing — so it never truncates.
+  // PHONE COLLISIONS (v0.388.10, founder: "a lot of collisions on mobile
+  // web"). Each side of a duel is a column whose items shrink-to-fit, so a
+  // nowrap line wider than its half doesn't clip — it hangs off the INNER
+  // edge into the other card (the opponent's sub note lay across your score;
+  // two FIELD GEN chips met in the middle). Every one-liner here now caps at
+  // the column's width, and on a phone the sub note says less and wraps.
   const statLine = suppressSpent != null
-    ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
+    ? <div className="mono" title="Suppress (a DST metric): it spends its own points to halve the opponent's drip in this window." style={{ fontSize: fs(9), color: 'var(--fx-stop)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: edge, cursor: 'help' }}>✕ {suppressSpent.toFixed(1)} spent on SUPPRESS</div>
     : subName
-      ? <div className="mono" style={{ fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: edge }}>⤴ {subName} {subLive ? 'subbed in — his points count here' : 'scoring'}</div>
+      ? <div className="mono" style={isMobile
+          ? { fontSize: 8.5, lineHeight: 1.3, color: accent, fontWeight: 700, whiteSpace: 'normal', maxWidth: '100%', textAlign: edge }
+          : { fontSize: fs(9.5), color: accent, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textAlign: edge }}>⤴ {subName} {isMobile ? (subLive ? 'subbed in — counts here' : 'scoring') : (subLive ? 'subbed in — his points count here' : 'scoring')}</div>
       : <div className="mono" style={isMobile
           ? { fontSize: 8.5, lineHeight: 1.3, color: 'var(--dimstrong)', whiteSpace: 'normal', textAlign: edge }
           // Wrap, never truncate — desktop too. The game line's departure
@@ -3867,7 +3875,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // hidden per-minute drip ticks). Suppressed on the FG QB itself (its metric
   // chip already says MULTIPLIER) and when the multiplier is still ~1.
   const fgEl = fgMult != null && fgMult > 1.005 ? (
-    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>⚡ FIELD GEN ×{fgMult.toFixed(2)}</span>
+    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' }}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} ×{fgMult.toFixed(2)}</span>
   ) : null;
 
   if (isMobile && cards) {

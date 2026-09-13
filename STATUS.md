@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.10 — phone-width duel cards stop colliding
+
+Founder, three phone screenshots of the web drip board at 2:21 PM Sunday:
+"A lot of collisions on mobile web." Warren's FIELD GEN chip lying across
+Mayfield's card; Lawrence's "⤴ subbed in — his points count here" laid
+over Burden's score; Washington's and Gibbs's FIELD GEN chips meeting in
+the middle; the outermost mini card cut off at the viewport edge.
+
+One cause for the first three: each side of a duel is a column whose
+items shrink-to-fit, so a `nowrap` line wider than its half doesn't clip
+— it hangs off the INNER edge into the other card (right side anchored
+at flex-end spills left; left side spills right). The metric chip and
+driver already capped at 100%; the FIELD GEN chip and the sub/suppress
+lines didn't. Now every one-liner caps at the column, and on a phone the
+FIELD GEN chip reads ⚡ FG ×1.46 and the sub note says "⤴ Name subbed in
+— counts here" and wraps instead of truncating. The floating mini card's
+phone overhang trims 16 → 10px so the outermost card stays inside the
+page gutter. Web only, no APK; desktop layout unchanged.
+
 ### v0.388.9 — the board's own copy of the rule: 0–0 until kickoff
 
 Founder, on v0.388.8: "it should always show 0 to 0 until kick off."
