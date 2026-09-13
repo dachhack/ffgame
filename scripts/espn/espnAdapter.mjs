@@ -70,6 +70,18 @@ function abbrevOf(displayName) {
   const parts = dn.split(/\s+/);
   return `${parts[0][0]}.${parts.slice(1).join(' ')}`;
 }
+/** Every play-text spelling an athlete can wear: "M.Wilson", "Mi.Wilson",
+ *  "Mic.Wilson" … "Michael.Wilson" — the gamebook lengthens the first-name
+ *  prefix only as far as it must to split namesakes, so all lengths are
+ *  registered and the longest match wins (v0.388.12). */
+export function abbrevKeys(displayName) {
+  const dn = displayName.replace(SUFFIX, '');
+  const parts = dn.split(/\s+/);
+  const first = parts[0] ?? '', rest = parts.slice(1).join(' ');
+  const keys = [];
+  for (let n = 1; n <= first.length; n++) keys.push(`${first.slice(0, n)}.${rest}`);
+  return keys.length ? keys : [abbrevOf(displayName)];
+}
 
 // `resolveSlug(displayName)` maps an ESPN athlete name to the contract slug. The
 // default is name-derived (slugOf); pass a crosswalk/Sleeper-id-backed resolver
@@ -108,12 +120,26 @@ export function buildRoster(summary, resolveSlug = slugOf) {
         // answer: 646 of the 647 players in Sleeper's 2026 rookie class carry
         // no espn_id, so the whole class resolves by name — and a name is only
         // ambiguous until you know which club it just played for.
-        const cands = byAbbrev.get(abbr) ?? [];
-        if (!byAbbrev.has(abbr)) byAbbrev.set(abbr, cands);
         const slug = resolveSlug(dn, a?.athlete?.id ?? null, team) || slugOf(dn);
-        const seen = cands.find((x) => x.slug === slug && x.team === team);
-        if (seen) { if (side) seen.cats.add(side); continue; }
-        cands.push({ name: dn, team, slug, cats: new Set(side ? [side] : []) });
+        // THE GAMEBOOK'S OWN DISAMBIGUATION (v0.388.12). When two men in one
+        // game abbreviate identically, the play text does NOT say "M.Wilson"
+        // twice and leave it to the reader: it lengthens the first-name
+        // prefix until they differ — "Mi.Wilson" (Michael, WR) and
+        // "Ma.Wilson" (Mack, LB), LAC@ARI, 2026 week 1. This roster knew each
+        // athlete as "M.Wilson" only, so neither spelling matched the
+        // alternation and every one of Michael Wilson's nine targets was
+        // dropped on the floor (founder: "we look to be missing michael
+        // wilson stats from the AZ game"). Register every first-name prefix
+        // from one letter to the whole name; the longest-first alternation
+        // below then matches whatever length the gamebook chose, and an
+        // extended key carries only the men it actually fits.
+        for (const key of abbrevKeys(dn)) {
+          const cands = byAbbrev.get(key) ?? [];
+          if (!byAbbrev.has(key)) byAbbrev.set(key, cands);
+          const seen = cands.find((x) => x.slug === slug && x.team === team);
+          if (seen) { if (side) seen.cats.add(side); continue; }
+          cands.push({ name: dn, team, slug, cats: new Set(side ? [side] : []) });
+        }
       }
     }
   }

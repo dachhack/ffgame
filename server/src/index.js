@@ -47,6 +47,9 @@ let lastMarketPoll = 0;
 const lastSeatWire = new Map();
 // Weeks whose simulator ('SIM') rows this process has already purged — see the play tick.
 const simPurgedWeeks = new Set();
+/** Completed games' last late-pass poll time (eventId → ms). See the tick. */
+const finalPolled = new Map();
+const FINAL_REPOLL_MS = 10 * 60_000;
 let lastSyncedWeek = null;
 let lastSyncAt = 0;
 let syncing = false;
@@ -429,7 +432,17 @@ async function tickContext(ctx, season) {
   } catch (e) { log(`[${ctx.tag}] classic seal`, e.message); }
 
   // Poll live games → plays, keyed at the board week. Reuses the scoreboard above.
-  const toPoll = gamesToPollFrom(games);
+  // FINALS GET A LATE PASS (v0.388.12): a completed game is re-polled every
+  // FINAL_REPOLL_MS for the rest of its week. ESPN corrects stats after the
+  // whistle, and an adapter fix shipped mid-Sunday (the Mi./Ma.Wilson
+  // prefixes) has to reach games that had already gone final — polling only
+  // 'in' and 'post && !completed' left Michael Wilson's 5-56 unreachable
+  // until someone ran the CLI by hand. pollGame upserts on the play key, so
+  // a re-poll is idempotent; ~13 finals × 6/hour is a rounding error.
+  const finalsDue = (games ?? []).filter((g) => g.state === 'post' && g.completed
+    && (finalPolled.get(g.eventId) ?? 0) <= Date.now() - FINAL_REPOLL_MS).map((g) => g.eventId);
+  for (const id of finalsDue) finalPolled.set(id, Date.now());
+  const toPoll = [...gamesToPollFrom(games), ...finalsDue];
   // SIMULATOR ROWS NEVER OUTLIVE THE REAL FEED (v0.387.2). live_play and
   // game_feed key on WEEK alone — no season — so a June dress rehearsal that
   // replayed baked 2025 Week 1 into week 1 (game_id 'SIM' / 'SIM:LV@NE') was

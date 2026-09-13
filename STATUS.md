@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.12 — "Mi.Wilson": the gamebook's own namesake prefixes, and a late pass over finals
+
+Founder, Sunday evening: "we look to be missing michael wilson stats
+from the AZ game." Replayed LAC@ARI (ESPN event 401872926, final)
+through the real ingest path offline, with the player index built from
+the live Sleeper directory: ZERO plays mentioned "M.Wilson". ESPN's box
+had Michael Wilson at 5-56 on 7 targets. The play text had him nine
+times as **"Mi.Wilson"** — and Mack Wilson Sr., the linebacker, eight
+times as **"Ma.Wilson"**. When two men in one game abbreviate
+identically the gamebook doesn't say "M.Wilson" twice; it lengthens the
+first-name prefix until they differ. buildRoster registered each athlete
+under `abbrevOf` — "M.Wilson" — only, so neither spelling matched the
+roster alternation and every one of his targets was dropped on the
+floor (the LB's tackles too).
+
+Fix: `abbrevKeys(displayName)` registers every first-name prefix, one
+letter to the whole name ("M.", "Mi.", "Mic.", … "Michael.Wilson"); the
+longest-first alternation matches whatever length the gamebook chose,
+and an extended key carries only the men it fits. Replay after: michael-
+wilson 5 rec / 56 yds + 2 incompletions (= 7 targets), mack-wilson 6
+tackles — both exactly the box score. espn-attr gains the case.
+
+Backfill without a hand: the tick polled only 'in' and 'post &&
+!completed', so a game already final could never receive an adapter fix
+(or ESPN's own post-whistle corrections). Completed games of the current
+week now get a LATE PASS every 10 minutes (`finalPolled` map in
+index.js); pollGame upserts on the play key, so it is idempotent. His
+plays land on the first tick after deploy.
+
+Noted, not touched: `server/test/h2h-verify.mjs` prints a soft "coin
+totals are positive" FAIL (home 30 / away 15 vs the > 50 it expects) on
+main before this change — an engine-coin expectation, not this diff.
+Worker + adapter only; deploy-worker.yml carries it. No migration, no APK.
+
 ### v0.388.11 — the Field General leaves a receipt, and the copy says 1.9×
 
 Founder, 3 PM Sunday, every FIELD GEN chip gone from the cards: "did my

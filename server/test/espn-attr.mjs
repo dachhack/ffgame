@@ -78,5 +78,47 @@ ok(kinds('atl-k').includes('fg'),
 ok(kinds('nate-folkish').includes('fg'),
   'v0.369.6: the NAMED kicker gets the same FG row — the man scores, not just the unit');
 
+// ── THE GAMEBOOK'S OWN DISAMBIGUATION (v0.388.12) ───────────────────────────
+// LAC@ARI, 2026 week 1: Michael Wilson (WR) and Mack Wilson Sr. (LB) both
+// abbreviate to "M.Wilson", so the play text never says that — it lengthens
+// the first-name prefix: "Mi.Wilson" and "Ma.Wilson". The roster knew each
+// man as "M.Wilson" only, neither spelling matched, and every one of the
+// receiver's nine targets was dropped. Founder: "we look to be missing
+// michael wilson stats from the AZ game." Shape copied from the real feed.
+{
+  const s2 = {
+    header: { id: '40200', competitions: [{ competitors: [
+      { id: '1', team: { id: '1', abbreviation: 'ARI' }, homeAway: 'home' },
+      { id: '2', team: { id: '2', abbreviation: 'LAC' }, homeAway: 'away' },
+    ] }] },
+    boxscore: { players: [
+      { team: { abbreviation: 'ARI' }, statistics: [
+        { name: 'defensive', athletes: [athlete(4040983, 'Mack Wilson Sr.')] },
+        { name: 'receiving', athletes: [athlete(4360761, 'Michael Wilson')] },
+        { name: 'passing', athletes: [athlete(77, 'Jacoby Brissett')] },
+      ] },
+      { team: { abbreviation: 'LAC' }, statistics: [
+        { name: 'rushing', athletes: [athlete(88, 'Omarion Hampton')] },
+        { name: 'defensive', athletes: [athlete(99, 'Derwin James')] },
+      ] },
+    ] },
+    drives: { previous: [{ plays: [
+      play(1, 'Pass Reception', '(Shotgun) J.Brissett pass short right to Mi.Wilson to LAC 22 for 10 yards (D.James).', '1', '2', { yds: 10 }),
+      play(2, 'Pass Incompletion', 'J.Brissett pass incomplete short right to Mi.Wilson.', '1', '2'),
+      play(3, 'Rush', 'O.Hampton up the middle to LAC 24 for 6 yards (Ma.Wilson).', '2', '1', { yds: 6 }),
+    ] }] },
+  };
+  const p2 = gameToRealPlays(s2);
+  const k2 = (slug) => (p2[slug] ?? []).map((p) => p.k);
+  ok(k2('michael-wilson').includes('rec') && (p2['michael-wilson'] ?? []).find((p) => p.k === 'rec')?.y === 10,
+    'THE POINT: "Mi.Wilson" credits Michael Wilson the 10-yard catch');
+  ok(k2('michael-wilson').includes('incomplete'),
+    'and the incompletion aimed at "Mi.Wilson" is his target too');
+  ok(k2('mack-wilson').includes('tackle'),
+    '"Ma.Wilson" credits Mack Wilson Sr. the tackle (suffix stripped, prefix kept)');
+  ok(!k2('mack-wilson').includes('rec') && !k2('michael-wilson').includes('tackle'),
+    'neither namesake absorbs the other\'s plays');
+}
+
 console.log(fails ? `\n${fails} FAIL(s)` : '\nALL ESPN-ATTR ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
