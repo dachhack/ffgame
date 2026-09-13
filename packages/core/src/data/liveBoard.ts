@@ -8,7 +8,7 @@ import type { BuiltLeague } from './league';
 import { REG_SEASON_WEEKS } from './league';
 import type { League, FantasyTeam, Player, Pos, PlayerStats, ScheduleGame } from '../types';
 import { shortName, teamForName, normName } from './players';
-import { slugMeta, normTeam, setSlugMetaOverrides } from './slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, liveTeamFor } from './slugMeta';
 import { entrySlug, entryTeam, type PoolEntry } from './poolEntry';
 import { getSupabase } from './supabaseClient';
 import { liveSlate } from './liveApi';
@@ -68,7 +68,12 @@ function poolToPlayer(p: PoolEntry): Player {
  *
  *  Pure and export-only-for-testing: the whole rule is stateable without a
  *  database or a screen, so it is asserted directly (scripts/check-live-meta.mjs). */
-export function poolMetaRows(rows: PoolEntry[]): { slug: string; pos: Pos; team: string; sleeperId?: string | null }[] {
+/** `season` (v0.388.5): the league's season, so a baked player who has moved
+ *  since resolves to his CURRENT team on the overlay — the rule the engine
+ *  players already followed (v0.387.3) and the overlay never did, so the web
+ *  board's logos and badges disagreed with its own engine. Absent = the bake's
+ *  own season, which keeps every existing assertion exactly as it was. */
+export function poolMetaRows(rows: PoolEntry[], season?: number | string | null): { slug: string; pos: Pos; team: string; sleeperId?: string | null }[] {
   return rows.flatMap((p) => {
     const slug = entrySlug(p);
     if (!slug) return [];
@@ -77,7 +82,7 @@ export function poolMetaRows(rows: PoolEntry[]): { slug: string; pos: Pos; team:
     return [{
       slug,
       pos: ((p.pos as Pos) || meta.pos),
-      team: normTeam(entryTeam(p)) || meta.team || teamForName(full) || '',
+      team: liveTeamFor(slug, entryTeam(p), season) || teamForName(full) || '',
       sleeperId: p.sleeper_id,
     }];
   });
@@ -107,7 +112,7 @@ export async function buildLiveLeague(leagueId: string, youRosterId: number, wee
 
   // Install the league's own meta before ANY of it is read — see
   // `poolMetaRows` for why the resolution is not just the row mapped through.
-  setSlugMetaOverrides(poolMetaRows([...poolByRoster.values()].flat()));
+  setSlugMetaOverrides(poolMetaRows([...poolByRoster.values()].flat(), leagueRes.data?.season));
 
   const players: Record<string, Player> = {};
   const excluded: string[] = []; // rostered players we couldn't map to an NFL team

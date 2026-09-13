@@ -6,6 +6,7 @@ import type { Pos } from '../types';
 import { BAKED_SLUGS } from './bakedSlugs';
 import { PLAYER_BIO } from './playerBio';
 import { teamFor } from './playerTeam';
+import { BAKED_PBP_SEASON } from './realPbp';
 
 // Relocation / alt codes → the slate's codes (matches buildLeague.normTeam).
 //
@@ -94,6 +95,41 @@ export function setSlugSleeperIds(ids: Record<string, string | null | undefined>
  *  name-keyed, and IDP resolves 960 of its 963 rows by name alone. */
 export function slugSleeperId(slug: string): string | undefined {
   return idBySlug.get(slug);
+}
+
+/** THE TEAM A LIVE BOARD SHOWS AND GATES ON (v0.388.5) — v0.387.3's rule, made
+ *  ONE function so the web engine, the web overlay and the app's boards can
+ *  never disagree about it again.
+ *
+ *  `slugMeta` answers a baked player from BAKED_SLUGS — his MAJORITY 2025 team
+ *  — and deliberately never asks the live layer for him, because the baked
+ *  play stream's possession gating is written against that team and the 2025
+ *  replay must keep scoring as it did. Right for the replay; wrong for every
+ *  surface that DISPLAYS a team or files a player into a game WINDOW in a
+ *  season after the bake. v0.387.3 fixed that for the web's engine players
+ *  (buildLeague) and nothing else: the app's drip picker still resolved
+ *  `pool.team || slugMeta().team`, so Romeo Doubs — a Patriot the directory
+ *  bake and the worker both knew about — wore a Packers badge and sat in
+ *  Green Bay's Sunday window (the founder's "we still have Doubs as GB").
+ *
+ *  In a season AFTER the bake the live layer wins: the worker's override, then
+ *  the directory (`teamFor`), then the pool row's own team (a rookie neither
+ *  knows), then the bake. In the bake's own season the caller's team stands,
+ *  exactly as before. K/DST slugs are team-keyed and answer from the slug on
+ *  every path. Never the empty string while any source knows. */
+export function liveTeamFor(
+  slug: string,
+  poolTeam: string | null | undefined,
+  season: number | string | null | undefined,
+): string {
+  if (!slug) return normTeam(poolTeam ?? '');
+  if (slug.endsWith('-dst') || slug.endsWith('-k')) return slugMeta(slug).team;
+  const live = Number(season) > BAKED_PBP_SEASON;
+  if (live) {
+    const t = teamFor(slug);
+    if (t) return normTeam(t);
+  }
+  return normTeam(poolTeam ?? '') || slugMeta(slug).team;
 }
 
 export function slugMeta(slug: string): { pos: Pos; team: string } {

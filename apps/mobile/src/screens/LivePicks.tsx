@@ -16,7 +16,7 @@ import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { srvBoardTotals } from '@drip/core/engine/liveScore';
-import { slugMeta, setSlugMetaOverrides } from '@drip/core/data/slugMeta';
+import { setSlugMetaOverrides, liveTeamFor } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
@@ -34,7 +34,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames } from '@drip/core/data/gameFeed';
-import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
+import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver } from '@drip/core/engine/sim';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
@@ -62,10 +62,14 @@ import { clearLeagueFlags } from '@drip/core/data/commish';
 // one — the setup board only ever displays name/pos/team.
 const ZERO_STATS = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 function poolToPlayer(p: PoolPlayer): Player {
-  // The row's own team FIRST: the pool carries the current team exactly so
-  // 2026 rookies resolve (the baked slugMeta table is 2025 PBP players only —
-  // a rookie like Carson Beck rendered teamless off it).
-  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: p.team || slugMeta(p.slug).team, stats: { ...ZERO_STATS } };
+  // THE LIVE TEAM (v0.388.5, founder: "we still have Doubs as GB"). This used
+  // to read `p.team || slugMeta(p.slug).team`: the row's team, else the BAKED
+  // 2025 team — so a baked player who has since moved (Doubs, GB → NE) wore
+  // last year's badge and, worse, was filed into last year's team's window.
+  // liveTeamFor is v0.387.3's rule made shared: in a live season the worker's
+  // override and the directory beat the pool row, which beats the bake; a
+  // rookie neither bake knows still takes the row (the Carson Beck case).
+  return { id: p.slug, name: shortName(p.full), full: p.full, pos: p.pos as Pos, team: liveTeamFor(p.slug, p.team, LIVE_SEASON), stats: { ...ZERO_STATS } };
 }
 
 // The board used to carry a hardcoded LIVE_UNLOCKS trio here. The shop derives
@@ -281,7 +285,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // board; `injuryVer` bumps to re-render the badges once it lands.
         clearLiveInjuries();
         clearLeagueFlags();
-        void loadTeamOverrides(); // global player→team drift (0142); cheap, auth-gated
+        // AWAITED (v0.388.5): the pool memos below resolve every team the moment
+        // the pool lands, and the override cache is a module global they read
+        // synchronously — fired-and-forgotten it lost the race to setPool and
+        // never re-ran. Never throws; one small table.
+        await loadTeamOverrides(); // global player→team drift (0142); cheap, auth-gated
         loadLiveInjuries(m.week).then((n) => { if (alive && n) setInjuryVer((v) => v + 1); }).catch(() => {});
         {
           const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
@@ -421,7 +429,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     const mySlug = revealed.find((p) => p.app_user_id === userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
     const theirSlug = revealed.find((p) => p.app_user_id !== userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
     const teams = [...new Set([mySlug, theirSlug]
-      .map((sl) => (sl ? duelPool[sl]?.team || slugMeta(sl).team : ''))
+      .map((sl) => (sl ? liveTeamFor(sl, duelPool[sl]?.team, LIVE_SEASON) : ''))
       .filter(Boolean))];
     // Dedupe by the GAME the team maps to, not the team: a duel whose two
     // players share a game (DEN RB vs ATL RB in DEN@ATL) is ONE field, and
@@ -498,7 +506,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     for (const rp of revealed) if (rp.player_slug) slugs.add(rp.player_slug);
     for (const v of Object.values(picks)) if (v.player_slug) slugs.add(v.player_slug);
     for (const sl of slugs) {
-      const tm = duelPool[sl]?.team || pool.find((p) => p.slug === sl)?.team || slugMeta(sl).team;
+      const tm = liveTeamFor(sl, duelPool[sl]?.team || pool.find((p) => p.slug === sl)?.team, LIVE_SEASON);
       if (tm) entries.push({ team: tm, side: 'you', clock: Number.MAX_SAFE_INTEGER });
     }
     return groupFieldGames(week, entries).map((g) => ({
@@ -512,7 +520,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   // table) — this used to consult slugMeta alone, which knows only players who
   // existed in 2025 and returned '' for everyone else, sending them to the
   // 'any' branch below instead of their real window.
-  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, p.team || slugMeta(p.slug).team])), [pool]);
+  const teamBySlug = useMemo(() => Object.fromEntries(pool.map((p) => [p.slug, liveTeamFor(p.slug, p.team, LIVE_SEASON)])), [pool]);
   // Slug → roster group. The pool is the manager's WHOLE roster now (starters,
   // bench, IR, taxi), and the group is the only thing distinguishing a fielded
   // RB1 from a taxi rookie in a list that otherwise shows them identically.
@@ -520,7 +528,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     () => Object.fromEntries(pool.map((p) => [p.slug, p.grp])), [pool]);
   const oppWinBySlug = useMemo<Record<string, WindowId | 'any' | null>>(() => {
     const m: Record<string, WindowId | 'any' | null> = {};
-    for (const p of oppPool) { const tm = p.team || slugMeta(p.slug).team; m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
+    for (const p of oppPool) { const tm = liveTeamFor(p.slug, p.team, LIVE_SEASON); m[p.slug] = tm ? windowForTeam(week, tm) : 'any'; }
     return m;
   }, [oppPool, week]);
   const oppGrpBySlug = useMemo<Record<string, PoolGroup>>(
@@ -1255,7 +1263,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               const slug = picks[s.key]?.player_slug;
               if (!slug) continue;
               const row = pool.find((p) => p.slug === slug);
-              put(row?.team || slugMeta(slug).team, shortName(row?.full ?? slug), 'you');
+              put(liveTeamFor(slug, row?.team, LIVE_SEASON), shortName(row?.full ?? slug), 'you');
             }
             // Theirs ONLY once the window has kicked and their cards are face
             // up. Listing a sealed opponent lineup here would leak exactly what
@@ -1265,7 +1273,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                 const slug = rp.player_slug;
                 if (!slug) continue;
                 const row = oppPool.find((p) => p.slug === slug);
-                put(row?.team || slugMeta(slug).team, shortName(row?.full ?? slug), 'their');
+                put(liveTeamFor(slug, row?.team, LIVE_SEASON), shortName(row?.full ?? slug), 'their');
               }
             }
             if (!rows.length) return <Mono size={10.5} tone="dim">No games on the slate for this window yet.</Mono>;
@@ -1314,7 +1322,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
             const list = !win ? [] : oppPool
               .filter((op) => {
                 if (!gateOn) return true;
-                const tm = slugMeta(op.slug).team;
+                const tm = liveTeamFor(op.slug, null, LIVE_SEASON);
                 const w = tm ? windowForTeam(week, tm) : 'any';
                 return w === 'any' || w === win;
               })
@@ -1326,7 +1334,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                   <Text style={{ fontFamily: 'System', fontSize: 9, fontWeight: '700', color: (t.pos[op.pos as keyof typeof t.pos] ?? { fg: t.dim }).fg }}>{op.pos}</Text>
                 </View>
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{op.full}</Text>
-                <Mono size={9} tone="faint">{slugMeta(op.slug).team}</Mono>
+                <Mono size={9} tone="faint">{liveTeamFor(op.slug, null, LIVE_SEASON)}</Mono>
               </View>
             ));
           })()}
