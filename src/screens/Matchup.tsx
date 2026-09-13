@@ -3104,6 +3104,10 @@ function WindowSectionInner(props: {
       {phase !== 'setup' && (
         <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done}
           srvYou={props.srvYou} srvThem={props.srvThem}
+          // Founder (v0.388.8): "it should always show 0 to 0 until kick off."
+          // The worker publishes 0–0 for an un-kicked window now; this is the
+          // board's own copy of the rule, for the moment before its row lands.
+          kicked={props.realtime == null || props.realtime === 'live' || props.realtime === 'final'}
           potMatchupId={potMatchupId} />
       )}
 
@@ -3263,7 +3267,7 @@ function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
 // aggregate (who's winning the window) as a battle meter; at FINAL it locks to
 // the settled result — WON/LOST, the +bonus points, and the window MVP (the
 // single top-scoring slot, which earns a drip-coin bounty).
-function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYou, srvThem }: {
+function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYou, srvThem, kicked = true }: {
   rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
   potMatchupId?: string | null;
   /** The RESOLVER's totals for THIS window, already read as you/them. Numbers
@@ -3272,6 +3276,10 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
    *  re-render the whole section on every poll. */
   srvYou?: number | null;
   srvThem?: number | null;
+  /** Live board: has this window's first game kicked off? Until it has, the
+   *  bar reads 0–0 whatever any number says — a flat credit (Ghost, Bye
+   *  Steal) or a misfiled player must not leak the sealed side early. */
+  kicked?: boolean;
 }) {
   const battle = rw.battle;
   // Window Pot: the CLOSED pot, rendered next to the window's own equation. The
@@ -3305,8 +3313,8 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
   // playback position off the live board and `winMax` on it, so the live board
   // never had a scrub position to preserve in the first place.
   const r1 = (n: number) => Math.round(n * 10) / 10;
-  const yTot = r1(shownScore({ final: !!(done && battle), settled: battle?.youTotal, srv: srvYou, bank: liveYou }));
-  const tTot = r1(shownScore({ final: !!(done && battle), settled: battle?.theirTotal, srv: srvThem, bank: liveTheir }));
+  const yTot = kicked ? r1(shownScore({ final: !!(done && battle), settled: battle?.youTotal, srv: srvYou, bank: liveYou })) : 0;
+  const tTot = kicked ? r1(shownScore({ final: !!(done && battle), settled: battle?.theirTotal, srv: srvThem, bank: liveTheir })) : 0;
   const total = yTot + tTot;
   const yPct = total > 0 ? Math.max(4, Math.min(96, (yTot / total) * 100)) : 50;
   const even = Math.abs(yTot - tTot) < 0.05;
@@ -3314,7 +3322,7 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
   const leadColor = even ? 'var(--dim)' : leadYou ? 'var(--you)' : 'var(--opp)';
   const mvp = battle?.mvp;
   const bonus = done && battle ? battle.bonus : WINDOW_WIN_BONUS;
-  const status = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST') : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
+  const status = !kicked ? 'AWAITING KICKOFF' : done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST') : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
   return (
     <div style={{ margin: '2px 0 9px', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
