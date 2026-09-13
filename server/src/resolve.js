@@ -618,9 +618,20 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // (lock.js falls back the same way) and all rows are safe to write.
   // Classic 'wk' rows have no single window: they reveal once ANY window has
   // kicked off — the same moment lock.js seals them (dueWindows adds 'wk').
-  const visSlots = opts.startedWins
-    ? slotRows.filter((s) => (s.win === CLASSIC_WIN ? opts.startedWins.size > 0 : opts.startedWins.has(s.win)))
-    : slotRows;
+  const started = (win) => !opts.startedWins
+    || (win === CLASSIC_WIN || win === 'ALL' ? opts.startedWins.size > 0 : opts.startedWins.has(win));
+  const visSlots = slotRows.filter((s) => started(s.win));
+  // NOTHING SCORES BEFORE KICKOFF — the window TOTAL included (v0.388.8).
+  // The slot rows above have hidden until kickoff since 0199; the window's
+  // home/away totals never did. The engine credits a Ghost (14 flat) and a
+  // Bye Steal (a flat projection) the moment they are applied, and it scores
+  // a slot's player wherever he is filed — so a window that had not kicked
+  // could publish a total with no slot behind it. Founder, Sunday morning of
+  // week 1, the SUN 1PM battle bar reading THEY LEAD 25.2–0.0 an hour before
+  // kickoff: the opponent's sealed plays, leaked as a number. A window that
+  // hasn't started reads 0–0 like the slots it has none of; the finals and
+  // coin below are untouched (every window has kicked by the time they write).
+  for (const s of states) if (!started(s.game_window)) { s.home_score = 0; s.away_score = 0; }
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))

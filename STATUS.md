@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.8 — nothing scores before kickoff: the window total hides with its slots
+
+Founder, Sunday morning of week 1, web, the SUN 1PM window LOCKED an hour
+before kickoff: "this hasn't kick off yet, but my opponent is up by 20+."
+THEY LEAD 25.2–0.0 over two face-down cards. The bar shows the worker's
+number (v0.339.3), and the worker had one: the resolver hid an un-kicked
+window's SLOT ROWS since 0199 (the leak guard) but wrote its home/away
+TOTALS as computed. The engine credits a Ghost (14 flat) and a Bye Steal
+(a flat projection, cap 16) the moment they are applied, and scores a
+slot's player wherever he is filed — so a window nobody had played
+published a total with no slot behind it, and the opponent's sealed plays
+leaked as a number. 14 + 11.2 is the likeliest 25.2; a TNF player filed
+into Sunday is the other candidate, and the slot rows will name him at
+1 PM either way.
+
+Fix in resolve.js: one `started(win)` rule for slots AND totals — a
+window not in the tick's startedWins (kickoff-based, v0.341.1) writes
+0–0; classic 'wk' and 'ALL' follow the slots' existing "once any window
+has kicked" rule; a null slate (no kickoffs known) publishes as before.
+Finals and coin untouched (every window has kicked by then). New
+server/test/prekick-window.mjs: a Ghost banks 14 in SNF once SNF has
+kicked, 0–0 with no slot rows while only TNF has, legacy with no slate.
+Worker-only; deploy-worker.yml carries it. No migration, no APK.
+
 ### v0.388.7 — a used card leaves the hand (Air Raid), and Underdog stops taking two
 
 Founder, Sunday of week 1, web card table: "I bought and played air raid
