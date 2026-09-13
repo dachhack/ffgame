@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.11 — the Field General leaves a receipt, and the copy says 1.9×
+
+Founder, 3 PM Sunday, every FIELD GEN chip gone from the cards: "did my
+field general apply?" It had — the boost is baked into each drip tick and
+flat play as it banks (the event carries its `mult`) — but the card
+showed only the LIVE multiplier, which resets when regulation ends unless
+Overtime is armed. Once it read ×1.00 there was no trace, which is why
+he had to ask.
+
+`fgBoostAt(events, side, clock)` in core liveScore sums the trace: over a
+side's events up to a clock, delta − delta/mult for every multiplied bank
+(burns and the QB's own zero-delta passes contribute nothing). The web
+card shows "⚡ FIELD GEN ×1.46 · +3.2" while the multiplier is live and
+"⚡ FIELD GEN BOOSTED +3.2" once it has reset — same chip, dimmed, with a
+tooltip saying what it banked stays banked. Four assertions in
+check:livescore. App untouched: its drip board renders the resolver's
+slot rows and has never carried the live chip either.
+
+The copy: the Field General metric said "300 yds = 2.8×"; the engine is
+1 + 0.003 per yard, so 300 yds = 1.9× (the engine's own comment says so).
+The picker line now gives the formula, the 1.9×, and the regulation
+reset; the rulebook regenerated with it. Web + core, no migration, no APK.
+
 ### v0.388.10 — phone-width duel cards stop colliding
 
 Founder, three phone screenshots of the web drip board at 2:21 PM Sunday:

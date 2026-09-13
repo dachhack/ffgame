@@ -129,3 +129,27 @@ export function shownScore(opts: { final: boolean; settled?: number | null; srv?
   if (opts.srv != null && Number.isFinite(opts.srv)) return opts.srv;
   return opts.bank;
 }
+
+// ── FIELD GENERAL, AFTER THE FACT (v0.388.11) ─────────────────────────────
+// Founder, Sunday afternoon, the multiplier chip gone from every card: "did
+// my field general apply?" It had — the boost is baked into every drip tick
+// and every flat play as it banks (sim.ts minuteGain / resolveSlot stamp the
+// event's `mult`) — but the card showed only the LIVE multiplier, and that
+// resets when regulation ends (Overtime carries it). Once it read ×1.00 there
+// was no trace. This sums the trace: for one side, up to a clock, how much of
+// the bank exists only because of the multiplier. Each event's delta is the
+// post-multiplier amount, so the boost is delta − delta/mult. Negative
+// deltas (a Napalm burn) carry no mult and are skipped by the guard.
+export function fgBoostAt(
+  events: ReadonlyArray<{ clock: number; side: string; delta: number; mult?: number }>,
+  side: 'you' | 'their',
+  clock: number,
+): number {
+  let boost = 0;
+  for (const e of events) {
+    if (e.side !== side || e.clock > clock) continue;
+    if (!(e.mult && e.mult > 1) || !(e.delta > 0)) continue;
+    boost += e.delta - e.delta / e.mult;
+  }
+  return Math.round(boost * 10) / 10;
+}

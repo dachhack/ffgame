@@ -21,7 +21,7 @@ import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
-import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore } from '@drip/core/engine/liveScore';
+import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { openPlayerCard } from '../app/playerCard';
 import { ScoreDiffPanel } from '../app/scoreDiff';
@@ -3663,6 +3663,10 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   const isFgSrc = (p: { player: Player; metricId: string }) => p.player.pos === 'QB' && p.metricId === 'fg';
   const youFg = slot.youFgMult && !isFgSrc(slot.you) ? slot.youFgMult(youClock) : undefined;
   const theirFg = slot.theirFgMult && !isFgSrc(slot.their) ? slot.theirFgMult(theirClock) : undefined;
+  // What the Field General has ALREADY banked for this slot (v0.388.11) — the
+  // trace that outlives the live multiplier's reset at the end of regulation.
+  const youBoost = slot.youFgMult && !isFgSrc(slot.you) ? fgBoostAt(slot.events, 'you', youClock) : 0;
+  const theirBoost = slot.theirFgMult && !isFgSrc(slot.their) ? fgBoostAt(slot.events, 'their', theirClock) : 0;
   const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock) : null;
   const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock) : null;
   // A SUB SHOWS THE MOMENT THE RESOLVER COUNTS IT (v0.387.6). The best-ball
@@ -3673,8 +3677,8 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   // Parkinson stood at 0 rec yd, so the card read 6.9 over no catches with
   // nothing to say why. Once the server has published this slot (srv row
   // present) and the pipeline says a sub lands here, say so.
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
-  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} fgBoost={theirBoost} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
       {slot.events.length > 0 && (
@@ -3753,8 +3757,12 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
 }
 
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, twin, cards, hot, scorched }: {
-  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number; twin?: boolean;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, fgBoost, twin, cards, hot, scorched }: {
+  side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number;
+  /** Points in this slot's bank that exist only because of a Field General's
+   *  multiplier, so far (v0.388.11). Shown on the chip while the multiplier is
+   *  live, and as "FG BOOSTED +N" on its own once it has reset. */
+  fgBoost?: number; twin?: boolean;
   /** Card-table theme: render as a face-up LiveCard on the felt (with the
    *  hot/nuked flags derived from the slot's play-by-play) instead of the
    *  compact score strip — the cards stay on the board after kickoff. */
@@ -3874,8 +3882,16 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   // surface the live ×N so the boost is visible (it otherwise only shows on the
   // hidden per-minute drip ticks). Suppressed on the FG QB itself (its metric
   // chip already says MULTIPLIER) and when the multiplier is still ~1.
-  const fgEl = fgMult != null && fgMult > 1.005 ? (
-    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult.toFixed(2)} right now`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' }}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} ×{fgMult.toFixed(2)}</span>
+  // Live: the multiplier, with what it has banked so far. After the reset
+  // (regulation over, no Overtime): the banked boost alone — founder, chips
+  // gone at 3 PM, "did my field general apply?" It had; nothing said so.
+  const fgLive = fgMult != null && fgMult > 1.005;
+  const boosted = (fgBoost ?? 0) >= 0.05;
+  const fgStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' };
+  const fgEl = fgLive ? (
+    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult!.toFixed(2)} right now${boosted ? ` — +${fgBoost!.toFixed(1)} of this bank is the boost so far` : ''}`} style={fgStyle}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} ×{fgMult!.toFixed(2)}{boosted ? ` · +${fgBoost!.toFixed(1)}` : ''}</span>
+  ) : boosted ? (
+    <span className="mono" title={`A Field General multiplied this slot's scoring: +${fgBoost!.toFixed(1)} of its bank is the boost. The multiplier resets when regulation ends (Overtime carries it), and what it banked stays banked.`} style={{ ...fgStyle, opacity: 0.85 }}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} BOOSTED +{fgBoost!.toFixed(1)}</span>
   ) : null;
 
   if (isMobile && cards) {
