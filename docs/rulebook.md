@@ -119,7 +119,7 @@ its own.
 
 | Metric | Tag | Scores | Effect |
 |---|---|---|---|
-| **Field General** | × | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players. 300 yds = 2.8×. The QB scores nothing himself. |
+| **Field General** | × | 0 direct pts | Passing yards set a window-wide drip multiplier on all your skill players: 1 + 0.003 per yard, so 300 yds = 1.9×. Resets when regulation ends unless Overtime is armed. The QB scores nothing himself. |
 | **Passing Yards** | FLAT | 0.04 pts / yd + 4 / TD | Flat points on passing yards and TDs. No drip, no nuke, no interaction. Predictable. |
 | **Rush Yards** | FLAT | 0.2 pts / yd + 8 / TD | Flat points on your scrambles and rushing TDs. Purely additive — no nuke, no erase, no interaction. |
 | **Air Raid** | TD HEAVY | 0.04 / yd + 10 / TD | Unlock (1 wk): passing yards at 0.04/yd plus a huge 10 pts per passing TD. Flat — no nuke or erase. |
@@ -132,7 +132,6 @@ its own.
 | **Carries** | COMPRESSION | 0.85 / carry | 0.85 per carry. A 3+ carry streak with no opponent score compresses: each further carry trims the opponent’s most recent score by 35% — and you keep a quarter of every point trimmed. |
 | **Receptions** | RATE RESET | 1 pt / catch | Each catch zeroes the opponent’s active drip rate (they keep the bank, rebuild from scratch); against a flat scorer it halves their last play — and you steal a quarter of any points cut. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
-| **Underdog** | COMEBACK | 0.1 / yd + 6 / TD | Unlock (1 wk, pick ANY TIME BEFORE KICKOFF — even after lock-in): flat rushing points, but while you’re TRAILING in the slot every score banks ×1.5. Fall behind and you punch above your weight to claw back; pull ahead and the boost switches off — no running up the score. Best on a player you EXPECT to trail — on a stud who leads all game the boost never fires and you gave up his drip for nothing. |
 | **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): carries AND catches both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | RUSH+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): carries AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight productive touches (rush 3+ / return 10+) goes hot → drip doubles, a stuffed run or short return cools it. |
 
@@ -144,7 +143,6 @@ its own.
 | **Receptions** | ERASE | 1 pt / catch | Each catch erases the opponent’s drip from the last 10 clock-minutes — and you steal a quarter of every point you erase. |
 | **Targets** | CLOCK STOP | 1 pt / target | Every target stops the opponent’s drip clock. No erase — pure denial. |
 | **Touchdowns** | NUKE | 0.04 / yd + 10 / TD | Boom-or-bust: scrimmage yards at a discount (0.04/yd) plus a big 10 per TD — and each TD wipes the opponent’s entire banked score AND steals a quarter of it. |
-| **Underdog** | COMEBACK | 0.1 / yd + 6 / TD | Unlock (1 wk, pick ANY TIME BEFORE KICKOFF — even after lock-in): flat receiving points, but while you’re TRAILING in the slot every score banks ×1.5. Fall behind and you punch above your weight to claw back; pull ahead and the boost switches off — no running up the score. Best on a player you EXPECT to trail — on a stud who leads all game the boost never fires and you gave up his drip for nothing. |
 | **Combo Drip** | RUSH+REC DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk, ONE SLOT PER PURCHASE — buy it again to field another): catches AND carries both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; a TD wipes the bank. 4 straight productive touches goes hot → drip doubles (a stuffed run or incomplete cools it). |
 | **Return Yards** | REC+RET DRIP | 0.01 / yd → rate (pts/min) | Unlock (1 wk): catches AND kick/punt return yards both feed one drip rate (yds × 0.01 pts/min) that accrues while your team has the ball. Same pauses/erases as a normal drip; 4 straight (catch / 10+ return) goes hot → drip doubles, an incomplete or short return cools it. |
 
@@ -246,7 +244,7 @@ only unlock from a live game-state trigger and are arm-able for a short window.
 | 💥 **WR/TE Carries** | ◎ 70 | action | Arm before kickoff: all week, every carry by a WR or TE in your starting spots wipes its matched opponent to 0 — a plus-up on TOP of whatever metric that slot is scoring. |
 | 🌀 **Combo Drip** | ◎ 65 | metric | This week only: unlock a Rush + Receiving combo drip for ONE player — both carries AND catches feed a single drip rate (yds × 0.01 pts/min). One slot per purchase: buy it again to field another. |
 | 🚀 **Air Raid** | ◎ 40 | metric | This week only: unlock a QB metric where passing TDs are worth 10 pts (plus 0.04 / passing yd). Flat — no nuke or erase. |
-| 🐕 **Underdog** | ◎ 35 | metric | This week only: unlock the Underdog comeback metric for your RB/WR spots — flat yardage points, but every score banks ×1.5 while that slot is TRAILING. Pick it ANY TIME BEFORE KICKOFF — even after lock-in, once you can size up the fight. Best on a player you EXPECT to trail; on a stud who leads all game the boost never fires. |
+| 🐕 **Underdog** | ◎ 35 | action | Attach to one of your slots before its window kicks off: he keeps his chosen metric, and while he’s TRAILING his head-to-head every score he banks counts ×1.5. Comeback fuel — pull ahead and the boost switches off. Best on a player you EXPECT to trail. |
 | 🎺 **Trick Play** | ◎ 90 | action | Arm before kickoff: if ANY non-QB in your starting spots throws a TD pass this week, your lineup banks a flat +50. |
 | 🛡️ **Pick Six** | ◎ 45 | action | Arm before kickoff: if any of your DST starters returns an INT or fumble for a touchdown, bank a flat +25. |
 | 🙏 **Hail Mary** | ◎ 35 | action | Arm before kickoff: if a QB in your starting spots throws a touchdown of 40+ yards, bank a flat +15. |

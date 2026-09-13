@@ -24,7 +24,7 @@
 //
 // Run: npx tsx scripts/check-live-score.mjs
 import {
-  encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvSlotRow, srvBoardTotals, shownScore,
+  encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvSlotRow, srvBoardTotals, shownScore, fgBoostAt,
 } from '../packages/core/src/engine/liveScore.ts';
 
 let fails = 0;
@@ -164,6 +164,26 @@ const rows = [
   ok(srvSlotRow(rows, 'home', '4') === undefined && srvSlotRow([], 'home', '0') === undefined
     && srvSlotRow(null, 'home', '0') === undefined,
     'no match, empty, and null all yield undefined rather than throwing');
+}
+
+// ── FIELD GENERAL, AFTER THE FACT (v0.388.11) ──────────────────────────────
+// "did my field general apply?" — the chip shows the LIVE multiplier, which
+// resets at the end of regulation; the boost it already banked must stay
+// readable off the slot's own events.
+{
+  const ev = [
+    { clock: 60, side: 'you', delta: 1.0, mult: 1.25 },   // drip tick under FG: 0.8 → 1.0, boost 0.2
+    { clock: 120, side: 'you', delta: 2.0, mult: 1.5 },   // 1.333 → 2.0, boost 0.667
+    { clock: 180, side: 'you', delta: 6.0 },              // a flat play with no mult: no boost
+    { clock: 240, side: 'their', delta: 3.0, mult: 2 },   // the other side's boost is theirs
+    { clock: 300, side: 'you', delta: -0.5, mult: 1.5 },  // a Napalm burn carries no boost
+    { clock: 360, side: 'you', delta: 0, mult: 1.6 },     // the FG QB's own pass: mult stamped, nothing banked
+    { clock: 3400, side: 'you', delta: 1.0, mult: 1.0 },  // after regulation: ×1 → no boost
+  ];
+  ok(fgBoostAt(ev, 'you', 9999) === 0.9, `your boost sums 0.2 + 0.667 → 0.9 (got ${fgBoostAt(ev, 'you', 9999)})`);
+  ok(fgBoostAt(ev, 'their', 9999) === 1.5, 'the other side sums its own: 3.0 − 3.0/2 = 1.5');
+  ok(fgBoostAt(ev, 'you', 60) === 0.2, 'clock-bounded: at 1:00 only the first tick counts');
+  ok(fgBoostAt(ev, 'you', 0) === 0 && fgBoostAt([], 'you', 9999) === 0, 'nothing yet, or no events, reads 0');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-SCORE ASSERTIONS PASSED');
