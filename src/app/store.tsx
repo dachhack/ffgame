@@ -208,6 +208,11 @@ interface Store {
   grantPowerup: (id: string) => void;
   /** Consume one of a held powerup. Returns false if none held. */
   useConsumable: (id: string) => boolean;
+  /** Replace the hand with a fresh server read (live board). The hand the
+   *  board deals comes from THIS ledger; a card the server consumed through an
+   *  RPC of its own (arm_unlock, apply_underdog) has to land here too, or the
+   *  board keeps dealing a card that no longer exists (v0.388.7). */
+  hydrateInventory: (inv: Record<string, number>) => void;
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
   /** Apply an Extra Slot to a window for a week (consumes one). Returns success. */
   applyExtraSlot: (week: number, win: WindowId) => boolean;
@@ -243,7 +248,7 @@ interface Store {
   /** Remove Rivalry from a window (refund). */
   removeRivalry: (week: number, win: WindowId) => void;
   /** Arm a slot-targeted list power-up (lead-change / grudge / jinx / red-herring) on a slotKey. */
-  applySlotListPu: (id: string, week: number, slotKey: string) => boolean;
+  applySlotListPu: (id: string, week: number, slotKey: string, opts?: { synced?: boolean }) => boolean;
   /** Remove a slot-targeted list power-up from a slotKey (refund). */
   removeSlotListPu: (id: string, week: number, slotKey: string) => void;
   /** Fire a live slot-targeted tactical power-up (surge / cold-snap / bunker) on a slot at the given clock. */
@@ -586,6 +591,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const grantPowerup = (id: string): void => {
     setInventory((prev) => { const next = { ...prev, [id]: (prev[id] ?? 0) + 1 }; persist({ inv: next }); return next; });
   };
+  const hydrateInventory = (inv: Record<string, number>): void => { setInventory(inv); persist({ inv }); };
 
   // Live leagues: keep owned inventory server-backed. Buys are recorded by
   // wallet_buy_powerup; here we mirror consumes (arm/apply) and refunds (disarm/
@@ -608,12 +614,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Consume one powerup and merge a patch into applied[week], preserving the
   // week's other applied effects. Returns false if none held.
-  const consumeAndApply = (id: string, week: number, patch: (cur: AppliedWeek) => AppliedWeek): boolean => {
+  // `synced` — the SERVER already took the card through an RPC of its own
+  // (apply_underdog, 0257): record the apply and the local −1, but do not
+  // mirror the consume a second time (v0.388.7 — it was, so an Underdog attach
+  // on the live board charged two cards).
+  const consumeAndApply = (id: string, week: number, patch: (cur: AppliedWeek) => AppliedWeek, opts?: { synced?: boolean }): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     const cur: AppliedWeek = applied[week] ?? { extraSlots: {}, swaps: {}, backups: {} };
     const nextApplied = { ...applied, [week]: patch({ ...cur, extraSlots: cur.extraSlots ?? {}, swaps: cur.swaps ?? {}, backups: cur.backups ?? {} }) };
-    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied }); syncInv(id, -1);
+    setInventory(nextInv); setApplied(nextApplied); persist({ inv: nextInv, applied: nextApplied }); if (!opts?.synced) syncInv(id, -1);
     return true;
   };
 
@@ -710,10 +720,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Slot-targeted list power-ups (Lead Change / Grudge / Jinx / Red Herring):
   // arm toggles a slotKey into the week's list, spending one consumable.
   const SLOT_LIST_PU: Record<string, keyof AppliedWeek> = { 'lead-change': 'leadChange', 'grudge': 'grudge', 'jinx': 'jinx', 'red-herring': 'redHerring', 'ghost': 'ghost', 'unlock-underdog': 'underdog' };
-  const applySlotListPu = (id: string, week: number, slotKey: string): boolean => {
+  const applySlotListPu = (id: string, week: number, slotKey: string, opts?: { synced?: boolean }): boolean => {
     const key = SLOT_LIST_PU[id];
     if (((applied[week]?.[key] as string[] | undefined) ?? []).includes(slotKey)) return false;
-    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: [ ...((cur[key] as string[] | undefined) ?? []), slotKey ] }));
+    return consumeAndApply(id, week, (cur) => ({ ...cur, [key]: [ ...((cur[key] as string[] | undefined) ?? []), slotKey ] }), opts);
   };
   const removeSlotListPu = (id: string, week: number, slotKey: string): void => {
     const key = SLOT_LIST_PU[id];
@@ -798,7 +808,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, liveScoring, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, liveScoring, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, cardSkin, bigText, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, liveNote, liveScoring, commishVer, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

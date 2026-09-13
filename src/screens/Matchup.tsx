@@ -172,7 +172,7 @@ function BoardRoomBar({ ctx, league, navigate }: {
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   // CLASSIC LEAGUES DO NOT PLAY THIS SCREEN (v0.234.0). LivePicks has branched
   // on league_game_mode since 0157 — but THIS screen, which serves the
   // `matchup` route (the one "my leagues → a league → the matchup" actually
@@ -442,7 +442,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             const kp = keyParts(key);
             const r = await applyUnderdog(liveCtx.matchupId, kp.win, kp.slot).catch(() => null);
             if (!r?.ok) { window.alert(friendlyError(r?.error ?? 'that didn’t work — try again')); return; }
-            setSrvInv((prev) => ({ ...(prev ?? {}), 'unlock-underdog': Math.max(0, ((prev ?? {})['unlock-underdog'] ?? 0) - 1) }));
+            // The server took the card in apply_underdog; record the attach
+            // locally WITHOUT mirroring the consume again (it did — two cards
+            // per attach), then read the hand back so both copies agree.
+            applySlotListPu('unlock-underdog', week, key, { synced: true });
+            await refreshHand(minusOne('unlock-underdog'));
+            return;
           }
           applySlotListPu('unlock-underdog', week, key);
         })();
@@ -757,6 +762,20 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!liveCtx) { setSrvInv(null); return; }
     myInventory(liveCtx.matchupId).then((m) => setSrvInv(m ?? {})).catch(() => setSrvInv({}));
   }, [liveCtx]); // eslint-disable-line react-hooks/exhaustive-deps
+  // THE HAND HAS TWO COPIES on the live board — the store's `inventory` (what
+  // the card hand and Apply modal deal from) and `srvInv` (what the metric
+  // picker and shop read) — both hydrated from my_inventory, then kept in step
+  // by hand. A card the SERVER consumes through an RPC of its own (arm_unlock,
+  // apply_underdog) was only ever taken out of srvInv, so the hand kept
+  // dealing it: founder, Sunday of week 1, Herbert wearing Air Raid and the
+  // Air Raid card still fanned below him. One re-read, both copies (v0.388.7).
+  const refreshHand = async (fallback?: (prev: Record<string, number>) => Record<string, number>) => {
+    if (!liveCtx) return;
+    const inv = await myInventory(liveCtx.matchupId).catch(() => null);
+    if (inv) { setSrvInv(inv); hydrateInventory(inv); return; }
+    if (fallback) { setSrvInv((prev) => fallback(prev ?? {})); hydrateInventory(fallback(inventory)); }
+  };
+  const minusOne = (id: string) => (prev: Record<string, number>) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) - 1) });
   // USE one owned unlock card: arm_unlock consumes it server-side (0256) and
   // arms the metric for this week. Resolves `true` or an error STRING.
   const armUnlockLive = async (id: string): Promise<true | string> => {
@@ -768,7 +787,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     }
     if (r.unlocks) setUnlocks(new Set(r.unlocks));
     if (id === 'unlock-combo-drip' && typeof r.comboQty === 'number') setComboQty(r.comboQty);
-    setSrvInv((prev) => ({ ...(prev ?? {}), [id]: Math.max(0, ((prev ?? {})[id] ?? 0) - 1) }));
+    await refreshHand(minusOne(id));
     return true;
   };
   // Combo Drip is one slot per purchase: offer it while placed picks are under
