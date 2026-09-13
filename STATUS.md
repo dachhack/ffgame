@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.9 — the board's own copy of the rule: 0–0 until kickoff
+
+Founder, on v0.388.8: "it should always show 0 to 0 until kick off."
+The worker now publishes 0–0 for an un-kicked window; the web battle bar
+renders whichever number it has — the resolver's row, or its own local
+simulation when no row has landed — and a Ghost or Bye Steal banks flat
+in the local engine too. So the bar carries the rule itself: on the live
+board a window whose real-time state is setup or locked reads 0–0 and
+AWAITING KICKOFF, whatever either source says. Off the live board
+(sim/demo, `realtime` null) nothing changes. Web only, no APK: the app's
+board reads the resolver's rows alone.
+
 ### v0.388.8 — nothing scores before kickoff: the window total hides with its slots
 
 Founder, Sunday morning of week 1, web, the SUN 1PM window LOCKED an hour
