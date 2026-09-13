@@ -368,8 +368,10 @@ const CSS = `
      frame's ~12px padding absorbs it) and a bit more above/below. Bonus: the
      outward shift hands the strip's text the room back. */
   .ctable .ct-float{width:58px;margin-top:-11px;margin-bottom:-11px;}
-  .ctable .ct-float.ct-lyou{margin-left:-16px;}
-  .ctable .ct-float.ct-lopp{margin-right:-16px;}
+  /* Overhang trimmed 16 → 10px (v0.388.10): at 16 the outermost card cleared
+     the page gutter and ran off the viewport edge on a phone. */
+  .ctable .ct-float.ct-lyou{margin-left:-10px;}
+  .ctable .ct-float.ct-lopp{margin-right:-10px;}
   .ctable .ct-float .ct-lart{height:36px;}
   .ctable .ct-float .ct-lname{font-size:6.8px;}
   .ctable .ct-float .ct-lhead .ct-suit{font-size:5.5px;padding:1px 2.5px;}
