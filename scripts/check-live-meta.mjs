@@ -17,9 +17,12 @@
 // Run: npx tsx scripts/check-live-meta.mjs
 import { poolMetaRows } from '../packages/core/src/data/liveBoard.ts';
 import {
-  slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides, slugSleeperId, stripSlugTag,
+  slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides, slugSleeperId, stripSlugTag, liveTeamFor,
 } from '../packages/core/src/data/slugMeta.ts';
 import { BAKED_SLUGS } from '../packages/core/src/data/bakedSlugs.ts';
+import { PLAYER_BIO } from '../packages/core/src/data/playerBio.ts';
+import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam.ts';
+import { BAKED_PBP_SEASON } from '../packages/core/src/data/realPbp.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -104,6 +107,52 @@ ok(stripSlugTag('bal-k') === 'bal-k' && stripSlugTag('atl-dst') === 'atl-dst',
   'team units keep their tag — the head must still hold a first + last name');
 ok(stripSlugTag('ha-ha-clinton-dix') === 'ha-ha-clinton-dix' && stripSlugTag('justin-watson') === 'justin-watson',
   'ordinary names, hyphenated surnames included, are untouched');
+
+// ── 7. liveTeamFor (v0.388.5): the one team rule for every live surface ─────
+// A baked player who has MOVED since the bake: picked from the data, not
+// hardcoded, so a re-bake that agrees with the directory can't invalidate it.
+clearSlugMetaOverrides(); clearTeamOverrides();
+const moved = Object.keys(BAKED_SLUGS).find((sl) => {
+  const bio = PLAYER_BIO[sl];
+  return bio?.team && BAKED_SLUGS[sl]?.team && bio.team !== BAKED_SLUGS[sl].team;
+});
+const LIVE = BAKED_PBP_SEASON + 1, BAKE = BAKED_PBP_SEASON;
+ok(!!moved, `the directory knows at least one baked player who moved (${moved ?? 'none'})`);
+if (moved) {
+  const was = slugMeta(moved).team, now = PLAYER_BIO[moved].team;
+  ok(liveTeamFor(moved, '', LIVE) === now,
+    `${moved}: a live season answers the directory's current team (${now}), not the bake's (${was})`);
+  ok(liveTeamFor(moved, was, LIVE) === now,
+    `…and beats a STALE pool row still carrying the bake's team — the Doubs case`);
+  ok(liveTeamFor(moved, '', BAKE) === was,
+    `${moved}: the bake's own season still answers the bake's team — the 2025 replay is untouched`);
+  ok(liveTeamFor(moved, 'XX', BAKE) === 'XX',
+    'in the bake season the pool row still wins over the bake, as before');
+  setTeamOverrides([{ slug: moved, team: 'ZZ' }]);
+  ok(liveTeamFor(moved, was, LIVE) === 'ZZ', "the worker's override beats the directory in a live season");
+  ok(liveTeamFor(moved, was, BAKE) === was, '…but never in the bake season');
+  clearTeamOverrides();
+}
+ok(liveTeamFor('fresh-rookie-nobody-knows', 'KC', LIVE) === 'KC',
+  'a rookie neither bake knows still takes the pool row team in a live season');
+ok(liveTeamFor('fresh-rookie-nobody-knows', '', LIVE) === '',
+  'unknown-and-teamless stays empty rather than inventing a team');
+ok(liveTeamFor('bal-k', 'XX', LIVE) === 'BAL' && liveTeamFor('atl-dst', '', LIVE) === 'ATL',
+  'K/DST answer from the team-keyed slug on every path');
+ok(liveTeamFor(moved ?? 'x', 'lar', LIVE) !== 'LAR' || liveTeamFor('unknown-guy', 'lar', LIVE) === 'LA',
+  'pool row teams are normalised to the slate\'s codes (LAR → LA)');
+
+// ── 8. poolMetaRows takes the season, and the overlay follows the rule ────
+if (moved) {
+  clearSlugMetaOverrides();
+  setSlugMetaOverrides(poolMetaRows([{ slug: moved, pos: BAKED_SLUGS[moved].pos, team: BAKED_SLUGS[moved].team }], LIVE));
+  ok(slugMeta(moved).team === PLAYER_BIO[moved].team,
+    'a live-season overlay carries the current team even from a stale row');
+  clearSlugMetaOverrides();
+  setSlugMetaOverrides(poolMetaRows([{ slug: moved, pos: BAKED_SLUGS[moved].pos, team: BAKED_SLUGS[moved].team }]));
+  ok(slugMeta(moved).team === BAKED_SLUGS[moved].team,
+    'with no season given the overlay behaves exactly as before');
+}
 
 clearSlugMetaOverrides();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-META ASSERTIONS PASSED');

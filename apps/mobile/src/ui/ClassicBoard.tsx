@@ -14,7 +14,8 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
-import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
+import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag, liveTeamFor } from '@drip/core/data/slugMeta';
+import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { shortName } from '@drip/core/data/players';
 import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
@@ -26,7 +27,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters, loadLiveInjuries, playoffState,
+  nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
@@ -456,7 +457,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         playoffState(leagueId).then((ps) => {
           if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
         }).catch(() => {});
-        liveSlate(m.week, '2026').then(setSlate).catch(() => {});
+        liveSlate(m.week, String(LIVE_SEASON)).then(setSlate).catch(() => {});
         leagueStandings(leagueId).then((rows) => {
           const map: Record<number, { wins: number; losses: number; ties: number; rank: number }> = {};
           (Array.isArray(rows) ? rows : []).forEach((row, i) => {
@@ -474,13 +475,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           setAvatars({ me: tm[rosterId]?.avatar ?? null, opp: tm[oppRoster]?.avatar ?? null });
           setNames({ me: tm[rosterId]?.team_name || 'YOU', opp: tm[oppRoster]?.team_name || 'OPPONENT' });
         }).catch(() => {});
+        // The worker's player→team drift (0142) must be in its cache BEFORE the
+        // overlay below resolves a single team — this board never loaded it at
+        // all, so a post-bake mover fell to the directory's answer. Never throws.
+        await loadTeamOverrides();
         const [pl, pk] = await Promise.all([myPool(leagueId, m.week, rosterId), myPicks(m.id, userId)]);
         setPool(pl);
         // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie
         // the baked slug map has never heard of otherwise resolves to WR with
         // an EMPTY team — which reads as a bye on the board and scores as a WR
         // in classicPoints. The pool row knows his real position and team.
-        setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
+        // THE LIVE TEAM (v0.388.5): the overlay is what every slugMeta consumer on
+        // this board reads, so it carries the current team — override, directory,
+        // then the row — not whatever team the pool row was seeded with.
+        setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) })));
         // …but a roster blob carries no IDENTITY, and the IDP bake is keyed by
         // one: three of its 963 slugs name two different men. `league_pool_ids`
         // (0205) is the map that tells them apart, and it exists for this.
@@ -570,7 +578,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     // store a lineup) fields its best projected lineup from its roster, and
     // without this the board would show that seat empty while the resolver
     // scored it. In the founder's own leagues that is seven seats in eight.
-    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
+    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows, gf] = await Promise.all([

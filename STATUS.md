@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.5 — the app's boards play for their 2026 teams too (Doubs, again)
+
+Founder, screenshot of the drip picker: "Looks like we still have Doubs as
+GB." Romeo Doubs in a Patriots jersey under a Packers badge, filed into
+the SUN 4PM window — Green Bay's game, not New England's. "Still", because
+v0.387.3 fixed exactly this and fixed it for ONE surface: the web engine's
+players (buildLeague), which take the provider's team in a season after
+the bake. The app never goes through buildLeague. Its drip picker and
+classic board resolved `pool.team || slugMeta(slug).team`, and `slugMeta`
+answers a baked player from BAKED_SLUGS — his MAJORITY 2025 team — without
+ever asking the live layer, by design: the 2025 replay's possession gating
+is written against that team. The directory bake already said NE. Nothing
+on the app asked it. Same hole on the web's OVERLAY (`poolMetaRows`), so
+the web board's logos and badges disagreed with its own engine.
+
+Two smaller faults underneath, both real: the drip board loaded the
+worker's team-drift table (0142) fire-and-forget and the pool memos read
+that cache synchronously the moment the pool landed — the load lost the
+race and never re-ran; and the classic board never loaded it at all.
+
+**One rule, one function.** `liveTeamFor(slug, poolTeam, season)` in
+slugMeta.ts is v0.387.3's rule made shared: in a season after the bake the
+worker's override, then the directory, then the pool row, then the bake;
+in the bake's own season the pool row then the bake, exactly as before, so
+the 2025 replay is untouched. K/DST answer from the team-keyed slug on
+every path. Now used by the app drip picker (card badge, engine Player,
+both window maps, the duel fields, the opponent rail), the app classic
+board's overlay install (my pool and the opponent's), and the web live
+board's `poolMetaRows` (which takes the league's season; absent = old
+behaviour, so every existing assertion holds). Both app boards `await
+loadTeamOverrides()` before resolving a team.
+
+The app has no league row in scope and assumed 2026 by literal, so
+`LIVE_SEASON` joins `BAKED_PBP_SEASON` in realPbp.ts — one named constant
+instead of a fourth copy; the classic board's `'2026'` now reads it. The
+web engine keeps reading the league's own season and needs no such thing.
+
+check-live-meta grows 13 assertions that find a moved player IN THE DATA
+(today A.J. Brown, PHI → NE) rather than hardcoding one: a live season
+answers the directory over the bake and over a stale pool row (the Doubs
+case); the bake season answers the bake; an override beats the directory
+live and never in the bake season; a rookie neither bake knows keeps its
+row; K/DST; LAR → LA; and the season-aware overlay. Known cost, the same
+one v0.387.3 accepted: a 🧪 LIVE TEST league in 2026 replaying a 2025 week
+files a moved player into his 2026 team's window, where the 2025 SIM feed
+has no plays for him. Battery green. APK 36930.
+
 ### v0.388.4 — the invite link lands on the league, not a password box (0274)
 
 Founder: "I'd love a landing page for the league invite links for external
