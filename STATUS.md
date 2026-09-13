@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.6 — the shop wears the clock: ⛔ passed, ⏳ locks in 2h, 🟢 live now
+
+Founder: "in the power up shop, let's have the power ups that you can't
+apply because the usage window has passed, have some kind of sign so we
+know what we can buy and apply last minute." The shop sold every card as
+if it were Tuesday: on a Sunday night it still offered Momentum at full
+price with nothing left for it to count, and the first hint was the card
+arriving dimmed in the hand. Buying is never blocked (0255 — a card
+keeps), so the fix is a LABEL, and the label has to say what the server's
+gates say, or it lies in the other direction.
+
+`powerupAvailability(p, windows, opts)` in core powerups.ts is the one
+rule, mirroring the migrations: pre-match cards are per window (0259) on
+the LOCK clock (0260) — open while ANY window has yet to lock, deadline =
+the LAST open window's lock; Extra Slot is scope 1 and closes at the
+week's FIRST lock; metric cards read like buffs (using one changes a pick,
+which needs an open window); real-time cards wait / go live / pass with
+the windows; a settled matchup closes everything. A passed card says
+"keeps for next week" — or "practice cards don't carry over" on a practice
+week, where inventory is per week (0121). `closesInLabel` is the
+last-minute cue: "in 2h 30m".
+
+Both shops: an OPEN card wears ⏳ LOCKS IN 2H 30M (or "counts the 2
+windows still to lock" when no kickoff is known), LIVE wears 🟢 LIVE NOW:
+LATE, WAITING a faint ⏳, PASSED a red ⛔ WINDOW PASSED with the reason,
+dimmed and sunk to the bottom of its tab; a legend line explains the ⛔
+the first time one shows. The app board feeds it its own windows through
+the same fail-safe as its picks (winLocked); the web board feeds the live
+phase machine + windowLockMs, or the sim's phase on a demo board. The hub
+and demo shops (no board) show no sign. New `check:shopclock` (31 probes)
+pins the rule to the migrations, in `check:parity`. APK 36931.
+
 ### v0.388.5 — the app's boards play for their 2026 teams too (Doubs, again)
 
 Founder, screenshot of the drip picker: "Looks like we still have Doubs as

@@ -138,3 +138,97 @@ export function buffAppliesToSpot(id: string, pos: string, metricId: string | nu
     default: return false;
   }
 }
+
+// ── THE SHOP'S CLOCK — is this card still playable THIS WEEK? (v0.388.6) ────
+// Founder: "in the power up shop, let's have the power ups that you can't
+// apply because the usage window has passed, have some kind of sign so we
+// know what we can buy and apply last minute."
+//
+// The shop sold every card as if it were Tuesday. Purchases are never blocked
+// (0255 — a card keeps to next week), but on a Sunday night the shop was still
+// offering Momentum at full price with nothing left for it to count, and
+// nothing said so until the hand showed the card dimmed. This is the ONE
+// statement of when each card's moment is, shared by both hosts' shops, and
+// it follows the server's gates exactly:
+//   · pre-match cards — per window since 0259, on the LOCK clock since 0260:
+//     playable while ANY window has yet to lock; the deadline is the LAST
+//     open window's lock. Extra Slot is scope 1: it closes with the week's
+//     FIRST lock (matchup.status leaves 'scheduled') and never returns.
+//   · metric cards never expire — but USING one changes a pick's metric,
+//     which needs an open window, so they read the same as a buff.
+//   · real-time cards need a LIVE window: waiting before one, live during,
+//     passed once every window is final.
+//   · a settled matchup (status 'final') closes everything.
+export type ShopWindowPhase = 'setup' | 'locked' | 'live' | 'final';
+export interface ShopWindow {
+  id: string;
+  label: string;
+  phase: ShopWindowPhase;
+  /** When the window's picks (and pre-match cards aimed at it) close — epoch
+   *  ms, or null when its kickoff isn't known. */
+  locksAt?: number | null;
+}
+export type PowerupWindowState = 'open' | 'live' | 'waiting' | 'passed';
+export interface PowerupAvailability {
+  state: PowerupWindowState;
+  /** The reason, in the manager's words: "3 windows still to lock",
+   *  "every window has locked — keeps for next week". */
+  note: string;
+  /** For 'open': the last instant the card can still be played this week
+   *  (the latest open window's lock), or null when no kickoff is known. */
+  closesAt: number | null;
+}
+
+export function powerupAvailability(
+  p: Powerup,
+  wins: readonly ShopWindow[],
+  opts?: { matchupFinal?: boolean; practice?: boolean },
+): PowerupAvailability {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  // A card that keeps is a different sentence from one that dies with the
+  // week: practice inventory (0121) is per week and never carries.
+  const keeps = opts?.practice ? 'practice cards don’t carry over' : 'keeps for next week';
+  if (opts?.matchupFinal) return { state: 'passed', note: `This week is settled — ${keeps}`, closesAt: null };
+  if (!wins.length) return { state: 'open', note: 'Before lock-in', closesAt: null };
+  const open = wins.filter((w) => w.phase === 'setup');
+  const live = wins.filter((w) => w.phase === 'live');
+  const allFinal = wins.every((w) => w.phase === 'final');
+  const lockOf = (ws: readonly ShopWindow[], pick: 'first' | 'last'): number | null => {
+    const ts = ws.map((w) => w.locksAt).filter((t): t is number => typeof t === 'number' && Number.isFinite(t));
+    if (ts.length !== ws.length) return null; // an unknown kickoff means no honest deadline
+    return pick === 'first' ? Math.min(...ts) : Math.max(...ts);
+  };
+  if (p.timing === 'pre') {
+    if (p.id === 'extra-slot') {
+      if (open.length === wins.length) return { state: 'open', note: 'Before the week’s first lock', closesAt: lockOf(wins, 'first') };
+      return { state: 'passed', note: `The week’s first window has locked — ${keeps}`, closesAt: null };
+    }
+    if (open.length) {
+      return {
+        state: 'open',
+        note: open.length === wins.length ? 'Before lock-in' : `Counts the ${plural(open.length, 'window')} still to lock`,
+        closesAt: lockOf(open, 'last'),
+      };
+    }
+    return { state: 'passed', note: `Every window has locked — ${keeps}`, closesAt: null };
+  }
+  if (live.length) return { state: 'live', note: `Live now: ${live.map((w) => w.label).join(', ')}`, closesAt: null };
+  if (allFinal) return { state: 'passed', note: `Every window has finished — ${keeps}`, closesAt: null };
+  return { state: 'waiting', note: 'Playable once a window goes live', closesAt: null };
+}
+
+/** "in 2h 10m" / "in 35m" / "in 3d 4h" / "now" — the last-minute cue beside an
+ *  open card. Null once the deadline is gone (the state machine flips the card
+ *  to passed on its own; this only stops a stale "in 0m" from rendering). */
+export function closesInLabel(closesAt: number | null | undefined, nowMs: number): string | null {
+  if (closesAt == null || !Number.isFinite(closesAt)) return null;
+  const left = closesAt - nowMs;
+  if (left <= 0) return null;
+  const m = Math.floor(left / 60_000);
+  if (m < 1) return 'in under a minute';
+  if (m < 60) return `in ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `in ${h}h${m % 60 ? ` ${m % 60}m` : ''}`;
+  const d = Math.floor(h / 24);
+  return `in ${d}d${h % 24 ? ` ${h % 24}h` : ''}`;
+}

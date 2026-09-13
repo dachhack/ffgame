@@ -3,7 +3,7 @@ import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults } from '@drip/core/data/league';
 import { TOTAL_SLOTS } from '@drip/core/data/metrics';
-import { POWERUPS, powerupCategory, POWERUP_CATEGORIES } from '@drip/core/data/powerups';
+import { POWERUPS, powerupCategory, POWERUP_CATEGORIES, closesInLabel, type Powerup, type PowerupAvailability } from '@drip/core/data/powerups';
 import { avatarUrl } from '@drip/core/data/media';
 import { SLEEPER_HANDLE } from '@drip/core/config';
 import { weekLockLabel } from '@drip/core/data/nflSlate';
@@ -180,8 +180,16 @@ export function LeagueOverview() {
 // they will in Week 1, which is the point: free power-ups taught "arm everything",
 // the one habit that bankrupts a manager in the real season. The flag only changes
 // what the header SAYS, so nobody reads their unfamiliar balance as a bug.
-export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, inventoryOverride }: {
+export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, inventoryOverride, availability }: {
   onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean | string>; cards?: boolean; practice?: boolean;
+  /** THE SHOP'S CLOCK (v0.388.6) — founder: "have the power ups that you
+   *  can't apply because the usage window has passed have some kind of sign
+   *  so we know what we can buy and apply last minute." The board answers per
+   *  card from core's powerupAvailability on its own windows: an OPEN card
+   *  wears its countdown to the last lock it can still make, a PASSED one a
+   *  ⛔ and sinks to the bottom of its tab. Buying stays open (0255 — the
+   *  card keeps); only the label changes. Absent (hub, demo) = no sign. */
+  availability?: (p: Powerup) => PowerupAvailability | null;
   /** Live board: the server-side hand (my_inventory), so OWNED counts are the
    *  DB's truth. Metric unlocks buy like everything else now (0256) — a card
    *  into the hand, no auto-arm; using one happens in the metric picker. */
@@ -191,7 +199,30 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
   const [flash, setFlash] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | string>('all');
-  const shownPu = POWERUPS.filter((p) => tab === 'all' || powerupCategory(p) === tab);
+  const nowMs = Date.now();
+  const avail = (p: Powerup): PowerupAvailability | null => availability?.(p) ?? null;
+  // Catalogue order within the tab, passed cards sinking below the ones still
+  // in play — "what can I still apply" reads top-down.
+  const shownPu = POWERUPS
+    .filter((p) => tab === 'all' || powerupCategory(p) === tab)
+    .map((p, i) => ({ p, i, a: avail(p) }))
+    .sort((x, y) => Number(x.a?.state === 'passed') - Number(y.a?.state === 'passed') || x.i - y.i)
+    .map((x) => x.p);
+  const anyPassed = !!availability && POWERUPS.some((p) => avail(p)?.state === 'passed');
+  /** The sign itself: ⛔ passed / 🟢 live / ⏳ countdown or reason. */
+  const signOf = (p: Powerup): { text: string; color: string } | null => {
+    const a = avail(p);
+    if (!a) return null;
+    if (a.state === 'passed') return { text: '⛔ WINDOW PASSED', color: 'var(--opp)' };
+    if (a.state === 'live') return { text: `🟢 ${a.note.toUpperCase()}`, color: 'var(--you)' };
+    if (a.state === 'open') { const c = closesInLabel(a.closesAt, nowMs); return { text: `⏳ ${c ? `LOCKS ${c.toUpperCase()}` : a.note.toUpperCase()}`, color: 'var(--warn)' }; }
+    return { text: `⏳ ${a.note}`, color: 'var(--faint)' };
+  };
+  const legend = anyPassed && (
+    <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginBottom: 8 }}>
+      ⛔ = this week&rsquo;s window has passed{practice ? ' — practice cards don’t carry over' : ' — a card bought now keeps for next week'}
+    </div>
+  );
   const tabBar = (
     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
       {[{ id: 'all', label: 'All' }, ...POWERUP_CATEGORIES].map((t) => {
@@ -228,18 +259,29 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
     return (
       <Modal title="Power-Up Shop" sub={subLine} onClose={onClose} maxWidth={560}>
         {tabBar}
+        {legend}
         {errLine}
         <div className="ctable" style={{ maxHeight: 440, overflowY: 'auto', overflowX: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 150px)', gap: 12, justifyContent: 'center', justifyItems: 'center', padding: '4px 2px' }}>
             {shownPu.map((p, i) => {
               const have = inv[p.id] ?? 0;
               const afford = canAfford(p.price);
+              const a = avail(p);
+              const sign = signOf(p);
+              // On the felt the card has one note line: the sign wins over the
+              // metric hint, and a passed card carries its reason instead.
+              const note = !afford ? `need ◈${p.price}`
+                : a?.state === 'passed' ? `⛔ window passed — ${a.note.replace(/^.*— /, '')}`
+                : sign ? sign.text
+                : p.kind === 'metric' ? 'to your hand — use it from a slot’s metric picker' : undefined;
               return (
-                <PowerupCard key={p.id} id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
+                <div key={p.id} style={{ opacity: a?.state === 'passed' ? 0.6 : 1 }}>
+                <PowerupCard id={p.id} name={p.name} icon={p.icon} blurb={p.blurb} idx={i}
                   timingLabel={p.kind === 'metric' ? 'METRIC' : p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME'} live={p.timing !== 'pre'}
                   cost={p.price} owned={have} disabled={!afford} flashed={flash === p.id}
-                  note={!afford ? `need ◈${p.price}` : p.kind === 'metric' ? 'to your hand — use it from a slot’s metric picker' : undefined}
+                  note={note}
                   onClick={() => buy(p.id)} />
+                </div>
               );
             })}
           </div>
@@ -253,14 +295,17 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
   return (
     <Modal title="Power-Up Shop" sub={subLine} onClose={onClose} maxWidth={560}>
       {tabBar}
+      {legend}
       {errLine}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440, overflow: 'auto' }}>
         {shownPu.map((p) => {
           const have = inv[p.id] ?? 0;
           const afford = canAfford(p.price);
           const timingTag = p.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME';
+          const a = avail(p);
+          const sign = signOf(p);
           return (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s' }}>
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--bg)', border: `1px solid ${flash === p.id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '10px 12px', transition: 'border-color .3s', opacity: a?.state === 'passed' ? 0.6 : 1 }}>
               <span style={{ fontSize: 30, flex: 'none', width: 46, textAlign: 'center' }}><PuIcon id={p.id} emoji={p.icon} size={42} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -269,6 +314,12 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
                   {p.kind === 'metric' && <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 4px' }}>METRIC</span>}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>{p.blurb}</div>
+                {sign && (
+                  <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: sign.color, marginTop: 4, letterSpacing: '0.08em' }}>
+                    {sign.text}
+                    {a?.state === 'passed' && <span style={{ fontWeight: 400, color: 'var(--faint)' }}>{` · ${a.note}`}</span>}
+                  </div>
+                )}
                 {have > 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginTop: 3, letterSpacing: '0.08em' }}>OWNED ×{have}</div>}
               </div>
               <button
