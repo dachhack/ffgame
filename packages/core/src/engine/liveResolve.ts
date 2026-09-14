@@ -31,7 +31,7 @@ import { capAmplifiers } from '../data/powerups';
 import { REAL_WEEKS } from '../data/realPbp';
 import { flagRulesFor } from '../data/commish';
 import { resolveSlot, windowFgMult, windowShield, teTdNukeClocks, defSuppressScore, clockAtRealTime, EMPTY_PLAYER, GHOST_PLAYER, GHOST_POINTS, type SlotInput } from './sim';
-import { banksAtClock, slotsFor, buffsForWindow, swapMetricFor } from './matchup';
+import { banksAtClock, slotsFor, buffsForWindow, swapMetricFor, liveCardFlags } from './matchup';
 import {
   WINDOW_MVP_COIN_PER_SLOT, TURNOVER_COIN, TURNOVER_COIN_BOOSTED,
   battleVerdict, coinBreakdown, BUFF_AWARDS, type SideLens,
@@ -483,15 +483,13 @@ export function resolveLiveMatchup(homePicks: LivePick[], awayPicks: LivePick[],
   //     (sig: true), so the victim is the opposite side.
   const flagsFor = (s: SlotRes, side: 'home' | 'away') => {
     const me = side === 'home' ? 'you' : 'their';
-    let hot = false, nuked = false;
-    for (const e of s.events) {
-      if (e.side === me && (e.effect?.type === 'streak' || e.drip) && (e.effect?.text ?? e.play).includes('HOT')) hot = true;
-      // Giveaways are typed 'nuke' for the log's red ✕ (coin to the opponent),
-      // but a turnover is NOT a nuke — without this guard (which buildMatchup's
-      // liveCardFlags has had all along) an interception scorched the QB's own
-      // card and struck through his points. Insult to injury, per the founder.
-      if (e.effect?.type === 'nuke' && !(e.effect.text ?? '').includes('TURNOVER') && (e.sig ? e.side !== me : e.side === me)) nuked = true;
-    }
+    // ONE definition of the card flags (v0.388.13): the web's liveCardFlags,
+    // at the end of everything the engine has seen. This used to be its own
+    // loop with a different meaning — "was EVER hot" — so the app's card kept
+    // 🔥 through a cold streak and past the final whistle while the web's
+    // (last-state) cooled. Same rule now; the worker clears it for a finished
+    // game on top (resolve.js doneTeams), the web by window state.
+    const { hot, nuked } = liveCardFlags(s.events, me, Number.POSITIVE_INFINITY);
     return { hot: hot || undefined, nuked: nuked || undefined };
   };
 

@@ -3493,7 +3493,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
     const showSuppress = isSuppress && (done || phase === 'final') ? (suppressSpent ?? undefined) : undefined;
     const bFg = (mineBackup ? slot.youFgMult : slot.theirFgMult) && !(be.player.pos === 'QB' && be.metricId === 'fg')
       ? (mineBackup ? slot.youFgMult : slot.theirFgMult)!(bclock) : undefined;
-    const bFlags = cards ? liveCardFlags(slot.events, mineBackup ? 'you' : 'their', bclock) : null;
+    const bFlags = cards ? liveCardFlags(slot.events, mineBackup ? 'you' : 'their', bclock, { over: isFinal }) : null;
     // Card theme, window not kicked: your side face-up without a score, the
     // opponent's backup face-down — the seal only breaks at this window's kickoff.
     const preCard = mineBackup
@@ -3667,8 +3667,10 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   // trace that outlives the live multiplier's reset at the end of regulation.
   const youBoost = slot.youFgMult && !isFgSrc(slot.you) ? fgBoostAt(slot.events, 'you', youClock) : 0;
   const theirBoost = slot.theirFgMult && !isFgSrc(slot.their) ? fgBoostAt(slot.events, 'their', theirClock) : 0;
-  const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock) : null;
-  const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock) : null;
+  // `over`: the window is final — a streak can't be running in a finished
+  // game, so the 🔥 comes off with the whistle (v0.388.13).
+  const youFlags = cards ? liveCardFlags(slot.events, 'you', youClock, { over: final }) : null;
+  const theirFlags = cards ? liveCardFlags(slot.events, 'their', theirClock, { over: final }) : null;
   // A SUB SHOWS THE MOMENT THE RESOLVER COUNTS IT (v0.387.6). The best-ball
   // sub used to be labelled only at FINAL, when the local number first
   // reflected it — but live the card shows the resolver's row, and the worker
