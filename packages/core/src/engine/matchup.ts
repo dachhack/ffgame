@@ -897,8 +897,15 @@ export function banksAtClock(events: PbpEvent[], clock: number): { you: number; 
  *    • nuked — latches once a nuke lands on this side: TD/erasure nukes ride
  *      the ATTACKER's play (sig), TE-TD drip nukes sit on the VICTIM's own
  *      standalone event. */
-export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: number): { hot: boolean; nuked: boolean } {
+export function liveCardFlags(events: PbpEvent[], side: 'you' | 'their', clock: number, opts?: { over?: boolean }): { hot: boolean; nuked: boolean } {
   let hot = false, nuked = false;
+  // HOT IS A LIVE STATE (v0.388.13). It is read off the last drip tick at or
+  // before `clock`, and a finished game leaves no later tick to cool it —
+  // founder, Monday, Olave and Flowers still wearing 🔥 HOT over a window
+  // that read ★ WON: "still says hot, but game has been over for a while".
+  // `over` — the player's game (or his window) is done: a streak cannot be
+  // running in a game that isn't. The scorch stays; a nuke is history.
+  if (opts?.over) { for (const e of events) { if (e.clock > clock) continue; const t = e.effect?.text ?? e.play ?? ''; if (e.effect?.type === 'nuke' && !t.includes('TURNOVER') && (e.sig ? e.side !== side : e.side === side)) nuked = true; } return { hot: false, nuked }; }
   for (const e of events) {
     if (e.clock > clock) continue;
     const t = e.effect?.text ?? e.play ?? '';

@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.388.13 — 🔥 HOT comes off with the whistle
+
+Founder, Monday, the Sunday window reading ★ WON with Olave, Flowers and
+Collins still wearing 🔥 HOT: "still says hot, but game has been over for
+a while." HOT is the streak state read off the last drip tick at or
+before the clock, and a finished game leaves no later tick to cool it —
+on either host. Worse, the two hosts disagreed on what it meant: the
+web's liveCardFlags is last-state (a streak that cools reads cold), but
+liveResolve's slot rows — what the worker publishes and the app renders
+— ran their own loop meaning "was EVER hot".
+
+One definition now: liveResolve calls the web's liveCardFlags at the end
+of the events. Then the whistle: `liveCardFlags(..., { over })` reads
+hot:false when the game is over (the scorch stays — a nuke is history, a
+streak is not); the web passes the window's final state, and the worker
+passes `doneTeams` — the teams whose game ESPN marks completed, from the
+scoreboard the tick already holds — so resolve.js publishes their
+players without `hot`, per game, not per window. Scores untouched. Three
+assertions in check:livescore; server/test/hot-clears.mjs resolves a
+baked week and shows the hot row cooling when its team is done and every
+row cool when all are, scores identical. Core + web + worker; the app's
+badge reads the worker's rows, so no APK.
+
 ### v0.388.12 — "Mi.Wilson": the gamebook's own namesake prefixes, and a late pass over finals
 
 Founder, Sunday evening: "we look to be missing michael wilson stats

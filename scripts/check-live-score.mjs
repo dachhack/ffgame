@@ -26,6 +26,7 @@
 import {
   encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvSlotRow, srvBoardTotals, shownScore, fgBoostAt,
 } from '../packages/core/src/engine/liveScore.ts';
+import { liveCardFlags } from '../packages/core/src/engine/matchup.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -184,6 +185,20 @@ const rows = [
   ok(fgBoostAt(ev, 'their', 9999) === 1.5, 'the other side sums its own: 3.0 − 3.0/2 = 1.5');
   ok(fgBoostAt(ev, 'you', 60) === 0.2, 'clock-bounded: at 1:00 only the first tick counts');
   ok(fgBoostAt(ev, 'you', 0) === 0 && fgBoostAt([], 'you', 9999) === 0, 'nothing yet, or no events, reads 0');
+}
+
+// ── 🔥 HOT IS A LIVE STATE (v0.388.13) ──────────────────────────────────────
+// "still says hot, but game has been over for a while." The last drip tick
+// before the clock says hot; a finished game has no later tick to cool it.
+{
+  const ev = [
+    { clock: 60, side: 'you', play: 'NO: 🔥 HOT drip', delta: 1, youBank: 1, theirBank: 0, drip: true },
+    { clock: 120, side: 'their', play: 'BUF: drip', delta: 0.4, youBank: 1, theirBank: 0.4, drip: true },
+  ];
+  ok(liveCardFlags(ev, 'you', 9999).hot === true, 'a hot last tick reads hot while the game runs');
+  ok(liveCardFlags(ev, 'you', 9999, { over: true }).hot === false, 'the same events read NOT hot once the game is over');
+  const nuke = [...ev, { clock: 200, side: 'their', play: 'BUF: TD', delta: 6, youBank: 0, theirBank: 6.4, sig: true, effect: { type: 'nuke', text: '✕ NUKED' } }];
+  ok(liveCardFlags(nuke, 'you', 9999, { over: true }).nuked === true, 'over: the scorch stays — a nuke is history, a streak is not');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-SCORE ASSERTIONS PASSED');

@@ -21,7 +21,7 @@ import { db } from './supabase.js';
 import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows, playsFor } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
-import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
+import { slugMeta, normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 // Shared with the client and migration 0110: board weeks above PRESEASON_BASE
 // are throwaway practice and never move real coin.
@@ -632,12 +632,17 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // hasn't started reads 0–0 like the slots it has none of; the finals and
   // coin below are untouched (every window has kicked by the time they write).
   for (const s of states) if (!started(s.game_window)) { s.home_score = 0; s.away_score = 0; }
+  // A FINISHED GAME IS NOT HOT (v0.388.13). `hot` is the engine's last-tick
+  // streak state, and a final game leaves no later tick to cool it — the app's
+  // card wore 🔥 all Monday. The tick passes the teams whose game ESPN marks
+  // completed (opts.doneTeams, normalised); their players publish hot:false.
+  const gameOver = (slug) => !!opts.doneTeams?.size && opts.doneTeams.has(normTeam(meta(slug)?.team ?? ''));
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
     .map(({ side, slot, slug, metric, score, hot, nuked }) => ({
       side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
-      ...(hot ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+      ...(hot && !gameOver(slug) ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
     }));
 
   const now = new Date().toISOString();
