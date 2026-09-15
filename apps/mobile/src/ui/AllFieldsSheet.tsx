@@ -66,7 +66,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
             <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>Loading the week…</Mono>
           </ScrollView>
         : week != null && (
-          <View style={{ flex: 1 }}>
+          <View style={{ flexShrink: 1, minHeight: 0 }}>
             {games.length === 0 && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>}
             {games.length > 0 && <GameViewBody week={week} initialKey={games[0]?.key ?? null} />}
           </View>
