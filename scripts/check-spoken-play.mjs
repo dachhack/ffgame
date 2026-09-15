@@ -36,6 +36,15 @@ eq(spokenText('(Shotgun) J.Brissett pass deep right to Mi.Wilson pushed ob at LA
   'Brissett pass deep right to Mi Wilson pushed out of bounds at the Los Angeles 25 for 17 yards, tackled by Still.',
   '"pushed ob" reads as out of bounds');
 
+// ── 1a. Every club code is a city (v0.390.1, founder: "It says DEN for Denver") ──
+eq(spokenText('H.Butker kicks 65 yards from KC 35 to DEN end zone, Touchback.', 'Kickoff'),
+  'Butker kicks 65 yards from the Kansas City 35 to Denver end zone, Touchback.',
+  'a kickoff: the yard-line club reads as "the Kansas City 35", the end-zone club as "Denver"');
+eq(spokenText('Timeout #1 by DEN at 02:00.', 'Timeout'), 'Timeout #1 by Denver at 02:00.', 'a timeout names the city');
+eq(spokenText('J.Brissett pass incomplete short right to Mi.Wilson. NO challenged the ruling; No Play.', 'Pass Incompletion'),
+  'Brissett pass incomplete short right to Mi Wilson. New Orleans challenged the ruling; No Play.',
+  '"NO" the club reads as New Orleans; "No Play" the phrase is untouched');
+
 // ── 1b. Full names from the game's box score (v0.389.1) ────────────────────
 {
   const people = namesFromSlugs(['jacoby-brissett', 'michael-wilson', 'mack-wilson', 'amon-ra-st-brown', 'kc-dst', 'kc-k', 'derwin-james']);

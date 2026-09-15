@@ -351,25 +351,22 @@ function VoicePicker({ lbl }: { lbl: CSSProperties }) {
   const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
   useEffect(() => onVoicesChanged(() => setVoices(listVoices())), []);
   const pick = (id: string) => { chooseVoice(id); setVoiceId(id); webVoice.stop(); webVoice.speak('First and ten. Ready when you are.', () => {}); };
+  const cur = voiceId && voices.some((v) => v.id === voiceId) ? voiceId : voices[0]?.id ?? '';
   return (
     <div>
       <div style={lbl}>PLAY-BY-PLAY VOICE</div>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.4 }}>Reads a game&rsquo;s plays to you from ≣ PLAY BY PLAY under any field. ★ = this browser&rsquo;s natural voices. Click one to hear it.</div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.4 }}>Reads a game&rsquo;s plays to you from ≣ PLAY BY PLAY under any field. ★ = this browser&rsquo;s natural voices. Pick one to hear it.</div>
       {voices.length === 0
         ? <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 7 }}>No English voice available in this browser.</div>
         : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
-            {voices.slice(0, 16).map((v) => {
-              const on = (voiceId ?? voices[0]?.id) === v.id;
-              return (
-                <button key={v.id} onClick={() => pick(v.id)} className="mono" title={`${v.label} · ${v.lang}${v.enhanced ? ' · natural' : ''}`}
-                  style={{ fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
-                    color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
-                  {v.label}{v.enhanced ? ' ★' : ''}
-                </button>
-              );
-            })}
-          </div>
+          // A dropdown (v0.390.1, founder): one field, the browser's own menu.
+          <select value={cur} onChange={(e) => pick(e.target.value)} className="mono"
+            style={{ width: '100%', marginTop: 7, fontSize: 11, fontWeight: 700, padding: '7px 9px', borderRadius: 6, cursor: 'pointer',
+              color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)' }}>
+            {voices.map((v) => (
+              <option key={v.id} value={v.id}>{v.enhanced ? '★ ' : ''}{v.label} · {v.lang}</option>
+            ))}
+          </select>
         )}
     </div>
   );
