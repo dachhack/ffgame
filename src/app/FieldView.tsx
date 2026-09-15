@@ -11,6 +11,9 @@
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
+import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
+import { spokenDown } from '@drip/core/data/spokenPlay';
+import { webVoice, hasVoice } from './voice';
 import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
@@ -254,6 +257,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
   // convention; the flip is remembered per game.
   const [flip, setFlip] = useState(() => { try { return localStorage.getItem(`fvflip:${feed.key}`) === '1'; } catch { return false; } });
   const [boxOpen, setBoxOpen] = useState(false);
+  const [pbpOpen, setPbpOpen] = useState(false); // ≣ PLAY BY PLAY panel (v0.389.0)
   const toggleFlip = () => setFlip((f) => { const n = !f; try { localStorage.setItem(`fvflip:${feed.key}`, n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const mx = (x: number) => (flip ? W - x : x); // mirror an x coordinate
   // Latest play at/under the feed clock = the play being shown; the next one
@@ -552,14 +556,96 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
 
           It follows the CLOCK, so scrubbing the log scrubs the box score with
           it rather than always reporting the present. */}
-      <div style={{ textAlign: 'center', marginTop: 5 }}>
+      {/* ≣ PLAY BY PLAY beside it (v0.389.0, founder: "expand the play by
+          play for each game and have it read off to you — catch up or
+          live"): the whole game's plays, inline under the field, with a
+          voice. What is said and when is core's (spokenPlay / PlayReader),
+          shared with the app; this is the panel and the feed tick. */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 5 }}>
         <button onClick={() => setBoxOpen(true)} className="mono"
           title={`Every player with stats in ${away} @ ${home}`}
           style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 8px', cursor: 'pointer' }}>
           ▤ BOX SCORE
         </button>
+        <button onClick={() => setPbpOpen((v) => !v)} className="mono"
+          title={`Every play of ${away} @ ${home}, with a voice`}
+          style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: pbpOpen ? 'var(--you)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${pbpOpen ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '3px 8px', cursor: 'pointer' }}>
+          ≣ PLAY BY PLAY 🔊 {pbpOpen ? '▴' : '▾'}
+        </button>
       </div>
+      {pbpOpen && <PlayByPlayPanel feed={feed} />}
       {boxOpen && <BoxScoreCard week={week} home={home} away={away} clock={clock} onClose={() => setBoxOpen(false)} />}
+    </div>
+  );
+}
+
+/** ≣ PLAY BY PLAY — the game's every play, inline, with a voice (v0.389.0).
+ *  ▶ CATCH UP reads from the top and keeps going live; ● LIVE reads the latest
+ *  play then each new one; ■ STOP. Re-reads the feed every 3s while open so
+ *  LIVE follows the poll; the row being read is lit. */
+function PlayByPlayPanel({ feed }: { feed: TeamGameFeed }) {
+  const { plays, home, away } = feed;
+  const last = plays.length ? plays[plays.length - 1] : null;
+  const over = !!last && (feed.st ? feed.st === 'post' : last.c >= 3300);
+  const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
+  const reader = useRef<PlayReader | null>(null);
+  useEffect(() => {
+    const r = new PlayReader(webVoice, { home, away }, setRs);
+    reader.current = r;
+    return () => { r.stop(); reader.current = null; };
+  }, [home, away]);
+  // The parent re-renders on the board's poll (a fresh `feed`), and a timer
+  // covers the gap between polls: either way the reader sees what is new.
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setTick((n) => n + 1), 3000); return () => clearInterval(id); }, []);
+  useEffect(() => { reader.current?.update(plays, over); }, [plays, over, tick]);
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = list.current;
+    if (el && rs.mode !== 'catchup') el.scrollTop = el.scrollHeight;
+  }, [plays.length, rs.mode]);
+  const speakingIdx = rs.speaking ? rs.cursor - 1 : -1;
+  const btn = (label: string, on: boolean, onClick: () => void, tone: string) => (
+    <button onClick={onClick} className="mono"
+      style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
+        color: on ? tone : 'var(--text)', background: on ? `color-mix(in srgb, ${tone} 16%, transparent)` : 'var(--bg)', border: `1px solid ${on ? tone : 'var(--bd)'}` }}>
+      {label}
+    </button>
+  );
+  const status = rs.mode === 'catchup' ? `Reading from the top · ${Math.min(rs.cursor, plays.length)}/${plays.length}${over ? '' : ' · goes live when caught up'}`
+    : rs.mode === 'live' ? (rs.speaking ? 'Reading the latest play' : over ? 'That’s the final' : 'Live · waiting for the next play')
+    : hasVoice() ? 'CATCH UP reads the game from the top · LIVE reads each play as it lands' : 'This browser has no speech engine — the list still updates live';
+  return (
+    <div style={{ marginTop: 8, border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', padding: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {btn('▶ CATCH UP', rs.mode === 'catchup', () => reader.current?.catchUp(plays, over), 'var(--you)')}
+        {btn(over ? '● FINAL' : '● LIVE', rs.mode === 'live', () => reader.current?.live(plays, over), 'var(--opp)')}
+        {btn('■ STOP', false, () => reader.current?.stop(), 'var(--text)')}
+      </div>
+      <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 5, letterSpacing: '0.04em' }}>{status}</div>
+      <div ref={list} style={{ maxHeight: 280, overflowY: 'auto', marginTop: 6 }}>
+        {plays.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: 8 }}>— no plays yet —</div>}
+        {plays.map((p, i) => {
+          const dd = spokenDown(p);
+          const lit = i === speakingIdx;
+          return (
+            <div key={p.pid ?? `${p.c}-${i}`} title="Double-click to hear this play"
+              onDoubleClick={() => { reader.current?.stop(); webVoice.speak(`${dd ? dd + '. ' : ''}${p.txt}`, () => {}); }}
+              style={{ padding: '5px 4px', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)', background: lit ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'transparent', borderRadius: 3 }}>
+              <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', marginBottom: 2 }}>
+                <span>{fmtQClock(p.c)}</span>
+                <span style={{ color: 'var(--dimstrong)' }}>{p.tm}</span>
+                {dd && <span>{dd.toUpperCase()}</span>}
+                <span style={{ flex: 1 }} />
+                {!!p.sc && <span style={{ color: 'var(--warn)', fontWeight: 800 }}>SCORE · {away} {p.as}–{p.hs} {home}</span>}
+                {!!p.to && !p.sc && <span style={{ color: 'var(--opp)', fontWeight: 800 }}>TURNOVER</span>}
+                {lit && <span style={{ color: 'var(--you)' }}>🔊</span>}
+              </div>
+              <div style={{ fontSize: 11, lineHeight: 1.35, color: p.sc ? 'var(--text)' : 'var(--dimstrong)', overflowWrap: 'anywhere' }}>{p.txt}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
