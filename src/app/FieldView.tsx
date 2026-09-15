@@ -16,9 +16,12 @@ import { spokenDown } from '@drip/core/data/spokenPlay';
 import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
-import { teamLogo } from '@drip/core/data/media';
+import { teamLogo, headshot } from '@drip/core/data/media';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier } from '@drip/core/data/gameView';
+import { clubNick } from '@drip/core/data/spokenPlay';
+import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
-import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
+import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
@@ -221,7 +224,7 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
           {dot('var(--you)', 'SCORED FOR YOU')}
           {dot('var(--opp)', 'FOR OPPONENT')}
           {dot('var(--warn)', 'BOTH')}
-          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginLeft: 'auto' }}>{bigKey ? 'TAP THE BIG FIELD TO SHRINK IT' : 'TAP A FIELD TO ENLARGE IT · THE READER FOLLOWS IT'}</span>
+          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginLeft: 'auto' }}>{bigKey ? 'TAP THE BIG FIELD TO SHRINK IT' : 'TAP A FIELD FOR ITS GAME VIEW · THE READER FOLLOWS IT'}</span>
         </div>
         {/* 🔊 THE READER FOLLOWS THE FIELD YOU ENLARGED (v0.390.2, founder):
             bound to the big field, else the first game; keyed so switching
@@ -248,11 +251,17 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
               title={bigKey === g.feed.key ? 'tap to shrink' : 'tap to enlarge'}
               style={{ borderRadius: 6, outline: focusKey === g.feed.key ? '2px solid var(--you)' : '2px solid transparent', outlineOffset: 2, transition: 'outline-color .4s ease', cursor: 'pointer',
                 ...(bigKey === g.feed.key ? { gridColumn: '1 / -1', maxWidth: 900, width: '100%', justifySelf: 'center' } : {}) }}>
-              <Field feed={g.feed} clock={g.clock} week={week} pidSide={(pid) => {
-                if (pid == null) return null;
-                const y = g.you.has(pid), t = g.their.has(pid);
-                return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
-              }} />
+              {bigKey === g.feed.key
+                ? <GameView feed={g.feed} week={week} clock={g.clock} pidSide={(pid) => {
+                    if (pid == null) return null;
+                    const y = g.you.has(pid), t = g.their.has(pid);
+                    return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
+                  }} />
+                : <Field feed={g.feed} clock={g.clock} week={week} pidSide={(pid) => {
+                    if (pid == null) return null;
+                    const y = g.you.has(pid), t = g.their.has(pid);
+                    return y && t ? 'both' : y ? 'you' : t ? 'their' : null;
+                  }} />}
             </div>
           ))}
         </div>
@@ -261,7 +270,11 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
   );
 }
 
-function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null }) {
+/** Who has the ball on the shown play — drawn at the spot with his headshot
+ *  and name (v0.390.3, Sleeper's K. Walker marker). Null = the plain badge. */
+export type Carrier = { slug: string; name: string } | null;
+
+function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null; carrierOf?: (p: GamePlay) => Carrier }) {
   const { away, home, plays } = feed;
   // ↔ mirror this game's field to match the viewer's TV broadcast — the feed
   // carries no camera orientation, so the default (away attacks right) is a
@@ -288,6 +301,8 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
   const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
+  const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
+  const carrierImg = carrier ? headshot(carrier.slug) : null;
   // Final play shown. "No next play yet" alone reads a live halftime as game
   // over — trust the real game state when the live feed carries it, else
   // require the shown play to sit in late Q4 (baked replays always do).
@@ -528,6 +543,16 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
               {(() => { const right = flip ? !attacksRight : attacksRight; return (
                 <text x={right ? 15 : -15} y={midY + 2.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={8} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
               ); })()}
+              {/* the ball carrier, above the spot: headshot in a ring, name under */}
+              {carrier && (
+                <g>
+                  <defs><clipPath id={`fvc-${feed.key}`}><circle cx={0} cy={TOP + 13} r={11} /></clipPath></defs>
+                  <circle cx={0} cy={TOP + 13} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
+                  {carrierImg && <image href={carrierImg} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
+                  <rect x={-26} y={TOP + 27} width={52} height={9} rx={2} fill="rgba(0,0,0,0.55)" />
+                  <text x={0} y={TOP + 34} fill="#fff" fontSize={6.5} fontWeight={700} textAnchor="middle" className="mono">{carrier.name}</text>
+                </g>
+              )}
             </g>
           )}
         </svg>
@@ -701,6 +726,148 @@ function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** 🏟 THE GAME VIEW — one game, the way Sleeper shows it (v0.390.3).
+ *  Founder: "the sleeper field view is pretty good can we emulate this?"
+ *  The scoreboard (nicknames, big scores, quarter clock, situation, the
+ *  ball on the possession side, club codes faded behind), the LAST PLAY
+ *  line, the field with the carrier's headshot at the spot, the drive
+ *  line, then LIVE (plays newest first with the people on each and their
+ *  lines) and STATS (the box score). The reader bar stays on the board
+ *  header, bound to this game. Readings are core's (data/gameView). */
+const fullName = (slug: string) => stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+const shortName = (full: string) => { const w = full.split(' '); return w.length > 1 ? `${w[0][0]}. ${w.slice(1).join(' ')}` : full; };
+export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; week: number; clock: number; pidSide?: (pid?: number) => PlaySide | null }) {
+  const { plays, home, away } = feed;
+  const last = latestPlay(plays);
+  const over = feedOver(feed);
+  const live = !over && plays.length > 0 && feed.st !== 'pre';
+  const people = useMemo(() => gamePeople(week, home, away), [week, home, away, plays.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const box = useMemo(() => gameBoxScore(week, home, away, Number.MAX_SAFE_INTEGER), [week, home, away, plays.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowOf = useMemo(() => { const m = new Map<string, BoxRow>(); for (const r of [...box.home, ...box.away]) m.set(r.slug, r); return m; }, [box]);
+  const personOf = (abbr: string): GamePerson | null => resolveGamebookPerson(people, abbr);
+  const carrierOf = (p: GamePlay): Carrier => { const a = ballCarrier(p); const who = a ? personOf(a) : null; return who ? { slug: who.slug, name: shortName(who.full) } : null; };
+  const [tab, setTab] = useState<'live' | 'stats'>('live');
+  const [statTab, setStatTab] = useState<'off' | 'def'>('off');
+  const drive = driveSummary(feed);
+  const sit = last ? situationLabel(last, home, away) : null;
+  const ballTm = last ? (last.tm2 ?? last.tm) : null;
+  const hc = teamColor(home), ac = teamColor(away);
+  const teamCol = (abbr: string, score: number | null, right: boolean) => (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
+        {teamLogo(abbr) && <img src={teamLogo(abbr)!} alt="" width={22} height={22} />}
+        <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{clubNick(abbr)}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+        <span className="mono" style={{ fontSize: 34, fontWeight: 800, color: 'var(--text)', lineHeight: 1.1 }}>{score == null ? '–' : score}</span>
+        {ballTm === abbr && !over && <span style={{ fontSize: 12 }}>🏈</span>}
+      </div>
+    </div>
+  );
+  const tabBtn = (id: 'live' | 'stats', label: string) => (
+    <button onClick={() => setTab(id)} className="mono" style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === id ? 'var(--you)' : 'transparent'}`, padding: '8px 4px', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: tab === id ? 'var(--you)' : 'var(--dim)', cursor: 'pointer' }}>{label}</button>
+  );
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 10px 12px' }}>
+      <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 8 }}>
+        <span aria-hidden className="mono" style={{ position: 'absolute', left: -8, top: -14, fontSize: 64, fontWeight: 900, color: `color-mix(in srgb, ${ac?.c ?? 'var(--dim)'} 14%, transparent)`, letterSpacing: '-0.04em', pointerEvents: 'none' }}>{away}</span>
+        <span aria-hidden className="mono" style={{ position: 'absolute', right: -8, top: -14, fontSize: 64, fontWeight: 900, color: `color-mix(in srgb, ${hc?.c ?? 'var(--dim)'} 14%, transparent)`, letterSpacing: '-0.04em', pointerEvents: 'none' }}>{home}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px' }}>
+          {teamCol(away, last ? last.as : null, false)}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 110 }}>
+            <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text)' }}>
+              {live && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--opp)' }} />}
+              {over ? 'FINAL' : last ? qClock(last.c) : 'UPCOMING'}
+            </span>
+            {sit && !over && <span className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{sit}</span>}
+          </div>
+          {teamCol(home, last ? last.hs : null, true)}
+        </div>
+      </div>
+      {last && !over && (
+        <div style={{ margin: '6px 4px 0', borderLeft: '2px solid var(--opp)', paddingLeft: 8 }}>
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>{live ? '● LIVE · ' : ''}LAST PLAY{sit ? ` · ${sit}` : ''}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.35, marginTop: 2 }}>{last.txt}</div>
+        </div>
+      )}
+      <Field feed={feed} clock={clock} week={week} pidSide={pidSide} carrierOf={carrierOf} />
+      {drive && !over && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', textAlign: 'center', marginTop: 4 }}>{drive.text}</div>}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10, borderBottom: '1px solid var(--bd)' }}>
+        {tabBtn('live', live ? '● LIVE' : 'PLAYS')}
+        {tabBtn('stats', 'STATS')}
+      </div>
+      {tab === 'live' && (
+        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          {plays.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: 16 }}>— no plays yet —</div>}
+          {[...plays].reverse().map((p, i) => {
+            const names = playNames(p.txt).map((a) => personOf(a)).filter((x): x is GamePerson => !!x);
+            const s2 = situationLabel(p, home, away);
+            return (
+              <div key={p.pid ?? `${p.c}-${i}`} title="Double-click to hear this play" onDoubleClick={() => { webVoice.stop(); webVoice.speak(p.txt, () => {}); }}
+                style={{ display: 'flex', gap: 8, padding: '10px 4px', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
+                {teamLogo(p.tm) && <img src={teamLogo(p.tm)!} alt="" width={22} height={22} style={{ marginTop: 2, flex: 'none' }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, fontWeight: 700, color: 'var(--dim)' }}>
+                    <span>{s2 ?? p.ty.toUpperCase()}</span><span>{qClock(p.c)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: p.sc ? 800 : 600, color: p.sc ? 'var(--warn)' : 'var(--text)', lineHeight: 1.35, marginTop: 2, overflowWrap: 'anywhere' }}>{p.txt}</span>
+                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, color: p.sc ? 'var(--warn)' : 'var(--dimstrong)', whiteSpace: 'nowrap' }}>{away} {p.as}–{p.hs} {home}</span>
+                  </div>
+                  {names.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+                      {names.map((who) => {
+                        const row = rowOf.get(who.slug);
+                        return (
+                          <button key={who.slug} onClick={() => openPlayerCard({ slug: who.slug, name: fullName(who.slug), pos: row?.pos ?? '', team: row?.team ?? '', week })} className="mono"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 9.5, fontWeight: 700, color: 'var(--text)' }}>
+                            <span style={{ width: 20, height: 20, borderRadius: 10, overflow: 'hidden', background: 'var(--sh)', display: 'inline-block', flex: 'none' }}>
+                              {headshot(who.slug) && <img src={headshot(who.slug)!} alt="" width={20} height={20} style={{ objectFit: 'cover' }} />}
+                            </span>
+                            <span>{shortName(who.full)}</span>
+                            {row && <span style={{ color: 'var(--faint)', fontSize: 8.5 }}>{row.pos}</span>}
+                            {row && <span style={{ color: 'var(--dim)', fontSize: 8.5, fontWeight: 400 }}>· {row.stat}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {tab === 'stats' && (
+        <div>
+          <div style={{ display: 'flex', gap: 6, margin: '10px 0', padding: 3, borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)' }}>
+            {(['off', 'def'] as const).map((id) => (
+              <button key={id} onClick={() => setStatTab(id)} className="mono" style={{ flex: 1, padding: '7px 0', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', background: statTab === id ? 'var(--bd)' : 'transparent', color: statTab === id ? 'var(--text)' : 'var(--dim)' }}>{id === 'off' ? 'OFFENSE' : 'DEFENSE'}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 14 }}>
+            {([[away, box.away], [home, box.home]] as const).map(([label, rows]) => (
+              <div key={label} style={{ flex: 1, minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--text)', marginBottom: 5 }}>{label}</div>
+                {boxTabRows(rows, statTab).length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>— nothing yet —</div>}
+                {boxTabRows(rows, statTab).map((r) => (
+                  <div key={r.slug} style={{ padding: '4px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)' }}>{r.pos}</span>
+                      <button onClick={() => openPlayerCard({ slug: r.slug, name: fullName(r.slug), pos: r.pos, team: label, week })} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--text)', textAlign: 'left' }}>{fullName(r.slug)}</button>
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--dimstrong)' }}>{r.stat}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
