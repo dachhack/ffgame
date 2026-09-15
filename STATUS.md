@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.7 — the leagues-page fields show THIS week, not last year's
+
+Founder, mobile web, ▦ fields from My Leagues: DAL@PHI, KC@LAC, TB@ATL —
+2025's week 1. The fields board reads whatever feeds are installed for
+the week and otherwise fetches the baked 2025 file; the live board
+installs the real ones on its poll, but the leagues-page entry has no
+board, so it opened on last year's opener. The same gap hid the box
+score, the carrier headshots and the people on each play, which read the
+week's live PLAYS that only a board used to install.
+
+Both entries now install the week themselves before opening — game feeds
+AND live plays — and re-pull every 30s while up: web LiveOnboard
+(loadFieldsWeek before FieldBoard mounts) and the app's AllFieldsSheet
+(plays added beside its feeds). Web + app. APK 36942.
+
 ### v0.390.6 — the Fields sheet opened as a header over nothing
 
 Founder, screenshot: ▦ fields on My Leagues opened the sheet with its

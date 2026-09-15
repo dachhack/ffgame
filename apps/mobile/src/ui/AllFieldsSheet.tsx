@@ -9,12 +9,12 @@
 // order. Pull to refresh, and a 30s tick while open, keep the drives live.
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
-import { liveSlate, slateWeeks, weekGameFeeds, type GameFeedRow } from '@drip/core/data/liveApi';
+import { liveSlate, slateWeeks, weekGameFeeds, weekLivePlays, type GameFeedRow } from '@drip/core/data/liveApi';
 import { setRuntimeSlate, windowsForWeek, windowForTeam, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { setLiveGameFeed, feedRowsToWeek, groupFieldGames } from '@drip/core/data/gameFeed';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
-import { LIVE_SEASON } from '@drip/core/data/realPbp';
+import { LIVE_SEASON, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { useTheme } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
@@ -36,8 +36,12 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
       setRuntimeSlate(w, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
       setWeek(w);
     }
-    const gf = await weekGameFeeds(w).catch(() => [] as GameFeedRow[]);
+    // Feeds AND plays (v0.390.7): the Game view's box score, carrier
+    // headshots and the people on each play read the week's plays, which
+    // only a board used to install.
+    const [gf, lp] = await Promise.all([weekGameFeeds(w).catch(() => [] as GameFeedRow[]), weekLivePlays(w).catch(() => [])]);
     setLiveGameFeed(w, feedRowsToWeek(gf));
+    if (lp.length) setLivePlays(w, liveRowsToPbp(lp));
     setFeeds(gf);
   }, [week]);
 

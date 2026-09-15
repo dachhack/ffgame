@@ -18,7 +18,9 @@ import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
-import { slateWeeks } from '@drip/core/data/liveApi';
+import { slateWeeks, weekGameFeeds, weekLivePlays } from '@drip/core/data/liveApi';
+import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
+import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
@@ -149,11 +151,31 @@ export function LiveOnboard() {
   // ▦ FIELDS off the leagues page (v0.390.0): the week the fields should
   // show is the slate's answer (what's on now, or what just happened).
   const [fieldsWeek, setFieldsWeek] = useState<number | null>(null);
+  // THIS WEEK'S FEED, NOT LAST YEAR'S (v0.390.7). The fields board reads
+  // whatever feeds are installed for the week and otherwise fetches the
+  // baked 2025 file — the live board installs the real ones on its poll,
+  // but this entry has no board, so it opened on Dallas at Philadelphia,
+  // 2025's opener (founder's screenshot). Install the week's live feeds AND
+  // plays (the box score, the carrier headshots and the people on a play
+  // read the plays) before the board opens, and re-pull them every 30s
+  // while it is up.
+  const loadFieldsWeek = async (w: number) => {
+    const [gf, lp] = await Promise.all([weekGameFeeds(w).catch(() => []), weekLivePlays(w).catch(() => [])]);
+    setLiveGameFeed(w, feedRowsToWeek(gf));
+    if (lp.length) setLivePlays(w, liveRowsToPbp(lp));
+  };
   const openFields = async () => {
     const rows = await slateWeeks('2026').catch(() => []);
     const w = fieldsWeekFrom(rows, Date.now());
-    if (w != null) setFieldsWeek(w);
+    if (w == null) return;
+    await loadFieldsWeek(w);
+    setFieldsWeek(w);
   };
+  useEffect(() => {
+    if (fieldsWeek == null) return;
+    const id = setInterval(() => { void loadFieldsWeek(fieldsWeek); }, 30_000);
+    return () => clearInterval(id);
+  }, [fieldsWeek]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
