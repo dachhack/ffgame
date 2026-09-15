@@ -17,6 +17,7 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
+import { VoicePicker } from './VoicePicker';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush } from '@drip/core/data/liveApi';
@@ -166,6 +167,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
             })}
           </View>
         </View>
+
+        <VoicePicker />
 
         <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">MORE</Mono>
