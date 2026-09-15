@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.2 — the reader follows the field you pick, and every field steps play by play
+
+Founder: "Can we have the live play reader work on a field you select?
+Also have a way to rewind or go forward each play in the field view."
+
+THE READER ON A FIELD. The CATCH UP · LIVE · STOP bar is its own piece now
+(app ui/ReaderBar, web FieldView.ReaderBar — the core PlayReader inside,
+keyed by game so switching stops the old one). On the app, one FieldsList
+carries every all-fields surface — the leagues page sheet and both boards'
+overlays: tap a field to select it (lit border, 🔊 in its header) and the
+bar at the top of the list reads THAT game; the classic board's "play
+log ▸" stays its own link. On the web, the fields board binds the bar to
+the field you enlarged (else the first game) — "tap a field to enlarge
+it · the reader follows it". The play-by-play sheet/panel use the same
+bar and only light the row being read.
+
+‹ › EVERY FIELD, EVERY PLAY. Under the score strip: ‹ PLAY 57/112 › and
+LIVE ▸. `pin` is an absolute play index (null follows the clock); pinned,
+the card draws that play exactly as it drew it when it landed — ball,
+arc, situation, text, the box score at that clock — and holds while new
+plays arrive; › past the last goes live. Both hosts, in Field itself, so
+the matchup's slot fields step too. App + web + a small core-free reuse.
+APK 36937.
+
 ### v0.390.1 — every club code is a city, and the voice is a dropdown
 
 Founder: "Let's have the voice selection a drop down. It says 'DEN' for

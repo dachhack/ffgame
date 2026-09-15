@@ -37,6 +37,7 @@ import { NoGame } from './NoGame';
 import { Overlay } from './Overlay';
 import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
+import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -1482,18 +1483,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         onClose={() => setFieldsOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 30 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
-          {fieldGames.length === 0 && (
-            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No live games with starters yet.</Mono>
-          )}
-          {fieldGames.map((g) => (
-            <Pressable key={g.key} onPress={() => { tap(); setFieldsOpen(false); setFieldGame(g.team); }} style={{ gap: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <Mono size={9.5} weight="700" track={0.08}>{g.away} @ {g.home}</Mono>
+          {/* Tap a field to SELECT it for the reader (v0.390.2); the play log
+              is its own link on the right, as before. */}
+          <FieldsList week={matchup?.week ?? 0} empty="No live games with starters yet."
+            games={fieldGames.map((g) => ({ key: g.key, away: g.away, home: g.home, team: g.team }))}
+            extra={(g) => (
+              <Pressable onPress={() => { tap(); setFieldsOpen(false); setFieldGame(g.team); }} hitSlop={8}>
                 <Mono size={8} tone="faint">play log ▸</Mono>
-              </View>
-              <FieldView week={matchup?.week ?? 0} team={g.team} clock={Number.MAX_SAFE_INTEGER} />
-            </Pressable>
-          ))}
+              </Pressable>
+            )} />
         </ScrollView>
       </Overlay>
 

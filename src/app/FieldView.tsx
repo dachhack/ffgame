@@ -152,6 +152,7 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
   // dependency: the memo must recompute when the week's feed arrives.
   const games = useMemo(() => groupFieldGames(week, entries), [entries, week, feedLoaded]);
   const shown = useMemo(() => (bigKey ? [...games].sort((a, b) => (a.feed.key === bigKey ? -1 : b.feed.key === bigKey ? 1 : 0)) : games), [games, bigKey]);
+  const readerGame = (bigKey ? games.find((g) => g.feed.key === bigKey) : null) ?? games[0] ?? null;
 
   // Detect a play landing: per game, count the plays at/under its clock; when
   // that count grows, the newest of those plays just became visible. Scroll to
@@ -220,8 +221,17 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
           {dot('var(--you)', 'SCORED FOR YOU')}
           {dot('var(--opp)', 'FOR OPPONENT')}
           {dot('var(--warn)', 'BOTH')}
-          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginLeft: 'auto' }}>{bigKey ? 'TAP THE BIG FIELD TO SHRINK IT' : 'TAP A FIELD TO ENLARGE IT'}</span>
+          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)', marginLeft: 'auto' }}>{bigKey ? 'TAP THE BIG FIELD TO SHRINK IT' : 'TAP A FIELD TO ENLARGE IT · THE READER FOLLOWS IT'}</span>
         </div>
+        {/* 🔊 THE READER FOLLOWS THE FIELD YOU ENLARGED (v0.390.2, founder):
+            bound to the big field, else the first game; keyed so switching
+            fields swaps the reader and the old one stops. */}
+        {readerGame && (
+          <div style={{ border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--surface)', padding: 8, marginBottom: 10 }}>
+            <ReaderBar key={readerGame.feed.key} feed={readerGame.feed} week={week}
+              label={`🔊 ${readerGame.feed.away} @ ${readerGame.feed.home}${bigKey ? '' : ' · TAP A FIELD TO READ ANOTHER'}`} />
+          </div>
+        )}
         {games.length === 0 && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '40px 0' }}>— NO GAME FEEDS FOR THIS WEEK —</div>
         )}
@@ -263,11 +273,19 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
   const mx = (x: number) => (flip ? W - x : x); // mirror an x coordinate
   // Latest play at/under the feed clock = the play being shown; the next one
   // (regardless of clock) carries the authoritative resulting down & spot.
-  const idx = useMemo(() => {
+  const liveIdx = useMemo(() => {
     let i = -1;
     for (let j = 0; j < plays.length; j++) { if (plays[j].c <= clock) i = j; else break; }
     return i;
   }, [plays, clock]);
+  // ‹ › STEP THE PLAYS (v0.390.2, founder: "a way to rewind or go forward
+  // each play in the field view"). `pin` is an absolute play index; null
+  // follows the clock (live). Pinned, the card draws that play exactly as it
+  // drew it when it landed and stays there while new plays arrive; › past
+  // the last play goes live.
+  const [pin, setPin] = useState<number | null>(null);
+  const idx = pin != null ? Math.min(pin, plays.length - 1) : liveIdx;
+  const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   // Final play shown. "No next play yet" alone reads a live halftime as game
@@ -402,6 +420,19 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
         <button onClick={toggleFlip} title="flip the field to match your TV" aria-pressed={flip}
           style={{ position: 'absolute', right: 0, top: -2, fontSize: 9, fontWeight: 700, color: flip ? 'var(--you)' : 'var(--faint)', background: 'none', border: `1px solid ${flip ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.4 }}>↔</button>
       </div>
+      {plays.length > 0 && (
+        <div className="mono" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em' }}>
+          <button onClick={() => stepTo(idx - 1)} disabled={idx <= 0} title="previous play"
+            style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'none', border: '1px solid var(--bd)', borderRadius: 3, padding: '0 8px', cursor: 'pointer', lineHeight: 1.5, opacity: idx <= 0 ? 0.35 : 1 }}>‹</button>
+          <span style={{ color: pin != null ? 'var(--warn)' : 'var(--faint)' }}>{pin != null ? `PLAY ${idx + 1}/${plays.length}` : `LIVE · ${plays.length} PLAYS`}</span>
+          <button onClick={() => stepTo(idx + 1)} disabled={pin == null} title="next play"
+            style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'none', border: '1px solid var(--bd)', borderRadius: 3, padding: '0 8px', cursor: 'pointer', lineHeight: 1.5, opacity: pin == null ? 0.35 : 1 }}>›</button>
+          {pin != null && (
+            <button onClick={() => setPin(null)} title="back to the latest play"
+              style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', background: 'none', border: '1px solid var(--you)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', lineHeight: 1.4 }}>LIVE ▸</button>
+          )}
+        </div>
+      )}
       {/* the field, with a light perspective tilt */}
       <div style={{ perspective: 560, position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', transform: 'rotateX(20deg)', transformOrigin: '50% 100%' }}>
@@ -575,7 +606,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
         </button>
       </div>
       {pbpOpen && <PlayByPlayPanel feed={feed} week={week} />}
-      {boxOpen && <BoxScoreCard week={week} home={home} away={away} clock={clock} onClose={() => setBoxOpen(false)} />}
+      {boxOpen && <BoxScoreCard week={week} home={home} away={away} clock={pin != null && cur ? cur.c : clock} onClose={() => setBoxOpen(false)} />}
     </div>
   );
 }
@@ -584,50 +615,69 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
  *  ▶ CATCH UP reads from the top and keeps going live; ● LIVE reads the latest
  *  play then each new one; ■ STOP. Re-reads the feed every 3s while open so
  *  LIVE follows the poll; the row being read is lit. */
-function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
-  const { plays, home, away } = feed;
+/** Is this game over, by the feed's own state or a late-Q4 last play? */
+const feedOver = (feed: TeamGameFeed | null | undefined): boolean => {
+  const plays = feed?.plays ?? [];
   const last = plays.length ? plays[plays.length - 1] : null;
-  const over = !!last && (feed.st ? feed.st === 'post' : last.c >= 3300);
-  // Names (v0.389.1): the box score says who "J.Brissett" is; through a ref
-  // so the reader reads the freshest roster without a rebuild.
+  return !!last && (feed?.st ? feed.st === 'post' : last.c >= 3300);
+};
+
+/** 🔊 THE READER BAR — CATCH UP · LIVE · STOP for one game (v0.390.2).
+ *  Extracted from the panel so the fields board can carry it too (founder:
+ *  "have the live play reader work on a field you select"). Owns the core
+ *  PlayReader for the feed it is given; `onState` lights a host's row. Key
+ *  it by game to switch — the old reader stops on unmount. */
+export function ReaderBar({ feed, week, label, onState }: { feed: TeamGameFeed; week: number; label?: string; onState?: (rs: ReaderState) => void }) {
+  const { plays, home, away } = feed;
+  const over = feedOver(feed);
   const nameOf = useRef(gameNameResolver(week, home, away));
   useEffect(() => { nameOf.current = gameNameResolver(week, home, away); }, [week, home, away]);
   const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
   const reader = useRef<PlayReader | null>(null);
   useEffect(() => {
-    const r = new PlayReader(webVoice, { home, away, nameOf: (a) => nameOf.current(a) }, setRs);
+    const r = new PlayReader(webVoice, { home, away, nameOf: (a) => nameOf.current(a) }, (st) => { setRs(st); onState?.(st); });
     reader.current = r;
     return () => { r.stop(); reader.current = null; };
-  }, [home, away]);
-  // The parent re-renders on the board's poll (a fresh `feed`), and a timer
-  // covers the gap between polls: either way the reader sees what is new.
+  }, [home, away]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((n) => n + 1), 3000); return () => clearInterval(id); }, []);
   useEffect(() => { reader.current?.update(plays, over); }, [plays, over, tick]);
-  const list = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = list.current;
-    if (el && rs.mode !== 'catchup') el.scrollTop = el.scrollHeight;
-  }, [plays.length, rs.mode]);
-  const speakingIdx = rs.speaking ? rs.cursor - 1 : -1;
-  const btn = (label: string, on: boolean, onClick: () => void, tone: string) => (
+  const btn = (text: string, on: boolean, onClick: () => void, tone: string) => (
     <button onClick={onClick} className="mono"
       style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
         color: on ? tone : 'var(--text)', background: on ? `color-mix(in srgb, ${tone} 16%, transparent)` : 'var(--bg)', border: `1px solid ${on ? tone : 'var(--bd)'}` }}>
-      {label}
+      {text}
     </button>
   );
   const status = rs.mode === 'catchup' ? `Reading from the top · ${Math.min(rs.cursor, plays.length)}/${plays.length}${over ? '' : ' · goes live when caught up'}`
     : rs.mode === 'live' ? (rs.speaking ? 'Reading the latest play' : over ? 'That’s the final' : 'Live · waiting for the next play')
-    : hasVoice() ? 'CATCH UP reads the game from the top · LIVE reads each play as it lands · voice: ⚙ settings' : 'This browser has no speech engine — the list still updates live';
+    : hasVoice() ? 'CATCH UP reads from the top · LIVE reads each play as it lands · voice: ⚙ settings' : 'This browser has no speech engine';
   return (
-    <div style={{ marginTop: 8, border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', padding: 8 }}>
+    <div>
+      {label && <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', textAlign: 'center', marginBottom: 5 }}>{label}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
         {btn('▶ CATCH UP', rs.mode === 'catchup', () => reader.current?.catchUp(plays, over), 'var(--you)')}
         {btn(over ? '● FINAL' : '● LIVE', rs.mode === 'live', () => reader.current?.live(plays, over), 'var(--opp)')}
         {btn('■ STOP', false, () => reader.current?.stop(), 'var(--text)')}
       </div>
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 5, letterSpacing: '0.04em' }}>{status}</div>
+    </div>
+  );
+}
+
+/** ≣ PLAY BY PLAY — the game's every play, inline, with the reader bar. */
+function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
+  const { plays, home, away } = feed;
+  const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = list.current;
+    if (el && rs.mode !== 'catchup') el.scrollTop = el.scrollHeight;
+  }, [plays.length, rs.mode]);
+  const speakingIdx = rs.speaking ? rs.cursor - 1 : -1;
+  return (
+    <div style={{ marginTop: 8, border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', padding: 8 }}>
+      <ReaderBar feed={feed} week={week} onState={setRs} />
       <div ref={list} style={{ maxHeight: 280, overflowY: 'auto', marginTop: 6 }}>
         {plays.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: 8 }}>— no plays yet —</div>}
         {plays.map((p, i) => {
@@ -635,7 +685,7 @@ function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
           const lit = i === speakingIdx;
           return (
             <div key={p.pid ?? `${p.c}-${i}`} title="Double-click to hear this play"
-              onDoubleClick={() => { reader.current?.stop(); webVoice.speak(`${dd ? dd + '. ' : ''}${p.txt}`, () => {}); }}
+              onDoubleClick={() => { webVoice.stop(); webVoice.speak(`${dd ? dd + '. ' : ''}${p.txt}`, () => {}); }}
               style={{ padding: '5px 4px', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)', background: lit ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'transparent', borderRadius: 3 }}>
               <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', marginBottom: 2 }}>
                 <span>{fmtQClock(p.c)}</span>

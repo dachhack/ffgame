@@ -51,6 +51,7 @@ import { ShopModal } from '../ui/ShopModal';
 import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 import { Duel, round1 } from '../ui/Duel';
 import { FieldView } from '../ui/FieldView';
+import { FieldsList } from '../ui/FieldsList';
 import { PlayLog } from '../ui/PlayLog';
 import { liveDuelEvents } from '@drip/core/data/duelLog';
 import { Overlay } from '../ui/Overlay';
@@ -1168,15 +1169,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
             background; this is the manual nudge for a stalled feed. */}
         <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
-          {fieldGames.length === 0 && (
-            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>
-          )}
-          {fieldGames.map((g) => (
-            <View key={g.key} style={{ gap: 4 }}>
-              <Mono size={9.5} weight="700" track={0.08}>{g.away}@{g.home} · {winLabelFor(g.win)}</Mono>
-              <FieldView week={week} team={g.team} clock={Number.MAX_SAFE_INTEGER} />
-            </View>
-          ))}
+          {/* Selection + the reader bar live in FieldsList (v0.390.2). */}
+          <FieldsList week={week} empty="No games on the live feed yet."
+            games={fieldGames.map((g) => ({ key: g.key, away: g.away, home: g.home, team: g.team, label: winLabelFor(g.win) }))} />
         </ScrollView>
       </Overlay>
 
