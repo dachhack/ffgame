@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.5 — a catch behind the line is one path, not a hook
+
+Founder, DEN@KC field: "Ball path lines are getting funky." The Worthy
+catch ("pass short right to X.Worthy to DEN 29 for 5 yards") drew a hook
+— up from the spot, across, back. ESPN's yards-after-catch runs PAST the
+gain on screens and dump-offs (YAC 6 on a 5-yard gain: caught a yard
+behind the line; a third of this game's completions), and playPath split
+there: the air segment ran backwards, overlapped the carry, the carry
+dropped to its own lane, and the connectors drew the hook.
+
+Rule, in the shared geometry (engine/playPath): a completed pass whose
+catch sits behind the line in the direction of travel, or under two
+yards of air, is one path from the snap to the stop — no split, no lane.
+A real throw downfield still splits at the catch and carries on. Also
+fixed while there: both hosts mirrored the arc's endpoints for the ↔
+flip but handed playPath an un-mirrored xOf, so a flipped field put the
+catch on the wrong side of the snap. Five probes in check:playpath (the
+old "absurd YAC" clamp case now reads as one path — the clamp lands the
+catch behind the line). Core + both hosts. APK 36940.
+
 ### v0.390.4 — "Tonga?": the jumbo package is not the ball carrier
 
 Founder, DEN@KC box score: a defensive tackle with 2 carries for 7, an
