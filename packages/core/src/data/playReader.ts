@@ -10,7 +10,7 @@
 // (and on a timer while the sheet is open); the reader speaks anything past
 // its cursor, one at a time, never overlapping. `stop()` is immediate.
 import type { GamePlay } from './gameFeed';
-import { spokenPlay, spokenScore } from './spokenPlay';
+import { spokenPlay, spokenScore, type NameOf } from './spokenPlay';
 
 export interface Voice {
   /** Speak one sentence; call `done` when it has finished (or failed). */
@@ -29,7 +29,7 @@ export class PlayReader {
   private plays: GamePlay[] = [];
   private over = false;
   private seq = 0;             // guards a late `done` from a stopped sentence
-  constructor(private voice: Voice, private ctx: { home: string; away: string }, private onChange?: (s: ReaderState) => void) {}
+  constructor(private voice: Voice, private ctx: { home: string; away: string; nameOf?: NameOf }, private onChange?: (s: ReaderState) => void) {}
 
   state(): ReaderState { return { mode: this.mode, cursor: this.cursor, speaking: this.speaking, finished: this.finished }; }
   private emit() { this.onChange?.(this.state()); }

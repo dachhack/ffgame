@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
 import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
-import { webVoice, hasVoice } from './voice';
+import { webVoice, hasVoice, listVoices, onVoicesChanged, chosenVoice, chooseVoice, type VoiceOption } from './voice';
+import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
@@ -573,7 +574,7 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
           ≣ PLAY BY PLAY 🔊 {pbpOpen ? '▴' : '▾'}
         </button>
       </div>
-      {pbpOpen && <PlayByPlayPanel feed={feed} />}
+      {pbpOpen && <PlayByPlayPanel feed={feed} week={week} />}
       {boxOpen && <BoxScoreCard week={week} home={home} away={away} clock={clock} onClose={() => setBoxOpen(false)} />}
     </div>
   );
@@ -583,14 +584,18 @@ function Field({ feed, clock, week, pidSide }: { feed: TeamGameFeed; clock: numb
  *  ▶ CATCH UP reads from the top and keeps going live; ● LIVE reads the latest
  *  play then each new one; ■ STOP. Re-reads the feed every 3s while open so
  *  LIVE follows the poll; the row being read is lit. */
-function PlayByPlayPanel({ feed }: { feed: TeamGameFeed }) {
+function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
   const { plays, home, away } = feed;
   const last = plays.length ? plays[plays.length - 1] : null;
   const over = !!last && (feed.st ? feed.st === 'post' : last.c >= 3300);
+  // Names (v0.389.1): the box score says who "J.Brissett" is; through a ref
+  // so the reader reads the freshest roster without a rebuild.
+  const nameOf = useRef(gameNameResolver(week, home, away));
+  useEffect(() => { nameOf.current = gameNameResolver(week, home, away); }, [week, home, away]);
   const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
   const reader = useRef<PlayReader | null>(null);
   useEffect(() => {
-    const r = new PlayReader(webVoice, { home, away }, setRs);
+    const r = new PlayReader(webVoice, { home, away, nameOf: (a) => nameOf.current(a) }, setRs);
     reader.current = r;
     return () => { r.stop(); reader.current = null; };
   }, [home, away]);
@@ -605,6 +610,12 @@ function PlayByPlayPanel({ feed }: { feed: TeamGameFeed }) {
     if (el && rs.mode !== 'catchup') el.scrollTop = el.scrollHeight;
   }, [plays.length, rs.mode]);
   const speakingIdx = rs.speaking ? rs.cursor - 1 : -1;
+  // VOICE (v0.389.1): every English voice this browser has, natural ones
+  // first (Edge's Natural set, Chrome's Google US English, Safari's Samantha).
+  const [voices, setVoices] = useState<VoiceOption[]>(() => listVoices());
+  const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
+  useEffect(() => onVoicesChanged(() => setVoices(listVoices())), []);
+  const pickVoice = (id: string) => { chooseVoice(id); setVoiceId(id); reader.current?.stop(); webVoice.speak(`${away} at ${home}. Ready when you are.`, () => {}); };
   const btn = (label: string, on: boolean, onClick: () => void, tone: string) => (
     <button onClick={onClick} className="mono"
       style={{ flex: 1, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
@@ -623,6 +634,21 @@ function PlayByPlayPanel({ feed }: { feed: TeamGameFeed }) {
         {btn('■ STOP', false, () => reader.current?.stop(), 'var(--text)')}
       </div>
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 5, letterSpacing: '0.04em' }}>{status}</div>
+      {voices.length > 1 && (
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', overflowX: 'auto', marginTop: 6, paddingBottom: 2 }}>
+          <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', flex: 'none' }}>VOICE</span>
+          {voices.slice(0, 12).map((v) => {
+            const on = (voiceId ?? voices[0]?.id) === v.id;
+            return (
+              <button key={v.id} onClick={() => pickVoice(v.id)} className="mono" title={`${v.label} · ${v.lang}${v.enhanced ? ' · natural' : ''}`}
+                style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, padding: '3px 8px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+                  color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
+                {v.label}{v.enhanced ? ' ★' : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div ref={list} style={{ maxHeight: 280, overflowY: 'auto', marginTop: 6 }}>
         {plays.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center', padding: 8 }}>— no plays yet —</div>}
         {plays.map((p, i) => {
