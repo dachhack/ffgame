@@ -14,6 +14,7 @@ import { Faq } from '../screens/Faq';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
+import { webVoice, hasVoice, listVoices, onVoicesChanged, chosenVoice, chooseVoice, type VoiceOption } from './voice';
 
 /** A league/team crest: the image when there is one, a lettered box when there
  *  is not (v0.324.0). The RULE lives in core (`crestFor`) so both platforms and
@@ -342,6 +343,38 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
   return fallback;
 }
 
+/** 🔊 PLAY-BY-PLAY VOICE — the picker, in the gear (v0.389.2, founder: "have
+ *  the voice selection in the options gear"). Every English voice this
+ *  browser has, the natural-sounding ones first (★); a click greets in it. */
+function VoicePicker({ lbl }: { lbl: CSSProperties }) {
+  const [voices, setVoices] = useState<VoiceOption[]>(() => listVoices());
+  const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
+  useEffect(() => onVoicesChanged(() => setVoices(listVoices())), []);
+  const pick = (id: string) => { chooseVoice(id); setVoiceId(id); webVoice.stop(); webVoice.speak('First and ten. Ready when you are.', () => {}); };
+  return (
+    <div>
+      <div style={lbl}>PLAY-BY-PLAY VOICE</div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.4 }}>Reads a game&rsquo;s plays to you from ≣ PLAY BY PLAY under any field. ★ = this browser&rsquo;s natural voices. Click one to hear it.</div>
+      {voices.length === 0
+        ? <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 7 }}>No English voice available in this browser.</div>
+        : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+            {voices.slice(0, 16).map((v) => {
+              const on = (voiceId ?? voices[0]?.id) === v.id;
+              return (
+                <button key={v.id} onClick={() => pick(v.id)} className="mono" title={`${v.label} · ${v.lang}${v.enhanced ? ' · natural' : ''}`}
+                  style={{ fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+                    color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
+                  {v.label}{v.enhanced ? ' ★' : ''}
+                </button>
+              );
+            })}
+          </div>
+        )}
+    </div>
+  );
+}
+
 /** Site settings — one gear chip that opens a popover with the theme picker + text
  *  toggles (previously inline chips). `superAdmin`, when provided, adds a super-admin
  *  entry at the bottom (shown only for admins in the live app). */
@@ -499,6 +532,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
               </button>
             </div>
           </div>
+          {hasVoice() && <VoicePicker lbl={lbl} />}
           <button
             onClick={() => { setOpen(false); setRules(true); }}
             className="mono"

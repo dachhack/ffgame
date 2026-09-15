@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.389.2 — the voice picker moves into the gear
+
+Founder: "Let's have the voice selection in the options gear." A voice is
+a preference, not a per-game control, so PLAY-BY-PLAY VOICE now sits in
+Settings on both hosts — app SettingsModal (new VoicePicker, between CARD
+DECK and MORE) and the web gear's SiteSettings (under DISPLAY, only when
+the browser has a speech engine). Same list, best first, ★ for enhanced /
+natural, a tap greets in the voice ("First and ten. Ready when you are."),
+the pick sticks. The play-by-play sheet and panel lose their row and
+point at ⚙ in the idle line. App + web, no core change. APK 36934.
+
 ### v0.389.1 — whole names, no pauses, and a choice of voice
 
 Founder, first listen: "Do we have other voice options? Anything more
