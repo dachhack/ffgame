@@ -56,6 +56,9 @@ export function spokenDown(p: Pick<GamePlay, 'dn' | 'dist' | 'yl'>): string | nu
  *  tackle (or, on an incompletion, the coverage), penalties read plainly. */
 export function spokenText(txt: string, ty?: string, nameOf?: NameOf): string {
   let s = String(txt ?? '').trim();
+  // "H.Nourzad and K.Tonga reported in as eligible." — the jumbo-package
+  // preamble is roster trivia, not the play (v0.390.4).
+  s = s.replace(/(?:^|(?<=[.)]\s))[^.]*?(?:\.[A-Za-z][^.]*?)*? reported in as eligible\.\s*/g, '').trim();
   // "(Shotgun)", "(No Huddle, Shotgun)", "(5:33) (Shotgun)" — leading notes.
   s = s.replace(/^(?:\(\s*[^()]*\)\s*)+/, '');
   // "[T.Tuipulotu]" — the gamebook's pressure/hurry note. Not worth a breath.

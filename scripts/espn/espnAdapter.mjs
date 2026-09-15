@@ -163,10 +163,27 @@ const reFG = /(\d+)\s+yard field goal/;
 
 // ── normalize one ESPN play into zero or more { slug, play } RealPlay rows ──────
 // `gameStartMs` is the game's earliest wallclock (ms) — `t` is seconds since it.
+/** "H.Nourzad and K.Tonga reported in as eligible.  K.Walker up the middle…"
+ *  — the gamebook lists a jumbo package's linemen BEFORE the play, and the
+ *  first name in the text used to be the ball carrier: two tackles and a
+ *  guard collected Kenneth Walker's carries, one of them a 60-yard touchdown
+ *  (founder, DEN@KC box score: "Tonga?"). The clause is dropped wherever it
+ *  sits, up to the sentence boundary before it (v0.390.4). */
+export function stripEligible(text) {
+  let s = String(text ?? '');
+  for (;;) {
+    const i = s.indexOf('reported in as eligible.');
+    if (i < 0) return s;
+    const head = s.slice(0, i);
+    const start = Math.max(head.lastIndexOf('. '), head.lastIndexOf(') ')) + 1;
+    s = (s.slice(0, start > 0 ? start + 1 : 0) + s.slice(i + 'reported in as eligible.'.length)).replace(/^\s+|\s+(?=\s)/g, '').trim();
+  }
+}
+
 export function playToRows(p, roster, eventId, gameStartMs) {
   const out = [];
   const typeText = p?.type?.text ?? '';
-  const text = p?.text ?? '';
+  const text = stripEligible(p?.text ?? '');
   const qtr = p?.period?.number ?? 1;
   const mmss = p?.clock?.displayValue ?? '15:00';
   const c = clockOf(Number(qtr), mmss);

@@ -4,7 +4,7 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible } from '../packages/core/src/data/gameView.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
 let fails = 0;
@@ -44,6 +44,18 @@ const P = (o) => ({ c: 0, drv: 3, tm: 'KC', dn: 1, dist: 10, yl: 80, yl2: 80, ty
   eq(ballCarrier({ ty: 'Timeout', txt: 'Timeout #1 by KC at 04:33.' }), null, 'a timeout names nobody');
   const people = namesFromSlugs(['kenneth-walker', 'patrick-mahomes', 'rashee-rice']);
   eq(resolveGamebookPerson(people, 'K.Walker')?.slug, 'kenneth-walker', 'the carrier resolves to a slug for the headshot');
+}
+
+// ── the jumbo package (v0.390.4, founder: "Tonga?") ─────────────────────────
+{
+  const J1 = '(Shotgun) H.Nourzad and K.Tonga reported in as eligible.  K.Walker up the middle to DEN 35 for 3 yards (E.Uwazurike; T.Hufanga).';
+  const J2 = 'J.Ezeudu, J.Moore and K.Tonga reported in as eligible.  K.Walker left end for 60 yards, TOUCHDOWN. H.Butker extra point is GOOD, Center-J.Winchester, Holder-M.Araiza.';
+  eq(stripEligible(J1), '(Shotgun) K.Walker up the middle to DEN 35 for 3 yards (E.Uwazurike; T.Hufanga).', 'the preamble goes; the formation note before it stays');
+  eq(stripEligible(J2), 'K.Walker left end for 60 yards, TOUCHDOWN. H.Butker extra point is GOOD, Center-J.Winchester, Holder-M.Araiza.', 'a three-man preamble at the very start goes');
+  eq(ballCarrier({ ty: 'Rush', txt: J1 }), 'K.Walker', 'THE POINT: the carrier is Walker, not the reported-eligible tackle');
+  eq(ballCarrier({ ty: 'Rushing Touchdown', txt: J2 }), 'K.Walker', 'the 60-yard touchdown is Walker\'s');
+  ok(!playNames(J1).includes('K.Tonga') && !playNames(J1).includes('H.Nourzad'), 'the linemen are not "on" the play');
+  eq(stripEligible('(Shotgun) J.Dobbins up the middle to KC 39 for 4 yards (K.Tonga; G.Karlaftis).'), '(Shotgun) J.Dobbins up the middle to KC 39 for 4 yards (K.Tonga; G.Karlaftis).', 'a play without the clause is untouched — Tonga keeps his tackle');
 }
 
 console.log(fails ? `\n${fails} GAME-VIEW PROBE(S) FAILED` : '\nALL GAME-VIEW PROBES PASSED');

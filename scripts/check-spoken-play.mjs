@@ -63,6 +63,11 @@ eq(spokenText('J.Brissett pass incomplete short right to Mi.Wilson. NO challenge
     'a name the box score lacks falls back to the last name in the same sentence');
 }
 
+// ── 1c. The jumbo package is not read out (v0.390.4) ───────────────────────
+eq(spokenText('(Shotgun) H.Nourzad and K.Tonga reported in as eligible.  K.Walker up the middle to DEN 35 for 3 yards (E.Uwazurike; T.Hufanga).', 'Rush'),
+  'Walker up the middle to the Denver 35 for 3 yards, tackled by Uwazurike and Hufanga.',
+  '"reported in as eligible" is roster trivia — the voice starts at the play');
+
 // ── 2. Down and distance ───────────────────────────────────────────────────
 eq(spokenDown({ dn: 1, dist: 10, yl: 75 }), 'First and 10', 'first and ten');
 eq(spokenDown({ dn: 3, dist: 5, yl: 5 }), 'Third and goal', 'goal to go when the distance reaches the end zone');

@@ -120,5 +120,43 @@ ok(kinds('nate-folkish').includes('fg'),
     'neither namesake absorbs the other\'s plays');
 }
 
+// ── THE JUMBO PACKAGE (v0.390.4, founder: "Tonga?") ─────────────────────────
+// DEN@KC, week 1: "H.Nourzad and K.Tonga reported in as eligible.  K.Walker
+// up the middle…" — the linemen are listed before the play, and the first
+// name in the text was the ball carrier. A defensive tackle ran twice and a
+// tackle scored from 60. The preamble is stripped before any name is read.
+{
+  const s3 = {
+    header: { id: '40300', competitions: [{ competitors: [
+      { id: '1', team: { id: '1', abbreviation: 'KC' }, homeAway: 'home' },
+      { id: '2', team: { id: '2', abbreviation: 'DEN' }, homeAway: 'away' },
+    ] }] },
+    boxscore: { players: [
+      { team: { abbreviation: 'KC' }, statistics: [
+        { name: 'rushing', athletes: [athlete(10, 'Kenneth Walker')] },
+        { name: 'defensive', athletes: [athlete(11, 'Khyiris Tonga')] },
+        { name: 'receiving', athletes: [athlete(12, 'Jaylon Moore')] },
+      ] },
+      { team: { abbreviation: 'DEN' }, statistics: [
+        { name: 'defensive', athletes: [athlete(20, 'Talanoa Hufanga'), athlete(21, 'Eyabi Uwazurike')] },
+        { name: 'rushing', athletes: [athlete(22, 'JK Dobbins')] },
+      ] },
+    ] },
+    drives: { previous: [{ plays: [
+      play(1, 'Rush', '(Shotgun) H.Nourzad and K.Tonga reported in as eligible.  K.Walker up the middle to DEN 35 for 3 yards (E.Uwazurike; T.Hufanga).', '1', '2', { yds: 3 }),
+      play(2, 'Rushing Touchdown', 'J.Ezeudu, J.Moore and K.Tonga reported in as eligible.  K.Walker left end for 60 yards, TOUCHDOWN.', '1', '2', { yds: 60, sc: 1 }),
+      play(3, 'Rush', '(Shotgun) J.Dobbins up the middle to KC 39 for 4 yards (K.Tonga; G.Karlaftis).', '2', '1', { yds: 4 }),
+    ] }] },
+  };
+  const p3 = gameToRealPlays(s3);
+  const k3 = (slug) => (p3[slug] ?? []).map((p) => p.k);
+  const walkerRush = (p3['kenneth-walker'] ?? []).filter((p) => p.k === 'rush');
+  ok(walkerRush.length === 2 && walkerRush.reduce((n, p) => n + p.y, 0) === 63 && walkerRush.some((p) => p.td === 1),
+    'THE POINT: Walker keeps both carries, 63 yards and the touchdown');
+  ok(!k3('khyiris-tonga').includes('rush') && !k3('jaylon-moore').includes('rush'),
+    'the reported-eligible linemen carry nothing');
+  ok(k3('khyiris-tonga').includes('tackle'), 'Tonga keeps the tackle he actually made on Dobbins');
+}
+
 console.log(fails ? `\n${fails} FAIL(s)` : '\nALL ESPN-ATTR ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
