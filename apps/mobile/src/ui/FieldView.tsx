@@ -34,6 +34,7 @@ import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix, fs } from '../theme.native';
 import { Overlay } from './Overlay';
 import { openPlayerCard } from './PlayerCardSheet';
+import { PlayByPlaySheet } from './PlayByPlaySheet';
 
 // Geometry (SVG user units) — identical to the web's.
 const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
@@ -93,6 +94,7 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
   // ↔ mirrors the field to match the viewer's broadcast. Remembered per game,
   // through the platform shim rather than localStorage.
   const [boxOpen, setBoxOpen] = useState(false);
+  const [pbpOpen, setPbpOpen] = useState(false); // ≣ PLAY BY PLAY sheet (v0.389.0)
   const [flip, setFlip] = useState(() => storeGet(`fvflip:${feed.key}`) === '1');
   const toggleFlip = () => setFlip((f) => { const n = !f; storeSet(`fvflip:${feed.key}`, n ? '1' : '0'); return n; });
   const mx = (x: number) => (flip ? W - x : x);
@@ -334,14 +336,21 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
           screen is acceptable at all. Everything with judgement in it (who is
           listed, in what order, how a line is phrased) lives in core; what is
           native here is the sheet. */}
-      <View style={{ alignItems: 'center', marginTop: 6 }}>
+      {/* ≣ PLAY BY PLAY beside it (v0.389.0, founder): every play of THIS
+          game, with a voice — CATCH UP from the top or LIVE as they land. */}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 6 }}>
         <Pressable onPress={() => setBoxOpen(true)}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: t.surface }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 1, color: t.dim }}>▤ BOX SCORE</Text>
         </Pressable>
+        <Pressable onPress={() => setPbpOpen(true)}
+          style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: t.surface }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 1, color: t.dim }}>≣ PLAY BY PLAY 🔊</Text>
+        </Pressable>
       </View>
       <BoxScoreSheet visible={boxOpen} onClose={() => setBoxOpen(false)}
         week={week} home={home} away={away} clock={clock} />
+      <PlayByPlaySheet visible={pbpOpen} onClose={() => setPbpOpen(false)} week={week} team={home} />
     </View>
   );
 }

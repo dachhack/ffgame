@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.389.0 — ≣ PLAY BY PLAY, read to you: catch up or live
+
+Founder, over the app's All fields sheet: "Let's also have the option to
+expand the play by play for each game and have it read off to you catch
+up or live." Every field card (app All fields sheet and the matchup's
+field; web ▦ FIELDS overlay and slot fields) grows a ≣ PLAY BY PLAY 🔊
+chip beside BOX SCORE. App: a sheet — the game's every play in order,
+scoring plays lit with the score, turnovers marked, newest kept in view;
+web: the same, inline under the field. Under it, the voice: ▶ CATCH UP
+reads from the top and keeps going live when it reaches the present
+(or says the final and stops); ● LIVE reads the latest play now and
+every new one as the feed lands; ■ STOP. Long-press (app) / double-click
+(web) a row to hear just that play. The row being read is lit.
+
+WHAT IS SAID is core's `spokenPlay` — the gamebook line as a sentence:
+formation notes, clock stamps and hurry brackets dropped, initials
+spaced ("J. Brissett", the "Mi. Wilson" prefix kept), club abbreviations
+before a yard line read as cities (ESPN's ARZ/BLT/CLV/HST/WSH included),
+the trailing parenthetical read as the tackle (coverage on an
+incompletion), penalties split off and read plainly, down and distance
+first, the score after a scoring play (away first, nicknames). WHEN is
+core's `PlayReader` — one state machine with the voice injected: the app
+hands it expo-speech (new dependency, SDK-matched ~57.0.3), the web
+window.speechSynthesis; a cut sentence is re-said on resume, a late
+`done` from a stopped voice is ignored, the final is said once. Both
+sheets re-read the game every 3s so LIVE follows the poll. 31 probes in
+new check:spoken (real 2026 week-1 gamebook lines), in check:parity.
+APK 36932.
+
 ### v0.388.13 — 🔥 HOT comes off with the whistle
 
 Founder, Monday, the Sunday window reading ★ WON with Olave, Flowers and
