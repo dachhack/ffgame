@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.389.1 — whole names, no pauses, and a choice of voice
+
+Founder, first listen: "Do we have other voice options? Anything more
+natural? The pauses after the first initials are a bit too much."
+
+THE PAUSE was the period. "J.Brissett" became "J. Brissett" and every
+engine reads that period as a full stop. Gone two ways. First, the box
+score knows who "J.Brissett" IS: engine/gameNames builds a resolver from
+everyone with a stat in the game — last name matched on letters alone
+("St. Brown" meets st-brown), the gamebook's prefix against the first
+name, one hit is the answer — and the voice says "Jacoby Brissett pass
+short right to Michael Wilson … tackled by Derwin James". Second, a name
+the box score can't place (a holder, a defender before his first tackle)
+is said the way a broadcast says it: the last name alone, "Brissett";
+the gamebook's disambiguating prefix survives only where it has to, as
+"Mi Wilson" — no period, no pause. Read fresh per sentence, so a defender
+is known by the time his tackle is spoken. Eight more probes in
+check:spoken.
+
+THE VOICE: both engines ship several. Android's Google engine marks its
+network voices Enhanced — noticeably more natural than the on-device
+default; Edge's "Microsoft … Online (Natural)" set is near a broadcast
+read, Chrome has Google US English, Safari Samantha. Each sheet now lists
+every English voice the device has, best first (★ = enhanced/natural),
+picks the best by default, remembers a tap, and greets in the chosen
+voice so you hear it before committing. What is installed is the phone's
+or browser's; a cloud voice (ElevenLabs / Polly class) would be the next
+rung and a paid one — not built. APK 36933.
+
 ### v0.389.0 — ≣ PLAY BY PLAY, read to you: catch up or live
 
 Founder, over the app's All fields sheet: "Let's also have the option to

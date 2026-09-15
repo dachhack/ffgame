@@ -11,6 +11,15 @@
 // thing. `PlayReader` (playReader.ts) decides WHICH plays to say and when.
 import type { GamePlay } from './gameFeed';
 
+/** Who a gamebook name token is — "J.Brissett" → "Jacoby Brissett" — or null
+ *  when the host can't say (then the last name alone is spoken). Built per
+ *  game from the box score by engine/gameNames.gameNameResolver. */
+export type NameOf = (abbr: string) => string | null;
+// A gamebook name: one-to-three-letter first-name prefix, a period, the last
+// name (which may itself carry "St. " — "A.St. Brown"). No space after the
+// period, which is exactly what a voice trips on.
+const NAME_RE = /\b([A-Z][a-z]{0,2})\.((?:St\. )?[A-Z][A-Za-z'’-]+)/g;
+
 /** City and nickname per club, keyed by the abbreviations the feed and the
  *  gamebook use (ESPN's ARZ/BLT/CLV/HST/WSH spellings included). */
 const CLUBS: Record<string, [city: string, nick: string]> = {
@@ -45,7 +54,7 @@ export function spokenDown(p: Pick<GamePlay, 'dn' | 'dist' | 'yl'>): string | nu
  *  dropped, initials spaced ("J. Brissett", "Mi. Wilson"), club abbreviations
  *  before a yard line read as cities, the trailing parenthetical read as the
  *  tackle (or, on an incompletion, the coverage), penalties read plainly. */
-export function spokenText(txt: string, ty?: string): string {
+export function spokenText(txt: string, ty?: string, nameOf?: NameOf): string {
   let s = String(txt ?? '').trim();
   // "(Shotgun)", "(No Huddle, Shotgun)", "(5:33) (Shotgun)" — leading notes.
   s = s.replace(/^(?:\(\s*[^()]*\)\s*)+/, '');
@@ -76,8 +85,19 @@ export function spokenText(txt: string, ty?: string): string {
   // Club abbreviation before a yard line or as a possessive: "to ARZ 44" → "to the Arizona 44".
   s = s.replace(new RegExp(`\\b(to|at|from) (${ABBR_RE}) (\\d{1,2})\\b`, 'g'), (_m, prep: string, c: string, yd: string) => `${prep} the ${clubCity(c)} ${yd}`);
   s = s.replace(new RegExp(`\\b(${ABBR_RE})-(?=[A-Z][a-z]*\\.)`, 'g'), (_m, c: string) => `${clubCity(c)}'s `);
-  // Initials: "J.Brissett" → "J. Brissett", "Mi.Wilson" → "Mi. Wilson".
-  s = s.replace(/\b([A-Z][a-z]{0,2})\.(?=[A-Z])/g, '$1. ');
+  // NAMES (v0.389.1). "J.Brissett" used to become "J. Brissett", and every
+  // engine treats that period as a full stop — founder: "the pauses after the
+  // first initials are a bit too much." Now: the FULL name when the game's
+  // box score can say who it is ("Jacoby Brissett"), else the last name the
+  // way a broadcast says it ("Brissett") — and the gamebook's disambiguating
+  // prefix survives only where it has to: two Wilsons on one side read
+  // "Michael Wilson" and "Mack Wilson" when known, "Mi Wilson" / "Ma Wilson"
+  // (no period, no pause) when not.
+  s = s.replace(NAME_RE, (whole, first: string, last: string) => {
+    const full = nameOf?.(whole);
+    if (full) return full;
+    return first.length > 1 ? `${first} ${last}` : last;
+  });
   // Gamebook shorthand a voice trips on.
   s = s.replace(/\bpushed ob\b/g, 'pushed out of bounds').replace(/\bran ob\b/g, 'ran out of bounds').replace(/\bob at\b/g, 'out of bounds at')
     .replace(/\b(\d+)\s*yd\b/g, '$1 yard').replace(/\bTD\b/g, 'touchdown').replace(/\bFG\b/g, 'field goal')
@@ -92,11 +112,11 @@ export function spokenText(txt: string, ty?: string): string {
 /** The whole spoken play: situation, the sentence, and the score when it
  *  moved — "Third and goal. K. Walker right end to the Denver 5 for 3 yards,
  *  tackled by M. Roach and P. Surtain." / "… Touchdown. Chiefs 7, Broncos 0." */
-export function spokenPlay(p: GamePlay, ctx: { home: string; away: string; prev?: GamePlay | null }): string {
+export function spokenPlay(p: GamePlay, ctx: { home: string; away: string; prev?: GamePlay | null; nameOf?: NameOf }): string {
   const parts: string[] = [];
   const dd = spokenDown(p);
   if (dd) parts.push(`${dd}.`);
-  parts.push(spokenText(p.txt, p.ty));
+  parts.push(spokenText(p.txt, p.ty, ctx.nameOf));
   const scored = p.sc === 1 || (ctx.prev != null && (ctx.prev.hs !== p.hs || ctx.prev.as !== p.as));
   if (scored) parts.push(`${clubNick(ctx.away)} ${p.as}, ${clubNick(ctx.home)} ${p.hs}.`);
   return parts.join(' ');

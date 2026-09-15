@@ -16,9 +16,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { gameFeedFor, type GamePlay } from '@drip/core/data/gameFeed';
 import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
+import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { useTheme, MONO, alpha, fs } from '../theme.native';
 import { Overlay } from './Overlay';
-import { appVoice } from './voice';
+import { appVoice, listVoices, chosenVoice, chooseVoice, type VoiceOption } from './voice';
 
 const fmtQClock = (c: number): string => {
   const q = Math.min(4, Math.floor(c / 900) + 1);
@@ -44,12 +45,17 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
   const last = plays.length ? plays[plays.length - 1] : null;
   const over = !!last && (feed?.st ? feed.st === 'post' : last.c >= 3300);
 
+  // Names (v0.389.1): the box score knows who "J.Brissett" is, and it grows
+  // as the game does — resolved through a ref so the reader always reads the
+  // freshest roster without being rebuilt.
+  const nameOf = useRef(gameNameResolver(week, home, away));
+  useEffect(() => { nameOf.current = gameNameResolver(week, home, away); }, [week, home, away]);
   // The reader lives for the sheet's life; a new game (or close) retires it.
   const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
   const reader = useRef<PlayReader | null>(null);
   useEffect(() => {
     if (!visible) return;
-    const r = new PlayReader(appVoice, { home, away }, setRs);
+    const r = new PlayReader(appVoice, { home, away, nameOf: (a) => nameOf.current(a) }, setRs);
     reader.current = r;
     return () => { r.stop(); reader.current = null; };
   }, [visible, home, away]);
@@ -62,6 +68,12 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
     if (rs.mode !== 'catchup') scroller.current?.scrollToEnd({ animated: true });
   }, [plays.length, rs.mode]);
 
+  // VOICE (v0.389.1): every English voice the phone has, best first; ★ marks
+  // the engine's enhanced (network) ones. The pick sticks.
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
+  useEffect(() => { if (visible) listVoices().then(setVoices).catch(() => setVoices([])); }, [visible]);
+  const pickVoice = (id: string) => { chooseVoice(id); setVoiceId(id); reader.current?.stop(); appVoice.speak(`${away} at ${home}. Ready when you are.`, () => {}); };
   const btn = (label: string, on: boolean, onPress: () => void, tone: string) => (
     <Pressable onPress={onPress}
       style={{ flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth,
@@ -88,6 +100,20 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
           : 'CATCH UP reads the game from the top · LIVE reads each play as it lands'}
       </Text>
 
+      {voices.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 8 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: t.faint, alignSelf: 'center' }}>VOICE</Text>
+          {voices.map((v) => {
+            const on = (voiceId ?? voices[0]?.id) === v.id;
+            return (
+              <Pressable key={v.id} onPress={() => pickVoice(v.id)}
+                style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 0.14) : t.bg }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: on ? t.you : t.dim }}>{v.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
       <ScrollView ref={scroller} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}>
         {plays.length === 0 && <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint, textAlign: 'center' }}>— no plays yet —</Text>}
         {plays.map((p, i) => {

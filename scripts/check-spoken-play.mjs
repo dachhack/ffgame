@@ -7,6 +7,7 @@
 // Run: npx tsx scripts/check-spoken-play.mjs
 import { spokenText, spokenPlay, spokenDown, spokenScore, clubCity, clubNick } from '../packages/core/src/data/spokenPlay.ts';
 import { PlayReader } from '../packages/core/src/data/playReader.ts';
+import { namesFromSlugs, resolveGamebookName } from '../packages/core/src/engine/gameNames.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -14,26 +15,44 @@ const eq = (got, want, label) => ok(got === want, `${label}\n        got:  ${JSO
 
 // ── 1. The sentence ────────────────────────────────────────────────────────
 eq(spokenText('K.Walker right end to DEN 5 for 3 yards (M.Roach; P.Surtain).', 'Rush'),
-  'K. Walker right end to the Denver 5 for 3 yards, tackled by M. Roach and P. Surtain.',
-  'a rush: initial spaced, club read as a city, the parenthetical read as the tackle');
+  'Walker right end to the Denver 5 for 3 yards, tackled by Roach and Surtain.',
+  'a rush: last names the way a broadcast says them, club read as a city, the parenthetical read as the tackle');
 eq(spokenText('(Shotgun) J.Brissett pass short right to Mi.Wilson to LAC 22 for 10 yards (D.Jackson).', 'Pass Reception'),
-  'J. Brissett pass short right to Mi. Wilson to the Los Angeles 22 for 10 yards, tackled by D. Jackson.',
-  'a pass: the formation note dropped, the gamebook\'s two-letter prefix kept ("Mi. Wilson")');
+  'Brissett pass short right to Mi Wilson to the Los Angeles 22 for 10 yards, tackled by Jackson.',
+  'a pass: the formation note dropped; the gamebook\'s two-letter prefix kept without its period ("Mi Wilson")');
 eq(spokenText('(No Huddle, Shotgun) J.Brissett pass incomplete deep right to Mi.Wilson (C.Hart).', 'Pass Incompletion'),
-  'J. Brissett pass incomplete deep right to Mi. Wilson, broken up by C. Hart.',
+  'Brissett pass incomplete deep right to Mi Wilson, broken up by Hart.',
   'an incompletion: the parenthetical is coverage, not a tackle');
 eq(spokenText('(5:33) (No Huddle, Shotgun) J.Brissett pass short right to Mi.Wilson to ARZ 41 for 14 yards (C.Hart) [T.Tuipulotu]', 'Pass Reception'),
-  'J. Brissett pass short right to Mi. Wilson to the Arizona 41 for 14 yards, tackled by C. Hart.',
+  'Brissett pass short right to Mi Wilson to the Arizona 41 for 14 yards, tackled by Hart.',
   'a clock stamp, two notes and the bracketed hurry dropped; ESPN\'s ARZ reads as Arizona');
 eq(spokenText('J.Brissett pass short middle to Mi.Wilson to ARZ 47 for 6 yards (D.Phillips).PENALTY on ARZ-H.Froholdt, Offensive Holding, 10 yards, enforced at JAX 39 - No Play.', 'Pass Reception'),
-  'J. Brissett pass short middle to Mi. Wilson to the Arizona 47 for 6 yards, tackled by D. Phillips. Penalty on Arizona, H. Froholdt, Offensive Holding, 10 yards, no play.',
+  'Brissett pass short middle to Mi Wilson to the Arizona 47 for 6 yards, tackled by Phillips. Penalty on Arizona, Froholdt, Offensive Holding, 10 yards, no play.',
   'a penalty reads plainly: club, player, foul, yards, no play');
 eq(spokenText('C.Santos 40 yard field goal is GOOD, Center-B.Gardner, Holder-T.Taylor.', 'Field Goal Good'),
-  'C. Santos 40 yard field goal is good, Center-B. Gardner, Holder-T. Taylor.',
+  'Santos 40 yard field goal is good, Center-Gardner, Holder-Taylor.',
   'a field goal: "is GOOD" lower-cased for the voice');
 eq(spokenText('(Shotgun) J.Brissett pass deep right to Mi.Wilson pushed ob at LAC 25 for 17 yards (T.Still).', 'Pass Reception'),
-  'J. Brissett pass deep right to Mi. Wilson pushed out of bounds at the Los Angeles 25 for 17 yards, tackled by T. Still.',
+  'Brissett pass deep right to Mi Wilson pushed out of bounds at the Los Angeles 25 for 17 yards, tackled by Still.',
   '"pushed ob" reads as out of bounds');
+
+// ── 1b. Full names from the game's box score (v0.389.1) ────────────────────
+{
+  const people = namesFromSlugs(['jacoby-brissett', 'michael-wilson', 'mack-wilson', 'amon-ra-st-brown', 'kc-dst', 'kc-k', 'derwin-james']);
+  eq(resolveGamebookName(people, 'J.Brissett'), 'Jacoby Brissett', 'a lone last-name match resolves to the full name');
+  eq(resolveGamebookName(people, 'Mi.Wilson'), 'Michael Wilson', 'the gamebook prefix picks Michael among the Wilsons');
+  eq(resolveGamebookName(people, 'Ma.Wilson'), 'Mack Wilson', '…and Mack');
+  eq(resolveGamebookName(people, 'M.Wilson'), null, 'a bare initial that fits both is not guessed');
+  eq(resolveGamebookName(people, 'A.St. Brown'), 'Amon Ra St Brown', '"St. Brown" meets the slug\'s st-brown');
+  eq(resolveGamebookName(people, 'C.Hart'), null, 'nobody with a stat yet → null (the voice says "Hart")');
+  const nameOf = (a) => resolveGamebookName(people, a);
+  eq(spokenText('(Shotgun) J.Brissett pass short right to Mi.Wilson to LAC 22 for 10 yards (D.James).', 'Pass Reception', nameOf),
+    'Jacoby Brissett pass short right to Michael Wilson to the Los Angeles 22 for 10 yards, tackled by Derwin James.',
+    'THE POINT: with the box score, the voice says whole names — no initials, no pauses');
+  eq(spokenText('J.Brissett pass incomplete to Mi.Wilson (C.Hart).', 'Pass Incompletion', nameOf),
+    'Jacoby Brissett pass incomplete to Michael Wilson, broken up by Hart.',
+    'a name the box score lacks falls back to the last name in the same sentence');
+}
 
 // ── 2. Down and distance ───────────────────────────────────────────────────
 eq(spokenDown({ dn: 1, dist: 10, yl: 75 }), 'First and 10', 'first and ten');
@@ -44,10 +63,10 @@ eq(spokenDown({ dn: 0, dist: 0, yl: 65 }), null, 'a kickoff has no down');
 const P = (o) => ({ c: 0, drv: 0, tm: 'KC', dn: 1, dist: 10, yl: 30, yl2: 25, ty: 'Rush', txt: 'x', hs: 0, as: 0, ...o });
 const ctx = { home: 'KC', away: 'DEN' };
 eq(spokenPlay(P({ dn: 1, dist: 5, yl: 5, txt: 'K.Walker right end to DEN 5 for 3 yards (M.Roach; P.Surtain).' }), ctx),
-  'First and goal. K. Walker right end to the Denver 5 for 3 yards, tackled by M. Roach and P. Surtain.',
+  'First and goal. Walker right end to the Denver 5 for 3 yards, tackled by Roach and Surtain.',
   'situation first, then the sentence; no score line when nothing scored');
 eq(spokenPlay(P({ dn: 2, dist: 2, yl: 2, txt: 'K.Walker up the middle for 2 yards, TOUCHDOWN.', sc: 1, hs: 6, as: 0 }), { ...ctx, prev: P({}) }),
-  'Second and goal. K. Walker up the middle for 2 yards, touchdown. Broncos 0, Chiefs 6.',
+  'Second and goal. Walker up the middle for 2 yards, touchdown. Broncos 0, Chiefs 6.',
   'a scoring play ends with the score, away first, nicknames');
 eq(spokenScore({ hs: 24, as: 17 }, ctx), 'Broncos 17, Chiefs 24.', 'the scoreline alone');
 ok(clubCity('WSH') === 'Washington' && clubNick('SF') === '49ers' && clubCity('XYZ') === 'XYZ', 'ESPN spellings map; an unknown club passes through');
