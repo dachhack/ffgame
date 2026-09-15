@@ -2147,6 +2147,21 @@ export const removePushToken = (token: string) =>
 export const setPushPrefs = (token: string, prefs: Record<string, boolean>) =>
   rpc<{ ok: boolean; error?: string; prefs?: Record<string, boolean> }>('set_push_prefs', { p_token: token, p_prefs: prefs });
 export const myPushTokens = () => rpc<PushTokenRow[]>('my_push_tokens');
+// ── Push diagnostics (0276): a test push, and what became of your pushes ────
+export interface PushLogRow { id: number; kind: string; title: string; at: string; sent_at: string | null; error: string | null; }
+export const pushTest = () =>
+  rpc<{ ok: boolean; error?: string; id?: number; devices?: number }>('push_test');
+export const myPushLog = () =>
+  rpc<{ ok: boolean; error?: string; rows?: PushLogRow[]; devices?: { platform: string; seen: string }[] }>('my_push_log');
+/** One line a manager can read off an outbox row. The 'waiting-*' marks are
+ *  the worker's: that channel has no credentials on the server yet. */
+export function pushLogStatus(r: PushLogRow): { glyph: string; text: string; tone: 'ok' | 'bad' | 'wait' } {
+  if (r.sent_at && !r.error) return { glyph: '✓', text: 'delivered', tone: 'ok' };
+  if (r.sent_at) return { glyph: '✗', text: r.error === 'no devices' ? 'no device was registered' : `refused: ${r.error}`, tone: 'bad' };
+  if (r.error === 'waiting-vapid') return { glyph: '⏳', text: 'waiting — the server has no browser push key yet', tone: 'wait' };
+  if (r.error === 'waiting-fcm') return { glyph: '⏳', text: 'waiting — the server has no phone push key yet', tone: 'wait' };
+  return { glyph: '⏳', text: 'queued — the worker sends within a minute', tone: 'wait' };
+}
 
 // ── Every message, per league (0241) ────────────────────────────────────────
 // Founder: "anytime someone ... posts a comment". The per-device mutes above

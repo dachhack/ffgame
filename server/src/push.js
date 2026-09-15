@@ -515,14 +515,26 @@ async function detectBitten() {
   }));
 }
 
+// A row every one of whose devices sits on a channel WITHOUT credentials is
+// marked (error 'waiting-vapid' / 'waiting-fcm', sent_at still null) and left
+// out of the next fetch while that channel is still credless (v0.392.0). It
+// used to be skipped silently and re-fetched every sweep: with the outbox read
+// oldest-first, fifty of them — a month of browser-only recipients and no
+// VAPID key on the server — were the whole page, and every push behind them
+// waited forever. The mark is also what my_push_log (0276) shows the manager.
+const WAITING = { web: 'waiting-vapid', fcm: 'waiting-fcm' };
+
 async function flush() {
-  const { data: pending } = await db().from('push_outbox')
-    .select('id, app_user_id, kind, title, body, data')
-    .is('sent_at', null).order('id').limit(50);
-  if (!pending?.length) return;
   const token = await fcmAccessToken();
   const vapid = vapidKeys();
   if (!token && !vapid) return; // no creds on either channel — leave the queue standing
+  let q = db().from('push_outbox')
+    .select('id, app_user_id, kind, title, body, data')
+    .is('sent_at', null);
+  if (!vapid) q = q.or(`error.is.null,error.neq.${WAITING.web}`);
+  if (!token) q = q.or(`error.is.null,error.neq.${WAITING.fcm}`);
+  const { data: pending } = await q.order('id').limit(50);
+  if (!pending?.length) return;
   const uids = [...new Set(pending.map((p) => p.app_user_id))];
   const { data: toks } = await db().from('push_token').select('token, app_user_id, platform, prefs').in('app_user_id', uids);
   const byUser = new Map();
@@ -535,16 +547,21 @@ async function flush() {
     const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false);
     let err = devices.length ? null : 'no devices';
     let attempted = devices.length === 0; // deviceless rows resolve immediately
+    let waiting = null;
     for (const d of devices) {
       const web = d.platform === 'web';
-      if (web ? !vapid : !token) { err = `${web ? 'vapid' : 'fcm'} creds absent`; continue; }
+      if (web ? !vapid : !token) { waiting = web ? WAITING.web : WAITING.fcm; continue; }
       attempted = true;
       const r = web ? await webPushSend(d.token, p) : await fcmSend(token, d.token, p);
       if (r.ok) { sent += 1; continue; }
       err = r.error;
       if (r.dead) await db().from('push_token').delete().eq('token', d.token);
     }
-    if (!attempted) continue; // every device is on a credless channel — retry next sweep
+    if (!attempted) {
+      // every device is on a credless channel — park it until that channel has keys
+      await db().from('push_outbox').update({ error: waiting }).eq('id', p.id);
+      continue;
+    }
     await db().from('push_outbox').update({ sent_at: new Date().toISOString(), error: err }).eq('id', p.id);
   }
   if (sent) log(`delivered ${sent} push${sent === 1 ? '' : 'es'}`);
@@ -587,6 +604,8 @@ async function detectMembers() {
 }
 
 /** One sweep: detect everything, then deliver. Called on its own interval. */
+export { flush as __flushForTest };
+
 export async function sweepPush() {
   await detectChat().catch((e) => log('chat detector error', e.message));
   await detectMembers().catch((e) => log('members detector error', e.message));

@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.392.0 — why the alerts weren't coming through, and a way to see it
+
+Founder: "Can we check the browser and mobile alerts. They are not coming
+through even though I have them on." Four things, found by reading the
+worker's own log out of the deploy run and the two clients:
+
+1. **The browser channel never had a key.** deploy-worker.yml has logged
+   "VAPID_PRIVATE_KEY secret not set — skipping" on every run since web push
+   shipped (v0.194.0). The private half of the committed pair never reached
+   the server, so every browser push ever queued sat in the outbox. Fixed by
+   ROTATING: a fresh pair (`scripts/webpush-keygen.mjs`), its public half
+   committed in `src/app/webPush.ts`, its private half handed to the founder
+   for the `VAPID_PRIVATE_KEY` repo secret. A browser still subscribed under
+   the old key is re-subscribed silently on its next visit (`webPushState`
+   compares the subscription's applicationServerKey to ours).
+2. **Parked rows walled off the queue.** flush read the outbox oldest-first,
+   fifty at a time, and a row whose only devices were on the credless
+   channel was skipped silently and re-fetched every sweep. Enough browser-
+   only recipients and the page was nothing but them: phone pushes behind
+   them never went. Such a row is now marked `waiting-vapid` / `waiting-fcm`
+   (sent_at still null) and left out of the fetch while that channel is
+   credless; the moment keys land it is picked up again.
+   `server/test/push-flush.mjs` pins it.
+3. **The app ate every foreground push.** expo-notifications shows nothing
+   for a push that arrives while the app is open unless a handler says so,
+   and none was set — so with the board open on a Sunday, alerts vanished.
+   `setNotificationHandler` (banner + shade + sound) in `ui/push.ts`.
+4. **Nobody could see any of this.** 0276 adds `push_test()` (queues one
+   outbox row for the caller, to every registered device; one per 30s) and
+   `my_push_log()` (the caller's last dozen outbox rows and their devices).
+   Both hosts' notification prefs gain 🔔 SEND ME A TEST PUSH and a RECENT
+   PUSHES list that polls every 8s: ✓ delivered / ✗ refused (with the push
+   service's error) / ⏳ queued or waiting on a server key. push-probes
+   pu14–pu25.
+
+The worker log also showed "[push] delivered 1 push" tonight, so the FCM
+channel itself works; the phone side is the foreground handler and the
+walled-off queue.
+
 ### v0.391.0 — The weekly report, in every league's chat
 
 Founder: "Can we get a weekly report for each league in the chat? Weekly

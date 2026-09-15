@@ -32,6 +32,7 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, type PushTokenRow,
+  pushTest, myPushLog, pushLogStatus, type PushLogRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade, leagueContracts, type LeagueContracts,
   setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
@@ -3544,6 +3545,26 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     setWeb(await (web === 'subscribed' ? disableWebPush() : enableWebPush()));
     void reload();
   };
+  // A TEST PUSH AND WHAT BECAME OF IT (0276, v0.392.0). Founder: "not coming
+  // through even though I have them on." The log is the outbox's own record,
+  // polled while the card is open so the row flips from queued to delivered
+  // (or to the reason it didn't) in front of you.
+  const [log, setLog] = useState<PushLogRow[] | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const loadLog = () => myPushLog().then((r) => setLog(r.ok ? (r.rows ?? []) : [])).catch(() => {});
+  useEffect(() => {
+    void loadLog();
+    const id = setInterval(() => void loadLog(), 8000);
+    return () => clearInterval(id);
+  }, []);
+  const sendTest = async () => {
+    setTestMsg(null);
+    try {
+      const r = await pushTest();
+      setTestMsg(r.ok ? `Queued for ${r.devices} device${r.devices === 1 ? '' : 's'} — the worker sends within a minute.` : (r.error ?? 'Could not queue a test.'));
+    } catch (x) { setTestMsg(friendlyError(x)); }
+    void loadLog();
+  };
   return (
     // BARE inside a Sheet (v0.296.3) — a card in a card is two frames around
     // one picture, and the sheet's own title already says NOTIFICATIONS.
@@ -3606,6 +3627,32 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
       )}
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
         Lit = on. Mutes apply per kind, per device — they follow your account, so flipping them here reaches your phone.
+      </div>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+        <button onClick={() => { void sendTest(); }} className="mono"
+          style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid var(--you)' }}>
+          🔔 SEND ME A TEST PUSH
+        </button>
+        {testMsg && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 5 }}>{testMsg}</div>}
+        {log && log.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>RECENT PUSHES</div>
+            {log.map((r) => {
+              const st = pushLogStatus(r);
+              const color = st.tone === 'ok' ? 'var(--you)' : st.tone === 'bad' ? 'var(--opp)' : 'var(--warn)';
+              return (
+                <div key={r.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
+                  <span className="mono" style={{ fontSize: 10, color, flex: 'none' }}>{st.glyph}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                    <div className="mono" style={{ fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {log && log.length === 0 && <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6 }}>Nothing has been queued for you yet.</div>}
       </div>
     </div>
   );

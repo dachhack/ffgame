@@ -10,6 +10,20 @@ import * as Notifications from 'expo-notifications';
 import { registerPushToken } from '@drip/core/data/liveApi';
 import { Ev, track } from '@drip/core/analytics';
 
+// SHOW IT WHILE THE APP IS OPEN (v0.392.0). expo-notifications drops a push
+// that arrives in the foreground unless a handler says otherwise — so with the
+// app open (the board, on a Sunday) every alert was silently eaten, and only
+// a backgrounded app ever showed one. Founder: "not coming through even
+// though I have them on." Banner + shade entry + sound, no badge count.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 let currentToken: string | null = null;
 
 /** The token this device registered this session — the Settings prefs target. */
