@@ -20,8 +20,9 @@ import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush } from '@drip/core/data/liveApi';
+import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
+import { tap } from './feedback';
 import { Overlay } from './Overlay';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
 
@@ -262,6 +263,26 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
     try { if (await registerForPush()) setToken(registeredPushToken()); }
     finally { setBusy(false); }
   };
+  // A TEST PUSH AND WHAT BECAME OF IT (0276, v0.392.0). Founder: "not coming
+  // through even though I have them on." Polled while the section is open so
+  // the row flips from queued to delivered (or to why not) in front of you.
+  const [log, setLog] = useState<PushLogRow[] | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const loadLog = () => myPushLog().then((r) => setLog(r.ok ? (r.rows ?? []) : [])).catch(() => {});
+  useEffect(() => {
+    void loadLog();
+    const id = setInterval(() => void loadLog(), 8000);
+    return () => clearInterval(id);
+  }, []);
+  const sendTest = async () => {
+    tap();
+    setTestMsg(null);
+    try {
+      const r = await pushTest();
+      setTestMsg(r.ok ? `Queued for ${r.devices} device${r.devices === 1 ? '' : 's'} — the worker sends within a minute.` : (r.error ?? 'Could not queue a test.'));
+    } catch (x) { setTestMsg(friendlyError(x)); }
+    void loadLog();
+  };
   const toggle = (key: string) => {
     if (!token) return;
     const next = { ...prefs, [key]: prefs[key] === false };
@@ -303,6 +324,32 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
           </Mono>
         </View>
       )}
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 6 }}>
+        <Pressable onPress={() => void sendTest()}
+          style={{ alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: alpha(t.you, 12) }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>🔔 SEND ME A TEST PUSH</Text>
+        </Pressable>
+        {!!testMsg && <Mono size={9} tone="dim">{testMsg}</Mono>}
+        {log && log.length > 0 && (
+          <View>
+            <Mono size={8.5} weight="700" track={0.12} tone="faint" style={{ marginBottom: 4 }}>RECENT PUSHES</Mono>
+            {log.map((r) => {
+              const st = pushLogStatus(r);
+              const color = st.tone === 'ok' ? t.you : st.tone === 'bad' ? t.opp : t.warn;
+              return (
+                <View key={r.id} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 10, color }}>{st.glyph}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 11.5, color: t.text }}>{r.title}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {log && log.length === 0 && <Mono size={8.5} tone="faint">Nothing has been queued for you yet.</Mono>}
+      </View>
     </View>
   );
 }

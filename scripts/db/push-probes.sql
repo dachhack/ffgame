@@ -88,4 +88,45 @@ begin
   reset role;
 end $$;
 
+-- ── 0276: a test push and the delivery log ─────────────────────────────────
+do $$
+declare r jsonb; lg jsonb; tid bigint;
+begin
+  set local role authenticated;
+  perform probe_as('c');
+  r := push_test();
+  perform assert_true(coalesce((r ->> 'ok')::boolean, false) is false and r ->> 'error' like 'no device%',
+    'pu14 no device registered: the test says so instead of queuing into the void');
+  perform assert_ok(register_push_token('device-token-c'), 'pu15 c registers a phone');
+  r := push_test();
+  perform assert_ok(r, 'pu16 a test push queues');
+  perform assert_true((r ->> 'devices')::int = 1, 'pu17 and says how many devices it reaches');
+  tid := (r ->> 'id')::bigint;
+  r := push_test();
+  perform assert_true(coalesce((r ->> 'ok')::boolean, false) is false and r ->> 'error' like '%30 seconds%',
+    'pu18 a second test inside 30s is refused');
+  lg := my_push_log();
+  perform assert_ok(lg, 'pu19 the log reads');
+  perform assert_true(jsonb_array_length(lg -> 'rows') = 1, 'pu20 one row queued');
+  perform assert_true(lg -> 'rows' -> 0 ->> 'title' like '🔔 Test push%' and lg -> 'rows' -> 0 -> 'sent_at' = 'null'::jsonb,
+    'pu21 the row is the test, not yet sent');
+  perform assert_true(jsonb_array_length(lg -> 'devices') = 1 and lg -> 'devices' -> 0 ->> 'platform' = 'android',
+    'pu22 the log lists the devices');
+  perform probe_as('b');
+  lg := my_push_log();
+  perform assert_true(jsonb_array_length(lg -> 'rows') = 0, 'pu23 another account sees none of it');
+  reset role;
+  -- the worker delivers (service role writes the outbox directly)
+  update push_outbox set sent_at = now(), error = null where id = tid;
+  set local role authenticated;
+  perform probe_as('c');
+  lg := my_push_log();
+  perform assert_true(lg -> 'rows' -> 0 -> 'sent_at' <> 'null'::jsonb, 'pu24 the log shows it went');
+  reset role;
+  perform set_config('app.uid', '', false);
+  set local role authenticated;
+  perform assert_true(coalesce((push_test() ->> 'ok')::boolean, true) is false, 'pu25 signed out cannot test');
+  reset role;
+end $$;
+
 select 'ALL PUSH PROBES PASSED' as result;
