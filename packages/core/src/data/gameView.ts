@@ -23,14 +23,18 @@ export function stripEligible(text: string): string {
     s = (s.slice(0, start > 0 ? start + 1 : 0) + s.slice(i + 'reported in as eligible.'.length)).replace(/^\s+|\s+(?=\s)/g, '').trim();
   }
 }
-const REG = 3300; // regulation ends (game-elapsed seconds; OT beyond)
+const REG = 3600; // four 15-minute quarters of game-elapsed seconds; OT beyond
+const OT_LEN = 600; // a 10-minute overtime period
 
-/** "Q2 04:33" from game-elapsed seconds; "OT" past regulation. */
+/** "Q2 04:33" from game-elapsed seconds; "OT 07:12" past regulation.
+ *  Regulation is 3600s (v0.390.8) — the first cut used the engine's
+ *  55-minute "late game" mark and read Q4 5:00 onward as OT (founder:
+ *  "It's not OT yet"). */
 export function qClock(c: number): string {
-  if (c >= REG) return 'OT';
+  const mmss = (left: number) => `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+  if (c >= REG) return `OT ${mmss(Math.max(0, OT_LEN - ((c - REG) % OT_LEN)))}`;
   const q = Math.min(4, Math.floor(c / 900) + 1);
-  const left = Math.max(0, q * 900 - c);
-  return `Q${q} ${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+  return `Q${q} ${mmss(Math.max(0, q * 900 - c))}`;
 }
 
 /** The ball spot the way a broadcast says it: yards-to-goal from the

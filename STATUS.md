@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.8 — "It's not OT yet", and the Fields sheet opens on all fields
+
+Founder, DEN@KC in the Game view: header "OT", field card "Q4 4:41".
+`qClock` took the engine's 55-minute late-game mark (3300s) as the end
+of regulation; regulation is four 15-minute quarters, 3600s. Now Q4 runs
+to 00:01 and past 3600 reads "OT 07:12" against a 10-minute period.
+Three probes in check:gameview.
+
+"Can we also get a chip to go to the all fields view? It should open in
+all fields then go to the single view when you select a game." The
+leagues page ▦ fields sheet opens on the stacked all-fields list again
+(FieldsList — every game, the reader bar on the 🔊 one, ‹ › on every
+field); tapping a game swaps in its Game view (strip, scoreboard, field,
+drive line, reader, LIVE / STATS) with a ‹ ▦ ALL FIELDS chip to come
+back. The 🔊 chip on a field makes it the reader's without opening it.
+Same list, same behaviour, on both boards' overlays. App + core (clock).
+APK 36943.
+
 ### v0.390.7 — the leagues-page fields show THIS week, not last year's
 
 Founder, mobile web, ▦ fields from My Leagues: DAL@PHI, KC@LAC, TB@ATL —

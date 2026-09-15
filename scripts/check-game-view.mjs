@@ -13,7 +13,9 @@ const eq = (got, want, label) => ok(got === want, `${label}\n        got:  ${JSO
 
 eq(qClock(0), 'Q1 15:00', 'kickoff reads Q1 15:00');
 eq(qClock(900 + 627), 'Q2 04:33', '1527s in reads Q2 04:33 (Sleeper\'s 2Q 04:33)');
-eq(qClock(3300), 'OT', 'past regulation reads OT');
+eq(qClock(3300), 'Q4 05:00', 'Q4 with five minutes left is NOT overtime (founder: "It\'s not OT yet")');
+eq(qClock(3599), 'Q4 00:01', 'the last second of regulation is still Q4');
+eq(qClock(3600 + 168), 'OT 07:12', 'past regulation reads OT with the period clock');
 eq(spotLabel('KC', 80, 'KC', 'DEN'), 'KC 20', '80 to go from KC\'s view is the KC 20');
 eq(spotLabel('KC', 35, 'KC', 'DEN'), 'DEN 35', '35 to go is the DEN 35');
 eq(spotLabel('KC', 50, 'KC', 'DEN'), '50', 'midfield is the 50');
