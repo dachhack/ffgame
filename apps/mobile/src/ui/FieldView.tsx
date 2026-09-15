@@ -27,7 +27,7 @@ import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } 
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
-import { teamLogo } from '@drip/core/data/media';
+import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
@@ -79,15 +79,20 @@ function pathLen(x1: number, x2: number, curved: boolean, y1: number = MID, y2: 
   return len;
 }
 
-export function FieldView({ week, team, clock, side }: {
-  week: number; team?: string | null; clock: number; side?: PlaySide | null;
+/** Who has the ball on the shown play — drawn at the spot with his headshot
+ *  and name (v0.390.3, Sleeper's K. Walker marker). The host resolves it
+ *  from the box score; null draws the plain possession badge. */
+export type Carrier = { slug: string; name: string } | null;
+
+export function FieldView({ week, team, clock, side, carrierOf }: {
+  week: number; team?: string | null; clock: number; side?: PlaySide | null; carrierOf?: (p: GamePlay) => Carrier;
 }) {
   const feed = gameFeedFor(week, team);
   if (!feed) return null;
-  return <Field feed={feed} clock={clock} side={side ?? null} week={week} />;
+  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} />;
 }
 
-function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number }) {
+function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier }) {
   const t = useTheme();
   const { away, home, plays } = feed;
 
@@ -114,6 +119,7 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
   const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
+  const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
   // "No next play" alone reads a live halftime as game over — trust the feed's
   // own state when it has one, else require the shown play to be in late Q4.
   const over = cur != null && !nxt && (feed.st ? feed.st === 'post' : cur.c >= 3300);
@@ -323,6 +329,15 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
             <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 2.5} fill={ballCol?.c ?? t.faint} fontSize={8} fontWeight="700" textAnchor="middle">
               {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
             </SvgText>
+            {/* the ball carrier, above the spot: headshot in a ring, name under */}
+            {carrier && (
+              <G>
+                <Circle cx={0} cy={TOP + 13} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
+                {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
+                <Rect x={-26} y={TOP + 27} width={52} height={9} rx={2} fill={alpha('#000000', 0.55)} />
+                <SvgText x={0} y={TOP + 34} fill="#FFFFFF" fontSize={6.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+              </G>
+            )}
           </AnimatedG>
         )}
       </Svg>

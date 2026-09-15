@@ -13,25 +13,37 @@ const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
 const cap = (w: string) => (w ? w[0].toUpperCase() + w.slice(1) : w);
 
 /** The box score's people as spoken names, keyed for matching. */
-export function namesFromSlugs(slugs: Iterable<string>): { first: string; lastKey: string; full: string }[] {
-  const out: { first: string; lastKey: string; full: string }[] = [];
+export interface GamePerson { slug: string; first: string; lastKey: string; full: string }
+export function namesFromSlugs(slugs: Iterable<string>): GamePerson[] {
+  const out: GamePerson[] = [];
   for (const slug of slugs) {
     if (slug.endsWith('-dst') || slug.endsWith('-k')) continue;
     const words = stripSlugTag(slug).split('-').filter(Boolean);
     if (words.length < 2) continue;
-    out.push({ first: words[0], lastKey: letters(words.slice(1).join('')), full: words.map(cap).join(' ') });
+    out.push({ slug, first: words[0], lastKey: letters(words.slice(1).join('')), full: words.map(cap).join(' ') });
   }
   return out;
 }
 
-/** Resolve one gamebook token against a name list. */
-export function resolveGamebookName(people: { first: string; lastKey: string; full: string }[], abbr: string): string | null {
+/** The person behind a gamebook token, or null (none, or more than one fit). */
+export function resolveGamebookPerson(people: GamePerson[], abbr: string): GamePerson | null {
   const m = abbr.match(/^([A-Z][a-z]{0,2})\.(.+)$/);
   if (!m) return null;
   const prefix = m[1].toLowerCase(), lastKey = letters(m[2]);
   if (!lastKey) return null;
   const hits = people.filter((p) => p.lastKey.endsWith(lastKey) && p.first.startsWith(prefix));
-  return hits.length === 1 ? hits[0].full : null;
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** The game's people, read fresh from the box score (v0.390.3). */
+export function gamePeople(week: number, home: string, away: string): GamePerson[] {
+  const box = gameBoxScore(week, home, away, Number.MAX_SAFE_INTEGER);
+  return namesFromSlugs([...box.home, ...box.away].map((r) => r.slug));
+}
+
+/** Resolve one gamebook token against a name list. */
+export function resolveGamebookName(people: GamePerson[], abbr: string): string | null {
+  return resolveGamebookPerson(people, abbr)?.full ?? null;
 }
 
 /** A resolver for one game, read fresh each call so a defender who just made

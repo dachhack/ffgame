@@ -18,7 +18,7 @@ export type NameOf = (abbr: string) => string | null;
 // A gamebook name: one-to-three-letter first-name prefix, a period, the last
 // name (which may itself carry "St. " — "A.St. Brown"). No space after the
 // period, which is exactly what a voice trips on.
-const NAME_RE = /\b([A-Z][a-z]{0,2})\.((?:St\. )?[A-Z][A-Za-z'’-]+)/g;
+export const NAME_RE = /\b([A-Z][a-z]{0,2})\.((?:St\. )?[A-Z][A-Za-z'’-]+)/g;
 
 /** City and nickname per club, keyed by the abbreviations the feed and the
  *  gamebook use (ESPN's ARZ/BLT/CLV/HST/WSH spellings included). */

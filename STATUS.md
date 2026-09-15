@@ -18,6 +18,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.3 — 🏟 the Game view: Sleeper's field screen, on our feed
+
+Founder, over Sleeper's game screen: "the sleeper field view is pretty
+good can we emulate this?" Everything on that screen above and below the
+field is a reading off a play feed we already carry. New core
+data/gameView says them once for both hosts: `qClock` ("Q2 04:33", OT),
+`spotLabel` (yards-to-goal → "KC 20" / "50" / "DEN 35"), `situationLabel`
+("3rd & 10 · KC 20", "2nd & Goal · KC 4"), `driveSummary` ("KC from own
+20 · 3 plays · 0/2 pass · 3 yds", kickoffs excluded, SCORED flagged),
+`playNames` (every gamebook name on a play, in order) and `ballCarrier`
+(the receiver on a pass, the returner on a kick, else the first name).
+engine/gameNames grows `resolveGamebookPerson` / `gamePeople`, so a name
+becomes a slug — the headshot. 19 probes in new check:gameview.
+
+THE GAME VIEW (app ui/GameView.GameViewBody, web FieldView.GameView):
+the week's games as a strip (tap to switch; live dot, FINAL, kickoff),
+the scoreboard — nicknames, big scores, the quarter clock, the situation,
+🏈 on the possession side, the club codes faded huge behind — the LAST
+PLAY line, the field with the ball carrier's headshot and name at the
+spot (Field's new `carrierOf`), the drive line, the reader bar, and two
+tabs: LIVE (plays newest first, each with its situation, text, score,
+and the people on it as headshot chips with position and box-score
+line — tap opens the player card; long-press / double-click speaks) and
+STATS (the box score, OFFENSE / DEFENSE). App: the leagues page ▦ fields
+sheet IS the Game view now (strip on top); the boards' all-fields lists
+gain "game view ▸" that swaps it in place (no stacked sheets). Web: tap
+a field on the ▦ FIELDS board and the enlarged card becomes the Game
+view; the header reader bar stays bound to it. Not built: Sleeper's win
+probability (no model) and records/broadcaster (no data). APK 36938.
+
 ### v0.390.2 — the reader follows the field you pick, and every field steps play by play
 
 Founder: "Can we have the live play reader work on a field you select?

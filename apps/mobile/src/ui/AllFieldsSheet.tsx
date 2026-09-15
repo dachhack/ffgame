@@ -8,7 +8,7 @@
 // week's slate and game feeds itself, and lists every game in schedule
 // order. Pull to refresh, and a 30s tick while open, keep the drives live.
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { liveSlate, slateWeeks, weekGameFeeds, type GameFeedRow } from '@drip/core/data/liveApi';
 import { setRuntimeSlate, windowsForWeek, windowForTeam, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
@@ -18,7 +18,7 @@ import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { useTheme } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
-import { FieldsList } from './FieldsList';
+import { GameViewBody } from './GameView';
 
 export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -56,14 +56,21 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   })) : [];
 
   return (
-    <Overlay visible={visible} title="All fields"
-      subtitle={week != null ? `${weekLabel(week).toUpperCase()} · EVERY GAME · LIVE DRIVES` : 'EVERY GAME THIS WEEK · LIVE DRIVES'}
+    <Overlay visible={visible} title="Fields"
+      subtitle={week != null ? `${weekLabel(week).toUpperCase()} · TAP A GAME · LIVE DRIVES` : 'EVERY GAME THIS WEEK · LIVE DRIVES'}
       onClose={onClose}>
-      <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={t.you} colors={[t.you]} />}>
-        {feeds == null && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>Loading the week…</Mono>}
-        {week != null && feeds != null && <FieldsList week={week} games={games} empty="No games on the live feed yet." />}
-      </ScrollView>
+      {/* The Game view (v0.390.3): the week's games as a strip, one game
+          below it — Sleeper's shape. Pull to refresh re-pulls the feeds. */}
+      {feeds == null
+        ? <ScrollView contentContainerStyle={{ padding: 12 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={t.you} colors={[t.you]} />}>
+            <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>Loading the week…</Mono>
+          </ScrollView>
+        : week != null && (
+          <View style={{ flex: 1 }}>
+            {games.length === 0 && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>}
+            {games.length > 0 && <GameViewBody week={week} initialKey={games[0]?.key ?? null} />}
+          </View>
+        )}
     </Overlay>
   );
 }
