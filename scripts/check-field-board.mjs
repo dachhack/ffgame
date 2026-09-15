@@ -160,6 +160,24 @@ const ENTRIES = [
     'and to the feed code — one answer, twice addressable');
 }
 
+// ── ▦ WHICH WEEK THE FIELDS SHOW off a board (v0.390.0) ─────────────────────
+{
+  const { fieldsWeekFrom } = await import('../packages/core/src/data/fieldsWeek.ts');
+  const D = (s) => Date.parse(s);
+  const rows = [
+    { week: 101, kickoff: '2026-08-08T23:00:00Z' }, { week: 102, kickoff: '2026-08-15T23:00:00Z' },
+    { week: 1, kickoff: '2026-09-11T00:20:00Z' }, { week: 1, kickoff: '2026-09-13T17:00:00Z' }, { week: 1, kickoff: '2026-09-15T00:15:00Z' },
+    { week: 2, kickoff: '2026-09-18T00:15:00Z' }, { week: 2, kickoff: '2026-09-20T17:00:00Z' },
+    { week: 3, kickoff: null },
+  ];
+  ok(fieldsWeekFrom(rows, D('2026-09-15T14:00:00Z')) === 1, 'Tuesday after MNF: the fields still show week 1 (what just happened)');
+  ok(fieldsWeekFrom(rows, D('2026-09-18T01:00:00Z')) === 2, 'Thursday night once week 2 has kicked: week 2');
+  ok(fieldsWeekFrom(rows, D('2026-09-12T12:00:00Z')) === 1, 'Saturday of week 1 (TNF played, Sunday not yet): week 1');
+  ok(fieldsWeekFrom(rows, D('2026-08-20T12:00:00Z')) === 102, 'late August: the last preseason week that kicked — by kickoff, not week number');
+  ok(fieldsWeekFrom(rows, D('2026-07-01T12:00:00Z')) === 101, 'before any kickoff: the earliest week the slate knows');
+  ok(fieldsWeekFrom([{ week: 3, kickoff: null }], D('2026-09-15T14:00:00Z')) === null, 'a slate with no kickoffs cannot answer');
+}
+
 clearLiveGameFeeds();
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL FIELD-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

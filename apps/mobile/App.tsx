@@ -19,6 +19,7 @@ import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha, type Theme } from './src/theme.native';
 import { ScrollChromeCtx, ScrollShiftCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
+import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
@@ -89,6 +90,7 @@ export function App() {
   // board below and the new size lands without closing and reopening anything.
   const [cardSize, setCardSize] = useState<CardSize>(loadCardSize);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ fields off the leagues page (v0.390.0)
   // Whether to OFFER the admin entry. The RPCs behind it are the real gate —
   // is_admin() + RLS server-side — exactly as on the web.
   const [admin, setAdmin] = useState(false);
@@ -293,6 +295,16 @@ export function App() {
               <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
             </Pressable>
           )}
+          {/* ▦ FIELDS on the leagues page (v0.390.0, founder: "put fields on
+              the upper left at the top of the my leagues page"): the same
+              slot the exit chip takes inside a league — every game this
+              week, live drives, with no board to open first. */}
+          {!open && !!session && (
+            <Pressable onPress={() => setFieldsOpen(true)} hitSlop={8}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 }}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>▦ fields</Text>
+            </Pressable>
+          )}
 
           <View style={{ flex: 1 }} />
 
@@ -485,6 +497,7 @@ export function App() {
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
           <ErrorBoundary>{body()}</ErrorBoundary>
           <PlayerCardHost />
+          <AllFieldsSheet visible={fieldsOpen} onClose={() => setFieldsOpen(false)} />
           <SettingsModal
             visible={settingsOpen}
             theme={themeName}

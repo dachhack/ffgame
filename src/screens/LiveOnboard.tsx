@@ -16,6 +16,9 @@ import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
+import { FieldBoard } from '../app/FieldView';
+import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
+import { slateWeeks } from '@drip/core/data/liveApi';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
 import { NativeCreate, DraftRoom, TeamManage, type TeamFocus } from './NativeLeague';
@@ -143,15 +146,30 @@ export function LiveOnboard() {
     : 440;
   const wide = pageMax > 700;
 
+  // ▦ FIELDS off the leagues page (v0.390.0): the week the fields should
+  // show is the slate's answer (what's on now, or what just happened).
+  const [fieldsWeek, setFieldsWeek] = useState<number | null>(null);
+  const openFields = async () => {
+    const rows = await slateWeeks('2026').catch(() => []);
+    const w = fieldsWeekFrom(rows, Date.now());
+    if (w != null) setFieldsWeek(w);
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {fieldsWeek != null && <FieldBoard week={fieldsWeek} entries={[]} onClose={() => setFieldsWeek(null)} />}
       {/* THE HEADER (v0.356.9, founder: the app's shape) — exit chip on the
           left without the arrow, the wordmark absolutely centered with no
           mark and no "LIVE", the gear on the right. Who you are and the way
           out of the session live in the gear's menu now. */}
       <header style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '10px 16px', gap: 10 }}>
         {session
-          ? (view !== 'home' && <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>my leagues</button>)
+          ? (view !== 'home'
+            ? <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>my leagues</button>
+            // ▦ FIELDS on the leagues page (v0.390.0, founder): every game
+            // this week, live drives, with no board to open first — the
+            // week comes from the slate (core fieldsWeekFrom).
+            : <button onClick={() => void openFields()} className="mono" title="Every game this week, as live fields" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>▦ fields</button>)
           : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>demo</button>}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'absolute', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
