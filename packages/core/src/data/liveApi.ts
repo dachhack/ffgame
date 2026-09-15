@@ -928,6 +928,13 @@ export async function liveSlate(week: number, season?: string): Promise<SlateGam
   return rows;
 }
 
+/** Every (week, kickoff) the slate holds for a season — what the leagues page
+ *  feeds fieldsWeekFrom to pick the week the ▦ FIELDS sheet shows (v0.390.0). */
+export async function slateWeeks(season: string): Promise<{ week: number; kickoff: string | null }[]> {
+  const { data } = await (await client()).from('nfl_slate').select('week, kickoff').eq('season', season);
+  return (data ?? []) as { week: number; kickoff: string | null }[];
+}
+
 /** Both teams' display identity (name + avatar) for a matchup — league members can
  *  read all memberships (RLS), so this drives the live board's team headers. */
 export interface TeamInfo { roster_id: number; team_name: string | null; avatar: string | null }

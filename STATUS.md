@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.0 — ▦ fields on the leagues page, both hosts
+
+Founder: "Let's put fields on the upper left at the top of the my leagues
+page in the app and on the web experiences." The All fields sheet lived on
+the board and borrowed the board's week, slate and feeds; off a board
+there was no way in. Now the upper-left slot of the leagues page — the
+one the exit chip takes inside a league — carries ▦ fields on both hosts:
+the app shell (App.tsx, signed in and no league open) opens a standalone
+AllFieldsSheet; the web live home (LiveOnboard, view 'home') opens the
+existing FieldBoard with no entries, so every game gets a card in schedule
+order.
+
+Which week: core `fieldsWeekFrom(slateRows, now)` — the week whose FIRST
+kickoff is the latest already past (what's on now, or what just
+happened), held until the next week's opener kicks; before any kickoff,
+the earliest the slate knows; ordered by kickoff, not week number, so a
+preseason board week and week 1 compare by when they played. New liveApi
+`slateWeeks(season)` feeds it. The app sheet installs that week's runtime
+slate and game feeds itself, polls every 30s while open, pulls to
+refresh; the web board's own feed hook loads the week. Six assertions in
+check:fieldboard. APK 36935.
+
 ### v0.389.2 — the voice picker moves into the gear
 
 Founder: "Let's have the voice selection in the options gear." A voice is
