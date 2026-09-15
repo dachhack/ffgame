@@ -32,25 +32,29 @@ export function FieldsList({ week, games, empty, extra }: {
   // "open ▸" swaps the Game view in, in place — this list already sits in
   // a sheet, and stacked sheets are flaky on Android.
   const [openKey, setOpenKey] = useState<string | null>(null);
-  if (openKey) return <View style={{ minHeight: 480 }}><GameViewBody week={week} initialKey={openKey} showStrip={false} onBack={() => setOpenKey(null)} /></View>;
+  if (openKey) return <View style={{ minHeight: 480 }}><GameViewBody week={week} initialKey={openKey} onBack={() => setOpenKey(null)} /></View>;
   return (
     <View style={{ gap: 12 }}>
       {sel && selFeed && (
         <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 10, backgroundColor: t.surface }}>
-          <ReaderBar key={sel.key} week={week} feed={selFeed} label={`🔊 ${sel.away} @ ${sel.home} · TAP ANOTHER FIELD TO SWITCH`} />
+          <ReaderBar key={sel.key} week={week} feed={selFeed} label={`🔊 ${sel.away} @ ${sel.home} · 🔊 ON ANOTHER FIELD TO SWITCH`} />
         </View>
       )}
       {games.length === 0 && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>{empty}</Mono>}
       {games.map((g) => {
         const on = g.key === sel?.key;
         return (
-          <Pressable key={g.key} onPress={() => setSelKey(g.key)}
+          // Tap the field → its Game view (v0.390.8, founder: "open in all
+          // fields then go to the single view when you select a game"). The
+          // 🔊 chip is how a field becomes the reader's without opening it.
+          <Pressable key={g.key} onPress={() => setOpenKey(g.key)}
             style={{ gap: 4, borderRadius: 8, padding: 4, borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : 'transparent' }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Mono size={9.5} weight="700" track={0.08} tone={on ? 'you' : 'dim'}>{g.away}@{g.home}{g.label ? ` · ${g.label}` : ''}{on ? ' · 🔊' : ''}</Mono>
+              <Mono size={9.5} weight="700" track={0.08} tone={on ? 'you' : 'dim'}>{g.away}@{g.home}{g.label ? ` · ${g.label}` : ''}</Mono>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'baseline' }}>
                 {extra?.(g)}
-                <Pressable onPress={() => setOpenKey(g.key)} hitSlop={8}><Mono size={8} tone="you">game view ▸</Mono></Pressable>
+                <Pressable onPress={() => setSelKey(g.key)} hitSlop={8}><Mono size={8} tone={on ? 'you' : 'faint'}>{on ? '🔊 reading' : '🔊 read'}</Mono></Pressable>
+                <Mono size={8} tone="you">game view ▸</Mono>
               </View>
             </View>
             <FieldView week={week} team={g.team} clock={Number.MAX_SAFE_INTEGER} />

@@ -84,8 +84,8 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
   return (
     <View style={{ flexShrink: 1, minHeight: 0 }}>
       {onBack && (
-        <Pressable onPress={onBack} hitSlop={8} style={{ paddingHorizontal: 12, paddingTop: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>‹ ALL FIELDS</Text>
+        <Pressable onPress={onBack} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>‹ ▦ ALL FIELDS</Text>
         </Pressable>
       )}
       {/* THE STRIP — every game this week; the selected one lit. */}
