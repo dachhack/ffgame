@@ -8,6 +8,21 @@ import type { GamePlay, TeamGameFeed } from './gameFeed';
 import { NAME_RE } from './spokenPlay';
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
+
+/** Drop the gamebook's jumbo-package preamble — "H.Nourzad and K.Tonga
+ *  reported in as eligible." — wherever it sits (v0.390.4): it names
+ *  linemen, not the play, and the first name in the text is otherwise read
+ *  as the ball carrier. Same rule as the ingest adapter's stripEligible. */
+export function stripEligible(text: string): string {
+  let s = String(text ?? '');
+  for (;;) {
+    const i = s.indexOf('reported in as eligible.');
+    if (i < 0) return s;
+    const head = s.slice(0, i);
+    const start = Math.max(head.lastIndexOf('. '), head.lastIndexOf(') ')) + 1;
+    s = (s.slice(0, start > 0 ? start + 1 : 0) + s.slice(i + 'reported in as eligible.'.length)).replace(/^\s+|\s+(?=\s)/g, '').trim();
+  }
+}
 const REG = 3300; // regulation ends (game-elapsed seconds; OT beyond)
 
 /** "Q2 04:33" from game-elapsed seconds; "OT" past regulation. */
@@ -66,7 +81,7 @@ export function playNames(txt: string): string[] {
   const seen = new Set<string>();
   const re = new RegExp(NAME_RE.source, 'g');
   let m: RegExpExecArray | null;
-  while ((m = re.exec(txt))) { if (!seen.has(m[0])) { seen.add(m[0]); out.push(m[0]); } }
+  while ((m = re.exec(stripEligible(txt)))) { if (!seen.has(m[0])) { seen.add(m[0]); out.push(m[0]); } }
   return out;
 }
 
@@ -74,11 +89,12 @@ export function playNames(txt: string): string[] {
  *  the returner on a kick/punt return, else the first name (the rusher /
  *  passer). Null when the text names nobody. */
 export function ballCarrier(p: Pick<GamePlay, 'txt' | 'ty'>): string | null {
-  const names = playNames(p.txt);
+  const txt = stripEligible(p.txt);
+  const names = playNames(txt);
   if (!names.length) return null;
-  const to = p.txt.match(/\b(?:pass (?:short|deep)? ?(?:left|middle|right)? ?(?:complete )?to|to) ((?:[A-Z][a-z]{0,2})\.(?:St\. )?[A-Z][A-Za-z'’-]+)/);
+  const to = txt.match(/\b(?:pass (?:short|deep)? ?(?:left|middle|right)? ?(?:complete )?to|to) ((?:[A-Z][a-z]{0,2})\.(?:St\. )?[A-Z][A-Za-z'’-]+)/);
   if (/Pass/i.test(p.ty) && to && names.includes(to[1])) return to[1];
-  const ret = p.txt.match(/\b((?:[A-Z][a-z]{0,2})\.(?:St\. )?[A-Z][A-Za-z'’-]+) (?:to|returns?|pushed|ran)/);
+  const ret = txt.match(/\b((?:[A-Z][a-z]{0,2})\.(?:St\. )?[A-Z][A-Za-z'’-]+) (?:to|returns?|pushed|ran)/);
   if (/Kickoff|Punt/i.test(p.ty) && ret && names.includes(ret[1])) return ret[1];
   return names[0];
 }

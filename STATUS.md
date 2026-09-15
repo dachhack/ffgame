@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.4 — "Tonga?": the jumbo package is not the ball carrier
+
+Founder, DEN@KC box score: a defensive tackle with 2 carries for 7, an
+offensive tackle listed as a WR with 2 carries, 66 yards and a TD.
+Replayed the game offline: the gamebook lists a jumbo package's linemen
+BEFORE the play — "H.Nourzad and K.Tonga reported in as eligible.
+K.Walker up the middle…" — and the adapter read the first name in the
+text as the rusher. Kenneth Walker lost four carries, one a 60-yard
+touchdown, to the men who reported in.
+
+Fix: `stripEligible` drops that clause wherever it sits, up to the
+sentence boundary before it — in the ingest adapter (before any name is
+read) and in core (gameView: playNames / ballCarrier; spokenPlay: the
+voice starts at the play). Replay after: Walker 19-151-1, Tonga his one
+tackle, Moore and Nourzad nothing. Probes in espn-attr (3), check:gameview
+(6) and check:spoken (1). The data heals itself: each poll reconciles a
+game's full play set and deletes rows it no longer produces, and finals
+get the 10-minute late pass — the wrong rows go on the worker's first
+pass after deploy. Adapter + core; deploy-worker.yml carries it, and the
+app bundles core, so APK 36939.
+
 ### v0.390.3 — 🏟 the Game view: Sleeper's field screen, on our feed
 
 Founder, over Sleeper's game screen: "the sleeper field view is pretty
