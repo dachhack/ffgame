@@ -23,6 +23,7 @@ import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { fixTeam } from '../../scripts/espn/espnAdapter.mjs';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
+import { postWeekReports } from './report.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
@@ -351,6 +352,15 @@ async function tickContext(ctx, season) {
         const stamped = await stampFinals(week, playerIndex);
         if (stamped) log(`[${ctx.tag}] stamped finals on`, stamped, 'matchups');
       } catch (e) { log(`[${ctx.tag}] stamp finals`, e.message); }
+      // THE WEEKLY REPORT (v0.391.0): once a league's finals are all stamped,
+      // its week gets written up and posted into its chat. Idempotent per
+      // league-week; regular season only (a preseason "week" has no matchups).
+      if (ctx.seasonType === REGULAR_SEASON) {
+        try {
+          const posted = await postWeekReports(week, season);
+          if (posted) log(`[${ctx.tag}] posted`, posted, 'weekly reports');
+        } catch (e) { log(`[${ctx.tag}] weekly reports`, e.message); }
+      }
     }
     return games;
   }

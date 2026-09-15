@@ -9,10 +9,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   chatPost, chatMessages, chatDelete, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin, chatReact,
+  chatPostPoll, pollCast, chatPin, chatReact, leagueReport,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
+import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
+import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
@@ -84,6 +86,61 @@ function MsgBody({ body, names, size = 13 }: { body: string; names: string[]; si
 }
 
 /** A poll message's options — tap to vote, tap another to change. */
+// ── THE WEEKLY REPORT (v0.391.0) ────────────────────────────────────────────
+// The house posts one line per week; the link on it opens the write-up in a
+// sheet. Read on open, rendered from core's reportSections — the web's
+// pop-up says the same things.
+function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
+  const t = useTheme();
+  const week = m.report?.week;
+  return (
+    <View style={{ borderLeftWidth: 3, borderLeftColor: t.warn, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: alpha(t.warn, 6), borderRadius: 4 }}>
+      <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{m.body}</Text>
+      <Pressable onPress={() => { tap(); onOpen(); }} hitSlop={6}
+        style={{ alignSelf: 'flex-start', marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: t.bg }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.warn }}>📋 OPEN WEEK {week ?? '?'} REPORT ▸</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; week: number; onClose: () => void }) {
+  const t = useTheme();
+  const [rep, setRep] = useState<WeekReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    leagueReport(leagueId, week)
+      .then((r) => { if (!live) return; if (r.ok && r.report) setRep(r.report); else setErr(friendlyError(r.error ?? 'No report yet.')); })
+      .catch((x) => { if (live) setErr(friendlyError(x)); });
+    return () => { live = false; };
+  }, [leagueId, week]);
+  const sections = rep ? reportSections(rep) : [];
+  return (
+    <Overlay visible title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+        {!!err && <Mono size={10} tone="opp">{err}</Mono>}
+        {!err && !rep && <Mono size={10} tone="faint">Loading…</Mono>}
+        {rep && <Text style={{ fontSize: 13.5, lineHeight: 20, color: t.text, marginBottom: 12 }}>{rep.headline}</Text>}
+        {sections.map((sec) => (
+          <View key={sec.title} style={{ marginBottom: 14 }}>
+            <Mono size={8.5} tone="faint" style={{ letterSpacing: 1.4, marginBottom: 5 }}>{sec.title.toUpperCase()}</Mono>
+            {sec.rows.map((r, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 5, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: r.hot ? '700' : '500', color: t.text }}>{r.label}</Text>
+                  {!!r.sub && <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.dim, marginTop: 1 }}>{r.sub}</Text>}
+                </View>
+                <Text style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: '700', color: r.hot ? t.warn : t.text, fontVariant: ['tabular-nums'] }}>{r.value}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </Overlay>
+  );
+}
+
 function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; onVoted: () => void }) {
   const t = useTheme();
   const p = m.poll;
@@ -343,6 +400,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [reportWeek, setReportWeek] = useState<number | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const sticky = useStickyScroll();
   // The message list shrinks by the keyboard's height when it opens, which
@@ -432,7 +490,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(m.at)}</Text>
               {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
             </View>
-            {m.kind === 'poll'
+            {m.kind === 'report'
+              ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
+              : m.kind === 'poll'
               ? <>
                   <Text style={{ fontSize: 13, lineHeight: 18, fontWeight: '700', color: t.text }}>📊 {m.body}</Text>
                   <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
@@ -444,6 +504,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
         <View style={{ height: 6 }} />
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
+      {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}

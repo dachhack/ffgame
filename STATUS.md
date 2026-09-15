@@ -18,6 +18,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.391.0 — The weekly report, in every league's chat
+
+Founder: "Can we get a weekly report for each league in the chat? Weekly
+report posts with a link you can click to open the report in a pop up."
+
+The worker now writes the week up the moment a league's finals are all
+stamped (the completed-week branch of the tick, after `stampFinals`) and
+posts one line into that league's chat as **Drip Fantasy** — no author, kind
+`report`, the week on the row. The line carries the headline ("Sox led the
+week with 120.0. Bulls edged Cubs by 0.4. MVP Josh Allen 33.4.") and an
+**OPEN WEEK N REPORT ▸** link; the link opens a pop-up (web `Sheet`, app
+`Overlay`) that reads the stored payload and renders it section by section:
+the week (high score, MVP, closest game, blowout, low score), a Guillotine
+or Vampire section where the format has one (chopped seat / bites), every
+result, and the season standings.
+
+- `packages/core/src/data/weekReport.ts` — `buildWeekReport` (pure, from
+  matchup finals + slot scores + membership names), `reportBody` (the chat
+  line, under 500), `reportSections` (what both pop-ups render), `slugPretty`.
+- `supabase/migrations/0275_week_report.sql` — `league_report(league_id,
+  week, payload)` (RLS, RPC-only; the PK is the idempotency), `league_message`
+  gains `report_week`, a nullable `author_id` and kind `report`;
+  `_chat_message_json` v3 (null author → "Drip Fantasy", `mine`/`mentions_me`
+  never null, `report.week`); `league_report_get` (member-gated);
+  `chat_unread` v3 (a null author counted — `<>` compared it as unknown).
+- `server/src/report.js` — `postWeekReports(week, season)`: one look every
+  five minutes per closed week, reports a league only when every matchup of
+  the week is final AND stamped, only this season's leagues, upsert-ignore on
+  `league_report` then the chat insert. `server/src/push.js` broadcasts the
+  line to the league once, like a poll.
+- Chat renderers (`src/app/chat.tsx`, `apps/mobile/src/ui/Chat.tsx`):
+  `ReportLine` + `ReportSheet`; `liveApi.leagueReport`.
+- Checks: `check:weekreport` (35 pins), `server/test/week-report.mjs` (posts
+  once across ticks and restarts; a half-stamped league waits),
+  `scripts/db/week-report-probes.sql` (25 probes) in the runner.
+
 ### v0.390.8 — "It's not OT yet", and the Fields sheet opens on all fields
 
 Founder, DEN@KC in the Game view: header "OT", field card "Q4 4:41".
