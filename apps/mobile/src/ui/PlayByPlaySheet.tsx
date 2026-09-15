@@ -14,12 +14,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { gameFeedFor, type GamePlay } from '@drip/core/data/gameFeed';
-import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
+import type { ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
-import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { useTheme, MONO, alpha, fs } from '../theme.native';
 import { Overlay } from './Overlay';
 import { appVoice } from './voice';
+import { ReaderBar, feedOver } from './ReaderBar';
 
 const fmtQClock = (c: number): string => {
   const q = Math.min(4, Math.floor(c / 900) + 1);
@@ -43,24 +43,9 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
   const plays: GamePlay[] = feed?.plays ?? [];
   const home = feed?.home ?? '', away = feed?.away ?? '';
   const last = plays.length ? plays[plays.length - 1] : null;
-  const over = !!last && (feed?.st ? feed.st === 'post' : last.c >= 3300);
-
-  // Names (v0.389.1): the box score knows who "J.Brissett" is, and it grows
-  // as the game does — resolved through a ref so the reader always reads the
-  // freshest roster without being rebuilt.
-  const nameOf = useRef(gameNameResolver(week, home, away));
-  useEffect(() => { nameOf.current = gameNameResolver(week, home, away); }, [week, home, away]);
-  // The reader lives for the sheet's life; a new game (or close) retires it.
+  const over = feedOver(feed);
+  // The reader lives in the bar (v0.390.2); the sheet only lights the row.
   const [rs, setRs] = useState<ReaderState>({ mode: 'idle', cursor: 0, speaking: false, finished: false });
-  const reader = useRef<PlayReader | null>(null);
-  useEffect(() => {
-    if (!visible) return;
-    const r = new PlayReader(appVoice, { home, away, nameOf: (a) => nameOf.current(a) }, setRs);
-    reader.current = r;
-    return () => { r.stop(); reader.current = null; };
-  }, [visible, home, away]);
-  // Every tick / feed change: anything new past the cursor gets said.
-  useEffect(() => { reader.current?.update(plays, over); }, [plays, over]);
 
   // Newest at the bottom, kept in view unless the reader is walking the past.
   const scroller = useRef<ScrollView>(null);
@@ -68,13 +53,6 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
     if (rs.mode !== 'catchup') scroller.current?.scrollToEnd({ animated: true });
   }, [plays.length, rs.mode]);
 
-  const btn = (label: string, on: boolean, onPress: () => void, tone: string) => (
-    <Pressable onPress={onPress}
-      style={{ flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth,
-        borderColor: on ? tone : t.bd, backgroundColor: on ? alpha(tone, 0.16) : t.bg }}>
-      <Text style={{ fontFamily: MONO, fontSize: fs(10.5), fontWeight: '700', letterSpacing: 1, color: on ? tone : t.text }}>{label}</Text>
-    </Pressable>
-  );
   const speakingIdx = rs.speaking ? rs.cursor - 1 : -1;
 
   return (
@@ -83,16 +61,9 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
       onClose={onClose}>
       {/* THE VOICE BAR — above the list so a thumb finds it without scrolling
           past a whole game. */}
-      <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 12, marginTop: 10 }}>
-        {btn('▶ CATCH UP', rs.mode === 'catchup', () => reader.current?.catchUp(plays, over), t.you)}
-        {btn(over ? '● FINAL' : '● LIVE', rs.mode === 'live', () => reader.current?.live(plays, over), t.opp)}
-        {btn('■ STOP', false, () => reader.current?.stop(), t.text)}
+      <View style={{ marginHorizontal: 12, marginTop: 10 }}>
+        {feed && <ReaderBar week={week} feed={feed} onState={setRs} />}
       </View>
-      <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.faint, textAlign: 'center', marginTop: 6, marginHorizontal: 12, letterSpacing: 0.5 }}>
-        {rs.mode === 'catchup' ? `READING FROM THE TOP · ${Math.min(rs.cursor, plays.length)}/${plays.length}${over ? '' : ' · GOES LIVE WHEN CAUGHT UP'}`
-          : rs.mode === 'live' ? (rs.speaking ? 'READING THE LATEST PLAY' : over ? 'THAT’S THE FINAL' : 'LIVE · WAITING FOR THE NEXT PLAY')
-          : 'CATCH UP reads the game from the top · LIVE reads each play as it lands · voice: ⚙ Settings'}
-      </Text>
 
       <ScrollView ref={scroller} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}>
         {plays.length === 0 && <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint, textAlign: 'center' }}>— no plays yet —</Text>}
@@ -101,7 +72,7 @@ export function PlayByPlaySheet({ visible, week, team, onClose }: {
           const lit = i === speakingIdx;
           return (
             <Pressable key={p.pid ?? `${p.c}-${i}`}
-              onLongPress={() => { reader.current?.stop(); appVoice.speak(`${dd ? dd + '. ' : ''}${p.txt}`, () => {}); }}
+              onLongPress={() => { appVoice.stop(); appVoice.speak(`${dd ? dd + '. ' : ''}${p.txt}`, () => {}); }}
               style={{ paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: alpha(t.bd, 0.5),
                 backgroundColor: lit ? alpha(t.you, 0.12) : 'transparent', borderRadius: 4, paddingHorizontal: 4 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>

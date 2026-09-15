@@ -99,11 +99,19 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
   const toggleFlip = () => setFlip((f) => { const n = !f; storeSet(`fvflip:${feed.key}`, n ? '1' : '0'); return n; });
   const mx = (x: number) => (flip ? W - x : x);
 
-  const idx = useMemo(() => {
+  const liveIdx = useMemo(() => {
     let i = -1;
     for (let j = 0; j < plays.length; j++) { if (plays[j].c <= clock) i = j; else break; }
     return i;
   }, [plays, clock]);
+  // ‹ › STEP THE PLAYS (v0.390.2, founder: "a way to rewind or go forward
+  // each play in the field view"). `pin` is an absolute play index; null
+  // follows the clock (live). Pinned, the card draws that play exactly as it
+  // drew it when it landed — the ball, the arc, the situation, the text —
+  // and stays there while new plays arrive; › past the last play goes live.
+  const [pin, setPin] = useState<number | null>(null);
+  const idx = pin != null ? Math.min(pin, plays.length - 1) : liveIdx;
+  const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   // "No next play" alone reads a live halftime as game over — trust the feed's
@@ -222,6 +230,27 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
           <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: flip ? t.you : t.faint }}>↔</Text>
         </Pressable>
       </View>
+      {plays.length > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 3 }}>
+          <Pressable onPress={() => stepTo(idx - 1)} disabled={idx <= 0} hitSlop={6}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 1, opacity: idx <= 0 ? 0.35 : 1 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.text }}>‹</Text>
+          </Pressable>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.6, color: pin != null ? t.warn : t.faint }}>
+            {pin != null ? `PLAY ${idx + 1}/${plays.length}` : `LIVE · ${plays.length} PLAYS`}
+          </Text>
+          <Pressable onPress={() => stepTo(idx + 1)} disabled={pin == null} hitSlop={6}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 1, opacity: pin == null ? 0.35 : 1 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.text }}>›</Text>
+          </Pressable>
+          {pin != null && (
+            <Pressable onPress={() => setPin(null)} hitSlop={6}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.you }}>LIVE ▸</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {/* The web tilts the field back — `perspective: 560` on the wrapper and
           `rotateX(20deg)` on the svg, hinged at the bottom edge. It is the
@@ -349,7 +378,7 @@ function Field({ feed, clock, side, week }: { feed: TeamGameFeed; clock: number;
         </Pressable>
       </View>
       <BoxScoreSheet visible={boxOpen} onClose={() => setBoxOpen(false)}
-        week={week} home={home} away={away} clock={clock} />
+        week={week} home={home} away={away} clock={pin != null && cur ? cur.c : clock} />
       <PlayByPlaySheet visible={pbpOpen} onClose={() => setPbpOpen(false)} week={week} team={home} />
     </View>
   );

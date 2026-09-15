@@ -8,7 +8,7 @@
 // week's slate and game feeds itself, and lists every game in schedule
 // order. Pull to refresh, and a 30s tick while open, keep the drives live.
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native';
 import { liveSlate, slateWeeks, weekGameFeeds, type GameFeedRow } from '@drip/core/data/liveApi';
 import { setRuntimeSlate, windowsForWeek, windowForTeam, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
@@ -18,7 +18,7 @@ import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { useTheme } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
-import { FieldView } from './FieldView';
+import { FieldsList } from './FieldsList';
 
 export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -52,7 +52,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   const wins = week != null ? windowsForWeek(week) : [];
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
   const games = week != null && feeds ? groupFieldGames(week, []).map((g) => ({
-    key: g.feed.key, away: g.feed.away, home: g.feed.home, win: String(windowForTeam(week, g.feed.home)),
+    key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home, label: winLabelFor(String(windowForTeam(week, g.feed.home))),
   })) : [];
 
   return (
@@ -62,15 +62,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
       <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={t.you} colors={[t.you]} />}>
         {feeds == null && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>Loading the week…</Mono>}
-        {feeds != null && games.length === 0 && (
-          <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>No games on the live feed yet.</Mono>
-        )}
-        {week != null && games.map((g) => (
-          <View key={g.key} style={{ gap: 4 }}>
-            <Mono size={9.5} weight="700" track={0.08}>{g.away}@{g.home} · {winLabelFor(g.win)}</Mono>
-            <FieldView week={week} team={g.home} clock={Number.MAX_SAFE_INTEGER} />
-          </View>
-        ))}
+        {week != null && feeds != null && <FieldsList week={week} games={games} empty="No games on the live feed yet." />}
       </ScrollView>
     </Overlay>
   );
