@@ -85,6 +85,12 @@ export function spokenText(txt: string, ty?: string, nameOf?: NameOf): string {
   // Club abbreviation before a yard line or as a possessive: "to ARZ 44" → "to the Arizona 44".
   s = s.replace(new RegExp(`\\b(to|at|from) (${ABBR_RE}) (\\d{1,2})\\b`, 'g'), (_m, prep: string, c: string, yd: string) => `${prep} the ${clubCity(c)} ${yd}`);
   s = s.replace(new RegExp(`\\b(${ABBR_RE})-(?=[A-Z][a-z]*\\.)`, 'g'), (_m, c: string) => `${clubCity(c)}'s `);
+  // …and EVERY other standalone club code reads as its city (v0.390.1,
+  // founder: "It says DEN for Denver"): "to KC end zone", "Timeout #1 by
+  // DEN", "DEN challenged". Upper-case whole tokens only, so "No Play" and
+  // "No Good" (the Saints are "NO") are untouched. Runs before the name
+  // pass, which only ever sees mixed-case tokens.
+  s = s.replace(new RegExp(`(^|[^A-Za-z.])(${ABBR_RE})(?![A-Za-z])`, 'g'), (_m, pre: string, c: string) => `${pre}${clubCity(c)}`);
   // NAMES (v0.389.1). "J.Brissett" used to become "J. Brissett", and every
   // engine treats that period as a full stop — founder: "the pauses after the
   // first initials are a bit too much." Now: the FULL name when the game's

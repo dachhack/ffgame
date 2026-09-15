@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.1 — every club code is a city, and the voice is a dropdown
+
+Founder: "Let's have the voice selection a drop down. It says 'DEN' for
+Denver. Can we have it say the actual team city?"
+
+The city: spokenText read a club code as a city only before a yard line
+("to the Denver 5"); everywhere else — "to KC end zone", "Timeout #1 by
+DEN", "DEN challenged the ruling" — the voice spelled the code. Now every
+standalone upper-case club token reads as its city (mixed-case phrases
+like "No Play" and "No Good" stay, though the Saints are "NO"). Three more
+probes in check:spoken (37).
+
+The dropdown: the app's VoicePicker is one field showing the voice in
+use, opening a sheet that lists every English voice best first with ✓ on
+the pick; the web's is a native <select>. Both greet in the chosen voice.
+Core + both hosts. APK 36936.
+
 ### v0.390.0 — ▦ fields on the leagues page, both hosts
 
 Founder: "Let's put fields on the upper left at the top of the my leagues
