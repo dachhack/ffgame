@@ -77,8 +77,12 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
     </View>
   );
 
+  // Sized by content and able to SHRINK, never `flex: 1` (v0.390.6): the
+  // Overlay hosting this sizes itself to its children, so a flex:1 root had
+  // no height to fill and the sheet opened as a header over nothing
+  // (founder's screenshot). Same shape as every other sheet body.
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flexShrink: 1, minHeight: 0 }}>
       {onBack && (
         <Pressable onPress={onBack} hitSlop={8} style={{ paddingHorizontal: 12, paddingTop: 8 }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>‹ ALL FIELDS</Text>
@@ -108,7 +112,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
         </ScrollView>
       )}
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
         {!game && <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint, textAlign: 'center', padding: 24 }}>No games on the feed yet.</Text>}
         {game && (
           <>

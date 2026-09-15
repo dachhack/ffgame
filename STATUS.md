@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.390.6 — the Fields sheet opened as a header over nothing
+
+Founder, screenshot: ▦ fields on My Leagues opened the sheet with its
+title and nothing under it. The Game view body's root was `flex: 1`, and
+the Overlay sizes itself to its children (capped at 92%) — a flex:1 root
+inside it has no height to fill and collapses to zero. Every other sheet
+body is `flexShrink: 1, minHeight: 0` with a shrinkable ScrollView; the
+Game view body and the sheet's wrapper are that shape now. App only.
+APK 36941.
+
 ### v0.390.5 — a catch behind the line is one path, not a hook
 
 Founder, DEN@KC field: "Ball path lines are getting funky." The Worthy
