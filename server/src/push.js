@@ -174,6 +174,23 @@ async function detectChat() {
       });
     }
   }
+  // THE WEEKLY REPORT (v0.391.0): the house posted the week's write-up; the
+  // whole league hears about it once, like a poll.
+  const { data: reports } = await db().from('league_message')
+    .select('id, league_id, body, created_at')
+    .eq('kind', 'report').gt('created_at', sinceIso());
+  const reportNames = await leagueNames([...new Set((reports ?? []).map((p) => p.league_id))]);
+  for (const r of reports ?? []) {
+    for (const uid of await leagueMembers(r.league_id)) {
+      rows.push({
+        app_user_id: uid, kind: 'chat',
+        title: `📋 Weekly report · ${reportNames.get(r.league_id) ?? 'your league'}`,
+        body: r.body.slice(0, 140),
+        data: { league_id: r.league_id, open: 'chat' },
+        dedupe_key: `report:${r.id}:${uid}`,
+      });
+    }
+  }
   // A fresh commish note (0152): the league's standing word changed.
   const { data: noted } = await db().from('league')
     .select('id, name, commissioner_id, settings_json')
@@ -213,7 +230,7 @@ async function detectChat() {
     for (const m of all ?? []) {
       // A poll already broadcasts to the whole league above; sending it again
       // through this door would be the same message twice on one phone.
-      if (m.kind === 'poll') continue;
+      if (m.kind === 'poll' || m.kind === 'report') continue;
       const mentioned = new Set(m.mentions ?? []);
       for (const uid of wanted.get(m.league_id) ?? []) {
         if (uid === m.author_id) continue;   // you wrote it

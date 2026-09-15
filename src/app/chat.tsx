@@ -17,11 +17,12 @@ import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin, chatReact,
+  chatPostPoll, pollCast, chatPin, chatReact, leagueReport,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
-import { ModalBackdrop } from './ui';
+import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
+import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
@@ -93,6 +94,59 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
 }
 
 /** A poll message's options — tap to vote, tap another to change. */
+// ── THE WEEKLY REPORT (v0.391.0) ────────────────────────────────────────────
+// The house posts one line per week; the link on it opens the write-up in a
+// pop-up. The payload is read on open (chat pages stay light) and rendered
+// from core's reportSections so the app's sheet says the same things.
+function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
+  const week = m.report?.week;
+  return (
+    <div style={{ borderLeft: '3px solid var(--warn)', padding: '4px 8px', background: 'color-mix(in srgb, var(--warn) 6%, transparent)', borderRadius: 4 }}>
+      <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.body}</div>
+      <button onClick={onOpen} className="mono"
+        style={{ marginTop: 4, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)' }}>
+        📋 OPEN WEEK {week ?? '?'} REPORT ▸
+      </button>
+    </div>
+  );
+}
+
+export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; week: number; onClose: () => void }) {
+  const [rep, setRep] = useState<WeekReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    leagueReport(leagueId, week)
+      .then((r) => { if (!live) return; if (r.ok && r.report) setRep(r.report); else setErr(friendlyError(r.error ?? 'No report yet.')); })
+      .catch((x) => { if (live) setErr(friendlyError(x)); });
+    return () => { live = false; };
+  }, [leagueId, week]);
+  const sections = rep ? reportSections(rep) : [];
+  return (
+    <Sheet title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose} max={520}>
+      <div style={{ padding: '10px 15px 16px', overflowY: 'auto' }}>
+        {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
+        {!err && !rep && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
+        {rep && <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text)', marginBottom: 12 }}>{rep.headline}</div>}
+        {sections.map((sec) => (
+          <div key={sec.title} style={{ marginBottom: 14 }}>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 5 }}>{sec.title.toUpperCase()}</div>
+            {sec.rows.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: r.hot ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</div>
+                  {r.sub && <div className="mono" style={{ fontSize: 8.5, color: 'var(--dim)', marginTop: 1 }}>{r.sub}</div>}
+                </div>
+                <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: r.hot ? 'var(--warn)' : 'var(--text)', flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{r.value}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
 function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; onVoted: () => void }) {
   const p = m.poll;
   if (!p) return null;
@@ -308,6 +362,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [reportWeek, setReportWeek] = useState<number | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const load = () => chatMessages(leagueId)
     .then((r) => {
@@ -403,7 +458,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                 <button onClick={() => void del(m.id)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
             </div>
-            {m.kind === 'poll'
+            {m.kind === 'report'
+              ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
+              : m.kind === 'poll'
               ? <>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>📊 {m.body}</div>
                   <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
@@ -416,6 +473,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
         ))}
       </MessageScroll>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
+      {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
         {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}

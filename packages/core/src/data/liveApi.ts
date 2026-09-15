@@ -2054,8 +2054,10 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
 // ── Chat (0147, v2 0148): league chat + member DMs, both league-scoped ───────
 export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
 export interface ChatMessage {
-  id: number; body: string; at: string; author: string; author_id: string; mine: boolean;
-  kind: 'text' | 'poll'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  id: number; body: string; at: string; author: string; author_id: string | null; mine: boolean;
+  kind: 'text' | 'poll' | 'report'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  /** A weekly report line (0275): the house posted it; the link opens the week. */
+  report?: { week: number };
   /** Quick reactions (0210), counted per emoji. Only ones somebody used. */
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
@@ -2073,6 +2075,9 @@ export const pollCast = (leagueId: string, messageId: number, choice: number) =>
 export const chatPin = (leagueId: string, id: number, on: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string }>('chat_pin', { p_league_id: leagueId, p_id: id, p_on: on }),
     Ev.chatPinned, { on });
+/** The weekly report behind a chat line of kind 'report' (0275). */
+export const leagueReport = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; report?: import('./weekReport').WeekReport; at?: string }>('league_report_get', { p_league_id: leagueId, p_week: week });
 /** Latest page (no `before`) marks the channel read and carries the pin strip. */
 export const chatMessages = (leagueId: string, before?: number) =>
   rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] }>('chat_messages', {
