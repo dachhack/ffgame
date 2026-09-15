@@ -363,7 +363,10 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // they each used to own a copy of — and so `overlaps`, the property that
   // made a returned kick look like a doubled line, is asserted rather than
   // eyeballed. See engine/playPath.
-  const { catchX, carrying, overlaps } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, xOf);
+  // The split point is mirrored exactly as the endpoints are (v0.390.5): the
+  // arc's x1/x2 pass through mx(), so xOf here must too, or a ↔-flipped
+  // field puts the catch on the wrong side of the snap.
+  const { catchX, carrying, overlaps } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, (y, tm) => mx(xOf(y, tm)));
   const offLogo = cur ? teamLogo(cur.tm) : null;
   const midY = (TOP + BOT) / 2;
   /** The carried phase rides its own lane just under the flight path — see the

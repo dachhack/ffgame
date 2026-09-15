@@ -41,6 +41,9 @@ export interface PlayPathInput {
   ret?: number | null;
 }
 
+/** One yard on the shared field (W=400, EZ=26: 348px over 100 yards). */
+const PX_PER_YARD = 3.48;
+
 /** `xOf` from the FieldViews: yards-to-endzone -> an x in field coordinates. */
 export type XOf = (yte: number, tm: string) => number;
 
@@ -70,7 +73,20 @@ export function playPath(cur: PlayPathInput | null | undefined, x1: number, x2: 
   const retX = cur.ret != null && /Kickoff|Punt/.test(cur.ty)
     ? xOf(Math.min(108, cur.yl2 + cur.ret), team)
     : null;
-  const catchX = yacX ?? retX;
+  let catchX = yacX ?? retX;
+  // A CATCH BEHIND THE LINE IS NOT A SPLIT (v0.390.5). ESPN's yards-after-
+  // catch runs past the gain on screens and dump-offs — "pass short right to
+  // X.Worthy to DEN 29 for 5 yards", YAC 6: the catch was a yard behind the
+  // line. Splitting there sent the air segment backwards, overlapped it
+  // with the carry, dropped the carry to its own lane, and drew a hook
+  // (founder: "ball path lines are getting funky"). A throw that goes
+  // nowhere — behind the line, or under two yards of air — is one path from
+  // the snap to where he was stopped.
+  if (completedPass && catchX != null) {
+    const dir = Math.sign(x2 - x1);
+    const airPx = (catchX - x1) * dir;
+    if (dir === 0 || airPx < 2 * PX_PER_YARD) catchX = null;
+  }
   if (catchX == null || catchX === x2) return { catchX, carrying: false, overlaps: false };
   const air = [Math.min(x1, catchX), Math.max(x1, catchX)];
   const carry = [Math.min(catchX, x2), Math.max(catchX, x2)];

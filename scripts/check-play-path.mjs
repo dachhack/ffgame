@@ -69,8 +69,11 @@ const run = (cur) => {
   ok('a kick fielded in the end zone still yields a finite split',
     Number.isFinite(deep.catchX), deep);
   const silly = run({ ty: 'Pass Reception', tm: 'HOU', yl: 75, yl2: 45, yac: 900 });
-  ok('an absurd yac is clamped rather than drawn off the field',
-    silly.catchX <= xOf(100, 'HOU') + 0.01 && silly.catchX >= FX - 0.01, silly);
+  // The clamp lands the catch at the goal line — BEHIND a snap at the 75 —
+  // and a catch behind the line is one path, not a split (v0.390.5): finite
+  // and on the field either way, never drawn off it.
+  ok('an absurd yac is clamped behind the line and draws one path, never off the field',
+    silly.catchX === null && !silly.carrying, silly);
 }
 
 // ── THE ARC'S HEIGHT SCALES WITH THE THROW (v0.333.0) ──────────────────────
@@ -248,6 +251,25 @@ const run = (cur) => {
   // both of which bank nothing for the man holding them.
   ok('no position defaults to a metric that scores nothing for its own player',
     DEFAULT_AI_METRIC.QB !== 'fg' && DEFAULT_AI_METRIC.DEF !== 'suppress');
+}
+
+// ── A CATCH BEHIND THE LINE IS NOT A SPLIT (v0.390.5) ───────────────────────
+// Real DEN@KC lines: ESPN's YAC past the gain means the catch was behind the
+// line — a screen. One path, no lane.
+{
+  // KC attacks the DEN end: yards-to-endzone fall as they advance.
+  const worthy = { ty: 'Pass Reception', tm: 'KC', yl: 34, yl2: 29, yac: 6 };   // 5-yard gain, caught 1 yard behind
+  const harvey = { ty: 'Pass Reception', tm: 'DEN', yl: 15, yl2: 14, yac: 5 };  // 1-yard gain, caught 4 behind
+  const deep = { ty: 'Pass Reception', tm: 'KC', yl: 60, yl2: 40, yac: 5 };    // 20-yard gain, caught 15 downfield
+  const shallow = { ty: 'Pass Reception', tm: 'KC', yl: 34, yl2: 26, yac: 7 }; // 8-yard gain, caught 1 yard past the line
+  const at = (p) => playPath(p, xOf(p.yl, p.tm), xOf(p.yl2, p.tm2 ?? p.tm), xOf);
+  ok('THE HOOK: a screen caught behind the line draws one path, no split', at(worthy).catchX === null && !at(worthy).carrying);
+  ok('a dump-off caught four yards behind the line: one path', at(harvey).catchX === null);
+  ok('a real throw downfield still splits at the catch and carries on', at(deep).catchX != null && at(deep).carrying && !at(deep).overlaps);
+  ok('under two yards of air is not a split either', at(shallow).catchX === null);
+  const flipped = (y, tm) => 400 - xOf(y, tm);
+  const fl = playPath(deep, flipped(deep.yl, deep.tm), flipped(deep.yl2, deep.tm), flipped);
+  ok('a ↔-flipped field mirrors the catch with the endpoints', fl.catchX != null && Math.abs(fl.catchX - (400 - at(deep).catchX)) < 0.01);
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
