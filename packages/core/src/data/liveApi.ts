@@ -2359,6 +2359,19 @@ export const createMockDraft = (
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_pos_caps: posCaps,
   });
+/** A PRACTICE ROOM (0281): mock THIS league's draft, from a slot you choose.
+ *  Open to any enrolled member — not just the commissioner, and not only
+ *  people carrying the `native` feature flag. Clones the league's game mode,
+ *  roster size, draft mode, clocks, caps and player pool; seats the AI under
+ *  your leaguemates' names; leaves the real league untouched. `slot` is your
+ *  pick number in round one, 1..teams. */
+export const createPracticeRoom = (leagueId: string, slot?: number) =>
+  rpc<{
+    ok: boolean; error?: string; league_id?: string; roster_id?: number;
+    slot?: number; teams?: number; game_mode?: string; source?: string; name?: string;
+    rounds?: number; mode?: string; pool?: number;
+  }>('create_mock_from_league', { p_league_id: leagueId, p_slot: slot ?? null });
+
 /** Wipe a mock draft (its commissioner or an admin); refuses real leagues. */
 export const deleteMockDraft = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('delete_mock_draft', { p_league_id: leagueId });

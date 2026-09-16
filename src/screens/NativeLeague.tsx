@@ -11,7 +11,7 @@ import { PosPill, PlayerImg, Avatar, FlagChip } from '../app/ui';
 import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
-import { buildDraftPool } from '@drip/core/data/nativeLeague';
+import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -20,7 +20,7 @@ import {
 } from '@drip/core/data/leagueBlueprint';
 import { statsForSlug } from '@drip/core/data/players';
 import {
-  createNativeLeague, createMockDraft, deleteMockDraft, seedLeaguePool, nativeGenerateSchedule, leagueGameMode, contractRosterDepth,
+  createNativeLeague, createMockDraft, deleteMockDraft, createPracticeRoom, seedLeaguePool, nativeGenerateSchedule, leagueGameMode, contractRosterDepth,
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
@@ -935,8 +935,11 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
 // ─────────────────────────────────────────────────────────────────────────────
 type DraftTab = 'players' | 'teams' | 'queue';
 
-export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
+export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = false }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
+  /** Open another league's draft room — the practice room this one spawns
+   *  (0281). Absent means the host cannot navigate, and the control hides. */
+  onOpenLeague?: (leagueId: string, rosterId: number) => void;
   /** Mounted inside the commish dashboard's DRAFT tab — no back link or
    *  cross-view CTAs (the dashboard provides the chrome). */
   embedded?: boolean;
@@ -1255,6 +1258,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     run(() => makeDraftPick(leagueId, slug));
   };
 
+  // A PRACTICE ROOM (0281). Not run(): this leaves for a different league, so
+  // refreshing THIS one afterwards is pointless — and the room has to be
+  // started before we hand the player to it, or they land in a lobby with a
+  // START button only a commissioner has.
+  const [slot, setSlot] = useState<number>(1);
+  // How many seats to offer. waiver_order carries one row per seat; the draft
+  // order is the fallback once it exists, and 12 is the shape of a league
+  // nobody has told us about yet.
+  const seatCount = (team?.waiver_order?.length || st?.order?.length || 12);
+  const practice = async () => {
+    if (busyRef.current || !onOpenLeague) return;
+    busyRef.current = true; setBusy(true); setErr(null);
+    try {
+      const r = await createPracticeRoom(leagueId, slot);
+      if (!r.ok || !r.league_id) { setErr(friendlyError(r.error ?? 'Could not open a practice room.')); return; }
+      const started = await startDraft(r.league_id);
+      if (!started.ok) { setErr(friendlyError(started.error ?? 'The room opened but would not start.')); return; }
+      onOpenLeague(r.league_id, r.roster_id ?? 1);
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   // Mock rooms are disposable — delete leaves the room, so don't refresh a
   // league that no longer exists (run() would).
   const deleteMock = async () => {
@@ -1380,6 +1405,34 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
             <DraftSetup leagueId={leagueId} st={st} teamName={teamName}
               seats={(team?.waiver_order ?? []).map((w) => w.roster_id).sort((a, b) => a - b)}
               onSaved={() => { void refresh(); }} />
+          )}
+          {/* PRACTICE THIS DRAFT (0281). Every member gets their own room, so
+              this is not gated on the commish badge — it is here precisely for
+              the manager who has never drafted before. Hidden in a mock (you
+              are already practising) and when the host has nowhere to send
+              you. */}
+          {!st.is_mock && onOpenLeague && (
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 12, paddingTop: 12 }}>
+              <div className="mono" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--faint)' }}>NEVER DRAFTED BEFORE?</div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+                Take a run at this exact draft against the computer — same players, same {st.rounds} rounds,
+                same rules. Nothing you do in there touches this league.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>I PICK</span>
+                <select value={slot} onChange={(e) => setSlot(Number(e.target.value))} disabled={busy}
+                  className="mono" aria-label="Which pick you draft from"
+                  style={{ fontSize: 11, padding: '5px 7px', borderRadius: 5, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>
+                  {Array.from({ length: seatCount }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{ordinal(n)}</option>
+                  ))}
+                </select>
+                <button onClick={practice} disabled={busy} className="mono"
+                  style={{ ...ghostBtn, flex: 1, minWidth: 190, opacity: busy ? 0.6 : 1 }}>
+                  {busy ? 'setting the room up…' : '🤖 PRACTICE THIS DRAFT'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

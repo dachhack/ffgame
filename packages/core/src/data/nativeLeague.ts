@@ -287,3 +287,12 @@ export function diagnosePoolGhosts(
   }
   return { fixes, unfixable };
 }
+
+/** "1st", "2nd", "3rd", "11th"… — the draft slot picker (0281) says which pick
+ *  you are taking, and both hosts have to say it the same way. The teens are
+ *  the whole reason this is a function: 11, 12 and 13 all take "th". */
+export function ordinal(n: number): string {
+  const v = Math.abs(Math.trunc(n));
+  if (v % 100 >= 11 && v % 100 <= 13) return `${n}th`;
+  return `${n}${(['th', 'st', 'nd', 'rd'][v % 10] ?? 'th')}`;
+}

@@ -19,11 +19,12 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
+  createPracticeRoom,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
-import { buildDraftPool } from '@drip/core/data/nativeLeague';
+import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
@@ -71,7 +72,12 @@ function Face({ slug, pos, size = 26 }: { slug: string; pos: string; size?: numb
 
 type DraftTab = 'board' | 'players' | 'teams' | 'queue';
 
-export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => void }) {
+export function Draft({ leagueId, onBack, onOpenLeague }: {
+  leagueId: string; onBack: () => void;
+  /** Open another league's draft room — the practice room this one spawns
+   *  (0281). Absent means the host cannot navigate, and the control hides. */
+  onOpenLeague?: (leagueId: string, rosterId: number, name: string) => void;
+}) {
   const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
   const [st, setSt] = useState<DraftState | null>(null);
@@ -356,6 +362,26 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     finally { busyRef.current = false; setBusy(false); }
   };
 
+  // A PRACTICE ROOM (0281) — the web twin's `practice`. Not run(): this leaves
+  // for a different league, so refreshing this one afterwards is pointless,
+  // and the room must be STARTED before we hand the player over or they land
+  // in a lobby whose only button belongs to a commissioner.
+  const [slot, setSlot] = useState(1);
+  const seatCount = (team?.waiver_order?.length || st?.order?.length || 12);
+  const practice = async () => {
+    if (busyRef.current || !onOpenLeague) return;
+    busyRef.current = true; setBusy(true); setErr(null);
+    try {
+      const r = await createPracticeRoom(leagueId, slot);
+      if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'Could not open a practice room.')); return; }
+      const started = await startDraft(r.league_id);
+      if (!started.ok) { warn(); setErr(friendlyError(started.error ?? 'The room opened but would not start.')); return; }
+      commit();
+      onOpenLeague(r.league_id, r.roster_id ?? 1, r.name ?? 'Practice');
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   const saveQueue = (next: string[]) => {
     setQueue(next);
     if (myRoster != null) setDraftQueue(leagueId, myRoster, next).catch(() => {});
@@ -529,6 +555,36 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
             <DraftSetupCard leagueId={leagueId} st={st} busy={busy} teamName={teamName}
               seats={(team?.waiver_order ?? []).map((w) => w.roster_id).sort((a, b) => a - b)}
               onDone={(fn) => void run(fn)} />
+          )}
+          {/* PRACTICE THIS DRAFT (0281) — the web twin. Not gated on the
+              commish badge: every member gets a room, and the manager who has
+              never drafted is exactly who it is for. */}
+          {!st.is_mock && !!onOpenLeague && (
+            <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+              <Mono size={9} tone="faint" track={0.12}>NEVER DRAFTED BEFORE?</Mono>
+              <Mono size={10} style={{ marginTop: 6, lineHeight: 15 }}>
+                {`Take a run at this exact draft against the computer — same players, same ${st.rounds} rounds, same rules. Nothing you do in there touches this league.`}
+              </Mono>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                <Mono size={9} tone="faint" track={0.08}>I PICK</Mono>
+                {Array.from({ length: seatCount }, (_, i) => i + 1).map((n) => (
+                  <Pressable key={n} onPress={() => setSlot(n)} disabled={busy}
+                    accessibilityRole="button" accessibilityLabel={`Draft from the ${ordinal(n)} pick`}
+                    accessibilityState={{ selected: slot === n }}
+                    style={{
+                      paddingHorizontal: 9, paddingVertical: 5, borderRadius: 5,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: slot === n ? t.you : t.bd,
+                    }}>
+                    <Mono size={10} tone={slot === n ? 'you' : 'dim'}>{ordinal(n)}</Mono>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ marginTop: 10 }}>
+                <PrimaryButton label={busy ? 'SETTING THE ROOM UP…' : '🤖 PRACTICE THIS DRAFT'}
+                  disabled={busy} onPress={() => void practice()} />
+              </View>
+            </View>
           )}
         </Card>
       )}
