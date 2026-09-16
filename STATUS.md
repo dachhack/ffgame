@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.395.1 — a practice room wears the league's roster
+
+Founder, on a room v0.395.0 had just made him: "Did the mock draft lock
+the roster spots? Why are there 24 roster spots?"
+
+The second question was a bug I shipped an hour earlier. 0281 copied the
+DRAFT — rounds, mode, clocks, caps, the pool — and nothing describing the
+ROSTER those picks land in. The builder's spots, the bench/taxi/IR counts,
+classic scoring, PPR, best-ball flags, admitted positions and the pool
+filter all live in settings_json under keys create_native_league never
+writes, so the room came up with a DEFAULT nine-spot lineup while carrying
+the source's 24-round count. Measured before and after, not reasoned
+about: a source with all of those set produced a room where every one of
+them was NULL.
+
+0282 copies them, by ALLOWLIST rather than cloning settings_json — the
+whole blob would drag in a format's vampire seats, the keeper and contract
+continuity 0281 deliberately zeroes, and whatever key is added next. The
+list is exactly what league_game_mode() serves: if a screen consults it to
+decide what the roster looks like, the room copies it. A probe sets a key
+outside the list on the source and asserts it does NOT come across.
+
+The first question: no. The shape lock reads `draft where league_id =
+p_league_id` — its own league's draft. A practice room starts the ROOM's
+draft, and 0281's probes already assert the source's stays pending. The
+locked editor was the practice room's own, which is correct.
+
 ### v0.395.0 — practice rooms: mock THIS draft, from your seat
 
 Founder: "everyone gets their own practice room and you can pick what

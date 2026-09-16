@@ -73,6 +73,23 @@ begin
   end loop;
   -- a pool row only this league has, to prove the copy is THIS board
   update league_pool set full_name = 'Repaired Twin' where league_id = lid and slug = 'pr-7';
+  -- A COMMISSIONER WHO HAS SET THE ROOM UP (0282). The roster the picks land
+  -- in lives in settings_json under keys the league builder never writes, so
+  -- without an explicit copy the practice room came up with a DEFAULT lineup
+  -- while carrying the source's round count.
+  update league set settings_json = settings_json || jsonb_build_object(
+      'roster_slots', '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb,
+      'roster_shape', '{"bench": 5, "taxi": 2, "ir": 1}'::jsonb,
+      'scoring_classic', '{"pass_td": 6}'::jsonb,
+      'bestball', '["S2"]'::jsonb,
+      'ppr', '0.5',
+      'positions_extra', '["IDP"]'::jsonb,
+      'pool_filter', '{"teams": ["PRT"]}'::jsonb,
+      'golf', 'true'::jsonb,
+      -- deliberately OUTSIDE the allowlist: a season setting the room will
+      -- never reach. pr10e proves the copy is a list, not the whole blob.
+      'playoff_teams', '6'::jsonb)
+    where id = lid;
 end $$;
 
 -- ── 1. a plain member, no flag, no badge, gets a room of their own ─────────
@@ -105,6 +122,26 @@ begin
   perform pr_true(n = 60, 'pr9 the whole pool came across');
   perform pr_true((select full_name from league_pool where league_id = mid and slug = 'pr-7') = 'Repaired Twin',
     'pr10 including the edit only this league''s pool carries');
+
+  -- 0282: the ROSTER the picks land in, not just the draft that fills it
+  perform pr_true((select settings_json -> 'roster_slots' from league where id = mid)
+                = '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb,
+    'pr10a the roster builder''s spots came across');
+  perform pr_true((select settings_json -> 'roster_shape' from league where id = mid)
+                = '{"bench": 5, "taxi": 2, "ir": 1}'::jsonb,
+    'pr10b and the bench / taxi / IR counts');
+  perform pr_true((select settings_json -> 'scoring_classic' from league where id = mid) = '{"pass_td": 6}'::jsonb
+              and (select settings_json ->> 'ppr' from league where id = mid) = '0.5',
+    'pr10c and the scoring the league plays');
+  perform pr_true((select settings_json -> 'bestball' from league where id = mid) = '["S2"]'::jsonb
+              and (select settings_json -> 'positions_extra' from league where id = mid) = '["IDP"]'::jsonb
+              and (select settings_json -> 'pool_filter' from league where id = mid) = '{"teams": ["PRT"]}'::jsonb
+              and (select (settings_json ->> 'golf')::boolean from league where id = mid),
+    'pr10d and best-ball, the admitted positions, the pool filter and golf');
+  -- the allowlist is a list: a key a practice room must not inherit stays out
+  perform pr_true((select settings_json -> 'playoff_teams' from league where id = lid) = '6'::jsonb
+              and (select settings_json -> 'playoff_teams' from league where id = mid) is null,
+    'pr10e while a key outside it — the source has one — is not dragged along');
 
   -- the room wears the league's names
   perform pr_true((select count(*) from league_membership
