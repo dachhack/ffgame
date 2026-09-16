@@ -29,7 +29,8 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicks, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { pickFailureNote } from '@drip/core/data/pickSave';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
 import { Rulebook } from './Rulebook';
@@ -334,8 +335,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       // on reload. The slot-cap trigger rejects the WHOLE upsert, so one pick past
       // the cap silently discards every later edit too — which is exactly how an
       // 11-slot practice board "only kept 8".
-      savePicks(liveCtx.matchupId, liveCtx.userId, rows)
-        .then(() => setSaveErr(null))
+      // BEST EFFORT, NOT ALL-OR-NOTHING (v0.394.2). The whole lineup rides in
+      // this batch, so a single row the server refuses used to roll back every
+      // other row with it — permanently, since the next autosave re-sent the
+      // same bad row. Now the legal picks land and the refusals come back named.
+      savePicksBestEffort(liveCtx.matchupId, liveCtx.userId, rows)
+        .then((r) => setSaveErr(pickFailureNote(r.failed)))
         .catch((e: unknown) => setSaveErr(friendlyError(e)));
     }, 1500);
     return () => clearTimeout(t);
@@ -1997,7 +2002,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 {/* An autosave that failed leaves the BOARD showing a lineup the
                     server doesn't have — the one state a manager must never be
                     left guessing about. */}
-                {saveErr && <span className="mono" title={saveErr} style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--opp)', letterSpacing: '0.04em' }}>· ⚠ NOT SAVED — {saveErr}</span>}
+                {saveErr && <span className="mono" title={saveErr} style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--opp)', letterSpacing: '0.04em' }}>· ⚠ {saveErr}</span>}
               </div>
             </div>
             {/* Headline + subhead on the left; power-ups fill the right instead of

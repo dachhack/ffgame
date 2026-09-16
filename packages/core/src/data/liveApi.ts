@@ -878,14 +878,62 @@ export async function myPicks(matchupId: string, userId: string): Promise<PickRo
   return (data ?? []) as PickRow[];
 }
 
-/** Upsert the caller's sealed picks. RLS + the window-lock trigger (migration
- *  0058) only accept rows in windows that haven't kicked off — callers must
- *  pre-filter locked windows out or the whole upsert fails. `locked` is stripped:
- *  only the server sets it (the RLS WITH CHECK rejects it from clients anyway). */
+const PICK_CONFLICT = 'matchup_id,app_user_id,game_window,roster_slot';
+
+/** Upsert the caller's sealed picks, ALL OR NOTHING. RLS + the window-lock
+ *  trigger (migration 0058) only accept rows in windows that haven't kicked
+ *  off — callers must pre-filter locked windows out or the whole upsert fails.
+ *  `locked` is stripped: only the server sets it (the RLS WITH CHECK rejects it
+ *  from clients anyway).
+ *
+ *  ATOMIC ON PURPOSE, and the classic boards depend on it: a move is the two
+ *  rows "player into the target spot" and "player out of the spot he left",
+ *  and landing only one of them stands the same man in two places. Those
+ *  callers revert their optimistic board when this throws. The LIVE boards
+ *  autosave a whole lineup instead, where all-or-nothing is the wrong trade —
+ *  they use savePicksBestEffort below. */
 export async function savePicks(matchupId: string, userId: string, rows: PickRow[]): Promise<void> {
   const payload = rows.map(({ locked: _locked, ...r }) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
-  const { error } = await (await client()).from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
+  const { error } = await (await client()).from('sealed_pick').upsert(payload, { onConflict: PICK_CONFLICT });
   if (error) throw error;
+}
+
+export interface SavePicksResult { saved: number; failed: import('./pickSave').FailedPick[] }
+
+/** Save as many of the caller's picks as the server will take, and report the
+ *  rest (v0.394.2).
+ *
+ *  A Postgres upsert is ONE statement, so a row any trigger refuses rolls back
+ *  every other row with it. On a live board — which re-sends the whole lineup
+ *  after every edit — that turns one illegal pick into a lineup that can never
+ *  save again, on every retry, while the slot counter (local state) still reads
+ *  full. Founder, week 2, one Combo Drip past the one he owned: eight slots set,
+ *  nothing saved, and a banner naming the rule but not the slot.
+ *
+ *  So: try the batch (one round trip, the overwhelmingly common path), and only
+ *  when it is refused re-send row by row. Every legal pick lands; each refusal
+ *  comes back with its window, slot and the server's own words. Never throws for
+ *  a REFUSED row — a refusal is an answer, not an outage — so callers read
+ *  `failed` rather than catching. It still throws if the client itself cannot be
+ *  built, which is a genuine failure to reach the server. */
+export async function savePicksBestEffort(matchupId: string, userId: string, rows: PickRow[]): Promise<SavePicksResult> {
+  const payload = rows.map(({ locked: _locked, ...r }) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
+  if (!payload.length) return { saved: 0, failed: [] };
+  const c = await client();
+  const { error } = await c.from('sealed_pick').upsert(payload, { onConflict: PICK_CONFLICT });
+  if (!error) return { saved: payload.length, failed: [] };
+  const failed: import('./pickSave').FailedPick[] = [];
+  let saved = 0;
+  // In ORDER, deliberately: where a cap is the reason (Combo Drip, extra slots)
+  // the earlier rows are the ones that fit, so the manager keeps the picks he
+  // made first and is told about the overflow — rather than the outcome
+  // depending on which row the database happened to reject.
+  for (const row of payload) {
+    const { error: e } = await c.from('sealed_pick').upsert([row], { onConflict: PICK_CONFLICT });
+    if (!e) { saved += 1; continue; }
+    failed.push({ win: row.game_window, slot: row.roster_slot, slug: row.player_slug ?? null, error: e.message });
+  }
+  return { saved, failed };
 }
 
 // ── Live board (Realtime) ───────────────────────────────────────────────────────
