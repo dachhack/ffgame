@@ -15,6 +15,7 @@ import { Faq } from '../screens/Faq';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
+import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { webVoice, hasVoice, listVoices, onVoicesChanged, chosenVoice, chooseVoice, type VoiceOption } from './voice';
 
 /** A league/team crest: the image when there is one, a lettered box when there
@@ -351,6 +352,25 @@ export function Avatar({ name, accent = 'var(--you)', size = 30, src }: { name: 
 /** 🔊 PLAY-BY-PLAY VOICE — the picker, in the gear (v0.389.2, founder: "have
  *  the voice selection in the options gear"). Every English voice this
  *  browser has, the natural-sounding ones first (★); a click greets in it. */
+// 🧪 REHEARSAL TOOLS (v0.393.5) — admin-only, per device, off by default.
+// Founder: "let's get rid of all these rehearsals or make them just for me."
+// The sim strip on a LIVE TEST league's board renders only while this is on.
+function RehearsalToggle({ lbl }: { lbl: CSSProperties }) {
+  const [on, setOn] = useState(rehearsalToolsOn());
+  const flip = () => { setRehearsalTools(!on); setOn(!on); };
+  return (
+    <div>
+      <div style={lbl}>🧪 REHEARSAL TOOLS</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7 }}>
+        <button onClick={flip} aria-pressed={on} title="Show the sim strip on LIVE TEST league boards (this device only)" className="mono"
+          style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', color: on ? 'var(--warn)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--warn) 12%, transparent)' : 'var(--bg)', border: `1px solid ${on ? 'var(--warn)' : 'var(--bd)'}` }}>
+          {on ? '✓ SIM STRIP ON BOARDS' : 'SIM STRIP HIDDEN'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VoicePicker({ lbl }: { lbl: CSSProperties }) {
   const [voices, setVoices] = useState<VoiceOption[]>(() => listVoices());
   const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
@@ -535,6 +555,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             </div>
           </div>
           {hasVoice() && <VoicePicker lbl={lbl} />}
+          {admin && <RehearsalToggle lbl={lbl} />}
           <button
             onClick={() => { setOpen(false); setRules(true); }}
             className="mono"

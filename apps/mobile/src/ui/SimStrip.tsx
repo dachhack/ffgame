@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { adminSimStart, adminSimReset, simRunState, type SimRun } from '@drip/core/data/liveApi';
+import { rehearsalToolsOn, onRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { APP_VERSION } from '@drip/core/version';
 import { MONO, useTheme } from '../theme.native';
 import { tap, warn as buzz } from './feedback';
@@ -25,6 +26,9 @@ export function SimStrip({ leagueId, week, onChanged }: { leagueId: string; week
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const alive = useRef(true);
+  // OFF UNLESS ASKED FOR (v0.393.5): the gear's 🧪 REHEARSAL TOOLS switch.
+  const [wanted, setWanted] = useState(rehearsalToolsOn());
+  useEffect(() => onRehearsalTools(() => setWanted(rehearsalToolsOn())), []);
 
   const refresh = async () => {
     const r = await simRunState(leagueId).catch(() => null);
@@ -33,14 +37,15 @@ export function SimStrip({ leagueId, week, onChanged }: { leagueId: string; week
     setState(r.run ?? 'idle');
   };
   useEffect(() => {
+    if (!wanted) return;
     alive.current = true;
     void refresh();
     const id = setInterval(() => void refresh(), 10_000);
     return () => { alive.current = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leagueId]);
+  }, [leagueId, wanted]);
 
-  if (state === null || state === false) return null;
+  if (!wanted || state === null || state === false) return null;
   const run = state === 'idle' ? null : state;
 
   const start = async () => {
