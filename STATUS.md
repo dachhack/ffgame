@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.392.2 — the push log names each device
+### v0.393.1 — the push log names each device
 
 Founder: "I'm getting the alerts on the web installed as app on my phone
 but not in my desktop chrome." One outbox row can go to a phone and a
@@ -30,6 +30,51 @@ per-device outcomes in the error column: null when every device took it,
 delivered, ◐ partial (the text says which device refused and why), ✗
 refused. Worker + core; the app shows the new text on its next APK.
 push-flush test gains the two-device case.
+### v0.393.0 — the changelog is real, the app knows when it's behind
+
+Founder, right after the APK got a link: "can you add the link to the site
+too? Can we have an in-app check that alerts users if they have an older
+version. 'You are X versions behind.' click for change log (i guess we
+need to keep a change log now too)."
+
+THE LOG WAS ALREADY KEPT — this file has carried a `### vX.Y.Z — title`
+section per version for months. `scripts/gen-changelog.mjs` turns those
+into `public/changelog.json` at web build (149 entries today), and
+`check:changelog` (in check:parity) fails when APP_VERSION has no entry,
+which is what makes the log stay kept. Core `data/changelog.ts` holds the
+types, the URLs (APK, its manifest, the changelog, the site page) and the
+arithmetic: `versionsBehind` counts entries newer than a build and no
+newer than the newest APK, skipping web-only ones — a site fix is not a
+reason to reinstall.
+
+WEB: `#/changelog` (⚙ → What's new) renders the log with the Android
+download at the top; ⚙ also gains "📱 Android app (APK)"; the FAQ's app
+answer says Android yes, with the link, iOS not yet.
+
+APP: `useUpdateCheck` fetches the release's `manifest.json` (newest APK
+version; release-apk.yml now publishes it beside the APK) and the site's
+changelog at launch and on every foreground. Behind → a strip under the
+header: "YOU ARE N VERSIONS BEHIND · vX IS OUT · WHAT'S NEW →". Tap → the
+What's New sheet: the entries between this build and the newest, a GET
+vX button (opens the APK URL; installs over the old build), and the full
+log on the site. Settings gains a What's new row that lights when behind.
+Nothing when current or offline. Web + app + core; APK via release-apk.
+
+### One link for the APK — release-apk.yml
+
+Founder: "is there a link to the apk I can send users?" There wasn't: every
+APK was built in a session and handed over as a file, and the repo has no
+releases. New `release-apk.yml` runs the session ritual in CI (expo
+prebuild → gradle assembleRelease, arm64, playtest keystore; the same
+three checks — versionCode, signer CN, APP_VERSION in the bundle) on every
+merge to main that touches apps/mobile or packages/core, or on demand, and
+republishes the result under ONE fixed tag, `apk-latest`, so the download
+URL never changes:
+https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk
+The repo is public, so no GitHub account is needed to download.
+versionCode = 40000 + run number (monotonic, past the hand-built 36943).
+Each run deletes and recreates the release so the tag rides the built
+commit. Documented in apps/mobile/README.md.
 
 ### v0.392.1 — a browser re-subscribes on every visit, not only from the card
 

@@ -1,0 +1,130 @@
+name: Release the Android APK
+
+# ONE LINK FOR PLAYTESTERS. Founder, Week 1: "is there a link to the apk I can
+# send users?" There wasn't — every APK was built in a session and handed over
+# as a file in chat. This builds the same playtest APK in CI and republishes it
+# under ONE fixed release tag, so the download URL never changes:
+#
+#   https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk
+#
+# (the repository is public, so the link needs no GitHub account). Each run
+# replaces the release — same tag, moved to the built commit — rather than
+# stacking a release per build; the version and build number are in the
+# release title and notes, and in the APK itself.
+#
+# Same recipe as the session ritual (docs/next-session-prompt.md): expo
+# prebuild → gradle assembleRelease, arm64 only, signed with the committed
+# playtest keystore (apps/mobile/plugins/withPlaytestSigning.js), then the
+# three checks before anything is published — version code, signer identity,
+# and the APP_VERSION string inside the bundle.
+#
+# versionCode is ANDROID_VERSION_CODE = 40000 + the run number: monotonic, past
+# the hand-built sequence (36943 as of v0.390.8), and derived from nothing a
+# person has to remember.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/core/**'
+      - '.github/workflows/release-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version code (40000 + run number)
+        run: echo "ANDROID_VERSION_CODE=$((40000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # The runner image ships the SDK; this only accepts licenses and adds
+      # platform-tools. The action's default package list includes the retired
+      # 'tools' package, which sdkmanager can no longer find (first run, Sep 16)
+      # — gradle then pulls the platform and build-tools the project pins.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: npm ci
+
+      - name: App version
+        id: ver
+        run: |
+          v=$(node -e "const m=require('fs').readFileSync('packages/core/src/version.ts','utf8').match(/APP_VERSION = '([^']+)'/); console.log(m[1])")
+          echo "app=$v" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$v  versionCode=$ANDROID_VERSION_CODE"
+
+      - name: Prebuild (android/)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build the release APK (arm64)
+        working-directory: apps/mobile/android
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon > "$RUNNER_TEMP/gradle.log" 2>&1
+          rc=$?
+          tail -40 "$RUNNER_TEMP/gradle.log"
+          exit $rc
+
+      - name: Verify before publishing
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$apk"
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $bt"
+          "$bt/aapt2" dump badging "$apk" | grep -o "versionCode='[0-9]*'" | tee "$RUNNER_TEMP/vc"
+          grep -q "versionCode='$ANDROID_VERSION_CODE'" "$RUNNER_TEMP/vc" || { echo "::error::versionCode mismatch"; exit 1; }
+          "$bt/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs"
+          grep -q "CN=Drip Fantasy Playtest" "$RUNNER_TEMP/certs" || { echo "::error::not signed with the playtest key"; exit 1; }
+          unzip -p "$apk" assets/index.android.bundle > "$RUNNER_TEMP/bundle.js"
+          grep -q "${{ steps.ver.outputs.app }}" "$RUNNER_TEMP/bundle.js" || { echo "::error::APP_VERSION ${{ steps.ver.outputs.app }} not in the bundle"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$apk" "$RUNNER_TEMP/out/drip-fantasy.apk"
+          # The app reads this to learn the newest build it could be (core's
+          # changelog.ts, APK_MANIFEST_URL) — version, code, and when.
+          printf '{"version":"%s","versionCode":%s,"built":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNNER_TEMP/out/manifest.json"
+          cat "$RUNNER_TEMP/out/manifest.json"
+          ls -la "$RUNNER_TEMP/out"
+
+      - name: Publish as the apk-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP: ${{ steps.ver.outputs.app }}
+        run: |
+          set -euo pipefail
+          # Replace, don't stack: one release, one tag, one URL. The tag moves
+          # to this commit so the release page's source matches the build.
+          gh release delete apk-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          printf '%s\n' \
+            "Drip Fantasy Android playtest build." "" \
+            "- App version: **$APP**" \
+            "- Build (versionCode): **$ANDROID_VERSION_CODE**" \
+            "- Commit: $GITHUB_SHA" \
+            "- arm64 only · signed with the playtest key · installs over any previous playtest build" "" \
+            "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk" "" \
+            "Android asks once to allow installs from your browser (Settings → Install unknown apps)." \
+            > "$RUNNER_TEMP/notes.md"
+          gh release create apk-latest "$RUNNER_TEMP/out/drip-fantasy.apk" "$RUNNER_TEMP/out/manifest.json" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "Drip Fantasy APK · $APP · build $ANDROID_VERSION_CODE" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk" >> "$GITHUB_STEP_SUMMARY"
