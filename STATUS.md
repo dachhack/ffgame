@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.7 — the download says which build it is (web only)
+
+Founder: "There should be an APK release path on the site rather than the
+chat." There already was one — `release-apk.yml` has published every
+merge that touches the app to one fixed URL since it landed, and the site
+links it from the gear menu, the leagues-page chip, #/changelog, the FAQ
+and onboarding. What was missing was any way to tell what you were about
+to install: the card said "always the newest" and asked you to take its
+word, while a release published minutes earlier might still be building.
+
+#/changelog now reads the same manifest.json the app has always read and
+names the build, the version it carries and when it was published — and
+warns when the site is ahead of it, which it is for about ten minutes
+after every release.
+
+The durable half is a doc fix: `docs/next-session-prompt.md` still
+described hand-building an APK and attaching it to chat as the delivery
+ritual, written before CI existed and never updated. That is why APKs
+kept arriving as files. It now says the answer to "apk please" is the
+link, and that hand-building is for testing uncommitted work on a device.
+
 ### v0.394.6 — the schedule starts on a week you can play
 
 The other half of v0.394.5. 0279 got the draft through; this is what
