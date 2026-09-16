@@ -330,6 +330,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         rows.push({ game_window: win, roster_slot: slot, player_slug: p.playerId, metric_id: p.metricId ?? null });
       }
       if (!rows.length) { setSaveErr(null); return; }
+      // The windows still OPEN — the same test the row filter above applies,
+      // stated once for the whole week rather than per pick. savePicksBestEffort
+      // reconciles against it, so a window whose LAST pick was cleared has its
+      // stranded rows removed too (v0.394.4); a locked window is never touched.
+      const openWins = windowsForWeek(week).map((w) => w.id).filter((id) => {
+        const k = windowLockMs(week, id as WindowId);
+        return held || k == null || k > Date.now();
+      });
       // A swallowed failure here is the worst kind: the board keeps showing the
       // lineup you built while the server has an older one, and you only find out
       // on reload. The slot-cap trigger rejects the WHOLE upsert, so one pick past
@@ -339,7 +347,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       // this batch, so a single row the server refuses used to roll back every
       // other row with it — permanently, since the next autosave re-sent the
       // same bad row. Now the legal picks land and the refusals come back named.
-      savePicksBestEffort(liveCtx.matchupId, liveCtx.userId, rows)
+      savePicksBestEffort(liveCtx.matchupId, liveCtx.userId, rows, { openWindows: openWins })
         .then((r) => setSaveErr(pickFailureNote(r.failed)))
         .catch((e: unknown) => setSaveErr(friendlyError(e)));
     }, 1500);

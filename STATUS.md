@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.4 — a cleared spot is cleared on the server too
+
+Founder, on v0.394.3's "not fixed" note: "let's do that clearSlot fix
+too." v0.394.3 swept the stranded rows only when something else happened
+to be refused, so the orphan was still CREATED on every clear and simply
+waited for a cap to trip over it.
+
+The prune now runs whenever the LINEUP'S SHAPE changes, not only on
+failure — a slot cleared, an extra slot removed, picks compacted — and
+before the write, because a stranded row counts against every cap while
+it is still there. A save that only swaps a player or a metric leaves the
+shape alone and stays a single round trip; the first save after a mount
+always reconciles, which is what heals a board that is already stranded.
+
+Both live autosaves now also pass the week's still-OPEN windows, so a
+window whose LAST pick was cleared is reconciled too — it names no rows,
+so without that list it was invisible to the prune and kept its whole
+lineup on the server. The bounds are unchanged and are the load-bearing
+part: `locked = false` (a sealed pick is never the client's to remove),
+open windows only, and callers may only ask once their lineup has
+hydrated.
+
+Considered and rejected: writing cleared spots as empty rows instead.
+It cannot see a slot that no longer EXISTS — a removed extra slot — which
+is one of the two ways a board strands a row.
+
 ### v0.394.3 — the second Combo Drip nobody could see
 
 Founder, with v0.394.2's banner now naming the slot ("NOT SAVED — SUN 1PM
@@ -44,10 +70,9 @@ On the FAILURE path only, so a healthy save still costs one round trip.
 The board self-heals on its next autosave — which fires on mount — so a
 reload is enough.
 
-NOT FIXED, and worth its own pass: `clearSlot` still leaves the row, so
-the orphan is created in the first place and is only swept when something
-else refuses. Making the autosave write cleared spots as empty rows
-rather than skipping them is the root-cause fix.
+NOT FIXED HERE — done in v0.394.4 below: `clearSlot` still leaves the row,
+so the orphan is created in the first place and is only swept when
+something else refuses.
 
 ### v0.394.2 — one bad pick no longer blocks the whole lineup
 
