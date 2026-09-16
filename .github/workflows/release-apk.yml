@@ -93,6 +93,10 @@ jobs:
           grep -q "${{ steps.ver.outputs.app }}" "$RUNNER_TEMP/bundle.js" || { echo "::error::APP_VERSION ${{ steps.ver.outputs.app }} not in the bundle"; exit 1; }
           mkdir -p "$RUNNER_TEMP/out"
           cp "$apk" "$RUNNER_TEMP/out/drip-fantasy.apk"
+          # The app reads this to learn the newest build it could be (core's
+          # changelog.ts, APK_MANIFEST_URL) — version, code, and when.
+          printf '{"version":"%s","versionCode":%s,"built":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNNER_TEMP/out/manifest.json"
+          cat "$RUNNER_TEMP/out/manifest.json"
           ls -la "$RUNNER_TEMP/out"
 
       - name: Publish as the apk-latest release
@@ -113,7 +117,7 @@ jobs:
             "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk" "" \
             "Android asks once to allow installs from your browser (Settings → Install unknown apps)." \
             > "$RUNNER_TEMP/notes.md"
-          gh release create apk-latest "$RUNNER_TEMP/out/drip-fantasy.apk" \
+          gh release create apk-latest "$RUNNER_TEMP/out/drip-fantasy.apk" "$RUNNER_TEMP/out/manifest.json" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
             --title "Drip Fantasy APK · $APP · build $ANDROID_VERSION_CODE" \
             --notes-file "$RUNNER_TEMP/notes.md"

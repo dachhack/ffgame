@@ -8,6 +8,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
+import { APK_URL } from '@drip/core/data/changelog';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
@@ -543,6 +544,19 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
           >
             ❓ FAQ
+          </button>
+          {/* The Android playtest build and what shipped (v0.393.0). One link,
+              always the newest APK — release-apk.yml keeps it current. */}
+          <a href={APK_URL} className="mono"
+            style={{ display: 'block', width: '100%', borderTop: '1px solid var(--bd)', paddingTop: 12, marginTop: -2, textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', textDecoration: 'none' }}>
+            📱 Android app (APK)
+          </a>
+          <button
+            onClick={() => { setOpen(false); navigate({ name: 'changelog' }); }}
+            className="mono"
+            style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+          >
+            🆕 What's new · {APP_VERSION}
           </button>
           {(superAdmin || admin) && (
             <button

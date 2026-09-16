@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { APK_URL } from '@drip/core/data/changelog';
 
 // Plain-language FAQ. The Rulebook (src/screens/Rulebook.tsx) is the deep scoring
 // reference rendered from live data; this page answers the "what is this / is it
@@ -183,8 +184,9 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Is there a mobile app?',
-          a: <>Not yet — Drip Fantasy is a web app today and works in your phone's browser. Native iOS and Android apps are on the roadmap;
-            the game engine is built to be portable so the same play loop can ship to phones later.</>,
+          a: <>Android: yes — a playtest build you install directly, always the newest: <a href={APK_URL} style={{ color: 'var(--you)' }}>download the APK</a> (Android
+            asks once to allow installs from your browser). iOS: not yet — the site works in Safari, and the game engine is shared so the
+            same play loop ships there when it's built. What changed in each version is at <b>⚙ → What's new</b>.</>,
         },
         {
           q: 'Is it free? Will it ever cost money?',
