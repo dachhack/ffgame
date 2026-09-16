@@ -1328,6 +1328,16 @@ export const simRunState = (leagueId: string) =>
  *  window) arm without waiting for the real NFL calendar. Admin-only AND the
  *  league must be in 🧪 LIVE TEST; p_favor makes that seat win its matchup,
  *  p_doom hands it the week's floor. week null = earliest unstamped. */
+// ── The weekly report's gate, and a forced build (0277) ─────────────────────
+export interface WeekReportState {
+  ok: boolean; error?: string; week: number | null; season?: string; matchups: number; final?: number; stamped?: number;
+  statuses?: Record<string, number>; report?: boolean; message?: boolean;
+  request?: { requested_at: string; done_at: string | null; error: string | null } | null;
+}
+export const adminWeekReportState = (leagueId: string, week?: number | null) =>
+  rpc<WeekReportState>('admin_week_report_state', { p_league_id: leagueId, p_week: week ?? null });
+export const adminRequestWeekReport = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; queued?: boolean; note?: string; id?: number }>('admin_request_week_report', { p_league_id: leagueId, p_week: week });
 export const adminStampWeek = (leagueId: string, week?: number | null, favor?: number | null, doom?: number | null) =>
   rpc<{ ok: boolean; error?: string; week?: number; stamped?: number; eliminated?: number; vampire_won?: boolean }>(
     'admin_stamp_week', { p_league_id: leagueId, p_week: week ?? null, p_favor: favor ?? null, p_doom: doom ?? null });

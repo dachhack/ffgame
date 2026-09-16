@@ -139,4 +139,51 @@ begin
   raise notice 'week-report probes done';
 end $$;
 
+-- ── 4. 0277: an admin sees the gate and forces a report ─────────────────────
+do $$
+declare lid uuid := current_setting('probe.wr_lid')::uuid; r jsonb; n int;
+begin
+  set local role authenticated;
+  perform probe_as('c');
+  perform wr_err(admin_week_report_state(lid, 3), 'forbidden', 'wr26 a member cannot read the report gate');
+  perform wr_err(admin_request_week_report(lid, 3), 'forbidden', 'wr27 nor force one');
+  reset role;
+  insert into app_admin (email) values ('b@test.dev') on conflict do nothing;
+  set local role authenticated;
+  perform probe_as('b');
+  r := admin_week_report_state(lid, 3);
+  perform wr_ok(r, 'wr28 admin reads the gate');
+  perform wr_true((r ->> 'matchups')::int = 0 and (r ->> 'report')::boolean and not (r ->> 'message')::boolean,
+    'wr29 the gate shows no matchups, a stored report, and no chat line (deleted in §3)');
+  perform wr_err(admin_request_week_report(lid, 3), 'no matchups', 'wr30 a week with no matchups cannot be forced');
+  reset role;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final)
+    values (lid, 3, 1, 2, 'live', 101.0, 90.5);
+  set local role authenticated;
+  perform probe_as('b');
+  r := admin_week_report_state(lid, null);
+  perform wr_true((r ->> 'week')::int = 3 and (r ->> 'matchups')::int = 1 and (r ->> 'final')::int = 0
+      and (r ->> 'stamped')::int = 1 and r -> 'statuses' ->> 'live' = '1',
+    'wr31 null week reads the latest; the gate counts final and stamped apart');
+  r := admin_request_week_report(lid, 3);
+  perform wr_ok(r, 'wr32 admin forces the report');
+  perform wr_true((r ->> 'queued')::boolean, 'wr33 it is queued for the worker');
+  r := admin_request_week_report(lid, 3);
+  perform wr_true(r ->> 'note' like 'already queued%', 'wr34 a second ask does not queue twice');
+  r := admin_week_report_state(lid, 3);
+  perform wr_true(r -> 'request' ->> 'requested_at' is not null and r -> 'request' -> 'done_at' = 'null'::jsonb,
+    'wr35 the gate shows the open request');
+  reset role;
+  select count(*) into n from report_request where league_id = lid and week = 3 and done_at is null;
+  perform wr_true(n = 1, 'wr36 one open request row');
+  -- the worker finishes it
+  update report_request set done_at = now() where league_id = lid and week = 3;
+  set local role authenticated;
+  perform probe_as('b');
+  r := admin_request_week_report(lid, 3);
+  perform wr_true(r ->> 'id' is not null, 'wr37 once done, a new ask queues afresh');
+  reset role;
+  raise notice 'week-report probes done';
+end $$;
+
 select 'ALL WEEK-REPORT PROBES PASSED' as status;

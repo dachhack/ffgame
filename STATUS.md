@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.393.2 — "Let's make the weekly reports": the gate is visible, and an admin can force one
+
+Founder, the morning after week 2 closed. The worker had posted nothing and
+said nothing: `postWeekReports` reports a league only when every matchup of
+the week is `final` AND stamped and the league's season string matches, and
+each of those failing was silent. Without a database in hand there was no
+way to tell which.
+
+- **The gate is logged** (server/src/report.js): once per week and again
+  whenever it changes — `[report] wk 2 gate — Kickoff League: 5/6 final,
+  6/6 stamped · Other: posted` — so the deploy log answers "why no report?".
+- **0277 `report_request`** + two admin RPCs. `admin_week_report_state`
+  (league, week or null for the latest) returns the counts the worker gates
+  on, the status breakdown, whether the report row and its chat line exist,
+  the league's season, and the latest request. `admin_request_week_report`
+  queues a FORCED build: the worker sweeps requests every tick, builds from
+  whatever finals exist (status and season not consulted), overwrites the
+  stored payload, replaces the chat line rather than doubling it, and stamps
+  the request done (or its error: no matchups / nothing stamped).
+- **AdminPage → ADMIN MODES** gains 📋 POST WEEKLY REPORT with a week box
+  (defaults to the league's latest week) and a gate line underneath:
+  "wk 2: 6/6 final · 6/6 stamped · report — · chat line — · season 2026";
+  polls while a request is open so it flips to done in front of you.
+- `buildLeagueReport` now always includes the requested week's rows (a
+  forced build of a week whose rows aren't `final` yet read "no games
+  scored"). week-report probes wr26–wr37; worker test gains the request
+  cases.
+
 ### v0.393.2 — GET THE ANDROID APP on the leagues page
 
 Founder: "add a 'get the android app' button on the leagues page." A
