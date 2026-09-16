@@ -151,13 +151,20 @@ export function buildWeekReport(input: WeekReportInput): WeekReport {
 }
 
 /** One line that tells the week: the top score, and the game that was close. */
+/** Did anybody score? A league that hasn't drafted stamps every final at 0. */
+export function reportHasScores(r: Pick<WeekReport, 'results'>): boolean {
+  return r.results.some((g) => g.home.score > 0 || g.away.score > 0);
+}
+
 export function headlineOf(r: WeekReport): string {
-  if (!r.results.length) return `Week ${r.week} closed with no games scored.`;
+  if (!r.results.length || !reportHasScores(r)) return `Week ${r.week} closed with no games scored.`;
   const bits: string[] = [];
   if (r.top) bits.push(`${r.top.name} led the week with ${fmt(r.top.score)}`);
   if (r.closest && r.results.length > 1) {
     const [w, l] = r.closest.home.score >= r.closest.away.score ? [r.closest.home, r.closest.away] : [r.closest.away, r.closest.home];
-    bits.push(r.closest.margin <= 5
+    bits.push(r.closest.margin === 0
+      ? `${w.name} and ${l.name} tied at ${fmt(w.score)}`
+      : r.closest.margin <= 5
       ? `${w.name} edged ${l.name} by ${fmt(r.closest.margin)}`
       : `${w.name} beat ${l.name} ${fmt(w.score)}–${fmt(l.score)}`);
   }

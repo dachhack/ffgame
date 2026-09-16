@@ -200,12 +200,16 @@ export function ModalBackdrop({ onClick, zIndex = 70, padTop = 40, children }: {
  *  shrink — the same rule the app's sheet settles on. Wide content (a scoring
  *  table, a register) scrolls sideways INSIDE the body, so the page behind
  *  never scrolls sideways. */
-export function Sheet({ title, subtitle, onClose, max = 620, children }: {
+export function Sheet({ title, subtitle, onClose, max = 620, zIndex = 60, children }: {
   title: ReactNode;
   subtitle?: ReactNode;
   onClose: () => void;
   /** Card width cap. Reference tables want more room than a settings form. */
   max?: number;
+  /** Layer. 60 by default (below the modal layer, see below); a sheet opened
+   *  FROM a modal — the weekly report from the chat panel (v0.393.4) — must
+   *  sit above it, or it opens behind the thing that opened it. */
+  zIndex?: number;
   children: ReactNode;
 }) {
   // Escape closes it — the keyboard's ✕, and the thing every dialog on the web
@@ -224,7 +228,7 @@ export function Sheet({ title, subtitle, onClose, max = 620, children }: {
     // as "manage flags and write note don't do anything". Below the modal
     // layer, above the page (the header is 50-58), and portaled last so it
     // still wins against anything else that also says 60.
-    <ModalBackdrop onClick={onClose} zIndex={60} padTop={26}>
+    <ModalBackdrop onClick={onClose} zIndex={zIndex} padTop={26}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
         style={{
           background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10,

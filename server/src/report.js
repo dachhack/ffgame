@@ -12,7 +12,7 @@
 // league_report primary key is the idempotency: an insert that hits it posts
 // nothing, so a restart or a re-run never says the same week twice.
 import { db } from './supabase.js';
-import { buildWeekReport, reportBody } from '../../packages/core/src/data/weekReport.ts';
+import { buildWeekReport, reportBody, reportHasScores } from '../../packages/core/src/data/weekReport.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[report]', ...a);
 
@@ -76,6 +76,10 @@ export async function postWeekReports(week, season, opts = {}) {
     if (!thisSeason(league)) continue;
     try {
       const report = await buildLeagueReport(league, week, weekRows);
+      // A league that hasn't drafted stamps every final at 0.0 (v0.393.4):
+      // nothing happened, so nothing is said. Remembered for the week so it
+      // is not rebuilt every five minutes; an admin request still forces it.
+      if (!reportHasScores(report)) { log(league.name ?? lid, 'wk', week, '— no scores, not posting'); posted.add(`${lid}:${week}`); continue; }
       if (await postReport(league, week, report)) n++;
       posted.add(`${lid}:${week}`);
     } catch (e) { log(league.name ?? lid, 'wk', week, e.message); }

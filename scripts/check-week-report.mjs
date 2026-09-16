@@ -4,7 +4,7 @@
 // worker builds it from plain rows and both hosts render its sections; this
 // pins the reading of a small week so a refactor can't quietly change what
 // the league is told. Run: npx tsx scripts/check-week-report.mjs
-import { buildWeekReport, reportBody, reportSections, slugPretty, headlineOf } from '../packages/core/src/data/weekReport.ts';
+import { buildWeekReport, reportBody, reportSections, slugPretty, headlineOf, reportHasScores } from '../packages/core/src/data/weekReport.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -70,6 +70,18 @@ const one = buildWeekReport({ week: 1, league: 'Two', names, matchups: [matchups
 eq(one.blowout, undefined, 'one game is not a blowout');
 eq(one.headline, 'Bulls led the week with 120.4.', 'and its headline skips the closest-game clause');
 ok(headlineOf({ ...one, results: [{ ...one.results[0], margin: 20 }, one.results[0] ], closest: { ...one.results[0], margin: 20.5 } }).includes('beat Bears 120.4–99.9'), 'a wide closest game reads as a plain win');
+// v0.393.4, from the first real run: a tie is a tie, and a league that has
+// not drafted (every final 0.0) does not "lead the week with 0.0".
+const tied = buildWeekReport({ week: 1, league: 'Tie', names, matchups: [
+  { week: 1, home_roster_id: 1, away_roster_id: 2, home_final: 88, away_final: 88 },
+  { week: 1, home_roster_id: 3, away_roster_id: 4, home_final: 100, away_final: 60 },
+], slots: [] });
+eq(tied.headline, 'Cubs led the week with 100.0. Bulls and Bears tied at 88.0.', 'a tie reads as a tie, never "edged by 0.0"');
+const zero = buildWeekReport({ week: 1, league: 'Undrafted', names, matchups: [
+  { week: 1, home_roster_id: 1, away_roster_id: 2, home_final: 0, away_final: 0 },
+], slots: [] });
+ok(!reportHasScores(zero), 'an all-zero week has no scores');
+eq(zero.headline, 'Week 1 closed with no games scored.', 'and says so instead of crowning a 0.0');
 eq(slugPretty('bal-dst'), 'BAL D/ST', 'a defence slug');
 eq(slugPretty('bal-k'), 'BAL K', 'a kicker unit slug');
 eq(slugPretty('josh-johnson-qb'), 'Josh Johnson', 'a tagged slug drops its tag');

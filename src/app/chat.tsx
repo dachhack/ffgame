@@ -123,7 +123,10 @@ export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; wee
   }, [leagueId, week]);
   const sections = rep ? reportSections(rep) : [];
   return (
-    <Sheet title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose} max={520}>
+    // zIndex 80: the chat panel is a ModalBackdrop at 70, and a Sheet's default
+    // 60 opened BEHIND it (founder, mobile web: "the weekly report is behind
+    // the chat").
+    <Sheet title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose} max={520} zIndex={80}>
       <div style={{ padding: '10px 15px 16px', overflowY: 'auto' }}>
         {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
         {!err && !rep && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
