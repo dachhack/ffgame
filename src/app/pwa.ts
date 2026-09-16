@@ -112,6 +112,18 @@ export function initPwa(): void {
     // HTTP cache, or the kill switch in public/sw.js could take minutes to land.
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL, updateViaCache: 'none' })
+      .then(() => {
+        // A BROWSER THAT ALREADY SAID YES RE-CHECKS ITS SUBSCRIPTION ON EVERY
+        // VISIT (v0.392.1). webPushState re-registers the subscription (fresh
+        // last_seen, follows an account switch) and, after the v0.392.0 key
+        // rotation, replaces one made under the old key — silently, since
+        // permission was already granted. It used to run only when the
+        // notifications card was opened, so a browser that never opened it
+        // kept a subscription the server could no longer sign for.
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          void import('./webPush').then((m) => m.webPushState()).catch(() => {});
+        }
+      })
       .catch(() => { /* an unregistrable worker just means no offline support */ });
   });
 }
