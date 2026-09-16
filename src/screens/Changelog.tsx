@@ -6,21 +6,49 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, SiteSettings } from '../app/ui';
 import { APP_VERSION } from '@drip/core/version';
-import { APK_URL, APK_RELEASE_PAGE_URL, compareVersions, type Changelog as Log } from '@drip/core/data/changelog';
+import { APK_URL, APK_MANIFEST_URL, APK_RELEASE_PAGE_URL, compareVersions, type ApkManifest, type Changelog as Log } from '@drip/core/data/changelog';
+
+/** "3 hours ago" / "2 days ago" — enough to tell a fresh build from a stale
+ *  one without turning a timestamp into a reading exercise. */
+function builtAgo(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'recently';
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
 
 export function Changelog() {
   const { navigate } = useStore();
   const [log, setLog] = useState<Log | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // WHICH BUILD IS BEHIND THE BUTTON (v0.394.7). release-apk.yml publishes a
+  // manifest.json beside the APK; the app has always read it to count how far
+  // behind it is, and the site never did — so the download said "always the
+  // newest" and asked you to take its word. A failed fetch is not an error
+  // worth showing: the button still works, it just goes back to saying that.
+  const [apk, setApk] = useState<ApkManifest | null>(null);
   useEffect(() => {
     let dead = false;
     fetch(`${import.meta.env.BASE_URL}changelog.json?t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<Log>; })
       .then((l) => { if (!dead) setLog(l); })
       .catch((e) => { if (!dead) setErr(String(e?.message ?? e)); });
+    fetch(`${APK_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? (r.json() as Promise<ApkManifest>) : null))
+      .then((m) => { if (!dead && m?.version) setApk(m); })
+      .catch(() => {});
     return () => { dead = true; };
   }, []);
   const mine = APP_VERSION.replace(/^v/, '');
+  // The site deploys in ~2 minutes and the APK takes ~10, so right after a
+  // release the button honestly offers an older build. Say so rather than let
+  // somebody install it and wonder why the fix is missing.
+  const apkBehind = !!apk && compareVersions(apk.version, mine) < 0;
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--bd)', position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 5 }}>
@@ -35,12 +63,19 @@ export function Changelog() {
           <div style={{ flex: 1, minWidth: 220 }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700 }}>📱 Drip Fantasy for Android</div>
             <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 3, lineHeight: 1.5 }}>
-              The playtest build, always the newest. Android asks once to allow installs from your browser.
-              iOS is not built yet — the site works in Safari.
+              {apk
+                ? <>Build <strong style={{ color: 'var(--text)' }}>{apk.versionCode}</strong>, carrying <strong style={{ color: 'var(--text)' }}>{apk.version}</strong> · published {builtAgo(apk.built)}. Installs over any earlier playtest build.</>
+                : <>The playtest build, always the newest.</>}
+              {' '}Android asks once to allow installs from your browser. iOS is not built yet — the site works in Safari.
             </div>
+            {apkBehind && (
+              <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginTop: 5, lineHeight: 1.5 }}>
+                ⚠ THE SITE IS ON {APP_VERSION.toUpperCase()} — THE APK IS STILL BEING BUILT. GIVE IT ~10 MINUTES.
+              </div>
+            )}
           </div>
           <a href={APK_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ DOWNLOAD APK</a>
-          <a href={APK_RELEASE_PAGE_URL} target="_blank" rel="noreferrer" className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>which build? →</a>
+          <a href={APK_RELEASE_PAGE_URL} target="_blank" rel="noreferrer" className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>release notes →</a>
         </section>
         <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 10 }}>
           THIS SITE IS {APP_VERSION.toUpperCase()}{log?.latest ? ` · LOG TO V${log.latest.toUpperCase()}` : ''}

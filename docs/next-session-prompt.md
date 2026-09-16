@@ -58,11 +58,13 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    - `is_admin()` checks the `app_admin` table by email. There is no column.
 2. **Versioning**: bump `packages/core/src/version.ts` on every deployable
    change (patch per deploy, minor per feature). Docs-only commits don't bump.
-   APK `versionCode` is now **sequential**, not version × 100 — the convention
-   broke around v0.370 when several APKs shipped per version family. Latest is
-   36914; just increment. It lives in the **gitignored**
-   `apps/mobile/android/app/build.gradle` (this container's `android/` dir
-   persists between builds; a fresh container needs `expo prebuild` first).
+   APK `versionCode` is **CI's business now**: `release-apk.yml` uses
+   `40000 + run number`, derived from nothing anyone has to remember (see 5).
+   The hand-built sequence stopped at 36950 and is deliberately below it. The
+   gitignored `apps/mobile/android/app/build.gradle` still holds the local
+   value, and only a local test build needs it touched (this container's
+   `android/` dir persists between builds; a fresh container needs
+   `expo prebuild` first).
 3. **The battery, before every merge**:
    ```
    npx tsc --noEmit                          # web
@@ -75,9 +77,28 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
 4. **Merge flow**: work on the `claude/…` branch → PR → squash-merge to `main`
    → `git fetch origin main && git checkout -B <branch> origin/main &&
    git push -u origin <branch> --force-with-lease`.
-5. **APK ritual** (arm64 only), when `apps/mobile` or `packages/core` changed
-   and the founder asks ("apk please"). In a container where
-   `apps/mobile/android/` already exists (this one), it's just:
+5. **THE APK SHIPS ITSELF — DO NOT HAND-BUILD ONE AND ATTACH IT TO CHAT.**
+   `.github/workflows/release-apk.yml` builds and publishes on every merge to
+   `main` that touches `apps/mobile/**` or `packages/core/**` (~10 min), and
+   republishes under one fixed tag so the URL never moves:
+
+       https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk
+
+   The site already links it from five places — the ⚙ menu (📱 Android app),
+   the leagues-page chip, `#/changelog`, the FAQ and onboarding — all off
+   `APK_URL` in `packages/core/src/data/changelog.ts`, and the app's What's New
+   compares the installed build against the release's `manifest.json`. CI runs
+   the same three checks a hand build does (versionCode, **CN=Drip Fantasy
+   Playtest**, APP_VERSION in the bundle) and refuses to publish if any fail.
+
+   So when the founder asks for the APK, the answer is the link, not a file.
+   After merging, confirm the run went green and that `manifest.json` reports
+   the version you just shipped — that is the delivery. CI's versionCode is
+   `40000 + run number`, which is deliberately above the retired hand-built
+   sequence (…36950), so a CI build always installs over a hand-built one.
+
+   **Hand-building is for testing UNCOMMITTED work on a device** — nothing
+   else. If you do it:
    ```
    # bump versionCode in apps/mobile/android/app/build.gradle (gitignored)
    cd apps/mobile/android
@@ -86,15 +107,17 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
    ```
    (~5 min warm; a fresh container needs `npx expo prebuild --platform android
    --no-install` + `local.properties` first, and possibly the SDK provisioning
-   in "This environment" below.) Verify before sending, all three:
+   in "This environment" below.) Verify all three the same way:
    `aapt2 dump badging` shows the new `versionCode`; `apksigner verify
    --print-certs` shows **CN=Drip Fantasy Playtest**; the new `APP_VERSION`
-   string is in the bundled `assets/index.android.bundle` (unzip -p | grep).
+   string is in the bundled `assets/index.android.bundle` (unzip -p | grep —
+   note Hermes stores any string containing a non-ASCII character as UTF-16,
+   so an ASCII grep gives false negatives on em dashes and emoji).
    **THE TREE IS FROZEN WHILE GRADLE RUNS** — Metro bundles the working tree as
    it is, not the commit you launched from. Background the build if you like,
-   but commit nothing and edit nothing until it exits. Send with
-   `SendUserFile` (stage a copy in the scratchpad — don't send from
-   `build/outputs`, the next build overwrites it mid-download).
+   but commit nothing and edit nothing until it exits. Stage a copy in the
+   scratchpad before sending — don't send from `build/outputs`, the next build
+   overwrites it mid-download.
 
 ## This environment
 
