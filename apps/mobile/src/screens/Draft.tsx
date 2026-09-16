@@ -19,7 +19,7 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  createPracticeRoom,
+  createPracticeRoom, deleteMockDraft,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
@@ -72,11 +72,15 @@ function Face({ slug, pos, size = 26 }: { slug: string; pos: string; size?: numb
 
 type DraftTab = 'board' | 'players' | 'teams' | 'queue';
 
-export function Draft({ leagueId, onBack, onOpenLeague }: {
+export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   leagueId: string; onBack: () => void;
   /** Open another league's draft room — the practice room this one spawns
    *  (0281). Absent means the host cannot navigate, and the control hides. */
   onOpenLeague?: (leagueId: string, rosterId: number, name: string) => void;
+  /** This league is GONE (a deleted practice room). The host has to forget it,
+   *  not just navigate away — onBack leaves the open-league handle pointing at
+   *  a row that no longer exists. Falls back to onBack when absent. */
+  onDeleted?: () => void;
 }) {
   const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   const t = useTheme();
@@ -378,6 +382,22 @@ export function Draft({ leagueId, onBack, onOpenLeague }: {
       if (!started.ok) { warn(); setErr(friendlyError(started.error ?? 'The room opened but would not start.')); return; }
       commit();
       onOpenLeague(r.league_id, r.roster_id ?? 1, r.name ?? 'Practice');
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
+  // BIN THE ROOM (v0.395.2). The web has had this in the draft room's COMMISH
+  // row since mocks existed; the app never got it, so a practice room on a
+  // phone could be opened and never closed. Not run(): the league is gone
+  // afterwards, so refreshing it would 404 — leave instead, the way the web's
+  // deleteMock does.
+  const deleteMock = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(true); setErr(null);
+    try {
+      const r = await deleteMockDraft(leagueId);
+      if (r.ok) { commit(); (onDeleted ?? onBack)(); return; }
+      warn(); setErr(friendlyError(r.error ?? 'Could not delete the practice room.'));
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { busyRef.current = false; setBusy(false); }
   };
@@ -774,6 +794,7 @@ export function Draft({ leagueId, onBack, onOpenLeague }: {
                 : ghost('⏸ PAUSE', () => void run(() => commishPauseDraft(leagueId)))}
               {!auction && ghost('⏭ FORCE PICK', () => void run(() => commishForcePick(leagueId)))}
               {!auction && ghost('↩ UNDO', () => void run(() => commishUndoPick(leagueId)), t.opp)}
+              {st.is_mock && ghost('🗑 DELETE PRACTICE ROOM', () => void deleteMock(), t.opp)}
               {ghost(st.night ? `🌙 ${fmtNight(st.night)}` : '🌙 QUIET HRS', () => { setNightOpen((v) => !v); })}
               {ghost(ctrlOpen ? 'CONTROLS ▴' : 'CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
@@ -805,6 +826,7 @@ export function Draft({ leagueId, onBack, onOpenLeague }: {
           {isCommish && (
             <View style={{ marginTop: 10, gap: 8 }}>
               {st.mode !== 'auction' && ghost('↩ UNDO LAST PICK (reopens the draft)', () => void run(() => commishUndoPick(leagueId)))}
+              {st.is_mock && ghost('🗑 DELETE PRACTICE ROOM', () => void deleteMock(), t.opp)}
               {ghost(ctrlOpen ? 'CONTROLS ▴' : 'CONTROLS ▾', () => { setCtrlOpen((v) => !v); })}
             </View>
           )}

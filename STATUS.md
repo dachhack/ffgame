@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.395.2 — you can delete a practice room on your phone
+
+Founder, in a practice room on the app: "How do I delete the mock?"
+
+You couldn't. The web has had 🗑 DELETE MOCK in the draft room's COMMISH
+row since mocks existed, and a delete on the mock card in the leagues
+list. The app had neither — only the 🤖 MOCK badge. So a practice room
+opened on a phone could never be closed from one, which v0.395.0 turned
+from a curiosity into a real problem by putting the button that creates
+them in front of every member.
+
+The app's draft room now carries 🗑 DELETE PRACTICE ROOM in the same
+COMMISH row as the web, in both the live and the complete states.
+
+It also needed a way to say the league is GONE, not merely left: the
+app's back handler keeps its open-league handle unless the seat is null,
+so deleting through onBack would have returned home still pointing at a
+row that no longer exists. A new onDeleted clears the handle; it falls
+back to onBack when a host does not pass one.
+
 ### v0.395.1 — a practice room wears the league's roster
 
 Founder, on a room v0.395.0 had just made him: "Did the mock draft lock

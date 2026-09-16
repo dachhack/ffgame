@@ -402,7 +402,8 @@ export function App() {
               // and its only human, and it is native by construction.
               setOpen({ leagueId, rosterId, name, native: true, commish: true });
               setView('draft');
-            }} /></View>
+            }}
+            onDeleted={() => { setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'team' && open && open.rosterId != null ? (
