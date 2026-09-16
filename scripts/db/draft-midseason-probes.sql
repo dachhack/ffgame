@@ -51,11 +51,6 @@ begin
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform probe_as('c'); perform dm_ok(native_join(code, 'MD-C'), 'dm0a c joins');
   reset role;
-  -- A kickoff in the PAST for the league's live week. classic_kickoff_for takes
-  -- MIN over the week's slate, so this row wins whatever the baked slate says.
-  insert into nfl_slate (season, week, win, home, away, kickoff)
-    values ('2026', 1, 'sun_early', 'MDH', 'MDA', now() - interval '6 hours')
-    on conflict do nothing;
   -- MDH players have kicked off; ZZZ players have no game this week at all.
   for i in 1..40 loop
     insert into league_pool (league_id, slug, full_name, pos, team, rank)
@@ -70,12 +65,25 @@ begin
   perform probe_as('b');
   perform dm_ok(native_generate_schedule(lid, 2), 'dm0b the schedule is generated');
   perform set_config('probe.md_lid', lid::text, false);
+  -- Open the draft while the week is still ahead, so 0280's shift is a no-op
+  -- and the league stays on week 1.
+  perform dm_ok(start_draft(lid), 'dm3 the draft opens');
   perform dm_true((select min(week) from matchup where league_id = lid and status <> 'final') = 1,
     'dm1 the league is live on week 1');
+
+  -- ONLY NOW does that week kick off — the draft has run into it. This is the
+  -- shape 0279 exists for and the one 0280 cannot prevent: a Thursday-night
+  -- draft that is still going when the Thursday game starts. (Planting this
+  -- before generation would just move the league to a later week, and the lock
+  -- under test would never arm.) classic_kickoff_for takes MIN over the week's
+  -- slate, so this row wins whatever the baked slate says.
+  reset role;
+  insert into nfl_slate (season, week, win, home, away, kickoff)
+    values ('2026', 1, 'sun_early', 'MDH', 'MDA', now() - interval '6 hours')
+    on conflict (season, week, home) do update set kickoff = excluded.kickoff;
+  perform probe_as('b');
   perform dm_true(classic_slug_started(lid, 'md-1'),
     'dm2 and week 1 HAS kicked off for a pooled player — the condition 0179 locks on');
-  perform probe_as('b');
-  perform dm_ok(start_draft(lid), 'dm3 the draft opens');
 end $$;
 
 -- ── 1. a manager drafts a kicked-off player, mid-season ────────────────────
