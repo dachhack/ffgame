@@ -34,6 +34,16 @@ versionCode = 40000 + run number (monotonic, past the hand-built 36943).
 Each run deletes and recreates the release so the tag rides the built
 commit. Documented in apps/mobile/README.md.
 
+### v0.392.1 — a browser re-subscribes on every visit, not only from the card
+
+Founder added the `VAPID_PRIVATE_KEY` secret and re-ran the worker deploy;
+the run staged it and the restarted worker delivered a push on its first
+sweep. Left over from the key rotation: `webPushState` (which replaces a
+subscription made under the old key) ran only when the notifications card
+was opened, so a browser that never opened it kept a dead subscription.
+`initPwa` now calls it after the service worker registers whenever
+permission is already granted. Web only, no migration, no APK.
+
 ### v0.392.0 — why the alerts weren't coming through, and a way to see it
 
 Founder: "Can we check the browser and mobile alerts. They are not coming
