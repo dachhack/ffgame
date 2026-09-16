@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.393.3 — the week Sleeper rolled off still gets closed and reported
+
+Why week 1 never reported: ESPN's week 2 kicks off Thursday, so "Monday
+(last night)" was week 1's final — and Sleeper had already rolled the
+worker's regular-season context to week 2 by the time the report feature
+deployed. `tickContext` only ever looked at the current week; week 1's
+completed branch (finalize → stamp → report) belonged to a week nobody
+ticked any more. The 0277 request sweep lived inside that same branch, so
+an admin's forced request would not have been picked up either while week
+2's games were still ahead.
+
+- `closeWeek(tag, week, games, season, regular)` factors the completed
+  branch; `closePriorWeek(regWeek)` runs it for `regWeek − 1` on every tick
+  (once per five minutes, one cached scoreboard fetch) when that week's
+  games are all complete. Each step is idempotent, so a closed week costs
+  one query.
+- The request sweep moves to `tick()` itself, after the contexts — every
+  tick, whatever the week is doing.
+Worker only; no migration, no APK.
+
 ### v0.393.2 — "Let's make the weekly reports": the gate is visible, and an admin can force one
 
 Founder, the morning after week 2 closed. The worker had posted nothing and

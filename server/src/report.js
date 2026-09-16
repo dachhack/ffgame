@@ -23,11 +23,11 @@ const posted = new Set();             // `${league_id}:${week}` already reported
 const lastSummary = new Map();        // week → the last gate summary logged
 
 /** Post the week's reports for every league whose finals are all stamped.
- *  Returns how many were posted this pass. Admin requests (0277) are swept
- *  first, on every call — they are rare and the table is tiny. */
+ *  Returns how many were posted this pass. (Admin requests, 0277, are swept
+ *  by the tick itself — see index.js — so they run whatever the week is doing.) */
 export async function postWeekReports(week, season, opts = {}) {
   const now = opts.now ?? Date.now();
-  let n = await sweepRequests(season).catch((e) => { log('requests', e.message); return 0; });
+  let n = 0;
   if (!opts.force && now - (lastCheck.get(week) ?? 0) < REPORT_RECHECK_MS) return n;
   lastCheck.set(week, now);
 
