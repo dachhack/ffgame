@@ -2157,6 +2157,11 @@ export const myPushLog = () =>
  *  the worker's: that channel has no credentials on the server yet. */
 export function pushLogStatus(r: PushLogRow): { glyph: string; text: string; tone: 'ok' | 'bad' | 'wait' } {
   if (r.sent_at && !r.error) return { glyph: '✓', text: 'delivered', tone: 'ok' };
+  // v0.392.2: the worker names each device that refused ("phone refused: …",
+  // "browser refused: …") and how many delivered; a partial delivery is a
+  // half-mark, not a failure.
+  if (r.sent_at && r.error?.startsWith('delivered to ')) return { glyph: '◐', text: r.error, tone: 'wait' };
+  if (r.sent_at && /^(phone|browser) refused: /.test(r.error ?? '')) return { glyph: '✗', text: r.error ?? '', tone: 'bad' };
   if (r.sent_at) return { glyph: '✗', text: r.error === 'no devices' ? 'no device was registered' : `refused: ${r.error}`, tone: 'bad' };
   if (r.error === 'waiting-vapid') return { glyph: '⏳', text: 'waiting — the server has no browser push key yet', tone: 'wait' };
   if (r.error === 'waiting-fcm') return { glyph: '⏳', text: 'waiting — the server has no phone push key yet', tone: 'wait' };

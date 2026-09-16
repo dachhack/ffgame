@@ -545,16 +545,21 @@ async function flush() {
   let sent = 0;
   for (const p of pending) {
     const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false);
-    let err = devices.length ? null : 'no devices';
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
+    // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;
+    // keeping only the last error let a phone success hide a browser refusal
+    // (founder: "getting the alerts on my phone but not in my desktop chrome").
+    // The error column now names every device that refused, and how many
+    // delivered — my_push_log reads it back to the manager verbatim.
+    let ok = 0; const refused = [];
     for (const d of devices) {
       const web = d.platform === 'web';
       if (web ? !vapid : !token) { waiting = web ? WAITING.web : WAITING.fcm; continue; }
       attempted = true;
       const r = web ? await webPushSend(d.token, p) : await fcmSend(token, d.token, p);
-      if (r.ok) { sent += 1; continue; }
-      err = r.error;
+      if (r.ok) { ok += 1; sent += 1; continue; }
+      refused.push(`${web ? 'browser' : 'phone'} refused: ${r.error}`);
       if (r.dead) await db().from('push_token').delete().eq('token', d.token);
     }
     if (!attempted) {
@@ -562,6 +567,9 @@ async function flush() {
       await db().from('push_outbox').update({ error: waiting }).eq('id', p.id);
       continue;
     }
+    const err = !devices.length ? 'no devices'
+      : !refused.length ? null
+      : `${ok ? `delivered to ${ok} · ` : ''}${refused.join(' · ')}`;
     await db().from('push_outbox').update({ sent_at: new Date().toISOString(), error: err }).eq('id', p.id);
   }
   if (sent) log(`delivered ${sent} push${sent === 1 ? '' : 'es'}`);
