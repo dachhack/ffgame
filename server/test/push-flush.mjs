@@ -17,7 +17,7 @@ delete process.env.FCM_SERVICE_ACCOUNT;
 process.env.VAPID_PRIVATE_KEY = Buffer.alloc(32, 7).toString('base64url');
 const sent = [];
 // Web sends are stubbed at the fetch layer: every push service says 201.
-globalThis.fetch = async (url) => ({ ok: true, status: 201, text: async () => '', json: async () => ({}) });
+globalThis.fetch = async (url) => ({ ok: true, status: 201, text: async () => '', json: async () => ({ access_token: 'tok', expires_in: 3600 }) });
 const { __flushForTest: flush } = await import('../src/push.js');
 
 function makeFakeDb(tables) {
@@ -82,3 +82,34 @@ await flush();
 assert.equal(JSON.stringify(outbox), before, 'a sweep with nothing attemptable is a no-op');
 console.log('PASS  a fully parked queue costs one query per sweep');
 console.log('ALL PUSH-FLUSH TESTS PASSED');
+
+// ── v0.392.2: per-device outcomes ───────────────────────────────────────────
+// A row that reaches a phone and a browser records each device's result; a
+// phone success no longer hides a browser refusal.
+{
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  process.env.FCM_SERVICE_ACCOUNT = JSON.stringify({
+    client_email: 'x@y', project_id: 'p',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  });
+  const { __flushForTest: flush2 } = await import('../src/push.js?v2');
+  // FCM token exchange goes through fetch → our stub returns ok with no
+  // access_token, and fcmSend's fetch returns 201 → the phone "delivers".
+  // The browser device's keys are not a valid curve point → encrypt fails →
+  // refused.
+  const BOTH = 'u-both';
+  const rows = [{ id: 900, app_user_id: BOTH, kind: 'chat', title: 'both', body: 'b', data: {}, sent_at: null, error: null }];
+  const { client: c2 } = makeFakeDb({
+    push_outbox: rows,
+    push_token: [
+      { token: 'fcm-2', app_user_id: BOTH, platform: 'android', prefs: {} },
+      { token: sub, app_user_id: BOTH, platform: 'web', prefs: {} },
+    ],
+  });
+  __setClientForTest(c2);
+  await flush2();
+  assert.ok(rows[0].sent_at, 'the row resolved');
+  assert.ok(/^delivered to 1 · browser refused: /.test(rows[0].error ?? ''), `per-device outcome recorded, got: ${rows[0].error}`);
+  console.log('PASS  a phone success no longer hides a browser refusal');
+}

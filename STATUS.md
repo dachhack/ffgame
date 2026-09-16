@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.392.2 — the push log names each device
+
+Founder: "I'm getting the alerts on the web installed as app on my phone
+but not in my desktop chrome." One outbox row can go to a phone and a
+browser, and flush kept only the LAST device's error — so a phone success
+hid a browser refusal and the log read "delivered". The worker now records
+per-device outcomes in the error column: null when every device took it,
+"phone refused: …" / "browser refused: …" for each refusal, prefixed with
+"delivered to N ·" when some did. `pushLogStatus` reads it back: ✓
+delivered, ◐ partial (the text says which device refused and why), ✗
+refused. Worker + core; the app shows the new text on its next APK.
+push-flush test gains the two-device case.
+
 ### v0.392.1 — a browser re-subscribes on every visit, not only from the card
 
 Founder added the `VAPID_PRIVATE_KEY` secret and re-ran the worker deploy;
