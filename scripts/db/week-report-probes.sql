@@ -186,4 +186,11 @@ begin
   raise notice 'week-report probes done';
 end $$;
 
+-- HAND THE ADMIN BADGE BACK. Every suite shares one database, so an app_admin
+-- row left behind silently makes `b` an admin in every LATER suite — and
+-- is_admin() is an exemption in a lot of triggers, so the next author's probe
+-- passes for the wrong reason. It cost exactly that in draft-midseason-probes.
+-- metricless-audit-probes does the same. Must come after §4, which grants it.
+delete from app_admin where email = 'b@test.dev';
+
 select 'ALL WEEK-REPORT PROBES PASSED' as status;

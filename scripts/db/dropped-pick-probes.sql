@@ -105,7 +105,21 @@ begin
   perform dp_ok(drop_player(lid, seat_b, 'dp-sun'), 'dp2 b drops Sunday Man');
   perform dp_true(not exists (select 1 from sealed_pick where matchup_id = mid and app_user_id = b and roster_slot = 'S1'),
     'dp3 the open pick on him is gone');
-  perform dp_ok(drop_player(lid, seat_b, 'dp-thu'), 'dp4 b drops Thursday Man (already kicked off) — the drop itself goes through');
+  -- A MANAGER CANNOT DROP A PLAYER WHOSE GAME HAS STARTED — that is 0179's
+  -- classic kickoff lock, and it is the correct answer here.
+  begin
+    perform drop_player(lid, seat_b, 'dp-thu');
+    raise exception 'PROBE FAIL dp4a — a manager dropped a player who had already kicked off';
+  exception when check_violation then null;
+  end;
+  -- The paths that DO move such a player are the server's (waivers, the
+  -- guillotine, commish tools), which the trigger exempts. This is the actor
+  -- that matters for the 0278 question below.
+  reset role;
+  perform probe_as_server();   -- `reset role` alone is not the server: auth.uid() reads app.uid
+  delete from native_roster where league_id = lid and roster_id = seat_b and slug = 'dp-thu';
+  set local role authenticated;
+  perform probe_as('b');
   perform dp_true(exists (select 1 from sealed_pick where matchup_id = mid and app_user_id = b and roster_slot = 'S2' and player_slug = 'dp-thu'),
     'dp5 the pick on a player who has kicked off stays — that spot is locked');
   perform dp_ok(drop_player(lid, seat_b, 'dp-sun3'), 'dp6 b drops Third Sunday (sealed by the server)');
@@ -115,6 +129,7 @@ begin
     'dp8 c''s own pick was never touched');
   -- a trade away is an UPDATE of roster_id, not a delete
   reset role;
+  perform probe_as_server();
   update native_roster set roster_id = seat_c, acquired = 'trade' where league_id = lid and slug = 'dp-sun2';
   perform dp_true(not exists (select 1 from sealed_pick where matchup_id = mid and app_user_id = b and roster_slot = 'S3'),
     'dp9 a player traded away leaves the giver''s lineup');

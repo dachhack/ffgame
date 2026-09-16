@@ -179,3 +179,4 @@ $RUN -f scripts/db/vampire-rules-probes.sql | grep -E "PROBE FAIL|ALL VAMPIRE-RU
 $RUN -f scripts/db/invite-landing-probes.sql | grep -E "PROBE FAIL|ALL INVITE-LANDING PROBES" || { echo "INVITE-LANDING PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/week-report-probes.sql | grep -E "PROBE FAIL|ALL WEEK-REPORT PROBES" || { echo "WEEK-REPORT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/dropped-pick-probes.sql | grep -E "PROBE FAIL|ALL DROPPED-PICK PROBES" || { echo "DROPPED-PICK PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/draft-midseason-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-MIDSEASON PROBES" || { echo "DRAFT-MIDSEASON PROBES FAILED"; exit 1; }

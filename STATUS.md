@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.5 — a draft can run after the season has started
+
+Founder, hours before a live draft: "running a draft in kickoff league
+tonight… with the season already started that might be a hiccup."
+
+It was the whole evening. 0179 stops a classic player moving on or off a
+roster once his game has kicked off, and a draft pick is exactly such a
+move. In a classic league whose schedule is generated and whose current
+week has started, every human pick was refused — while the worker's
+autopick and an admin's picks went through, because both are exemptions
+in that trigger. The room would have appeared to draft itself and
+rejected every manager in it, with commissioner undo, edit and reset
+refusing too. Reproduced in scratch before the fix, not reasoned about.
+
+0279 adds one exemption: a draft that is not `complete`. Not "before week
+one" — a draft at any point in the season. The lock re-arms the moment
+the last pick lands, and a probe suite that builds a league shaped like a
+real one (schedule generated, week 1 kicked off) holds both halves.
+
+Three smaller draft-night repairs alongside it:
+
+* the worker logged nothing when `draft_tick`, `process_waivers` or the
+  autostart sweep failed — supabase-js returns `{error}` rather than
+  throwing, so a dead clock looked like a quiet one;
+* the pick button's busy latch was React state, so a fast second tap at a
+  snake turnaround could fire two picks; it is a ref now;
+* a failed `nativeTeamState` at mount left every DRAFT button disabled
+  with no retry — it now retries every 4s until the team loads — and the
+  client's own tick is floored at 3s so a seat that cannot find a legal
+  player stops hammering the RPC twice a second.
+
 ### v0.394.4 — a cleared spot is cleared on the server too
 
 Founder, on v0.394.3's "not fixed" note: "let's do that clearSlot fix
