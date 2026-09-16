@@ -23,7 +23,7 @@ import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { fixTeam } from '../../scripts/espn/espnAdapter.mjs';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
-import { postWeekReports } from './report.js';
+import { postWeekReports, sweepRequests } from './report.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
@@ -306,6 +306,48 @@ async function manualSyncTick() {
 /** One context's pass: fetch its scoreboard, then lock → poll → resolve →
  *  finalize at its BOARD week. Returns the games it saw (the caller pools them
  *  for the injury cadence) — or null when the context has nothing live. */
+/** CLOSE A WEEK whose games are all complete: flip the last 'live' matchups
+ *  to 'final', stamp their finals, and (regular season) post the weekly
+ *  report. Called from the current context's completed branch, and — since
+ *  v0.393.3 — for the PRIOR week on every tick: Sleeper rolls its week on
+ *  Tuesday morning, and a Monday-night final that lands after the roll used
+ *  to belong to a week nobody ticked any more. Week 1's report never posted
+ *  for exactly that reason. */
+async function closeWeek(tag, week, games, season, regular) {
+  const slate = slateFromGames(games);
+  setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
+  const f = await finalizeMatchups(week, true);
+  if (f) log(`[${tag}] finalized`, f, 'matchups');
+  try {
+    const stamped = await stampFinals(week, playerIndex);
+    if (stamped) log(`[${tag}] stamped finals on`, stamped, 'matchups');
+  } catch (e) { log(`[${tag}] stamp finals`, e.message); }
+  // THE WEEKLY REPORT (v0.391.0): once a league's finals are all stamped,
+  // its week gets written up and posted into its chat. Idempotent per
+  // league-week; regular season only (a preseason "week" has no matchups).
+  if (regular) {
+    try {
+      const posted = await postWeekReports(week, season);
+      if (posted) log(`[${tag}] posted`, posted, 'weekly reports');
+    } catch (e) { log(`[${tag}] weekly reports`, e.message); }
+  }
+}
+
+/** THE PRIOR WEEK, every tick (v0.393.3), throttled to once in five minutes:
+ *  fetch its scoreboard and, if every game is complete, close it. Nothing to
+ *  do while its games are still on (the current context has them) or once
+ *  every final is stamped and reported (each step is idempotent and cheap). */
+const PRIOR_WEEK_MS = 5 * 60_000;
+let lastPriorClose = 0;
+async function closePriorWeek(regWeek, season) {
+  if (regWeek <= 1 || Date.now() - lastPriorClose < PRIOR_WEEK_MS) return;
+  lastPriorClose = Date.now();
+  const prior = regWeek - 1;
+  const games = await getGames(season, prior, REGULAR_SEASON);
+  if (!games.length || !games.every((g) => g.completed)) return;
+  await closeWeek(`wk ${prior}`, prior, games, season, true);
+}
+
 async function tickContext(ctx, season) {
   const week = ctx.espnWeek + ctx.offset;
   const games = await getGames(season, ctx.espnWeek, ctx.seasonType);
@@ -343,25 +385,7 @@ async function tickContext(ctx, season) {
     // playoffs, the guillotine and coin all stall. The runtime slate is set
     // first so the final resolve derives the real windows even on a cold start
     // (a worker restart between the last live tick and this one).
-    if (games.length) {
-      const slate = slateFromGames(games);
-      setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
-      const f = await finalizeMatchups(week, true);
-      if (f) log(`[${ctx.tag}] finalized`, f, 'matchups');
-      try {
-        const stamped = await stampFinals(week, playerIndex);
-        if (stamped) log(`[${ctx.tag}] stamped finals on`, stamped, 'matchups');
-      } catch (e) { log(`[${ctx.tag}] stamp finals`, e.message); }
-      // THE WEEKLY REPORT (v0.391.0): once a league's finals are all stamped,
-      // its week gets written up and posted into its chat. Idempotent per
-      // league-week; regular season only (a preseason "week" has no matchups).
-      if (ctx.seasonType === REGULAR_SEASON) {
-        try {
-          const posted = await postWeekReports(week, season);
-          if (posted) log(`[${ctx.tag}] posted`, posted, 'weekly reports');
-        } catch (e) { log(`[${ctx.tag}] weekly reports`, e.message); }
-      }
-    }
+    if (games.length) await closeWeek(ctx.tag, week, games, season, ctx.seasonType === REGULAR_SEASON);
     return games;
   }
 
@@ -528,6 +552,16 @@ async function tick() {
   for (const c of contexts) {
     try { const games = await tickContext(c, season); if (games) seen.push(...games); }
     catch (e) { log(`[${c.tag}] tick error`, e.message); }
+  }
+
+  // ADMIN REPORT REQUESTS (0277) are swept every tick, whatever the week is
+  // doing, and the week Sleeper just rolled off gets closed (v0.393.3).
+  const reg = contexts.find((c) => c.seasonType === REGULAR_SEASON);
+  if (reg) {
+    try { const forced = await sweepRequests(season); if (forced) log('forced', forced, 'weekly reports'); }
+    catch (e) { log('report requests error', e.message); }
+    try { await closePriorWeek(reg.espnWeek + reg.offset, season); }
+    catch (e) { log('prior week close error', e.message); }
   }
 
   // Week-agnostic work, once per tick regardless of how many contexts ran.

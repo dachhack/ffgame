@@ -9,7 +9,7 @@
 // Run from server/:  npx tsx test/week-report.mjs
 import assert from 'node:assert';
 import { __setClientForTest } from '../src/supabase.js';
-import { postWeekReports, __resetForTest } from '../src/report.js';
+import { postWeekReports, sweepRequests, __resetForTest } from '../src/report.js';
 
 const LID = 'aaaaaaaa-0000-0000-0000-000000000001';
 const OLD = 'bbbbbbbb-0000-0000-0000-000000000002';
@@ -151,7 +151,7 @@ tables.report_request.push(
   { id: 3, league_id: LID, week: 9, done_at: null, error: null },       // no matchups
 );
 const msgsBefore = tables.league_message.length;
-assert.equal(await postWeekReports(WEEK, '2026', { force: true }), 2, 'two requests posted, the empty week closed with an error');
+assert.equal(await sweepRequests('2026'), 2, 'two requests posted, the empty week closed with an error');
 assert.ok(tables.report_request.every((r) => r.done_at), 'every request closed');
 assert.equal(tables.report_request[2].error, 'no matchups for that week');
 assert.equal(tables.league_message.length, msgsBefore + 2, 'two new lines');
@@ -160,7 +160,7 @@ assert.ok(late3?.body.includes('Roster 1 led the week with 55.0'), late3?.body);
 console.log('PASS  an admin request forces a report from whatever finals exist');
 // Asking again replaces the line rather than adding a second.
 tables.report_request.push({ id: 4, league_id: LATE, week: 3, done_at: null, error: null });
-await postWeekReports(WEEK, '2026', { force: true });
+await sweepRequests('2026');
 assert.equal(tables.league_message.filter((m) => m.league_id === LATE && m.report_week === 3).length, 1, 'one line for the week after a re-request');
 console.log('PASS  a re-request replaces the chat line instead of doubling it');
 console.log('ALL WEEK-REPORT TESTS PASSED (0277)');
