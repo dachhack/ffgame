@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.0 — a dropped player leaves the lineup
+
+Founder: "if someone assigns a player to a spot but then drops him from
+their external league or native league, we need to remove them from the
+spot as long as it is unlocked." 0072's `enforce_legal_roster` only ever
+checked the roster when a pick was WRITTEN; a pick made and then orphaned
+by a drop stayed in the spot and scored zero.
+
+Migration 0278, all in the database so every drop path is covered:
+- `_pick_still_open(pick, week, league)` mirrors the 0178 lock rule a
+  manager's own delete is held to — the row's `locked` flag, a windowed
+  pick's kickoff less the hour lead, a classic pick's own player kickoff,
+  a week hold — so the cleanup never trips the delete trigger.
+- `_clear_dropped_picks(league, roster, slug)` deletes the seat's
+  still-open picks on that player (rows written by the seat's manager or
+  its agent, on matchups where the seat is a side), each under its own
+  guard so a drop can never fail because of its lineup.
+- **native**: trigger on `native_roster` after DELETE (drop_player,
+  add_free_agent with a drop, waivers, the guillotine, commish moves) and
+  after UPDATE of roster_id (a trade away).
+- **external**: trigger on `sleeper_lineup` after INSERT or UPDATE of
+  starters_json (the worker's sync) — any open pick on a player the synced
+  roster no longer carries goes. External leagues ONLY: a native league's
+  row is a materialized copy of native_roster (0252) and must not speak for
+  it (the sim-run probe's deliberately stale pool caught exactly that). An
+  EMPTY synced roster clears nothing (a failed fetch is not twelve drops).
+dropped-pick probes (16) in the runner. No client change; a board that is
+open when the drop lands shows the empty spot on its next refresh.
+
 ### v0.393.5 — the rehearsal strip is off unless asked for
 
 Founder, a week into the season, on a real league's board: "REHEARSAL ·
