@@ -18,6 +18,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
+import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, type PushLogRow } from '@drip/core/data/liveApi';
@@ -174,6 +175,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
 
         <VoicePicker />
 
+        {isAdmin && <RehearsalToggle />}
+
         <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
           <Mono size={8.5} weight="700" track={0.16} tone="faint">MORE</Mono>
           {/* No Commissioner entry here anymore: commissioner tools are the
@@ -225,6 +228,25 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
+
+// 🧪 REHEARSAL TOOLS (v0.393.5) — admin-only, per device, off by default.
+// Founder: "let's get rid of all these rehearsals or make them just for me."
+// The sim strip on a LIVE TEST league's board renders only while this is on.
+function RehearsalToggle() {
+  const t = useTheme();
+  const [on, setOn] = useState(rehearsalToolsOn());
+  const flip = () => { tap(); setRehearsalTools(!on); setOn(!on); };
+  return (
+    <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
+      <Mono size={8.5} weight="700" track={0.16} tone="faint">🧪 REHEARSAL TOOLS</Mono>
+      <Pressable onPress={flip}
+        style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.warn : t.bd, backgroundColor: on ? alpha(t.warn, 12) : t.surface }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.warn : t.dim }}>{on ? '✓ SIM STRIP ON BOARDS' : 'SIM STRIP HIDDEN'}</Text>
+      </Pressable>
+      <Mono size={8.5} tone="faint">This phone only. Shows the ▶ SIM / ⏹ RESET strip on LIVE TEST league boards.</Mono>
+    </View>
+  );
+}
 
 // ── Push notification prefs (0150) ──────────────────────────────────────────
 // Per-device mutes for the push kinds; the toggles bite the token this device

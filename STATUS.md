@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.393.5 — the rehearsal strip is off unless asked for
+
+Founder, a week into the season, on a real league's board: "REHEARSAL ·
+v0.393.4 week 1 · DONE … RESET WEEK 1 — let's get rid of all these
+rehearsals or make them just for me." The strip was already the server's
+to grant (super-admins only) and only on 🧪 LIVE TEST leagues — but every
+league the founder ever rehearsed in stays flagged, and the founder IS the
+admin, so it sat on real boards with a red reset button.
+
+`packages/core/src/data/rehearsalTools.ts`: a per-device switch, off by
+default (`rehearsal:tools` in platform storage, with change listeners).
+Both SimStrips (web `src/screens/SimStrip.tsx`, app `ui/SimStrip.tsx`)
+render nothing — and probe nothing — while it is off. The gear shows an
+admin-only 🧪 REHEARSAL TOOLS row on both hosts: "SIM STRIP HIDDEN" /
+"✓ SIM STRIP ON BOARDS". No migration. APK.
+
 ### v0.393.4 — week 1 reported; a tie is a tie; an undrafted league says nothing
 
 v0.393.3's first tick closed week 1: `[report] wk 1 gate — … ready`, seven
