@@ -22,7 +22,7 @@ import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot, pow
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
-  myRoster, myMatchup, myPool, myPicks, savePicks, myMembership, setTeamController,
+  myRoster, myMatchup, myPool, myPicks, savePicksBestEffort, myMembership, setTeamController,
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
   myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState,
   ensureWallet,
@@ -36,6 +36,7 @@ import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver } from '@drip/core/engine/sim';
+import { pickFailureNote } from '@drip/core/data/pickSave';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import type { GameWindow, Player, Pos, WindowId } from '@drip/core/types';
@@ -601,12 +602,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         .filter((r) => r.game_window && r.player_slug && !winLocked(r.game_window));
       if (!rows.length) return;
       setSaving(true);
-      savePicks(matchup.id, userId, rows)
-        // The activation event, and the North Star's input (a week with a
-        // lineup in). Fired on the SAVE rather than on each tap, so it counts
-        // lineups that reached the server — the autosave debounce above is
-        // what keeps one settled edit burst to one event.
-        .then(() => { setSaved(true); setErr(null); commit(); track(Ev.lineupSet, { week: matchup.week, slots: rows.length }); })
+      // BEST EFFORT (v0.394.2): the whole lineup rides in this batch, and an
+      // upsert is one statement — so a single refused row used to roll back
+      // every other row with it, on every retry, while the slot counter kept
+      // reading full. Now the legal picks land and the refusals come back with
+      // their window and slot.
+      savePicksBestEffort(matchup.id, userId, rows)
+        .then((r) => {
+          const note = pickFailureNote(r.failed);
+          setErr(note);
+          // The activation event, and the North Star's input (a week with a
+          // lineup in). Fired on the SAVE rather than on each tap, so it counts
+          // lineups that reached the server — the autosave debounce above is
+          // what keeps one settled edit burst to one event. Only when picks
+          // actually landed: a fully refused batch is not a lineup set.
+          if (r.saved > 0) { setSaved(true); commit(); track(Ev.lineupSet, { week: matchup.week, slots: r.saved }); }
+        })
         // A swallowed failure is the worst outcome here: the board keeps showing
         // the lineup you built while the server holds an older one, and you find
         // out on reload. Say so on the board.

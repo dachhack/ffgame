@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.2 — one bad pick no longer blocks the whole lineup
+
+Founder, over a board reading SLOTS SET 8/8: "what's up with the not saved
+alert?" The banner read "⚠ NOT SAVED — Combo Drip is one per unlock — you
+own 1, buy another to field more", and it was telling the truth: nothing
+in that batch had reached the server.
+
+A Postgres upsert is ONE statement, so any row a trigger refuses rolls
+back every other row with it. The live boards autosave the WHOLE lineup
+1.5s after every edit — so one over-cap Combo Drip blocked every other
+pick in the lineup, on every retry, forever, while the slot counter (local
+state) kept reading full. The banner named the RULE and never the SLOT.
+
+THE THIRD TIME this shape has bitten, and the code's own comments record
+the other two: a locked window once painted a permanent NOT SAVED banner
+over a fully-saved board, and the slot-cap trigger once made an 11-slot
+practice board "only keep 8". Both were patched with a targeted
+client-side filter — whack-a-mole, since the next rule the client does not
+mirror does it again. So this fixes the SHAPE:
+
+- `liveApi.savePicksBestEffort` — try the batch (one round trip, the
+  common path); when it is refused, re-send the rows ONE AT A TIME, in
+  order, so a cap keeps the picks made FIRST. Returns `{saved, failed}`
+  and never throws for a refused row: a refusal is an answer, not an
+  outage. Both live autosaves (web Matchup, app LivePicks) use it.
+- `savePicks` is UNCHANGED and still atomic — the classic boards need it:
+  a move is "player into the target spot" + "player out of the spot he
+  left", and landing one without the other stands a man in two places.
+  Those callers revert their optimistic board when it throws.
+- `core data/pickSave.ts` — `pickFailureNote` turns refusals into
+  "NOT SAVED — SUN 1PM · S2: <the server's own words>", the slot first
+  because that is the actionable half. Static window labels so the line
+  points at something on screen. `check:picksave` (14 pins) in parity.
+- The app only fires `lineupSet` when picks actually landed; a fully
+  refused batch is not a lineup set.
+
+No migration, no schema change. APK.
+
 ### v0.394.1 — Gridiron Gang's rosters actually sync
 
 Founder, the morning after waivers ran in both leagues: "when do rosters
