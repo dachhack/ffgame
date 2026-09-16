@@ -14,6 +14,7 @@ import { postWeekReports, sweepRequests, __resetForTest } from '../src/report.js
 const LID = 'aaaaaaaa-0000-0000-0000-000000000001';
 const OLD = 'bbbbbbbb-0000-0000-0000-000000000002';
 const LATE = 'cccccccc-0000-0000-0000-000000000003';
+const ZERO = 'dddddddd-0000-0000-0000-000000000004';   // drafted nothing: every final 0
 
 function makeFakeDb(tables) {
   const writes = { league_report: [], league_message: [] };
@@ -80,6 +81,7 @@ const tables = {
     { id: LID, name: 'Chat League', season: '2026', settings_json: { format: 'standard' } },
     { id: OLD, name: 'Last Year', season: '2025', settings_json: {} },
     { id: LATE, name: 'Still Playing', season: '2026', settings_json: {} },
+    { id: ZERO, name: 'Undrafted', season: '2026', settings_json: {} },
   ],
   league_membership: [
     { league_id: LID, sleeper_roster_id: 1, team_name: 'Bulls' }, { league_id: LID, sleeper_roster_id: 2, team_name: 'Bears' },
@@ -93,6 +95,7 @@ const tables = {
     { id: 'o1', league_id: OLD, week: 2, home_roster_id: 1, away_roster_id: 2, home_final: 50, away_final: 60, status: 'final' },
     { id: 'l1', league_id: LATE, week: 2, home_roster_id: 1, away_roster_id: 2, home_final: 50, away_final: 60, status: 'final' },
     { id: 'l2', league_id: LATE, week: 2, home_roster_id: 3, away_roster_id: 4, home_final: null, away_final: null, status: 'final' },
+    { id: 'z1', league_id: ZERO, week: 2, home_roster_id: 1, away_roster_id: 2, home_final: 0, away_final: 0, status: 'final' },
   ],
   matchup_state: [
     { matchup_id: 'm3', game_window: 'SUN 1PM', slot_scores: [{ side: 'home', slot: 'QB', slug: 'josh-allen', score: 33.4, metric: 'BIG' }, { side: 'away', slot: 'RB', slug: 'bijan-robinson', score: 21 }] },
@@ -105,7 +108,8 @@ __setClientForTest(client);
 __resetForTest();
 
 const n = await postWeekReports(WEEK, '2026');
-assert.equal(n, 1, 'exactly one league reported: the stamped 2026 one');
+assert.equal(n, 1, 'exactly one league reported: the stamped 2026 one (the all-zero league stays quiet)');
+assert.ok(!writes.league_message.some((m) => m.league_id === ZERO), 'an undrafted league posts nothing');
 assert.equal(writes.league_report.length, 1);
 const rep = writes.league_report[0];
 assert.equal(rep.league_id, LID); assert.equal(rep.week, WEEK);

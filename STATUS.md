@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.393.4 — week 1 reported; a tie is a tie; an undrafted league says nothing
+
+v0.393.3's first tick closed week 1: `[report] wk 1 gate — … ready`, seven
+reports posted, 23 pushes delivered. Two things the first real run showed:
+- "Team 3 edged Team 6 by 0.0" — a tie. `headlineOf` now reads "Team 3 and
+  Team 6 tied at 88.0".
+- "dachhack led the week with 0.0" in two leagues that haven't drafted
+  (every final stamped 0.0). `reportHasScores` gates the automatic post: an
+  all-zero week is remembered as done and nothing is said; an admin
+  request still forces it, with the headline "closed with no games
+  scored". The two zero lines already posted are the commissioner's to
+  delete (✕ on the web, long-press in the app).
+- Founder, mobile web: "the weekly report is behind the chat." The chat
+  panel is a ModalBackdrop at layer 70 and `Sheet` defaults to 60 (below
+  the modal layer on purpose). `Sheet` gains a `zIndex` prop; the report
+  opens at 80.
+
 ### v0.393.3 — the week Sleeper rolled off still gets closed and reported
 
 Why week 1 never reported: ESPN's week 2 kicks off Thursday, so "Monday
