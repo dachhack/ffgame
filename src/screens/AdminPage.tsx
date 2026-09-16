@@ -13,7 +13,7 @@ import {
   adminUserState, type ViewAsState,
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
-  convertLeagueToNative, type ConvertSummary, commishRepairPoolRow,
+  convertLeagueToNative, type ConvertSummary, commishRepairPoolRow, nativeReschedule,
   playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   keeperState, rolloverLeague, type KeeperState,
@@ -1230,6 +1230,28 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     } catch (e) { setBusy(errMsg(e, 'pool check failed')); }
   };
 
+  // RESET THE CALENDAR (0280): a league created mid-season was handed weeks
+  // starting at 1 — games that finished before it existed. Nothing ever
+  // finalizes them, so its live week never moves and the classic kickoff rule
+  // stays armed against everybody. Starting a draft now heals this on its own;
+  // this is the door for a league that already drafted into it.
+  const reschedule = async () => {
+    if (busy === 'reschedule') return;
+    setBusy('reschedule');
+    try {
+      const r = await nativeReschedule(l.league_id);
+      if (!r.ok) { setBusy(`⚠ ${r.error ?? 'could not reschedule'}`); return; }
+      if (!r.shifted) {
+        setBusy(r.why === 'season underway'
+          ? '✓ nothing to do — this season has already played a week'
+          : '✓ nothing to do — the schedule already starts on a week that has not kicked off');
+        return;
+      }
+      setBusy(`✓ moved ${r.shifted} week${r.shifted === 1 ? '' : 's'} — the season now starts at week ${r.first_week}`
+        + ((r.dropped_weeks ?? 0) > 0 ? ` · ${r.dropped_weeks} fixture${r.dropped_weeks === 1 ? '' : 's'} past week ${r.cap} dropped` : ''));
+    } catch (e) { setBusy(errMsg(e, 'reschedule failed')); }
+  };
+
   const regen = async (which: 'invite' | 'commish') => {
     if (!confirm(`Regenerate the ${which} code? The old one stops working.`)) return;
     const r = await adminRegenCode(l.league_id, which);
@@ -1554,6 +1576,17 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {/* THE POOL DOCTOR (0265): repair retired name-twin ghosts in the
               player pool — the row keeps its slug, the person behind it is
               rewritten to the live player. */}
+          {/* THE CALENDAR (0280): only shows for a native league, and says no
+              when there is nothing to move. */}
+          {l.provider === 'native' && (
+          <div>
+            <div style={subhead}>SCHEDULE</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={reschedule} disabled={busy === 'reschedule'} className="mono" style={btn(false)} title="move a not-yet-played schedule onto weeks that have not kicked off — a league made mid-season starts at week 1 by default, which it can never play">{busy === 'reschedule' ? 'moving…' : '📅 start the season on the next open week'}</button>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>keeps the same fixtures, renumbers them forward; refuses once a week has been played</span>
+            </div>
+          </div>
+          )}
           {l.provider === 'native' && (
           <div>
             <div style={subhead}>PLAYER IDENTITIES</div>

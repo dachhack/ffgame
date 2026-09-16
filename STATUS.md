@@ -18,6 +18,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.6 — the schedule starts on a week you can play
+
+The other half of v0.394.5. 0279 got the draft through; this is what
+happened the morning after.
+
+`native_generate_schedule` always numbered weeks 1..N against that NFL
+week's real kickoff, and the creation flow runs it the moment a league is
+made — so a league created in week 2 got a week 1 whose games had
+finished days earlier. Nothing ever clears it: the worker's
+`finalizeMatchups` only moves live → final, and `lockDueMatchups` is
+scoped to the worker's current NFL week, so a stale `scheduled` week is
+never flipped live in the first place. Measured, not reasoned about: 28
+matchups, all scheduled, week 1's lock_at a week in the past,
+`league_live_week` pinned at 1.
+
+Everything keys off that number, so the league seizes — 0179's kickoff
+lock armed against every player with a game in the dead week (no adds,
+drops, waivers or trades, ever), 0178 refusing lineups for the week
+that's showing, no scores, no report, standings frozen at 0-0.
+
+0280 does two things. Generation starts at the first week of the season
+that hasn't kicked off; a league made before week 1 is byte-identical to
+before, and a probe asserts that by fingerprinting the pairings and
+sides. And a league already carrying dead weeks heals itself at the two
+doors onto `_start_draft_now` — there is no regenerate button, so this
+could not be left to somebody noticing. It shifts rather than
+regenerates, so pairings survive, re-points each week's lock_at, stops at
+the playoffs, and refuses once anything has been played. `native_reschedule`
+and a COMMISH button cover a league that already drafted into the state.
+
 ### v0.394.5 — a draft can run after the season has started
 
 Founder, hours before a live draft: "running a draft in kickoff league

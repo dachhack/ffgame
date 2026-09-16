@@ -2622,7 +2622,17 @@ export const commishRepairPoolRow = (leagueId: string, slug: string,
 export const leaguePoolIds = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; ids?: Record<string, string> }>('league_pool_ids', { p_league_id: leagueId });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
-  rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number }>('native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
+  rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number; first_week?: number; last_week?: number }>(
+    'native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });
+
+// 0280: shift a not-yet-played schedule onto weeks the league can still play.
+// A league made mid-season was handed weeks starting at 1 — games already over,
+// which nothing ever finalizes, so its live week never moved and every roster
+// move stayed locked behind the kickoff rule. Starting a draft heals it now;
+// this is the door for a league that already drafted into that state.
+export const nativeReschedule = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; shifted?: number; why?: string; first_week?: number; dropped_weeks?: number; cap?: number }>(
+    'native_reschedule', { p_league_id: leagueId });
 
 // ── GO NATIVE (0263): convert an imported league in place ───────────────────
 export interface ConvertSummary {
