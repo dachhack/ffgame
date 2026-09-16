@@ -18,6 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.393.1 — GET THE ANDROID APP on the leagues page
+
+Founder: "add a 'get the android app' button on the leagues page." A
+solid chip in the leagues page's control row, right-aligned ahead of
+🔎 FIND A LEAGUE and ＋ ADD A LEAGUE: the apk-latest download, the same
+link ⚙ and #/changelog carry. Web only.
+
 ### v0.393.0 — the changelog is real, the app knows when it's behind
 
 Founder, right after the APK got a link: "can you add the link to the site
