@@ -3,7 +3,7 @@ import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, adminWeekReportState, adminRequestWeekReport, type WeekReportState, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -1579,6 +1579,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         <div style={{ marginTop: 12 }}>
           <div style={subhead}>ADMIN MODES</div>
           <WeekLockControl leagueId={l.league_id} />
+          <WeekReportControl leagueId={l.league_id} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
             <TestLiveToggle on={!!l.test_live_at} leagueId={l.league_id} reload={reload} />
             <CardThemeToggle leagueId={l.league_id} />
@@ -2455,6 +2456,65 @@ function WeekLockControl({ leagueId }: { leagueId: string }) {
  *  falls with the stamp, the vampire's steal window arms off a favored win.
  *  Only rendered while 🧪 LIVE TEST is on — the RPC refuses otherwise, and a
  *  control that mostly errors is worse than one that appears when usable. */
+// ── THE WEEKLY REPORT'S GATE (0277, v0.393.2) ───────────────────────────────
+// Founder, the morning after week 2 closed: "Let's make the weekly reports."
+// The worker posts on its own once every matchup of the week is final AND
+// stamped; this shows those counts for a week (latest by default), whether the
+// report and its chat line exist, and lets an admin force one — the worker
+// sweeps the request within a minute and the row here flips to done.
+function WeekReportControl({ leagueId }: { leagueId: string }) {
+  const [week, setWeek] = useState('');
+  const [st, setSt] = useState<WeekReportState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async (w?: number | null) => {
+    const r = await adminWeekReportState(leagueId, w ?? null).catch(() => null);
+    if (r?.ok) { setSt(r); if (!week && r.week != null) setWeek(String(r.week)); }
+  };
+  useEffect(() => { void load(null); }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While a request is open, poll so the row flips to done in front of you.
+  useEffect(() => {
+    if (!st?.request || st.request.done_at) return;
+    const id = setInterval(() => void load(Number(week) || null), 5000);
+    return () => clearInterval(id);
+  }, [st?.request?.requested_at, st?.request?.done_at, week]); // eslint-disable-line react-hooks/exhaustive-deps
+  const go = async () => {
+    const w = Number(week);
+    if (busy || !w) return;
+    setBusy(true); setNote(null);
+    const r = await adminRequestWeekReport(leagueId, w).catch(() => null);
+    setBusy(false);
+    if (!r?.ok) { setNote(`⚠ ${r?.error ?? 'failed'}`); return; }
+    setNote(r.note ?? 'queued — the worker posts it within a minute');
+    void load(w);
+  };
+  const seatInput: React.CSSProperties = { width: 44, fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 4 };
+  const gate = st && st.week != null
+    ? `wk ${st.week}: ${st.final ?? 0}/${st.matchups} final · ${st.stamped ?? 0}/${st.matchups} stamped · report ${st.report ? '✓' : '—'} · chat line ${st.message ? '✓' : '—'}${st.season ? ` · season ${st.season}` : ''}`
+    : st ? 'no matchups yet' : 'loading…';
+  const req = st?.request
+    ? st.request.done_at
+      ? (st.request.error ? `⚠ last request: ${st.request.error}` : `✓ last request done ${new Date(st.request.done_at).toLocaleTimeString()}`)
+      : `⏳ request queued ${new Date(st.request.requested_at).toLocaleTimeString()}`
+    : null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={go} disabled={busy || !Number(week)} className="mono"
+          title="Build and post this week's report into the league chat now, from whatever finals are stamped — replaces an earlier line for the same week."
+          style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          {busy ? '…' : '📋 post weekly report'}
+        </button>
+        <label className="mono" style={{ fontSize: 10, color: 'var(--dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          week <input value={week} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setWeek(v); if (v) void load(Number(v)); }} placeholder="—" style={seatInput} />
+        </label>
+        {note && <span className="mono" style={{ fontSize: 10.5, color: note.startsWith('⚠') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
+      </div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 4 }}>{gate}{req ? ` · ${req}` : ''}</div>
+    </div>
+  );
+}
+
 function StampWeekControl({ leagueId }: { leagueId: string }) {
   const [busy, setBusy] = useState(false);
   const [favor, setFavor] = useState('');

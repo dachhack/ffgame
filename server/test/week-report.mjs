@@ -25,6 +25,9 @@ function makeFakeDb(tables) {
       lte: (c, v) => builder(name, rows.filter((r) => r[c] <= v)),
       in: (c, vs) => { const s = new Set(vs); return builder(name, rows.filter((r) => s.has(r[c]))); },
       like: (c, pat) => builder(name, rows.filter((r) => like(r[c], pat))),
+      is: (c, v) => builder(name, rows.filter((r) => (v === null ? r[c] == null : r[c] === v))),
+      order: () => api,
+      limit: (k) => builder(name, rows.slice(0, k)),
       then: (res, rej) => Promise.resolve({ data: rows, error: null }).then(res, rej),
     };
     return api;
@@ -32,16 +35,40 @@ function makeFakeDb(tables) {
   const client = {
     from: (name) => ({
       ...builder(name, tables[name] ?? []),
-      upsert: (row, opts) => ({
-        select: () => {
-          const key = String(opts?.onConflict ?? '').split(',');
-          const dup = (tables[name] ?? []).some((r) => key.every((k) => r[k] === row[k]));
-          if (dup) return Promise.resolve({ data: [], error: null });
-          (tables[name] ??= []).push(row); writes[name].push(row);
+      upsert: (row, opts) => {
+        const key = String(opts?.onConflict ?? '').split(',');
+        const hit = (tables[name] ?? []).find((r) => key.every((k) => r[k] === row[k]));
+        const run = () => {
+          if (hit && opts?.ignoreDuplicates) return Promise.resolve({ data: [], error: null });
+          if (hit) { Object.assign(hit, row); return Promise.resolve({ data: [hit], error: null }); }
+          (tables[name] ??= []).push(row); writes[name]?.push(row);
           return Promise.resolve({ data: [row], error: null });
-        },
-      }),
-      insert: (row) => { (tables[name] ??= []).push(row); writes[name].push(row); return Promise.resolve({ data: null, error: null }); },
+        };
+        return { select: run, then: (res, rej) => run().then(res, rej) };
+      },
+      insert: (row) => { (tables[name] ??= []).push(row); writes[name]?.push(row); return Promise.resolve({ data: null, error: null }); },
+      update: (patch) => {
+        const q = { filters: [] };
+        const api = {
+          eq: (c, v) => { q.filters.push([c, v]); return api; },
+          then: (res, rej) => {
+            for (const r of tables[name] ?? []) if (q.filters.every(([c, v]) => r[c] === v)) Object.assign(r, patch);
+            return Promise.resolve({ data: null, error: null }).then(res, rej);
+          },
+        };
+        return api;
+      },
+      delete: () => {
+        const q = { filters: [] };
+        const api = {
+          eq: (c, v) => { q.filters.push([c, v]); return api; },
+          then: (res, rej) => {
+            tables[name] = (tables[name] ?? []).filter((r) => !q.filters.every(([c, v]) => r[c] === v));
+            return Promise.resolve({ data: null, error: null }).then(res, rej);
+          },
+        };
+        return api;
+      },
     }),
   };
   return { client, writes };
@@ -71,7 +98,7 @@ const tables = {
     { matchup_id: 'm3', game_window: 'SUN 1PM', slot_scores: [{ side: 'home', slot: 'QB', slug: 'josh-allen', score: 33.4, metric: 'BIG' }, { side: 'away', slot: 'RB', slug: 'bijan-robinson', score: 21 }] },
     { matchup_id: 'm4', game_window: 'SUN 1PM', slot_scores: [{ side: 'away', slot: 'WR', slug: 'ceedee-lamb', score: 29.9 }] },
   ],
-  league_txn: [], vampire_steal: [], league_report: [], league_message: [],
+  league_txn: [], vampire_steal: [], league_report: [], league_message: [], report_request: [],
 };
 const { client, writes } = makeFakeDb(tables);
 __setClientForTest(client);
@@ -110,3 +137,30 @@ assert.equal(writes.league_message.length, 2);
 assert.equal(writes.league_message[1].league_id, LATE);
 console.log('PASS  a league reports the moment its last final is stamped');
 console.log('ALL WEEK-REPORT TESTS PASSED');
+
+// ── 0277: an admin's request forces a report, replacing the old line ────────
+// The LATE league is only half-stamped again for a new week 3, and last
+// season's league asks too: both go out, status and season not consulted.
+tables.matchup.push(
+  { id: 'l3', league_id: LATE, week: 3, home_roster_id: 1, away_roster_id: 2, home_final: 55, away_final: 44, status: 'live' },
+  { id: 'l4', league_id: LATE, week: 3, home_roster_id: 3, away_roster_id: 4, home_final: null, away_final: null, status: 'live' },
+);
+tables.report_request.push(
+  { id: 1, league_id: LATE, week: 3, done_at: null, error: null },
+  { id: 2, league_id: OLD, week: 2, done_at: null, error: null },
+  { id: 3, league_id: LID, week: 9, done_at: null, error: null },       // no matchups
+);
+const msgsBefore = tables.league_message.length;
+assert.equal(await postWeekReports(WEEK, '2026', { force: true }), 2, 'two requests posted, the empty week closed with an error');
+assert.ok(tables.report_request.every((r) => r.done_at), 'every request closed');
+assert.equal(tables.report_request[2].error, 'no matchups for that week');
+assert.equal(tables.league_message.length, msgsBefore + 2, 'two new lines');
+const late3 = tables.league_message.find((m) => m.league_id === LATE && m.report_week === 3);
+assert.ok(late3?.body.includes('Roster 1 led the week with 55.0'), late3?.body);
+console.log('PASS  an admin request forces a report from whatever finals exist');
+// Asking again replaces the line rather than adding a second.
+tables.report_request.push({ id: 4, league_id: LATE, week: 3, done_at: null, error: null });
+await postWeekReports(WEEK, '2026', { force: true });
+assert.equal(tables.league_message.filter((m) => m.league_id === LATE && m.report_week === 3).length, 1, 'one line for the week after a re-request');
+console.log('PASS  a re-request replaces the chat line instead of doubling it');
+console.log('ALL WEEK-REPORT TESTS PASSED (0277)');
