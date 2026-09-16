@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.1 — Gridiron Gang's rosters actually sync
+
+Founder, the morning after waivers ran in both leagues: "when do rosters
+sync?" The cadence (0319: 20 minutes through the 04:00–10:00 ET waiver
+window, hourly otherwise, tightening to a minute at each kickoff) was
+right — but `syncAllLeagues` only walks `PILOT_LEAGUE_IDS`, and that was
+ONE id. The worker's own log said so and nobody had read it that way:
+"weekly sync: week 2 — 1/1 leagues".
+
+Gridiron Gang therefore never mirrored its Sleeper rosters. What made it
+look healthy is the MEMBER sweep, which does cover every current-season
+sleeper league and logs `member sync: 1393005400290267136 → 12 seats`
+every ten minutes — but it writes `league_membership` (team names, owners)
+and never `sleeper_lineup`. So the board's player pool was whatever it was
+the last time somebody pressed ⟳ (0204's manual request).
+
+`fly.toml` now lists both ids. This also decides how fast v0.394.0's
+dropped-pick cleanup bites: it fires on the `sleeper_lineup` rewrite, so
+a waiver drop in either league now clears its open lineup spots within
+the cadence instead of waiting for a manual refresh.
+
+WATCH THE NEXT DEPLOY LOG: a same-named Fly SECRET overrides `[env]`, and
+the tell is the count — "2/2 leagues" means this took, "1/1" means a
+stale secret is winning and needs `fly secrets unset PILOT_LEAGUE_IDS`.
+
 ### v0.394.0 — a dropped player leaves the lineup
 
 Founder: "if someone assigns a player to a spot but then drops him from
