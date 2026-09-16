@@ -18,13 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.393.1 — GET THE ANDROID APP on the leagues page
+### v0.393.2 — GET THE ANDROID APP on the leagues page
 
 Founder: "add a 'get the android app' button on the leagues page." A
 solid chip in the leagues page's control row, right-aligned ahead of
 🔎 FIND A LEAGUE and ＋ ADD A LEAGUE: the apk-latest download, the same
 link ⚙ and #/changelog carry. Web only.
 
+
+### v0.393.1 — the push log names each device
+
+Founder: "I'm getting the alerts on the web installed as app on my phone
+but not in my desktop chrome." One outbox row can go to a phone and a
+browser, and flush kept only the LAST device's error — so a phone success
+hid a browser refusal and the log read "delivered". The worker now records
+per-device outcomes in the error column: null when every device took it,
+"phone refused: …" / "browser refused: …" for each refusal, prefixed with
+"delivered to N ·" when some did. `pushLogStatus` reads it back: ✓
+delivered, ◐ partial (the text says which device refused and why), ✗
+refused. Worker + core; the app shows the new text on its next APK.
+push-flush test gains the two-device case.
 ### v0.393.0 — the changelog is real, the app knows when it's behind
 
 Founder, right after the APK got a link: "can you add the link to the site

@@ -1107,7 +1107,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
             a code / I'm making one" versus "I have neither, show me leagues
             that need managers" — and burying the second inside the first meant
             the people with no way in had the furthest to walk. */}
-        {/* 📱 GET THE ANDROID APP (v0.393.1, founder: "add a 'get the android
+        {/* 📱 GET THE ANDROID APP (v0.393.2, founder: "add a 'get the android
             app' button on the leagues page"). The one link, always the newest
             build (release-apk.yml); solid where the other two are dashed,
             because this one leaves the page. */}
