@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### One link for the APK — release-apk.yml
+
+Founder: "is there a link to the apk I can send users?" There wasn't: every
+APK was built in a session and handed over as a file, and the repo has no
+releases. New `release-apk.yml` runs the session ritual in CI (expo
+prebuild → gradle assembleRelease, arm64, playtest keystore; the same
+three checks — versionCode, signer CN, APP_VERSION in the bundle) on every
+merge to main that touches apps/mobile or packages/core, or on demand, and
+republishes the result under ONE fixed tag, `apk-latest`, so the download
+URL never changes:
+https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk
+The repo is public, so no GitHub account is needed to download.
+versionCode = 40000 + run number (monotonic, past the hand-built 36943).
+Each run deletes and recreates the release so the tag rides the built
+commit. Documented in apps/mobile/README.md.
+
 ### v0.392.1 — a browser re-subscribes on every visit, not only from the card
 
 Founder added the `VAPID_PRIVATE_KEY` secret and re-ran the worker deploy;
