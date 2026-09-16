@@ -72,7 +72,8 @@ export async function sweepNative(log = () => {}, weeks = []) {
   // One statement for every league; the RPC is the only thing that decides
   // whether a start is due, so there's no clock arithmetic out here.
   try {
-    const { data } = await db().rpc('draft_autostart_sweep');
+    const { data, error } = await db().rpc('draft_autostart_sweep');
+    if (error) throw new Error(error.message);   // see draft_tick: {data,error}, not a throw
     started = Number(data?.started ?? 0);
     // A scheduled start that CAN'T run (unseeded pool, a seat short) retries on
     // later sweeps — logged every time, because a league sitting armed and
@@ -85,7 +86,13 @@ export async function sweepNative(log = () => {}, weeks = []) {
   if (de) { log('native draft sweep', de.message); }
   for (const d of live ?? []) {
     try {
-      const { data } = await db().rpc('draft_tick', { p_league_id: d.league_id });
+      // supabase-js does NOT throw on a failed RPC — it returns {data, error}.
+      // Destructuring `data` alone (as this did) meant a draft_tick that failed
+      // server-side added zero autopicks, logged NOTHING, and never reached the
+      // catch: a frozen draft and a quiet draft produced identical logs. On
+      // draft night that is the one thing the log has to be able to tell you.
+      const { data, error } = await db().rpc('draft_tick', { p_league_id: d.league_id });
+      if (error) { log('draft_tick', d.league_id, error.message); continue; }
       // snake autopicks + auction lot awards/auto-nominations, one counter
       drafts += Number(data?.autopicks ?? 0) + Number(data?.lots_awarded ?? 0);
     } catch (e) { log('draft_tick', d.league_id, e.message); }
@@ -96,7 +103,9 @@ export async function sweepNative(log = () => {}, weeks = []) {
   if (we) { log('native waiver sweep', we.message); }
   for (const leagueId of new Set((pending ?? []).map((c) => c.league_id))) {
     try {
-      const { data } = await db().rpc('process_waivers', { p_league_id: leagueId });
+      // Same silent-failure shape as draft_tick above: check `error`.
+      const { data, error } = await db().rpc('process_waivers', { p_league_id: leagueId });
+      if (error) { log('process_waivers', leagueId, error.message); continue; }
       won += Number(data?.won ?? 0); lost += Number(data?.lost ?? 0);
     } catch (e) { log('process_waivers', leagueId, e.message); }
   }

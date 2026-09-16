@@ -134,6 +134,13 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0);
   const ticking = useRef(false);
+  // See the web twin for all three (v0.394.5): a ref latch so two taps in one
+  // frame can't both pick, a floor under the client-driven draft_tick so a stuck
+  // auto-seat can't turn every open room into 2 RPCs a second, and a retry flag
+  // for the team read that decides whether any DRAFT button is enabled.
+  const busyRef = useRef(false);
+  const lastTick = useRef(0);
+  const [teamOk, setTeamOk] = useState(false);
   // ── THE WIN MOMENT (v0.352.0, founder: "We also need a quick UI
   // interaction when you win a player as that's pretty quiet and brief.") —
   // a lot closing in your favour was one poll-cycle of silence: the lot row
@@ -198,13 +205,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
         leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
       }
     }).catch(() => {});
-    nativeTeamState(leagueId).then((tm) => {
-      setTeam(tm);
-      if (tm.my_roster_id != null) {
-        myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
-        myQueueMaxes(leagueId, tm.my_roster_id).then((m) => { if (alive) setQMax(m); }).catch(() => {});
-      }
-    }).catch(() => {});
+    loadTeam();
     const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
     return () => { alive = false; clearInterval(poll); clearInterval(clock); };
@@ -227,6 +228,9 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     const pausedAuto = !!st.paused && st.on_clock != null && !!autos[st.on_clock];
     if (st.paused && !pausedAuto) return;
     if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto || pausedAuto) {
+      // See `lastTick`: a floor under the client-driven tick.
+      if (Date.now() - lastTick.current < 3000) return;
+      lastTick.current = Date.now();
       ticking.current = true;
       // A failing tick must be VISIBLE — swallowing it freezes the room at 0:00
       // with nothing to go on. The 3s poll clears the banner on recovery.
@@ -316,8 +320,32 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
     return () => clearTimeout(id);
   }, [won]);
 
+  /** The caller's seat, retried until it lands — a swallowed failure here used
+   *  to lock a manager out of the whole draft with no message. */
+  const loadTeam = () => {
+    nativeTeamState(leagueId).then((tm) => {
+      setTeamOk(true);
+      setTeam(tm);
+      if (tm.my_roster_id != null) {
+        myDraftQueue(leagueId, tm.my_roster_id).then(setQueue).catch(() => {});
+        myQueueMaxes(leagueId, tm.my_roster_id).then(setQMax).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+  // Retry ONLY while the read has never succeeded — a spectator's null roster
+  // is an answer, not a failure.
+  useEffect(() => {
+    if (teamOk) return;
+    const id = setInterval(loadTeam, 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamOk, leagueId]);
+
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    if (busy) return;
+    // A REF, NOT THE STATE (v0.394.5) — see the web twin: two taps inside one
+    // frame both read `busy === false`, and at a snake turnaround both land.
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setErr(null);
     try {
       const r = await fn();
@@ -325,7 +353,7 @@ export function Draft({ leagueId, onBack }: { leagueId: string; onBack: () => vo
       await refresh();
       loadAutos();
     } catch (x) { warn(); setErr(friendlyError(x)); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   const saveQueue = (next: string[]) => {

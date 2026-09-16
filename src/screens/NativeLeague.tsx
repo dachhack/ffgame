@@ -995,6 +995,19 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
   const [now, setNow] = useState(Date.now());
   const skew = useRef(0); // serverNow − clientNow, for an honest countdown
   const ticking = useRef(false);
+  // The pick latch (v0.394.5) — a ref, so two taps in one frame can't both pass.
+  const busyRef = useRef(false);
+  // Last client-driven draft_tick (v0.394.5). This effect re-runs on the 500ms
+  // clock, and when the on-clock seat is AUTO and the RPC can find no legal
+  // player it returns ok with ZERO autopicks — nothing changes, so the effect
+  // fired again, forever: two RPCs a second per open room, board frozen at 0:00,
+  // no error to show. The worker still sweeps every ~25s, so a floor here costs
+  // nothing and caps what a stuck room can do to the database.
+  const lastTick = useRef(0);
+  // Has the team read EVER landed? It decides myRoster, and myRoster decides
+  // whether any DRAFT button is enabled — fetched once with a swallowed error,
+  // one flaky moment at mount locked a manager out of the whole draft, silently.
+  const [teamOk, setTeamOk] = useState(false);
   // The board follows the draft: the on-clock cell scrolls into view per pick.
   const onClockCellRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -1038,13 +1051,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
         leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
       }
     }).catch(() => {});
-    nativeTeamState(leagueId).then((t) => {
-      setTeam(t);
-      if (t.my_roster_id != null) {
-        myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
-        myQueueMaxes(leagueId, t.my_roster_id).then(setQMax).catch(() => {});
-      }
-    }).catch(() => {});
+    loadTeam();
     const poll = setInterval(refresh, 3000);
     const clock = setInterval(() => setNow(Date.now()), 500);
     return () => { alive = false; clearInterval(poll); clearInterval(clock); };
@@ -1068,6 +1075,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     const pausedAuto = !!st.paused && st.on_clock != null && !!autos[st.on_clock];
     if (st.paused && !pausedAuto) return;
     if ((overdueMs != null && overdueMs > 1200) || st.on_clock_auto || pausedAuto) {
+      // See `lastTick`: a floor under the client-driven tick.
+      if (Date.now() - lastTick.current < 3000) return;
+      lastTick.current = Date.now();
       ticking.current = true;
       // A failing tick must be VISIBLE: swallowing it leaves the room frozen at
       // 0:00 with nothing to go on. The 3s poll clears the banner on recovery.
@@ -1172,12 +1182,39 @@ export function DraftRoom({ leagueId, onBack, onTeam, embedded = false }: {
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
   }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own]);
 
+  /** The caller's seat in this league, and the queue that hangs off it. */
+  const loadTeam = () => {
+    nativeTeamState(leagueId).then((t) => {
+      setTeamOk(true);
+      setTeam(t);
+      if (t.my_roster_id != null) {
+        myDraftQueue(leagueId, t.my_roster_id).then(setQueue).catch(() => {});
+        myQueueMaxes(leagueId, t.my_roster_id).then(setQMax).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+  // Retry ONLY while the read has never succeeded: a genuine spectator answers
+  // with a null roster, which is an answer, and must not poll forever.
+  useEffect(() => {
+    if (teamOk) return;
+    const id = setInterval(loadTeam, 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamOk, leagueId]);
+
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    if (busy) return;
+    // A REF, NOT THE STATE (v0.394.5). `busy` is read in the same render the
+    // button's `disabled` comes from, so two taps dispatched inside one frame
+    // both saw false. Usually the server's advisory lock saves you — it
+    // re-derives who is on the clock and refuses the second — but at a SNAKE
+    // TURNAROUND picks N and N+1 belong to the same seat, both pass, and a
+    // double-tap burns two picks on two players.
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setErr(null);
     try { const r = await fn(); if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); await refresh(); loadAutos(); }
     catch (x) { setErr(friendlyError(x)); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   const saveQueue = (next: string[]) => {
