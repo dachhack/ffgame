@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.394.3 — the second Combo Drip nobody could see
+
+Founder, with v0.394.2's banner now naming the slot ("NOT SAVED — SUN 1PM
+· 1: Combo Drip is one per unlock"): "I only have one combo drip set."
+He was right. The board showed one. The DATABASE held two.
+
+`clearSlot` only ever changed local state — it deletes the key and
+`compactPicks` shifts the rest upward — and the live autosave SKIPS empty
+slots (`if (!p?.playerId) continue`). So the row a cleared spot left
+behind stayed in `sealed_pick` forever, stranded at a slot index the
+board no longer renders. `enforce_single_combodrip` counts every
+combodrip row for the matchup, visible or not, so one orphan capped the
+lineup permanently with nothing on screen to remove.
+
+`pruneStaleSlots` (liveApi): before the row-by-row retry, delete this
+user's picks in the batch's windows at slots the batch does not name.
+Bounded on purpose — `locked = false` so a sealed pick is never the
+client's to remove, and only inside windows the batch is writing (the
+caller has already filtered those down to the still-open ones), so local
+state that has not hydrated can never empty a lineup. Best effort per
+window, since the 0178 lock trigger fires on DELETE too.
+
+On the FAILURE path only, so a healthy save still costs one round trip.
+The board self-heals on its next autosave — which fires on mount — so a
+reload is enough.
+
+NOT FIXED, and worth its own pass: `clearSlot` still leaves the row, so
+the orphan is created in the first place and is only swept when something
+else refuses. Making the autosave write cleared spots as empty rows
+rather than skipping them is the root-cause fix.
+
 ### v0.394.2 — one bad pick no longer blocks the whole lineup
 
 Founder, over a board reading SLOTS SET 8/8: "what's up with the not saved
