@@ -32,6 +32,18 @@ code, so every path below produces a real build. That's a deliberate trade:
 MMKV's synchronous storage is what lets core's ~51 read-during-render call sites
 work unchanged — see the note in `src/platform.native.ts`.
 
+### The playtest link (CI builds it)
+
+`.github/workflows/release-apk.yml` builds the playtest APK on every merge to
+`main` that touches `apps/mobile/` or `packages/core/` (or on demand: Actions →
+Release the Android APK → Run workflow) and republishes it under one fixed
+release tag, so this URL always serves the newest build:
+
+    https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk
+
+Send that to playtesters. The release page shows which app version and build
+number it is. Same recipe and same checks as the manual ritual below.
+
 ### An Android APK (no Mac needed)
 
 ```bash
