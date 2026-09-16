@@ -396,7 +396,13 @@ export function App() {
         ) : view === 'draft' && open?.native ? (
           // A seatless commissioner has no MATCHUP to go back to — back means
           // leaving the league, not landing on a lineup that doesn't exist.
-          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} /></View>
+          <View style={{ flex: 1 }}><Draft leagueId={open.leagueId} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }}
+            onOpenLeague={(leagueId, rosterId, name) => {
+              // The practice room is its own league: you are its commissioner
+              // and its only human, and it is native by construction.
+              setOpen({ leagueId, rosterId, name, native: true, commish: true });
+              setView('draft');
+            }} /></View>
         ) : view === 'team' && open?.native ? (
           <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'team' && open && open.rosterId != null ? (

@@ -18,6 +18,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.395.0 — practice rooms: mock THIS draft, from your seat
+
+Founder: "everyone gets their own practice room and you can pick what
+spot you draft from. It's just a practice right now so that players can
+see how drafting works."
+
+Mock drafts have existed since 0070, but they could never mock a league
+you are in: create_mock_draft takes settings typed into the create-league
+form, seeds a generic pool, and — calling a twelve-argument
+create_native_league that has since grown to fifteen — lands on
+p_game_mode's default. Every mock was a drip redraft league, whatever you
+meant to practise for.
+
+A PRACTICE ROOM points the same machinery at a real league: same game
+mode, roster size, draft mode, clocks and caps, the same player pool
+copied row for row (not rebuilt — the copy carries pool-doctor repairs and
+commissioner edits a rebuild would lose), and the AI seats wearing your
+leaguemates' names. You choose the slot you draft from, because on a snake
+the difference between 1st and 12th is the thing worth practising.
+
+Everyone gets one, which forced the gate to move. create_native_league
+refuses anyone without the `native` feature flag, but native_join has
+never required it — you can be seated by invite code without it, and those
+managers are exactly who this is for. So the builder splits the way
+start_draft did in 0177: the body moves once into
+_create_native_league_now(), create_native_league becomes the flagged door
+onto it, and a practice room checks membership of the league it is mocking
+instead.
+
+Deliberately not: keepers (keeper_slots and stash_slots are forced to 0,
+so you draft the whole roster rather than the eight rounds a keeper league
+leaves), a schedule (so 0179's kickoff lock and 0280's shift both read "no
+season"), or any write to the source league. Rooms sweep themselves —
+opening one bins the caller's own rooms older than two days, never anyone
+else's and never a real league.
+
 ### v0.394.7 — the download says which build it is (web only)
 
 Founder: "There should be an APK release path on the site rather than the

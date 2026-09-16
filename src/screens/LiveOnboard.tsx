@@ -847,7 +847,13 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'draft' && target) return (
     <>
       {stripFor('draft')}
-      <DraftRoom leagueId={target.leagueId} onBack={() => { setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onTeam={() => setView('team')} />
+      <DraftRoom leagueId={target.leagueId} onBack={() => { setView(homeFor ? 'leaguehome' : 'home'); refresh(); }} onTeam={() => setView('team')}
+        onOpenLeague={(leagueId, rosterId) => {
+          // Into the practice room (0281). homeFor is cleared so ← leaves to
+          // the leagues list rather than the league we were practising for —
+          // the room is not part of that league.
+          setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); refresh();
+        }} />
     </>
   );
   if (view === 'team' && target) return (
