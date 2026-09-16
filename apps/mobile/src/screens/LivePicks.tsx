@@ -607,7 +607,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // every other row with it, on every retry, while the slot counter kept
       // reading full. Now the legal picks land and the refusals come back with
       // their window and slot.
-      savePicksBestEffort(matchup.id, userId, rows)
+      // The windows still OPEN — the same test the row filter above applies.
+      // savePicksBestEffort reconciles against it, so a window whose LAST pick
+      // was cleared has its stranded rows removed too (v0.394.4).
+      savePicksBestEffort(matchup.id, userId, rows, { openWindows: wins.filter((w) => !winLocked(w.id)).map((w) => w.id) })
         .then((r) => {
           const note = pickFailureNote(r.failed);
           setErr(note);

@@ -900,25 +900,39 @@ export async function savePicks(matchupId: string, userId: string, rows: PickRow
 
 export interface SavePicksResult { saved: number; failed: import('./pickSave').FailedPick[] }
 
-/** Delete this user's picks in the batch's windows at slots the batch does NOT
- *  name — the rows a cleared-and-compacted lineup leaves stranded (v0.394.3).
+/** Reconcile the server's picks with the lineup the client is sending: delete
+ *  the rows a cleared spot left stranded (v0.394.3, completed v0.394.4).
  *
- *  Never touches a LOCKED row (`locked = false` on the filter): a sealed pick is
- *  the record of what was fielded and is not the client's to remove. Never
- *  touches a window the batch is not writing, so a window whose picks are all
- *  gone keeps them until something is set there — deliberately conservative,
- *  because local state that has not hydrated must never be able to empty a
- *  lineup. Best effort per window: the 0178 lock trigger fires on DELETE too and
- *  may refuse a row whose player has kicked off, and that must not stop the
- *  other windows being tidied. */
+ *  `clearSlot` only ever changed local state — it deletes the key and compacts
+ *  the rest upward — and the autosave only ever SENDS filled slots. So a
+ *  cleared pick's row stayed in `sealed_pick` forever, at a slot index the
+ *  board had stopped rendering: invisible, un-removable, and still counted by
+ *  every cap trigger. Founder, week 2: one Combo Drip on screen, two in the
+ *  table, the lineup refused.
+ *
+ *  Bounded deliberately, because a delete that guesses wrong loses a lineup:
+ *   • `locked = false` — a sealed pick is the record of what was fielded and is
+ *     never the client's to remove.
+ *   • Only windows the caller says are OPEN, which is the same set it filtered
+ *     `rows` down to. A window that has locked is left entirely alone.
+ *   • Callers must only call this once their saved lineup has HYDRATED; empty
+ *     local state must never be able to empty the server.
+ *  Best effort per window: the 0178 lock trigger fires on DELETE too and may
+ *  refuse a row whose player has kicked off, and that must not stop the rest
+ *  being tidied. */
 async function pruneStaleSlots(matchupId: string, userId: string,
-                               payload: { game_window: string; roster_slot: string }[]): Promise<void> {
+                               payload: { game_window: string; roster_slot: string }[],
+                               openWindows?: string[]): Promise<void> {
   const byWin = new Map<string, Set<string>>();
   for (const r of payload) {
     let keep = byWin.get(r.game_window);
     if (!keep) { keep = new Set(); byWin.set(r.game_window, keep); }
     keep.add(r.roster_slot);
   }
+  // An open window the batch names NOTHING in is a window the manager emptied —
+  // every row in it is stale. Without this, clearing a window's last pick left
+  // the whole window standing on the server.
+  for (const w of openWindows ?? []) if (!byWin.has(w)) byWin.set(w, new Set());
   const c = await client();
   for (const [win, keep] of byWin) {
     const slots = [...keep];
@@ -926,45 +940,42 @@ async function pruneStaleSlots(matchupId: string, userId: string,
     // could break out of it means we skip this window rather than send a filter
     // we cannot reason about. Real slot ids are "1", "S2", "FLEX" and the like.
     if (!slots.every((x) => /^[A-Za-z0-9_-]+$/.test(x))) continue;
-    await c.from('sealed_pick').delete()
+    let q = c.from('sealed_pick').delete()
       .eq('matchup_id', matchupId).eq('app_user_id', userId)
-      .eq('game_window', win).eq('locked', false)
-      .not('roster_slot', 'in', `(${slots.map((x) => `"${x}"`).join(',')})`)
-      .then(undefined, () => undefined);
+      .eq('game_window', win).eq('locked', false);
+    if (slots.length) q = q.not('roster_slot', 'in', `(${slots.map((x) => `"${x}"`).join(',')})`);
+    await q.then(undefined, () => undefined);
   }
 }
 
-/** Save as many of the caller's picks as the server will take, and report the
- *  rest (v0.394.2).
- *
- *  A Postgres upsert is ONE statement, so a row any trigger refuses rolls back
- *  every other row with it. On a live board — which re-sends the whole lineup
- *  after every edit — that turns one illegal pick into a lineup that can never
- *  save again, on every retry, while the slot counter (local state) still reads
- *  full. Founder, week 2, one Combo Drip past the one he owned: eight slots set,
- *  nothing saved, and a banner naming the rule but not the slot.
- *
- *  So: try the batch (one round trip, the overwhelmingly common path), and only
- *  when it is refused re-send row by row. Every legal pick lands; each refusal
- *  comes back with its window, slot and the server's own words. Never throws for
- *  a REFUSED row — a refusal is an answer, not an outage — so callers read
- *  `failed` rather than catching. It still throws if the client itself cannot be
- *  built, which is a genuine failure to reach the server. */
-export async function savePicksBestEffort(matchupId: string, userId: string, rows: PickRow[]): Promise<SavePicksResult> {
+/** The (window → slots) shape last reconciled, per board. Pruning only matters
+ *  when the LAYOUT moves — a slot cleared, an extra slot removed, picks
+ *  compacted — so a save that only swaps a player or a metric skips it and
+ *  stays a single round trip. Keyed per matchup+user; the first save after a
+ *  mount always prunes, which is what heals a board that is already stranded. */
+const lastPruned = new Map<string, string>();
+const slotShape = (payload: { game_window: string; roster_slot: string }[], openWindows?: string[]): string =>
+  JSON.stringify([
+    payload.map((r) => `${r.game_window}#${r.roster_slot}`).sort(),
+    [...(openWindows ?? [])].sort(),
+  ]);
+
+export async function savePicksBestEffort(matchupId: string, userId: string, rows: PickRow[],
+                                          opts?: { openWindows?: string[] }): Promise<SavePicksResult> {
   const payload = rows.map(({ locked: _locked, ...r }) => ({ matchup_id: matchupId, app_user_id: userId, ...r }));
   if (!payload.length) return { saved: 0, failed: [] };
+  // RECONCILE BEFORE WRITING (v0.394.4). A cleared spot's row has to go, and it
+  // has to go FIRST: while it is still there it counts against every cap, which
+  // is exactly how one invisible Combo Drip refused a lineup that had one.
+  const key = `${matchupId}:${userId}`;
+  const shape = slotShape(payload, opts?.openWindows);
+  if (lastPruned.get(key) !== shape) {
+    await pruneStaleSlots(matchupId, userId, payload, opts?.openWindows).catch(() => {});
+    lastPruned.set(key, shape);
+  }
   const c = await client();
   const { error } = await c.from('sealed_pick').upsert(payload, { onConflict: PICK_CONFLICT });
   if (!error) return { saved: payload.length, failed: [] };
-  // ORPHANED SLOTS FIRST (v0.394.3). Clearing a spot only ever changed local
-  // state — `clearSlot` deletes the key and compacts the rest upward — and this
-  // autosave SKIPS empty slots, so the row it left behind stayed on the server
-  // forever, at a slot index the board no longer renders. Founder, week 2, one
-  // Combo Drip on the board and the cap refusing it: the invisible orphan was
-  // the second one. Pruned only on the failure path, so a healthy save still
-  // costs one round trip, and only inside the windows this batch is writing —
-  // which the caller has already filtered down to the still-OPEN ones.
-  await pruneStaleSlots(matchupId, userId, payload).catch(() => {});
   const failed: import('./pickSave').FailedPick[] = [];
   let saved = 0;
   // In ORDER, deliberately: where a cap is the reason (Combo Drip, extra slots)
