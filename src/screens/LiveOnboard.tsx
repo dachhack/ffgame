@@ -19,6 +19,7 @@ import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
 import { slateWeeks, weekGameFeeds, weekLivePlays } from '@drip/core/data/liveApi';
+import { APK_URL } from '@drip/core/data/changelog';
 import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -1106,8 +1107,17 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
             a code / I'm making one" versus "I have neither, show me leagues
             that need managers" — and burying the second inside the first meant
             the people with no way in had the furthest to walk. */}
+        {/* 📱 GET THE ANDROID APP (v0.393.2, founder: "add a 'get the android
+            app' button on the leagues page"). The one link, always the newest
+            build (release-apk.yml); solid where the other two are dashed,
+            because this one leaves the page. */}
+        <a href={APK_URL} className="mono" title="The Android playtest build — installs over any earlier one" style={{
+          marginLeft: 'auto', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
+          color: 'var(--on-accent)', background: 'var(--you)',
+          border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
+        }}>📱 GET THE ANDROID APP</a>
         <button onClick={onFind} className="mono" style={{
-          marginLeft: 'auto', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
         }}>🔎 FIND A LEAGUE</button>
