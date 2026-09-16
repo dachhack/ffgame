@@ -19,6 +19,7 @@ import { liveConfigured } from '@drip/core/data/liveConfig';
 import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha, type Theme } from './src/theme.native';
 import { ScrollChromeCtx, ScrollShiftCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
+import { useUpdateCheck, WhatsNewBanner, WhatsNewSheet } from './src/ui/WhatsNew';
 import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
@@ -90,6 +91,9 @@ export function App() {
   // board below and the new size lands without closing and reopening anything.
   const [cardSize, setCardSize] = useState<CardSize>(loadCardSize);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // "You are N versions behind" (v0.393.0): checked at launch and on foreground.
+  const update = useUpdateCheck();
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ fields off the leagues page (v0.390.0)
   // Whether to OFFER the admin entry. The RPCs behind it are the real gate —
   // is_admin() + RLS server-side — exactly as on the web.
@@ -495,7 +499,9 @@ export function App() {
       <ThemeCtx.Provider value={theme}>
         <StatusBar style={isLight(themeName) ? 'dark' : 'light'} />
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
+          <WhatsNewBanner st={update} onOpen={() => setWhatsNewOpen(true)} />
           <ErrorBoundary>{body()}</ErrorBoundary>
+          <WhatsNewSheet visible={whatsNewOpen} st={update} onClose={() => setWhatsNewOpen(false)} />
           <PlayerCardHost />
           <AllFieldsSheet visible={fieldsOpen} onClose={() => setFieldsOpen(false)} />
           <SettingsModal
@@ -511,6 +517,8 @@ export function App() {
             onDemo={() => setView('demo')}
             onAdmin={() => setView('admin')}
             onSignOut={() => { void signOut(); }}
+            onWhatsNew={() => setWhatsNewOpen(true)}
+            behind={update.behind}
             onClose={() => setSettingsOpen(false)}
           />
         </SafeAreaView>

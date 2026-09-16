@@ -56,12 +56,15 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onAdmin, onSignOut, onClose }: {
+export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onAdmin, onSignOut, onWhatsNew, behind = 0, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
   cardSize: CardSize;
   version: string;
+  /** Opens What's New (v0.393.0); `behind` is how many app updates are newer than this build. */
+  onWhatsNew?: () => void;
+  behind?: number;
   /** Resolved from is_admin(). Only decides whether the entry is SHOWN — the
    *  RPCs behind it are the real gate, as they are on the web. */
   isAdmin?: boolean;
@@ -185,6 +188,18 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Admin</Text>
                 <Mono size={9} tone="faint">Health, leagues, code requests, audit.</Mono>
+              </View>
+            </Pressable>
+          )}
+          {onWhatsNew && (
+            <Pressable
+              onPress={() => { onClose(); onWhatsNew(); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: behind > 0 ? 2 : StyleSheet.hairlineWidth, borderColor: behind > 0 ? t.you : t.bd, borderRadius: 8, padding: 11 }}
+            >
+              <Text style={{ fontSize: 16 }}>🆕</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>What's new</Text>
+                <Mono size={9} tone={behind > 0 ? 'you' : 'faint'}>{behind > 0 ? `You are ${behind} ${behind === 1 ? 'version' : 'versions'} behind — tap to update.` : `${version} · what changed, by version.`}</Mono>
               </View>
             </Pressable>
           )}
