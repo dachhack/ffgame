@@ -28,6 +28,7 @@ import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
+import { lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
@@ -1069,6 +1070,50 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // The FAQ explains the choice, so it names both too.
   const faq = src('src/screens/Faq.tsx');
   ok('the FAQ points at the zip first', faq.indexOf('APK_ZIP_URL') < faq.lastIndexOf('APK_URL'));
+}
+
+// ── the three zeroes on the slate chip (v0.411.0) ─────────────────────────
+// Founder, on a board reading "NFL SLATE · 0 GAMES" with "all final" under
+// both scores: "dig into the empty slate." The slate had sixteen games in it.
+// The chip counts games WITH ONE OF HIS STARTERS, and he had set no lineup —
+// so an untouched week described itself as a finished one, and the zero sent
+// the investigation after schedule data that was never missing.
+{
+  const g = (home, away, kickoff, state, homeCount = 0) => ({
+    key: `${away}@${home}`, home, away, kickoff, state,
+    homeCount, awayCount: 0, homePts: 0, awayPts: 0,
+  });
+  const slate = [g('SEA', 'NE', '2026-09-10T00:20:00Z', 'pre'), g('LA', 'SF', '2026-09-11T00:35:00Z', 'pre')];
+  const mine = [g('SEA', 'NE', '2026-09-10T00:20:00Z', 'pre', 2), slate[1]];
+
+  // NO LINEUP — the founder's case. Not a claim about the NFL at all.
+  const none = lineupChipSummary(slate, 'home', 0);
+  ok('an unset lineup says so instead of reporting zero games', none.label === 'NO LINEUP');
+  ok('and explains itself', none.detail === 'nothing set for this week');
+
+  // NO SLATE — a lineup is set but we do not know the games. Saying "0 GAMES"
+  // here claims knowledge we do not have.
+  const noSlate = lineupChipSummary([], 'home', 9);
+  ok('a missing slate is not zero games', noSlate.label === 'NO SLATE');
+  ok('and says the games have not loaded', /haven't loaded/.test(noSlate.detail));
+
+  // A LINEUP WITH NO GAMES — everybody on bye. Real, rare, and a true zero.
+  const allBye = lineupChipSummary(slate, 'home', 3);
+  ok('a set lineup with no games is still zero games', allBye.label === '0 GAMES');
+  ok('but says how many starters that is', allBye.detail === '3 starters, none with a game');
+
+  // The ordinary paths must be untouched.
+  ok('a normal pre-kickoff chip still counts the games with a starter',
+    lineupChipSummary(mine, 'home', 9).label === '1 GAME');
+  ok('and still counts the starters to play',
+    lineupChipSummary(mine, 'home', 9).detail === '2 starters to play');
+  const done = [g('SEA', 'NE', '2026-09-10T00:20:00Z', 'done', 2)];
+  ok('a finished slate still reads ALL FINAL', lineupChipSummary(done, 'home', 9).label === 'ALL FINAL');
+  const liveG = [g('SEA', 'NE', '2026-09-10T00:20:00Z', 'live', 2)];
+  ok('a live game still leads', lineupChipSummary(liveG, 'home', 9).label === '1 LIVE');
+  // Callers that do not pass a count keep the old behaviour exactly.
+  ok('without a starter count the old wording stands',
+    lineupChipSummary(slate, 'home').label === '0 GAMES');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

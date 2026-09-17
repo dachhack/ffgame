@@ -85,6 +85,16 @@ export interface BoardSide {
   playing: number;
   /** "2 QB, 2 RB, 4 WR" — still to START, by position, in roster order. */
   yetToPlayBreakdown: string;
+  /** How many starter SLOTS actually hold a player (v0.411.0).
+   *
+   *  Founder, on a board that read "NFL SLATE · 0 GAMES" and "all final" under
+   *  both scores: "dig into the empty slate." The slate was fine — sixteen
+   *  games, right there in the table. Both lines were counting HIS STARTERS,
+   *  and he had none set, so a week nobody had touched described itself as a
+   *  week that was over. A side cannot tell that story about itself without
+   *  knowing the difference between "nothing left to play" and "nothing to
+   *  play with". */
+  filled: number;
   /** Win chance 0..1 — see winProbability below for what it is and isn't. */
   winPct: number;
   record?: { wins: number; losses: number; ties: number; rank?: number | null } | null;
@@ -251,6 +261,7 @@ export function buildMatchupBoard(input: {
       projected,
       yetToPlay: pre,
       playing,
+      filled: played.length,
       yetToPlayBreakdown: yetToPlayBreakdown(played),
       winPct: winProbability(projected, theirProjected, left, theirLeft),
       record: s.record ?? null,
@@ -517,7 +528,21 @@ export interface LineupChipSummary {
   detail: string;
 }
 
-export function lineupChipSummary(chips: SlateChip[], side: 'home' | 'away'): LineupChipSummary {
+/**
+ * `filled` is how many starter slots this side actually has a player in. It is
+ * optional only so older callers keep compiling; pass it, because without it
+ * the three different ways this can come back zero are indistinguishable, and
+ * the label for all of them was "0 GAMES":
+ *
+ *   • no lineup set        — nothing to play with. THIS is the founder's case.
+ *   • no slate loaded      — we do not know the games; saying "0" claims we do.
+ *   • a lineup, no games   — everybody on bye, which is real and rare.
+ *
+ * The first two are not statements about the NFL slate at all, and reading
+ * them as one is what sent a whole investigation after missing schedule data
+ * that was sitting in the table the entire time.
+ */
+export function lineupChipSummary(chips: SlateChip[], side: 'home' | 'away', filled?: number): LineupChipSummary {
   const count = (c: SlateChip) => (side === 'home' ? c.homeCount : c.awayCount);
   const points = (c: SlateChip) => (side === 'home' ? c.homePts : c.awayPts);
   const mine = chips.filter((c) => count(c) > 0);
@@ -540,15 +565,27 @@ export function lineupChipSummary(chips: SlateChip[], side: 'home' | 'away'): Li
 
   const tone: LineupChipSummary['tone'] = live > 0 ? 'live' : mine.length > 0 && pre === 0 ? 'done' : 'pre';
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-  const label = live > 0 ? `${live} LIVE`
+  // The three zeroes, told apart (v0.411.0). Only reachable when the caller
+  // says how many starters there are; without that we cannot know which of
+  // them we are looking at, and the old wording stands.
+  const noLineup = filled === 0;
+  const noSlate = filled != null && filled > 0 && chips.length === 0;
+  const label = noLineup ? 'NO LINEUP'
+    : noSlate ? 'NO SLATE'
+    : live > 0 ? `${live} LIVE`
     : tone === 'done' ? 'ALL FINAL'
     // 'GAMES', spelled out: the default pluraliser appends a lowercase 's',
     // which on an upper-case label reads as "3 GAMEs".
     : plural(mine.length, 'GAME', 'GAMES');
-  const detail = live > 0 ? `${playersLive} playing · ${playersPre} to come`
+  const detail = noLineup ? 'nothing set for this week'
+    : noSlate ? "this week's games haven't loaded"
+    : live > 0 ? `${playersLive} playing · ${playersPre} to come`
     : tone === 'done' ? `${plural(playersDone, 'starter')} played`
     // Before anything kicks off, the honest thing is the size of the day.
     : mine.length > 0 ? `${plural(playersPre, 'starter')} to play`
+    // A lineup IS set and not one of its players has a game: everybody is on
+    // bye. Rare, real, and worth saying out loud rather than as a bare zero.
+    : filled != null && filled > 0 ? `${plural(filled, 'starter')}, none with a game`
     : '';
 
   return {
