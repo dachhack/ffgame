@@ -432,8 +432,8 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   // a lineup. Founder: "the box score can contain projected starters and
   // fantasy projections until kick off."
   const notStarted = !cur.feed || cur.feed.plays.length === 0;
-  const proj = useMemo(() => (visible && notStarted ? projectedBox(cur.home, cur.away) : null),
-    [visible, notStarted, cur.home, cur.away]);
+  const proj = useMemo(() => (visible && notStarted ? projectedBox(cur.home, cur.away, week) : null),
+    [visible, notStarted, cur.home, cur.away, week]);
   // OFFENSE / DEFENSE tabs (v0.343.2, founder): the single list ran past the
   // sheet's cap and clipped — see the ScrollView note below — and even scrolled,
   // "how did the defense do" meant paging past every receiver. Membership is
@@ -487,6 +487,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
           <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.faint }}>{r.pos}</Text>
             <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: fs(13), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+            {!!r.injury && <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.warn }}>{r.injury}</Text>}
             <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>{r.proj.toFixed(1)}</Text>
           </View>
         ))}

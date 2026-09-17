@@ -931,7 +931,7 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   // feed can exist with an empty play list, and either way what we can honestly
   // show is the same.
   const notStarted = !cur.feed || cur.feed.plays.length === 0;
-  const proj = useMemo(() => (notStarted ? projectedBox(cur.home, cur.away) : null), [notStarted, cur.home, cur.away]);
+  const proj = useMemo(() => (notStarted ? projectedBox(cur.home, cur.away, week) : null), [notStarted, cur.home, cur.away, week]);
   // OFFENSE / DEFENSE tabs (v0.365.1, founder) — matching the app's box sheet:
   // the single list ran long and "how did the defense do" meant scrolling past
   // every receiver. Membership is core's boxTabRows (stat-driven), so a two-way
@@ -992,6 +992,10 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
                 style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: carded ? 'pointer' : undefined, textDecoration: carded ? 'underline dotted color-mix(in srgb, var(--dim) 55%, transparent)' : undefined, textUnderlineOffset: 3 }}>
                 {boxName(r.slug)}
               </span>
+              {r.injury && (
+                <span className="mono" title={r.injury === 'Q' ? 'questionable' : r.injury === 'D' ? 'doubtful' : r.injury}
+                  style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{r.injury}</span>
+              )}
               <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dimstrong)', flex: 'none' }}>{r.proj.toFixed(1)}</span>
             </div>
           );
