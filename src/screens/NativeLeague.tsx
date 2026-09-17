@@ -2907,7 +2907,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const doAdd = (p: LeaguePoolPlayer, dropSlug?: string) => {
     if (myRoster == null) return;
     setPendingAdd(null);
-    const onWaivers = waivedFor(p) != null;
+    // v0.403.0: a closed window is a CLAIM, not a dead button. He is on
+    // waivers if he carries a hold OR free agency cannot reach him right now —
+    // the same question 0288 taught the server to ask. Without this half the
+    // client still called add_free_agent and got "free agency is closed",
+    // which is what "all the waivers are closed" looked like from the outside.
+    const onWaivers = waivedFor(p) != null || team?.fa_open === false;
     // FAAB league: a claim carries a blind bid — ask for it first.
     if (onWaivers && team?.waiver_mode === 'faab') { setClaimFor({ p, drop: dropSlug }); setBidDraft(''); return; }
     return run(() => onWaivers
@@ -3150,7 +3155,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         <div style={hdr}>
           PLAYER POOL ({free.length} available)
           {team.waiver_mode === 'faab' && team.my_faab != null ? ` · 💰 FAAB $${team.my_faab}` : ''}
-          {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
+          {team.fa_open === false
+            ? (team.fa_start_min != null
+                ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET — until then, claims only`
+                : ' · 🔒 no free agency — claims only')
+            : ''}
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -3205,14 +3214,21 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
                 {(() => {
-                  // over-limit rosters are locked out; the FA window gates instant adds only
-                  const blocked = !!team.roster_issue || (left == null && team.fa_open === false);
+                  // OVER-LIMIT ROSTERS ARE THE ONLY LOCK-OUT LEFT (v0.403.0).
+                  // A shut FA window used to disable this button for anyone
+                  // without a waiver hold — which is most of the pool, since
+                  // only a DROP sets one. So for the hours the window was
+                  // closed the board was a wall of dead buttons. It is a
+                  // CLAIM now: 0288 made the server take one.
+                  const blocked = !!team.roster_issue;
+                  const claim = left != null || team.fa_open === false;
                   return (
                     <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null || blocked} className="mono"
                       title={team.roster_issue ? 'roster over its limits — drop players first'
-                        : left == null && team.fa_open === false ? 'free agency is closed right now' : undefined}
+                        : left != null ? 'on waivers — put in a claim'
+                        : team.fa_open === false ? 'free agency is closed — put in a claim for the next run' : undefined}
                       style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null || blocked ? 0.4 : 1 }}>
-                      {left != null ? 'CLAIM' : 'ADD'}
+                      {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
                     </button>
                   );
                 })()}
