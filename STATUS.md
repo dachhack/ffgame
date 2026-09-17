@@ -18,6 +18,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.408.0 — stop deleting the release out from under the download
+
+Founder: "the app downloads from the link but never finished and says
+failed despite showing all the data transferred."
+
+Checked the artifact before touching anything, because "failed" could have
+meant a truncated build: the link answers 200, Content-Length 20,240,920,
+exactly that many bytes arrive, Content-Type is the Android package type,
+the zip passes an integrity test and carries v0.406.0 in its bundle. The
+build is sound and the bytes are all there. Whatever fails, fails after
+the download.
+
+Two things then, one of them ours.
+
+OURS: release-apk.yml opened with `gh release delete apk-latest
+--cleanup-tag`. Every build destroyed the release and its tag and built
+them again — so for the seconds in between, the ONE URL every playtester
+has, the one the site's download card points at, was a 404. On a quiet week
+nobody lands in that window. On the day that produced this report it was
+seven windows in ninety minutes, on the exact link the founder keeps being
+handed. It now creates the release only when it is missing and replaces the
+assets in place. --clobber still drops an asset before re-uploading it, so
+the window is not zero, but it is one file for a few seconds instead of the
+whole release. The tag stays where it was first cut; the commit is in the
+notes, and a stale link on a page beats a dead link in a browser.
+
+NOT OURS, and not fixable by us: a browser that runs its own verification
+over a download whose type says "package archive" can report FAILED after
+every byte has arrived. So there is a second door now — the same signed
+APK, zipped, published beside it. An ordinary zip is an ordinary file to
+every browser: download, unzip, tap the APK inside.
+
+And the word is explained where it appears. The changelog's download card
+and the FAQ both now say that "Failed" at the end of the bar is the browser
+refusing the file rather than a broken build, with the zip link right
+there. Somebody staring at that word should not have to conclude the app is
+broken.
+
+The app carries the zip link too, through core's changelog module, so the
+APK rebuilds with this one.
+
 ### v0.407.0 — the board opens on the week being played
 
 Founder, on a classic league matchup: "still opens to week 1."

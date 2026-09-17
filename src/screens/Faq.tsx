@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { APK_URL } from '@drip/core/data/changelog';
+import { APK_URL, APK_ZIP_URL } from '@drip/core/data/changelog';
 
 // Plain-language FAQ. The Rulebook (src/screens/Rulebook.tsx) is the deep scoring
 // reference rendered from live data; this page answers the "what is this / is it
@@ -185,7 +185,9 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         {
           q: 'Is there a mobile app?',
           a: <>Android: yes — a playtest build you install directly, always the newest: <a href={APK_URL} style={{ color: 'var(--you)' }}>download the APK</a> (Android
-            asks once to allow installs from your browser). iOS: not yet — the site works in Safari, and the game engine is shared so the
+            asks once to allow installs from your browser). If the download reaches the end and then says <b>Failed</b>, that is the browser
+            refusing a package archive rather than a broken build — <a href={APK_ZIP_URL} style={{ color: 'var(--you)' }}>take the zip</a>,
+            unzip it, and tap the APK inside. iOS: not yet — the site works in Safari, and the game engine is shared so the
             same play loop ships there when it's built. What changed in each version is at <b>⚙ → What's new</b>.</>,
         },
         {

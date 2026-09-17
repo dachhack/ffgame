@@ -25,6 +25,13 @@ export const SITE_URL = 'https://dripfantasy.com';
 export const CHANGELOG_URL = `${SITE_URL}/changelog.json`;
 export const CHANGELOG_PAGE_URL = `${SITE_URL}/#/changelog`;
 export const APK_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk';
+/** THE SAME APK, ZIPPED (v0.408.0). Founder: "the app downloads from the link
+ *  but never finished and says failed despite showing all the data
+ *  transferred." A browser that refuses a package archive after the bytes have
+ *  already arrived will take an ordinary zip without complaint, so this is the
+ *  second door: download, unzip, install. Same signed build, published beside
+ *  the APK by release-apk.yml. */
+export const APK_ZIP_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk.zip';
 export const APK_MANIFEST_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/manifest.json';
 export const APK_RELEASE_PAGE_URL = 'https://github.com/dachhack/ffgame/releases/tag/apk-latest';
 
