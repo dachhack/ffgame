@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.398.0 — a rookie filter on the draft board
+
+Founder: "And a rookie filter on the draft player list." A 🌱 ROOKIES
+chip beside the position chips in both draft rooms.
+
+Client only — years_exp already rides league_pool and the waiver wire
+already knows what a rookie is (0172's TenureBand). Two things had to
+change to reuse that rather than invent a second answer.
+
+The draft room loaded years_exp ONLY when some roster spot filtered on
+tenure, which is precisely backwards for this: a league with no
+tenure-filtered spot is exactly the league that wants the chip, and its
+map would have been empty. It now loads once per room open, and the chip
+only appears once the map has arrived — an empty map behind a live filter
+hides every player and reads as broken rather than as empty.
+
+And tenureMatches lets a team unit (K/DST/HC/P) pass EVERY band, because
+a rookies-only SPOT must still accept a D/ST. A browse filter is the
+other question: "show me rookies" is not answered by every kicker and all
+thirty-two defenses. Rather than let the two drift — which is the bug
+v0.258.0 had to go and fix — the helper takes an explicit
+`teamUnits: false`, and only the browse filters pass it.
+
 ### v0.397.0 — who is actually in the draft room
 
 Founder, after the draft: "Also need an indicator on the draft board if a

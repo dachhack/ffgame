@@ -26,6 +26,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
+import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
@@ -99,6 +100,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   const [q, setQ] = useState('');
   // Multi-select positions + the sort order (v0.302.0). A position the server
   // caps at ZERO (0195 — no starting spot accepts it) isn't offered at all.
+  // ROOKIE FILTER (v0.398.0) — the web twin. A band, not a boolean, so it
+  // reuses the wire's definition of rookie rather than minting a second one.
+  const [tenure, setTenure] = useState<TenureBand>('any');
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   // Show already-drafted players in the list (v0.351.0, founder: "add a
@@ -213,9 +217,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       // showed projections without installing would quietly render them under
       // whichever league was opened before it.
       setLeagueProjScoring(leagueCatalogOf(g));
-      if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
-        leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-      }
+      // ALWAYS, not just when a spot filters on tenure (v0.398.0): the ROOKIE
+      // chip needs years_exp in every league, and the leagues that want it are
+      // exactly the ones with no tenure-filtered spot to trigger the old
+      // condition. One read per room open.
+      leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     }).catch(() => {});
     loadTeam();
     const poll = setInterval(refresh, 3000);
@@ -311,9 +317,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => (showTaken || !taken.has(p.slug)) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
+      // teamUnits: false — "show me rookies" is not answered by every kicker
+      // and all thirty-two defenses (see tenure.ts).
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap]);
 
   useEffect(() => {
     if (!auction || myRoster == null || !st) return;
@@ -957,6 +966,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
               );
             })}
+            {/* ROOKIES (v0.398.0). Only once years_exp has loaded — an empty
+                map would hide every player and look broken rather than empty. */}
+            {Object.keys(expMap).length > 0 && (
+              <Chip label="🌱 ROOKIES" on={tenure === 'rookie'}
+                onPress={() => { tap(); setTenure((cur) => (cur === 'rookie' ? 'any' : 'rookie')); }} />
+            )}
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
             <Chip label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />

@@ -966,6 +966,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   // Multi-select positions + the sort order (v0.302.0). Empty = every position
   // the league can roster; a position the server caps at ZERO (0195 — no spot
   // accepts it) isn't offered at all, since drafting one is refused anyway.
+  // ROOKIE FILTER (v0.398.0, founder: "And a rookie filter on the draft player
+  // list"). A band rather than a boolean so it reuses the wire's definition of
+  // rookie instead of minting a second one; only ANY and ROOKIE are offered
+  // here, which is the ask.
+  const [tenure, setTenure] = useState<TenureBand>('any');
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
@@ -1053,9 +1058,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       // showed projections without installing would quietly render them under
       // whichever league was opened before it.
       setLeagueProjScoring(leagueCatalogOf(g));
-      if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
-        leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-      }
+      // ALWAYS, not just when a spot filters on tenure (v0.398.0): the ROOKIE
+      // chip needs years_exp in every league, and the leagues that want it are
+      // precisely the ones with no tenure-filtered spot to trigger the old
+      // condition. One read per room open.
+      leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     }).catch(() => {});
     loadTeam();
     const poll = setInterval(refresh, 3000);
@@ -1184,9 +1191,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
+      // teamUnits: false — "show me rookies" is not answered by every kicker
+      // and all thirty-two defenses (see tenure.ts).
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap]);
 
   /** The caller's seat in this league, and the queue that hangs off it. */
   const loadTeam = () => {
@@ -1892,6 +1902,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}{fill}</Chip>
               );
             })}
+            {/* ROOKIES (v0.398.0). Shown only once years_exp has actually
+                loaded — an empty map would make the chip hide every player and
+                look broken rather than empty. */}
+            {Object.keys(expMap).length > 0 && (
+              <Chip on={tenure === 'rookie'} onClick={() => setTenure((t) => (t === 'rookie' ? 'any' : 'rookie'))}>
+                🌱 ROOKIES
+              </Chip>
+            )}
             <StarChips mode={starMode} setMode={setStarMode} />
           </div>
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
