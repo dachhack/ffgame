@@ -18,7 +18,7 @@ import { teamLogo } from '@drip/core/data/media';
 import { srvBoardTotals } from '@drip/core/engine/liveScore';
 import { setSlugMetaOverrides, liveTeamFor } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot, powerupAvailability, type ShopWindow } from '@drip/core/data/powerups';
+import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot, twinGeneralKeys, powerupAvailability, type ShopWindow } from '@drip/core/data/powerups';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } from '@drip/core/data/premiumClient';
 import {
@@ -740,7 +740,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   // payload) PLUS armed team buffs that matter to this spot — the same two
   // sources the web board's chips draw from (v0.375.1; targeted-only missed
   // buffed players entirely).
-  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null): { icon: string; name: string; blurb: string }[] => {
+  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { icon: string; name: string; blurb: string }[] => {
     const k = `${win}|${slot}`;
     const out: { icon: string; name: string; blurb: string }[] = [];
     const add = (id: string) => { const p = powerupById(id); out.push({ icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
@@ -758,6 +758,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     const sw = targeted.swaps?.[k];
     if (sw) add(sw.kind === 'player-swap' ? 'player-swap' : sw.kind === 'mulligan' ? 'mulligan' : 'metric-swap');
     if (pos) for (const id of buffs) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id);
+    // Twin Generals is decided a window at a time (twinGeneralKeys), so the
+    // caller passes the verdict in — the ⚡ chip must count it and the list
+    // behind the chip must name it, or the card badge would be the only place
+    // it appears and tapping for "what is on this card" would omit it.
+    if (twin) add('fg-stack');
     return out;
   };
 
@@ -1046,6 +1051,19 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         const winSlots = slots.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+        // TWIN GENERALS (v0.417.0, founder: "I armed twin generals for 1pm but
+        // I don't see it on the cards"). A window-level rule, not a per-spot
+        // one — two Field General QBs here or the card is worth nothing — so
+        // it cannot come through appliedFor's buffAppliesToSpot, which is why
+        // the app had never drawn it. Shared with the web through core.
+        const twinKeys = twinGeneralKeys(buffs.has('fg-stack'), winSlots.map((s) => {
+          const sp = picks[s.key];
+          return {
+            key: s.key,
+            pos: sp?.player_slug ? playersBySlug[sp.player_slug]?.pos ?? null : null,
+            metricId: sp?.metric_id ?? null,
+          };
+        }));
         const wLocked = winLocked(w.id);
 
         // Sealed and scoring → the duel, with its own window header. Duel
@@ -1154,7 +1172,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     // an owned card sits in the hand (0256 — picking it then
                     // confirms and uses the card).
                     metricFilter={(m) => !m.lock || unlocks.has(m.lock) || (inventory[m.lock] ?? 0) > 0}
-                    applied={appliedFor(s.win, s.slot, pick ? playersBySlug[pick.playerId]?.pos : undefined, pick?.metricId)}
+                    applied={appliedFor(s.win, s.slot, pick ? playersBySlug[pick.playerId]?.pos : undefined, pick?.metricId, twinKeys.has(s.key))}
+                    twin={twinKeys.has(s.key)}
                     hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) pickMetricWithCard(s.key, mid); }}

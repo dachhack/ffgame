@@ -14,7 +14,7 @@ import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
-import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow } from '@drip/core/data/powerups';
+import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
@@ -2904,11 +2904,14 @@ function WindowSectionInner(props: {
   // Twin Generals: with the buff armed and ≥2 of your Field General QBs in this
   // window, the top two multipliers stack — link those QB spots so you can see
   // which two are paired.
-  const twinLinked = new Set<string>();
-  if (armed['fg-stack']) {
-    const fgKeys = rw.slots.filter((s) => s.you && s.you.player.pos === 'QB' && s.you.metricId === 'fg').map((s) => slotKey(w.id, s.slotIndex));
-    if (fgKeys.length >= 2) fgKeys.forEach((k) => twinLinked.add(k));
-  }
+  // v0.417.0: the rule moved to core (twinGeneralKeys) so the app can show the
+  // same pairing. It was written here and only here, which is exactly why the
+  // phone had never heard of this card.
+  const twinLinked = twinGeneralKeys(!!armed['fg-stack'], rw.slots.map((s) => ({
+    key: slotKey(w.id, s.slotIndex),
+    pos: s.you?.player.pos ?? null,
+    metricId: s.you?.metricId ?? null,
+  })));
   const setN = rw.slots.filter((s) => picks[slotKey(w.id, s.slotIndex)]?.metricId).length;
   const { bigText } = useStore();
   const fs = (n: number) => bigText ? Math.round(n * 1.3 * 10) / 10 : n; // larger-text mode bumps the header's fine print

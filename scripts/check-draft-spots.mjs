@@ -34,6 +34,7 @@ import { projectedBox, projectedStarters } from '../packages/core/src/engine/pro
 import { liveTeamFor, slugMeta, normTeam } from '../packages/core/src/data/slugMeta';
 import { setLiveInjuries, clearLiveInjuries } from '../packages/core/src/data/injuries';
 import { setDepthChart, clearDepthChart } from '../packages/core/src/data/playerDepth';
+import { twinGeneralKeys, buffAppliesToSpot } from '../packages/core/src/data/powerups';
 import { LIVE_SEASON } from '../packages/core/src/data/realPbp';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
@@ -1332,6 +1333,41 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   } else {
     ok('at least one mover is a projected starter somewhere (else this guard proves nothing)', false);
   }
+}
+
+// ── Twin Generals is about a PAIR (v0.417.0) ──────────────────────────────
+// Founder: "I armed twin generals for 1pm but I don't see it on the cards."
+// He was on the phone. The app asks buffAppliesToSpot, which answers per SPOT,
+// and this is the one buff that is a property of a WINDOW — two Field General
+// QBs in it, or the card is worth nothing. So it can never be a case in that
+// switch, and the web had the rule inline on its own board, which is how one
+// host came to draw it and the other to deny it existed.
+{
+  const spot = (key, pos, metricId) => ({ key, pos, metricId });
+  const fgA = spot('w|1', 'QB', 'fg'), fgB = spot('w|2', 'QB', 'fg'), fgC = spot('w|3', 'QB', 'fg');
+  const wr = spot('w|4', 'WR', 'recyd'), qbOther = spot('w|5', 'QB', 'payd');
+
+  ok('two Field Generals link', [...twinGeneralKeys(true, [fgA, fgB])].sort().join(',') === 'w|1,w|2');
+  ok('one on its own links nothing', twinGeneralKeys(true, [fgA, wr, qbOther]).size === 0);
+  ok('unarmed links nothing, however many there are', twinGeneralKeys(false, [fgA, fgB]).size === 0);
+  // Three all link: the engine stacks the top TWO multipliers, and which two
+  // that turns out to be is a question the final scores answer.
+  ok('three all link', twinGeneralKeys(true, [fgA, fgB, fgC]).size === 3);
+  ok('only the Field Generals link, not the rest of the window',
+    !twinGeneralKeys(true, [fgA, fgB, wr, qbOther]).has('w|4'));
+  // A QB on another metric is not a Field General; a Field General is a QB.
+  ok('a QB on another metric does not count', twinGeneralKeys(true, [fgA, qbOther]).size === 0);
+  ok('a non-QB on the fg metric does not count',
+    twinGeneralKeys(true, [fgA, spot('w|6', 'WR', 'fg')]).size === 0);
+  // The shapes a half-filled setup screen really hands it.
+  ok('empty spots are simply not Field Generals',
+    twinGeneralKeys(true, [fgA, spot('w|7', null, null)]).size === 0);
+  ok('no spots at all is empty, not a crash', twinGeneralKeys(true, []).size === 0);
+  ok('undefined spots are empty too', twinGeneralKeys(true, undefined).size === 0);
+  // buffAppliesToSpot must NOT answer for it — that is the bug, and a later
+  // "fix" that adds a case there would badge a lone Field General.
+  ok('the per-spot rule still refuses it, which is why the pair rule exists',
+    buffAppliesToSpot('fg-stack', 'QB', 'fg') === false);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
