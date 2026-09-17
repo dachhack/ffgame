@@ -2372,6 +2372,24 @@ export const createPracticeRoom = (leagueId: string, slot?: number) =>
     rounds?: number; mode?: string; pool?: number;
   }>('create_mock_from_league', { p_league_id: leagueId, p_slot: slot ?? null });
 
+/** WHO IS IN THE ROOM (0286): mark me present and get everyone's last beat
+ *  back in the same round trip. `secs` is how long ago that seat was last
+ *  seen — the client decides what stale means, so a client that dies fades
+ *  instead of lying "here" forever. */
+export interface DraftPresence { roster_id: number; seen_at: string; secs: number }
+export const draftHere = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; server_now?: string; here?: DraftPresence[] }>(
+    'draft_here', { p_league_id: leagueId });
+
+/** A seat counts as IN THE ROOM for this long after its last beat. The client
+ *  beats every 10s, so this is four missed beats — long enough to ride out a
+ *  phone waking up or a tab throttling, short enough that a manager who walked
+ *  away shows as gone before their clock does. Shared so the web and the app
+ *  never disagree about who is here. */
+export const PRESENCE_STALE_SECS = 40;
+export const seatIsHere = (here: DraftPresence[] | null | undefined, rosterId: number | null | undefined): boolean =>
+  rosterId != null && (here ?? []).some((h) => h.roster_id === rosterId && h.secs <= PRESENCE_STALE_SECS);
+
 /** THE DRAFT LOG (0284): what happened, in order — every pick, autopick,
  *  auction award and nomination, every undo/edit/reset, start/pause/resume/
  *  complete, every autodraft toggle, and (0285) every clock that ran out.

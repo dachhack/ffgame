@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.397.0 — who is actually in the draft room
+
+Founder, after the draft: "Also need an indicator on the draft board if a
+team is active in the draft and not absent in the draft room. And commish
+needs a way to set players to auto. And then players can take them selves
+off auto."
+
+The last two already existed and neither was findable: the manager's
+AUTODRAFT chip lives in the QUEUE tab, the commissioner's per-seat
+switches behind CONTROLS ▾. Both are now ALSO on the live draft card,
+where the decision actually gets made — same two RPCs, no new
+permissions (set_autodraft has always taken the seat's owner, the
+commissioner or an admin).
+
+Presence is new (0286). A heartbeat, not a connection: every client
+already polls, so draft_here() marks the caller present and hands back
+everyone's last beat in the same round trip — one call every 10s, no
+extra fetch. It returns a TIMESTAMP rather than a boolean, so the client
+decides what stale means (40s, four missed beats, shared in core so the
+hosts cannot disagree) and a client that dies fades out instead of lying
+"here" forever. Keyed by person, reported by seat: a co-managed seat is
+lit while either of them is there.
+
+On the card: a roll-call row — ● in the room, ○ away, 🤖 autodrafting —
+and for the commissioner each chip is the autodraft switch for that seat.
+On the on-clock line, the thing everyone is staring at: "⚠ NOT IN THE
+ROOM — the clock will put them on autodraft". Seats with no manager show
+a dot rather than a circle; they cannot be absent.
+
 ### v0.396.0 — a timed-out seat goes on autodraft, and the draft has a log
 
 Founder, mid-draft: "We need a way that teams that time out and auto get

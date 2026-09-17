@@ -31,6 +31,7 @@ import {
   setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
   draftLog, type DraftEvent,
+  draftHere, seatIsHere, type DraftPresence,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, type PushTokenRow,
@@ -1282,6 +1283,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     finally { busyRef.current = false; setBusy(false); }
   };
 
+  // WHO IS IN THE ROOM (0286). One call does both jobs — marks me present and
+  // returns everyone's last beat — so this costs one round trip every 10s and
+  // no extra fetch. Only while the draft is actually on: a pending lobby and a
+  // finished board have nobody to wait for.
+  const [here, setHere] = useState<DraftPresence[]>([]);
+  const liveRoom = st?.status === 'live';
+  useEffect(() => {
+    if (!liveRoom) { setHere([]); return; }
+    let dead = false;
+    const beat = () => draftHere(leagueId).then((r) => { if (!dead && r.ok) setHere(r.here ?? []); }).catch(() => {});
+    beat();
+    const id = setInterval(beat, 10000);
+    return () => { dead = true; clearInterval(id); };
+  }, [liveRoom, leagueId]);
+  const isHere = (rid: number | null | undefined) => seatIsHere(here, rid);
+  // A seat nobody is sitting in is not "absent" — it has no manager to be
+  // absent. Only a seat with a person behind it can be missing from the room.
+  const seatHasHuman = (rid: number | null | undefined) =>
+    rid != null && (team?.waiver_order ?? []).some((w) => w.roster_id === rid);
+  const onClockAway = liveRoom && !st?.on_clock_auto && st?.on_clock != null
+    && seatHasHuman(st.on_clock) && !isHere(st.on_clock);
+
   // THE DRAFT LOG (0284): fetched whole while the tab is open — a draft is at
   // most a few hundred lines — and every 5s so a live room scrolls itself.
   const [log, setLog] = useState<DraftEvent[]>([]);
@@ -1597,6 +1620,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                       : myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
                       : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                   </div>
+                  {/* 0286: the room is waiting on somebody who is not in it.
+                      Said here rather than only as a dot, because this is the
+                      one seat everyone is currently staring at. */}
+                  {onClockAway && (
+                    <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginTop: 3 }}>
+                      ⚠ NOT IN THE ROOM — the clock will put them on autodraft
+                    </div>
+                  )}
                 </div>
               </div>
               {nomSecsLeft != null && (
@@ -1633,6 +1664,55 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             <CommishDraftControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
               assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }} onRun={run} />
           )}
+          {/* WHO IS HERE (0286) + AUTODRAFT, ON THE CARD. Both switches already
+              existed — the manager's in the QUEUE tab, the commissioner's
+              behind CONTROLS ▾ — which is too far away at the moment somebody
+              has gone quiet and the room is watching a clock. This is the same
+              two RPCs, where the decision is actually made. */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 10, paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>IN THE ROOM</span>
+              {(st.order ?? []).map((rid) => {
+                const human = seatHasHuman(rid);
+                const on = autos[rid];
+                const present = isHere(rid);
+                const label = `${human ? (present ? '●' : '○') : '·'} ${teamName(rid) ?? `Team ${rid}`}${on ? ' 🤖' : ''}`;
+                const title = !human ? 'no manager in this seat — it always autodrafts'
+                  : on ? 'on autodraft' + (isCommish ? ' — click to take it off' : '')
+                  : present ? 'in the draft room' + (isCommish ? ' — click to put on autodraft' : '')
+                  : 'NOT in the draft room' + (isCommish ? ' — click to put on autodraft' : '');
+                const canToggle = isCommish && human;
+                return (
+                  <button key={rid} title={title} disabled={!canToggle || busy}
+                    onClick={canToggle ? () => run(() => setAutodraft(leagueId, rid, !on)) : undefined}
+                    className="mono"
+                    style={{
+                      fontSize: 9.5, padding: '3px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+                      cursor: canToggle && !busy ? 'pointer' : 'default',
+                      background: 'none',
+                      border: `1px solid ${on ? 'var(--warn)' : human && !present ? 'var(--faint)' : 'var(--bd)'}`,
+                      color: on ? 'var(--warn)' : !human ? 'var(--faint)' : present ? 'var(--you)' : 'var(--dim)',
+                    }}>{label}</button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              {myRoster != null && (
+                <button onClick={() => run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft))} disabled={busy}
+                  className="mono"
+                  style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5,
+                    borderColor: st.my_autodraft ? 'var(--warn)' : 'var(--bd)',
+                    color: st.my_autodraft ? 'var(--warn)' : 'var(--text)' }}>
+                  {st.my_autodraft ? '🤖 AUTODRAFT IS ON — TAKE MY SEAT BACK' : '🤖 AUTODRAFT MY SEAT'}
+                </button>
+              )}
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5 }}>
+                {isCommish
+                  ? '● in the room · ○ away · 🤖 autodrafting. Click a team to switch its autodraft on or off.'
+                  : '● in the room · ○ away · 🤖 autodrafting.'}
+              </span>
+            </div>
+          </div>
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
       )}
@@ -1878,7 +1958,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {(st.order ?? []).map((rid) => (
               <Chip key={rid} on={(teamView ?? myRoster) === rid} onClick={() => setTeamView(rid)}>
+                {/* 0286: ● in the room · ○ a manager who is not · nothing at
+                    all for a seat with no manager to be absent. */}
+                {liveRoom && seatHasHuman(rid) && (
+                  <span title={isHere(rid) ? 'in the draft room' : 'not in the draft room'}
+                    style={{ color: isHere(rid) ? 'var(--you)' : 'var(--faint)', marginRight: 5 }}>
+                    {isHere(rid) ? '●' : '○'}
+                  </span>
+                )}
                 {teamName(rid) ?? `Team ${rid}`}{auction && st.budgets ? ` $${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}` : ''}
+                {autos[rid] ? ' 🤖' : ''}
               </Chip>
             ))}
           </div>

@@ -20,6 +20,7 @@ import {
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   createPracticeRoom, deleteMockDraft, draftLog, type DraftEvent,
+  draftHere, seatIsHere, type DraftPresence,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
@@ -386,6 +387,27 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { busyRef.current = false; setBusy(false); }
   };
+
+  // WHO IS IN THE ROOM (0286) — the web twin. One call marks me present and
+  // returns everyone's last beat, so this is one round trip every 10s. Only
+  // while the draft is live: a lobby and a finished board have nobody to wait
+  // for.
+  const [here, setHere] = useState<DraftPresence[]>([]);
+  const liveRoom = st?.status === 'live';
+  useEffect(() => {
+    if (!liveRoom) { setHere([]); return; }
+    let dead = false;
+    const beat = () => draftHere(leagueId).then((r) => { if (!dead && r.ok) setHere(r.here ?? []); }).catch(() => {});
+    beat();
+    const id = setInterval(beat, 10000);
+    return () => { dead = true; clearInterval(id); };
+  }, [liveRoom, leagueId]);
+  const isHere = (rid: number | null | undefined) => seatIsHere(here, rid);
+  // A seat nobody sits in is not "absent" — it has no manager to be absent.
+  const seatHasHuman = (rid: number | null | undefined) =>
+    rid != null && (team?.waiver_order ?? []).some((w) => w.roster_id === rid);
+  const onClockAway = liveRoom && !st?.on_clock_auto && st?.on_clock != null
+    && seatHasHuman(st.on_clock) && !isHere(st.on_clock);
 
   // THE DRAFT LOG (0284): fetched whole while the tab is open — a draft is at
   // most a few hundred lines — and every 5s so a live room scrolls itself.
@@ -786,6 +808,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     : myTurn ? (auction ? 'YOUR NOMINATION — pick below' : 'YOUR PICK')
                     : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                 </Text>
+                {/* 0286: the room is waiting on somebody who is not in it. */}
+                {onClockAway && (
+                  <Mono size={9} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>
+                    ⚠ NOT IN THE ROOM — the clock will put them on autodraft
+                  </Mono>
+                )}
               </View>
               {nomSecsLeft != null && (
                 <Text style={{ fontFamily: MONO, fontSize: 26, fontWeight: '700', color: nomSecsLeft <= 10 ? t.opp : t.you, fontVariant: ['tabular-nums'] }}>
@@ -822,6 +850,48 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }}
               onRun={(fn) => void run(fn)} />
           )}
+          {/* WHO IS HERE (0286) + AUTODRAFT, ON THE CARD — the web twin. Both
+              switches already existed (the manager's in QUEUE, the
+              commissioner's behind CONTROLS ▾), too far from the moment
+              somebody goes quiet and the room is watching a clock. */}
+          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 10, paddingTop: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Mono size={8.5} tone="faint" track={0.1}>IN THE ROOM</Mono>
+              {(st.order ?? []).map((rid) => {
+                const human = seatHasHuman(rid);
+                const on = autos[rid];
+                const present = isHere(rid);
+                const canToggle = isCommish && human && !busy;
+                return (
+                  <Pressable key={rid} disabled={!canToggle}
+                    onPress={canToggle ? () => { tap(); void run(() => setAutodraft(leagueId, rid, !on)); } : undefined}
+                    accessibilityRole={canToggle ? 'button' : undefined}
+                    accessibilityLabel={`${teamName(rid) ?? `Team ${rid}`}: ${!human ? 'no manager' : present ? 'in the room' : 'not in the room'}${on ? ', autodrafting' : ''}`}
+                    style={{
+                      borderWidth: StyleSheet.hairlineWidth, borderRadius: 4,
+                      paddingHorizontal: 7, paddingVertical: 3,
+                      borderColor: on ? t.warn : human && !present ? t.faint : t.bd,
+                    }}>
+                    <Mono size={9.5} tone={on ? 'warn' : !human ? 'faint' : present ? 'you' : 'dim'}>
+                      {`${human ? (present ? '●' : '○') : '·'} ${teamName(rid) ?? `Team ${rid}`}${on ? ' 🤖' : ''}`}
+                    </Mono>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {myRoster != null && (
+              <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {ghost(st.my_autodraft ? '🤖 AUTODRAFT IS ON — TAKE MY SEAT BACK' : '🤖 AUTODRAFT MY SEAT',
+                  () => void run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft)),
+                  st.my_autodraft ? t.warn : undefined)}
+              </View>
+            )}
+            <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+              {isCommish
+                ? '● in the room · ○ away · 🤖 autodrafting. Tap a team to switch its autodraft on or off.'
+                : '● in the room · ○ away · 🤖 autodrafting.'}
+            </Mono>
+          </View>
         </Card>
       )}
 
