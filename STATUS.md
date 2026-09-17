@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.395.3 — an IR spot is not a round, in a practice room either
+
+Founder, in a room made on the fixed build: "Draft says 21 rounds but
+the mock has 24" — then, with a fresh one: "Still 24."
+
+His league is a 24-spot roster with 3 IR spots. IR spots are not drafted
+(0193: `rounds` is what a team may hold, `stash_slots` how many of those
+the draft does not fill), so its draft is 21 rounds and its lobby says
+so. 0281 copied `rounds` = 24 and then forced `stash_slots` to 0 — "so
+you draft the whole roster" — which is exactly wrong for IR: three spots
+nobody drafts became three extra drafted rounds. Reproduced before the
+fix: source lobby 21, room lobby 24.
+
+0283 carries `stash_slots` across as it is. Keepers stay at 0, because a
+keeper is a pre-draft designation the room does not have. The probe
+fixture now builds its source through the real roster RPCs — three spots,
+a bench, a taxi and one IR spot — and asserts the room's `draft_state`
+rounds equal the source's: 10 of 11, not 11. It did not catch this
+before because it wrote `roster_shape` straight into settings_json,
+which skips the sync that sets `stash_slots`; the bug lived exactly in
+the gap the shortcut jumped over.
+
 ### v0.395.2 — you can delete a practice room on your phone
 
 Founder, in a practice room on the app: "How do I delete the mock?"
