@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.414.0 — the projected box was reading last year's rosters
+
+Founder, asking whether a real depth chart could be had from ESPN or
+StatHead. Checking that answer against v0.413.0's output is what turned up
+the bug: Seattle's projected starters listed Kenneth Walker, who signed for
+Kansas City, and did not list Rashid Shaheed, who is an actual Seahawk.
+
+projectedBox filed candidates by slugMeta's team. That field is a player's
+MAJORITY 2025 team, deliberately — the baked play stream's possession gating
+is written against it and it must stay that way. It is simply the wrong
+question to ask about who plays for a team in 2026, and asking it put every
+offseason mover on the team he left.
+
+liveTeamFor is the function this should have used from the start, and its
+own comment records the same bug being fixed for the app's picker a while
+back: "we still have Doubs as GB". It prefers the worker's override, then
+the directory bake, and it NORMALISES — which matters on its own, because
+the layer underneath answers LAR where the slate says LA, so even a correct
+team could miss.
+
+Asserted as a rule rather than by naming the two players, so a projection
+refresh cannot quietly retire the guard: every row on a side must resolve to
+that side under the live map, and a player whose baked team differs from his
+live one must appear under the new team and not the old. The mover is found
+in the data — the run currently reports "kenneth-walker: SEA -> KC" — and
+the assertion fails loudly if the data ever stops containing one, because a
+guard with nothing to catch proves nothing.
+
+Confirmed to bite by restoring the old filter: both assertions fail.
+
+ON THE DEPTH CHART ITSELF, which was the actual question — the findings are
+in the reply, not the code. Short version: ESPN's core API serves real 2026
+ranked depth charts and is the best source; StatHead's get_depth_charts has
+the right shape but its worker blows its resource limit on 2025 and 2026
+(2024 answers fine); Sleeper carries depth_chart_order and the sync already
+reads it, but it has Seattle's QB1 as Drew Lock over Sam Darnold, so it is
+not trustworthy on its own. Nothing shipped on that yet.
+
 ### v0.413.0 — the fields open before kickoff, and the box score projects
 
 Founder: "on a non-existing feed, just open the fields with a kick off time

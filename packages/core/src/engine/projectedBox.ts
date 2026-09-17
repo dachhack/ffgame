@@ -23,7 +23,8 @@
 // on the lineup rows. Nothing is baked in twice.
 import type { Pos } from '../types';
 import { PROJ_2026 } from '../data/proj2026';
-import { slugMeta, normTeam } from '../data/slugMeta';
+import { slugMeta, normTeam, liveTeamFor } from '../data/slugMeta';
+import { LIVE_SEASON } from '../data/realPbp';
 import { projFor } from '../data/poolSort';
 
 export interface ProjectedRow {
@@ -52,7 +53,19 @@ function candidatesFor(team: string): { slug: string; pos: Pos }[] {
   const out: { slug: string; pos: Pos }[] = [];
   for (const slug of PROJ_2026.keys()) {
     const m = slugMeta(slug);
-    if (normTeam(m.team) !== T) continue;
+    // THE LIVE TEAM, NOT THE BAKE'S (v0.414.0). slugMeta's team comes from
+    // BAKED_SLUGS, which is deliberately a player's MAJORITY 2025 team — the
+    // baked play stream's possession gating is written against it, so it must
+    // stay that way. It is simply the wrong question here, and v0.413.0 asked
+    // it: Kenneth Walker signed for KC and was still listed as a Seattle
+    // starter, while Rashid Shaheed — an actual Seahawk — was filed under New
+    // Orleans and missing from the sheet entirely.
+    //
+    // liveTeamFor is the answer this file should have used from the start.
+    // Its own comment records this same bug being fixed for the app's picker
+    // ("we still have Doubs as GB"); it also normalises, which teamFor alone
+    // does not — that layer answers LAR where the slate says LA.
+    if (liveTeamFor(slug, null, LIVE_SEASON) !== T) continue;
     out.push({ slug, pos: m.pos });
   }
   const lower = T.toLowerCase();
