@@ -172,10 +172,50 @@ jobs:
           # build with the same name.
           (cd "$RUNNER_TEMP/out" && zip -q -X drip-fantasy.apk.zip drip-fantasy.apk)
           gh release upload apk-latest \
-            "$RUNNER_TEMP/out/drip-fantasy.apk" \
             "$RUNNER_TEMP/out/drip-fantasy.apk.zip" \
             "$RUNNER_TEMP/out/manifest.json" \
             --repo "$GITHUB_REPOSITORY" --clobber
+          # THE APK GOES UP AS AN ORDINARY BINARY (v0.409.0).
+          #
+          # Founder, with a screenshot of Chrome's download list: the APK sat
+          # at "20.24 MB / 20.24 MB" with a pause icon, never finishing, while
+          # the identical file handed over in chat installed without complaint.
+          # Every byte had arrived; Chrome simply would not call it done.
+          #
+          # The difference between the two doors is one header. GitHub types a
+          # release asset from its extension, so .apk is served as
+          # application/vnd.android.package-archive — the type that puts Chrome
+          # into its package-archive handling — while the zip published above
+          # is served as application/octet-stream and behaves like any other
+          # download. So send the APK as octet-stream too: same bytes, same
+          # signature, same filename, same URL. Android resolves the installer
+          # from the .apk extension when it is tapped, not from the type it
+          # arrived under.
+          #
+          # gh release upload cannot set the type, so this is the REST upload,
+          # which needs the old asset gone first. If ANY of that fails we fall
+          # back to gh release upload: a link serving the awkward type beats a
+          # release with no APK on it at all.
+          rel=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/apk-latest" --jq .id)
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$rel/assets" \
+                  --jq '.[] | select(.name=="drip-fantasy.apk") | .id' | head -1)
+          if [ -n "$old" ]; then gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old" || true; fi
+          if gh api --method POST \
+               "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$rel/assets?name=drip-fantasy.apk" \
+               -H "Content-Type: application/octet-stream" \
+               --input "$RUNNER_TEMP/out/drip-fantasy.apk" >/dev/null; then
+            echo "APK uploaded as application/octet-stream"
+          else
+            echo "::warning::octet-stream upload failed — falling back to the typed upload"
+            gh release upload apk-latest "$RUNNER_TEMP/out/drip-fantasy.apk" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+          # Whatever route it took, the APK has to be ON the release.
+          gh api "repos/$GITHUB_REPOSITORY/releases/$rel/assets" \
+            --jq '.[] | "\(.name)  \(.size)  \(.content_type)"'
+          gh api "repos/$GITHUB_REPOSITORY/releases/$rel/assets" \
+            --jq '[.[] | select(.name=="drip-fantasy.apk")] | length' | grep -q '^1$' \
+            || { echo "::error::no drip-fantasy.apk on the release"; exit 1; }
           gh release edit apk-latest --repo "$GITHUB_REPOSITORY" --latest \
             --title "Drip Fantasy APK · $APP · build $ANDROID_VERSION_CODE" \
             --notes-file "$RUNNER_TEMP/notes.md"
