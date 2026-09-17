@@ -73,13 +73,20 @@ begin
   end loop;
   -- a pool row only this league has, to prove the copy is THIS board
   update league_pool set full_name = 'Repaired Twin' where league_id = lid and slug = 'pr-7';
-  -- A COMMISSIONER WHO HAS SET THE ROOM UP (0282). The roster the picks land
-  -- in lives in settings_json under keys the league builder never writes, so
-  -- without an explicit copy the practice room came up with a DEFAULT lineup
-  -- while carrying the source's round count.
+  -- A COMMISSIONER WHO HAS SET THE ROOM UP (0282), THROUGH THE REAL DOORS
+  -- (0283): three starting spots, a 5-man bench, a 2-seat taxi and ONE IR SPOT.
+  -- set_league_roster_shape re-syncs the draft — rounds 3+5+2+1 = 11, of which
+  -- the IR spot is NOT drafted (stash_slots 1) — which a direct settings_json
+  -- write would have skipped, and the bug 0283 fixes lived exactly there.
+  perform pr_as('1');
+  perform pr_ok(set_league_classic_slots(lid,
+      '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'pr0d the source gets a lineup');
+  perform pr_ok(set_league_roster_shape(lid, 5, 2, 1), 'pr0e and a bench, taxi and one IR spot');
+  perform pr_true((select rounds = 11 and stash_slots = 1 from draft where league_id = lid),
+    'pr0f so the source drafts 10 of its 11 spots');
+  reset role;
+  -- the rest live in settings_json under keys the league builder never writes
   update league set settings_json = settings_json || jsonb_build_object(
-      'roster_slots', '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb,
-      'roster_shape', '{"bench": 5, "taxi": 2, "ir": 1}'::jsonb,
       'scoring_classic', '{"pass_td": 6}'::jsonb,
       'bestball', '["S2"]'::jsonb,
       'ppr', '0.5',
@@ -112,10 +119,17 @@ begin
     'pr5 CLASSIC, like the league it practises — not the drip default');
   perform pr_true((select settings_json -> 'pos_caps' from league where id = mid) = '{"QB": 2}'::jsonb,
     'pr6 with the same position caps');
-  perform pr_true((select rounds = 8 and pick_seconds = 45 and mode = 'snake'
+  perform pr_true((select rounds = 11 and pick_seconds = 45 and mode = 'snake'
                      from draft where league_id = mid), 'pr7 same roster size, clock and mode');
-  perform pr_true((select keeper_slots = 0 and stash_slots = 0 from draft where league_id = mid),
-    'pr8 and no keepers — a practice room drafts the whole roster');
+  perform pr_true((select keeper_slots = 0 from draft where league_id = mid),
+    'pr8 and no keepers — a practice room has none to hold back');
+  -- 0283: an IR spot is not a round. The room carries the source's stash so
+  -- its draft is the same length as the real one — 10 rounds, not 11.
+  perform pr_true((select stash_slots = 1 from draft where league_id = mid),
+    'pr8a the IR spot came across as an IR spot');
+  perform pr_true((draft_state(mid) ->> 'rounds') = (draft_state(lid) ->> 'rounds')
+              and (draft_state(mid) ->> 'rounds')::int = 10,
+    'pr8b so the room drafts exactly as many rounds as the real league — 10 of 11');
 
   -- the board is the league's board, not a rebuilt one
   select count(*) into n from league_pool where league_id = mid;
@@ -125,8 +139,9 @@ begin
 
   -- 0282: the ROSTER the picks land in, not just the draft that fills it
   perform pr_true((select settings_json -> 'roster_slots' from league where id = mid)
-                = '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb,
-    'pr10a the roster builder''s spots came across');
+                = (select settings_json -> 'roster_slots' from league where id = lid)
+              and jsonb_array_length((select settings_json -> 'roster_slots' from league where id = mid)) = 3,
+    'pr10a the roster builder''s spots came across, as the RPC stored them');
   perform pr_true((select settings_json -> 'roster_shape' from league where id = mid)
                 = '{"bench": 5, "taxi": 2, "ir": 1}'::jsonb,
     'pr10b and the bench / taxi / IR counts');
