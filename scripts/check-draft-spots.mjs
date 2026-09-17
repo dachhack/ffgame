@@ -21,6 +21,7 @@ import {
 } from '../packages/core/src/engine/classic';
 import { sortPool, poolSortValue, adpFor, projFor, setLiveAdp, clearLiveAdp, adpIsLive } from '../packages/core/src/data/poolSort';
 import { disambiguateSlugs } from '../packages/core/src/data/nativeLeague';
+import { fmtClearsAt } from '../packages/core/src/data/waiverClock';
 import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
@@ -926,6 +927,42 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   ok('input order does not change the answer',
     openWeekFrom([2, 1], kicks, ET('2026-09-15T18:00:00Z'))
       === openWeekFrom([1, 2], kicks, ET('2026-09-15T18:00:00Z')));
+}
+
+// ── the waiver clock (v0.404.0) ───────────────────────────────────────────
+// Founder: "it looks like my bid for golden went through immediately." 0289
+// gave a claim its own clearing time; this is the line the card prints, and
+// both hosts print it from here, so they cannot drift apart on what time a
+// claim settles.
+{
+  const ET = (iso) => Date.parse(iso);
+  // 2026-09-17 06:00Z = 2:00 AM ET, Thursday. The window opens at 10 AM ET,
+  // which is 14:00Z the same day.
+  const now = ET('2026-09-17T06:00:00Z');
+  ok('a time later today is said without a weekday — it is today',
+    fmtClearsAt('2026-09-17T14:00:00Z', now) === 'clears 10 AM ET');
+  ok('a time on another day says which day, or "10 AM" is a guess',
+    fmtClearsAt('2026-09-18T07:00:00Z', now) === 'clears Fri 3 AM ET');
+  ok('minutes show when there are any',
+    fmtClearsAt('2026-09-17T14:30:00Z', now) === 'clears 10:30 AM ET');
+  // A clock that has run out is waiting on the next sweep, not on the clock.
+  ok('a time that has passed reads as clearing now, not as a stuck future time',
+    fmtClearsAt('2026-09-17T05:00:00Z', now) === 'clearing now');
+  ok('the exact instant counts as now', fmtClearsAt('2026-09-17T06:00:00Z', now) === 'clearing now');
+  // Null in, null out: a pre-0289 row has nothing honest to say.
+  ok('no clearing time renders nothing at all', fmtClearsAt(null, now) === null);
+  ok('undefined renders nothing', fmtClearsAt(undefined, now) === null);
+  ok('an unparseable stamp renders nothing rather than Invalid Date',
+    fmtClearsAt('whenever', now) === null);
+  // EST vs EDT: the same UTC hour is a different wall clock in January. A
+  // fixed offset would print 10 AM here and be an hour wrong.
+  ok('the zone moves with the clocks — 14:00Z is 9 AM ET in January',
+    fmtClearsAt('2027-01-14T14:00:00Z', ET('2027-01-14T06:00:00Z')) === 'clears 9 AM ET');
+  // Midnight is 12 AM, not 0 AM, and noon is 12 PM.
+  ok('midnight ET reads as 12 AM',
+    fmtClearsAt('2026-09-18T04:00:00Z', now) === 'clears Fri 12 AM ET');
+  ok('noon ET reads as 12 PM',
+    fmtClearsAt('2026-09-17T16:00:00Z', now) === 'clears 12 PM ET');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

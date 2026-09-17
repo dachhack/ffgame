@@ -13,6 +13,7 @@ import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
+import { fmtClearsAt } from '@drip/core/data/waiverClock';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -3132,6 +3133,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
                 {c.drop_slug && <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}> · dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</span>}
               </span>
+              {/* 0289: PENDING UNTIL WHEN. Without this the card says a claim is
+                  pending and stops, which is the same silence that made a claim
+                  settling on the spot look normal. */}
+              {fmtClearsAt(c.clears_at, Date.now() + skew.current) && (
+                <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}>{fmtClearsAt(c.clears_at, Date.now() + skew.current)}</span>
+              )}
               {team.waiver_mode === 'faab' && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>${c.bid ?? 0}</span>}
               <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 5px' }}>PENDING</span>
               <button onClick={() => run(() => cancelWaiverClaim(c.id))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>cancel</button>
@@ -3155,10 +3162,14 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         <div style={hdr}>
           PLAYER POOL ({free.length} available)
           {team.waiver_mode === 'faab' && team.my_faab != null ? ` · 💰 FAAB $${team.my_faab}` : ''}
+          {/* 0289, founder: "waivers are now open but it still has the FA time".
+              Leading with a padlock and an hour he cannot use reads as "shut",
+              even standing in front of a board of live BID buttons. Say what
+              works now; the hour is the footnote, not the headline. */}
           {team.fa_open === false
             ? (team.fa_start_min != null
-                ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET — until then, claims only`
-                : ' · 🔒 no free agency — claims only')
+                ? ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — free agency opens ${fmtEtMin(team.fa_start_min)} ET`
+                : ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — this league has no free agency`)
             : ''}
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
