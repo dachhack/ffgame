@@ -30,6 +30,7 @@ import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 import { lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
 import { groupFieldGames, setLiveGameFeed, clearLiveGameFeeds } from '../packages/core/src/data/gameFeed';
+import { projectedBox } from '../packages/core/src/engine/projectedBox';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
@@ -1147,6 +1148,69 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   ok('a week with no feed yields no cards, so the chip stays hidden',
     groupFieldGames(903, []).length === 0);
   clearLiveGameFeeds();
+}
+
+// ── fields before kickoff (v0.413.0) ──────────────────────────────────────
+// Founder: "on a non-existing feed, just open the fields with a kick off time
+// and no data. The box score can contain projected starters and fantasy
+// projections until kick off." A feed exists only once a play has been
+// ingested, so before the first whistle of a week the whole screen was empty —
+// on the evening a manager is actually choosing a lineup.
+{
+  const play = (c) => ({ c, t: '' });
+  const sched = [
+    { away: 'NE', home: 'SEA', kickoff: '2026-09-10T00:20:00Z' },
+    { away: 'SF', home: 'LA', kickoff: '2026-09-11T00:35:00Z' },
+    { away: 'TB', home: 'CIN', kickoff: '2026-09-13T17:00:00Z' },
+  ];
+
+  // NOTHING INGESTED YET: the slate is the whole screen.
+  clearLiveGameFeeds();
+  const cold = groupFieldGames(904, [], sched);
+  ok('a week with no feed at all still opens onto its fixtures', cold.length === 3);
+  ok('and every card carries its kickoff', cold.every((g) => !!g.feed.kickoff));
+  ok('with no plays to draw', cold.every((g) => g.feed.plays.length === 0));
+  ok('and marked as not started', cold.every((g) => g.feed.st === 'pre'));
+
+  // A LIVE FEED ALWAYS WINS. The slate must never overwrite ingested plays.
+  setLiveGameFeed(904, {
+    games: { 'NE@SEA': [play(1), play(2)] },
+    teams: { NE: 'NE@SEA', SEA: 'NE@SEA' },
+    states: { 'NE@SEA': 'in' },
+  });
+  const mixed = groupFieldGames(904, [], sched);
+  ok('a mixed week shows every game exactly once', mixed.length === 3);
+  const live = mixed.find((g) => g.feed.key === 'NE@SEA');
+  ok('the live game keeps its plays', live.feed.plays.length === 2);
+  ok('and its own state, not the slate\'s', live.feed.st === 'in');
+  ok('while a feed with no kickoff borrows the slate\'s', live.feed.kickoff === sched[0].kickoff);
+  ok('and the unstarted ones are still there', mixed.filter((g) => g.feed.plays.length === 0).length === 2);
+
+  // No schedule and no feed is still nothing — the chip stays hidden.
+  ok('no fixtures and no feed yields nothing', groupFieldGames(905, []).length === 0);
+  clearLiveGameFeeds();
+
+  // ── the projected box ──────────────────────────────────────────────────
+  const box = projectedBox('SEA', 'NE');
+  ok('both sides get a projected lineup', box.home.length > 0 && box.away.length > 0);
+  ok('one quarterback, not a roster of them', box.home.filter((r) => r.pos === 'QB').length === 1);
+  ok('two backs and three receivers', box.home.filter((r) => r.pos === 'RB').length === 2
+    && box.home.filter((r) => r.pos === 'WR').length === 3);
+  // The units live in a different bake from the skill positions, which is why
+  // this goes through projFor rather than the projection map.
+  ok('the kicker and the defence are in it', box.home.some((r) => r.pos === 'K')
+    && box.home.some((r) => r.pos === 'DEF'));
+  ok('every row carries a real number', box.home.every((r) => Number.isFinite(r.proj) && r.proj > 0));
+  ok('each position group is ordered by projection',
+    box.home.filter((r) => r.pos === 'WR').every((r, i, a) => i === 0 || a[i - 1].proj >= r.proj));
+  ok('and the sides are the two teams asked for',
+    box.home.every((r) => r.team === 'SEA') && box.away.every((r) => r.team === 'NE'));
+  // Both vocabularies: the feed says LAR/WSH where the slate says LA/WAS, and
+  // a raw compare is what once emptied one column of a live box score.
+  ok('the feed vocabulary resolves like the slate\'s',
+    projectedBox('LAR', 'WSH').home[0].slug === projectedBox('LA', 'WAS').home[0].slug);
+  ok('a team nobody has heard of yields nothing rather than throwing',
+    projectedBox('ZZZ', 'ZZZ').home.length === 0);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
