@@ -412,14 +412,21 @@ begin
   update draft set deadline_at = now() - interval '1 second' where league_id = lid;
   r := draft_tick(lid);
   perform assert_true((select slug from draft_pick where league_id = lid and overall = 2) = 's-rb2', '12i queue autopick');
-  -- snake: B again (round 2). autodraft toggle → instant pick from queue (s-wr3)
-  perform probe_as('b');
-  perform assert_ok(set_autodraft(lid, 2, true), '12j autodraft on');
+  -- 0285: RUNNING OUT THE CLOCK PUT B ON AUTODRAFT. So the same tick did not
+  -- wait for B in round two either — it took the next queued player at once
+  -- (s-wr3) and moved on to A. Before 0285 B stayed a live human and the room
+  -- waited a full clock on a seat that had just proved nobody was in it; the
+  -- old 12j–12l toggled autodraft by hand to get the pick this now makes on
+  -- its own.
+  perform assert_true((select autodraft from league_membership where league_id = lid and sleeper_roster_id = 2),
+    '12j the timeout put B on autodraft');
+  perform assert_true((select slug from draft_pick where league_id = lid and overall = 3) = 's-wr3',
+    '12k and round two came straight off B''s queue, in the same tick');
   r := draft_state(lid);
-  perform assert_true((r ->> 'on_clock')::int = 2 and (r ->> 'on_clock_auto')::boolean, '12k autodraft seat flagged');
-  r := draft_tick(lid);
-  perform assert_true((select slug from draft_pick where league_id = lid and overall = 3) = 's-wr3', '12l autodraft queue pick');
-  perform assert_ok(set_autodraft(lid, 2, false), '12m autodraft off');
+  perform assert_true((r ->> 'on_clock')::int = 1 and not (r ->> 'on_clock_auto')::boolean,
+    '12l A is on the clock — a live human the room waits for');
+  perform probe_as('b');
+  perform assert_ok(set_autodraft(lid, 2, false), '12m B takes the seat back');
 
   -- A on the clock (overall 4): pause gates
   perform probe_as('b');

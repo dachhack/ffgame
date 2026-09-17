@@ -1,0 +1,194 @@
+-- 0287 probes: a league with no free agency.
+--
+-- What must hold:
+--   • 'off' shuts the wire for EVERY unowned player — including one who was
+--     never rostered, which is the case waiver_hold_days could never reach;
+--   • the refusal says so, rather than naming hours the league does not have;
+--   • waiver CLAIMS still work, which is the whole point of turning FA off;
+--   • an unset fa_mode reads from the window, so no existing league changes
+--     behaviour: hours ⇒ 'window', none ⇒ 'open';
+--   • 'open' ignores a stale stored window rather than half-applying it;
+--   • only a commissioner may set it, and only to a real mode.
+\set QUIET on
+\pset pager off
+
+create or replace function fo_ok(r jsonb, msg text) returns void language plpgsql as $$
+begin
+  if coalesce((r ->> 'ok')::boolean, false) is not true then
+    raise exception 'PROBE FAIL % — got %', msg, r;
+  end if;
+end $$;
+create or replace function fo_no(r jsonb, want text, msg text) returns void language plpgsql as $$
+begin
+  if coalesce((r ->> 'ok')::boolean, true) is not false then
+    raise exception 'PROBE FAIL % — expected a refusal, got %', msg, r;
+  end if;
+  if position(want in coalesce(r ->> 'error', '')) = 0 then
+    raise exception 'PROBE FAIL % — refused for the wrong reason: %', msg, r ->> 'error';
+  end if;
+end $$;
+create or replace function fo_true(b boolean, msg text) returns void language plpgsql as $$
+begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;
+create or replace function fo_as(u text) returns void language plpgsql as $$
+begin
+  perform set_config('app.uid', '00000000-0000-0000-0000-00000000fa0' || u, false);
+  perform set_config('app.email', 'fo' || u || '@test.dev', false);
+end $$;
+
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-00000000fa01', 'fo1@test.dev'),
+  ('00000000-0000-0000-0000-00000000fa02', 'fo2@test.dev')
+on conflict (id) do nothing;
+
+-- ── fixture: a drafted 2-team league with spare players in the pool ────────
+do $$
+declare lid uuid; r jsonb; i int; code text; seat2 int;
+begin
+  insert into app_user (id, email) values
+    ('00000000-0000-0000-0000-00000000fa01', 'fo1@test.dev'),
+    ('00000000-0000-0000-0000-00000000fa02', 'fo2@test.dev') on conflict (id) do nothing;
+  update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb
+    where id = '00000000-0000-0000-0000-00000000fa01';
+  perform fo_as('1');
+  r := create_native_league('No FA', '2026', 2, 5, 60, 'snake', 200, 15, 1);
+  lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  perform fo_as('2'); perform fo_ok(native_join(code, 'FO-2'), 'fo0 fo2 joins');
+  reset role;
+  for i in 1..40 loop
+    insert into league_pool (league_id, slug, full_name, pos, team, rank)
+      values (lid, 'fo-' || i, 'FO ' || i, (array['QB','RB','WR','TE'])[1 + (i % 4)], 'FOT', i)
+      on conflict do nothing;
+  end loop;
+  perform fo_as('1');
+  perform fo_ok(start_draft(lid, '[1,2]'::jsonb), 'fo0a the draft opens');
+  -- run it out so the wire is legal at all
+  perform set_config('app.uid', '', false);
+  for i in 1..40 loop
+    exit when (select status from draft where league_id = lid) = 'complete';
+    update draft set deadline_at = now() - interval '1 second' where league_id = lid and status = 'live';
+    perform draft_tick(lid);
+  end loop;
+  perform fo_true((select status from draft where league_id = lid) = 'complete', 'fo0b and finishes');
+  perform set_config('probe.fo_lid', lid::text, false);
+end $$;
+
+-- ── 1. an unset mode reads from the window — nobody is migrated ───────────
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid;
+begin
+  perform fo_as('1');
+  perform fo_true(league_fa_mode(lid) = 'open',
+    'fo1 no hours set ⇒ open, exactly as this league already behaved');
+  perform fo_true(fa_window_open(lid), 'fo1a and the wire is open');
+  perform fo_ok(set_transaction_rules(lid, p_fa_start_min => 600, p_fa_end_min => 660),
+    'fo2 the commissioner sets hours');
+  perform fo_true(league_fa_mode(lid) = 'window',
+    'fo2a hours set ⇒ window, again without migrating anything');
+end $$;
+
+-- ── 2. OFF shuts it, including for a player nobody ever rostered ──────────
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; free_slug text; r jsonb; seat int;
+begin
+  perform fo_as('1');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'off'), 'fo3 free agency off');
+  perform fo_true(league_fa_mode(lid) = 'off', 'fo3a and it reads back off');
+  perform fo_true(not fa_window_open(lid), 'fo3b the wire is shut');
+
+  -- a player who was NEVER on a roster: no waived_until, the case the hold
+  -- could never cover
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    limit 1;
+  perform fo_true(free_slug is not null, 'fo4 an undrafted player is sitting there');
+  perform fo_true((select waived_until from league_pool where league_id = lid and slug = free_slug) is null,
+    'fo4a with no waiver hold on him at all');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  perform fo_no(add_free_agent(lid, seat, free_slug), 'no free agency',
+    'fo5 and he still cannot be picked up — the sentence names the league, not hours');
+end $$;
+
+-- ── 3. waivers still work, which is the entire point ──────────────────────
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; free_slug text; seat int; drop_slug text;
+begin
+  perform fo_as('1');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    limit 1;
+  select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
+  perform fo_ok(submit_waiver_claim(lid, seat, free_slug, drop_slug),
+    'fo6 a waiver claim is accepted with free agency off');
+  perform fo_true(exists (select 1 from waiver_claim
+                    where league_id = lid and roster_id = seat and add_slug = free_slug and status = 'pending'),
+    'fo6a and it is sitting there pending');
+end $$;
+
+-- ── 3b. THE WHOLE POINT, end to end: FAAB waivers, no free agency ─────────
+-- An accepted claim that never resolves would be the same hole one step
+-- later, so this runs the market the founder actually asked for: FAAB on,
+-- free agency off, a bid on a player nobody ever drafted, resolved.
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text; r jsonb;
+begin
+  perform fo_as('1');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_mode => 'faab', p_faab_budget => 100),
+    'fo6b the league runs FAAB');
+  perform fo_true(league_fa_mode(lid) = 'off', 'fo6c with free agency still off');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  -- the mode change reset every balance, so the earlier claim is stale: clear
+  -- the board and bid fresh.
+  reset role;
+  delete from waiver_claim where league_id = lid;
+  perform fo_as('1');
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    order by lp.rank limit 1;
+  -- a full roster is a full roster whatever the wire looks like, so the claim
+  -- carries its drop, exactly as a manager's would
+  select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
+  perform fo_ok(submit_waiver_claim(lid, seat, free_slug, drop_slug, 7),
+    'fo6d a $7 bid on a player who was never drafted');
+  perform fo_ok(process_waivers(lid), 'fo6e the run resolves');
+  perform fo_true(exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo6f and he is on the roster — an unowned player reached ONLY through FAAB');
+  perform fo_true(member_faab(lid, seat) = 93, 'fo6g the bid was paid out of the wallet');
+end $$;
+
+-- ── 4. open ignores a stale window; the gate is the mode ──────────────────
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid;
+begin
+  perform fo_as('1');
+  -- the hours from §1 are still stored; 'open' must not half-apply them
+  perform fo_true((select nullif(settings_json ->> 'fa_start_min', '') from league where id = lid) is not null,
+    'fo7 the old window is still on the row');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'open'), 'fo7a back to open');
+  perform fo_true(fa_window_open(lid),
+    'fo7b and the wire is open whatever the hour, because the mode is the answer');
+end $$;
+
+-- ── 5. who may set it, and to what ────────────────────────────────────────
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid;
+begin
+  perform fo_as('1');
+  perform fo_no(set_transaction_rules(lid, p_fa_mode => 'sometimes'), 'open, window or off',
+    'fo8 a mode that is not a mode is refused');
+  perform fo_as('2');
+  perform fo_no(set_transaction_rules(lid, p_fa_mode => 'off'), 'forbidden',
+    'fo9 and a member who is not the commissioner cannot turn it off');
+  perform fo_true(league_fa_mode(lid) = 'open', 'fo9a so it is still open');
+  reset role;
+  raise notice 'fa-off probes done';
+end $$;
+
+select 'ALL FA-OFF PROBES PASSED' as status;

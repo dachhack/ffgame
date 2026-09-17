@@ -1967,6 +1967,7 @@ export const rosterRules = (leagueId: string) =>
         waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null;
+  fa_mode?: FaMode;
         /** The taxi squad's rules (0196): the tenure ceiling (null = anyone),
          *  whether the squad shuts at the season's first kickoff, whether it is
          *  shut RIGHT NOW, and when that kickoff is. */
@@ -2008,6 +2009,8 @@ export const setRosterRules = (leagueId: string, rounds: number | null, posCaps:
  *  standings at every clear (Sleeper's default — winning a claim costs
  *  nothing); faab = blind bids from a season budget. */
 export type WaiverMode = 'rolling' | 'standings' | 'faab';
+/** Free agency: always open, only inside the hours, or not at all (0287). */
+export type FaMode = 'open' | 'window' | 'off';
 export type TradeReview = 'none' | 'commish';
 /** Per-seat FAAB (0173). `faab` is the EFFECTIVE balance — an untouched seat
  *  reads the league default rather than 0 — and `touched` says whether the
@@ -2043,14 +2046,19 @@ export const setTransactionRules = (
    *  is housekeeping, while adding and dropping changes the league's pool and
    *  spends its FAAB. Absent = on. */
   agentWaivers: boolean | null = null,
+  /** FREE AGENCY (0287): 'open' always, 'window' only inside the hours, 'off'
+   *  not at all — in which case every unowned player is a waiver claim. Unset
+   *  reads from the hours, so a league that has never touched this keeps
+   *  exactly the behaviour it has. */
+  faMode: FaMode | null = null,
 ) =>
-  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean }>(
+  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean; fa_mode?: FaMode }>(
     'set_transaction_rules', {
       p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
       p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
-      p_agent_waivers: agentWaivers,
+      p_agent_waivers: agentWaivers, p_fa_mode: faMode,
     });
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player
@@ -2371,6 +2379,43 @@ export const createPracticeRoom = (leagueId: string, slot?: number) =>
     slot?: number; teams?: number; game_mode?: string; source?: string; name?: string;
     rounds?: number; mode?: string; pool?: number;
   }>('create_mock_from_league', { p_league_id: leagueId, p_slot: slot ?? null });
+
+/** WHO IS IN THE ROOM (0286): mark me present and get everyone's last beat
+ *  back in the same round trip. `secs` is how long ago that seat was last
+ *  seen — the client decides what stale means, so a client that dies fades
+ *  instead of lying "here" forever. */
+export interface DraftPresence { roster_id: number; seen_at: string; secs: number }
+export const draftHere = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; server_now?: string; here?: DraftPresence[] }>(
+    'draft_here', { p_league_id: leagueId });
+
+/** A seat counts as IN THE ROOM for this long after its last beat. The client
+ *  beats every 10s, so this is four missed beats — long enough to ride out a
+ *  phone waking up or a tab throttling, short enough that a manager who walked
+ *  away shows as gone before their clock does. Shared so the web and the app
+ *  never disagree about who is here. */
+export const PRESENCE_STALE_SECS = 40;
+export const seatIsHere = (here: DraftPresence[] | null | undefined, rosterId: number | null | undefined): boolean =>
+  rosterId != null && (here ?? []).some((h) => h.roster_id === rosterId && h.secs <= PRESENCE_STALE_SECS);
+
+/** THE DRAFT LOG (0284): what happened, in order — every pick, autopick,
+ *  auction award and nomination, every undo/edit/reset, start/pause/resume/
+ *  complete, every autodraft toggle, and (0285) every clock that ran out.
+ *  Oldest first from `after` (exclusive), so poll with the last id you hold. */
+export type DraftEventKind =
+  | 'start' | 'pick' | 'autopick' | 'forced' | 'won' | 'nominate' | 'removed' | 'edit'
+  | 'reset' | 'pause' | 'resume' | 'complete' | 'autodraft_on' | 'autodraft_off' | 'timeout';
+export interface DraftEvent {
+  id: number; at: string; kind: DraftEventKind | string;
+  roster_id: number | null; team: string | null;
+  slug: string | null; player: string | null; pos: string | null; nfl: string | null;
+  overall: number | null; round: number | null; price: number | null;
+  actor_role: 'server' | 'commish' | 'member'; actor_roster: number | null; actor_team?: string | null;
+  detail: Record<string, unknown>;
+}
+export const draftLog = (leagueId: string, after = 0, limit = 300) =>
+  rpc<{ ok: boolean; error?: string; events?: DraftEvent[] }>('draft_log',
+    { p_league_id: leagueId, p_after: after, p_limit: limit });
 
 /** Wipe a mock draft (its commissioner or an admin); refuses real leagues. */
 export const deleteMockDraft = (leagueId: string) =>

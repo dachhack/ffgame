@@ -384,6 +384,23 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   ok('a skill player with unknown tenure still proves nothing', !tenureMatches('rookie', null, 'RB'));
   ok('…and a known one still lands in his own band only',
     tenureMatches('rookie', 0, 'RB') && !tenureMatches('y1_3', 0, 'RB'));
+  // THE BROWSE SWITCH (v0.398.0). Roster LEGALITY keeps the exemption above;
+  // a filter answering "show me rookies" drops it, because thirty-two
+  // defenses and every kicker are not an answer. One function, one switch —
+  // the alternative is two definitions of rookie, which is the drift
+  // v0.258.0 had to go and fix.
+  ok('teamUnits:false hides the units from a browse filter',
+    ['rookie', 'y1_3', 'y4_7', 'y8'].every((b) => !tenureMatches(b, null, 'DEF', { teamUnits: false })
+      && !tenureMatches(b, null, 'K', { teamUnits: false })));
+  ok('…and the default is still the legality answer',
+    tenureMatches('rookie', null, 'DEF') && tenureMatches('rookie', null, 'DEF', {})
+      && tenureMatches('rookie', null, 'DEF', { teamUnits: true }));
+  ok('…while a real rookie passes either way',
+    tenureMatches('rookie', 0, 'RB', { teamUnits: false }) && tenureMatches('rookie', 0, 'RB'));
+  ok('…and a unit with a KNOWN tenure is judged on it, not exempted',
+    tenureMatches('rookie', 0, 'K', { teamUnits: false })
+      && !tenureMatches('rookie', 5, 'K', { teamUnits: false })
+      && tenureMatches('y4_7', 5, 'K', { teamUnits: false }));
 }
 
 // ── The BEST-BALL fill, testable for the first time ────────────────────────

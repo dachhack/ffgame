@@ -12,6 +12,7 @@ import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
+import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -29,6 +30,8 @@ import {
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
+  draftLog, type DraftEvent,
+  draftHere, seatIsHere, type DraftPresence,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, type PushTokenRow,
@@ -933,7 +936,7 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Draft room
 // ─────────────────────────────────────────────────────────────────────────────
-type DraftTab = 'players' | 'teams' | 'queue';
+type DraftTab = 'players' | 'teams' | 'queue' | 'log';
 
 export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = false }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
@@ -963,6 +966,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   // Multi-select positions + the sort order (v0.302.0). Empty = every position
   // the league can roster; a position the server caps at ZERO (0195 — no spot
   // accepts it) isn't offered at all, since drafting one is refused anyway.
+  // ROOKIE FILTER (v0.398.0, founder: "And a rookie filter on the draft player
+  // list"). A band rather than a boolean so it reuses the wire's definition of
+  // rookie instead of minting a second one; only ANY and ROOKIE are offered
+  // here, which is the ask.
+  const [tenure, setTenure] = useState<TenureBand>('any');
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
@@ -1050,9 +1058,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       // showed projections without installing would quietly render them under
       // whichever league was opened before it.
       setLeagueProjScoring(leagueCatalogOf(g));
-      if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
-        leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-      }
+      // ALWAYS, not just when a spot filters on tenure (v0.398.0): the ROOKIE
+      // chip needs years_exp in every league, and the leagues that want it are
+      // precisely the ones with no tenure-filtered spot to trigger the old
+      // condition. One read per room open.
+      leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     }).catch(() => {});
     loadTeam();
     const poll = setInterval(refresh, 3000);
@@ -1181,9 +1191,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => !taken.has(p.slug) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
+      // teamUnits: false — "show me rookies" is not answered by every kicker
+      // and all thirty-two defenses (see tenure.ts).
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap]);
 
   /** The caller's seat in this league, and the queue that hangs off it. */
   const loadTeam = () => {
@@ -1279,6 +1292,40 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     } catch (x) { setErr(friendlyError(x)); }
     finally { busyRef.current = false; setBusy(false); }
   };
+
+  // WHO IS IN THE ROOM (0286). One call does both jobs — marks me present and
+  // returns everyone's last beat — so this costs one round trip every 10s and
+  // no extra fetch. Only while the draft is actually on: a pending lobby and a
+  // finished board have nobody to wait for.
+  const [here, setHere] = useState<DraftPresence[]>([]);
+  const liveRoom = st?.status === 'live';
+  useEffect(() => {
+    if (!liveRoom) { setHere([]); return; }
+    let dead = false;
+    const beat = () => draftHere(leagueId).then((r) => { if (!dead && r.ok) setHere(r.here ?? []); }).catch(() => {});
+    beat();
+    const id = setInterval(beat, 10000);
+    return () => { dead = true; clearInterval(id); };
+  }, [liveRoom, leagueId]);
+  const isHere = (rid: number | null | undefined) => seatIsHere(here, rid);
+  // A seat nobody is sitting in is not "absent" — it has no manager to be
+  // absent. Only a seat with a person behind it can be missing from the room.
+  const seatHasHuman = (rid: number | null | undefined) =>
+    rid != null && (team?.waiver_order ?? []).some((w) => w.roster_id === rid);
+  const onClockAway = liveRoom && !st?.on_clock_auto && st?.on_clock != null
+    && seatHasHuman(st.on_clock) && !isHere(st.on_clock);
+
+  // THE DRAFT LOG (0284): fetched whole while the tab is open — a draft is at
+  // most a few hundred lines — and every 5s so a live room scrolls itself.
+  const [log, setLog] = useState<DraftEvent[]>([]);
+  useEffect(() => {
+    if (tab !== 'log') return;
+    let dead = false;
+    const load = () => draftLog(leagueId).then((r) => { if (!dead && r.ok) setLog(r.events ?? []); }).catch(() => {});
+    load();
+    const id = setInterval(load, 5000);
+    return () => { dead = true; clearInterval(id); };
+  }, [tab, leagueId]);
 
   // Mock rooms are disposable — delete leaves the room, so don't refresh a
   // league that no longer exists (run() would).
@@ -1583,6 +1630,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                       : myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
                       : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                   </div>
+                  {/* 0286: the room is waiting on somebody who is not in it.
+                      Said here rather than only as a dot, because this is the
+                      one seat everyone is currently staring at. */}
+                  {onClockAway && (
+                    <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginTop: 3 }}>
+                      ⚠ NOT IN THE ROOM — the clock will put them on autodraft
+                    </div>
+                  )}
                 </div>
               </div>
               {nomSecsLeft != null && (
@@ -1619,6 +1674,55 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             <CommishDraftControls leagueId={leagueId} st={st} busy={busy} teamName={teamName} autos={autos}
               assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }} onRun={run} />
           )}
+          {/* WHO IS HERE (0286) + AUTODRAFT, ON THE CARD. Both switches already
+              existed — the manager's in the QUEUE tab, the commissioner's
+              behind CONTROLS ▾ — which is too far away at the moment somebody
+              has gone quiet and the room is watching a clock. This is the same
+              two RPCs, where the decision is actually made. */}
+          <div style={{ borderTop: '1px solid var(--bd)', marginTop: 10, paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>IN THE ROOM</span>
+              {(st.order ?? []).map((rid) => {
+                const human = seatHasHuman(rid);
+                const on = autos[rid];
+                const present = isHere(rid);
+                const label = `${human ? (present ? '●' : '○') : '·'} ${teamName(rid) ?? `Team ${rid}`}${on ? ' 🤖' : ''}`;
+                const title = !human ? 'no manager in this seat — it always autodrafts'
+                  : on ? 'on autodraft' + (isCommish ? ' — click to take it off' : '')
+                  : present ? 'in the draft room' + (isCommish ? ' — click to put on autodraft' : '')
+                  : 'NOT in the draft room' + (isCommish ? ' — click to put on autodraft' : '');
+                const canToggle = isCommish && human;
+                return (
+                  <button key={rid} title={title} disabled={!canToggle || busy}
+                    onClick={canToggle ? () => run(() => setAutodraft(leagueId, rid, !on)) : undefined}
+                    className="mono"
+                    style={{
+                      fontSize: 9.5, padding: '3px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+                      cursor: canToggle && !busy ? 'pointer' : 'default',
+                      background: 'none',
+                      border: `1px solid ${on ? 'var(--warn)' : human && !present ? 'var(--faint)' : 'var(--bd)'}`,
+                      color: on ? 'var(--warn)' : !human ? 'var(--faint)' : present ? 'var(--you)' : 'var(--dim)',
+                    }}>{label}</button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              {myRoster != null && (
+                <button onClick={() => run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft))} disabled={busy}
+                  className="mono"
+                  style={{ ...ghostBtn, padding: '6px 10px', fontSize: 9.5,
+                    borderColor: st.my_autodraft ? 'var(--warn)' : 'var(--bd)',
+                    color: st.my_autodraft ? 'var(--warn)' : 'var(--text)' }}>
+                  {st.my_autodraft ? '🤖 AUTODRAFT IS ON — TAKE MY SEAT BACK' : '🤖 AUTODRAFT MY SEAT'}
+                </button>
+              )}
+              <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5 }}>
+                {isCommish
+                  ? '● in the room · ○ away · 🤖 autodrafting. Click a team to switch its autodraft on or off.'
+                  : '● in the room · ○ away · 🤖 autodrafting.'}
+              </span>
+            </div>
+          </div>
           {err && <div className="mono" style={errStyle}>{err}</div>}
         </div>
       )}
@@ -1778,6 +1882,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
         {!embedded && tabChip('players', `PLAYERS (${avail.length})`)}
         {tabChip('teams', 'TEAMS')}
         {!embedded && tabChip('queue', `QUEUE (${queue.length})`)}
+        {tabChip('log', 'LOG')}
       </div>
 
       {/* PLAYERS — available list with ADP + projections. Not in the console
@@ -1797,6 +1902,14 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}{fill}</Chip>
               );
             })}
+            {/* ROOKIES (v0.398.0). Shown only once years_exp has actually
+                loaded — an empty map would make the chip hide every player and
+                look broken rather than empty. */}
+            {Object.keys(expMap).length > 0 && (
+              <Chip on={tenure === 'rookie'} onClick={() => setTenure((t) => (t === 'rookie' ? 'any' : 'rookie'))}>
+                🌱 ROOKIES
+              </Chip>
+            )}
             <StarChips mode={starMode} setMode={setStarMode} />
           </div>
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
@@ -1863,7 +1976,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {(st.order ?? []).map((rid) => (
               <Chip key={rid} on={(teamView ?? myRoster) === rid} onClick={() => setTeamView(rid)}>
+                {/* 0286: ● in the room · ○ a manager who is not · nothing at
+                    all for a seat with no manager to be absent. */}
+                {liveRoom && seatHasHuman(rid) && (
+                  <span title={isHere(rid) ? 'in the draft room' : 'not in the draft room'}
+                    style={{ color: isHere(rid) ? 'var(--you)' : 'var(--faint)', marginRight: 5 }}>
+                    {isHere(rid) ? '●' : '○'}
+                  </span>
+                )}
                 {teamName(rid) ?? `Team ${rid}`}{auction && st.budgets ? ` $${st.budgets.find((b) => b.roster_id === rid)?.budget ?? ''}` : ''}
+                {autos[rid] ? ' 🤖' : ''}
               </Chip>
             ))}
           </div>
@@ -1946,7 +2068,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', lineHeight: 1.5, paddingTop: 6 }}>
-              Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
+              Autodraft is on — your queue, then best available, picks for you, even through a pause. Tap AUTODRAFT OFF above to pick for yourself again.
+            </div>
+          )}
+          {queue.length > 0 && (
+            <div className="mono" style={{ display: 'flex', gap: 8, padding: '4px 0 2px 84px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
+              <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 34, textAlign: 'right' }}>ADP</span><span style={{ width: 34, textAlign: 'right' }}>PROJ</span><span style={{ width: 30, textAlign: 'right' }}>OWN</span><span style={{ width: 14 }} />
             </div>
           )}
           {queue.map((slug, i) => {
@@ -1961,9 +2088,62 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: dragOver === i ? '2px solid var(--you)' : '1px solid var(--bd)', opacity: gone ? 0.45 : 1, cursor: 'grab' }}>
                 <span className="mono" title="drag to reorder" style={{ fontSize: 11, color: 'var(--faint)', width: 14, cursor: 'grab' }}>⠿</span>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 18 }}>{i + 1}</span>
-                {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
-                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
+                {/* DRAFT FROM THE QUEUE (v0.399.0, founder: "and then a way to
+                    draft directly from your queue"). The queue is where you
+                    already decided; making you find the same player again in a
+                    list of eight hundred is the step this removes. Same act()
+                    and the same guards as the PLAYERS row — one handler, so
+                    the two lists cannot disagree about what is legal, and the
+                    auction's "paused"/"not your nomination" answers are the
+                    ones you already get there. */}
+                {!gone && (() => {
+                  const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
+                  const capped = p ? atCap(p.pos) : false;
+                  const can = !onBlock && !busy && (assigning || myTurn) && !capped;
+                  return (
+                    <button onClick={() => act(slug)} disabled={!can} className="mono"
+                      title={onBlock ? 'already on the block' : capped && p ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                      style={{ ...btn, padding: '5px 7px', fontSize: 8.5, width: 50, flexShrink: 0,
+                        background: assigning ? 'var(--warn)' : btn.background,
+                        opacity: can ? 1 : 0.35 }}>
+                      {assigning ? 'ASSIGN' : onBlock ? 'UP' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                    </button>
+                  );
+                })()}
+                {/* THE SAME ROW AS THE PLAYERS LIST (v0.399.0, founder: "all the
+                    stats that are in the player list should be available in
+                    your queue as well"). Same fields, same order, same
+                    formatting, and the name opens the same card — a queue you
+                    have to leave to check a projection is a queue you check
+                    somewhere else. */}
+                <button onClick={() => p && setCardFor(p)} disabled={!p}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: p ? 'pointer' : 'default', textAlign: 'left' }}>
+                  {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: gone ? 'line-through' : 'none' }}>
+                      {starMark(favs, slug)}{p?.full_name ?? slug}
+                    </div>
+                    {p && (
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
+                        <PosPill pos={p.pos as Pos} />
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <FlagChip slug={slug} />
+                      </div>
+                    )}
+                  </div>
+                </button>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
+                {(() => {
+                  const adp = ADP_2026.get(slug); const proj = p ? projFor(slug, p.pos) : null;
+                  return (
+                    <>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 30, textAlign: 'right' }}
+                        title="share of this platform's drafted leagues rostering him">{own ? `${own[slug] ?? 0}%` : '—'}</span>
+                    </>
+                  );
+                })()}
                 {auction && !gone && myRoster != null && (() => {
                   const mkt = auctionMarketValue(p?.rank, st.budget);
                   return mkt != null && qMax[slug] !== mkt ? (
@@ -2008,6 +2188,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   </span>
                 ))}
                 <button onClick={() => toggleQueue(slug)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '0 3px' }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* LOG — what happened, newest first (0284) */}
+      {tab === 'log' && (
+        <div style={card}>
+          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>DRAFT LOG · NEWEST FIRST</div>
+          {log.length === 0 && (
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Nothing yet — the log fills as the draft happens.</div>
+          )}
+          {[...log].reverse().map((e) => {
+            const l = draftEventLine(e);
+            const tone = e.roster_id != null && e.roster_id === myRoster ? 'you' : l.tone;
+            const color = tone === 'you' ? 'var(--you)' : tone === 'warn' ? 'var(--warn)' : tone === 'dim' ? 'var(--dim)' : 'var(--text)';
+            return (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '7px 0', borderTop: '1px solid var(--bd)' }}>
+                <span className="mono" style={{ width: 20, textAlign: 'center', fontSize: 12, flexShrink: 0 }}>{l.icon}</span>
+                <span className="mono" style={{ flex: 1, fontSize: 10.5, lineHeight: 1.5, color }}>{l.text}</span>
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{draftEventTime(e.at)}</span>
               </div>
             );
           })}

@@ -18,6 +18,156 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.400.0 — free agency can be turned off
+
+Founder: "how do i turn off free agency and just do faab waivers?" He
+couldn't. FAAB was already a waiver mode and three knobs came close —
+waiver_hold_days, fa_after_waivers_dow, the fa_start/fa_end window — but
+all three miss the same case: a player who was NEVER ROSTERED has no
+waived_until, so the moment the window opens he is free, for nothing, to
+whoever refreshes first. And the window is a RANGE, not a switch: the
+setter refuses a start equal to its end, so "never" was not expressible.
+The nearest thing was a one-minute window at 4am.
+
+0287 adds fa_mode — open | window | off — as a MODE rather than a flag,
+because the window already encoded two of those three states implicitly
+and a bare `fa_off` beside it would leave two settings disagreeing about
+one question. Unset reads FROM the window, so nothing needs migrating: a
+league with hours reads 'window', one without reads 'open'.
+
+The gate lands in fa_window_open, which every add path already consults —
+one place, not a check copied into each caller.
+
+AND THE HOLE THE PROBE FOUND, which would have shipped the feature
+broken: submit_waiver_claim refuses a player whose waived_until is null
+("player not in pool"), because until now the answer was always "add him
+directly." With free agency off there is no directly — so an undrafted
+player would have been refused by add_free_agent for having no free
+agency AND by the claim for having no hold. Unobtainable by any route,
+half the pool frozen. Those two checks now apply only where free agency
+exists. A probe runs the whole market the founder asked for: FAAB on, FA
+off, a $7 bid on a player nobody drafted, resolved onto the roster and
+paid out of the wallet.
+
+Commish UI in both hosts gains a third choice — 🚫 NONE — WAIVERS ONLY —
+which says in place what it means, and says to switch the mode to FAAB if
+the league is still on priority waivers.
+
+### v0.399.0 — draft straight from your queue
+
+Founder: "and then a way to draft directly from your queue." A DRAFT
+button (NOM in an auction) on every queue row, both hosts.
+
+The queue is where you already made the decision. Until now it could only
+be reordered and pruned, and taking the man at the top meant going back to
+PLAYERS and finding him again in a list of eight hundred while a clock ran
+— which is also why people left autodraft on when they were sitting right
+there.
+
+It calls the SAME act() the players row calls, with the same guards, so
+the two lists cannot disagree about what is legal: the position-cap LIMIT
+state, the auction's "the draft is paused" and "it's not your nomination"
+answers, and the commissioner's ASSIGN mode all behave exactly as they do
+in the list. A player already on the auction block reads UP rather than
+offering a nomination that would collide with his open lot.
+
+A drafted player stays in the queue struck through as TAKEN, which is what
+already happens when somebody else takes him — the queue is a record of
+what you wanted, not a to-do list that empties.
+
+And the queue row now carries everything the PLAYERS row carries —
+position pill, team, pool rank, dynasty value, ADP, projection, ownership
+and the flag chip, in the same order and the same formatting, with the
+name opening the same player card. A queue you have to leave to check a
+projection is a queue you check somewhere else. The app's queue row has a
+fixed height that the drag-to-reorder also divides a finger's travel by,
+so it went 44 → 54 in the one place that governs both.
+
+Client only; no migration, no probe run needed (nothing SQL changed).
+
+### v0.398.0 — a rookie filter on the draft board
+
+Founder: "And a rookie filter on the draft player list." A 🌱 ROOKIES
+chip beside the position chips in both draft rooms.
+
+Client only — years_exp already rides league_pool and the waiver wire
+already knows what a rookie is (0172's TenureBand). Two things had to
+change to reuse that rather than invent a second answer.
+
+The draft room loaded years_exp ONLY when some roster spot filtered on
+tenure, which is precisely backwards for this: a league with no
+tenure-filtered spot is exactly the league that wants the chip, and its
+map would have been empty. It now loads once per room open, and the chip
+only appears once the map has arrived — an empty map behind a live filter
+hides every player and reads as broken rather than as empty.
+
+And tenureMatches lets a team unit (K/DST/HC/P) pass EVERY band, because
+a rookies-only SPOT must still accept a D/ST. A browse filter is the
+other question: "show me rookies" is not answered by every kicker and all
+thirty-two defenses. Rather than let the two drift — which is the bug
+v0.258.0 had to go and fix — the helper takes an explicit
+`teamUnits: false`, and only the browse filters pass it.
+
+### v0.397.0 — who is actually in the draft room
+
+Founder, after the draft: "Also need an indicator on the draft board if a
+team is active in the draft and not absent in the draft room. And commish
+needs a way to set players to auto. And then players can take them selves
+off auto."
+
+The last two already existed and neither was findable: the manager's
+AUTODRAFT chip lives in the QUEUE tab, the commissioner's per-seat
+switches behind CONTROLS ▾. Both are now ALSO on the live draft card,
+where the decision actually gets made — same two RPCs, no new
+permissions (set_autodraft has always taken the seat's owner, the
+commissioner or an admin).
+
+Presence is new (0286). A heartbeat, not a connection: every client
+already polls, so draft_here() marks the caller present and hands back
+everyone's last beat in the same round trip — one call every 10s, no
+extra fetch. It returns a TIMESTAMP rather than a boolean, so the client
+decides what stale means (40s, four missed beats, shared in core so the
+hosts cannot disagree) and a client that dies fades out instead of lying
+"here" forever. Keyed by person, reported by seat: a co-managed seat is
+lit while either of them is there.
+
+On the card: a roll-call row — ● in the room, ○ away, 🤖 autodrafting —
+and for the commissioner each chip is the autodraft switch for that seat.
+On the on-clock line, the thing everyone is staring at: "⚠ NOT IN THE
+ROOM — the clock will put them on autodraft". Seats with no manager show
+a dot rather than a circle; they cannot be absent.
+
+### v0.396.0 — a timed-out seat goes on autodraft, and the draft has a log
+
+Founder, mid-draft: "We need a way that teams that time out and auto get
+set to auto draft. We also need a draft log." Built during the draft,
+merged after it, on his call.
+
+TIMEOUT → AUTODRAFT (0285). A clock that ran out used to cost the room one
+pick's wait and then the seat was a live human again, so a manager who had
+wandered off made everyone sit through every one of their picks. The two
+places in draft_tick where a live human's deadline is found behind us — the
+snake pick and the auction nomination — now flip the seat to autodraft
+first, so the pick that follows is already an autodraft pick and the seat
+is not waited for again until the manager turns it off (the AUTODRAFT chip
+both hosts already show). The manager gets a push, because the person who
+timed out is by definition not looking at the room; mirrors the worker's
+on-the-clock push, skipped in a practice room.
+
+THE DRAFT LOG (0284). The board shows what the draft IS; nothing showed
+what HAPPENED — an undone pick was simply gone, a forced pick looked like
+any other. One append-only table, written by TRIGGERS on the rows the
+draft already writes rather than by editing eight RPCs (0179's argument:
+a rule on the table cannot be bypassed by the path nobody remembered).
+The actor is auth.uid() at write time, so one insert reads "pick",
+"forced by the commissioner" or "autopick" from who did it; a single
+deleted row is an undo, many at once is a reset and the draft row logs
+that one line. Logged: every pick, autopick, award, nomination, removal,
+edit, reset, start/pause/resume/complete, every autodraft toggle by a
+person, every timeout. Not logged: individual auction bids — the award
+carries the price. LOG tab in both draft rooms, newest first, one shared
+formatter in core so both hosts say it the same way.
+
 ### v0.395.3 — an IR spot is not a round, in a practice room either
 
 Founder, in a room made on the fixed build: "Draft says 21 rounds but

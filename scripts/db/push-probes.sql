@@ -23,6 +23,13 @@ begin
   perform set_config('app.email', u || '@test.dev', false);
 end $$;
 
+-- EVERY SUITE SHARES ONE DATABASE, and since 0285 a draft in an EARLIER suite
+-- that lets a test user's clock run out queues that user a real push. This
+-- suite counts a user's outbox rows (pu20, pu23), so it starts from an empty
+-- outbox for the shared test accounts rather than inheriting another suite's
+-- timeouts. The same shape as week-report-probes handing back the admin badge.
+delete from push_outbox where app_user_id in (select id from app_user where email like '%@test.dev');
+
 do $$
 declare r jsonb; tk jsonb;
 begin

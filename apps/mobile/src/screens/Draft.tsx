@@ -19,12 +19,15 @@ import {
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  createPracticeRoom, deleteMockDraft,
+  createPracticeRoom, deleteMockDraft, draftLog, type DraftEvent,
+  draftHere, seatIsHere, type DraftPresence,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
+import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
+import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
@@ -70,7 +73,7 @@ function Face({ slug, pos, size = 26 }: { slug: string; pos: string; size?: numb
   );
 }
 
-type DraftTab = 'board' | 'players' | 'teams' | 'queue';
+type DraftTab = 'board' | 'players' | 'teams' | 'queue' | 'log';
 
 export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   leagueId: string; onBack: () => void;
@@ -97,6 +100,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   const [q, setQ] = useState('');
   // Multi-select positions + the sort order (v0.302.0). A position the server
   // caps at ZERO (0195 — no starting spot accepts it) isn't offered at all.
+  // ROOKIE FILTER (v0.398.0) — the web twin. A band, not a boolean, so it
+  // reuses the wire's definition of rookie rather than minting a second one.
+  const [tenure, setTenure] = useState<TenureBand>('any');
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   // Show already-drafted players in the list (v0.351.0, founder: "add a
@@ -211,9 +217,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       // showed projections without installing would quietly render them under
       // whichever league was opened before it.
       setLeagueProjScoring(leagueCatalogOf(g));
-      if ((g.slots ?? []).some((s) => s.min_exp != null || s.max_exp != null)) {
-        leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-      }
+      // ALWAYS, not just when a spot filters on tenure (v0.398.0): the ROOKIE
+      // chip needs years_exp in every league, and the leagues that want it are
+      // exactly the ones with no tenure-filtered spot to trigger the old
+      // condition. One read per room open.
+      leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
     }).catch(() => {});
     loadTeam();
     const poll = setInterval(refresh, 3000);
@@ -309,9 +317,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     const onBlock = new Set((st?.lots ?? []).map((l) => l.slug));
     const base = pool.filter((p) => (showTaken || !taken.has(p.slug)) && !onBlock.has(p.slug)
       && (posSel.size ? posSel.has(p.pos) : (!bannedPos(p.pos) && (!eligPos || eligPos.has(p.pos))))
+      // teamUnits: false — "show me rookies" is not answered by every kicker
+      // and all thirty-two defenses (see tenure.ts).
+      && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap]);
 
   useEffect(() => {
     if (!auction || myRoster == null || !st) return;
@@ -386,6 +397,39 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     finally { busyRef.current = false; setBusy(false); }
   };
 
+  // WHO IS IN THE ROOM (0286) — the web twin. One call marks me present and
+  // returns everyone's last beat, so this is one round trip every 10s. Only
+  // while the draft is live: a lobby and a finished board have nobody to wait
+  // for.
+  const [here, setHere] = useState<DraftPresence[]>([]);
+  const liveRoom = st?.status === 'live';
+  useEffect(() => {
+    if (!liveRoom) { setHere([]); return; }
+    let dead = false;
+    const beat = () => draftHere(leagueId).then((r) => { if (!dead && r.ok) setHere(r.here ?? []); }).catch(() => {});
+    beat();
+    const id = setInterval(beat, 10000);
+    return () => { dead = true; clearInterval(id); };
+  }, [liveRoom, leagueId]);
+  const isHere = (rid: number | null | undefined) => seatIsHere(here, rid);
+  // A seat nobody sits in is not "absent" — it has no manager to be absent.
+  const seatHasHuman = (rid: number | null | undefined) =>
+    rid != null && (team?.waiver_order ?? []).some((w) => w.roster_id === rid);
+  const onClockAway = liveRoom && !st?.on_clock_auto && st?.on_clock != null
+    && seatHasHuman(st.on_clock) && !isHere(st.on_clock);
+
+  // THE DRAFT LOG (0284): fetched whole while the tab is open — a draft is at
+  // most a few hundred lines — and every 5s so a live room scrolls itself.
+  const [log, setLog] = useState<DraftEvent[]>([]);
+  useEffect(() => {
+    if (tab !== 'log') return;
+    let dead = false;
+    const load = () => draftLog(leagueId).then((r) => { if (!dead && r.ok) setLog(r.events ?? []); }).catch(() => {});
+    load();
+    const id = setInterval(load, 5000);
+    return () => { dead = true; clearInterval(id); };
+  }, [tab, leagueId]);
+
   // BIN THE ROOM (v0.395.2). The web has had this in the draft room's COMMISH
   // row since mocks existed; the app never got it, so a practice room on a
   // phone could be opened and never closed. Not run(): the league is gone
@@ -414,7 +458,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   // the queue in all versions") — the ⠿ handle owns the gesture, the screen's
   // scroll is suspended while a row is in the air, and the drop index is pure
   // arithmetic on the fixed row height.
-  const QROW_H = 44;
+  // 44 when a queue row was one line; the stats line (v0.399.0) needs the
+  // room. It is the row's fixed height AND the divisor the drag-to-reorder
+  // turns a finger's dy into rows with — which is exactly why it is one
+  // constant: change it in one place and the two cannot disagree.
+  const QROW_H = 54;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const dragY = useRef(new Animated.Value(0)).current;
   const dragFrom = useRef<number | null>(null);
@@ -773,6 +821,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     : myTurn ? (auction ? 'YOUR NOMINATION — pick below' : 'YOUR PICK')
                     : `${auction ? 'Nominating' : 'On the clock'}: ${teamName(st.on_clock) ?? `Team ${st.on_clock} (auto)`}`}
                 </Text>
+                {/* 0286: the room is waiting on somebody who is not in it. */}
+                {onClockAway && (
+                  <Mono size={9} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>
+                    ⚠ NOT IN THE ROOM — the clock will put them on autodraft
+                  </Mono>
+                )}
               </View>
               {nomSecsLeft != null && (
                 <Text style={{ fontFamily: MONO, fontSize: 26, fontWeight: '700', color: nomSecsLeft <= 10 ? t.opp : t.you, fontVariant: ['tabular-nums'] }}>
@@ -809,6 +863,48 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               assign={assign} onAssign={(v) => { setAssign(v); if (v) setTab('players'); }}
               onRun={(fn) => void run(fn)} />
           )}
+          {/* WHO IS HERE (0286) + AUTODRAFT, ON THE CARD — the web twin. Both
+              switches already existed (the manager's in QUEUE, the
+              commissioner's behind CONTROLS ▾), too far from the moment
+              somebody goes quiet and the room is watching a clock. */}
+          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 10, paddingTop: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Mono size={8.5} tone="faint" track={0.1}>IN THE ROOM</Mono>
+              {(st.order ?? []).map((rid) => {
+                const human = seatHasHuman(rid);
+                const on = autos[rid];
+                const present = isHere(rid);
+                const canToggle = isCommish && human && !busy;
+                return (
+                  <Pressable key={rid} disabled={!canToggle}
+                    onPress={canToggle ? () => { tap(); void run(() => setAutodraft(leagueId, rid, !on)); } : undefined}
+                    accessibilityRole={canToggle ? 'button' : undefined}
+                    accessibilityLabel={`${teamName(rid) ?? `Team ${rid}`}: ${!human ? 'no manager' : present ? 'in the room' : 'not in the room'}${on ? ', autodrafting' : ''}`}
+                    style={{
+                      borderWidth: StyleSheet.hairlineWidth, borderRadius: 4,
+                      paddingHorizontal: 7, paddingVertical: 3,
+                      borderColor: on ? t.warn : human && !present ? t.faint : t.bd,
+                    }}>
+                    <Mono size={9.5} tone={on ? 'warn' : !human ? 'faint' : present ? 'you' : 'dim'}>
+                      {`${human ? (present ? '●' : '○') : '·'} ${teamName(rid) ?? `Team ${rid}`}${on ? ' 🤖' : ''}`}
+                    </Mono>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {myRoster != null && (
+              <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {ghost(st.my_autodraft ? '🤖 AUTODRAFT IS ON — TAKE MY SEAT BACK' : '🤖 AUTODRAFT MY SEAT',
+                  () => void run(() => setAutodraft(leagueId, myRoster, !st.my_autodraft)),
+                  st.my_autodraft ? t.warn : undefined)}
+              </View>
+            )}
+            <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>
+              {isCommish
+                ? '● in the room · ○ away · 🤖 autodrafting. Tap a team to switch its autodraft on or off.'
+                : '● in the room · ○ away · 🤖 autodrafting.'}
+            </Mono>
+          </View>
         </Card>
       )}
 
@@ -843,6 +939,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
         <Chip label="BOARD" on={tab === 'board'} onPress={() => { tap(); setTab('board'); }} />
         <Chip label="TEAMS" on={tab === 'teams'} onPress={() => { tap(); setTab('teams'); }} />
         <Chip label={`QUEUE (${queue.length})`} on={tab === 'queue'} onPress={() => { tap(); setTab('queue'); }} />
+        <Chip label="LOG" on={tab === 'log'} onPress={() => { tap(); setTab('log'); }} />
       </View>
 
       {/* PLAYERS — available list with ADP + projections */}
@@ -873,6 +970,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
               );
             })}
+            {/* ROOKIES (v0.398.0). Only once years_exp has loaded — an empty
+                map would hide every player and look broken rather than empty. */}
+            {Object.keys(expMap).length > 0 && (
+              <Chip label="🌱 ROOKIES" on={tenure === 'rookie'}
+                onPress={() => { tap(); setTenure((cur) => (cur === 'rookie' ? 'any' : 'rookie')); }} />
+            )}
             <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
             <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
             <Chip label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />
@@ -1126,7 +1229,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
             <Mono size={9} tone="you" style={{ lineHeight: 14, paddingTop: 6 }}>
-              🤖 Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
+              🤖 Autodraft is on — your queue, then best available, picks for you, even through a pause. Tap AUTODRAFT OFF above to pick for yourself again.
             </Mono>
           )}
           {queue.map((slug, i) => {
@@ -1139,8 +1242,52 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   <Text style={{ color: lifted ? t.you : t.faint, fontSize: 13 }}>⠿</Text>
                 </View>
                 <Mono size={9} tone="faint" style={{ width: 16 }}>{i + 1}</Mono>
+                {/* DRAFT FROM THE QUEUE (v0.399.0) — the web twin. Same act()
+                    and the same guards as the PLAYERS row, so the two lists
+                    cannot disagree about what is legal. */}
+                {!gone && (() => {
+                  const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
+                  const capped = p ? atCap(p.pos) : false;
+                  const can = !onBlock && !busy && (assigning || myTurn) && !capped;
+                  return (
+                    <Pressable disabled={!can} onPress={() => { tap(); act(slug); }}
+                      accessibilityLabel={`${auction ? 'Nominate' : 'Draft'} ${p?.full_name ?? slug} from your queue`}
+                      style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 5, width: 46, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                        {assigning ? 'ASSIGN' : onBlock ? 'UP' : capped ? 'LIMIT' : auction ? 'NOM' : 'DRAFT'}
+                      </Text>
+                    </Pressable>
+                  );
+                })()}
                 {p && <Face slug={p.slug} pos={p.pos} size={22} />}
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</Text>
+                {/* THE SAME ROW AS THE PLAYERS LIST (v0.399.0, founder: "all the
+                    stats that are in the player list should be available in
+                    your queue as well"). Same fields, same order, same second
+                    line, and the name opens the same card — a queue you have to
+                    leave to check a projection is a queue you check elsewhere. */}
+                <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4} disabled={!p}
+                  onPress={() => { if (!p) return; tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>
+                    {favs.has(slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p?.full_name ?? slug}
+                  </Text>
+                  {p && (() => {
+                    const adp = ADP_2026.get(slug); const proj = projFor(slug, p.pos);
+                    const dyn = dynasty ? dynFor(slug) : null;
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                        <PosPill pos={p.pos} size={8} />
+                        <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
+                          {p.team} · #{p.rank}
+                          {dyn != null ? ` · DYN ${dyn}` : ''}
+                          {adp != null ? ` · ADP ${adp.toFixed(0)}` : ''}
+                          {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
+                          {own ? ` · ${own[slug] ?? 0}%` : ''}
+                        </Mono>
+                        <FlagChip slug={slug} size={7.5} />
+                      </View>
+                    );
+                  })()}
+                </Pressable>
                 {gone && <Mono size={8.5} tone="opp">TAKEN</Mono>}
                 {auction && !gone && myRoster != null && (() => {
                   const mkt = auctionMarketValue(p?.rank, st.budget);
@@ -1193,6 +1340,26 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                 )}
                 <Pressable hitSlop={6} onPress={() => toggleQueue(slug)}><Text style={{ color: t.opp, fontSize: 13 }}>✕</Text></Pressable>
               </Animated.View>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* LOG — what happened, newest first (0284) */}
+      {tab === 'log' && (
+        <Card>
+          <Mono size={8.5} tone="faint" track={0.12}>DRAFT LOG · NEWEST FIRST</Mono>
+          {log.length === 0 && (
+            <Mono size={10} tone="dim" style={{ marginTop: 8, lineHeight: 15 }}>Nothing yet — the log fills as the draft happens.</Mono>
+          )}
+          {[...log].reverse().map((e) => {
+            const l = draftEventLine(e);
+            return (
+              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                <Mono size={11} style={{ width: 20, textAlign: 'center' }}>{l.icon}</Mono>
+                <Mono size={10} tone={e.roster_id != null && e.roster_id === myRoster ? 'you' : l.tone} style={{ flex: 1, lineHeight: 15 }}>{l.text}</Mono>
+                <Mono size={8.5} tone="faint">{draftEventTime(e.at)}</Mono>
+              </View>
             );
           })}
         </Card>

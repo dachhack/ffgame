@@ -20,7 +20,7 @@ import {
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   leagueContracts, setContractRules, setSalaryRules, setRookieYears, type LeagueContracts,
-  type WaiverMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
+  type WaiverMode, type FaMode, type TradeReview, type TradeRow, type LeaguePoolPlayer, type NativeRosterRow,
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
@@ -470,6 +470,7 @@ interface TxnRules {
   mode: WaiverMode; budget: number; review: TradeReview;
   clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
+  faMode: FaMode;
   agentWaivers: boolean;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
@@ -487,6 +488,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
   const [faEnd, setFaEnd] = useState<number | null>(null);
+  // 0287: the window said open-or-hours; the MODE can also say none at all.
+  const [faMode, setFaMode] = useState<FaMode>('open');
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -499,12 +502,15 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
+        // Absent reads from the hours, exactly as league_fa_mode does, so a
+        // league that predates 0287 shows what it has always done.
+        faMode: r.fa_mode ?? (r.fa_start_min != null ? 'window' : 'open'),
         // Absent means ON (0213), the same default league_agent_waivers uses.
         agentWaivers: r.agent_waivers !== false,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading_(a.pick_trading !== false); }).catch(() => {});
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
@@ -527,8 +533,9 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faChanged ? (faEnd ?? -1) : null,
         dowChanged ? (clearDow ?? []) : null,
         faDowChanged ? (faDow ?? []) : null,
-        agentWaivers !== init.agentWaivers ? agentWaivers : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, agentWaivers }); setMsg('✓ saved'); }
+        agentWaivers !== init.agentWaivers ? agentWaivers : null,
+        faMode !== init.faMode ? faMode : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -673,13 +680,24 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         </div>
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(faStart == null, 'ALWAYS OPEN', () => { setFaStart(null); setFaEnd(null); })}
-            {toggle(faStart != null, '🕒 DAILY WINDOW', () => { setFaStart(faStart ?? 600); setFaEnd(faEnd ?? 1320); })}
+          <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+            {toggle(faMode === 'open', 'ALWAYS OPEN', () => { setFaMode('open'); setFaStart(null); setFaEnd(null); })}
+            {toggle(faMode === 'window', '🕒 DAILY WINDOW', () => { setFaMode('window'); setFaStart(faStart ?? 600); setFaEnd(faEnd ?? 1320); })}
+            {/* 0287 (founder: "how do i turn off free agency and just do faab
+                waivers?"). Not a narrower window — none at all, so every
+                unowned player is a claim. */}
+            {toggle(faMode === 'off', '🚫 NONE — WAIVERS ONLY', () => setFaMode('off'))}
           </div>
+          {faMode === 'off' && (
+            <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--warn)', marginTop: 6, lineHeight: 1.5 }}>
+              No instant pickups at all. EVERY unowned player — including anyone who went undrafted — has to be won
+              on waivers{mode === 'faab' ? ' with a FAAB bid' : ''}.
+              {mode !== 'faab' && ' This league runs priority waivers; switch the mode above to FAAB for blind bidding.'}
+            </div>
+          )}
         </div>
-        {faStart != null && hourStep(faStart, setFaStart, 'OPENS')}
-        {faStart != null && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
+        {faMode === 'window' && hourStep(faStart ?? 600, setFaStart, 'OPENS')}
+        {faMode === 'window' && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save'}</button>
       </div>
       {/* FAAB wallets (0173) — only meaningful in FAAB mode, and the grant RPC
