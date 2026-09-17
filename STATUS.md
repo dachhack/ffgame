@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.416.0 — the depth chart, so the right backup comes on
+
+Founder: "Lock is the QB2 but Darnold is hurt and out this week." Then, on
+the plan: "yes build it."
+
+v0.415.0 took the injured man off the sheet and promoted Jalen Milroe,
+because the sheet ranked by PROJECTION and Drew Lock has none — a player
+the projection set never valued cannot be sorted into view however the list
+is ordered. Injury-awareness fixed who comes off. This fixes who comes on.
+
+WHY SLEEPER, out of three checked. ESPN's core API serves a real ranked 2026
+chart and it is the SEASON one — it still has Darnold at QB1, so it answers
+about role, not about Sunday. StatHead's get_depth_charts has exactly the
+right shape and its worker exceeds its resource limit on 2025 and 2026
+(2024 answers fine), so it cannot be leaned on today. Sleeper's directory
+carries depth_chart_order, is re-ordered for AVAILABILITY week to week —
+Lock 1, Darnold 2, already — and the worker pulls that directory daily
+already. sync.js has been reading the field since the preseason pool
+builder and simply never stored it.
+
+Built on the player_team_override pattern (0142), which is the proven one:
+worker writes, any signed-in user reads, no RPC. Difference is that this is
+the WHOLE map rather than a drift — there is no baked depth chart to diff
+against, and at ~570 rows there needs not be.
+
+THE RULE: rank first, projection second. A ranked man always sorts above an
+unranked one, ties and absences fall through to projection, and a player
+with neither a rank nor a projection is not a candidate at all. Where
+Sleeper has no opinion — about a third of the pool — the sheet is byte for
+byte what it was before, which is what makes partial coverage safe. A rank
+still loses to being OUT: the injury filter runs first.
+
+NO KICKERS in the chart, deliberately: this game scores kicking as a team
+unit (sea-k), so publishing an individual kicker's rank put "Jason Myers —"
+where the unit's real projection belongs. Caught by running the whole chain
+against the live directory before shipping, which is also how the Lock case
+was confirmed end to end: 572 rows published, Seattle's QB1 comes back
+drew-lock.
+
+ONE THING TO WATCH, flagged rather than silently accepted: rank-first also
+puts George Holani (rank 2, proj 0.4) at RB2 over Zach Charbonnet (rank 5,
+proj 7.8). That is what Sleeper says, and trusting it is the whole point —
+but a committee backfield is where the chart and the model disagree most,
+and it is worth a look before week's end.
+
+Eight parity assertions on the ordering rule and five probes on the table's
+RLS — a client that could write here would own every league's idea of who
+starts. 94 suites.
+
 ### v0.415.0 — a man who is out is not a projected starter
 
 Founder, correcting me on Seattle's quarterbacks: "Lock is the QB2 but

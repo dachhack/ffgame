@@ -7,6 +7,7 @@ import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
+import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
@@ -542,6 +543,19 @@ export async function loadTeamOverrides(): Promise<number> {
     if (error) return 0;
     const rows = (data ?? []) as { slug: string; team: string | null }[];
     setTeamOverrides(rows);
+    return rows.length;
+  } catch { return 0; }
+}
+
+/** Load the worker-published depth chart (0293) into the playerDepth cache.
+ *  A few hundred rows. Never throws — without it the projected sheet falls
+ *  back to projection order, which is what it did before the chart existed. */
+export async function loadDepthChart(): Promise<number> {
+  try {
+    const { data, error } = await (await client()).from('player_depth').select('slug, team, pos, depth');
+    if (error) return 0;
+    const rows = (data ?? []) as { slug: string; team: string; pos: string; depth: number }[];
+    setDepthChart(rows);
     return rows.length;
   } catch { return 0; }
 }

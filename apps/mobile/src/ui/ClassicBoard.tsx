@@ -29,7 +29,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides,
+  nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
@@ -494,6 +494,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // overlay below resolves a single team — this board never loaded it at
         // all, so a post-bake mover fell to the directory's answer. Never throws.
         await loadTeamOverrides();
+        // 0293 — the depth chart the projected box prefers before kickoff.
+        await loadDepthChart().catch(() => 0);
         const [pl, pk] = await Promise.all([myPool(leagueId, m.week, rosterId), myPicks(m.id, userId)]);
         setPool(pl);
         // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie

@@ -13,7 +13,7 @@ import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
 import { track, setTraits, Ev } from '@drip/core/analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, loadTeamOverrides, leagueNote, playerFlags, leagueScoringGet, type TargetedState } from '@drip/core/data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, loadTeamOverrides, loadDepthChart, leagueNote, playerFlags, leagueScoringGet, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
@@ -402,6 +402,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // (covers a signed-in reload) and again when a live board opens (covers the
   // first sign-in of the session, when the mount-time read saw no rows).
   useEffect(() => { void loadTeamOverrides(); }, []);
+  // The depth chart (0293) rides the same door: a few hundred rows, loaded
+  // once, read synchronously by the projected box before kickoff.
+  useEffect(() => { void loadDepthChart(); }, []);
   useEffect(() => { if (liveCtx) void loadTeamOverrides(); }, [liveCtx]);
 
   // Commish kit (0141): the league note + player flags, live leagues only —

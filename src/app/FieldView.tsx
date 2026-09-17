@@ -996,7 +996,9 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
                 <span className="mono" title={r.injury === 'Q' ? 'questionable' : r.injury === 'D' ? 'doubtful' : r.injury}
                   style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{r.injury}</span>
               )}
-              <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dimstrong)', flex: 'none' }}>{r.proj.toFixed(1)}</span>
+              {/* A rank with no projection is still an answer about who starts; a
+                  fabricated 0.0 would not be. */}
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dimstrong)', flex: 'none' }}>{r.proj != null ? r.proj.toFixed(1) : '—'}</span>
             </div>
           );
         })}
