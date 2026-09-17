@@ -25,6 +25,7 @@ import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
+import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -856,6 +857,75 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   disambiguateSlugs(noIds);
   ok('without an id there is nothing to disambiguate WITH, and it says so by leaving them equal',
     noIds[0].slug === 'dup' && noIds[1].slug === 'dup');
+}
+
+
+// ── WHICH WEEK THE MATCHUP SCREEN OPENS ON (v0.401.0) ───────────────────────
+// Founder: "you should go to the current week that is to be played if it is
+// Wednesday or later." Every interesting case is a calendar edge, which is
+// why the rule is a pure function: each one here is a fixed instant rather
+// than a day somebody has to wait for.
+{
+  const ET = (iso) => Date.parse(iso);          // the Z instants below are ET+4/+5 already
+  // 2026 week 1: Thu 10 Sep kickoff, MNF Mon 14 Sep 20:15 ET = 15 Sep 00:15Z
+  const wk1 = { first: ET('2026-09-10T20:20:00Z'), last: ET('2026-09-15T00:15:00Z') };
+  // week 2: Thu 17 Sep, MNF Mon 21 Sep
+  const wk2 = { first: ET('2026-09-17T20:20:00Z'), last: ET('2026-09-22T00:15:00Z') };
+  const kicks = { 1: wk1, 2: wk2 };
+  const weeks = [1, 2];
+
+  // Monday night, mid-game: obviously week 1.
+  ok('mid-MNF you are on the week being played',
+    openWeekFrom(weeks, kicks, ET('2026-09-15T02:00:00Z')) === 1);
+  // Tuesday: the games are long done, and the OLD rule (last + 4h) had already
+  // jumped to week 2 here. Tuesday is for reading what happened.
+  ok('Tuesday still shows the week just played',
+    openWeekFrom(weeks, kicks, ET('2026-09-15T18:00:00Z')) === 1);
+  ok('…right up to Tuesday 23:59 ET',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T03:59:00Z')) === 1);
+  // Wednesday 00:00 ET = 04:00Z in September (EDT, UTC−4).
+  ok('Wednesday 00:00 ET turns the page',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T04:00:00Z')) === 2);
+  ok('…and it stays turned on Thursday',
+    openWeekFrom(weeks, kicks, ET('2026-09-17T18:00:00Z')) === 2);
+
+  // The close instant itself is a Wednesday midnight ET, not a Tuesday one.
+  ok('a week closes on a Wednesday, at hour 0 ET', etWeekday(weekClosesAt(wk1.last)) === 3);
+  ok('…and that is strictly after the games are done', weekClosesAt(wk1.last) > wk1.last + GAME_MS);
+
+  // A week with no Monday game still waits for Wednesday rather than closing
+  // on Sunday night — the rule is the calendar, not the last whistle.
+  const sunOnly = { 5: { first: ET('2026-10-11T17:00:00Z'), last: ET('2026-10-11T20:25:00Z') } };
+  ok('a Sunday-only week still runs to Wednesday',
+    openWeekFrom([5, 6], { ...sunOnly, 6: { first: ET('2026-10-18T17:00:00Z'), last: ET('2026-10-18T20:25:00Z') } },
+      ET('2026-10-13T18:00:00Z')) === 5);
+
+  // NOVEMBER, after the DST change: Wednesday 00:00 ET is 05:00Z, not 04:00Z.
+  // A fixed −4 offset would turn the page an hour early here, every week for
+  // the half of the season that decides seeding.
+  const nov = {
+    10: { first: ET('2026-11-12T20:20:00Z'), last: ET('2026-11-17T01:15:00Z') },
+    11: { first: ET('2026-11-19T20:20:00Z'), last: ET('2026-11-24T01:15:00Z') },
+  };
+  ok('past the DST change, 23:59 ET Tuesday is still last week',
+    openWeekFrom([10, 11], nov, ET('2026-11-18T04:59:00Z')) === 10);
+  ok('…and 00:00 ET Wednesday is the next one',
+    openWeekFrom([10, 11], nov, ET('2026-11-18T05:00:00Z')) === 11);
+
+  // The shapes that must not throw or guess.
+  ok('no weeks at all answers null', openWeekFrom([], {}, Date.now()) === null);
+  ok('a week with no slate is returned, not skipped — we cannot call it over',
+    openWeekFrom([3, 4], {}, Date.now()) === 3);
+  ok('after the last week is done you stay on it rather than falling off the end',
+    openWeekFrom(weeks, kicks, ET('2027-02-01T00:00:00Z')) === 2);
+  // Order of the input must not matter, and preseason numbering sorts by its
+  // own kickoffs rather than by being a bigger integer.
+  const pre = { 101: { first: ET('2026-08-13T23:00:00Z'), last: ET('2026-08-13T23:00:00Z') }, 1: wk1 };
+  ok('a preseason week sorts by kickoff, not by its number',
+    openWeekFrom([1, 101], pre, ET('2026-08-12T12:00:00Z')) === 101);
+  ok('input order does not change the answer',
+    openWeekFrom([2, 1], kicks, ET('2026-09-15T18:00:00Z'))
+      === openWeekFrom([1, 2], kicks, ET('2026-09-15T18:00:00Z')));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

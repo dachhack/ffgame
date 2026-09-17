@@ -28,6 +28,7 @@ import {
   ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
+  defaultOpenWeek,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
@@ -261,7 +262,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // preseason board is reachable at all (v0.279.0).
         leagueWeeks(r.leagueId).then((w) => { if (w.length) setWeeks(w); }).catch(() => {});
         myMembership(r.leagueId, r.rosterId).then((mm) => { if (mm?.controller) setController(mm.controller); }).catch(() => {});
-        const m = await myMatchup(r.leagueId, r.rosterId, weekSel ?? undefined);
+        // v0.401.0: ASK WHICH WEEK, don't take the first one. The week-less
+        // myMatchup is `.order('week').limit(1)` — the league's FIRST week,
+        // for ever, so this screen opened week 1 in December. Its sibling
+        // myMatchupFrom already carries a comment about this exact bug being
+        // fixed for the leagues list; the matchup screen kept the old call.
+        // defaultOpenWeek is the web's rule, now shared: the week being played,
+        // or the one just played until Wednesday 00:00 ET.
+        let wk = weekSel ?? undefined;
+        if (wk == null) {
+          // '2026' and false match PodBuilder's call. Both arguments only
+          // decide the fallback for a league with NO matchups at all, which
+          // this screen renders as "no game" regardless; a league that HAS
+          // weeks is answered from its own rows, preseason ones included.
+          wk = await defaultOpenWeek(r.leagueId, '2026', false).catch(() => undefined);
+        }
+        const m = await myMatchup(r.leagueId, r.rosterId, wk);
         if (!m) { setMatchup(null); setState('none'); return; }
         setMatchup(m);
         matchupPremium(m.id).then(setMatchPremium).catch(() => {});

@@ -11,6 +11,7 @@ import { resolveUser } from './sleeper';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
+import { openWeekFrom } from './openWeek';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -809,13 +810,11 @@ export async function defaultOpenWeek(leagueId: string, season: string, preseaso
     const e = kicks[r.week] ?? (kicks[r.week] = { first: t, last: t });
     e.first = Math.min(e.first, t); e.last = Math.max(e.last, t);
   }
-  // Ordered by real kickoff (weeks with no known slate sort last). Open the first
-  // week that isn't fully over — i.e. live now or the soonest upcoming.
-  const ordered = weeks.slice().sort((a, b) => (kicks[a]?.first ?? Infinity) - (kicks[b]?.first ?? Infinity) || a - b);
-  const now = Date.now();
-  const GAME_MS = 4 * 3_600_000;
-  for (const w of ordered) { const k = kicks[w]; if (!k || now <= k.last + GAME_MS) return w; }
-  return ordered[ordered.length - 1];
+  // v0.401.0: the ordering and the cutoff moved into openWeekFrom, a pure
+  // function parity can test against fixed instants. The cutoff also MOVED —
+  // it used to be last kickoff + 4h, so the screen jumped to next week the
+  // moment Monday night football ended; it now holds until Wednesday 00:00 ET.
+  return openWeekFrom(weeks, kicks, Date.now()) ?? (preseasonEnabled ? 101 : 1);
 }
 
 export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
