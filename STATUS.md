@@ -18,6 +18,51 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.406.0 — the hold is on the same schedule as the run
+
+Founder, on the pool an hour after 0291 shipped: "still has jax kicker
+clearing at 4am."
+
+Different 4am, and my own sentence caused it. 0291 re-dated a claim's own
+clock and said, in as many words, that a claim queued behind a real pool
+hold "follows that hold, as it always has". There are two stamps in this
+system and I moved one:
+
+    waiver_claim.clears_at    set when a claim is made      — 0291 re-stamped
+    league_pool.waived_until  set when a player is DROPPED  — nothing did
+
+Somebody dropped JAX Kicker while the league still cleared at 4am, so his
+pool row carries a 4am hold. The ⏳ in the player list counts down to it,
+and the claim behind it inherits it through coalesce(clears_at,
+waived_until). Moving the league to 2pm Thursday moved neither, so the pool
+was a queue of players still clearing on a schedule the league no longer
+ran.
+
+Every fantasy platform means one thing by a waiver time: there is a run,
+and everybody on waivers clears at it. The per-player stamp is an
+implementation detail of that, not a separate promise made to each player
+at the moment he was dropped. So changing the schedule now re-dates every
+live hold and every claim, through one function, because a league whose
+holds and claims disagreed about what day it is would be the same bug one
+layer down.
+
+Three things it deliberately does not do, each with a probe:
+
+  • an EXPIRED hold stays expired — he already cleared, he is a free agent,
+    and re-dating him would put him back on waivers;
+  • a ROLLING league (no clear time at all) is left alone — waiver_hold_until
+    answers now() + 24h there, so re-stamping would shove every live hold a
+    further day out every time a commissioner saved any setting;
+  • a longer-than-one-day hold restarts against the new clock rather than
+    crediting days already served. Moving the schedule mid-hold is a rare and
+    deliberate act, and a rule you can say in one sentence beats an accounting
+    nobody can predict.
+
+Leagues already out of step — the founder's among them, since he changed
+the time before any of this existed — are re-dated once by the migration.
+
+93 suites pass.
+
 ### v0.405.0 — the wire, out loud; and the clear time actually clears
 
 Two asks in one build, both about the same corner of the league.
