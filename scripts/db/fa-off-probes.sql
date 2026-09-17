@@ -176,6 +176,62 @@ begin
     'fo7b and the wire is open whatever the hour, because the mode is the answer');
 end $$;
 
+-- ── 4b. A CLOSED WINDOW IS WHAT WAIVERS ARE FOR (0288) ────────────────────
+-- The founder's league: FAAB, free agency on a daily window, the clock
+-- outside it. Before 0288 a player nobody ever dropped was refused by BOTH
+-- doors — no waived_until for the claim, no open window for the add — so most
+-- of the pool was unobtainable for most of the day.
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text; r jsonb;
+begin
+  perform fo_as('1');
+  -- a window that is definitely NOT now: one minute, a decade of midnights ago
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'window',
+    p_fa_start_min => 0, p_fa_end_min => 1), 'fo10 the league runs a daily window');
+  perform fo_true(league_fa_mode(lid) = 'window', 'fo10a mode reads window');
+  perform fo_true(not fa_window_open(lid), 'fo10b and the window is shut right now');
+
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  -- explicitly one NOBODY HAS EVER DROPPED: earlier probes in this file won a
+  -- claim, and a resolved claim puts its drop on a hold, so the top-ranked
+  -- free man is not necessarily an untouched one.
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid and lp.waived_until is null
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    order by lp.rank limit 1;
+  perform fo_true(free_slug is not null
+    and (select waived_until from league_pool where league_id = lid and slug = free_slug) is null,
+    'fo11 he has no waiver hold — nobody ever dropped him');
+  -- the add is correctly refused: the window is shut
+  perform fo_no(add_free_agent(lid, seat, free_slug), 'free agency is closed',
+    'fo12 adding him is refused while the window is shut');
+  -- …and THAT is exactly when a claim has to work
+  reset role;
+  delete from waiver_claim where league_id = lid;
+  perform fo_as('1');
+  select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
+  perform fo_ok(submit_waiver_claim(lid, seat, free_slug, drop_slug, 4),
+    'fo13 but a claim on him is ACCEPTED — the closed window is what waivers cover');
+  perform fo_ok(process_waivers(lid), 'fo13a and the run resolves it');
+  perform fo_true(exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo13b onto the roster');
+
+  -- With the window OPEN, an unheld player is an add, not a claim — and the
+  -- refusal says so rather than the old, untrue "player not in pool".
+  perform fo_ok(set_transaction_rules(lid, p_fa_start_min => -1, p_fa_end_min => -1),
+    'fo14 the window is cleared');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'open'), 'fo14a and free agency is open');
+  perform fo_true(fa_window_open(lid), 'fo14b so the wire is open');
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid and lp.waived_until is null
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    order by lp.rank limit 1;
+  perform fo_no(submit_waiver_claim(lid, seat, free_slug, drop_slug, 1), 'add him directly',
+    'fo15 claiming an open free agent points you at the add instead');
+end $$;
+
 -- ── 5. who may set it, and to what ────────────────────────────────────────
 do $$
 declare lid uuid := current_setting('probe.fo_lid')::uuid;
