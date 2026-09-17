@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.401.0 — the matchup screen opens on the week you're about to play
+
+Founder: "When you go to matchup in a classic league you should go to the
+current week that is to be played if it is Wednesday or later."
+
+TWO THINGS WERE WRONG and only one was the rule.
+
+The APP never asked the question. Its matchup screen called the week-LESS
+myMatchup, which is `.order('week').limit(1)` — the league's FIRST week,
+for ever. It would have opened week 1 in December. myMatchupFrom's own
+comment records this exact bug being found and fixed for the leagues list
+back in v0.364.0; the matchup screen kept the old call. It now asks
+defaultOpenWeek, the same rule the web uses.
+
+And the web's rule rolled over too early: a week was held until its last
+kickoff + 4 hours, so the screen jumped to next week the moment Monday
+Night Football ended, around 00:30 ET Tuesday. Tuesday is when you read
+what happened. A week now stays open until the first Wednesday 00:00 ET
+after its games are done — which is the founder's line, and the simpler
+thing to say.
+
+The rule moved into core as a pure function, because every interesting
+case is a calendar edge: Tuesday 23:59 against Wednesday 00:01, a week
+with no Monday game, a week with no slate at all, preseason numbering
+that sorts by kickoff rather than by integer, and the November DST change
+where Wednesday midnight ET is 05:00Z rather than 04:00Z — a fixed −4
+offset would turn the page an hour early for exactly the half of the
+season that decides seeding. Fifteen parity assertions, each a fixed
+instant rather than a day somebody waits for.
+
+Found while writing them: the block ran AFTER check-draft-spots' own
+process.exit and never executed — passing silently, proving nothing. The
+summary line now prints last, so a block appended below it still runs.
+
 ### v0.400.0 — free agency can be turned off
 
 Founder: "how do i turn off free agency and just do faab waivers?" He
