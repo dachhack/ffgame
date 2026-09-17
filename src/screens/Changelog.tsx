@@ -74,12 +74,13 @@ export function Changelog() {
               </div>
             )}
           </div>
-          <a href={APK_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ DOWNLOAD APK</a>
-          {/* THE ZIP IS A BUTTON, NOT A SENTENCE (v0.409.1). It is the route
-              that demonstrably completes when the direct one stalls, and
-              somebody whose download just hung should not have to read a
-              paragraph to find it. */}
-          <a href={APK_ZIP_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ ZIP</a>
+          {/* v0.410.0, founder: "zip downloaded fine, make it the default for
+              android." The zip is the primary button now. The direct .apk
+              keeps its place beside it — it is one tap shorter where a browser
+              will take it — but it is no longer what somebody lands on, and
+              the line below says why. */}
+          <a href={APK_ZIP_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ DOWNLOAD (ZIP)</a>
+          <a href={APK_URL} className="mono" title="Skips the unzip, but some browsers never finish it" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>direct .apk</a>
           <a href={APK_RELEASE_PAGE_URL} target="_blank" rel="noreferrer" className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>release notes →</a>
           {/* WHEN THE DOWNLOAD SAYS FAILED (v0.408.0). Founder: "the app
               downloads from the link but never finished and says failed
@@ -89,8 +90,8 @@ export function Changelog() {
               button that produced it, rather than left to conclude the app is
               broken. */}
           <div style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 9 }}>
-            Download stalls at 100%, or says <strong style={{ color: 'var(--text)' }}>Failed</strong> once the bar is full? Nothing is wrong with the build — the browser is refusing a file served as an Android package.
-            {' '}Take <strong style={{ color: 'var(--text)' }}>⬇ ZIP</strong> instead: it downloads as an ordinary file. Unzip it with any file manager and tap the APK inside — same build, same signature, byte for byte.
+            The download is a zip: unzip it with any file manager and tap the APK inside. That extra step exists because a browser handed a file served as an Android package can leave the download sitting at 100%, or call it <strong style={{ color: 'var(--text)' }}>Failed</strong> once every byte has arrived — nothing to do with the build.
+            {' '}<strong style={{ color: 'var(--text)' }}>direct .apk</strong> skips the unzip if your browser will take it. Same build, same signature, byte for byte.
           </div>
         </section>
         <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 10 }}>

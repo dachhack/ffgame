@@ -20,6 +20,7 @@ import {
   optimalLineup, autoSlotPlan, classicLineup, slateAwareProj, leagueEligiblePos,
 } from '../packages/core/src/engine/classic';
 import { sortPool, poolSortValue, adpFor, projFor, setLiveAdp, clearLiveAdp, adpIsLive } from '../packages/core/src/data/poolSort';
+import { readFileSync } from 'node:fs';
 import { disambiguateSlugs } from '../packages/core/src/data/nativeLeague';
 import { fmtClearsAt, waiverScheduleText } from '../packages/core/src/data/waiverClock';
 import { txnLook, txnBody } from '../packages/core/src/data/txnChat';
@@ -1035,6 +1036,39 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     txnBody('The Firsts added Bijan Robinson', txnLook({ kind: 'add' })) === 'The Firsts added Bijan Robinson');
   ok('and the wrong icon is not stripped',
     txnBody('🤝 Trade — A sends X to B', txnLook({ kind: 'add' })) === '🤝 Trade — A sends X to B');
+}
+
+// ── the Android download default (v0.410.0) ───────────────────────────────
+// Founder, having tested both: "zip downloaded fine, make it the default for
+// android." The direct .apk is served as an Android package archive, which is
+// what leaves a download sitting at 100%, and GitHub will not serve a file
+// called .apk as anything else (v0.409.0 tried and the build log said no). So
+// every place a download STARTS points at the zip.
+//
+// Asserted against the source because this is the kind of thing that comes
+// back one careless import at a time: someone adds a download button, reaches
+// for the obvious-looking constant, and the default quietly reverts for a
+// surface nobody re-tests.
+{
+  const src = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const entries = [
+    ['src/app/ui.tsx', 'the settings menu'],
+    ['src/screens/LiveOnboard.tsx', 'the leagues page button'],
+    ['apps/mobile/src/ui/WhatsNew.tsx', "the app's own update button"],
+  ];
+  for (const [f, what] of entries) {
+    const t = src(f);
+    ok(`${what} downloads the zip`, /APK_ZIP_URL/.test(t));
+    ok(`${what} does not fall back to the raw .apk`, !/\bAPK_URL\b/.test(t));
+  }
+  // The changelog card is the one place that offers BOTH, because it is the
+  // one place with room to say why.
+  const card = src('src/screens/Changelog.tsx');
+  ok('the changelog card offers the zip', /APK_ZIP_URL/.test(card));
+  ok('and still offers the direct .apk beside it', /\bAPK_URL\b/.test(card));
+  // The FAQ explains the choice, so it names both too.
+  const faq = src('src/screens/Faq.tsx');
+  ok('the FAQ points at the zip first', faq.indexOf('APK_ZIP_URL') < faq.lastIndexOf('APK_URL'));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

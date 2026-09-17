@@ -8,7 +8,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
-import { APK_URL } from '@drip/core/data/changelog';
+import { APK_ZIP_URL } from '@drip/core/data/changelog';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
@@ -571,10 +571,13 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             ❓ FAQ
           </button>
           {/* The Android playtest build and what shipped (v0.393.0). One link,
-              always the newest APK — release-apk.yml keeps it current. */}
-          <a href={APK_URL} className="mono"
+              always the newest build — release-apk.yml keeps it current.
+              v0.410.0: it is the ZIP. The direct .apk stalls at 100% in a
+              browser that treats it as a package archive, and this menu has no
+              room to explain that, so it points at the route that finishes. */}
+          <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside"
             style={{ display: 'block', width: '100%', borderTop: '1px solid var(--bd)', paddingTop: 12, marginTop: -2, textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', textDecoration: 'none' }}>
-            📱 Android app (APK)
+            📱 Android app (zip → APK)
           </a>
           <button
             onClick={() => { setOpen(false); navigate({ name: 'changelog' }); }}

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { APP_VERSION } from '@drip/core/version';
-import { APK_MANIFEST_URL, APK_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
+import { APK_MANIFEST_URL, APK_ZIP_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
@@ -83,10 +83,15 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
     <Overlay visible={visible} title="What's new" subtitle={sub} onClose={onClose}
       footer={(
         <View style={{ flexDirection: 'row', gap: 8, padding: 12 }}>
+          {/* v0.410.0: THE ZIP. This button matters most of all — it opens a
+              browser ON THE PHONE, which is exactly where a file served as an
+              Android package stalls at 100%. Founder, after testing both: "zip
+              downloaded fine, make it the default for android." Unzip and tap
+              the APK inside. */}
           {behind > 0 && (
-            <Pressable onPress={() => { void Linking.openURL(APK_URL); }}
+            <Pressable onPress={() => { void Linking.openURL(APK_ZIP_URL); }}
               style={{ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>⬇ GET V{st.latest?.toUpperCase()}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>⬇ GET V{st.latest?.toUpperCase()} (ZIP)</Text>
             </Pressable>
           )}
           <Pressable onPress={() => { void Linking.openURL(CHANGELOG_PAGE_URL); }}

@@ -24,13 +24,25 @@ export interface ApkManifest { version: string; versionCode: number; built: stri
 export const SITE_URL = 'https://dripfantasy.com';
 export const CHANGELOG_URL = `${SITE_URL}/changelog.json`;
 export const CHANGELOG_PAGE_URL = `${SITE_URL}/#/changelog`;
+/** THE DIRECT .apk — the SECONDARY route since v0.410.0. Still published, still
+ *  correct, and one tap shorter when a browser will take it. But GitHub serves
+ *  a file called .apk as application/vnd.android.package-archive and will not
+ *  be argued out of it (0409.0 tried), and a browser in package-archive
+ *  handling can leave a download sitting at 100% for ever. Offered where there
+ *  is room to explain the choice; never the button somebody lands on. */
 export const APK_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk';
-/** THE SAME APK, ZIPPED (v0.408.0). Founder: "the app downloads from the link
- *  but never finished and says failed despite showing all the data
- *  transferred." A browser that refuses a package archive after the bytes have
- *  already arrived will take an ordinary zip without complaint, so this is the
- *  second door: download, unzip, install. Same signed build, published beside
- *  the APK by release-apk.yml. */
+/** THE SAME APK, ZIPPED — and since v0.410.0 the DEFAULT for Android.
+ *
+ *  Founder: "the app downloads from the link but never finished and says
+ *  failed despite showing all the data transferred", then, once this existed:
+ *  "zip downloaded fine, make it the default for android."
+ *
+ *  It is served as an ordinary file rather than an Android package, which is
+ *  the whole difference between a download that finishes and one that sits at
+ *  100% with a pause icon. It costs an unzip — worth it, because a default has
+ *  to work for the person who has never sideloaded anything and will read
+ *  "Failed" as "this app is broken". Same signed build as APK_URL, byte for
+ *  byte; release-apk.yml zips the very artifact it publishes. */
 export const APK_ZIP_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk.zip';
 export const APK_MANIFEST_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/manifest.json';
 export const APK_RELEASE_PAGE_URL = 'https://github.com/dachhack/ffgame/releases/tag/apk-latest';
