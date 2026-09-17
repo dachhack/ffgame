@@ -32,6 +32,7 @@ import { lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
 import { groupFieldGames, setLiveGameFeed, clearLiveGameFeeds } from '../packages/core/src/data/gameFeed';
 import { projectedBox, projectedStarters } from '../packages/core/src/engine/projectedBox';
 import { liveTeamFor, slugMeta, normTeam } from '../packages/core/src/data/slugMeta';
+import { setLiveInjuries, clearLiveInjuries } from '../packages/core/src/data/injuries';
 import { LIVE_SEASON } from '../packages/core/src/data/realPbp';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
@@ -1224,6 +1225,47 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // side must resolve to that side under the live map, and a player whose
   // baked team differs from his live one must land on the live one. The mover
   // is found in the data rather than hardcoded.
+  // A MAN WHO IS OUT IS NOT A PROJECTED STARTER (v0.415.0). Founder, on
+  // Seattle's quarterbacks: "Lock is the QB2 but Darnold is hurt and out this
+  // week." Darnold outprojects Lock over a season and will score nothing on
+  // Sunday, and the sheet had him starting.
+  {
+    const qb = (t, wk) => projectedStarters(t, wk).filter((r) => r.pos === 'QB').map((r) => r.slug);
+    const healthy = qb('SEA', null);
+    ok('with no week the sheet is the season view', healthy.length === 1);
+    const starter = healthy[0];
+
+    setLiveInjuries(901, { [starter]: { status: 'O' } });
+    const out = qb('SEA', 901);
+    ok('a starter ruled OUT is off the sheet', !out.includes(starter));
+    ok('and somebody else has the spot', out.length === 1 && out[0] !== starter);
+
+    clearLiveInjuries();
+    setLiveInjuries(901, { [starter]: { status: 'IR' } });
+    ok('IR takes him off the same way', !qb('SEA', 901).includes(starter));
+
+    // Questionable and Doubtful are judgement calls the screen must not make:
+    // a questionable starter usually plays, and swapping him out on a coin
+    // flip would be worse than showing the letter and letting a manager read
+    // it.
+    clearLiveInjuries();
+    setLiveInjuries(901, { [starter]: { status: 'Q' } });
+    const q = projectedStarters('SEA', 901).filter((r) => r.pos === 'QB');
+    ok('a questionable starter still starts', q[0]?.slug === starter);
+    ok('and carries his tag so it can be read', q[0]?.injury === 'Q');
+
+    clearLiveInjuries();
+    setLiveInjuries(901, { [starter]: { status: 'D' } });
+    ok('doubtful is shown, not decided', projectedStarters('SEA', 901)
+      .some((r) => r.slug === starter && r.injury === 'D'));
+
+    // The week matters: an injury in ANOTHER week must not reach this one.
+    clearLiveInjuries();
+    setLiveInjuries(902, { [starter]: { status: 'O' } });
+    ok('an injury in another week leaves this one alone', qb('SEA', 901).includes(starter));
+    clearLiveInjuries();
+  }
+
   const teamsToCheck = ['KC', 'SEA', 'LA', 'NO', 'BUF'];
   ok('every projected row belongs to the team it is listed under',
     teamsToCheck.every((t) => projectedStarters(t)

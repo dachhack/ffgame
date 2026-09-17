@@ -26,6 +26,7 @@ import { PROJ_2026 } from '../data/proj2026';
 import { slugMeta, normTeam, liveTeamFor } from '../data/slugMeta';
 import { LIVE_SEASON } from '../data/realPbp';
 import { projFor } from '../data/poolSort';
+import { injuryFor, type InjuryStatus } from '../data/injuries';
 
 export interface ProjectedRow {
   slug: string;
@@ -33,6 +34,10 @@ export interface ProjectedRow {
   team: string;
   /** Projected points, already through the league's scoring. */
   proj: number;
+  /** The week's designation, when a week was given — 'Q' or 'D' on a man who
+   *  is still expected to play. 'O' and 'IR' never reach a row; they are what
+   *  takes a man OFF the sheet. Null with no week, and null for the fit. */
+  injury: InjuryStatus | null;
 }
 export interface ProjectedBox { home: ProjectedRow[]; away: ProjectedRow[] }
 
@@ -77,11 +82,27 @@ function candidatesFor(team: string): { slug: string; pos: Pos }[] {
  *
  *  A position the projection set cannot value at all contributes nothing —
  *  a row reading "—" is worse than no row, and a zero would be a claim. */
-export function projectedStarters(team: string): ProjectedRow[] {
+export function projectedStarters(team: string, week?: number | null): ProjectedRow[] {
   const T = normTeam(team);
   const valued = candidatesFor(T)
-    .map((c) => ({ ...c, team: T, proj: projFor(c.slug, c.pos) }))
-    .filter((r): r is ProjectedRow => typeof r.proj === 'number' && Number.isFinite(r.proj));
+    .map((c) => ({
+      ...c, team: T, proj: projFor(c.slug, c.pos),
+      injury: week != null ? injuryFor(week, c.slug) : null,
+    }))
+    .filter((r): r is ProjectedRow => typeof r.proj === 'number' && Number.isFinite(r.proj))
+    // A MAN WHO IS OUT IS NOT A PROJECTED STARTER (v0.415.0).
+    //
+    // Founder, on Seattle's quarterbacks: "Lock is the QB2 but Darnold is hurt
+    // and out this week." Exactly right, and it is the case that shows why
+    // projection order alone cannot answer this: Darnold outprojects Lock over
+    // a season and will score nothing on Sunday. The sheet had him starting.
+    //
+    // Only 'O' and 'IR' take a man off — they are the unambiguous ones.
+    // Questionable and Doubtful stay, carrying their tag, because a
+    // questionable starter usually plays and guessing otherwise would swap a
+    // real starter out on a coin flip. The manager can see the letter and
+    // decide; that is a judgement the screen should not make for him.
+    .filter((r) => r.injury !== 'O' && r.injury !== 'IR');
   const out: ProjectedRow[] = [];
   for (const [pos, n] of DEPTH) {
     out.push(...valued.filter((r) => r.pos === pos).sort((a, b) => b.proj - a.proj).slice(0, n));
@@ -93,6 +114,6 @@ export function projectedStarters(team: string): ProjectedRow[] {
  *  vocabulary the caller has (the feed's LAR/WSH or the slate's LA/WAS), so
  *  both go through normTeam — the same fix gameBoxScore carries, for the same
  *  reason. */
-export function projectedBox(home: string, away: string): ProjectedBox {
-  return { home: projectedStarters(home), away: projectedStarters(away) };
+export function projectedBox(home: string, away: string, week?: number | null): ProjectedBox {
+  return { home: projectedStarters(home, week), away: projectedStarters(away, week) };
 }

@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.415.0 — a man who is out is not a projected starter
+
+Founder, correcting me on Seattle's quarterbacks: "Lock is the QB2 but
+Darnold is hurt and out this week."
+
+He is right, and the data says so plainly — Sleeper's directory has Darnold
+at injury_status Out, Lower Body, and has already moved Lock to depth 1 for
+the week. I had read Sleeper's chart as WRONG for putting Lock above
+Darnold. It is not wrong; it is answering a different question. ESPN's is
+the season depth chart (role), Sleeper's is this week's (availability), and
+for a sheet shown before kickoff the second one is the one that matters.
+
+The bug that exposes: the projected box had Darnold starting. He
+outprojects Lock across a season and will score nothing on Sunday, which is
+exactly why projection order alone cannot answer "who starts this week".
+
+So a week can now be handed to projectedStarters, and a man designated 'O'
+or 'IR' is off the sheet — the next man takes the spot. Only those two.
+Questionable and Doubtful stay, carrying their letter, because a
+questionable starter usually plays and swapping him out on a coin flip
+would be worse than showing the tag and letting a manager read it. The
+screen should not make that judgement for him. Both hosts pass the week and
+render the tag.
+
+THE LIMIT THIS EXPOSES, stated because it will be seen: with Darnold out,
+the sheet now shows Jalen Milroe — not Drew Lock. Lock is not in PROJ_2026
+at all, so no amount of ordering can surface him; the candidate set is
+"players the projection knows", and a backup with no projection is
+invisible to it. Injury-awareness fixes who comes OFF the sheet. Only a real
+depth chart fixes who comes ON.
+
+Which is the answer to the question that started this: Sleeper carries
+depth_chart_order, is injury-adjusted weekly, knows Lock, and sync.js
+already reads it — transiently, for preseason pools, never stored. That is
+the integration to build, and it is not built yet.
+
+Eight parity assertions on the injury rule, including that an injury in
+another week leaves this one alone.
+
 ### v0.414.0 — the projected box was reading last year's rosters
 
 Founder, asking whether a real depth chart could be had from ESPN or
