@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.410.0 — the zip is the Android download
+
+Founder, after testing it: "zip downloaded fine, make it the default for
+android."
+
+So every place a download STARTS now points at the zip: the settings menu,
+the GET THE ANDROID APP button on the leagues page, the changelog card's
+primary button, the FAQ's first link, and — the one that matters most —
+the app's own "you are N versions behind" button, which opens a browser on
+the phone, which is exactly where the stall happens.
+
+The direct .apk keeps its place on the changelog card, beside the zip and
+labelled as what it is: one tap shorter where a browser will take it. That
+card is the only surface with room to explain the choice, so it is the only
+one that offers it. Everywhere else, a default has to work for somebody who
+has never sideloaded anything and will read "Failed" as "this app is
+broken".
+
+The copy no longer treats the unzip as an apology. It says the download is
+a zip, says to unzip it and tap the APK inside, and says why: a browser
+handed a file served as an Android package can leave the download sitting
+at 100%, or call it Failed with every byte already there, and none of that
+is about the build. GitHub will not serve a file called .apk as anything
+else — v0.409.0 tried, and its own build log is quoted in the workflow.
+
+A parity guard holds it, asserted against the source rather than a runtime
+value, because this is exactly the kind of default that comes back one
+careless import at a time: somebody adds a download button, reaches for the
+obvious-looking constant, and a surface nobody re-tests quietly reverts.
+Nine assertions — each entry point uses the zip AND does not reference the
+raw constant at all, the card offers both, the FAQ names the zip first —
+verified to bite by breaking one.
+
 ### v0.409.1 — the content-type experiment failed; the zip is the answer
 
 v0.409.0 guessed that the APK's stalled download was down to one header,

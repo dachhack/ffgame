@@ -184,11 +184,12 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Is there a mobile app?',
-          a: <>Android: yes — a playtest build you install directly, always the newest: <a href={APK_URL} style={{ color: 'var(--you)' }}>download the APK</a> (Android
-            asks once to allow installs from your browser). If the download reaches the end and then says <b>Failed</b>, that is the browser
-            refusing a package archive rather than a broken build — <a href={APK_ZIP_URL} style={{ color: 'var(--you)' }}>take the zip</a>,
-            unzip it, and tap the APK inside. iOS: not yet — the site works in Safari, and the game engine is shared so the
-            same play loop ships there when it's built. What changed in each version is at <b>⚙ → What's new</b>.</>,
+          a: <>Android: yes — a playtest build you install directly, always the newest: <a href={APK_ZIP_URL} style={{ color: 'var(--you)' }}>download it</a>,
+            unzip it with any file manager, and tap the APK inside (Android asks once to allow installs from your browser). It arrives as a zip
+            because a browser handed a file served as an Android package can leave the download stuck at 100% or call it <b>Failed</b> with every
+            byte already there; the zip is the same signed build and simply downloads. If you would rather skip the unzip, the
+            {' '}<a href={APK_URL} style={{ color: 'var(--you)' }}>direct .apk</a> is still there. iOS: not yet — the site works in Safari, and the
+            game engine is shared so the same play loop ships there when it's built. What changed in each version is at <b>⚙ → What's new</b>.</>,
         },
         {
           q: 'Is it free? Will it ever cost money?',
