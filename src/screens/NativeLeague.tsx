@@ -2071,6 +2071,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
               Autodraft is on — your queue, then best available, picks for you, even through a pause. Tap AUTODRAFT OFF above to pick for yourself again.
             </div>
           )}
+          {queue.length > 0 && (
+            <div className="mono" style={{ display: 'flex', gap: 8, padding: '4px 0 2px 84px', fontSize: 7.5, letterSpacing: '0.1em', color: 'var(--faint)' }}>
+              <span style={{ flex: 1 }}>PLAYER</span><span style={{ width: 34, textAlign: 'right' }}>ADP</span><span style={{ width: 34, textAlign: 'right' }}>PROJ</span><span style={{ width: 30, textAlign: 'right' }}>OWN</span><span style={{ width: 14 }} />
+            </div>
+          )}
           {queue.map((slug, i) => {
             const p = poolBySlug.get(slug);
             const gone = taken.has(slug);
@@ -2083,9 +2088,62 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: dragOver === i ? '2px solid var(--you)' : '1px solid var(--bd)', opacity: gone ? 0.45 : 1, cursor: 'grab' }}>
                 <span className="mono" title="drag to reorder" style={{ fontSize: 11, color: 'var(--faint)', width: 14, cursor: 'grab' }}>⠿</span>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 18 }}>{i + 1}</span>
-                {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
-                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, textDecoration: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</span>
+                {/* DRAFT FROM THE QUEUE (v0.399.0, founder: "and then a way to
+                    draft directly from your queue"). The queue is where you
+                    already decided; making you find the same player again in a
+                    list of eight hundred is the step this removes. Same act()
+                    and the same guards as the PLAYERS row — one handler, so
+                    the two lists cannot disagree about what is legal, and the
+                    auction's "paused"/"not your nomination" answers are the
+                    ones you already get there. */}
+                {!gone && (() => {
+                  const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
+                  const capped = p ? atCap(p.pos) : false;
+                  const can = !onBlock && !busy && (assigning || myTurn) && !capped;
+                  return (
+                    <button onClick={() => act(slug)} disabled={!can} className="mono"
+                      title={onBlock ? 'already on the block' : capped && p ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                      style={{ ...btn, padding: '5px 7px', fontSize: 8.5, width: 50, flexShrink: 0,
+                        background: assigning ? 'var(--warn)' : btn.background,
+                        opacity: can ? 1 : 0.35 }}>
+                      {assigning ? 'ASSIGN' : onBlock ? 'UP' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                    </button>
+                  );
+                })()}
+                {/* THE SAME ROW AS THE PLAYERS LIST (v0.399.0, founder: "all the
+                    stats that are in the player list should be available in
+                    your queue as well"). Same fields, same order, same
+                    formatting, and the name opens the same card — a queue you
+                    have to leave to check a projection is a queue you check
+                    somewhere else. */}
+                <button onClick={() => p && setCardFor(p)} disabled={!p}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: p ? 'pointer' : 'default', textAlign: 'left' }}>
+                  {p && <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: gone ? 'line-through' : 'none' }}>
+                      {starMark(favs, slug)}{p?.full_name ?? slug}
+                    </div>
+                    {p && (
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
+                        <PosPill pos={p.pos as Pos} />
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <FlagChip slug={slug} />
+                      </div>
+                    )}
+                  </div>
+                </button>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
+                {(() => {
+                  const adp = ADP_2026.get(slug); const proj = p ? projFor(slug, p.pos) : null;
+                  return (
+                    <>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{proj != null ? proj.toFixed(1) : '—'}</span>
+                      <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 30, textAlign: 'right' }}
+                        title="share of this platform's drafted leagues rostering him">{own ? `${own[slug] ?? 0}%` : '—'}</span>
+                    </>
+                  );
+                })()}
                 {auction && !gone && myRoster != null && (() => {
                   const mkt = auctionMarketValue(p?.rank, st.budget);
                   return mkt != null && qMax[slug] !== mkt ? (

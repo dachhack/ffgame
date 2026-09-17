@@ -458,7 +458,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   // the queue in all versions") — the ⠿ handle owns the gesture, the screen's
   // scroll is suspended while a row is in the air, and the drop index is pure
   // arithmetic on the fixed row height.
-  const QROW_H = 44;
+  // 44 when a queue row was one line; the stats line (v0.399.0) needs the
+  // room. It is the row's fixed height AND the divisor the drag-to-reorder
+  // turns a finger's dy into rows with — which is exactly why it is one
+  // constant: change it in one place and the two cannot disagree.
+  const QROW_H = 54;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const dragY = useRef(new Animated.Value(0)).current;
   const dragFrom = useRef<number | null>(null);
@@ -1238,8 +1242,52 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   <Text style={{ color: lifted ? t.you : t.faint, fontSize: 13 }}>⠿</Text>
                 </View>
                 <Mono size={9} tone="faint" style={{ width: 16 }}>{i + 1}</Mono>
+                {/* DRAFT FROM THE QUEUE (v0.399.0) — the web twin. Same act()
+                    and the same guards as the PLAYERS row, so the two lists
+                    cannot disagree about what is legal. */}
+                {!gone && (() => {
+                  const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
+                  const capped = p ? atCap(p.pos) : false;
+                  const can = !onBlock && !busy && (assigning || myTurn) && !capped;
+                  return (
+                    <Pressable disabled={!can} onPress={() => { tap(); act(slug); }}
+                      accessibilityLabel={`${auction ? 'Nominate' : 'Draft'} ${p?.full_name ?? slug} from your queue`}
+                      style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 5, width: 46, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                        {assigning ? 'ASSIGN' : onBlock ? 'UP' : capped ? 'LIMIT' : auction ? 'NOM' : 'DRAFT'}
+                      </Text>
+                    </Pressable>
+                  );
+                })()}
                 {p && <Face slug={p.slug} pos={p.pos} size={22} />}
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>{p?.full_name ?? slug}</Text>
+                {/* THE SAME ROW AS THE PLAYERS LIST (v0.399.0, founder: "all the
+                    stats that are in the player list should be available in
+                    your queue as well"). Same fields, same order, same second
+                    line, and the name opens the same card — a queue you have to
+                    leave to check a projection is a queue you check elsewhere. */}
+                <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4} disabled={!p}
+                  onPress={() => { if (!p) return; tap(); openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team }); }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12.5, color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>
+                    {favs.has(slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p?.full_name ?? slug}
+                  </Text>
+                  {p && (() => {
+                    const adp = ADP_2026.get(slug); const proj = projFor(slug, p.pos);
+                    const dyn = dynasty ? dynFor(slug) : null;
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                        <PosPill pos={p.pos} size={8} />
+                        <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
+                          {p.team} · #{p.rank}
+                          {dyn != null ? ` · DYN ${dyn}` : ''}
+                          {adp != null ? ` · ADP ${adp.toFixed(0)}` : ''}
+                          {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
+                          {own ? ` · ${own[slug] ?? 0}%` : ''}
+                        </Mono>
+                        <FlagChip slug={slug} size={7.5} />
+                      </View>
+                    );
+                  })()}
+                </Pressable>
                 {gone && <Mono size={8.5} tone="opp">TAKEN</Mono>}
                 {auction && !gone && myRoster != null && (() => {
                   const mkt = auctionMarketValue(p?.rank, st.budget);

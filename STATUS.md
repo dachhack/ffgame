@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.399.0 — draft straight from your queue
+
+Founder: "and then a way to draft directly from your queue." A DRAFT
+button (NOM in an auction) on every queue row, both hosts.
+
+The queue is where you already made the decision. Until now it could only
+be reordered and pruned, and taking the man at the top meant going back to
+PLAYERS and finding him again in a list of eight hundred while a clock ran
+— which is also why people left autodraft on when they were sitting right
+there.
+
+It calls the SAME act() the players row calls, with the same guards, so
+the two lists cannot disagree about what is legal: the position-cap LIMIT
+state, the auction's "the draft is paused" and "it's not your nomination"
+answers, and the commissioner's ASSIGN mode all behave exactly as they do
+in the list. A player already on the auction block reads UP rather than
+offering a nomination that would collide with his open lot.
+
+A drafted player stays in the queue struck through as TAKEN, which is what
+already happens when somebody else takes him — the queue is a record of
+what you wanted, not a to-do list that empties.
+
+And the queue row now carries everything the PLAYERS row carries —
+position pill, team, pool rank, dynasty value, ADP, projection, ownership
+and the flag chip, in the same order and the same formatting, with the
+name opening the same player card. A queue you have to leave to check a
+projection is a queue you check somewhere else. The app's queue row has a
+fixed height that the drag-to-reorder also divides a finger's travel by,
+so it went 44 → 54 in the one place that governs both.
+
+Client only; no migration, no probe run needed (nothing SQL changed).
+
 ### v0.398.0 — a rookie filter on the draft board
 
 Founder: "And a rookie filter on the draft player list." A 🌱 ROOKIES
