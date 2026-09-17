@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.409.1 — the content-type experiment failed; the zip is the answer
+
+v0.409.0 guessed that the APK's stalled download was down to one header,
+and tried to publish it as application/octet-stream through the REST
+upload, which lets you name a Content-Type. The build log settles it:
+
+    APK uploaded as application/octet-stream
+    drip-fantasy.apk  20243344  application/vnd.android.package-archive
+
+The upload was accepted and GitHub re-typed the asset from its extension
+anyway. A file called .apk cannot be served as anything else from a
+release, so there is no version of that idea that works, and the machinery
+is reverted rather than left in place looking like it does something. The
+asset listing it added stays — that log line is what answered the question
+— and so does the check that the APK is actually on the release before the
+job passes.
+
+Which leaves the zip, and the zip is now a button rather than a sentence.
+It sits beside DOWNLOAD APK on the changelog card, because the person who
+needs it is the person whose download just hung, and they should not have
+to read a paragraph to find it. The paragraph is still there and now says
+the true thing: the build is fine, the browser is refusing a file served as
+an Android package, take the zip — same build, same signature, byte for
+byte, which was verified by sha256 against the direct download before any
+of this was claimed.
+
+Two things worth keeping straight, because they were separate problems
+wearing the same symptom: 0408 stopped the release being deleted and
+recreated on every build, which really was ours and really did break the
+link (confirmed fixed — created_at unchanged across three builds now). The
+stall at 100% is not ours and cannot be fixed from this side. Both needed
+doing; only one of them is a bug we wrote.
+
 ### v0.409.0 — the APK goes up as an ordinary binary
 
 Founder, with a screenshot of Chrome's own download list: the APK sat at

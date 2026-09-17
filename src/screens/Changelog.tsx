@@ -75,6 +75,11 @@ export function Changelog() {
             )}
           </div>
           <a href={APK_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ DOWNLOAD APK</a>
+          {/* THE ZIP IS A BUTTON, NOT A SENTENCE (v0.409.1). It is the route
+              that demonstrably completes when the direct one stalls, and
+              somebody whose download just hung should not have to read a
+              paragraph to find it. */}
+          <a href={APK_ZIP_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ ZIP</a>
           <a href={APK_RELEASE_PAGE_URL} target="_blank" rel="noreferrer" className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>release notes →</a>
           {/* WHEN THE DOWNLOAD SAYS FAILED (v0.408.0). Founder: "the app
               downloads from the link but never finished and says failed
@@ -84,8 +89,8 @@ export function Changelog() {
               button that produced it, rather than left to conclude the app is
               broken. */}
           <div style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 9 }}>
-            Says <strong style={{ color: 'var(--text)' }}>Failed</strong> after the bar reaches the end? That is the browser refusing the file, not a broken build — nothing is wrong with the download.
-            {' '}<a href={APK_ZIP_URL} style={{ color: 'var(--you)', fontWeight: 700 }}>Get the zip instead</a>, unzip it with any file manager, and tap the APK inside. Same build, same signature.
+            Download stalls at 100%, or says <strong style={{ color: 'var(--text)' }}>Failed</strong> once the bar is full? Nothing is wrong with the build — the browser is refusing a file served as an Android package.
+            {' '}Take <strong style={{ color: 'var(--text)' }}>⬇ ZIP</strong> instead: it downloads as an ordinary file. Unzip it with any file manager and tap the APK inside — same build, same signature, byte for byte.
           </div>
         </section>
         <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 10 }}>
