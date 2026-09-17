@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.417.0 — Twin Generals on the app's cards
+
+Founder, on the phone, with the buff armed for the 1pm window: "I armed
+twin generals for 1pm but I don't see it on the cards."
+
+He could not, and not because anything was mis-saved. The app has never
+drawn this card. Its cards ask `buffAppliesToSpot`, which answers per SPOT
+— and Twin Generals is the one buff that is a property of a WINDOW: two
+Field General QBs in it, or the card is worth nothing. It cannot be a case
+in that switch, because a case there would badge a lone Field General as
+though it were paired. So it was written inline on the web's own board, and
+never anywhere else — which is precisely how one host came to draw it and
+the other to deny it existed.
+
+The rule is core's now (twinGeneralKeys), and the web board reads it from
+there instead of computing its own: the pairing cannot drift again without
+both hosts drifting together. It returns the KEYS of the pair rather than a
+boolean, because the useful thing to draw is which two cards are linked.
+
+The app wears it as 🎖️ TWIN ×2 on the card, opposite the ⚡ chip so the two
+never collide on a narrow card — and appliedFor counts it too, so the chip's
+number is right and tapping "what is on this card" names it. A badge alone
+would have left the chip lying by one.
+
+Three Field Generals in a window all link. The engine stacks the top two
+multipliers (sim.ts) and which two that turns out to be is a question the
+final scores answer, not the setup screen — so the screen says all three are
+in it rather than guessing at a pair.
+
+Eleven parity assertions on the shared rule, including that
+buffAppliesToSpot still REFUSES fg-stack. That last one is the guard against
+the obvious wrong fix: adding a case there would put the badge on a single
+Field General, which is the bug wearing a different face.
+
 ### v0.416.0 — the depth chart, so the right backup comes on
 
 Founder: "Lock is the QB2 but Darnold is hurt and out this week." Then, on

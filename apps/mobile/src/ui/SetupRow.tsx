@@ -20,13 +20,19 @@ import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twin, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
   /** Power-ups attached to THIS slot — targeted plays plus armed team buffs
    *  that matter to it (v0.375.1). Worn as one ⚡N chip on the card's
    *  shoulder; tapping it lists them (founder: "click the chip to see what
    *  power ups apply"). */
   applied?: { icon: string; name: string; blurb: string }[];
+  /** TWIN GENERALS pairs this card with another Field General in the same
+   *  window (v0.417.0, founder: "I armed twin generals for 1pm but I don't
+   *  see it on the cards"). Worn on the card rather than only inside the ⚡
+   *  chip, because the whole point is knowing WHICH two are linked, and a
+   *  chip you have to tap is not seeing it. */
+  twin?: boolean;
   /** Deal order within the window. */
   idx?: number;
   /** Opens the opponent's window pool. Absent when there is nothing to scout. */
@@ -115,6 +121,14 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, hyd
         {/* Attached power-ups ride the card's shoulder as ONE gold ⚡N chip —
             a row of pips ran off the card once buffs joined the targeted
             plays. Tapping it lists what's on the card. */}
+        {/* 🎖️ TWIN ×2 — the web board's badge, on the app's card. Sits opposite
+            the ⚡ chip so the two never collide on a narrow card. */}
+        {twin && (
+          <View style={{ position: 'absolute', top: -7, right: -5, zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#C9A227', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 10 }}>🎖️</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: '#E9B959' }}>TWIN ×2</Text>
+          </View>
+        )}
         {!!applied?.length && (
           <Pressable onPress={() => setPuOpen(true)} hitSlop={6} accessibilityLabel={`${applied.length} power-ups on this card`}
             style={{ position: 'absolute', top: -7, left: -5, zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#E9B959', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 }}>

@@ -126,6 +126,29 @@ export function capAmplifiers(buffs: ReadonlySet<string>): Set<string> {
 /** Which armed team buffs are relevant to a given spot — drives the on-spot
  *  chips on both hosts (moved here from the web's boardParts in v0.375.1 so
  *  the app's chip can't drift from the web's). */
+/** TWIN GENERALS, THE ONLY BUFF THAT IS ABOUT A PAIR (v0.417.0).
+ *
+ *  Founder: "I armed twin generals for 1pm but I don't see it on the cards."
+ *  He was on the phone, and the app had no idea the card existed — it asks
+ *  `buffAppliesToSpot`, which answers per SPOT, and this buff is not a
+ *  property of any one spot. It needs two Field General QBs in the SAME
+ *  window; one of them alone is worth nothing and must not be badged as
+ *  though it were. So it cannot be a case in that switch, and the web had it
+ *  written inline on its own board, which is how the two hosts came to
+ *  disagree about whether the buff exists at all.
+ *
+ *  Returns the keys of every spot in the pair, or an empty set — a set rather
+ *  than a boolean because the useful thing to draw is WHICH cards are linked.
+ *  Three Field Generals in one window all link: the engine stacks the top two
+ *  multipliers (sim.ts), and which two that turns out to be is a question the
+ *  final scores answer, not the setup screen. */
+export interface TwinSpot { key: string; pos?: string | null; metricId?: string | null }
+export function twinGeneralKeys(fgStackArmed: boolean, spots: TwinSpot[]): Set<string> {
+  if (!fgStackArmed) return new Set();
+  const fg = (spots ?? []).filter((s) => (s.pos ?? '') === 'QB' && s.metricId === 'fg').map((s) => s.key);
+  return fg.length >= 2 ? new Set(fg) : new Set();
+}
+
 export function buffAppliesToSpot(id: string, pos: string, metricId: string | null): boolean {
   const drip = metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush');
   switch (id) {
