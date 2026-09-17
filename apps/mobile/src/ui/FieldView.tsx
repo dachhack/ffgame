@@ -27,6 +27,7 @@ import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } 
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
+import { projectedBox } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
@@ -425,6 +426,14 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   const box = useMemo(() => (visible ? gameBoxScore(week, cur.home, cur.away, effClock) : { home: [], away: [] }),
     [visible, week, cur.home, cur.away, effClock, clock]);
   const last = latestPlay(cur.feed?.plays);
+  // BEFORE KICKOFF IT IS A PROJECTION (v0.413.0) — the web twin. gameBoxScore
+  // accumulates from plays, so a game that has not started shows "— nothing
+  // yet —" under both teams, on the one evening a manager is actually picking
+  // a lineup. Founder: "the box score can contain projected starters and
+  // fantasy projections until kick off."
+  const notStarted = !cur.feed || cur.feed.plays.length === 0;
+  const proj = useMemo(() => (visible && notStarted ? projectedBox(cur.home, cur.away) : null),
+    [visible, notStarted, cur.home, cur.away]);
   // OFFENSE / DEFENSE tabs (v0.343.2, founder): the single list ran past the
   // sheet's cap and clipped — see the ScrollView note below — and even scrolled,
   // "how did the defense do" meant paging past every receiver. Membership is
@@ -464,6 +473,25 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
       </View>
     );
   };
+  /** The same column before anyone has played: expected starters and what THIS
+   *  league's scoring projects them for. Never dressed as a stat line. */
+  const projCol = (label: string, rows: NonNullable<typeof proj>['home']) => (
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+        {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: t.text }}>{label}</Text>
+      </View>
+      {rows.length === 0
+        ? <Text style={{ fontFamily: MONO, fontSize: fs(11), color: t.faint }}>— no projections —</Text>
+        : rows.map((r) => (
+          <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.faint }}>{r.pos}</Text>
+            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: fs(13), fontWeight: '600', color: t.text }}>{boxName(r.slug)}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>{r.proj.toFixed(1)}</Text>
+          </View>
+        ))}
+    </View>
+  );
   const tabBtn = (id: 'off' | 'def', label: string) => (
     <Pressable onPress={() => setTab(id)}
       style={{ flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 4, backgroundColor: tab === id ? t.bd : 'transparent' }}>
@@ -503,21 +531,33 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
           {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
         </Text>
       </View>
-      {/* The tab bar stays put; only the list scrolls. */}
-      <View style={{ flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
-        {tabBtn('off', 'OFFENSE')}
-        {tabBtn('def', 'DEFENSE')}
-      </View>
+      {/* The tab bar stays put; only the list scrolls. Before kickoff there is
+          one list per side, so a tab bar would promise a cut of nothing. */}
+      {!notStarted && (
+        <View style={{ flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
+          {tabBtn('off', 'OFFENSE')}
+          {tabBtn('def', 'DEFENSE')}
+        </View>
+      )}
+      {notStarted && !!proj && (
+        <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.warn, textAlign: 'center', marginTop: 10 }}>
+          ◷ PROJECTED STARTERS · NOT A STAT LINE
+        </Text>
+      )}
       {/* A ScrollView, not a View (v0.343.2): the sheet body clips at the
           sheet's height cap, and a full game's list is taller than any phone —
           the founder's screenshot ended mid-linebacker with no way to reach
           the rest. The Overlay's flexShrink body needs the scroll INSIDE. */}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12 }}>
-        <View style={{ flexDirection: 'row', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</View>
+        {notStarted && proj
+          ? <View style={{ flexDirection: 'row', gap: 14 }}>{projCol(cur.away, proj.away)}{projCol(cur.home, proj.home)}</View>
+          : <View style={{ flexDirection: 'row', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</View>}
         {/* Said plainly: an empty column is a player who has not touched the
             ball, not a player the box score forgot. */}
         <Text style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, marginTop: 10, lineHeight: fs(8) * 1.5 }}>
-          everyone with a stat on this side of the ball · by position, by yards · two-way players appear on both tabs · follows the log's clock
+          {notStarted
+            ? "the highest-projected man at each spot, scored by THIS league's rules · a projection, not a depth chart · real stats replace it at kickoff"
+            : "everyone with a stat on this side of the ball · by position, by yards · two-way players appear on both tabs · follows the log's clock"}
         </Text>
       </ScrollView>
     </Overlay>

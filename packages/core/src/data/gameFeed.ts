@@ -38,7 +38,14 @@ export interface WeekGameFeed {
                                      // game_id vocabulary) — the box score's exact
                                      // membership key (v0.369.0); live rows only
 }
-export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; gid?: string | null; }
+export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; gid?: string | null;
+  /** Kickoff, ISO, when the caller handed us the week's schedule (v0.413.0).
+   *  A game seeded from the SLATE has no plays and nothing else to say, so the
+   *  time is the whole card. */
+  kickoff?: string | null; }
+/** A scheduled game, as the slate knows it — enough to draw a card for a game
+ *  that has not kicked off. */
+export interface ScheduledGame { away: string; home: string; kickoff?: string | null }
 
 const cache = new Map<number, WeekGameFeed>();
 const inflight = new Map<number, Promise<void>>();
@@ -217,10 +224,35 @@ export interface FieldBoardGame { feed: TeamGameFeed; clock: number; you: Set<nu
  *  Lived in the web's FieldBoard useMemo until v0.340.1, with the app running
  *  a DIFFERENT (slotted-only) rule and check-field-board pinning a
  *  reimplementation — now all three call this. */
-export function groupFieldGames(week: number, entries: FieldBoardEntry[]): FieldBoardGame[] {
+export function groupFieldGames(week: number, entries: FieldBoardEntry[], scheduled?: ScheduledGame[]): FieldBoardGame[] {
   const m = new Map<string, FieldBoardGame>();
   for (const feed of allGameFeeds(week)) {
     m.set(feed.key, { feed, clock: Infinity, you: new Set(), their: new Set(), mine: false });
+  }
+  // A GAME THAT HAS NOT KICKED OFF STILL GETS A CARD (v0.413.0). Founder: "on a
+  // non-existing feed, just open the fields with a kick off time and no data."
+  //
+  // The feed only exists once the worker has ingested a play, so before the
+  // first whistle of a week this map was empty and the whole screen had
+  // nothing in it — on the one day a manager is actually deciding a lineup.
+  // The slate knows the fixtures days ahead, so it seeds the rest: no plays,
+  // no state beyond 'pre', and the kickoff, which is the only thing there is
+  // to say. A feed that already exists always wins — it is the live truth, and
+  // this must never overwrite it — but a feed with no kickoff of its own
+  // borrows the slate's, so every card can show a time.
+  for (const g of scheduled ?? []) {
+    const away = normTeam(g.away ?? ''), home = normTeam(g.home ?? '');
+    if (!away || !home) continue;
+    const key = `${away}@${home}`;
+    const have = m.get(key);
+    if (have) {
+      if (have.feed.kickoff == null && g.kickoff != null) have.feed = { ...have.feed, kickoff: g.kickoff };
+      continue;
+    }
+    m.set(key, {
+      feed: { key, away, home, plays: [], st: 'pre', gid: null, kickoff: g.kickoff ?? null },
+      clock: Infinity, you: new Set(), their: new Set(), mine: false,
+    });
   }
   for (const e of entries) {
     const feed = gameFeedFor(week, e.team);

@@ -21,6 +21,8 @@ import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
+import { setRuntimeSlate } from '@drip/core/data/nflSlate';
+import type { WindowId } from '@drip/core/types';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
@@ -462,7 +464,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         playoffState(leagueId).then((ps) => {
           if (ps?.playoff_start_week) setLastRegWeek(Math.max(1, ps.playoff_start_week - 1));
         }).catch(() => {});
-        liveSlate(m.week, String(LIVE_SEASON)).then(setSlate).catch(() => {});
+        liveSlate(m.week, String(LIVE_SEASON)).then((sl) => {
+          setSlate(sl);
+          // v0.413.0 — the web twin: nflSlate derives a week's fixtures from
+          // the runtime slate, and this screen had never installed one.
+          if (sl.length) setRuntimeSlate(m.week, sl.map((g) => ({
+            away: g.away, home: g.home, aScore: 0, hScore: 0,
+            win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
+          })));
+        }).catch(() => {});
         leagueStandings(leagueId).then((rows) => {
           const map: Record<number, { wins: number; losses: number; ties: number; rank: number }> = {};
           (Array.isArray(rows) ? rows : []).forEach((row, i) => {
@@ -879,15 +889,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
    *  ordering the same week differently. gameFeeds (state) is the re-render
    *  tie — setLiveGameFeed writes a module map React cannot see. */
   const fieldGames = useMemo(() => {
-    if (!matchup || !gameFeeds.length) return [] as { key: string; away: string; home: string; team: string }[];
+    // v0.413.0: a week with FIXTURES has fields, feed or no feed — before the
+    // first whistle the feed map is empty and this used to return nothing.
+    if (!matchup || (!gameFeeds.length && !slate.length)) return [] as { key: string; away: string; home: string; team: string }[];
     const entries: FieldBoardEntry[] = [];
     for (const row of board?.starters ?? []) {
       if (row.home?.team) entries.push({ team: row.home.team, side: 'you', clock: Number.MAX_SAFE_INTEGER });
       if (row.away?.team) entries.push({ team: row.away.team, side: 'their', clock: Number.MAX_SAFE_INTEGER });
     }
-    return groupFieldGames(matchup.week, entries)
+    return groupFieldGames(matchup.week, entries, slate)
       .map((g) => ({ key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home }));
-  }, [matchup, board, gameFeeds]);
+  }, [matchup, board, gameFeeds, slate]);
   /** A game line's tap handler — only when that game has a published feed, so
    *  the line never opens onto an empty sheet. */
   const gameOpener = (e: BoardEntry | null): (() => void) | undefined => {

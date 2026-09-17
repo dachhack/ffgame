@@ -17,6 +17,8 @@ import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring'
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { setRuntimeSlate } from '@drip/core/data/nflSlate';
+import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
@@ -620,7 +622,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         leagueTestLiveAt(r.leagueId).then(setTestLive).catch(() => setTestLive(null));
         // The week's NFL slate drives every player's kickoff, opponent and —
         // by absence — their bye. Scoped to the matchup's own season/week.
-        liveSlate(m.week, '2026').then(setSlate).catch(() => {});
+        liveSlate(m.week, '2026').then((sl) => {
+          setSlate(sl);
+          // INSTALL IT GLOBALLY TOO (v0.413.0). nflSlate derives a week's
+          // windows and fixtures from whatever runtime slate it has been
+          // handed, and this screen had never handed it one — so the box
+          // score's game strip fell back to the BAKED 2025 schedule for the
+          // week number, which is the wrong fixtures for a 2026 league. Every
+          // other screen that shows a slate does this; the classic board
+          // simply never did.
+          if (sl.length) setRuntimeSlate(m.week, sl.map((g) => ({
+            away: g.away, home: g.home, aScore: 0, hScore: 0,
+            win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
+          })));
+        }).catch(() => {});
         // Records for the header. Rank is the standings order the RPC already
         // returns (wins desc, PF desc), so it matches the playoff seeding
         // rather than inventing a second ordering.
@@ -1269,7 +1284,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
               every game on the week's feed and uses the entries only to tint
               and sort your own. An empty lineup is a full slate with nothing
               highlighted, which is exactly what it should be. */}
-          {gameFeeds.length > 0 && (
+          {(gameFeeds.length > 0 || slate.length > 0) && (
             <button onClick={() => setFieldsOpen(true)} title="Every game this week, as live field visuals — yours highlighted" className="mono"
               style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ▦ FIELDS
@@ -1745,7 +1760,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
           starters. Same component, so follow mode and the flip memory ride
           along for free. */}
       {fieldsOpen && matchup && (
-        <FieldBoard week={matchup.week} entries={fieldEntries} onClose={() => setFieldsOpen(false)}
+        <FieldBoard week={matchup.week} entries={fieldEntries} scheduled={slate} onClose={() => setFieldsOpen(false)}
           onRefresh={() => void reloadLive.current?.()} />
       )}
 

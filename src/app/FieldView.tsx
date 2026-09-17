@@ -10,7 +10,7 @@
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
+import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, type ScheduledGame, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
 import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
 import { webVoice, hasVoice } from './voice';
@@ -22,6 +22,7 @@ import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
+import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { teamColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
@@ -115,8 +116,14 @@ export function SlotFieldViews({ week, youTeam, theirTeam, youClock, theirClock 
 // its side is sampled at (mirrors the slot rows), and those outcome pids.
 export interface FieldBoardEntry { playerId: string; team?: string | null; side: 'you' | 'their'; clock: number; pids?: number[]; }
 
-export function FieldBoard({ week, entries, onClose, onRefresh }: {
+export function FieldBoard({ week, entries, scheduled, onClose, onRefresh }: {
   week: number; entries: FieldBoardEntry[]; onClose: () => void;
+  /** The week's fixtures (v0.413.0, founder: "on a non-existing feed, just open
+   *  the fields with a kick off time and no data"). A feed only exists once a
+   *  play has been ingested, so before the first whistle this screen had
+   *  nothing on it — on the day a manager is actually choosing a lineup. The
+   *  slate seeds a card per game; the feed still wins wherever it exists. */
+  scheduled?: ScheduledGame[];
   /** Pull-to-refresh inside the overlay (v0.369.2, founder: "pull down …
    *  all fields should refresh the … fields"). The board that opened this
    *  passes its own live re-poll; without one the gesture stays off. */
@@ -153,7 +160,7 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
   // groupFieldGames carries the full story (and check-field-board pins it
   // directly instead of pinning a reimplementation). feedLoaded is a real
   // dependency: the memo must recompute when the week's feed arrives.
-  const games = useMemo(() => groupFieldGames(week, entries), [entries, week, feedLoaded]);
+  const games = useMemo(() => groupFieldGames(week, entries, scheduled), [entries, week, feedLoaded, scheduled]);
   const shown = useMemo(() => (bigKey ? [...games].sort((a, b) => (a.feed.key === bigKey ? -1 : b.feed.key === bigKey ? 1 : 0)) : games), [games, bigKey]);
   const readerGame = (bigKey ? games.find((g) => g.feed.key === bigKey) : null) ?? games[0] ?? null;
 
@@ -236,7 +243,7 @@ export function FieldBoard({ week, entries, onClose, onRefresh }: {
           </div>
         )}
         {games.length === 0 && (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '40px 0' }}>— NO GAME FEEDS FOR THIS WEEK —</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', letterSpacing: '0.1em', textAlign: 'center', padding: '40px 0' }}>— NO GAMES SCHEDULED FOR THIS WEEK —</div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 350px), 1fr))', gap: 10 }}>
           {shown.map((g) => (
@@ -621,6 +628,16 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
           live"): the whole game's plays, inline under the field, with a
           voice. What is said and when is core's (spokenPlay / PlayReader),
           shared with the app; this is the panel and the feed tick. */}
+      {/* NOT STARTED (v0.413.0). A card seeded from the slate has no plays and
+          nothing to draw on the field, so the time is the whole card — and the
+          box score below it is the projected lineup rather than an empty
+          sheet. Founder: "just open the fields with a kick off time and no
+          data." */}
+      {plays.length === 0 && (
+        <div className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--faint)', textAlign: 'center', marginTop: 4 }}>
+          {feed.kickoff ? `KICKS OFF ${kickoffLabel(Date.parse(feed.kickoff))}` : 'NOT STARTED'} · NO PLAYS YET
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 5 }}>
         <button onClick={() => setBoxOpen(true)} className="mono"
           title={`Every player with stats in ${away} @ ${home}`}
@@ -904,6 +921,17 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   const effClock = cur.key === originKey ? clock : Number.MAX_SAFE_INTEGER;
   const box = useMemo(() => gameBoxScore(week, cur.home, cur.away, effClock), [week, cur.home, cur.away, effClock, clock]);
   const last = latestPlay(cur.feed?.plays);
+  // BEFORE KICKOFF IT IS A PROJECTION (v0.413.0, founder: "the box score can
+  // contain projected starters and fantasy projections until kick off").
+  //
+  // gameBoxScore accumulates from PLAYS, so a game that has not started has an
+  // empty sheet and "— nothing yet —" under both teams, which is true and
+  // useless: the hour you most want a box score is the hour before kickoff.
+  // Keyed off the game having no plays rather than off its state, because a
+  // feed can exist with an empty play list, and either way what we can honestly
+  // show is the same.
+  const notStarted = !cur.feed || cur.feed.plays.length === 0;
+  const proj = useMemo(() => (notStarted ? projectedBox(cur.home, cur.away) : null), [notStarted, cur.home, cur.away]);
   // OFFENSE / DEFENSE tabs (v0.365.1, founder) — matching the app's box sheet:
   // the single list ran long and "how did the defense do" meant scrolling past
   // every receiver. Membership is core's boxTabRows (stat-driven), so a two-way
@@ -942,6 +970,34 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
     </div>
     );
   };
+  /** The same column, before anyone has played: who is expected to start and
+   *  what the LEAGUE'S scoring projects them for. Never dressed as a stat
+   *  line — the number carries "proj" and the sheet says so above. */
+  const projCol = (label: string, rows: NonNullable<typeof proj>['home']) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
+        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
+      </div>
+      {rows.length === 0
+        ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>— no projections —</div>
+        : rows.map((r) => {
+          const carded = !r.slug.endsWith('-dst') && !r.slug.endsWith('-k');
+          return (
+            <div key={r.slug} style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '4px 0', borderTop: '1px solid color-mix(in srgb, var(--bd) 50%, transparent)' }}>
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: `var(--pos-${r.pos}-fg, var(--faint))`, flex: 'none' }}>{r.pos}</span>
+              <span
+                onClick={carded ? () => openPlayerCard({ slug: r.slug, name: boxName(r.slug), pos: r.pos, team: label, week }) : undefined}
+                role={carded ? 'button' : undefined}
+                title={carded ? `${boxName(r.slug)} — player card` : undefined}
+                style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: carded ? 'pointer' : undefined, textDecoration: carded ? 'underline dotted color-mix(in srgb, var(--dim) 55%, transparent)' : undefined, textUnderlineOffset: 3 }}>
+                {boxName(r.slug)}
+              </span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dimstrong)', flex: 'none' }}>{r.proj.toFixed(1)}</span>
+            </div>
+          );
+        })}
+    </div>
+  );
   const tabBtn = (id: 'off' | 'def', label: string) => (
     <button onClick={() => setTab(id)} className="mono"
       style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: tab === id ? 'var(--text)' : 'var(--dim)', background: tab === id ? 'var(--bd)' : 'transparent' }}>{label}</button>
@@ -988,16 +1044,29 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
             {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
           </span>
         </div>
-        {/* Offense / Defense tab bar — matches the app; stays put above the list. */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 3, borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)' }}>
-          {tabBtn('off', 'OFFENSE')}
-          {tabBtn('def', 'DEFENSE')}
-        </div>
-        <div style={{ display: 'flex', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</div>
+        {/* Offense / Defense split only where there are stats to split. Before
+            kickoff there is one list per side — a projected lineup — and a tab
+            bar over it would promise a cut of nothing. */}
+        {!notStarted && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 3, borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg)' }}>
+            {tabBtn('off', 'OFFENSE')}
+            {tabBtn('def', 'DEFENSE')}
+          </div>
+        )}
+        {notStarted && proj && (
+          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)', marginBottom: 8, textAlign: 'center' }}>
+            ◷ PROJECTED STARTERS · NOT A STAT LINE
+          </div>
+        )}
+        {notStarted && proj
+          ? <div style={{ display: 'flex', gap: 14 }}>{projCol(cur.away, proj.away)}{projCol(cur.home, proj.home)}</div>
+          : <div style={{ display: 'flex', gap: 14 }}>{col(cur.away, box.away)}{col(cur.home, box.home)}</div>}
         {/* Said plainly: an empty column is a player who has not touched the
             ball, not a player the box score forgot. */}
         <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
-          everyone with a stat on this side of the ball · most involved first · two-way players appear on both tabs · follows the log&rsquo;s clock
+          {notStarted
+            ? <>the highest-projected man at each spot, scored by THIS league&rsquo;s rules · a projection, not a depth chart · real stats replace it at kickoff</>
+            : <>everyone with a stat on this side of the ball · most involved first · two-way players appear on both tabs · follows the log&rsquo;s clock</>}
         </div>
       </div>
     </ModalBackdrop>

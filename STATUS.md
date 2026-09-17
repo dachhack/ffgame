@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.413.0 — the fields open before kickoff, and the box score projects
+
+Founder: "on a non-existing feed, just open the fields with a kick off time
+and no data. The box score can contain projected starters and fantasy
+projections until kick off."
+
+A game feed only exists once the worker has ingested a play, so before the
+first whistle of a week there was nothing on the screen at all — on the
+evening a manager is actually choosing a lineup. v0.412.0 ungated the chip
+from the LINEUPS; this ungates the screen from the FEED.
+
+The slate knows the fixtures days ahead, so it seeds the rest.
+groupFieldGames takes the week's scheduled games and mints a card for any it
+has no feed for: no plays, state 'pre', and the kickoff, which is the only
+thing there is to say. A feed that exists always wins — it is the live
+truth and must never be overwritten — but a feed carrying no kickoff of its
+own borrows the slate's, so every card can show a time. A week with neither
+still yields nothing, which is why the chip is gated on "has fixtures OR has
+a feed" rather than ungated: a button onto an empty screen reads as broken,
+and that was the right instinct behind the original gate.
+
+THE BOX SCORE, BEFORE ANYONE HAS PLAYED. gameBoxScore accumulates from
+plays, so an unstarted game showed "— nothing yet —" under both teams. The
+new projectedBox answers the other question: who is expected to start, and
+what does THIS league's scoring project them for. It runs through projFor,
+so a TE-premium league's tight ends project like TE-premium tight ends here
+exactly as they do in the pool — and so the kicker and the defence are in
+it, since the units are baked separately from the skill positions and
+projFor is what knows both.
+
+There is no depth chart in the building. "The highest-projected quarterback
+on this roster" stands in for QB1, and it works because the projection
+already folds in the job — a backup projects like a backup. The file says
+so and the sheet says so: ◷ PROJECTED STARTERS · NOT A STAT LINE, with the
+footnote "a projection, not a depth chart". A starter projected below his
+backup will be listed second, which is the honest consequence of deriving
+depth from value rather than pretending to a depth chart we do not have.
+
+Found on the way: the classic board never called setRuntimeSlate, so
+nflSlate derived that week's fixtures from the BAKED 2025 schedule — which
+is the wrong games for a 2026 league, in the box score's own game strip.
+Every other screen showing a slate installs it; this one never did. Both
+hosts now do.
+
+Nineteen parity assertions, verified to bite by breaking one.
+
 ### v0.412.0 — the fields chip, on a classic matchup, for that week
 
 Founder: "Let's add the fields chip to the matchup view in classic mode. It
