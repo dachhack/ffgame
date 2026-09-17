@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.409.0 — the APK goes up as an ordinary binary
+
+Founder, with a screenshot of Chrome's own download list: the APK sat at
+"20.24 MB / 20.24 MB" with a pause icon and never finished, while the
+identical file handed over in chat installed without complaint. Every byte
+had arrived. Chrome simply would not call it done.
+
+Two files on the same release, fetched the same way, answered that. The
+zip 0408 added comes back as application/octet-stream and behaves like any
+other download; the APK comes back as
+application/vnd.android.package-archive, because GitHub types a release
+asset from its extension, and that is the type that puts Chrome into its
+package-archive handling. One header is the whole difference between the
+door that works and the door that hangs.
+
+So the APK goes up as octet-stream too. Same bytes, same signature, same
+filename, same URL — Android resolves the installer from the .apk
+extension when the file is tapped, not from the type it arrived under. The
+zip stays where it is: it is now proven to work, and a fallback you have
+tested is worth keeping.
+
+gh release upload cannot set a content type, so this is the REST upload,
+which needs the old asset deleted first. Every part of that can fail in a
+way the old one-liner could not, so it falls back to gh release upload —
+a link serving the awkward type beats a release with no APK on it — and
+then asserts the asset is actually there before the job is allowed to pass.
+The step also prints every asset with its size and type, so the next time
+this question comes up the answer is in the log rather than in a curl.
+
+Verified on 0408 before writing any of this: the release now updates IN
+PLACE (created_at unchanged across two builds, so the delete-and-recreate
+really is gone), and the zip's contents are byte-identical to the direct
+download — same sha256, valid package, right version in the bundle.
+
+A hypothesis about somebody else's browser, though, not a proof. If the
+direct link still hangs, the zip is one tap away and the header experiment
+costs nothing to reverse.
+
 ### v0.408.0 — stop deleting the release out from under the download
 
 Founder: "the app downloads from the link but never finished and says
