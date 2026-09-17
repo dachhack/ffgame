@@ -796,13 +796,33 @@ export async function leagueWeeks(leagueId: string): Promise<number[]> {
   return weeks.sort((a, b) => key(a) - key(b));
 }
 
-export async function defaultOpenWeek(leagueId: string, season: string, preseasonEnabled: boolean): Promise<number> {
+export async function defaultOpenWeek(leagueId: string, season?: string, preseasonEnabled?: boolean): Promise<number> {
+  // v0.407.0: season and the preseason flag are now OPTIONAL and read from the
+  // league when not supplied. ClassicBoard — the screen the founder was
+  // actually looking at — has a league id and a roster id and nothing else,
+  // and needing a season string is the reason it never called this at all.
+  let seas = season, pre = preseasonEnabled;
+  if (seas == null || pre == null) {
+    const { data } = await (await client()).from('league')
+      .select('season, preseason_at').eq('id', leagueId).maybeSingle();
+    const row = data as { season?: string | null; preseason_at?: string | null } | null;
+    seas = seas ?? row?.season ?? '2026';
+    pre = pre ?? !!row?.preseason_at;
+  }
   const [msRes, slRes] = await Promise.all([
-    (await client()).from('matchup').select('week').eq('league_id', leagueId),
-    (await client()).from('nfl_slate').select('week, kickoff').eq('season', season),
+    // status too (v0.407.0): a week whose matchups are all final is over even
+    // when no slate row exists to measure the Wednesday rule against.
+    (await client()).from('matchup').select('week, status').eq('league_id', leagueId),
+    (await client()).from('nfl_slate').select('week, kickoff').eq('season', seas),
   ]);
-  const weeks = [...new Set(((msRes.data ?? []) as { week: number }[]).map((r) => r.week))];
-  if (!weeks.length) return preseasonEnabled ? 101 : 1;
+  const rows = (msRes.data ?? []) as { week: number; status: string | null }[];
+  const weeks = [...new Set(rows.map((r) => r.week))];
+  if (!weeks.length) return pre ? 101 : 1;
+  const finals: Record<number, boolean> = {};
+  for (const w of weeks) {
+    const mine = rows.filter((r) => r.week === w);
+    finals[w] = mine.length > 0 && mine.every((r) => r.status === 'final');
+  }
   const kicks: Record<number, { first: number; last: number }> = {};
   for (const r of (slRes.data ?? []) as { week: number; kickoff: string | null }[]) {
     if (!r.kickoff) continue;
@@ -814,7 +834,7 @@ export async function defaultOpenWeek(leagueId: string, season: string, preseaso
   // function parity can test against fixed instants. The cutoff also MOVED —
   // it used to be last kickoff + 4h, so the screen jumped to next week the
   // moment Monday night football ended; it now holds until Wednesday 00:00 ET.
-  return openWeekFrom(weeks, kicks, Date.now()) ?? (preseasonEnabled ? 101 : 1);
+  return openWeekFrom(weeks, kicks, Date.now(), finals) ?? (pre ? 101 : 1);
 }
 
 export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }

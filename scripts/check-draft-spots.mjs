@@ -928,6 +928,32 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   ok('input order does not change the answer',
     openWeekFrom([2, 1], kicks, ET('2026-09-15T18:00:00Z'))
       === openWeekFrom([1, 2], kicks, ET('2026-09-15T18:00:00Z')));
+
+  // A WEEK WITH NO SLATE THAT IS PLAINLY OVER (v0.407.0). Founder: "still
+  // opens to week 1" — on a board showing "NFL SLATE 0 GAMES" and "all final"
+  // under both scores. A league whose schedule was rebuilt mid-season has real
+  // finished weeks with no slate rows behind them, and the old rule pinned it
+  // to week 1 for the rest of the season.
+  const now = ET('2026-09-17T12:00:00Z');
+  ok('a finished week with no slate is stepped past',
+    openWeekFrom([1, 2], {}, now, { 1: true }) === 2);
+  ok('and an unfinished one is still returned — we cannot call it over',
+    openWeekFrom([1, 2], {}, now, { 1: false }) === 1);
+  ok('no finals map at all keeps the old behaviour exactly',
+    openWeekFrom([1, 2], {}, now) === 1);
+  ok('several finished weeks in a row are all stepped past',
+    openWeekFrom([1, 2, 3], {}, now, { 1: true, 2: true }) === 3);
+  ok('every week finished lands on the last rather than falling off the end',
+    openWeekFrom([1, 2], {}, now, { 1: true, 2: true }) === 2);
+  // The slate, where there is one, still decides — a week can go final on
+  // Monday night and the founder's rule holds it until Wednesday.
+  ok('a final week WITH a slate is still held until Wednesday',
+    openWeekFrom([1, 2], kicks, ET('2026-09-15T18:00:00Z'), { 1: true }) === 1);
+  ok('and released once Wednesday comes',
+    openWeekFrom([1, 2], kicks, ET('2026-09-16T05:00:00Z'), { 1: true }) === 2);
+  // Mixed: week 1 played with no slate, week 2 scheduled.
+  ok('a finished slate-less week hands over to the next scheduled one',
+    openWeekFrom([1, 2], { 2: wk2 }, ET('2026-09-15T18:00:00Z'), { 1: true }) === 2);
 }
 
 // ── the waiver clock (v0.404.0) ───────────────────────────────────────────

@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.407.0 — the board opens on the week being played
+
+Founder, on a classic league matchup: "still opens to week 1."
+
+v0.401.0 answered this question for the app's matchup screen, the leagues
+list and the league hub, and missed the one screen a classic league
+actually opens: ClassicBoard. Both hosts carried the same line —
+
+    const m = await myMatchup(leagueId, rosterId, weekWanted ?? undefined);
+
+— above a `weekWanted` whose own comment reads "null means whatever week the
+league is on". It does not. Undefined goes through to myMatchup, which is
+`.order('week').limit(1)`: the league's FIRST week, for ever. The comment
+described the intent and the code did the other thing, which is why reading
+past it twice did not catch it.
+
+That alone would not have fixed his league, though, and the screenshot says
+why: NFL SLATE 0 GAMES, and "all final" under both scores. There are no
+slate rows behind that week, and openWeekFrom's rule for a week with no
+slate was to return it — "an unscheduled week is the one thing we cannot say
+is over". Right for a week that has not been played; wrong for one that
+plainly has. A league whose schedule was rebuilt mid-season (his kickoff
+league; any converted one) has real, finished weeks with no slate behind
+them, and was pinned to week 1 for the rest of the season with no way to say
+otherwise.
+
+The matchups' own status is the league's answer to "is this week done", and
+it needs no slate at all: every one final ⇒ over. openWeekFrom takes that as
+a fourth argument, defaultOpenWeek reads it in the query it was already
+making, and where a slate DOES exist it still decides — a week that goes
+final on Monday night is still held until Wednesday, which is the rule the
+founder asked for in the first place.
+
+defaultOpenWeek's season and preseason flag are now optional, read from the
+league row when absent. Needing a season string is the reason the board
+never called it: it has a league id and a roster id and nothing else.
+
+Eight new parity assertions, verified by breaking one that they run.
+
 ### v0.406.0 — the hold is on the same schedule as the run
 
 Founder, on the pool an hour after 0291 shipped: "still has jax kicker
