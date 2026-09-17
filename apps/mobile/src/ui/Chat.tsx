@@ -14,6 +14,7 @@ import {
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
+import { txnLook, txnBody } from '@drip/core/data/txnChat';
 import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { Ev, track } from '@drip/core/analytics';
@@ -100,6 +101,21 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
         style={{ alignSelf: 'flex-start', marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: t.bg }}>
         <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.warn }}>📋 OPEN WEEK {week ?? '?'} REPORT ▸</Text>
       </Pressable>
+    </View>
+  );
+}
+
+// ── THE WIRE (v0.405.0) — the web twin ──────────────────────────────────────
+// The sentence is composed server-side (0290) so push and chat read alike;
+// this is the rail and the colour, from the same shared look as the web bubble
+// so the two hosts cannot end up calling a trade different things.
+function TxnLine({ m }: { m: ChatMessage }) {
+  const t = useTheme();
+  const look = txnLook(m.txn);
+  const rail = look.tone === 'you' ? t.you : look.tone === 'warn' ? t.warn : t.bd;
+  return (
+    <View style={{ borderLeftWidth: 3, borderLeftColor: rail, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: alpha(t.dim, 7), borderRadius: 4 }}>
+      <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{look.icon}  {txnBody(m.body, look)}</Text>
     </View>
   );
 }
@@ -490,7 +506,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(m.at)}</Text>
               {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
             </View>
-            {m.kind === 'report'
+            {m.kind === 'txn'
+              ? <TxnLine m={m} />
+              : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
               : m.kind === 'poll'
               ? <>

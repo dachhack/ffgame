@@ -52,3 +52,39 @@ export function fmtClearsAt(iso: string | null | undefined, nowMs: number = Date
   const sameDay = etDay(d) === etDay(new Date(nowMs));
   return `clears ${sameDay ? '' : `${etWeekday(d)} `}${etTime(d)} ET`;
 }
+
+// Spelled out, because the plural is the point: "Thu" + "s" is "Thus", which
+// is a word, which is how a typo of this shape survives a read-through.
+const DAY_PLURAL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+/** "10 AM" / "2:30 PM" from a minute of the ET day. */
+function fmtMin(m: number): string {
+  const h = Math.floor(m / 60) % 24, mm = m % 60;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${mm ? `:${String(mm).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/**
+ * The league's waiver schedule, said in one sentence (v0.405.0).
+ *
+ * Founder: "i changed waivers to clear at 2pm tomorrow (thursday) but this
+ * still says they clear at 4am." Part of why that was only discoverable by
+ * staring at a claim is that the card said "Waivers clear DAILY at …" whatever
+ * the day set was — so a league clearing once a week described itself as a
+ * league clearing every day, and the one place the schedule appeared was
+ * wrong. This says the days it actually runs.
+ *
+ * `clearMin` null is the rolling league: no run to name, 24h from each drop.
+ */
+export function waiverScheduleText(
+  clearMin: number | null | undefined,
+  clearDow: number[] | null | undefined,
+  holdDays: number | null | undefined,
+): string {
+  const hold = `${holdDays ?? 1}-day hold`;
+  if (clearMin == null) return `Waivers roll — a dropped player clears 24h later (${hold}).`;
+  const days = Array.isArray(clearDow) && clearDow.length
+    ? clearDow.filter((d) => d >= 0 && d <= 6).sort((a, b) => a - b).map((d) => DAY_PLURAL[d]).join(' & ')
+    : null;
+  return `Waivers clear ${days ?? 'daily'} at ${fmtMin(clearMin)} ET (${hold}).`;
+}
