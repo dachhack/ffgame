@@ -1967,6 +1967,7 @@ export const rosterRules = (leagueId: string) =>
         waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null;
+  fa_mode?: FaMode;
         /** The taxi squad's rules (0196): the tenure ceiling (null = anyone),
          *  whether the squad shuts at the season's first kickoff, whether it is
          *  shut RIGHT NOW, and when that kickoff is. */
@@ -2008,6 +2009,8 @@ export const setRosterRules = (leagueId: string, rounds: number | null, posCaps:
  *  standings at every clear (Sleeper's default — winning a claim costs
  *  nothing); faab = blind bids from a season budget. */
 export type WaiverMode = 'rolling' | 'standings' | 'faab';
+/** Free agency: always open, only inside the hours, or not at all (0287). */
+export type FaMode = 'open' | 'window' | 'off';
 export type TradeReview = 'none' | 'commish';
 /** Per-seat FAAB (0173). `faab` is the EFFECTIVE balance — an untouched seat
  *  reads the league default rather than 0 — and `touched` says whether the
@@ -2043,14 +2046,19 @@ export const setTransactionRules = (
    *  is housekeeping, while adding and dropping changes the league's pool and
    *  spends its FAAB. Absent = on. */
   agentWaivers: boolean | null = null,
+  /** FREE AGENCY (0287): 'open' always, 'window' only inside the hours, 'off'
+   *  not at all — in which case every unowned player is a waiver claim. Unset
+   *  reads from the hours, so a league that has never touched this keeps
+   *  exactly the behaviour it has. */
+  faMode: FaMode | null = null,
 ) =>
-  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean }>(
+  rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean; fa_mode?: FaMode }>(
     'set_transaction_rules', {
       p_league_id: leagueId, p_waiver_mode: waiverMode, p_faab_budget: faabBudget, p_trade_review: tradeReview,
       p_waiver_clear_min: waiverClearMin, p_waiver_hold_days: waiverHoldDays,
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
-      p_agent_waivers: agentWaivers,
+      p_agent_waivers: agentWaivers, p_fa_mode: faMode,
     });
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player

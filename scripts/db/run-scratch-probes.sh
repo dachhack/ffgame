@@ -184,3 +184,4 @@ $RUN -f scripts/db/schedule-start-probes.sql | grep -E "PROBE FAIL|ALL SCHEDULE-
 $RUN -f scripts/db/practice-room-probes.sql | grep -E "PROBE FAIL|ALL PRACTICE-ROOM PROBES" || { echo "PRACTICE-ROOM PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/draft-log-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-LOG PROBES" || { echo "DRAFT-LOG PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/presence-probes.sql | grep -E "PROBE FAIL|ALL PRESENCE PROBES" || { echo "PRESENCE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/fa-off-probes.sql | grep -E "PROBE FAIL|ALL FA-OFF PROBES" || { echo "FA-OFF PROBES FAILED"; exit 1; }

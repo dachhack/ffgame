@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.400.0 — free agency can be turned off
+
+Founder: "how do i turn off free agency and just do faab waivers?" He
+couldn't. FAAB was already a waiver mode and three knobs came close —
+waiver_hold_days, fa_after_waivers_dow, the fa_start/fa_end window — but
+all three miss the same case: a player who was NEVER ROSTERED has no
+waived_until, so the moment the window opens he is free, for nothing, to
+whoever refreshes first. And the window is a RANGE, not a switch: the
+setter refuses a start equal to its end, so "never" was not expressible.
+The nearest thing was a one-minute window at 4am.
+
+0287 adds fa_mode — open | window | off — as a MODE rather than a flag,
+because the window already encoded two of those three states implicitly
+and a bare `fa_off` beside it would leave two settings disagreeing about
+one question. Unset reads FROM the window, so nothing needs migrating: a
+league with hours reads 'window', one without reads 'open'.
+
+The gate lands in fa_window_open, which every add path already consults —
+one place, not a check copied into each caller.
+
+AND THE HOLE THE PROBE FOUND, which would have shipped the feature
+broken: submit_waiver_claim refuses a player whose waived_until is null
+("player not in pool"), because until now the answer was always "add him
+directly." With free agency off there is no directly — so an undrafted
+player would have been refused by add_free_agent for having no free
+agency AND by the claim for having no hold. Unobtainable by any route,
+half the pool frozen. Those two checks now apply only where free agency
+exists. A probe runs the whole market the founder asked for: FAAB on, FA
+off, a $7 bid on a player nobody drafted, resolved onto the roster and
+paid out of the wallet.
+
+Commish UI in both hosts gains a third choice — 🚫 NONE — WAIVERS ONLY —
+which says in place what it means, and says to switch the mode to FAAB if
+the league is still on priority waivers.
+
 ### v0.399.0 — draft straight from your queue
 
 Founder: "and then a way to draft directly from your queue." A DRAFT

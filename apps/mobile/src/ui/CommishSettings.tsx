@@ -17,7 +17,7 @@ import {
   closeLeagueListing, friendlyError,
   leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
   setPickTrading as setPickTradingRpc, pickAssets,
-  type PosCaps, type TradeReview, type WaiverMode,
+  type PosCaps, type TradeReview, type WaiverMode, type FaMode,
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -57,6 +57,7 @@ interface Rules {
   mode: WaiverMode; budget: number; review: TradeReview;
   clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
+  faMode: FaMode;
   agentWaivers: boolean;
 }
 
@@ -84,6 +85,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [holdDays, setHoldDays] = useState(1);
   const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
+  // 0287: the window said open-or-hours; the MODE can also say none at all.
+  const [faMode, setFaMode] = useState<FaMode>('open');
   const [faEnd, setFaEnd] = useState<number | null>(null);
   const [listed, setListed] = useState<boolean | null>(null);      // null = still loading
   const [blurbDraft, setBlurbDraft] = useState('');
@@ -108,6 +111,9 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
+        // Absent reads from the hours, exactly as league_fa_mode does, so a
+        // league that predates 0287 shows what it has always done.
+        faMode: r.fa_mode ?? (r.fa_start_min != null ? 'window' : 'open'),
         // Absent means ON (0213) — the same default league_agent_waivers
         // applies, spelled once here so the switch can never render the
         // opposite of what the worker will do.
@@ -115,7 +121,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading(a.pick_trading !== false); }).catch(() => {});
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd);
+      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
@@ -148,10 +154,11 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         faChanged ? (faEnd ?? -1) : null,
         dowChanged ? (clearDow ?? []) : null,
         faDowChanged ? (faDow ?? []) : null,
-        agentWaivers !== init.agentWaivers ? agentWaivers : null);
+        agentWaivers !== init.agentWaivers ? agentWaivers : null,
+        faMode !== init.faMode ? faMode : null);
       if (r.ok) {
         commit();
-        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, agentWaivers });
+        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers });
         setMsg('✓ saved'); onSaved();
       } else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
@@ -205,7 +212,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const sec = (label: string) => <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>{label}</Mono>;
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd
-    || agentWaivers !== init.agentWaivers
+    || agentWaivers !== init.agentWaivers || faMode !== init.faMode
     || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
     || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
 
@@ -326,13 +333,20 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
 
           {sec('FREE AGENCY')}
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <Chip label="ALWAYS OPEN" on={faStart === null} onPress={() => { tap(); setFaStart(null); setFaEnd(null); }} />
-            <Chip label="DAILY WINDOW" on={faStart !== null} onPress={() => { tap(); if (faStart === null) { setFaStart(600); setFaEnd(1380); } }} />
+            <Chip label="ALWAYS OPEN" on={faMode === 'open'} onPress={() => { tap(); setFaMode('open'); setFaStart(null); setFaEnd(null); }} />
+            <Chip label="DAILY WINDOW" on={faMode === 'window'} onPress={() => { tap(); setFaMode('window'); if (faStart === null) { setFaStart(600); setFaEnd(1380); } }} />
+            {/* 0287 — not a narrower window, none at all. */}
+            <Chip label="🚫 NONE — WAIVERS ONLY" on={faMode === 'off'} onPress={() => { tap(); setFaMode('off'); }} />
           </View>
-          {faStart !== null && faEnd !== null && (
+          {faMode === 'off' && (
+            <Mono size={9.5} tone="warn" style={{ marginTop: 6, lineHeight: 14 }}>
+              {`No instant pickups at all. EVERY unowned player — including anyone who went undrafted — has to be won on waivers${mode === 'faab' ? ' with a FAAB bid' : ''}.${mode !== 'faab' ? ' This league runs priority waivers; switch the mode above to FAAB for blind bidding.' : ''}`}
+            </Mono>
+          )}
+          {faMode === 'window' && (
             <View style={{ marginTop: 8, gap: 6 }}>
-              <TimeStep label="OPENS" value={faStart} onChange={setFaStart} />
-              <TimeStep label="CLOSES" value={faEnd} onChange={setFaEnd} />
+              <TimeStep label="OPENS" value={faStart ?? 600} onChange={setFaStart} />
+              <TimeStep label="CLOSES" value={faEnd ?? 1380} onChange={setFaEnd} />
             </View>
           )}
           {/* Sleeper's quiet morning: on checked days, instant adds stay closed
