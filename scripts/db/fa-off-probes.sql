@@ -29,6 +29,13 @@ begin
 end $$;
 create or replace function fo_true(b boolean, msg text) returns void language plpgsql as $$
 begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;
+-- app.uid survives `reset role`, so a probe that wants the SERVER has to say
+-- so explicitly — otherwise RLS still sees the last signed-in probe user.
+create or replace function fo_server() returns void language plpgsql as $$
+begin
+  perform set_config('app.uid', '', false);
+  perform set_config('app.email', '', false);
+end $$;
 create or replace function fo_as(u text) returns void language plpgsql as $$
 begin
   perform set_config('app.uid', '00000000-0000-0000-0000-00000000fa0' || u, false);
@@ -154,9 +161,22 @@ begin
   -- a full roster is a full roster whatever the wire looks like, so the claim
   -- carries its drop, exactly as a manager's would
   select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
-  perform fo_ok(submit_waiver_claim(lid, seat, free_slug, drop_slug, 7),
-    'fo6d a $7 bid on a player who was never drafted');
-  perform fo_ok(process_waivers(lid), 'fo6e the run resolves');
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 7);
+  perform fo_ok(r, 'fo6d a $7 bid on a player who was never drafted');
+  -- 0289: the bid SITS until the league's waiver run — an off league has no
+  -- window to wait for, so that run is its clock. It used to settle on the
+  -- next sweep, seconds later, which made a blind bid neither blind nor a bid.
+  perform fo_true((r ->> 'clears_at')::timestamptz > now(),
+    'fo6e it is pending against a clock, not settled on the spot');
+  perform fo_ok(process_waivers(lid), 'fo6e1 a sweep before that clock changes nothing');
+  perform fo_true(not exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo6e2 he is not on the roster yet');
+  perform fo_server();
+  update waiver_claim set clears_at = now() - interval '1 minute'
+    where league_id = lid and add_slug = free_slug and status = 'pending';
+  perform fo_as('1');
+  perform fo_ok(process_waivers(lid), 'fo6e3 and when the clock passes, the run resolves');
   perform fo_true(exists (select 1 from native_roster
                     where league_id = lid and roster_id = seat and slug = free_slug),
     'fo6f and he is on the roster — an unowned player reached ONLY through FAAB');
@@ -182,12 +202,18 @@ end $$;
 -- doors — no waived_until for the claim, no open window for the add — so most
 -- of the pool was unobtainable for most of the day.
 do $$
-declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text; r jsonb;
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text; r jsonb; et_now int;
 begin
   perform fo_as('1');
-  -- a window that is definitely NOT now: one minute, a decade of midnights ago
+  -- A window shut BY CONSTRUCTION: one minute, three hours from now. The old
+  -- fixture used midnight-to-00:01, which is shut 1439 minutes out of 1440 —
+  -- a suite that fails once a day at 00:00 ET is a suite nobody trusts. Three
+  -- hours out also gives 0289's fa_opens_at something real to be checked
+  -- against.
+  et_now := et_minutes(now());
   perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'window',
-    p_fa_start_min => 0, p_fa_end_min => 1), 'fo10 the league runs a daily window');
+    p_fa_start_min => (et_now + 180) % 1440, p_fa_end_min => (et_now + 181) % 1440),
+    'fo10 the league runs a daily window');
   perform fo_true(league_fa_mode(lid) = 'window', 'fo10a mode reads window');
   perform fo_true(not fa_window_open(lid), 'fo10b and the window is shut right now');
 
@@ -211,12 +237,42 @@ begin
   delete from waiver_claim where league_id = lid;
   perform fo_as('1');
   select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
-  perform fo_ok(submit_waiver_claim(lid, seat, free_slug, drop_slug, 4),
-    'fo13 but a claim on him is ACCEPTED — the closed window is what waivers cover');
-  perform fo_ok(process_waivers(lid), 'fo13a and the run resolves it');
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 4);
+  perform fo_ok(r, 'fo13 but a claim on him is ACCEPTED — the closed window is what waivers cover');
+
+  -- 0289: AND IT MUST NOT SETTLE ON THE SPOT.
+  --
+  -- This is where the suite asserted the opposite — 'and the run resolves it'
+  -- — which is exactly the bug the founder reported the next morning: "it
+  -- looks like my bid for golden went through immediately". It did: a player
+  -- nobody ever dropped has no pool hold, process_waivers read a null hold as
+  -- DUE NOW, and the team screen sweeps every fifteen seconds. The claim won
+  -- uncontested, and charged FAAB for the privilege. A green probe asserting
+  -- the broken behaviour is worse than no probe, so it now asserts the rule:
+  -- a claim made behind a closed door clears when that door opens.
+  perform fo_true((r ->> 'clears_at') is not null and (r ->> 'clears_at')::timestamptz > now(),
+    'fo13a the claim comes back with a clearing time, and it is in the future');
+  perform fo_true((r ->> 'clears_at')::timestamptz = fa_opens_at(lid),
+    'fo13b which is the moment free agency next opens');
+  perform fo_true(fa_opens_at(lid) between now() + interval '2 hours' and now() + interval '4 hours',
+    'fo13c and that is the window three hours out, not some other day');
+  perform fo_ok(process_waivers(lid), 'fo13d a sweep right now runs clean');
+  perform fo_true(not exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo13e and does NOT hand him over — the blind-bid window IS the feature');
+  perform fo_true(exists (select 1 from waiver_claim where league_id = lid
+                    and add_slug = free_slug and status = 'pending'),
+    'fo13f the claim is still pending, waiting for the door');
+
+  -- …and once the clock has passed it settles exactly as it always did.
+  perform fo_server();
+  update waiver_claim set clears_at = now() - interval '1 minute'
+    where league_id = lid and add_slug = free_slug and status = 'pending';
+  perform fo_as('1');
+  perform fo_ok(process_waivers(lid), 'fo13g once the clock has passed, the run resolves it');
   perform fo_true(exists (select 1 from native_roster
                     where league_id = lid and roster_id = seat and slug = free_slug),
-    'fo13b onto the roster');
+    'fo13h onto the roster');
 
   -- With the window OPEN, an unheld player is an add, not a claim — and the
   -- refusal says so rather than the old, untrue "player not in pool".
@@ -230,6 +286,62 @@ begin
     order by lp.rank limit 1;
   perform fo_no(submit_waiver_claim(lid, seat, free_slug, drop_slug, 1), 'add him directly',
     'fo15 claiming an open free agent points you at the add instead');
+end $$;
+
+-- ── 4c. THE CLOCK ITSELF (0289) ───────────────────────────────────────────
+-- Three rules the clearing time has to keep:
+--   • a league with no free agency at all has no door to wait for, so the
+--     claim falls back to the league's own waiver run — otherwise an 'off'
+--     league (v0.400.0's whole point) would park every claim forever;
+--   • fa_opens_at is null exactly when free agency never opens;
+--   • a claim that has come due is settled BEFORE anyone can add the player,
+--     even when the add arrives first — the fifteen seconds between the
+--     window opening and the next sweep is otherwise a free snipe.
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; seat2 int;
+        free_slug text; drop_slug text; r jsonb;
+begin
+  perform fo_as('1');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  select sleeper_roster_id into seat2 from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa02';
+
+  -- (a) no free agency at all: the waiver run is the only clock there is
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'off'), 'fo16 free agency off');
+  perform fo_true(fa_opens_at(lid) is null, 'fo16a a door that never opens has no opening time');
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid and lp.waived_until is null
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    order by lp.rank limit 1;
+  select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 2);
+  perform fo_ok(r, 'fo17 a claim in an off league is accepted');
+  perform fo_true((r ->> 'clears_at')::timestamptz = waiver_hold_until(lid),
+    'fo17a and clears on the league waiver run, the only clock that mode has');
+  perform fo_true((r ->> 'clears_at')::timestamptz > now(),
+    'fo17b which is still in the future — an off league must not settle on the spot either');
+  perform fo_ok(process_waivers(lid), 'fo17c a sweep now runs clean');
+  perform fo_true(not exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo17d and leaves him alone');
+
+  -- (b) a due claim beats an add that arrives in the same breath. The other
+  -- seat tries to take the player the instant the door opens; add_free_agent
+  -- settles the sweep first and then honestly reports him gone.
+  perform fo_server();
+  update waiver_claim set clears_at = now() - interval '1 minute'
+    where league_id = lid and add_slug = free_slug and status = 'pending';
+  perform fo_as('1');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'open'), 'fo18 the door opens');
+  perform fo_true(fa_window_open(lid), 'fo18a the wire is open');
+  perform fo_true(fa_opens_at(lid) <= now(), 'fo18b and an open door opens now');
+  perform fo_as('2');
+  perform fo_no(add_free_agent(lid, seat2, free_slug), 'already rostered',
+    'fo19 an add racing a due claim loses to it — the claim settled first');
+  perform fo_true(exists (select 1 from native_roster
+                    where league_id = lid and roster_id = seat and slug = free_slug),
+    'fo19a and the claimant has him');
 end $$;
 
 -- ── 5. who may set it, and to what ────────────────────────────────────────

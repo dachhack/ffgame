@@ -3063,7 +3063,10 @@ export const cancelWaiverClaim = (claimId: string) =>
 /** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */
 export const processWaivers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; won?: number; lost?: number }>('process_waivers', { p_league_id: leagueId });
-export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number; }
+export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number;
+  /** 0289: when this claim settles — its own clock when free agency could
+   *  not reach the player, else the pool hold it is queued behind. */
+  clears_at?: string | null; }
 export interface NativeTeamState {
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
   /** THE BLADE (0272): the week the guillotine took THIS seat, null while it

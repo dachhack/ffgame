@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.404.0 — a claim needs a clock of its own
+
+Founder, on the claim he put in minutes earlier: "it looks like my bid for
+golden went through immediately."
+
+It did. Matthew Golden went undrafted, so his pool row carries no
+waived_until — only a DROP sets one — and process_waivers has read a null
+hold as DUE NOW since the day it was written:
+
+    and (lp.waived_until is null or lp.waived_until <= now())
+
+That reading was correct when a claim could only exist for a player
+somebody had dropped, where null meant "the hold has been cleared". 0288
+changed the population: a player free agency cannot reach is claimable
+too, and almost none of those have ever been on a hold. The team screen
+sweeps every fifteen seconds to stay self-driving without a worker, so the
+claim was won within seconds of being made.
+
+That is worse than the bug it came out of. It is an instant add that also
+charges FAAB, and it settles UNCONTESTED — nobody else gets the blind-bid
+window the closed door exists to create. Whoever is awake takes anyone.
+
+So a claim gets its own clock (0289). clears_at is stamped at submission
+for exactly the claims 0288 admitted, and process_waivers prefers it to
+the pool row: coalesce(claim, pool, now()), where a claim with neither is
+due now and every pre-0289 row behaves exactly as it did. The moment
+chosen is when free agency next opens — the deadline the pool header
+already promises — which needed fa_window_open() lifted into
+fa_window_open_at(ts) and a new fa_opens_at(). The league's own waiver run
+would have been wrong here: a league clearing waivers Wednesdays at 3am
+would park a Thursday claim for six days while the player sat freely
+addable every morning in between. Where free agency never opens at all,
+waiver_hold_until() is the only clock there is, and that is the fallback.
+
+One more hole while we were in there: the sweep runs from the team screen,
+not from the stroke of ten. A screen already open renders a live ADD on
+state up to fifteen seconds stale, and the first click beat a claim that
+was due before the clicker arrived. add_free_agent now settles due claims
+before adding, under the advisory lock it already holds.
+
+The screen says all of it: each pending claim shows when it clears, from a
+shared formatter both hosts print from, and the pool header leads with what
+works now — "💸 bids only — free agency opens 10 AM ET" — rather than a
+padlock and an hour you cannot use, which the founder read as shut while
+standing in front of a board of live BID buttons.
+
+The probe that should have caught this asserted the bug instead: fo13a
+read "and the run resolves it". It now asserts the rule, and §3b and the
+new §4c cover the off-league fallback, fa_opens_at, and the add-vs-claim
+race. 92 suites pass.
+
 ### v0.403.0 — the button has to offer the claim
 
 Founder, after 0288 went live: "waivers are still closed and it says FA

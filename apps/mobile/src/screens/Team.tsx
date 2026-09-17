@@ -27,6 +27,7 @@ import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type Poo
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
+import { fmtClearsAt } from '@drip/core/data/waiverClock';
 import { useTheme, MONO, fs } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
@@ -786,6 +787,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}</Text>
                 {c.drop_slug && <Mono size={9} tone="faint">dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</Mono>}
+                {/* 0289: PENDING UNTIL WHEN — the web twin. A card that says
+                    "pending" and stops is the same silence that made a claim
+                    settling on the spot look like normal behaviour. */}
+                {fmtClearsAt(c.clears_at, Date.now() + skew.current) && (
+                  <Mono size={9} tone="dim">{fmtClearsAt(c.clears_at, Date.now() + skew.current)}</Mono>
+                )}
               </View>
               {team.waiver_mode === 'faab' && <Mono size={9.5} tone="you" weight="700">${c.bid ?? 0}</Mono>}
               <Mono size={8} tone="warn" track={0.06}>PENDING</Mono>
@@ -807,10 +814,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       <Card>
         <Mono size={9} tone="faint" track={0.12}>
           PLAYER POOL ({free.length}){team.waiver_mode === 'faab' && team.my_faab != null ? ` · FAAB $${team.my_faab}` : ''}
+          {/* 0289, founder: "waivers are now open but it still has the FA time".
+              A padlock and an hour he cannot use reads as "shut" even above a
+              board of live BID buttons. Lead with what works now. */}
           {team.fa_open === false
             ? (team.fa_start_min != null
-                ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET — until then, claims only`
-                : ' · 🔒 no free agency — claims only')
+                ? ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — free agency opens ${fmtEtMin(team.fa_start_min)} ET`
+                : ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — this league has no free agency`)
             : ''}
         </Mono>
         {deals && (
