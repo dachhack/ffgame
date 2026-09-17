@@ -12,6 +12,7 @@ import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
+import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -29,6 +30,7 @@ import {
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
+  draftLog, type DraftEvent,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
   myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, type PushTokenRow,
@@ -933,7 +935,7 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Draft room
 // ─────────────────────────────────────────────────────────────────────────────
-type DraftTab = 'players' | 'teams' | 'queue';
+type DraftTab = 'players' | 'teams' | 'queue' | 'log';
 
 export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = false }: {
   leagueId: string; onBack: () => void; onTeam: () => void;
@@ -1279,6 +1281,18 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     } catch (x) { setErr(friendlyError(x)); }
     finally { busyRef.current = false; setBusy(false); }
   };
+
+  // THE DRAFT LOG (0284): fetched whole while the tab is open — a draft is at
+  // most a few hundred lines — and every 5s so a live room scrolls itself.
+  const [log, setLog] = useState<DraftEvent[]>([]);
+  useEffect(() => {
+    if (tab !== 'log') return;
+    let dead = false;
+    const load = () => draftLog(leagueId).then((r) => { if (!dead && r.ok) setLog(r.events ?? []); }).catch(() => {});
+    load();
+    const id = setInterval(load, 5000);
+    return () => { dead = true; clearInterval(id); };
+  }, [tab, leagueId]);
 
   // Mock rooms are disposable — delete leaves the room, so don't refresh a
   // league that no longer exists (run() would).
@@ -1778,6 +1792,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
         {!embedded && tabChip('players', `PLAYERS (${avail.length})`)}
         {tabChip('teams', 'TEAMS')}
         {!embedded && tabChip('queue', `QUEUE (${queue.length})`)}
+        {tabChip('log', 'LOG')}
       </div>
 
       {/* PLAYERS — available list with ADP + projections. Not in the console
@@ -1946,7 +1961,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
               waited for keeps picking through one. */}
           {!!st.my_autodraft && (
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', lineHeight: 1.5, paddingTop: 6 }}>
-              Autodraft is on — your seat keeps picking even while the commissioner has the draft paused.
+              Autodraft is on — your queue, then best available, picks for you, even through a pause. Tap AUTODRAFT OFF above to pick for yourself again.
             </div>
           )}
           {queue.map((slug, i) => {
@@ -2008,6 +2023,28 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   </span>
                 ))}
                 <button onClick={() => toggleQueue(slug)} className="mono" style={{ ...linkBtn, color: 'var(--opp)', padding: '0 3px' }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* LOG — what happened, newest first (0284) */}
+      {tab === 'log' && (
+        <div style={card}>
+          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>DRAFT LOG · NEWEST FIRST</div>
+          {log.length === 0 && (
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>Nothing yet — the log fills as the draft happens.</div>
+          )}
+          {[...log].reverse().map((e) => {
+            const l = draftEventLine(e);
+            const tone = e.roster_id != null && e.roster_id === myRoster ? 'you' : l.tone;
+            const color = tone === 'you' ? 'var(--you)' : tone === 'warn' ? 'var(--warn)' : tone === 'dim' ? 'var(--dim)' : 'var(--text)';
+            return (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '7px 0', borderTop: '1px solid var(--bd)' }}>
+                <span className="mono" style={{ width: 20, textAlign: 'center', fontSize: 12, flexShrink: 0 }}>{l.icon}</span>
+                <span className="mono" style={{ flex: 1, fontSize: 10.5, lineHeight: 1.5, color }}>{l.text}</span>
+                <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{draftEventTime(e.at)}</span>
               </div>
             );
           })}

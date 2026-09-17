@@ -182,3 +182,4 @@ $RUN -f scripts/db/dropped-pick-probes.sql | grep -E "PROBE FAIL|ALL DROPPED-PIC
 $RUN -f scripts/db/draft-midseason-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-MIDSEASON PROBES" || { echo "DRAFT-MIDSEASON PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/schedule-start-probes.sql | grep -E "PROBE FAIL|ALL SCHEDULE-START PROBES" || { echo "SCHEDULE-START PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/practice-room-probes.sql | grep -E "PROBE FAIL|ALL PRACTICE-ROOM PROBES" || { echo "PRACTICE-ROOM PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/draft-log-probes.sql | grep -E "PROBE FAIL|ALL DRAFT-LOG PROBES" || { echo "DRAFT-LOG PROBES FAILED"; exit 1; }

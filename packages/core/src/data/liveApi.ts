@@ -2372,6 +2372,25 @@ export const createPracticeRoom = (leagueId: string, slot?: number) =>
     rounds?: number; mode?: string; pool?: number;
   }>('create_mock_from_league', { p_league_id: leagueId, p_slot: slot ?? null });
 
+/** THE DRAFT LOG (0284): what happened, in order — every pick, autopick,
+ *  auction award and nomination, every undo/edit/reset, start/pause/resume/
+ *  complete, every autodraft toggle, and (0285) every clock that ran out.
+ *  Oldest first from `after` (exclusive), so poll with the last id you hold. */
+export type DraftEventKind =
+  | 'start' | 'pick' | 'autopick' | 'forced' | 'won' | 'nominate' | 'removed' | 'edit'
+  | 'reset' | 'pause' | 'resume' | 'complete' | 'autodraft_on' | 'autodraft_off' | 'timeout';
+export interface DraftEvent {
+  id: number; at: string; kind: DraftEventKind | string;
+  roster_id: number | null; team: string | null;
+  slug: string | null; player: string | null; pos: string | null; nfl: string | null;
+  overall: number | null; round: number | null; price: number | null;
+  actor_role: 'server' | 'commish' | 'member'; actor_roster: number | null; actor_team?: string | null;
+  detail: Record<string, unknown>;
+}
+export const draftLog = (leagueId: string, after = 0, limit = 300) =>
+  rpc<{ ok: boolean; error?: string; events?: DraftEvent[] }>('draft_log',
+    { p_league_id: leagueId, p_after: after, p_limit: limit });
+
 /** Wipe a mock draft (its commissioner or an admin); refuses real leagues. */
 export const deleteMockDraft = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string }>('delete_mock_draft', { p_league_id: leagueId });

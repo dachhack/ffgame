@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.396.0 — a timed-out seat goes on autodraft, and the draft has a log
+
+Founder, mid-draft: "We need a way that teams that time out and auto get
+set to auto draft. We also need a draft log." Built during the draft,
+merged after it, on his call.
+
+TIMEOUT → AUTODRAFT (0285). A clock that ran out used to cost the room one
+pick's wait and then the seat was a live human again, so a manager who had
+wandered off made everyone sit through every one of their picks. The two
+places in draft_tick where a live human's deadline is found behind us — the
+snake pick and the auction nomination — now flip the seat to autodraft
+first, so the pick that follows is already an autodraft pick and the seat
+is not waited for again until the manager turns it off (the AUTODRAFT chip
+both hosts already show). The manager gets a push, because the person who
+timed out is by definition not looking at the room; mirrors the worker's
+on-the-clock push, skipped in a practice room.
+
+THE DRAFT LOG (0284). The board shows what the draft IS; nothing showed
+what HAPPENED — an undone pick was simply gone, a forced pick looked like
+any other. One append-only table, written by TRIGGERS on the rows the
+draft already writes rather than by editing eight RPCs (0179's argument:
+a rule on the table cannot be bypassed by the path nobody remembered).
+The actor is auth.uid() at write time, so one insert reads "pick",
+"forced by the commissioner" or "autopick" from who did it; a single
+deleted row is an undo, many at once is a reset and the draft row logs
+that one line. Logged: every pick, autopick, award, nomination, removal,
+edit, reset, start/pause/resume/complete, every autodraft toggle by a
+person, every timeout. Not logged: individual auction bids — the award
+carries the price. LOG tab in both draft rooms, newest first, one shared
+formatter in core so both hosts say it the same way.
+
 ### v0.395.3 — an IR spot is not a round, in a practice room either
 
 Founder, in a room made on the fixed build: "Draft says 21 rounds but
