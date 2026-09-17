@@ -22,6 +22,7 @@ import {
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
+import { txnLook, txnBody } from '@drip/core/data/txnChat';
 import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 
@@ -107,6 +108,25 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
         style={{ marginTop: 4, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)' }}>
         📋 OPEN WEEK {week ?? '?'} REPORT ▸
       </button>
+    </div>
+  );
+}
+
+// ── THE WIRE (v0.405.0) ─────────────────────────────────────────────────────
+// Founder: "we need an add/drop log... All this goes in chat." The house
+// composes the sentence server-side (0290) so a push notification and a chat
+// bubble read alike; this gives it a rail and a colour, so the league's own
+// conversation still reads as the conversation and the moves read as the
+// record rather than as somebody talking.
+function TxnLine({ m }: { m: ChatMessage }) {
+  const look = txnLook(m.txn);
+  const rail = look.tone === 'you' ? 'var(--you)' : look.tone === 'warn' ? 'var(--warn)' : 'var(--bd)';
+  return (
+    <div style={{ borderLeft: `3px solid ${rail}`, padding: '3px 8px', borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--dim) 7%, transparent)' }}>
+      <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', overflowWrap: 'anywhere' }}>
+        <span style={{ marginRight: 5 }}>{look.icon}</span>{txnBody(m.body, look)}
+      </div>
     </div>
   );
 }
@@ -461,7 +481,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                 <button onClick={() => void del(m.id)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
             </div>
-            {m.kind === 'report'
+            {m.kind === 'txn'
+              ? <TxnLine m={m} />
+              : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
               : m.kind === 'poll'
               ? <>

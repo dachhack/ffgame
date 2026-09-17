@@ -18,6 +18,71 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.405.0 — the wire, out loud; and the clear time actually clears
+
+Two asks in one build, both about the same corner of the league.
+
+**"We need an add/drop log that also includes a waiver report when it runs
+and a trade report when it happens. All this goes in chat."**
+
+The log already existed and had never said a word. league_txn (0186) has
+recorded every roster movement since the register went in, written by one
+trigger on native_roster. A register is a thing you go and look at; chat is
+where a league lives, and a trade nobody mentions may as well not have
+happened. So 0290 posts — not a second log, the same events announced.
+
+Not from that trigger, though, which is the design decision worth keeping:
+the trigger fires per ROW and the founder asked for per EVENT. A waiver run
+that settles five claims is one report, not five lines. A trade is one
+sentence, not four roster updates. An add that carries a drop is one
+decision and reads as one line. Only the RPC knows where an event begins,
+so the four that do the work post: add_free_agent, drop_player,
+process_waivers and execute_trade.
+
+The house voice existed too — 0275 taught league_message that a null author
+is "Drip Fantasy" — but only the Node worker had ever used it, through the
+service role. _chat_house is the SQL-side version, revoked from everyone so
+only a definer function reaches it. A new 'txn' kind carries a payload the
+clients render an icon and a rail from, shared so the two hosts cannot
+disagree about what colour a trade is.
+
+Two deliberate silences: a sweep that settles nothing says nothing (the
+team screen calls process_waivers every fifteen seconds, and a league whose
+chat filled with "waivers ran, nothing happened" would be worse than no
+feature), and transaction lines never reach the "every message" push door.
+That subscription was bought for the conversation, not for a move-by-move
+feed.
+
+**"I changed waivers to clear at 2pm tomorrow (thursday) but this still
+says they clear at 4am. We need the ability to set a custom time for
+waivers to clear each day."**
+
+The custom time has existed since v0.216.1 — any minute, plus a day picker.
+He set it. It did nothing, because 0289 had pinned a claim to the wrong
+clock: it asked when free agency could next reach the player and used that
+as the deadline, which quietly made the FREE AGENCY schedule govern the
+WAIVER run. The one setting labelled "waivers clear at…" had no bearing on
+when waivers cleared.
+
+He is right and 0289 was wrong. 0291 adds next_waiver_run() — the
+configured time on the configured days, with no waiver_hold_days added,
+because that is how long a dropped player sits and not when the run happens
+— and a claim now clears there. Free agency's door is the fallback for a
+rolling league that has no run at all, where 0289's answer was right.
+
+And a deadline the commissioner moves has to move: clears_at is stamped at
+submission, so his two standing claims kept the rule they were born under.
+set_transaction_rules now re-stamps every pending claim, and the migration
+backfills the ones already in flight.
+
+The card said "Waivers clear DAILY at …" whatever the day set was, so a
+once-a-week league described itself as a daily one and the question had
+nowhere to be answered from. It now names the real days and the next run.
+
+The week-report probe caught 0290 dropping 0275's report_week constraint —
+the sweep that widens the kind check eats every check whose definition says
+"kind", and 0275's own paired check says it too. 93 suites pass.
+
 ### v0.404.0 — a claim needs a clock of its own
 
 Founder, on the claim he put in minutes earlier: "it looks like my bid for

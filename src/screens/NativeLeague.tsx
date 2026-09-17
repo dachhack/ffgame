@@ -13,7 +13,7 @@ import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
-import { fmtClearsAt } from '@drip/core/data/waiverClock';
+import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -3272,7 +3272,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           {team.waiver_mode === 'faab'
             ? 'FAAB: claims carry blind bids from your season budget — highest bid wins, the order above only breaks ties. Winners still rotate to the back.'
             : 'Winning a claim sends you to the back of the line.'}
-          {team.waiver_clear_min != null && ` Waivers clear daily at ${fmtEtMin(team.waiver_clear_min)} ET (${team.waiver_hold_days ?? 1}-day hold).`}
+          {/* 0291: the schedule, said properly. This read "clear DAILY at …"
+              whatever the day set was, so a once-a-week league described itself
+              as a daily one — and the founder's "why does it still say 4am"
+              had nowhere on the screen to be answered from. */}
+          {' '}{waiverScheduleText(team.waiver_clear_min, team.waiver_clear_dow, team.waiver_hold_days)}
+          {team.next_waiver_run && ` Next run ${fmtClearsAt(team.next_waiver_run, Date.now() + skew.current)?.replace(/^clears /, '') ?? ''}.`}
         </div>
       </div>
 

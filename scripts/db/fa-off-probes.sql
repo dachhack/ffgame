@@ -344,6 +344,96 @@ begin
     'fo19a and the claimant has him');
 end $$;
 
+-- ── 4d. THE CLEAR TIME IS WHAT CLEARS (0291) ──────────────────────────────
+-- Founder: "i changed waivers to clear at 2pm tomorrow (thursday) but this
+-- still says they clear at 4am." 0289 pinned a claim to the free-agency door,
+-- which made the one setting labelled "waivers clear at…" inert. The league's
+-- own run is the deadline; the door is only the fallback for a rolling league
+-- that has no run.
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text;
+        r jsonb; et_now int; want int; ran timestamptz;
+begin
+  perform fo_as('1');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+
+  -- No clear time yet: a rolling league falls back to the door, as 0289 had it
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => -1), 'fo20 no clear time set');
+  perform fo_true(next_waiver_run(lid) is null,
+    'fo20a a league with no clear time has no run to wait for');
+
+  -- Now give it one, four hours out, every day.
+  et_now := et_minutes(now());
+  want := (et_now + 240) % 1440;
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want), 'fo21 waivers clear daily at a set time');
+  ran := next_waiver_run(lid);
+  perform fo_true(ran is not null, 'fo21a which gives the league a run');
+  perform fo_true(et_minutes(ran) = want, 'fo21b at the minute the commissioner set');
+  perform fo_true(ran between now() + interval '3 hours' and now() + interval '5 hours',
+    'fo21c and it is the NEXT one, not one a week out');
+  -- waiver_hold_days must not leak in: that is how long a DROPPED player sits,
+  -- not when the run happens.
+  perform fo_ok(set_transaction_rules(lid, p_waiver_hold_days => 3), 'fo22 a three-day hold on drops');
+  perform fo_true(next_waiver_run(lid) = ran,
+    'fo22a does not push the RUN out — a claim is not a dropped player');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_hold_days => 1), 'fo22b (put it back)');
+
+  -- A claim now takes the run, not the door.
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'window',
+    p_fa_start_min => (et_now + 180) % 1440, p_fa_end_min => (et_now + 181) % 1440),
+    'fo23 free agency is shut, and opens BEFORE the run');
+  perform fo_true(not fa_window_open(lid), 'fo23a shut right now');
+  perform fo_true(fa_opens_at(lid) < next_waiver_run(lid),
+    'fo23b the door opens first, so the two clocks genuinely disagree');
+  reset role; perform fo_server();
+  delete from waiver_claim where league_id = lid;
+  perform fo_as('1');
+  select lp.slug into free_slug from league_pool lp
+    where lp.league_id = lid and lp.waived_until is null
+      and not exists (select 1 from native_roster nr where nr.league_id = lid and nr.slug = lp.slug)
+    order by lp.rank limit 1;
+  select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 3);
+  perform fo_ok(r, 'fo24 a claim is accepted');
+  perform fo_true((r ->> 'clears_at')::timestamptz = next_waiver_run(lid),
+    'fo24a and clears at the RUN — the setting the commissioner actually set');
+  perform fo_true((r ->> 'clears_at')::timestamptz <> fa_opens_at(lid),
+    'fo24b not at the free-agency door, which is 0289s bug');
+
+  -- MOVING THE TIME MOVES THE CLAIM. This is the "still says 4am" half.
+  want := (et_now + 600) % 1440;
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want),
+    'fo25 the commissioner moves the clear time');
+  perform fo_true((select clears_at from waiver_claim where league_id = lid and status = 'pending'
+                    and add_slug = free_slug) = next_waiver_run(lid),
+    'fo25a and the claim already in moves with it');
+  perform fo_true(et_minutes((select clears_at from waiver_claim where league_id = lid
+                    and status = 'pending' and add_slug = free_slug)) = want,
+    'fo25b to the new minute, not the one it was born with');
+
+  -- A day set narrows it to those days.
+  perform fo_ok(set_transaction_rules(lid,
+    p_waiver_clear_dow => to_jsonb(array[(extract(dow from (now() + interval '3 days') at time zone 'America/New_York')::int)])),
+    'fo26 waivers clear on one day a week');
+  perform fo_true(next_waiver_run(lid) between now() + interval '2 days' and now() + interval '4 days',
+    'fo26a so the next run is that day');
+  perform fo_true((select clears_at from waiver_claim where league_id = lid and status = 'pending'
+                    and add_slug = free_slug) = next_waiver_run(lid),
+    'fo26b and the live claim followed it there too');
+  -- the screen can say so
+  perform fo_true((native_team_state(lid) ->> 'next_waiver_run') is not null,
+    'fo27 and the team screen is told when the run is');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_dow => '[]'::jsonb), 'fo28 (back to every day)');
+  -- Hand the league back the way §4 left it: every suite in this file shares
+  -- one league, and §5 asserts free agency is still open. A section that
+  -- changes the mode and walks away breaks the section after it.
+  perform fo_ok(set_transaction_rules(lid, p_fa_start_min => -1, p_fa_end_min => -1), 'fo28a (window cleared)');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'open'), 'fo28b (and free agency open again)');
+  perform fo_true(league_fa_mode(lid) = 'open', 'fo28c as §5 expects to find it');
+  reset role; perform fo_server();
+end $$;
+
 -- ── 5. who may set it, and to what ────────────────────────────────────────
 do $$
 declare lid uuid := current_setting('probe.fo_lid')::uuid;

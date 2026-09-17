@@ -230,7 +230,14 @@ async function detectChat() {
     for (const m of all ?? []) {
       // A poll already broadcasts to the whole league above; sending it again
       // through this door would be the same message twice on one phone.
-      if (m.kind === 'poll' || m.kind === 'report') continue;
+      //
+      // A transaction line (0290) never comes through here at all. "Every
+      // message" means every message somebody TYPED — it was a subscription to
+      // the conversation, bought before the house started narrating adds and
+      // drops, and turning it into a move-by-move feed would be a change
+      // nobody asked for made to a setting they already set. The lines are in
+      // chat for anyone who opens it.
+      if (m.kind === 'poll' || m.kind === 'report' || m.kind === 'txn') continue;
       const mentioned = new Set(m.mentions ?? []);
       for (const uid of wanted.get(m.league_id) ?? []) {
         if (uid === m.author_id) continue;   // you wrote it

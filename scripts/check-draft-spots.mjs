@@ -21,7 +21,8 @@ import {
 } from '../packages/core/src/engine/classic';
 import { sortPool, poolSortValue, adpFor, projFor, setLiveAdp, clearLiveAdp, adpIsLive } from '../packages/core/src/data/poolSort';
 import { disambiguateSlugs } from '../packages/core/src/data/nativeLeague';
-import { fmtClearsAt } from '../packages/core/src/data/waiverClock';
+import { fmtClearsAt, waiverScheduleText } from '../packages/core/src/data/waiverClock';
+import { txnLook, txnBody } from '../packages/core/src/data/txnChat';
 import { ADP_2026 } from '../packages/core/src/data/adp2026';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
@@ -963,6 +964,51 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     fmtClearsAt('2026-09-18T04:00:00Z', now) === 'clears Fri 12 AM ET');
   ok('noon ET reads as 12 PM',
     fmtClearsAt('2026-09-17T16:00:00Z', now) === 'clears 12 PM ET');
+}
+
+// ── the waiver schedule, and the wire in chat (v0.405.0) ──────────────────
+// Founder: "i changed waivers to clear at 2pm tomorrow (thursday) but this
+// still says they clear at 4am." Half of why that was invisible is that the
+// card called every league's schedule "daily".
+{
+  ok('a day set is named, not called daily',
+    waiverScheduleText(840, [4], 1) === 'Waivers clear Thursdays at 2 PM ET (1-day hold).');
+  ok('several days read as a list',
+    waiverScheduleText(180, [2, 4], 2) === 'Waivers clear Tuesdays & Thursdays at 3 AM ET (2-day hold).');
+  ok('no day set really is daily',
+    waiverScheduleText(600, null, 1) === 'Waivers clear daily at 10 AM ET (1-day hold).');
+  ok('an empty day set is daily too, which is what the server means by it',
+    waiverScheduleText(600, [], 1) === 'Waivers clear daily at 10 AM ET (1-day hold).');
+  ok('days come out in week order however they were stored',
+    waiverScheduleText(600, [4, 2], 1) === waiverScheduleText(600, [2, 4], 1));
+  ok('minutes show when the time is not on the hour',
+    waiverScheduleText(870, null, 1) === 'Waivers clear daily at 2:30 PM ET (1-day hold).');
+  ok('midnight is 12 AM', waiverScheduleText(0, null, 1) === 'Waivers clear daily at 12 AM ET (1-day hold).');
+  ok('noon is 12 PM', waiverScheduleText(720, null, 1) === 'Waivers clear daily at 12 PM ET (1-day hold).');
+  // No clear time is the rolling league: naming a run it does not have would
+  // be inventing a deadline.
+  ok('a rolling league is described as rolling, not as clearing at midnight',
+    waiverScheduleText(null, null, 1).startsWith('Waivers roll'));
+  ok('and an undefined clear time reads the same',
+    waiverScheduleText(undefined, null, 2).includes('2-day hold'));
+
+  // The chat line's look. An unknown kind is a newer server talking to an
+  // older app, which happens on every release.
+  ok('an add is the you tone', txnLook({ kind: 'add' }).tone === 'you');
+  ok('a drop is dim', txnLook({ kind: 'drop' }).tone === 'dim');
+  ok('a waiver run and a trade both stand out', txnLook({ kind: 'waiver' }).tone === 'warn'
+    && txnLook({ kind: 'trade' }).tone === 'warn');
+  ok('a kind this client has never heard of still renders',
+    txnLook({ kind: 'teleport' }).icon === '·' && txnLook({ kind: 'teleport' }).label === 'MOVE');
+  ok('and so does no payload at all', txnLook(null).icon === '·' && txnLook(undefined).tone === 'dim');
+  // The server composes the body with the icon already on it, so push reads
+  // right; a bubble that draws its own would print it twice.
+  ok('the leading icon is stripped for a bubble that draws its own',
+    txnBody('🟢 The Firsts added Bijan Robinson', txnLook({ kind: 'add' })) === 'The Firsts added Bijan Robinson');
+  ok('a body without the icon is left exactly alone',
+    txnBody('The Firsts added Bijan Robinson', txnLook({ kind: 'add' })) === 'The Firsts added Bijan Robinson');
+  ok('and the wrong icon is not stripped',
+    txnBody('🤝 Trade — A sends X to B', txnLook({ kind: 'add' })) === '🤝 Trade — A sends X to B');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');

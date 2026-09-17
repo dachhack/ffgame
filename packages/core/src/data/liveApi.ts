@@ -2174,9 +2174,11 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
 export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
 export interface ChatMessage {
   id: number; body: string; at: string; author: string; author_id: string | null; mine: boolean;
-  kind: 'text' | 'poll' | 'report'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  kind: 'text' | 'poll' | 'report' | 'txn'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
   /** A weekly report line (0275): the house posted it; the link opens the week. */
   report?: { week: number };
+  /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
+  txn?: import('./txnChat').TxnPayload;
   /** Quick reactions (0210), counted per emoji. Only ones somebody used. */
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
@@ -3091,6 +3093,9 @@ export interface NativeTeamState {
   fa_start_min?: number | null; fa_end_min?: number | null;
   /** Daily ET waiver clear time (minutes since midnight; null = rolling 24h). */
   waiver_clear_min?: number | null; waiver_hold_days?: number;
+  /** 0291: when this league next runs waivers, so the card can say the rule
+   *  rather than leaving it to be inferred from one claim's timestamp. */
+  next_waiver_run?: string | null; waiver_clear_dow?: number[] | null;
   my_team?: string | null; my_avatar?: string | null; league_avatar?: string | null; is_commish?: boolean;
   waiver_order: { roster_id: number; team: string | null; priority: number | null; avatar?: string | null; faab?: number | null }[];
   my_claims: WaiverClaimRow[];

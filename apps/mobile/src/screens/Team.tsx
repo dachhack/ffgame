@@ -27,7 +27,7 @@ import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type Poo
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
-import { fmtClearsAt } from '@drip/core/data/waiverClock';
+import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { useTheme, MONO, fs } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
@@ -944,7 +944,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           {team.waiver_mode === 'faab'
             ? 'FAAB: claims carry blind bids from your season budget — highest bid wins, the order above only breaks ties. Winners still rotate to the back.'
             : 'Winning a claim sends you to the back of the line.'}
-          {team.waiver_clear_min != null && ` Waivers clear daily at ${fmtEtMin(team.waiver_clear_min)} ET (${team.waiver_hold_days ?? 1}-day hold).`}
+          {/* 0291 — the web twin: the real day set, not an assumed "daily". */}
+          {' '}{waiverScheduleText(team.waiver_clear_min, team.waiver_clear_dow, team.waiver_hold_days)}
+          {team.next_waiver_run ? ` Next run ${fmtClearsAt(team.next_waiver_run, Date.now() + skew.current)?.replace(/^clears /, '') ?? ''}.` : ''}
         </Mono>
       </Card>
       )}
