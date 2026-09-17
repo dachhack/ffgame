@@ -525,7 +525,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const doAdd = (p: LeaguePoolPlayer, dropSlug?: string) => {
     if (myRoster == null) return;
     setPendingAdd(null);
-    const onWaivers = waivedFor(p) != null;
+    // v0.403.0 — the web twin. A closed window is a CLAIM, not a dead button:
+    // he is on waivers if he carries a hold OR free agency cannot reach him
+    // right now, the same question 0288 taught the server to ask.
+    const onWaivers = waivedFor(p) != null || team?.fa_open === false;
     // FAAB league: a claim carries a blind bid — ask for it first.
     if (onWaivers && team?.waiver_mode === 'faab') { setClaimFor({ p, drop: dropSlug }); setBidDraft(''); return; }
     void run(() => onWaivers
@@ -804,7 +807,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       <Card>
         <Mono size={9} tone="faint" track={0.12}>
           PLAYER POOL ({free.length}){team.waiver_mode === 'faab' && team.my_faab != null ? ` · FAAB $${team.my_faab}` : ''}
-          {team.fa_open === false && team.fa_start_min != null ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET` : ''}
+          {team.fa_open === false
+            ? (team.fa_start_min != null
+                ? ` · 🔒 FA opens ${fmtEtMin(team.fa_start_min)} ET — until then, claims only`
+                : ' · 🔒 no free agency — claims only')
+            : ''}
         </Mono>
         {deals && (
           <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
@@ -849,9 +856,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         </ScrollView>
         {free.slice(0, 60).map((p) => {
           const left = waivedFor(p);
-          // over-limit rosters are locked out; the FA window gates instant adds only
-          const blocked = !!team.roster_issue || (left == null && team.fa_open === false);
+          // OVER-LIMIT ROSTERS ARE THE ONLY LOCK-OUT LEFT (v0.403.0). A shut
+          // FA window used to disable this for anyone without a waiver hold —
+          // most of the pool, since only a DROP sets one — so the board was a
+          // wall of dead buttons for the hours the window was closed. It is a
+          // claim now: 0288 made the server take one.
+          const blocked = !!team.roster_issue;
           const can = !busy && myRoster != null && !blocked;
+          const claim = left != null || team.fa_open === false;
           return (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
               {/* The leading number is whatever the list is SORTED BY — a list
@@ -878,7 +890,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
               <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
                 style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
-                  {left != null ? 'CLAIM' : 'ADD'}
+                  {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
                 </Text>
               </Pressable>
             </View>

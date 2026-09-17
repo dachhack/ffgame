@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.403.0 — the button has to offer the claim
+
+Founder, after 0288 went live: "waivers are still closed and it says FA
+starts at 10AM."
+
+They were, because the fix had only a server half. 0288 taught
+submit_waiver_claim to take a claim on a player free agency cannot reach
+right now — but neither client ever asked it to. Both read the same two
+lines, written back when a shut window only ever gated instant adds:
+
+    const onWaivers = waivedFor(p) != null;
+    const blocked = !!team.roster_issue || (left == null && team.fa_open === false);
+
+Only a DROP sets waived_until, so ~700 of his 703 players carried no hold.
+First line: every one of them routed to add_free_agent, which correctly
+refuses outside the window. Second line: the button was disabled anyway.
+A greyed-out ADD and a header reading "🔒 FA opens 10 AM ET" is exactly
+what "all the waivers are closed" looks like from the outside, and it
+stayed true for as long as the client shipped those lines — the migration
+underneath was invisible.
+
+So both hosts now ask the server's question. A player is on waivers if he
+carries a hold OR free agency is shut; the roster-limit lockout is the only
+thing left that disables the button, and the label says which door you are
+using — BID in a FAAB league, else CLAIM, else ADD. The pool header
+finishes the sentence instead of stopping at the bad news: "🔒 FA opens
+10 AM ET — until then, claims only", and in a league with no free agency
+at all, "🔒 no free agency — claims only".
+
+Claims on an unheld player do resolve: process_waivers has always taken
+`waived_until is null or <= now()`, so they clear on the next run like any
+other. Web and app, same three edits each.
+
 ### v0.402.0 — a closed window is what waivers are for
 
 Founder, at 11pm ET on a league whose free-agency window opens at 10am:
