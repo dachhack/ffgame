@@ -23,7 +23,7 @@ import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock } from '@drip/core/data/gameFeed';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
-  myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
+  myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
@@ -409,13 +409,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     (async () => {
       try {
         setState('loading'); setErr(null);
-        const m = await myMatchup(leagueId, rosterId, weekWanted ?? undefined);
+        // OPEN ON THE WEEK BEING PLAYED (v0.407.0) — the web twin. null
+        // weekWanted meant "whatever week the league is on" in the comment and
+        // "the league's first week, for ever" in the call, on both hosts.
+        const wk = weekWanted ?? await defaultOpenWeek(leagueId).catch(() => null);
+        const m = await myMatchup(leagueId, rosterId, wk ?? undefined);
         if (!m) {
           // No row for this seat is either a BYE or a schedule nobody has
           // built, and only the league-wide view knows which (0247).
-          const role = weekWanted == null ? 'unbuilt'
-            : await leagueWeekRole(leagueId, rosterId, weekWanted).catch(() => 'unbuilt');
-          if (role === 'bye') { setByeWeek(weekWanted); setState('ready'); return; }
+          const role = wk == null ? 'unbuilt'
+            : await leagueWeekRole(leagueId, rosterId, wk).catch(() => 'unbuilt');
+          if (role === 'bye') { setByeWeek(wk); setState('ready'); return; }
           setState('none'); return;
         }
         setByeWeek(null);

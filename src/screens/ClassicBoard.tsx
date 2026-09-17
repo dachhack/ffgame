@@ -25,7 +25,7 @@ import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel } from '@drip/core/data/gameFeed';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
-  myRoster, myMatchup, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
+  myRoster, myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
   leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
@@ -546,13 +546,25 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
         if (!r) { setState('none'); return; }
         setRos(r);
-        const m = await myMatchup(r.leagueId, r.rosterId, weekWanted ?? undefined);
+        // OPEN ON THE WEEK BEING PLAYED (v0.407.0). Founder, on a classic
+        // league board: "still opens to week 1."
+        //
+        // weekWanted starts null, and its comment has always said null means
+        // "whatever week the league is on" — but the call below passed
+        // undefined straight through to myMatchup, which is
+        // `.order('week').limit(1)`: the league's FIRST week, for ever. The
+        // comment described the intent and the code did the other thing.
+        // v0.401.0 fixed this for the app's matchup screen, the leagues list
+        // and the hub, and missed the board itself, which is the screen a
+        // classic league actually opens.
+        const wk = weekWanted ?? await defaultOpenWeek(r.leagueId).catch(() => null);
+        const m = await myMatchup(r.leagueId, r.rosterId, wk ?? undefined);
         if (!m) {
           // No row for this seat is either a BYE or a schedule nobody has
           // built, and only the league-wide view knows which (0247).
-          const role = weekWanted == null ? 'unbuilt'
-            : await leagueWeekRole(r.leagueId, r.rosterId, weekWanted).catch(() => 'unbuilt');
-          if (role === 'bye') { setByeWeek(weekWanted); setState('ready'); return; }
+          const role = wk == null ? 'unbuilt'
+            : await leagueWeekRole(r.leagueId, r.rosterId, wk).catch(() => 'unbuilt');
+          if (role === 'bye') { setByeWeek(wk); setState('ready'); return; }
           setState('none'); return;
         }
         setByeWeek(null);

@@ -79,13 +79,37 @@ export function weekClosesAt(lastKickoffMs: number): number {
  *  keyed by week and may be missing entries. A week with NO known slate sorts
  *  last and is returned rather than skipped — an unscheduled week is the one
  *  thing we cannot say is over. */
-export function openWeekFrom(weeks: number[], kicks: Record<number, WeekKicks>, nowMs: number): number | null {
+export function openWeekFrom(
+  weeks: number[],
+  kicks: Record<number, WeekKicks>,
+  nowMs: number,
+  /** Week → every matchup in it is FINAL. v0.407.0; see below. */
+  finals: Record<number, boolean> = {},
+): number | null {
   if (!weeks.length) return null;
   const ordered = weeks.slice().sort((a, b) =>
     (kicks[a]?.first ?? Infinity) - (kicks[b]?.first ?? Infinity) || a - b);
   for (const w of ordered) {
     const k = kicks[w];
-    if (!k) return w;
+    if (!k) {
+      // NO SLATE FOR THIS WEEK (v0.407.0). Founder, on a league whose board
+      // still opened on week 1 with "NFL SLATE 0 GAMES" and "all final" under
+      // both scores: "still opens to week 1."
+      //
+      // Without kickoffs the Wednesday rule has nothing to measure, and the
+      // old answer — return it, we cannot say it is over — is right for a week
+      // that has not been played. It is wrong for one that plainly has. A
+      // league whose schedule was rebuilt mid-season (a kickoff league, a
+      // converted one) can have real, finished weeks with no slate rows
+      // behind them, and that league was pinned to week 1 for the rest of the
+      // season with no way to say otherwise.
+      //
+      // The matchups' own status is the league's answer to "is this week
+      // done", and it needs no slate at all. Every one final ⇒ over; anything
+      // else ⇒ this is the week.
+      if (finals[w]) continue;
+      return w;
+    }
     if (nowMs < weekClosesAt(k.last)) return w;
   }
   return ordered[ordered.length - 1];
