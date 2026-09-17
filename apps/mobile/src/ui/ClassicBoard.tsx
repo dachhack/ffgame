@@ -20,7 +20,7 @@ import { shortName } from '@drip/core/data/players';
 import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
-import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
@@ -863,21 +863,30 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   }, [chips, selGame]);
 
   // ── ▦ FIELDS (v0.270.0) ──────────────────────────────────────────────────
-  /** Every NFL game with a STARTER on either side, deduped by game — the
-   *  all-fields sheet's list. gameFeeds (state) is the re-render tie. */
+  /** EVERY game on the matchup week's feed, the ones with a starter first
+   *  (v0.412.0, founder: "add the fields chip to the matchup view in classic
+   *  mode. It opens the fields for the specific matchup week").
+   *
+   *  This used to be built from the two lineups alone, so a week nobody had
+   *  set a lineup for — the week you most want to look at — offered no chip at
+   *  all. The web board never had that problem because its overlay derives
+   *  from the week's feed; this one is handed an explicit list, so the list is
+   *  what had to change.
+   *
+   *  groupFieldGames is that rule, already in core and already driving the web:
+   *  a card per game on the feed, yours marked and sorted first, finished ones
+   *  last. Reused rather than re-derived, so the two hosts cannot end up
+   *  ordering the same week differently. gameFeeds (state) is the re-render
+   *  tie — setLiveGameFeed writes a module map React cannot see. */
   const fieldGames = useMemo(() => {
-    if (!matchup || !board || !gameFeeds.length) return [] as { key: string; away: string; home: string; team: string }[];
-    const seen = new Set<string>();
-    const out: { key: string; away: string; home: string; team: string }[] = [];
-    const add = (e: BoardEntry | null) => {
-      if (!e?.team) return;
-      const f = gameFeedFor(matchup.week, e.team);
-      if (!f || seen.has(f.key)) return;
-      seen.add(f.key);
-      out.push({ key: f.key, away: f.away, home: f.home, team: e.team });
-    };
-    for (const row of board.starters) { add(row.home); add(row.away); }
-    return out;
+    if (!matchup || !gameFeeds.length) return [] as { key: string; away: string; home: string; team: string }[];
+    const entries: FieldBoardEntry[] = [];
+    for (const row of board?.starters ?? []) {
+      if (row.home?.team) entries.push({ team: row.home.team, side: 'you', clock: Number.MAX_SAFE_INTEGER });
+      if (row.away?.team) entries.push({ team: row.away.team, side: 'their', clock: Number.MAX_SAFE_INTEGER });
+    }
+    return groupFieldGames(matchup.week, entries)
+      .map((g) => ({ key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home }));
   }, [matchup, board, gameFeeds]);
   /** A game line's tap handler — only when that game has a published feed, so
    *  the line never opens onto an empty sheet. */
@@ -1492,7 +1501,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={t.you} colors={[t.you]} />}>
           {/* Tap a field to SELECT it for the reader (v0.390.2); the play log
               is its own link on the right, as before. */}
-          <FieldsList week={matchup?.week ?? 0} empty="No live games with starters yet."
+          <FieldsList week={matchup?.week ?? 0} empty="No games on this week's feed yet."
             games={fieldGames.map((g) => ({ key: g.key, away: g.away, home: g.home, team: g.team }))}
             extra={(g) => (
               <Pressable onPress={() => { tap(); setFieldsOpen(false); setFieldGame(g.team); }} hitSlop={8}>

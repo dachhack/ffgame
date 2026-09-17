@@ -18,6 +18,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.412.0 — the fields chip, on a classic matchup, for that week
+
+Founder: "Let's add the fields chip to the matchup view in classic mode. It
+opens the fields for the specific matchup week."
+
+Half of that already existed and could not be reached. The classic board
+has had a ▦ FIELDS chip since v0.270.0, already scoped to the right week —
+weekGameFeeds(matchup.week), FieldBoard week={matchup.week} — but it was
+gated on `fieldEntries.length > 0`, and fieldEntries is built from the two
+LINEUPS. So the week a manager most wants to look at, the one he has not set
+a lineup for yet, was the one week with no way in. That is the same shape as
+v0.411.0's "0 GAMES": a screen counting starters and reporting it as a fact
+about the NFL.
+
+The overlay never needed the lineups. groupFieldGames seeds a card from
+every game on the week's feed and uses the entries only to tint your own and
+sort them first — the founder's own ruling when that rule went into core:
+"the screen is called ALL GAMES, and a slate filtered to your matchup reads
+as a broken feed". An empty lineup is a full slate with nothing highlighted,
+which is exactly right.
+
+So the web chip is gated on the FEED existing instead, and the title stops
+promising "every game with a starter" when it always showed every game.
+
+The app needed more than a gate. Its sheet is handed an explicit list, and
+that list was built from the starters — a reimplementation of a rule that
+already lives in core. It now calls groupFieldGames like the web does, so
+the two hosts cannot order the same week differently, and its empty copy no
+longer says "no live games with starters yet" about a week whose games have
+simply not started.
+
+Still gated on the feed rather than ungated: with no feed there are no
+cards, and a chip that opens onto an empty sheet reads as broken — which is
+what the original gate was defending against. It was defending the right
+thing with the wrong test.
+
+Six parity assertions on the grouping rule, verified to bite by breaking
+one: an empty lineup opens onto the whole week, a lineup does not narrow it,
+yours sorts first, finished sinks last, and a week with no feed still yields
+nothing.
+
 ### v0.411.0 — a week nobody set a lineup for is not a week that is over
 
 Founder: "dig into the empty slate."

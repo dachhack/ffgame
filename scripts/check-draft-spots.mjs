@@ -29,6 +29,7 @@ import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/comm
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 import { lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
+import { groupFieldGames, setLiveGameFeed, clearLiveGameFeeds } from '../packages/core/src/data/gameFeed';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
@@ -1114,6 +1115,38 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // Callers that do not pass a count keep the old behaviour exactly.
   ok('without a starter count the old wording stands',
     lineupChipSummary(slate, 'home').label === '0 GAMES');
+}
+
+// ── the fields chip on a classic matchup (v0.412.0) ───────────────────────
+// Founder: "add the fields chip to the matchup view in classic mode. It opens
+// the fields for the specific matchup week." It was gated on the two LINEUPS,
+// so the week you most want to look at — the one you have not set yet — was
+// the one week with no way in. The overlay never needed them, and this is the
+// rule that says so.
+{
+  const play = (c) => ({ c, t: '' });
+  setLiveGameFeed(902, {
+    games: { 'NE@SEA': [play(1)], 'SF@LA': [play(1)], 'TB@CIN': [play(1)] },
+    teams: { NE: 'NE@SEA', SEA: 'NE@SEA', SF: 'SF@LA', LA: 'SF@LA', TB: 'TB@CIN', CIN: 'TB@CIN' },
+    states: { 'NE@SEA': 'in', 'SF@LA': 'in', 'TB@CIN': 'post' },
+  });
+
+  // THE FOUNDER'S CASE: nobody has set a lineup. Every game still gets a card.
+  const none = groupFieldGames(902, []);
+  ok('an empty lineup still opens onto the whole week', none.length === 3);
+  ok('and marks none of them as yours', none.every((g) => !g.mine));
+
+  // With a lineup, the same three games — yours first, finished last.
+  const mine = groupFieldGames(902, [{ team: 'SEA', side: 'you', clock: Number.MAX_SAFE_INTEGER }]);
+  ok('a lineup does not narrow the slate', mine.length === 3);
+  ok('your game sorts to the front', mine[0].feed.key === 'NE@SEA' && mine[0].mine);
+  ok('and a finished game sinks to the back', mine[mine.length - 1].feed.key === 'TB@CIN');
+
+  // A week with no feed at all has nothing to show — which is why the chip is
+  // gated on the FEED rather than on the lineup, and not ungated entirely.
+  ok('a week with no feed yields no cards, so the chip stays hidden',
+    groupFieldGames(903, []).length === 0);
+  clearLiveGameFeeds();
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
