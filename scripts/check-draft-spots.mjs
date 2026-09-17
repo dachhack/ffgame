@@ -30,7 +30,9 @@ import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { tenureMatches, TENURE_BANDS } from '../packages/core/src/data/tenure';
 import { lineupChipSummary } from '../packages/core/src/engine/matchupBoard';
 import { groupFieldGames, setLiveGameFeed, clearLiveGameFeeds } from '../packages/core/src/data/gameFeed';
-import { projectedBox } from '../packages/core/src/engine/projectedBox';
+import { projectedBox, projectedStarters } from '../packages/core/src/engine/projectedBox';
+import { liveTeamFor, slugMeta, normTeam } from '../packages/core/src/data/slugMeta';
+import { LIVE_SEASON } from '../packages/core/src/data/realPbp';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
@@ -1211,6 +1213,39 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     projectedBox('LAR', 'WSH').home[0].slug === projectedBox('LA', 'WAS').home[0].slug);
   ok('a team nobody has heard of yields nothing rather than throwing',
     projectedBox('ZZZ', 'ZZZ').home.length === 0);
+
+  // THE LIVE TEAM, NOT THE BAKE'S (v0.414.0). v0.413.0 filed candidates by
+  // slugMeta's team, which is a player's MAJORITY 2025 team by design — so
+  // Kenneth Walker was a Seattle starter after signing for KC, and Rashid
+  // Shaheed, an actual Seahawk, was under New Orleans and missing entirely.
+  //
+  // Asserted as the RULE rather than by naming those two, so a projection
+  // refresh that moves players cannot quietly retire the guard: every row on a
+  // side must resolve to that side under the live map, and a player whose
+  // baked team differs from his live one must land on the live one. The mover
+  // is found in the data rather than hardcoded.
+  const teamsToCheck = ['KC', 'SEA', 'LA', 'NO', 'BUF'];
+  ok('every projected row belongs to the team it is listed under',
+    teamsToCheck.every((t) => projectedStarters(t)
+      .every((r) => r.slug.endsWith('-k') || r.slug.endsWith('-dst')
+        || liveTeamFor(r.slug, null, LIVE_SEASON) === t)));
+  const movers = [...PROJ_2026.keys()].filter((slug) => {
+    const live = liveTeamFor(slug, null, LIVE_SEASON);
+    return live && normTeam(slugMeta(slug).team) && live !== normTeam(slugMeta(slug).team);
+  });
+  ok('the bake and the live map really do disagree about somebody', movers.length > 0);
+  const mover = movers.find((slug) => projectedStarters(liveTeamFor(slug, null, LIVE_SEASON))
+    .some((r) => r.slug === slug));
+  if (mover) {
+    const live = liveTeamFor(mover, null, LIVE_SEASON);
+    const baked = normTeam(slugMeta(mover).team);
+    ok(`a player who changed teams is listed under his NEW team (${mover}: ${baked} -> ${live})`,
+      projectedStarters(live).some((r) => r.slug === mover));
+    ok('and never under the old one',
+      !projectedStarters(baked).some((r) => r.slug === mover));
+  } else {
+    ok('at least one mover is a projected starter somewhere (else this guard proves nothing)', false);
+  }
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
