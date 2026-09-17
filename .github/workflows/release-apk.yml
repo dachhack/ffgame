@@ -77,10 +77,25 @@ jobs:
       - name: Build the release APK (arm64)
         working-directory: apps/mobile/android
         run: |
-          set -o pipefail
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon > "$RUNNER_TEMP/gradle.log" 2>&1
-          rc=$?
-          tail -40 "$RUNNER_TEMP/gradle.log"
+          # THE LOG HAS TO SURVIVE THE FAILURE. A step's shell is `bash -e`, so
+          # `./gradlew … > log` followed by `rc=$?` never reaches `rc=$?` when
+          # gradle fails — the shell is already gone, the tail never runs, and
+          # the log dies in $RUNNER_TEMP. v0.400.0's build failed in 0.8s and
+          # printed NOTHING, which is a build you cannot diagnose. `|| rc=$?`
+          # keeps the shell alive long enough to say what happened.
+          rc=0
+          # Cheap insurance: prebuild generates the wrapper, and a wrapper
+          # without its execute bit fails in under a second looking exactly
+          # like a compile error that left no log.
+          ls -l gradlew gradle/wrapper/gradle-wrapper.jar || true
+          chmod +x gradlew || true
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon > "$RUNNER_TEMP/gradle.log" 2>&1 || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::gradle failed (exit $rc) — the last 200 lines follow"
+            tail -200 "$RUNNER_TEMP/gradle.log"
+          else
+            tail -40 "$RUNNER_TEMP/gradle.log"
+          fi
           exit $rc
 
       - name: Verify before publishing
