@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.402.0 — a closed window is what waivers are for
+
+Founder, at 11pm ET on a league whose free-agency window opens at 10am:
+"all the waivers are closed."
+
+They were. Reproduced before touching anything, in a league shaped like
+his — FAAB, a 10:00–11:00 window, the clock outside it:
+
+    ADD   a never-dropped player -> free agency is closed — open 10 AM ET…
+    CLAIM the same player        -> player not in pool
+
+Both doors shut on the same man, and there are seven hundred of him: only
+a DROP sets waived_until, so every player who went undrafted has none. For
+the twenty-three hours a day the window is closed, most of the pool could
+be neither added nor bid on.
+
+This is the hole 0287 found and closed one size too small. That migration
+asked "does this league have free agency at all?" and exempted only the
+'off' mode; the right question is whether free agency can reach the player
+RIGHT NOW. fa_window_open() already answers it and subsumes 'off', which
+can never be open. A closed window is precisely the state waivers exist to
+cover.
+
+The refusal when the window IS open also stopped lying: an unheld player
+now reads "free agent — add him directly" rather than "player not in
+pool", which was never true — 0287 already refuses a slug that genuinely
+is not in the pool, a few lines above.
+
 ### v0.401.0 — the matchup screen opens on the week you're about to play
 
 Founder: "When you go to matchup in a classic league you should go to the
