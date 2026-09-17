@@ -103,7 +103,15 @@ export async function buildPlayerIndex(directory) {
       bySleeperId.set(e.sid, { slug, full: e.full, pos: e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null });
       if (e.p.espn_id) byEspnId.set(String(e.p.espn_id), slug);
       if (e.p.gsis_id && String(e.p.gsis_id).trim()) byGsis.set(String(e.p.gsis_id).trim(), slug);
-      bySlug.set(slug, { full: e.full, pos: e.p.position, team: e.p.team, sid: e.sid });
+      // depth (v0.416.0): Sleeper's own depth_chart_order, which is adjusted
+      // for AVAILABILITY week to week — with a starter ruled out it promotes
+      // the man who will actually take the snaps. Null where Sleeper has no
+      // opinion (roughly a third of the pool, mostly deep bench), which the
+      // consumer treats as "no rank" rather than "last".
+      bySlug.set(slug, {
+        full: e.full, pos: e.p.position, team: e.p.team, sid: e.sid,
+        depth: Number.isFinite(Number(e.p.depth_chart_order)) ? Number(e.p.depth_chart_order) : null,
+      });
       const cand = { slug, team: normTeam(e.p.team ?? ''), rank: liveRank(e.p) };
       push(nameCands, normName(e.full), cand);
       // nflverse short-name key ("C.Jordan" → "c jordan").

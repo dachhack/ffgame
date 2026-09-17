@@ -15,6 +15,7 @@ import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides } from './poll/teamOverrides.js';
+import { syncDepthChart } from './poll/depthChart.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
@@ -645,6 +646,13 @@ async function main() {
       const r = await syncTeamOverrides(playerIndex);
       log(`team overrides: ${r.standing} standing (${r.changed} changed, ${r.cleared} cleared)`);
     } catch (e) { log('team override sync', e.message); }
+    // The depth chart rides the same directory (0293) — it is the same pull,
+    // and it changes for the same reasons. Its own try/catch: a depth failure
+    // must not take the team drift down with it, and neither blocks game ops.
+    try {
+      const d = await syncDepthChart(playerIndex);
+      log(`depth chart: ${d.standing} ranked (${d.changed} changed, ${d.cleared} cleared)`);
+    } catch (e) { log('depth chart sync', e.message); }
   };
   await pushTeams();
   // Refresh the player directory daily.

@@ -33,6 +33,7 @@ import { groupFieldGames, setLiveGameFeed, clearLiveGameFeeds } from '../package
 import { projectedBox, projectedStarters } from '../packages/core/src/engine/projectedBox';
 import { liveTeamFor, slugMeta, normTeam } from '../packages/core/src/data/slugMeta';
 import { setLiveInjuries, clearLiveInjuries } from '../packages/core/src/data/injuries';
+import { setDepthChart, clearDepthChart } from '../packages/core/src/data/playerDepth';
 import { LIVE_SEASON } from '../packages/core/src/data/realPbp';
 import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
 
@@ -1225,6 +1226,49 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // side must resolve to that side under the live map, and a player whose
   // baked team differs from his live one must land on the live one. The mover
   // is found in the data rather than hardcoded.
+  // THE DEPTH CHART DECIDES WHO COMES ON (0293, v0.416.0). Founder: "Lock is
+  // the QB2 but Darnold is hurt and out this week." v0.415.0 took Darnold off
+  // and promoted the THIRD-stringer, because the sheet ranked by projection
+  // and Drew Lock has none — a player the projection set never valued cannot
+  // be sorted into view. The chart is a source of candidates, not just an
+  // ordering.
+  {
+    clearDepthChart(); clearLiveInjuries();
+    const qb = (wk) => projectedStarters('SEA', wk).filter((r) => r.pos === 'QB');
+    const seasonStarter = qb(null)[0]?.slug;
+
+    // A ranked man the projection has never heard of: the Lock case exactly.
+    const UNVALUED = 'zz-unvalued-backup';
+    ok('the fixture slug really is unknown to the projection', !PROJ_2026.has(UNVALUED));
+    setDepthChart([
+      { slug: UNVALUED, team: 'SEA', pos: 'QB', depth: 1 },
+      { slug: seasonStarter, team: 'SEA', pos: 'QB', depth: 2 },
+    ]);
+    const ranked = qb(null);
+    ok('a rank outranks a projection', ranked[0]?.slug === UNVALUED);
+    ok('even with no projection of his own', ranked[0]?.proj === null);
+    ok('and the rank is carried on the row', ranked[0]?.depth === 1);
+
+    // …and the rank still loses to being OUT.
+    setLiveInjuries(903, { [UNVALUED]: { status: 'O' } });
+    ok('a ranked man who is OUT still comes off', qb(903)[0]?.slug === seasonStarter);
+    clearLiveInjuries();
+
+    // An unranked man sorts BELOW a ranked one, whatever he projects.
+    setDepthChart([{ slug: UNVALUED, team: 'SEA', pos: 'QB', depth: 3 }]);
+    ok('ranked beats unranked even on a worse rank', qb(null)[0]?.slug === UNVALUED);
+
+    // No chart at all: exactly the pre-0293 behaviour.
+    clearDepthChart();
+    ok('with no chart the projection orders it, as before', qb(null)[0]?.slug === seasonStarter);
+    ok('and the depth column is empty', qb(null)[0]?.depth === null);
+
+    // A chart for ANOTHER team must not reach this one.
+    setDepthChart([{ slug: UNVALUED, team: 'KC', pos: 'QB', depth: 1 }]);
+    ok("another team's chart does not reach this one", qb(null)[0]?.slug === seasonStarter);
+    clearDepthChart();
+  }
+
   // A MAN WHO IS OUT IS NOT A PROJECTED STARTER (v0.415.0). Founder, on
   // Seattle's quarterbacks: "Lock is the QB2 but Darnold is hurt and out this
   // week." Darnold outprojects Lock over a season and will score nothing on
