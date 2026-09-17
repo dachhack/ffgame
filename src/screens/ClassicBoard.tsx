@@ -1256,11 +1256,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
                 style={{ ...stepBtn, opacity: canGo(1) ? 1 : 0.3 }}>›</button>
             </span>
           )}
-          {/* ▦ FIELDS (founder) — the drip board's all-fields idea, fed by
-              classic's starters. Offered only once feeds exist: a button into
-              an empty overlay would read as broken. */}
-          {fieldEntries.length > 0 && (
-            <button onClick={() => setFieldsOpen(true)} title="Every game with a starter, as live field visuals" className="mono"
+          {/* ▦ FIELDS (founder) — the drip board's all-fields idea, over the
+              week's feed. Offered once FEEDS exist, not once STARTERS do
+              (v0.412.0, founder: "add the fields chip to the matchup view in
+              classic mode. It opens the fields for the specific matchup
+              week").
+              
+              It was gated on fieldEntries, which is built from the two
+              lineups — so the week a manager most wants to look at, the one
+              he has not set a lineup for yet, was the one week with no way in.
+              The overlay never needed them: groupFieldGames seeds a card from
+              every game on the week's feed and uses the entries only to tint
+              and sort your own. An empty lineup is a full slate with nothing
+              highlighted, which is exactly what it should be. */}
+          {gameFeeds.length > 0 && (
+            <button onClick={() => setFieldsOpen(true)} title="Every game this week, as live field visuals — yours highlighted" className="mono"
               style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ▦ FIELDS
             </button>
