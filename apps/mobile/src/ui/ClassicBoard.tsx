@@ -852,7 +852,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   // 'home' is this caller's own side on the board, so the chip counts THEIR
   // games rather than the league's. See lineupChipSummary.
-  const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
+  const lineChip = useMemo(() => lineupChipSummary(chips, 'home', board?.home.filled), [chips, board]);
 
   // A whole-pool preseason week, said out loud (v0.322.0). See isRehearsalPool.
   const rehearsal = isRehearsalPool(pool.length);
@@ -1182,6 +1182,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       ? <Mono size={8.5} tone="faint" style={{ textAlign: alignSide === 'right' ? 'right' : 'left', lineHeight: 12 }}>
                           {`yet to play (${s.yetToPlay})${s.yetToPlayBreakdown ? `\n${s.yetToPlayBreakdown}` : ''}`}
                         </Mono>
+                      // v0.411.0 — the web twin: a side with no starters is
+                      // not finished, it is unset.
+                      : s.filled === 0 ? <Mono size={8.5} tone="warn">no lineup set</Mono>
                       : s.playing === 0 ? <Mono size={8.5} tone="faint">all final</Mono> : null}
                   </View>
                 ))}

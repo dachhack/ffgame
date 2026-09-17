@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.411.0 — a week nobody set a lineup for is not a week that is over
+
+Founder: "dig into the empty slate."
+
+It was not empty. Queried live, through the same anon key the site uses:
+sixteen rows for 2026 week 1, kickoffs and windows intact, and all 272
+games of the season seeded since 0051. I had told him the slate looked
+missing and that it would probably bite at scoring time. Both wrong.
+
+What the board actually says, in three places that all read as one claim:
+
+  NFL SLATE · 0 GAMES   ← games WITH ONE OF HIS STARTERS in them
+  all final             ← starters still playing: zero
+  0.00 — 0.00           ← starters, scoring
+
+He had no lineup set for that week. Every one of those lines is counting
+his starters, and counting nothing, so a week nobody had touched described
+itself as a week that had finished. The zero is not a statement about the
+NFL at all, and reading it as one is what sent an investigation after
+schedule data that was sitting in the table the whole time.
+
+So the chip now tells the three zeroes apart, because they mean completely
+different things:
+
+  no lineup set    → NO LINEUP · nothing set for this week
+  no slate loaded  → NO SLATE  · this week's games haven't loaded
+  a lineup, no games → 0 GAMES · 3 starters, none with a game
+
+and the side line under the score says "no lineup set" rather than "all
+final". BoardSide carries `filled` — how many starter slots hold a player —
+because a side cannot tell that story about itself without knowing the
+difference between nothing left to play and nothing to play with. A caller
+that passes no count keeps the old wording exactly, so nothing else moves.
+
+Eleven parity assertions, verified to run by breaking one. Both hosts.
+
+STILL OPEN, and reported rather than fixed, because the fix deletes
+matchups and that is the founder's call: his league really does carry a
+dead week 1. 0280 was written to prevent exactly this and could not heal
+his, because it refuses any league with a matchup that is not 'scheduled'
+— and the worker's closeWeek had already flipped that dead week to final
+at 0.00. The guard is tripped by the very condition it exists to repair.
+Everyone carries a phantom tie from it; symmetric, so standings order is
+unaffected, but 0-0-1 in week one of a league that has played nothing is a
+lie the screen tells.
+
 ### v0.410.0 — the zip is the Android download
 
 Founder, after testing it: "zip downloaded fine, make it the default for

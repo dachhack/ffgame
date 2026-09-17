@@ -1010,7 +1010,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
   // THE LINEUP CHIP'S CONTENT (v0.321.0). 'home' is always the caller's own
   // side on this board — `TeamHead side={board.home} accent="var(--you)"` — so
   // the chip counts THEIR games, not the league's.
-  const lineChip = useMemo(() => lineupChipSummary(chips, 'home'), [chips]);
+  const lineChip = useMemo(() => lineupChipSummary(chips, 'home', board?.home.filled), [chips, board]);
 
   // A WHOLE-POOL PRESEASON WEEK, SAID OUT LOUD (v0.322.0). See isRehearsalPool:
   // the seed is deliberate, and the silence about it was not.
@@ -1408,6 +1408,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
                     {s.playing > 0 && <><span style={{ color: alignSide === 'left' ? 'var(--you)' : 'var(--opp, var(--dim))', fontWeight: 700 }}>playing ({s.playing})</span><br /></>}
                     {s.yetToPlay > 0
                       ? <>yet to play ({s.yetToPlay}){s.yetToPlayBreakdown ? <><br />{s.yetToPlayBreakdown}</> : null}</>
+                      // v0.411.0: A SIDE WITH NO STARTERS IS NOT FINISHED. This
+                      // read "all final" over a lineup nobody had set, on both
+                      // sides at once, which is how a week that never happened
+                      // came to look like a week that was over.
+                      : s.filled === 0 ? <span style={{ color: 'var(--warn)' }}>no lineup set</span>
                       : s.playing === 0 ? 'all final' : null}
                   </span>
                 ))}
