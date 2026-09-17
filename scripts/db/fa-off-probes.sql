@@ -434,6 +434,86 @@ begin
   reset role; perform fo_server();
 end $$;
 
+-- ── 4e. THE HOLD MOVES WITH THE SCHEDULE (0292) ───────────────────────────
+-- Founder, after 0291: "still has jax kicker clearing at 4am." Different 4am.
+-- 0291 re-stamped a claim's own clock and deliberately left claims queued
+-- behind a POOL hold following that hold — and nothing ever re-dated the hold,
+-- so a league that moved to 2pm Thursday kept a queue of dropped players
+-- clearing at the old time, with their claims inheriting it.
+do $$
+declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; seat2 int;
+        dropped text; held timestamptz; et_now int; want int; r jsonb;
+begin
+  perform fo_as('1');
+  select sleeper_roster_id into seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa01';
+  select sleeper_roster_id into seat2 from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000fa02';
+  et_now := et_minutes(now());
+
+  -- a league that clears three hours from now, and a player dropped into it
+  want := (et_now + 180) % 1440;
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want, p_waiver_hold_days => 1),
+    'fo29 the league clears three hours out');
+  select slug into dropped from native_roster where league_id = lid and roster_id = seat limit 1;
+  perform fo_ok(drop_player(lid, seat, dropped), 'fo30 a player is dropped');
+  select waived_until into held from league_pool where league_id = lid and slug = dropped;
+  perform fo_true(held is not null and held > now(), 'fo30a and lands on a hold');
+  perform fo_true(held = next_waiver_run(lid), 'fo30b dated at the league run');
+
+  -- a claim queued BEHIND that hold carries no clock of its own
+  perform fo_as('2');
+  r := submit_waiver_claim(lid, seat2, dropped,
+    (select slug from native_roster where league_id = lid and roster_id = seat2 limit 1), 2);
+  perform fo_ok(r, 'fo31 the other seat claims him');
+  perform fo_true((select clears_at from waiver_claim where league_id = lid
+                    and add_slug = dropped and status = 'pending') is null,
+    'fo31a with no clock of its own — it follows the hold');
+  perform fo_true((r ->> 'clears_at')::timestamptz = held, 'fo31b which is what it reports');
+
+  -- NOW MOVE THE SCHEDULE. Both stamps have to follow.
+  perform fo_as('1');
+  want := (et_now + 540) % 1440;
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want),
+    'fo32 the commissioner moves the clear time');
+  perform fo_true((select waived_until from league_pool where league_id = lid and slug = dropped)
+                    = next_waiver_run(lid),
+    'fo32a the POOL HOLD moved — this is the one 0291 missed');
+  perform fo_true(et_minutes((select waived_until from league_pool where league_id = lid and slug = dropped)) = want,
+    'fo32b to the new minute');
+  perform fo_true((native_team_state(lid) is not null), 'fo32c (team state still answers)');
+  perform fo_as('2');
+  perform fo_true((select coalesce(c.clears_at, lp.waived_until) from waiver_claim c
+                     join league_pool lp on lp.league_id = c.league_id and lp.slug = c.add_slug
+                    where c.league_id = lid and c.add_slug = dropped and c.status = 'pending')
+                    = next_waiver_run(lid),
+    'fo33 and the claim behind it reports the new time too');
+
+  -- A HOLD THAT ALREADY EXPIRED IS NOT PUT BACK ON WAIVERS. He cleared; he is
+  -- a free agent; re-dating him would un-clear him.
+  perform fo_server();
+  update league_pool set waived_until = now() - interval '1 hour'
+    where league_id = lid and slug = dropped;
+  perform fo_as('1');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => (et_now + 300) % 1440),
+    'fo34 the time moves again');
+  perform fo_true((select waived_until from league_pool where league_id = lid and slug = dropped) < now(),
+    'fo34a an expired hold stays expired');
+
+  -- A ROLLING LEAGUE HAS NO RUN TO BE OUT OF STEP WITH, and re-dating there
+  -- would push every live hold a day further out on every settings save.
+  perform fo_server();
+  update league_pool set waived_until = now() + interval '2 hours'
+    where league_id = lid and slug = dropped;
+  select waived_until into held from league_pool where league_id = lid and slug = dropped;
+  perform fo_as('1');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => -1), 'fo35 the league goes rolling');
+  perform fo_true(next_waiver_run(lid) is null, 'fo35a so it has no run');
+  perform fo_true((select waived_until from league_pool where league_id = lid and slug = dropped) = held,
+    'fo35b and a live hold is left exactly where it was');
+  reset role; perform fo_server();
+end $$;
+
 -- ── 5. who may set it, and to what ────────────────────────────────────────
 do $$
 declare lid uuid := current_setting('probe.fo_lid')::uuid;
