@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { Brand, SiteSettings } from '../app/ui';
 import { APP_VERSION } from '@drip/core/version';
-import { APK_URL, APK_MANIFEST_URL, APK_RELEASE_PAGE_URL, compareVersions, type ApkManifest, type Changelog as Log } from '@drip/core/data/changelog';
+import { APK_URL, APK_ZIP_URL, APK_MANIFEST_URL, APK_RELEASE_PAGE_URL, compareVersions, type ApkManifest, type Changelog as Log } from '@drip/core/data/changelog';
 
 /** "3 hours ago" / "2 days ago" — enough to tell a fresh build from a stale
  *  one without turning a timestamp into a reading exercise. */
@@ -76,6 +76,17 @@ export function Changelog() {
           </div>
           <a href={APK_URL} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '9px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>⬇ DOWNLOAD APK</a>
           <a href={APK_RELEASE_PAGE_URL} target="_blank" rel="noreferrer" className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>release notes →</a>
+          {/* WHEN THE DOWNLOAD SAYS FAILED (v0.408.0). Founder: "the app
+              downloads from the link but never finished and says failed
+              despite showing all the data transferred." The build is fine —
+              the browser is refusing a package archive after the fact — and
+              somebody staring at that word needs to be told so, next to the
+              button that produced it, rather than left to conclude the app is
+              broken. */}
+          <div style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 9 }}>
+            Says <strong style={{ color: 'var(--text)' }}>Failed</strong> after the bar reaches the end? That is the browser refusing the file, not a broken build — nothing is wrong with the download.
+            {' '}<a href={APK_ZIP_URL} style={{ color: 'var(--you)', fontWeight: 700 }}>Get the zip instead</a>, unzip it with any file manager, and tap the APK inside. Same build, same signature.
+          </div>
         </section>
         <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 10 }}>
           THIS SITE IS {APP_VERSION.toUpperCase()}{log?.latest ? ` · LOG TO V${log.latest.toUpperCase()}` : ''}

@@ -126,9 +126,27 @@ jobs:
           APP: ${{ steps.ver.outputs.app }}
         run: |
           set -euo pipefail
-          # Replace, don't stack: one release, one tag, one URL. The tag moves
-          # to this commit so the release page's source matches the build.
-          gh release delete apk-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          # NEVER DELETE THE RELEASE (v0.408.0). Founder: "the app downloads
+          # from the link but never finished and says failed despite showing
+          # all the data transferred."
+          #
+          # This used to `gh release delete apk-latest --cleanup-tag` and build
+          # it again. For the seconds in between, the ONE URL every playtester
+          # has — and the one the site's download card points at — is a 404,
+          # and the tag it hangs off does not exist. On a quiet week that is a
+          # window nobody lands in. On a day like the one that produced this
+          # comment it is seven windows in ninety minutes, on the exact link
+          # the founder keeps being told to use.
+          #
+          # Create it only if it is missing, then replace the assets in place.
+          # --clobber still removes an asset before re-uploading it, so the
+          # window is not zero, but it is one file for a few seconds rather
+          # than the whole release plus its tag.
+          #
+          # The tag stays where it was first cut. That makes the release page's
+          # "source code" link point at an older commit, which is a cosmetic
+          # cost the notes below already pay off: the exact commit is in them.
+          # A stale link on a page beats a dead link in a browser.
           printf '%s\n' \
             "Drip Fantasy Android playtest build." "" \
             "- App version: **$APP**" \
@@ -136,10 +154,29 @@ jobs:
             "- Commit: $GITHUB_SHA" \
             "- arm64 only · signed with the playtest key · installs over any previous playtest build" "" \
             "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk" "" \
-            "Android asks once to allow installs from your browser (Settings → Install unknown apps)." \
+            "Android asks once to allow installs from your browser (Settings → Install unknown apps)." "" \
+            "If the download reaches 100% and then says **Failed**, that is the browser refusing the file, not a broken build. Grab the zip instead and unzip it: https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk.zip" \
             > "$RUNNER_TEMP/notes.md"
-          gh release create apk-latest "$RUNNER_TEMP/out/drip-fantasy.apk" "$RUNNER_TEMP/out/manifest.json" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+          if ! gh release view apk-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create apk-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+              --title "Drip Fantasy APK · $APP · build $ANDROID_VERSION_CODE" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+          # A ZIP OF THE SAME APK, alongside it. Chrome on Android runs its own
+          # verification over a download whose type says "package archive", and
+          # when that verdict does not come back the download is reported
+          # FAILED after every byte has already arrived — which is the symptom
+          # exactly. A .zip is an ordinary file to every browser, so this is a
+          # second door for anyone standing at a closed one: download, unzip,
+          # install. Built from the same signed APK, so it is not a different
+          # build with the same name.
+          (cd "$RUNNER_TEMP/out" && zip -q -X drip-fantasy.apk.zip drip-fantasy.apk)
+          gh release upload apk-latest \
+            "$RUNNER_TEMP/out/drip-fantasy.apk" \
+            "$RUNNER_TEMP/out/drip-fantasy.apk.zip" \
+            "$RUNNER_TEMP/out/manifest.json" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit apk-latest --repo "$GITHUB_REPOSITORY" --latest \
             --title "Drip Fantasy APK · $APP · build $ANDROID_VERSION_CODE" \
             --notes-file "$RUNNER_TEMP/notes.md"
           echo "https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/drip-fantasy.apk" >> "$GITHUB_STEP_SUMMARY"
