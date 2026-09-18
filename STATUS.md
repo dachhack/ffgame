@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.418.1 — the switcher on a phone
+
+Founder, mobile web, on the drip board: "We need the switch between your
+matchups feature."
+
+The league switcher (v0.388.0) — the header names the league you are in
+and opens "Your matchups", a list of your other seats — lived in the
+board's own top row of chips. On a phone that row was replaced by the
+shared brand rail in v0.356.11 (my leagues · wordmark · gear), and nothing
+carried the switcher over. So the one screen the founder actually plays
+on, four leagues live, had no way between his matchups but back out to the
+leagues list. Wide screens never lost it.
+
+It sits beside the week selector now, where the ◈ DRIP chip was. That chip
+is a statement of the mode, not a control, and the row has room for one
+chip beside the week and the score; the door between leagues wins it.
+Only when there is more than one league to go to — a single-league seat
+keeps its mode chip, and the menu already marks a classic league in its
+list. Same chip, same menu, same prelude as the desktop: nothing new to
+learn between the two.
+
+The classic board has never had the switcher on any width — noted, not
+done here.
+
+Battery: web tsc, vite build, check:changelog — green.
+
 ### v0.418.0 — the Combo Drip you already fielded is not a second one, and the fields chip before kickoff
 
 Founder, Thursday evening before TNF, over a board with ONE Combo Drip on

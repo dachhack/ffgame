@@ -1849,7 +1849,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{liveTestChip}</div>
+                {/* THE SWITCHER ON A PHONE (v0.418.0, founder, mobile web: "We
+                    need the switch between your matchups feature"). The rail
+                    replaced the row the switcher lived in (v0.356.11), and
+                    nothing carried it over — so the one screen the founder
+                    plays on had no way between his four matchups but the
+                    leagues list. It sits beside the week now, where the ◈ DRIP
+                    chip was: a statement of the mode gives way to the door
+                    between leagues, and only when there is more than one
+                    league to go to; a single-league seat keeps its chip. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{railed && liveSwitchChip ? liveSwitchChip : liveModeChip}{liveTestChip}</div>
                 {liveScore}
               </div>
               {/* WEEK RESULT lost its seat in the rail's right-hand corner, so
