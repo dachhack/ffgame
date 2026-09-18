@@ -18,6 +18,64 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.418.0 — the Combo Drip you already fielded is not a second one, and the fields chip before kickoff
+
+Founder, Thursday evening before TNF, over a board with ONE Combo Drip on
+it: "Still this error. And what happened to the fields chip?" The error:
+"NOT SAVED — SUN 1PM · 1: Combo Drip is one per unlock — you own 1, buy
+another to field more."
+
+THE ERROR. The database held one combodrip row, at SUN 1PM · 1. The row
+being refused was that same row, sent again. The live boards autosave the
+whole lineup after every edit as one upsert — INSERT … ON CONFLICT DO
+UPDATE on the slot key — and Postgres fires a row's BEFORE INSERT trigger
+on the PROPOSED row before it discovers the conflict, with a freshly
+minted id. `enforce_single_combodrip` excluded "the row I am" by `sp.id is
+distinct from new.id`, which on that path excludes nothing: the saved row
+at the same slot has a different id, so it was counted as a second Combo
+Drip, and the manager was told to buy another to keep the one he had.
+Every autosave after the first refused it, and v0.394.2's row-by-row retry
+refused it again for the same reason.
+
+Reproduced on a scratch Postgres 16 with the 0062 body verbatim: first
+save accepted, the identical second save refused. v0.394.3 read this same
+banner, found a real orphan row behind it, fixed that and stopped — the
+orphan was true and was not the whole story.
+
+Migration 0294: the row a write REPLACES is the one at the same (matchup,
+user, window, slot) — the upsert's conflict key — not the one with the
+same id. The metric-swap path in apply_targeted has always excluded by
+slot for exactly this reason; the trigger now does too. Six probes on the
+scratch cluster: the same row re-saved, a whole-lineup batch around it,
+moving it to another slot in one batch, and two-owned-two-fielded all
+accepted; a second at another slot and an UPDATE into a second both still
+refused with the same message. `scripts/db/combodrip-resave-probes.sql`
+carries the same six against the real schema.
+
+Also, `savePicksBestEffort` (liveApi) takes ONE MORE pass over the rows it
+refused, once every row has had its turn. A cap is counted against what
+is already on the server, and a later row in the batch may be the one that
+frees it — moving the Combo Drip from slot 2 to slot 1 sends "1: combodrip"
+before "2: something else". Refusals that were only about order now go
+through; refusals about the rule come back once, with the same words.
+
+THE FIELDS CHIP. The drip board's ▦ was gated on `hasGameFeed(week)`, which
+is true only once the worker has ingested a play. So the chip was missing
+for the whole of the week before its first whistle — the evening a
+manager is setting his lineup — and reappeared mid-game, which read as the
+chip having gone somewhere. v0.413.0 taught the overlay to draw a card
+from the slate alone (kickoff, no plays) and the CLASSIC board's chip to
+open on "fixtures OR feed"; this board never got the same ruling. It now
+does: gated on `hasGameFeed(week) || hasSlate(week)`, and the overlay is
+handed the week's fixtures through core's new `scheduledGamesFor(week)`,
+read back from the slate the live board already installs. The demo board's
+copy keeps its feed gate — its weeks are baked and always have one. The
+app's chip was never gated and its sheet loads its own slate, so nothing
+to do there.
+
+Battery: web tsc, vite build, check:changelog, check:pick-save,
+check:fieldboard, scratch-Postgres probes — all green.
+
 ### v0.417.0 — Twin Generals on the app's cards
 
 Founder, on the phone, with the buff armed for the 1pm window: "I armed

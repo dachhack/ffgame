@@ -1020,6 +1020,23 @@ export async function savePicksBestEffort(matchupId: string, userId: string, row
     if (!e) { saved += 1; continue; }
     failed.push({ win: row.game_window, slot: row.roster_slot, slug: row.player_slug ?? null, error: e.message });
   }
+  // ONE MORE PASS OVER WHAT WAS REFUSED (v0.418.0). A cap is counted against
+  // the rows already on the server, and a LATER row in this batch may be the
+  // one that frees it: moving the Combo Drip from slot 2 to slot 1 sends
+  // "1: combodrip" before "2: something else", and row 1 is refused while row
+  // 2 still reads combodrip. Once every row has had its turn, the refusals
+  // that were only about ORDER go through; the ones that were about the rule
+  // come back with the same message, once.
+  if (failed.length && saved) {
+    const again = failed.splice(0);
+    for (const f of again) {
+      const row = payload.find((r) => r.game_window === f.win && r.roster_slot === f.slot);
+      if (!row) continue;
+      const { error: e } = await c.from('sealed_pick').upsert([row], { onConflict: PICK_CONFLICT });
+      if (!e) { saved += 1; continue; }
+      failed.push({ ...f, error: e.message });
+    }
+  }
   return { saved, failed };
 }
 

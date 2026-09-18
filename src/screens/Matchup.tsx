@@ -11,7 +11,7 @@ import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase, hasSlate, scheduledGamesFor } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys } from '@drip/core/data/powerups';
@@ -2053,8 +2053,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                         coin, SHOP and chat all in this row, the FIELDS label
                         was the straw that wrapped it on a phone. The ▦ glyph
                         carries it, like the chat chip beside it. */}
-                    {liveCtx && hasGameFeed(week) && (
-                      <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" aria-label="All games field board" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px' }}>
+                    {/* Offered once the week has FIXTURES, not once it has PLAYS
+                        (v0.418.0, founder, Thursday evening before TNF: "what
+                        happened to the fields chip?"). hasGameFeed is true only
+                        after the worker has ingested a play, so the chip went
+                        missing for the whole of the week before its first
+                        whistle — and came back mid-game, which read as broken.
+                        v0.413.0 taught the overlay to draw a card from the slate
+                        alone (kickoff, no plays) and the classic board's chip
+                        to open on "fixtures OR feed"; this is the same ruling on
+                        this board. The demo board's copy above keeps its feed
+                        gate — its weeks are baked and always have one. */}
+                    {liveCtx && (hasGameFeed(week) || hasSlate(week)) && (
+                      <button onClick={() => setFieldsOpen(true)} title="Every game this week, as live field visuals — yours highlighted" aria-label="All games field board" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px' }}>
                         ▦
                       </button>
                     )}
@@ -2370,6 +2381,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {fieldsOpen && (
         <FieldBoard week={week} onClose={() => setFieldsOpen(false)}
           onRefresh={liveCtx ? () => void reloadLive.current?.() : undefined}
+          /* The week's fixtures, so a game with no feed yet still gets a card
+             with its kickoff (v0.413.0 rule, v0.418.0 on this board). The
+             live board installs its slate through setRuntimeSlate, so it
+             reads the same games back; the demo weeks are baked 2025 and
+             their feeds already cover every game, so the slate adds nothing. */
+          scheduled={liveCtx ? scheduledGamesFor(week) : undefined}
           entries={(() => {
           // One entry per slotted player: its team locates the NFL game, its
           // side drives the play tinting, and its clock mirrors the slot rows
