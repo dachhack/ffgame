@@ -295,7 +295,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // The busy note NAMES the game, so the moment of creation says what is
       // being created — the last chance to notice a wrong tap before it
       // freezes at the draft.
-      setNote(`Creating your ${contLabel}${chosenGame === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+      setNote(`Creating your ${contLabel}${chosenGame === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
       const contN = continuity === 'keeper' ? keepN : dynastyType ? rookieN : null;
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
         mode === 'auction' ? maxLots : 1,
@@ -436,14 +436,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div className="mono" style={label}>WHICH GAME?</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={game === 'drip'} onClick={() => setGame('drip')}>DRIP</Chip>
-              <Chip on={game === 'classic'} onClick={() => setGame('classic')}>NORMAL</Chip>
+              <Chip on={game === 'classic'} onClick={() => setGame('classic')}>CLASSIC</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {game === null
                 ? 'Pick one — this is the choice that decides what your league plays, and it locks in at the draft.'
                 : game === 'drip'
                   ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
-                  : 'Normal: fantasy the way you already know it. A positional starting lineup, weekly point totals, standard scoring you can tune.'}
+                  : 'Classic: fantasy the way you already know it. A positional starting lineup, weekly point totals, scoring you tune knob by knob — every spot locking at its own kickoff.'}
             </div>
             {/* CONTINUITY (0185): redraft / keeper / dynasty. One selection;
                 the number it needs appears with it. Editable any time in
@@ -584,7 +584,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? 'START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
-            : `CREATE ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} LEAGUE →`}
+            : `CREATE ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>

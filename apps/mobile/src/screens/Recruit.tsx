@@ -361,7 +361,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     if (!nm || busy || !game) return;
     // The busy note NAMES the game — the last chance to notice a wrong tap
     // before it freezes at the draft.
-    setBusy(true); setErr(null); setMakeNote(`Creating your ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} league…`);
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       // Same defaults the web derives from the game type (v0.221.0): drip
@@ -415,7 +415,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       commit();
       // The success note names the game too — created is the moment a wrong
       // mode is cheapest to notice.
-      setJoined(`${nm}, a ${contLabel}${game === 'classic' ? 'NORMAL' : 'DRIP'} league — you're its commissioner`);
+      setJoined(`${nm}, a ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} league — you're its commissioner`);
       // Back to the menu with the form reset — the branch is done, and a
       // create screen still holding the league you just made is a trap.
       setNode('root'); setStepIx(0); setNameDraft('');
@@ -657,10 +657,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {step === 'game' && (
               <View>
                 <LabelInfo label="WHICH GAME?"
-                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nNORMAL — fantasy the way you already know it: a positional starting lineup, weekly point totals, standard scoring you can tune.'} />
+                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nCLASSIC — fantasy the way you already know it: a positional starting lineup, weekly point totals, scoring you tune knob by knob.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
                   <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
-                  <Chip label="NORMAL" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                  <Chip label="CLASSIC" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
                 </View>
                 {game === null && (
                   <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
@@ -760,7 +760,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <Mono size={9} tone="faint" track={0.12}>YOU ARE CREATING</Mono>
                 <Display size={16}>{nameDraft.trim() || 'un-named league'}</Display>
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
-                  {teamCount} teams · {game === 'classic' ? 'NORMAL' : 'DRIP'}
+                  {teamCount} teams · {game === 'classic' ? 'CLASSIC' : 'DRIP'}
                   {continuity !== 'redraft' ? ` · ${contLabel.trim()}` : ' · REDRAFT'}
                   {format !== 'standard' ? ` · ${format === 'guillotine' ? 'GUILLOTINE' : 'VAMPIRE'}` : ''}
                 </Mono>
@@ -782,7 +782,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               <PrimaryButton
                 label={busy ? (makeNote || 'CREATING…')
                   : game === null ? 'PICK A GAME TO CREATE'
-                  : game === 'classic' ? 'CREATE NORMAL LEAGUE' : 'CREATE DRIP LEAGUE'}
+                  : game === 'classic' ? 'CREATE CLASSIC LEAGUE' : 'CREATE DRIP LEAGUE'}
                 disabled={busy || !nameDraft.trim() || !game} onPress={() => void doCreate()} />
               </View>
             )}
@@ -1018,7 +1018,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
  *  "DRIP · CONTRACT ($30 cap) · GUILLOTINE · ½ PPR · custom scoring". */
 const identityLine = (id?: LeagueIdentity): string => {
   if (!id) return '';
-  const bits: string[] = [id.game_mode === 'classic' ? 'NORMAL' : 'DRIP'];
+  const bits: string[] = [id.game_mode === 'classic' ? 'CLASSIC' : 'DRIP'];
   if (id.continuity === 'contract') bits.push(`CONTRACT${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
   else if (id.continuity === 'contract_dynasty') bits.push(`CONTRACT DYNASTY${id.salary_cap ? ` ($${id.salary_cap} cap)` : ''}`);
   else if (id.continuity === 'dynasty') bits.push('DYNASTY');

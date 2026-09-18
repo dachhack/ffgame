@@ -8,7 +8,7 @@ import { METRICS } from '@drip/core/data/metrics';
 import { loadRealWeek } from '@drip/core/data/realPbp';
 import { gamesInWindow, windowsForWeek } from '@drip/core/data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '@drip/core/data/demoNarration';
-import { readRecruitGame, recruitFraming, FORMAT_NOTES, CONTINUITY_NOTES, DRAFT_NOTES, type FormatNote } from '@drip/core/data/leagueTagline';
+import { readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, type FormatNote } from '@drip/core/data/leagueTagline';
 import { ClassicDemo } from './ClassicDemo';
 import { classifyEvent } from '@drip/core/engine/moments';
 import { avatarUrl } from '@drip/core/data/media';
@@ -507,8 +507,21 @@ export function DemoBoard() {
   // WHICH GAME IS ON SCREEN (v0.358.0). A ?game=classic recruit lands on the
   // classic board rather than reading that the demo plays something else —
   // v0.357.3 made the framing honest, this makes the demo match it.
-  const [game, setGame] = useState<'drip' | 'classic'>(recruited === 'classic' ? 'classic' : 'drip');
-  const framing = recruitFraming(recruited, game);
+  // NOTHING OPENS ON A BARE VISIT (v0.419.0). Founder: "have the landing page
+  // show the different types of league options, then the user can click the
+  // drip scoring for a drip demo." The menu IS the page; a demo board appears
+  // only when a game is tapped in its WHICH GAME row (or the recruit link
+  // named one), and the page scrolls to it.
+  const [game, setGame] = useState<'drip' | 'classic' | null>(recruited);
+  const framing = recruitFraming(recruited, game ?? 'drip');
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const [scrollOnOpen, setScrollOnOpen] = useState(false);
+  useEffect(() => {
+    if (!game || !scrollOnOpen) return;
+    setScrollOnOpen(false);
+    try { boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { /* ignore */ }
+  }, [game, scrollOnOpen]);
+  const openGame = (g: 'drip' | 'classic') => { setGame(g); setScrollOnOpen(true); };
   const band = (
     <div style={{
       margin: '0 14px 6px', padding: '10px 13px', borderRadius: 6,
@@ -526,7 +539,7 @@ export function DemoBoard() {
           two; this is how you see the other one. */}
       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
         {(['drip', 'classic'] as const).map((g) => (
-          <button key={g} onClick={() => setGame(g)} aria-pressed={game === g} className="mono"
+          <button key={g} onClick={() => openGame(g)} aria-pressed={game === g} className="mono"
             title={g === 'drip' ? 'Hidden metrics, live effects, power-ups.' : 'Nine slots, standard scoring, kickoff locks.'}
             style={{
               fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px',
@@ -536,44 +549,95 @@ export function DemoBoard() {
               border: `1px solid ${game === g ? 'var(--you)' : 'var(--bd)'}`,
             }}>{g.toUpperCase()}</button>
         ))}
+        <button onClick={() => setGame(null)} className="mono" title="Close the demo" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)' }}>✕</button>
       </div>
     </div>
   );
 
-  // ── WHAT ELSE A SEASON CAN BE (v0.358.0) ────────────────────────────────
-  // Founder: "We want to show off all the scoring options and game
-  // formats/modes." The scoring options are demonstrated above — one real week
-  // re-scored. A FORMAT decides how a season goes, so none of it can happen
-  // inside a single week; saying so plainly beats faking a demo of it. Copy
-  // from core, beside the join-screen wording it has to agree with.
-  const formats = (
-    <section style={{ maxWidth: 760, margin: '0 auto', padding: '28px 14px 0' }}>
-      <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>
-        AND OVER A SEASON
-      </div>
-      <div className="grotesk" style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', margin: '6px 0 4px' }}>
-        The parts a single week can’t show you
-      </div>
-      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.55, marginBottom: 14 }}>
-        Every one of these is a switch a commissioner actually has.
-      </div>
-      {([
-        ['HOW THE SEASON ENDS', FORMAT_NOTES],
-        ['WHAT CARRIES OVER', CONTINUITY_NOTES],
-        ['HOW THE ROSTER FILLS', DRAFT_NOTES],
-      ] as const).map(([heading, notes]) => (
-        <div key={heading} style={{ marginBottom: 16 }}>
-          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 7 }}>{heading}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))', gap: 9 }}>
-            {notes.map((n: FormatNote) => (
-              <div key={n.name} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px' }}>
-                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{n.name}</div>
-                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, marginTop: 4 }}>{n.line}</div>
-              </div>
-            ))}
-          </div>
+  // ── THE SITE LEADS WITH THE LEAGUE YOU CAN BUILD (v0.419.0) ─────────────
+  // Founder: "Drip fantasy is becoming more of a 'Create your dream league'
+  // playground… Let's lean into that. It's not the place exclusively for
+  // drip-style fantasy." The landing used to open on the drip demo's headline
+  // and keep the formats under the board, where only a visitor who finished a
+  // week ever scrolled. Now the product pitch and the whole menu of switches
+  // come FIRST, and the two demo boards sit under it as exhibits. Copy from
+  // core, beside the join-screen wording it has to agree with.
+  //
+  // The menu is chips, not cards: five groups of one-liners is a wall above
+  // the fold on a phone, so each row shows its names and opens one line on a
+  // tap. The WHICH GAME row doubles as the demo switch — tapping CLASSIC there
+  // is the same as tapping it on the band below.
+  const [openNote, setOpenNote] = useState<string | null>(null);
+  const hero = (
+    <section style={{ maxWidth: 760, margin: '0 auto', padding: '10px 14px 4px' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)' }}>
+          {SITE_PITCH.kicker}
         </div>
-      ))}
+        <div className="grotesk" style={{ fontSize: 'clamp(22px, 6.5vw, 32px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, margin: '8px 0 0', color: 'var(--text)' }}>
+          {SITE_PITCH.headline}
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5, margin: '10px auto 0', maxWidth: '62ch' }}>
+          {SITE_PITCH.sub}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
+          <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, width: 'auto', padding: '11px 18px' }}>Start a league →</button>
+          <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, width: 'auto', padding: '11px 18px', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>◈ Request an invite</button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 12px 4px' }}>
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 8 }}>
+          EVERY SWITCH A COMMISSIONER HAS · TAP ONE
+        </div>
+        {LEAGUE_MENU.map(({ heading, notes }) => {
+          const isGame = heading === 'WHICH GAME';
+          const open = notes.find((n: FormatNote) => openNote === `${heading}|${n.name}`);
+          return (
+            <div key={heading} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 8px', flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', width: 128, flex: 'none' }}>{heading}</span>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                  {notes.map((n: FormatNote) => {
+                    const key = `${heading}|${n.name}`;
+                    const lit = isGame ? game === n.name.toLowerCase() : openNote === key;
+                    return (
+                      <button key={n.name} className="mono" aria-pressed={lit}
+                        onClick={() => {
+                          setOpenNote((o) => (o === key && !isGame ? null : key));
+                          if (isGame) openGame(n.name.toLowerCase() as 'drip' | 'classic');
+                        }}
+                        style={{
+                          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
+                          color: lit ? 'var(--on-accent)' : 'var(--text)',
+                          background: lit ? 'var(--you)' : 'var(--bg)',
+                          border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`,
+                        }}>{n.name.toUpperCase()}</button>
+                    );
+                  })}
+                  {isGame && !game && (
+                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', alignSelf: 'center' }}>▶ TAP ONE TO PLAY A WEEK — FREE, NO SIGN-IN</span>
+                  )}
+                </div>
+              </div>
+              {open && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, margin: '6px 0 2px', paddingLeft: narrow ? 0 : 136 }}>
+                  <b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!game && (
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+          <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Already invited? Sign in</button>
+          <span style={{ color: 'var(--faint)' }}>·</span>
+          <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>Read the FAQ</button>
+        </div>
+      )}
+      <div style={{ height: 14 }} />
     </section>
   );
 
@@ -731,7 +795,9 @@ export function DemoBoard() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
-      {band}
+      {hero}
+      <div ref={boardRef} style={{ scrollMarginTop: 8 }} />
+      {game && band}
       {/* THE OTHER GAME (v0.358.0). Its own board rather than a branch through
           this one: classic has no windows, no metrics and no power-ups, so
           almost nothing below applies to it. Same week, same real plays. */}
@@ -740,7 +806,6 @@ export function DemoBoard() {
           <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '6px 14px 0' }}>
             <ClassicDemo youId={youId} oppId={oppId} week={DEMO_WEEK} />
           </main>
-          {formats}
           <div style={{ height: 96 }} />
         </>
       )}
@@ -985,9 +1050,6 @@ export function DemoBoard() {
         )}
       </main>
       )}
-      {/* The season-shape formats sit under BOTH boards — they are true of the
-          product, not of whichever game is on screen. */}
-      {game === 'drip' && <div style={{ padding: '0 0 96px' }}>{formats}</div>}
 
       {/* "More demo?" bar — the identity ask, shown only AFTER the payoff starts
           (first window gone final). Showing it from second zero contradicted the

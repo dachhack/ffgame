@@ -105,7 +105,7 @@ export function recruitFraming(recruited: 'drip' | 'classic' | null, demoMode: G
   const demo = taglineFor(demoMode);
   if (!recruited) {
     return {
-      lead: `Two games, one league app. This demo plays ${demo.label || 'DRIP'}.`,
+      lead: `Two games to try. This board plays ${demo.label || 'DRIP'}.`,
       blurb: NEUTRAL_BLURB,
       mismatch: false,
     };
@@ -159,6 +159,58 @@ export const DRAFT_NOTES: FormatNote[] = [
   { name: 'Snake', line: 'Pick order reverses each round. The usual.' },
   { name: 'Linear', line: 'Same order every round — the wooden spoon gets first pick eighteen times.' },
   { name: 'Auction', line: 'Nominate and bid. Anyone can own anyone, if the budget stretches.' },
+];
+
+// ── THE SITE LEADS WITH THE LEAGUE YOU CAN BUILD (v0.419.0) ───────────────
+//
+// Founder: "Drip fantasy is becoming more of a 'Create your dream league'
+// playground in a bespoke environment for people with creative or wild league
+// ideas. Let's lean into that. It's not the place exclusively for drip-style
+// fantasy." And: "I want to keep the name, but change the site experience to
+// focus on the broader features."
+//
+// The create screen has been a format builder for a while — game × continuity
+// × format × draft × scoring — and the landing still opened on the drip demo's
+// headline, so a stranger met one game and never learned about the rest. The
+// pitch below is the product-level line the landing now opens with; the demo
+// boards become exhibits under it. The words live here, beside the join-card
+// copy, so the tagline check holds them to the same rule: a classic line never
+// carries drip vocabulary, and every named switch is one a commissioner has.
+
+/** The one line the site opens with, and the line under it. */
+export const SITE_PITCH = {
+  // The founder's three lines (v0.419.0): the kicker, the headline, and the
+  // one the title tag carries — "Anything goes fantasy football".
+  kicker: 'YOUR LEAGUE, YOUR RULES',
+  headline: 'Create the fantasy league of your dreams.',
+  sub: 'Anything goes: guillotine, vampire, golf, contracts and dynasty, auction drafts, best ball, IDP — every one a switch you actually have. Classic scoring, or Drip mode’s sealed picks and live effects. All of it scored live on real NFL play-by-play.',
+  title: 'Anything Goes Fantasy Football',
+} as const;
+
+/** The two games, in the words the create screen uses. Drip is the house
+ *  game; classic is the one everybody already knows. Neither is the default
+ *  here — the create screen makes the commissioner choose (v0.251.0). */
+export const GAME_NOTES: FormatNote[] = [
+  { name: 'Drip', line: 'Eight starters in kickoff windows, each with a sealed scoring metric that reveals at kickoff and fires effects live — nukes, erasures, hot streaks, power-ups.' },
+  { name: 'Classic', line: 'A positional lineup, weekly point totals, scoring you tune knob by knob. Every spot locks at its own kickoff and scores live.' },
+];
+
+/** What the SCORING can be, whichever game runs it. */
+export const SCORING_NOTES: FormatNote[] = [
+  { name: 'Reception value', line: 'Standard, half, full PPR or anything between — plus the per-stat knobs under it, about forty in all.' },
+  { name: 'Best ball', line: 'Your best lineup is started for you after the fact. No lineup to set, nobody left on the bench by mistake.' },
+  { name: 'IDP', line: 'Defensive linemen, linebackers and backs as real starters, with tackles, sacks and takeaways scored live.' },
+  { name: 'K & D/ST', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores — on or off per league.' },
+];
+
+/** The gallery the landing draws: every group is a question the create screen
+ *  asks, in the order it asks them. */
+export const LEAGUE_MENU: { heading: string; notes: FormatNote[] }[] = [
+  { heading: 'WHICH GAME', notes: GAME_NOTES },
+  { heading: 'HOW THE SEASON ENDS', notes: FORMAT_NOTES },
+  { heading: 'WHAT CARRIES OVER', notes: CONTINUITY_NOTES },
+  { heading: 'HOW THE ROSTER FILLS', notes: DRAFT_NOTES },
+  { heading: 'HOW IT SCORES', notes: SCORING_NOTES },
 ];
 
 // ── IS THERE ROOM, AND IS THE DOOR OPEN (v0.326.0) ────────────────────────
