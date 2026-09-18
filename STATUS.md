@@ -37,9 +37,11 @@ framed drip as the default and classic as the exception, while the join
 card, the blueprint summary and the code all said CLASSIC. A commissioner
 with a guillotine idea met one game and never learned about the rest.
 
-THE LANDING. A product-level hero now comes first: kicker, "Run the league
-the big apps won't build.", one line naming the switches, and two doors —
-Start a league (sign-in) and Request an invite. Under it, the whole menu of
+THE LANDING. A product-level hero now comes first, in the founder's own
+three lines: kicker "Your league, your rules", headline "Create the fantasy
+league of your dreams.", and "Anything goes fantasy football" as the title
+tag and social-card title. Under the headline, one line naming the
+switches, and two doors — Start a league (sign-in) and Request an invite. Under it, the whole menu of
 switches as chip rows in the order the create screen asks them: WHICH GAME
 · HOW THE SEASON ENDS · WHAT CARRIES OVER · HOW THE ROSTER FILLS · HOW IT
 SCORES. Chips, not cards — five groups of one-liners was a wall above the

@@ -179,9 +179,12 @@ export const DRAFT_NOTES: FormatNote[] = [
 
 /** The one line the site opens with, and the line under it. */
 export const SITE_PITCH = {
-  kicker: 'FANTASY FOOTBALL, YOUR LEAGUE’S RULES',
-  headline: 'Run the league the big apps won’t build.',
-  sub: 'Guillotine, vampire, golf, contracts and dynasty, auction drafts, best ball, IDP — every one a switch you actually have. Classic scoring, or Drip mode’s sealed picks and live effects. All of it scored live on real NFL play-by-play.',
+  // The founder's three lines (v0.419.0): the kicker, the headline, and the
+  // one the title tag carries — "Anything goes fantasy football".
+  kicker: 'YOUR LEAGUE, YOUR RULES',
+  headline: 'Create the fantasy league of your dreams.',
+  sub: 'Anything goes: guillotine, vampire, golf, contracts and dynasty, auction drafts, best ball, IDP — every one a switch you actually have. Classic scoring, or Drip mode’s sealed picks and live effects. All of it scored live on real NFL play-by-play.',
+  title: 'Anything Goes Fantasy Football',
 } as const;
 
 /** The two games, in the words the create screen uses. Drip is the house

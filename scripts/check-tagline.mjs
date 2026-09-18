@@ -119,6 +119,7 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('the pitch names the product beyond drip', /guillotine/i.test(SITE_PITCH.sub) && /classic/i.test(SITE_PITCH.sub), SITE_PITCH.sub);
   ok('…and still names Drip mode as one of the games', /drip mode/i.test(SITE_PITCH.sub), SITE_PITCH.sub);
   ok('the headline is not a drip pitch', !DRIP_WORDS.test(SITE_PITCH.headline), SITE_PITCH.headline);
+  ok('the founder\'s three lines are the ones on the page', /your league, your rules/i.test(SITE_PITCH.kicker) && /league of your dreams/i.test(SITE_PITCH.headline) && /anything goes/i.test(SITE_PITCH.title));
   const games = GAME_NOTES.map((n) => n.name.toLowerCase());
   ok('the menu offers both games, by the names the create screen uses', games.includes('drip') && games.includes('classic'), games);
   const classic = GAME_NOTES.find((n) => n.name === 'Classic');
