@@ -90,7 +90,7 @@ export function ScoringView({ leagueId }: { leagueId: string }) {
   const sc = normalizeClassicScoring(leagueCatalogOf(gm));
   return (
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
-      <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} tone="you" />
+      <Row k="GAME MODE" v={classic ? '🏈 CLASSIC' : '◈ DRIP'} tone="you" />
       {!classic ? (
         // A drip league has no per-stat table — the engine owns those numbers.
         // What it DOES have is the commissioner's layering knobs, printed just
@@ -147,7 +147,7 @@ function Adjustments({ adj, classic }: { adj: LeagueScoring | null; classic: boo
         {classic ? (
           <Mono size={9.5} tone="faint" style={{ lineHeight: fs(15) }}>
             This league has drip-engine adjustments stored (touchdown, yardage, turnover). They do not
-            apply in 🏈 NORMAL mode — the scoring above is the whole of it. The scoped bonuses below DO.
+            apply in 🏈 CLASSIC mode — the scoring above is the whole of it. The scoped bonuses below DO.
           </Mono>
         ) : (<>
           {adj.tdBonus !== 0 && <Row k="EVERY TOUCHDOWN" v={`${adj.tdBonus > 0 ? '+' : ''}${adj.tdBonus} pts`} tone="you" />}

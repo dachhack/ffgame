@@ -4,7 +4,7 @@
 // different tagline." A classic league has no hidden picks and no effects, so
 // pitching them to a recruit is not a tone problem — it is a description of a
 // game they are not about to play.
-import { taglineFor, NEUTRAL_BLURB, joinDoorFor, readRecruitGame, recruitFraming } from '../packages/core/src/data/leagueTagline';
+import { taglineFor, NEUTRAL_BLURB, joinDoorFor, readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, GAME_NOTES } from '../packages/core/src/data/leagueTagline';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -108,6 +108,28 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   const none = recruitFraming(null, 'drip');
   ok('no hint still says there are two games', !none.mismatch && /[Tt]wo games/.test(none.lead), none.lead);
   ok('no hint falls back to the line true of both', none.blurb === NEUTRAL_BLURB, none.blurb);
+}
+
+// ── THE SITE LEADS WITH THE LEAGUE YOU CAN BUILD (v0.419.0) ───────────────
+// Founder: "It's not the place exclusively for drip-style fantasy." The
+// landing's pitch and menu come from here, and the rule they must keep is the
+// one the join card keeps: the classic line never borrows drip vocabulary,
+// and the menu names the switches the create screen really has.
+{
+  ok('the pitch names the product beyond drip', /guillotine/i.test(SITE_PITCH.sub) && /classic/i.test(SITE_PITCH.sub), SITE_PITCH.sub);
+  ok('…and still names Drip mode as one of the games', /drip mode/i.test(SITE_PITCH.sub), SITE_PITCH.sub);
+  ok('the headline is not a drip pitch', !DRIP_WORDS.test(SITE_PITCH.headline), SITE_PITCH.headline);
+  const games = GAME_NOTES.map((n) => n.name.toLowerCase());
+  ok('the menu offers both games, by the names the create screen uses', games.includes('drip') && games.includes('classic'), games);
+  const classic = GAME_NOTES.find((n) => n.name === 'Classic');
+  ok('the classic game line is never pitched hidden picks or effects', classic && !DRIP_WORDS.test(classic.line), classic?.line);
+  ok('the menu opens on WHICH GAME — the create screen\'s first question', LEAGUE_MENU[0].heading === 'WHICH GAME' && LEAGUE_MENU[0].notes === GAME_NOTES);
+  const names = LEAGUE_MENU.flatMap((g) => g.notes.map((n) => n.name));
+  for (const must of ['Guillotine', 'Vampire', 'Golf', 'Dynasty', 'Contract', 'Auction', 'Best ball', 'IDP']) {
+    ok(`the menu names ${must}`, names.includes(must));
+  }
+  ok('every menu line is one sentence a manager can read, not a paragraph', LEAGUE_MENU.every((g) => g.notes.every((n) => n.line.length > 30 && n.line.length < 220)));
+  ok('no two menu entries share a name', new Set(names).size === names.length, names);
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

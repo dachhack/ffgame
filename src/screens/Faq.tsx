@@ -49,10 +49,19 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
       items: [
         {
           q: 'What is Drip Fantasy?',
-          a: <>A real-time, head-to-head fantasy football game where <b>how</b> you score matters as much as <b>who</b> you start.
-            Instead of piling up raw points, you assign each roster player to a game-time <b>window slot</b> and pair them with a
-            hidden <b>scoring metric</b> that carries a strategic effect — a nuke, an erase, a hot streak, a multiplier. Picks stay
-            sealed until kickoff, then resolve live as the real NFL games play out.</>,
+          a: <>A place to run the fantasy football league you actually want — including the ones the big apps won't host.
+            <b> Guillotine</b>, <b>vampire</b>, <b>golf</b>, <b>contract</b> and <b>dynasty</b> leagues, auction drafts, best ball, IDP,
+            scoring you tune knob by knob — every one is a switch a commissioner has, and every league is scored <b>live</b> on real NFL
+            play-by-play. Pick <b>classic</b> scoring, or our own <b>Drip mode</b>: sealed picks, hidden scoring metrics and live effects.</>,
+        },
+        {
+          q: 'What kinds of leagues can I run here?',
+          a: <>Mix and match. <b>Which game:</b> Drip or classic. <b>How the season ends:</b> head-to-head, guillotine (lowest score each
+            week is eliminated, their roster hits the wire) or vampire (vampires skip the draft and steal a player each win). <b>What
+            carries over:</b> redraft, keeper, dynasty with rookie drafts and tradeable future picks, or contract leagues where auction
+            bids become salaries under a cap. <b>How the roster fills:</b> snake, linear or auction, live or slow. <b>How it scores:</b>
+            standard to full PPR and the forty-odd knobs beneath it, best ball, golf, IDP, kickers and defenses. If your league has a
+            rule we don't have a switch for yet, tell us — that's exactly the kind of league we want to host.</>,
         },
         {
           q: 'Is this a real game or just a demo?',
@@ -128,8 +137,8 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
       id: '03', title: 'HOW THE GAME WORKS',
       items: [
         {
-          q: 'How is this different from regular fantasy football?',
-          a: <>Two big twists. First, your picks are <b>hidden</b> until kickoff — you and your opponent both seal a player <i>and</i> a
+          q: 'What is Drip mode, and how is it different from regular fantasy?',
+          a: <>Drip is our own game, and it's optional — a classic league here plays fantasy the way you already know it. In Drip mode there are two big twists. First, your picks are <b>hidden</b> until kickoff — you and your opponent both seal a player <i>and</i> a
             secret metric per slot. Second, metrics don't just score points, they <b>attack</b> the slot across from them: a nuke zeros
             a banked score, an erase cancels recent accumulation, a hot streak doubles your drip rate. You can win by scoring big
             <b> or</b> by shutting your opponent down.</>,
@@ -167,15 +176,17 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
       items: [
         {
           q: 'Can I play with my own league and friends?',
-          a: <>Yes — live head-to-head play is running for the <b>2026 season</b> in a limited <b>pilot</b>: real leaguemates, sealed
-            picks, live NFL data. Spots are limited while we tune it, so if you're interested, use the <b>request an invite</b> link on
-            the splash screen (or the floating request button) and we'll be in touch.</>,
+          a: <>Yes, two ways. <b>Create a league here</b> — pick the game, the format, the scoring and the draft, invite your friends, and
+            draft in the app; no other platform needed. Or <b>bring an existing league</b> from Sleeper, ESPN, Yahoo, MFL or Fleaflicker
+            and play it live here. The <b>2026 season</b> is running now as a limited <b>pilot</b>, so use <b>request an invite</b> (on the
+            landing page, or the floating request button) and we'll set you up.</>,
         },
         {
           q: 'What if my league isn’t on Sleeper?',
           a: <>You're covered — alongside Sleeper we support <b>ESPN</b>, <b>MyFantasyLeague (MFL)</b> and <b>Fleaflicker</b>, with
-            <b> Yahoo</b> landing next. If your league is on a platform we haven't connected yet, use <b>request an invite</b> and
-            we'll let you know the moment it's ready.</>,
+            <b> Yahoo</b> landing next. And you don't need any of them: a league <b>created here</b> drafts and runs entirely in the app.
+            If your league is on a platform we haven't connected yet, use <b>request an invite</b> and we'll let you know the moment it's
+            ready.</>,
         },
         {
           q: 'Is there a waitlist for the live pilot?',

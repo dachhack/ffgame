@@ -18,6 +18,64 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.419.0 — the site leads with the league you can build
+
+Founder, strategizing: "Drip fantasy is becoming more of a 'Create your
+dream league' playground in a bespoke environment for people with creative
+or wild league ideas. Let's lean into that. It's not the place exclusively
+for drip-style fantasy." Then, on the name: "I want to keep the name, but
+change the site experience to focus on the broader features."
+
+THE GAP. The create screen has been a format builder for months — game ×
+continuity × format × draft × pace × scoring × roster, with guillotine,
+vampire, golf, contracts and best ball all live — and the landing still
+opened on the drip demo's headline ("Your picks are sealed") with the
+formats parked UNDER the board, where only a visitor who finished a demo
+week ever scrolled. The FAQ's first answer defined the whole product as the
+hidden-metric game. The create screen called classic mode NORMAL, which
+framed drip as the default and classic as the exception, while the join
+card, the blueprint summary and the code all said CLASSIC. A commissioner
+with a guillotine idea met one game and never learned about the rest.
+
+THE LANDING. A product-level hero now comes first: kicker, "Run the league
+the big apps won't build.", one line naming the switches, and two doors —
+Start a league (sign-in) and Request an invite. Under it, the whole menu of
+switches as chip rows in the order the create screen asks them: WHICH GAME
+· HOW THE SEASON ENDS · WHAT CARRIES OVER · HOW THE ROSTER FILLS · HOW IT
+SCORES. Chips, not cards — five groups of one-liners was a wall above the
+fold on a phone — so a row shows its names and opens one line on a tap.
+The WHICH GAME row is also the demo switch: tapping CLASSIC there is the
+band's CLASSIC. The two demo boards sit under all of it as exhibits, with
+the band reading "Two games to try. This board plays DRIP." The old
+"AND OVER A SEASON" section under the boards is gone; its three groups
+moved up into the menu, joined by the two games and the scoring options.
+
+The copy lives in core (`leagueTagline.ts`: SITE_PITCH, GAME_NOTES,
+SCORING_NOTES, LEAGUE_MENU) beside the join-card wording, and
+check-tagline holds it to the same rule: the classic line never borrows
+drip vocabulary, both games are named as the create screen names them,
+and the menu names guillotine, vampire, golf, dynasty, contract, auction,
+best ball and IDP.
+
+THE REST OF THE FRONT DOOR. index.html's title, description and the
+social cards lead with the formats. The FAQ's first answer is the product;
+a new "What kinds of leagues can I run here?" walks the menu and ends with
+the ask — "if your league has a rule we don't have a switch for yet, tell
+us"; "How is this different" became "What is Drip mode" and says up front
+that it is optional; the own-league and not-on-Sleeper answers both say a
+league can be created here with no other platform. NORMAL is CLASSIC on
+the web create screen and in the mobile app's create, league info and
+commish rollover strings — the word the rest of the product already used.
+
+NOT DONE HERE, deliberately: the signed-in chooser still gates "Start a
+fresh league" behind the native flag or admin, and its heading still asks
+how you are joining the pilot. Opening create to every account is a
+product decision, not copy. The Android app's own recruit landing was not
+re-pitched; it does not import the landing copy.
+
+Battery: web tsc, mobile tsc, check:tagline, check:changelog, vite build —
+green.
+
 ### v0.418.2 — the switcher on the classic board, and HOT says what Momentum makes it
 
 Founder, mobile web: "add the switcher to the classic board too. Is my

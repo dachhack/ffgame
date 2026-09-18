@@ -741,7 +741,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
   }, [leagueId]);
   if (!st) return <Card><Mono size={10} tone="faint">{note ?? 'Loading…'}</Mono></Card>;
 
-  const modeName = st.game_mode === 'classic' ? 'NORMAL' : 'DRIP';
+  const modeName = st.game_mode === 'classic' ? 'CLASSIC' : 'DRIP';
   const rolled = !!st.rolled_league_id;
   const drafted = st.draft_status === 'complete';
   // the Super Bowl gate (0185): the rollover appears when the season is over
@@ -758,7 +758,7 @@ function DynastyCard({ leagueId }: { leagueId: string }) {
       const r = await rolloverLeague(leagueId, 14, rookieOnly);
       if (r.ok) {
         commit();
-        setNote(`✓ rolled into ${r.season} — a ${r.game_mode === 'classic' ? 'NORMAL' : 'DRIP'} league, ${r.kept} keepers carried, ${r.draft_rounds}-round draft pending. Invite code ${r.invite_code}.`);
+        setNote(`✓ rolled into ${r.season} — a ${r.game_mode === 'classic' ? 'CLASSIC' : 'DRIP'} league, ${r.kept} keepers carried, ${r.draft_rounds}-round draft pending. Invite code ${r.invite_code}.`);
         await load();
       } else { warn(); setNote(friendlyError(r.error ?? 'that didn’t work')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
