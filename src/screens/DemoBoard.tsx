@@ -507,8 +507,21 @@ export function DemoBoard() {
   // WHICH GAME IS ON SCREEN (v0.358.0). A ?game=classic recruit lands on the
   // classic board rather than reading that the demo plays something else —
   // v0.357.3 made the framing honest, this makes the demo match it.
-  const [game, setGame] = useState<'drip' | 'classic'>(recruited === 'classic' ? 'classic' : 'drip');
-  const framing = recruitFraming(recruited, game);
+  // NOTHING OPENS ON A BARE VISIT (v0.419.0). Founder: "have the landing page
+  // show the different types of league options, then the user can click the
+  // drip scoring for a drip demo." The menu IS the page; a demo board appears
+  // only when a game is tapped in its WHICH GAME row (or the recruit link
+  // named one), and the page scrolls to it.
+  const [game, setGame] = useState<'drip' | 'classic' | null>(recruited);
+  const framing = recruitFraming(recruited, game ?? 'drip');
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const [scrollOnOpen, setScrollOnOpen] = useState(false);
+  useEffect(() => {
+    if (!game || !scrollOnOpen) return;
+    setScrollOnOpen(false);
+    try { boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { /* ignore */ }
+  }, [game, scrollOnOpen]);
+  const openGame = (g: 'drip' | 'classic') => { setGame(g); setScrollOnOpen(true); };
   const band = (
     <div style={{
       margin: '0 14px 6px', padding: '10px 13px', borderRadius: 6,
@@ -526,7 +539,7 @@ export function DemoBoard() {
           two; this is how you see the other one. */}
       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
         {(['drip', 'classic'] as const).map((g) => (
-          <button key={g} onClick={() => setGame(g)} aria-pressed={game === g} className="mono"
+          <button key={g} onClick={() => openGame(g)} aria-pressed={game === g} className="mono"
             title={g === 'drip' ? 'Hidden metrics, live effects, power-ups.' : 'Nine slots, standard scoring, kickoff locks.'}
             style={{
               fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px',
@@ -536,6 +549,7 @@ export function DemoBoard() {
               border: `1px solid ${game === g ? 'var(--you)' : 'var(--bd)'}`,
             }}>{g.toUpperCase()}</button>
         ))}
+        <button onClick={() => setGame(null)} className="mono" title="Close the demo" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)' }}>✕</button>
       </div>
     </div>
   );
@@ -591,7 +605,7 @@ export function DemoBoard() {
                       <button key={n.name} className="mono" aria-pressed={lit}
                         onClick={() => {
                           setOpenNote((o) => (o === key && !isGame ? null : key));
-                          if (isGame) setGame(n.name.toLowerCase() as 'drip' | 'classic');
+                          if (isGame) openGame(n.name.toLowerCase() as 'drip' | 'classic');
                         }}
                         style={{
                           fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
@@ -601,6 +615,9 @@ export function DemoBoard() {
                         }}>{n.name.toUpperCase()}</button>
                     );
                   })}
+                  {isGame && !game && (
+                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', alignSelf: 'center' }}>▶ TAP ONE TO PLAY A WEEK — FREE, NO SIGN-IN</span>
+                  )}
                 </div>
               </div>
               {open && (
@@ -613,9 +630,14 @@ export function DemoBoard() {
         })}
       </div>
 
-      <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)', textAlign: 'center', margin: '18px 0 6px' }}>
-        TRY A WEEK · FREE · NO SIGN-IN
-      </div>
+      {!game && (
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+          <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Already invited? Sign in</button>
+          <span style={{ color: 'var(--faint)' }}>·</span>
+          <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>Read the FAQ</button>
+        </div>
+      )}
+      <div style={{ height: 14 }} />
     </section>
   );
 
@@ -774,7 +796,8 @@ export function DemoBoard() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
       {hero}
-      {band}
+      <div ref={boardRef} style={{ scrollMarginTop: 8 }} />
+      {game && band}
       {/* THE OTHER GAME (v0.358.0). Its own board rather than a branch through
           this one: classic has no windows, no metrics and no power-ups, so
           almost nothing below applies to it. Same week, same real plays. */}

@@ -47,8 +47,13 @@ switches as chip rows in the order the create screen asks them: WHICH GAME
 SCORES. Chips, not cards — five groups of one-liners was a wall above the
 fold on a phone — so a row shows its names and opens one line on a tap.
 The WHICH GAME row is also the demo switch: tapping CLASSIC there is the
-band's CLASSIC. The two demo boards sit under all of it as exhibits, with
-the band reading "Two games to try. This board plays DRIP." The old
+band's CLASSIC. Nothing else opens on a bare visit — founder: "have the
+landing page show the different types of league options, then the user
+can click the drip scoring for a drip demo." Tapping DRIP or CLASSIC in
+the WHICH GAME row opens that game's demo week under the menu and scrolls
+to it, with the band reading "Two games to try. This board plays DRIP."
+and a ✕ to put it away; a recruit link's `?game=` still opens its game on
+arrival. The old
 "AND OVER A SEASON" section under the boards is gone; its three groups
 moved up into the menu, joined by the two games and the scoring options.
 

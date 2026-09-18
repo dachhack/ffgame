@@ -72,9 +72,9 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Do I need an account to try it?',
-          a: <>No. You can <b>Explore the demo league</b> straight from the splash screen with no sign-up. If you want to see the demo
-            re-skinned over your own league, type your <b>Sleeper username</b> on the splash — that's it. An account (magic-link email)
-            is only needed for the invited live pilot.</>,
+          a: <>No. On the landing page, tap <b>DRIP</b> or <b>CLASSIC</b> in the <i>Which game</i> row and a full demo week of that game
+            opens right there, no sign-up. If you want to see the demo re-skinned over your own league, type your <b>Sleeper
+            username</b> under the board — that's it. An account (magic-link email) is only needed for the invited live pilot.</>,
         },
         {
           q: 'How do I actually play a week?',
