@@ -187,3 +187,4 @@ $RUN -f scripts/db/presence-probes.sql | grep -E "PROBE FAIL|ALL PRESENCE PROBES
 $RUN -f scripts/db/fa-off-probes.sql | grep -E "PROBE FAIL|ALL FA-OFF PROBES" || { echo "FA-OFF PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/txn-chat-probes.sql | grep -E "PROBE FAIL|ALL TXN-CHAT PROBES" || { echo "TXN-CHAT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/player-depth-probes.sql | grep -E "PROBE FAIL|ALL PLAYER-DEPTH PROBES" || { echo "PLAYER-DEPTH PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/combodrip-resave-probes.sql | grep -E "PROBE FAIL|ALL COMBO-RESAVE PROBES" || { echo "COMBO-RESAVE PROBES FAILED"; exit 1; }

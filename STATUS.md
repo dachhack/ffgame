@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.418.3 — the Combo Drip probes are in the runner
+
+Founder: "wire the probes into the runner."
+
+v0.418.0 shipped `scripts/db/combodrip-resave-probes.sql` and proved the
+trigger on a hand-built scratch table, but never registered the suite in
+`run-scratch-probes.sh` — the discipline note is explicit that a probe
+file not wired into the runner is not a probe. It is the 95th suite now,
+and the first full run against the real schema (RLS, the native-league
+flow, the window-lock triggers, all 294 migrations) passes all seven
+assertions: the same row re-saved, a whole-lineup batch around it, the
+move to another slot in one batch, two-owned-two-fielded, and the three
+refusals — a second at another slot, an UPDATE into a second, a third with
+two owned.
+
+Battery: 95 scratch-DB probe suites, check:changelog — green. Web only —
+no client change.
+
 ### v0.418.2 — the switcher on the classic board, and HOT says what Momentum makes it
 
 Founder, mobile web: "add the switcher to the classic board too. Is my
