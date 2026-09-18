@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.418.2 — the switcher on the classic board, and HOT says what Momentum makes it
+
+Founder, mobile web: "add the switcher to the classic board too. Is my
+momentum power up working with Amon Ra?"
+
+THE SWITCHER. The classic board is an early return from the drip board's
+component, and the switcher (chip, "Your matchups" menu, the open prelude)
+was built AFTER that return — so a classic league could never have been
+handed it, on any width. The block moved above the hand-off (plain values,
+no hooks; the state it reads is declared at the top with the rest), and the
+classic board takes the chip as a prop and draws it in its header row
+beside ← LEAGUE — which on a phone the rail hides, so there the chip is
+the row's whole left side. The drip board keeps ownership of the seats
+list and the menu, so both boards open the same door and it cannot drift.
+
+MOMENTUM. It was working. minuteGain has read the side's buffs since the
+power-up shipped — hot drips accrue at 3× under Momentum, 2× without — and
+the live path hands each window's armed buffs through (buffsForWindow →
+resolveSlot → youBuffs/theirBuffs). What lied was the LABEL: the streak
+badge on a hot drip play was hard-coded "🔥 HOT 2× · rate/m", whatever the
+multiplier actually applied. So the one line on the log that names the
+multiplier said 2× on a card wearing the Momentum chip, and there was no
+way to tell the buff was counting. It reads the same buff set the accrual
+reads now: "🔥 HOT 3× · 1.04/m" when Momentum is on. matchup.ts's hot
+detection matches on "HOT", not on the digit, so nothing downstream moves.
+
+The minute-by-minute drip ticks have always carried "MOMENTUM 3×" as their
+note, but the log's PLAYS view does not show ticks — which is why the
+founder had to ask.
+
+Battery: web tsc, mobile tsc, vite build, check:changelog — green.
+
 ### v0.418.1 — the switcher on a phone
 
 Founder, mobile web, on the drip board: "We need the switch between your

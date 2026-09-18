@@ -1227,7 +1227,12 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
     }
 
     // streak / drip badges
-    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `🔥 HOT 2× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
+    // The hot multiplier the label names is the one minuteGain applies: 3×
+    // under Momentum, 2× otherwise (v0.418.2, founder, reading "🔥 HOT 2×" on
+    // a card wearing the Momentum chip: "Is my momentum power up working?").
+    // It was — the accrual read the buff; only the label was hard-coded.
+    const myHotMult = (play.side === 'you' ? youBuffs : theirBuffs).has('momentum') ? 3 : 2;
+    if (!effect && iAmDrip && myDripKind?.includes(play.kind)) effect = { type: 'streak', text: mine.hot ? `🔥 HOT ${myHotMult}× · ${mine.rate.toFixed(2)}/m` : `DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && (play.side === 'you' ? dstEarnYou : dstEarnTheir) && SPLASH_KINDS.includes(play.kind)) effect = { type: 'streak', text: `DEF DRIP ↑ ${mine.rate.toFixed(2)}/m` };
     if (!effect && myFam === 'streak') {
       if (play.td) effect = { type: 'streak', text: '🔥 TD → STREAK 2×' };

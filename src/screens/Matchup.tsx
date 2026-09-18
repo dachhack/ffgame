@@ -1469,6 +1469,63 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Hand a classic league to its own board. Held until the mode is KNOWN
   // (null) rather than defaulting to drip for a frame — flashing the card
   // board and then replacing it is exactly the symptom this is fixing.
+  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
+  // Defined here, ABOVE the classic hand-off below (v0.418.2, founder: "add
+  // the switcher to the classic board too"): the classic board is an early
+  // return from this component, and the switcher used to be built after it,
+  // so a classic league could never be given the chip. Plain values, no
+  // hooks — the state they read is declared at the top with the rest.
+  // Founder, Thursday night, four leagues live: "I have to keep going back
+  // to my leagues to see my other match ups. Can we make a quick selector
+  // at the top?" The header names the league you are in and opens a list of
+  // your other seats; picking one runs the same prelude the leagues list
+  // runs (openHeroBoard) — the board rebuilds for that league on the week
+  // it is playing — so this is the leagues page's card, one tap from here.
+  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
+  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
+  const goToLeague = async (e: Enrollment) => {
+    if (!liveCtx || switchingLeague) return;
+    setLeagueMenu(false);
+    setSwitchingLeague(e.league_id);
+    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
+    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
+  };
+  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
+  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
+    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
+      title="Switch to another of your leagues"
+      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
+      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
+    </button>
+  ) : null;
+  const leagueMenuEl = leagueMenu ? (
+    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
+          </div>
+          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {otherSeats.map((e) => (
+            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
+              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
+                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
+            </button>
+          ))}
+          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
+        </div>
+      </div>
+    </ModalBackdrop>
+  ) : null;
   if (!demo && liveCtx && classicMode === null) {
     return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading your matchup…</div>;
   }
@@ -1485,9 +1542,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const back = () => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId });
     return (
       <>
+        {leagueMenuEl}
         {railed && <BoardTopRail />}
         <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
-          onBack={back} hideBack={railed} />
+          onBack={back} hideBack={railed} switcher={liveSwitchChip} />
         {railed && barLeague && (
           <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />
         )}
@@ -1702,58 +1760,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
-  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
-  // Founder, Thursday night, four leagues live: "I have to keep going back
-  // to my leagues to see my other match ups. Can we make a quick selector
-  // at the top?" The header names the league you are in and opens a list of
-  // your other seats; picking one runs the same prelude the leagues list
-  // runs (openHeroBoard) — the board rebuilds for that league on the week
-  // it is playing — so this is the leagues page's card, one tap from here.
-  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
-  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
-  const goToLeague = async (e: Enrollment) => {
-    if (!liveCtx || switchingLeague) return;
-    setLeagueMenu(false);
-    setSwitchingLeague(e.league_id);
-    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
-    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
-  };
-  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
-  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
-    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
-      title="Switch to another of your leagues"
-      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
-      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
-    </button>
-  ) : null;
-  const leagueMenuEl = leagueMenu ? (
-    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
-          <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
-          </div>
-          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
-        </div>
-        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
-          {otherSeats.map((e) => (
-            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
-              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
-                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
-              </div>
-              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
-            </button>
-          ))}
-          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
-        </div>
-      </div>
-    </ModalBackdrop>
-  ) : null;
   // ← LEAGUE, beside it (v0.288.1). The classic board has had this door and the
   // drip board never did, so "my leagues" was the only way off it — two clicks
   // and a list to get back to the league you were already in. It only exists for
