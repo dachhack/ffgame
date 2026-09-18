@@ -8,7 +8,7 @@
 // (matchup.lock_at) the lineup seals and the board turns into the live view:
 // your starters vs theirs, each scoring classicPoints off the same live play
 // stream the drip boards run on, refreshed every 60s.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
 import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
@@ -419,12 +419,16 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
   );
 }
 
-export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
+export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, switcher }: {
   userId: string; leagueId?: string; rosterId?: number; onBack: () => void;
   /** The room bar is on screen (v0.356.11) — its LEAGUE button is this
    *  board's way back, so the header's own "← LEAGUE" would be a second
    *  door in the same square inch. `onBack` still runs the swipe gesture. */
   hideBack?: boolean;
+  /** The league switcher (v0.388.0's chip, v0.418.2 here): the drip board
+   *  owns the seats list and the "Your matchups" menu, and hands this board
+   *  the chip so both boards open the same door. Null with one league. */
+  switcher?: ReactNode;
 }) {
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [err, setErr] = useState<string | null>(null);
@@ -1252,9 +1256,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack }: {
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        {hideBack
-          ? <span />
-          : <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer' }}>← LEAGUE</button>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          {!hideBack && <button onClick={onBack} className="mono" style={{ background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, color: 'var(--dim)', cursor: 'pointer', whiteSpace: 'nowrap' }}>← LEAGUE</button>}
+          {/* THE SWITCHER (founder: "add the switcher to the classic board
+              too"). On a phone the rail hides ← LEAGUE, so this is the row's
+              whole left side; on a desktop it sits beside the door, as it
+              does on the drip board. */}
+          {switcher}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {/* THE WEEK IS NAVIGATION NOW (v0.299.1), not a status line. The
               founder: "we don't need the classic, week 1, full ppr line" — the

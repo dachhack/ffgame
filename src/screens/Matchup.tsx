@@ -11,7 +11,7 @@ import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
-import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase, hasSlate, scheduledGamesFor } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys } from '@drip/core/data/powerups';
@@ -1469,6 +1469,63 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Hand a classic league to its own board. Held until the mode is KNOWN
   // (null) rather than defaulting to drip for a frame — flashing the card
   // board and then replacing it is exactly the symptom this is fixing.
+  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
+  // Defined here, ABOVE the classic hand-off below (v0.418.2, founder: "add
+  // the switcher to the classic board too"): the classic board is an early
+  // return from this component, and the switcher used to be built after it,
+  // so a classic league could never be given the chip. Plain values, no
+  // hooks — the state they read is declared at the top with the rest.
+  // Founder, Thursday night, four leagues live: "I have to keep going back
+  // to my leagues to see my other match ups. Can we make a quick selector
+  // at the top?" The header names the league you are in and opens a list of
+  // your other seats; picking one runs the same prelude the leagues list
+  // runs (openHeroBoard) — the board rebuilds for that league on the week
+  // it is playing — so this is the leagues page's card, one tap from here.
+  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
+  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
+  const goToLeague = async (e: Enrollment) => {
+    if (!liveCtx || switchingLeague) return;
+    setLeagueMenu(false);
+    setSwitchingLeague(e.league_id);
+    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
+    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
+  };
+  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
+  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
+    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
+      title="Switch to another of your leagues"
+      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
+      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
+    </button>
+  ) : null;
+  const leagueMenuEl = leagueMenu ? (
+    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
+          </div>
+          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {otherSeats.map((e) => (
+            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
+              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
+                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
+            </button>
+          ))}
+          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
+        </div>
+      </div>
+    </ModalBackdrop>
+  ) : null;
   if (!demo && liveCtx && classicMode === null) {
     return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading your matchup…</div>;
   }
@@ -1485,9 +1542,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const back = () => navigate({ name: 'live', view: 'leaguehome', leagueId: liveCtx.leagueId });
     return (
       <>
+        {leagueMenuEl}
         {railed && <BoardTopRail />}
         <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
-          onBack={back} hideBack={railed} />
+          onBack={back} hideBack={railed} switcher={liveSwitchChip} />
         {railed && barLeague && (
           <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />
         )}
@@ -1702,58 +1760,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const liveLeaguesChip = (
     <button onClick={() => navigate({ name: 'live' })} className="mono" title="Back to your leagues" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>← my leagues</button>
   );
-  // ── LEAGUE SWITCHER (v0.388.0) ────────────────────────────────────────
-  // Founder, Thursday night, four leagues live: "I have to keep going back
-  // to my leagues to see my other match ups. Can we make a quick selector
-  // at the top?" The header names the league you are in and opens a list of
-  // your other seats; picking one runs the same prelude the leagues list
-  // runs (openHeroBoard) — the board rebuilds for that league on the week
-  // it is playing — so this is the leagues page's card, one tap from here.
-  const thisSeat = seats?.find((e) => e.league_id === liveCtx?.leagueId) ?? null;
-  const leagueName = thisSeat?.league?.name ?? getActiveLeague().name;
-  const goToLeague = async (e: Enrollment) => {
-    if (!liveCtx || switchingLeague) return;
-    setLeagueMenu(false);
-    setSwitchingLeague(e.league_id);
-    const ok = await openHeroBoard(e, liveCtx.userId, loadSimLeague, navigate);
-    if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
-  };
-  const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
-  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
-    <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
-      title="Switch to another of your leagues"
-      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
-      <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
-    </button>
-  ) : null;
-  const leagueMenuEl = leagueMenu ? (
-    <ModalBackdrop onClick={() => setLeagueMenu(false)} padTop={60}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
-          <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
-          </div>
-          <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
-        </div>
-        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
-          {otherSeats.map((e) => (
-            <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
-              <Avatar src={e.league?.avatar_url ?? null} name={e.league?.name ?? 'League'} size={26} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
-                <div style={{ fontSize: 9, color: 'var(--dim)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}</div>
-              </div>
-              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>OPEN →</span>
-            </button>
-          ))}
-          {!otherSeats.length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other leagues.</div>}
-        </div>
-      </div>
-    </ModalBackdrop>
-  ) : null;
   // ← LEAGUE, beside it (v0.288.1). The classic board has had this door and the
   // drip board never did, so "my leagues" was the only way off it — two clicks
   // and a list to get back to the league you were already in. It only exists for
@@ -1849,7 +1855,16 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{liveModeChip}{liveTestChip}</div>
+                {/* THE SWITCHER ON A PHONE (v0.418.0, founder, mobile web: "We
+                    need the switch between your matchups feature"). The rail
+                    replaced the row the switcher lived in (v0.356.11), and
+                    nothing carried it over — so the one screen the founder
+                    plays on had no way between his four matchups but the
+                    leagues list. It sits beside the week now, where the ◈ DRIP
+                    chip was: a statement of the mode gives way to the door
+                    between leagues, and only when there is more than one
+                    league to go to; a single-league seat keeps its chip. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{liveWeekSel}{railed && liveSwitchChip ? liveSwitchChip : liveModeChip}{liveTestChip}</div>
                 {liveScore}
               </div>
               {/* WEEK RESULT lost its seat in the rail's right-hand corner, so
@@ -2053,8 +2068,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                         coin, SHOP and chat all in this row, the FIELDS label
                         was the straw that wrapped it on a phone. The ▦ glyph
                         carries it, like the chat chip beside it. */}
-                    {liveCtx && hasGameFeed(week) && (
-                      <button onClick={() => setFieldsOpen(true)} title="Every game with a slotted player, as live field visuals" aria-label="All games field board" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px' }}>
+                    {/* Offered once the week has FIXTURES, not once it has PLAYS
+                        (v0.418.0, founder, Thursday evening before TNF: "what
+                        happened to the fields chip?"). hasGameFeed is true only
+                        after the worker has ingested a play, so the chip went
+                        missing for the whole of the week before its first
+                        whistle — and came back mid-game, which read as broken.
+                        v0.413.0 taught the overlay to draw a card from the slate
+                        alone (kickoff, no plays) and the classic board's chip
+                        to open on "fixtures OR feed"; this is the same ruling on
+                        this board. The demo board's copy above keeps its feed
+                        gate — its weeks are baked and always have one. */}
+                    {liveCtx && (hasGameFeed(week) || hasSlate(week)) && (
+                      <button onClick={() => setFieldsOpen(true)} title="Every game this week, as live field visuals — yours highlighted" aria-label="All games field board" className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px' }}>
                         ▦
                       </button>
                     )}
@@ -2370,6 +2396,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       {fieldsOpen && (
         <FieldBoard week={week} onClose={() => setFieldsOpen(false)}
           onRefresh={liveCtx ? () => void reloadLive.current?.() : undefined}
+          /* The week's fixtures, so a game with no feed yet still gets a card
+             with its kickoff (v0.413.0 rule, v0.418.0 on this board). The
+             live board installs its slate through setRuntimeSlate, so it
+             reads the same games back; the demo weeks are baked 2025 and
+             their feeds already cover every game, so the slate adds nothing. */
+          scheduled={liveCtx ? scheduledGamesFor(week) : undefined}
           entries={(() => {
           // One entry per slotted player: its team locates the NFL game, its
           // side drives the play tinting, and its clock mirrors the slot rows

@@ -71,6 +71,18 @@ function slateFor(week: number): NflGame[] | undefined {
 /** Whether we have a slate for a week (live override or baked) — gates slate-aware UI. */
 export const hasSlate = (week: number): boolean => !!slateFor(week);
 
+/** The week's fixtures as the field board takes them (gameFeed's
+ *  ScheduledGame: away, home, kickoff as ISO or null) — so a board that has
+ *  installed its week's slate can open ▦ FIELDS before a single play has been
+ *  ingested (v0.418.0). The classic board hands the overlay the RPC rows it
+ *  already holds; the drip board holds its slate here, so it reads them back. */
+export function scheduledGamesFor(week: number): { away: string; home: string; kickoff: string | null }[] {
+  return (slateFor(week) ?? []).map((g) => ({
+    away: g.away, home: g.home,
+    kickoff: g.kickoff != null && Number.isFinite(g.kickoff) ? new Date(g.kickoff).toISOString() : null,
+  }));
+}
+
 /** The NFL game a team plays in a given week, or undefined (bye). */
 export function nflGameForTeam(week: number, team?: string | null): NflGame | undefined {
   if (!team) return undefined;
