@@ -6,12 +6,12 @@
 // the same live play stream, refreshed every 60s.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, projectEntry, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag, liveTeamFor } from '@drip/core/data/slugMeta';
@@ -706,54 +706,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     [matchup, slate],
   );
 
-  // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
-  // the engine's fills — the same bestballFill the worker scores with.
-  const effective = useMemo(() => {
-    void playsAt;
-    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
-      const out: Record<string, string | null> = {};
-      const manualPicks: ClassicPick[] = [];
-      for (const d of slotDefs) {
-        if (bb.has(d.slot)) { out[d.slot] = null; continue; }
-        out[d.slot] = manual[d.slot] ?? null;
-        if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
-      }
-      // exp rides along (0172) so tenure-filtered spots fill honestly.
-      const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
-      // THE SEAT NOBODY MANAGES (v0.248.0). sealed_pick hangs off a user, so a
-      // seat with no claimed manager cannot store a lineup at all — the worker's
-      // auto-slot never reaches it. The engine fields its best projected lineup
-      // from the roster instead (classicLineup), and this is the same call, so
-      // what this board draws is what the resolver scores. Only when the side
-      // stored NOTHING: a seat with rows is managed, and everything it stored
-      // stands, empty spots included.
-      if (!Object.keys(manual).length && ros.length) {
-        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, fillValue)) {
-          out[r.slot] = r.player;
-          manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
-        }
-      }
-      if (matchup && bb.size) {
-        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
-        // itself with whoever scores most, so before anyone has scored it used
-        // to render empty and count ZERO toward the projected total —
-        // understating a best-ball team by however many spots it auto-fills.
-        // Same algorithm either way (bestballFillBy owns eligibility, the
-        // manual-start exclusion, one-player-one-spot and the fill order); only
-        // the number it sorts on changes, so the preview and the real fill can
-        // never disagree about who is ALLOWED, just about who is best.
-        const fills = locked
-          ? bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)
-          : bestballFillBy(manualPicks, bestball, ros, slotDefs, fillValue);
-        for (const f of fills) out[f.slot] = f.player.id;
-      }
-      return out;
-    };
-    return {
-      mine: build(mine, pool.map((p) => p.slug)),
-      theirs: build(theirs, oppPool.map((p) => p.slug)),
-    };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(
@@ -842,6 +794,68 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
   }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams]);
+
+  // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
+  // the engine's fills — the same bestballFill the worker scores with.
+  const effective = useMemo(() => {
+    void playsAt;
+    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
+      const out: Record<string, string | null> = {};
+      const manualPicks: ClassicPick[] = [];
+      for (const d of slotDefs) {
+        if (bb.has(d.slot)) { out[d.slot] = null; continue; }
+        out[d.slot] = manual[d.slot] ?? null;
+        if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
+      }
+      // exp rides along (0172) so tenure-filtered spots fill honestly.
+      const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
+      // THE SEAT NOBODY MANAGES (v0.248.0). sealed_pick hangs off a user, so a
+      // seat with no claimed manager cannot store a lineup at all — the worker's
+      // auto-slot never reaches it. The engine fields its best projected lineup
+      // from the roster instead (classicLineup), and this is the same call, so
+      // what this board draws is what the resolver scores. Only when the side
+      // stored NOTHING: a seat with rows is managed, and everything it stored
+      // stands, empty spots included.
+      if (!Object.keys(manual).length && ros.length) {
+        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, fillValue)) {
+          out[r.slot] = r.player;
+          manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
+        }
+      }
+      if (matchup && bb.size) {
+        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
+        // itself with whoever scores most, so before anyone has scored it used
+        // to render empty and count ZERO toward the projected total —
+        // understating a best-ball team by however many spots it auto-fills.
+        // Same algorithm either way (bestballFillBy owns eligibility, the
+        // manual-start exclusion, one-player-one-spot and the fill order); only
+        // the number it sorts on changes, so the preview and the real fill can
+        // never disagree about who is ALLOWED, just about who is best.
+        // THE PROJECTED FINAL, NOT THE LIVE SCORE (v0.427.1). Founder, on a
+        // Saturday: "the game swapped in Washington into the bestball spot
+        // despite Sadiq having a higher projection." Once the week's first
+        // game had kicked off this ranked by LIVE points (bestballFill) — so
+        // every man whose game was still to come was worth exactly 0, the
+        // fill tied across the whole bench and fell to roster order. The
+        // resolver's live ranking is right at the END, when every game is
+        // final; mid-week the honest value of a player is what the board
+        // already projects for him — his points if he is done, his
+        // projection if he hasn't started, the blend while he plays
+        // (projectEntry) — and that is the same number at the end.
+        const finalValue = (p: { id: string; pos?: string | null; team?: string | null }, d: ClassicSlotDef) => {
+          const e = entryFor(p.id, d.pos, d.slot);
+          return e ? projectEntry(e) : fillValue(p, d);
+        };
+        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked ? finalValue : fillValue);
+        for (const f of fills) out[f.slot] = f.player.id;
+      }
+      return out;
+    };
+    return {
+      mine: build(mine, pool.map((p) => p.slug)),
+      theirs: build(theirs, oppPool.map((p) => p.slug)),
+    };
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -1410,11 +1424,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)}
                              onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
                       <Mono size={12.5} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42, textAlign: 'right' }}>
-                        {h ? scoreOf(h) : ''}
+                        {h ? (k === 'ir' && h.state === 'pre' ? '—' : scoreOf(h)) : ''}
                       </Mono>
                       <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
                       <Mono size={12.5} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
-                        {a ? scoreOf(a) : ''}
+                        {a ? (k === 'ir' && a.state === 'pre' ? '—' : scoreOf(a)) : ''}
                       </Mono>
                       {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)}
                              onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
