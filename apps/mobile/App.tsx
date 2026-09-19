@@ -124,8 +124,8 @@ export function App() {
   // headless task is the widget's normal painter, but the app in hand knows
   // things first (a lineup just saved, a sign-in that just happened).
   useEffect(() => {
-    void refreshMatchupWidgets();
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void refreshMatchupWidgets(); });
+    void refreshMatchupWidgets({ fresh: true });
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void refreshMatchupWidgets({ fresh: true }); });
     return () => sub.remove();
   }, [session?.user.id]);
   // A tap on the widget: dripfantasy://matchup?league=…&roster=… opens that

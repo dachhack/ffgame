@@ -31,6 +31,7 @@ import {
 } from './liveApi';
 import { windowsForWeek, windowPhase, windowLockMs, windowDateLabel, windowTimeLabel, weekLabel, setRuntimeSlate, windowForTeam, gamesInWindow, type WindowPhase } from './nflSlate';
 import { slotsFor } from '../engine/matchup';
+import { platform } from '../platform';
 import type { WindowId } from '../types';
 
 export type WidgetPhase = 'pre' | 'live' | 'final' | 'bye';
@@ -250,26 +251,70 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   return { ...common, phase: 'live', line: 'Settling…', lead: 'score' };
 }
 
+// ── THE CACHE (v0.422.1) ────────────────────────────────────────────────────
+// Founder: "There's a lot of lag when you press the buttons. Almost unusable."
+// Every tap woke a cold headless task that made nine network reads before it
+// could draw anything. Most of those answers change on the order of hours —
+// the seats you hold, the week the league is on, the roster, the slate, the
+// injury sheet, the team names — so they are remembered in the app's storage
+// with a lifetime each, and only the two that move on a Sunday (the matchup
+// row and its state, plus the picks) are always read fresh. The last drawn
+// picture is remembered too, so a wake can PAINT FIRST and fetch second.
+const CACHE = (k: string) => `widget:cache:${k}`;
+const MIN = 60_000;
+
+export function cacheGet<T>(key: string, maxAgeMs: number, nowMs: number = Date.now()): T | null {
+  try {
+    const raw = platform().storage.get(CACHE(key));
+    if (!raw) return null;
+    const j = JSON.parse(raw) as { at?: unknown; v?: T };
+    if (!j || typeof j.at !== 'number' || nowMs - j.at > maxAgeMs || nowMs < j.at - MIN) return null;
+    return j.v === undefined ? null : j.v;
+  } catch { return null; }
+}
+export function cacheSet<T>(key: string, v: T, nowMs: number = Date.now()): void {
+  try { platform().storage.set(CACHE(key), JSON.stringify({ at: nowMs, v })); } catch { /* storage is best-effort */ }
+}
+async function cached<T>(key: string, maxAgeMs: number, fresh: boolean, load: () => Promise<T>): Promise<T> {
+  if (!fresh) { const hit = cacheGet<T>(key, maxAgeMs); if (hit !== null) return hit; }
+  const v = await load();
+  cacheSet(key, v);
+  return v;
+}
+
+export interface RememberedSnapshot { leagues: WidgetLeague[]; snapshot: WidgetSnapshot }
+/** The last picture drawn for a league, for the instant first paint. A day
+ *  old is still worth a frame while the fresh one loads; the card says when
+ *  it was drawn. */
+export const recallSnapshot = (leagueId: string): RememberedSnapshot | null => cacheGet<RememberedSnapshot>(`snap:${leagueId}`, 24 * 60 * MIN);
+export const rememberSnapshot = (r: RememberedSnapshot): void => cacheSet(`snap:${r.snapshot.leagueId}`, r);
+/** The leagues list as last read, so ▸ can pick the next league without a
+ *  network round-trip. */
+export const recallLeagues = (): WidgetLeague[] | null => cacheGet<WidgetLeague[]>('leagues', 24 * 60 * MIN);
+
 /** The whole feed for one widget: the leagues it could show, and the picture
  *  for the one it does. Null snapshot with an empty list means "signed in,
  *  no seats"; the caller decides what a signed-OUT widget says. `userId` is
- *  the session user, for the picks of a seat that has no owner override. */
-export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
-  const leagues = widgetLeagues(await myEnrollments(''));
+ *  the session user, for the picks of a seat that has no owner override.
+ *  `fresh` bypasses every cache (the app in the foreground knows things
+ *  first: a league just joined, a lineup just saved). */
+export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null, fresh = false): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
+  const leagues = await cached('leagues', 5 * MIN, fresh, async () => widgetLeagues(await myEnrollments('')));
   const league = pickWidgetLeague(leagues, wantLeagueId);
   if (!league) return { leagues, snapshot: null };
-  const openWeek = await defaultOpenWeek(league.id);
+  const openWeek = await cached(`week:${league.id}`, 10 * MIN, fresh, () => defaultOpenWeek(league.id));
   const matchup = await myMatchupFrom(league.id, league.rosterId, openWeek);
   const week = matchup?.week ?? openWeek;
   const pickUser = league.pickUserId ?? userId ?? null;
   const drip = league.gameMode === 'drip' && !!matchup && !!pickUser;
+  const teamIds = matchup ? [matchup.home_roster_id, matchup.away_roster_id] : [league.rosterId];
   const [state, teams, slate, picks, pool, injuries] = await Promise.all([
     matchup ? getMatchupState(matchup.id) : Promise.resolve([] as WindowScore[]),
-    matchupTeams(league.id, matchup ? [matchup.home_roster_id, matchup.away_roster_id] : [league.rosterId]),
-    liveSlate(week).catch(() => []),
+    cached(`teams:${league.id}:${teamIds.join(',')}`, 60 * MIN, fresh, () => matchupTeams(league.id, teamIds)),
+    cached(`slate:${week}`, 60 * MIN, fresh, () => liveSlate(week).catch(() => [])),
     drip ? myPicks(matchup!.id, pickUser as string).catch(() => undefined) : Promise.resolve(undefined),
-    drip ? myPool(league.id, week, league.rosterId).catch(() => []) : Promise.resolve([]),
-    drip ? injuryTags().catch(() => ({})) : Promise.resolve({}),
+    drip ? cached(`pool:${league.id}:${week}:${league.rosterId}`, 30 * MIN, fresh, () => myPool(league.id, week, league.rosterId).catch(() => [])) : Promise.resolve([]),
+    drip ? cached('injuries', 30 * MIN, fresh, () => injuryTags().catch(() => ({}))) : Promise.resolve({}),
   ]);
   // The baked slate has no kickoff clocks; the headless task starts from a
   // cold module, so the week's real kickoffs are installed here exactly as
@@ -281,5 +326,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
       kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
     })));
   }
-  return { leagues, snapshot: summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks, pool, injuries }) };
+  const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks, pool, injuries });
+  rememberSnapshot({ leagues, snapshot });
+  return { leagues, snapshot };
 }

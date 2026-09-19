@@ -41,7 +41,10 @@ export type WidgetState =
   | { kind: 'signed-out' }
   | { kind: 'no-leagues' }
   | { kind: 'error'; message: string }
-  | { kind: 'ok'; snap: WidgetSnapshot; leagues: number };
+  /** Painted the instant a chip is tapped, before any read: the last picture
+   *  we drew, or a one-line notice while the first read runs. */
+  | { kind: 'loading'; title: string; body: string }
+  | { kind: 'ok'; snap: WidgetSnapshot; leagues: number; /** True when this is the remembered picture and a fresh read is on its way. */ stale?: boolean };
 
 export const MATCHUP_WIDGET_NAME = 'Matchup';
 export const WIDGET_CLICK = { open: 'OPEN_URI', next: 'NEXT_LEAGUE', refresh: 'REFRESH', flip: 'FLIP_VIEW' } as const;
@@ -231,6 +234,7 @@ export function MatchupWidget({ state, heightDp = 110, view }: { state: WidgetSt
   if (state.kind === 'signed-out') return <Notice title="Sign in to see your matchup" body="Your live score, right here, once you're signed in." />;
   if (state.kind === 'no-leagues') return <Notice title="No league yet" body="Join or create a league and your matchup lands here." />;
   if (state.kind === 'error') return <Notice title="Couldn’t reach the league" body={state.message} />;
+  if (state.kind === 'loading') return <Notice title={state.title} body={state.body} />;
   const { snap, leagues } = state;
   const tier = tierFor(heightDp);
   const shown: WidgetView = snap.assessable ? (view ?? snap.lead) : 'score';
