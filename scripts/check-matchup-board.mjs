@@ -362,5 +362,27 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
     WHOLE_POOL_MIN > 30 && WHOLE_POOL_MIN < 900, WHOLE_POOL_MIN);
 }
 
+// ── THE WEEK'S RING (v0.424.0) ─────────────────────────────────────────────
+// The ▸ chip walks every matchup in the league for the week. Both hosts step
+// through the same order and say the same "2/6", from a bye included.
+{
+  const { orderMatchups, matchupIndex, matchupOrdinal, nextMatchupSeat } = await import('../packages/core/src/data/matchupBrowse.ts');
+  const wk = [
+    { id: 'c', home_roster_id: 5, away_roster_id: 2 },
+    { id: 'a', home_roster_id: 1, away_roster_id: 6 },
+    { id: 'b', home_roster_id: 3, away_roster_id: 4 },
+  ];
+  ok('ring: ordered by home seat, not by id', orderMatchups(wk).map((m) => m.id).join(''), 'abc');
+  ok('ring: my index, from either side of the pair', matchupIndex(wk, 6) === 0 && matchupIndex(wk, 4) === 1 && matchupIndex(wk, 5) === 2);
+  ok('ring: a bye is in no matchup', matchupIndex(wk, 9) === -1);
+  ok('ring: the chip reads 2/3 from seat 3', matchupOrdinal(wk, 3) === '2/3', matchupOrdinal(wk, 3));
+  ok('ring: …and –/3 from a bye', matchupOrdinal(wk, 9) === '–/3', matchupOrdinal(wk, 9));
+  ok('ring: next from seat 1 is the home seat of the next pair', nextMatchupSeat(wk, 1) === 3, nextMatchupSeat(wk, 1));
+  ok('ring: the last wraps to the first', nextMatchupSeat(wk, 2) === 1, nextMatchupSeat(wk, 2));
+  ok('ring: a bye steps into the first', nextMatchupSeat(wk, 9) === 1, nextMatchupSeat(wk, 9));
+  ok('ring: no rows, nowhere to go', nextMatchupSeat([], 1) === null);
+  ok('ring: the input is not reordered in place', wk[0].id === 'c');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

@@ -39,6 +39,8 @@ import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
+import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
  *
@@ -498,6 +500,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // null means "whatever week the league is on" — the board's own default, and
   // what it opens on. A number is a week the manager asked for.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // ── EVERY MATCHUP IN THE LEAGUE (v0.424.0, founder: "a chip that goes to
+  //    the next matchup for that week") ─────────────────────────────────────
+  // `viewRid` is the seat on the LEFT of the board; null is mine. `ros` (the
+  // seat everything below reads) follows it, so a rival pair renders through
+  // the same path — its lineup read from the league-readable classic picks
+  // (0178) rather than myPicks — and editing is off while the seat isn't
+  // mine. `mySeat` remembers which seat IS mine once the loader resolved it;
+  // `seatUser` is the account in the left seat, what the poll splits by.
+  const [viewRid, setViewRid] = useState<number | null>(null);
+  const [mySeat, setMySeat] = useState<number | null>(null);
+  const [seatUser, setSeatUser] = useState<string | null>(userId);
+  const [weekList, setWeekList] = useState<MatchupResult[]>([]);
+  const browsing = ros != null && mySeat != null && ros.rosterId !== mySeat;
+  useEffect(() => { setViewRid(null); }, [leagueId, rosterId]);
   // 🧪 LIVE TEST (0053): non-null marks this league a sandbox, which is what
   // lets the REHEARSAL strip below offer the worker-driven sim (0251) on THIS
   // board. The founder's call (v0.367.1): the week-0 client-side replay is
@@ -549,8 +565,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     (async () => {
       try {
         setState('loading'); setErr(null);
-        const r = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
-        if (!r) { setState('none'); return; }
+        const base = leagueId && rosterId != null ? { leagueId, rosterId } : await myRoster(userId);
+        if (!base) { setState('none'); return; }
+        const r = viewRid != null ? { leagueId: base.leagueId, rosterId: viewRid } : base;
+        const peeking = r.rosterId !== base.rosterId;
+        setMySeat(base.rosterId);
         setRos(r);
         // OPEN ON THE WEEK BEING PLAYED (v0.407.0). Founder, on a classic
         // league board: "still opens to week 1."
@@ -570,11 +589,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           // built, and only the league-wide view knows which (0247).
           const role = wk == null ? 'unbuilt'
             : await leagueWeekRole(r.leagueId, r.rosterId, wk).catch(() => 'unbuilt');
+          // The ring is still there from a bye — the ▸ chip is the way in.
+          if (wk != null) weekMatchups(r.leagueId, wk).then(setWeekList).catch(() => {});
           if (role === 'bye') { setByeWeek(wk); setState('ready'); return; }
           setState('none'); return;
         }
         setByeWeek(null);
         setMatchup(m);
+        weekMatchups(r.leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(r.leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
           setStashReady(true);
@@ -607,8 +629,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
-        matchupTeams(r.leagueId, [r.rosterId, oppRoster]).then((t: Record<number, TeamInfo>) => {
-          setNames({ me: t[r.rosterId]?.team_name || 'YOU', opp: t[oppRoster]?.team_name || 'OPPONENT' });
+        const teamsP = matchupTeams(r.leagueId, [r.rosterId, oppRoster]);
+        teamsP.then((t: Record<number, TeamInfo>) => {
+          setNames({ me: t[r.rosterId]?.team_name || (peeking ? 'HOME' : 'YOU'), opp: t[oppRoster]?.team_name || (peeking ? 'AWAY' : 'OPPONENT') });
           setAvatars({ me: t[r.rosterId]?.avatar ?? null, opp: t[oppRoster]?.avatar ?? null });
         }).catch(() => {});
         // THE LIVE INJURY REPORT (v0.299.1, founder: "we also need any injury
@@ -655,7 +678,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           const me = (Array.isArray(rows) ? rows : []).find((row) => row.roster_id === r.rosterId);
           setChopped(me?.eliminated ?? null);
         }).catch(() => {});
-        const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId), myPicks(m.id, userId)]);
+        // A browsed seat's lineup comes off the league-readable classic picks
+        // (0178), keyed by the account in that seat; mine still comes from
+        // myPicks, which also carries the per-spot seal.
+        const vu = peeking ? ((await teamsP.catch(() => ({} as Record<number, TeamInfo>)))[r.rosterId]?.user_id ?? null) : userId;
+        setSeatUser(vu);
+        const [pl, pk] = await Promise.all([myPool(r.leagueId, m.week, r.rosterId),
+          peeking ? revealedPicksOf(m.id).then((rows) => rows.filter((p) => vu != null && p.app_user_id === vu)) : myPicks(m.id, userId)]);
         setPool(pl);
         // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie
         // the baked slug map has never heard of otherwise resolves to WR with
@@ -687,7 +716,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     // loader reads, so a poll-only refresh would leave the header in live
     // dress over a reverted week.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, leagueId, rosterId, weekWanted, simVer]);
+  }, [userId, leagueId, rosterId, viewRid, weekWanted, simVer]);
 
   // THE WEEK IS UNDERWAY — the only thing this flag still decides is
   // PRESENTATION (live scores rather than projections, the win bar, the
@@ -740,7 +769,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         if (stop) return;
         const opp: Record<string, string> = {};
         for (const p of rev) {
-          if (p.app_user_id === userId || p.game_window !== CLASSIC_WIN || !p.player_slug) continue;
+          if (p.app_user_id === seatUser || p.game_window !== CLASSIC_WIN || !p.player_slug) continue;
           opp[p.roster_slot] = p.player_slug;
         }
         setTheirs(opp);
@@ -760,7 +789,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     // reads as a dead board there. 10s under LIVE TEST, the usual 60s outside.
     const t = window.setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
     return () => { stop = true; reloadLive.current = null; window.clearInterval(t); };
-  }, [matchup, userId, ros, testLive]);
+  }, [matchup, userId, ros, seatUser, testLive]);
 
   // The bell's poll — 20s, the app vampire card's cadence, so a SIM'd win
   // rings while the founder watches. Vampire leagues only: the first probe
@@ -1093,7 +1122,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   };
   const goWeek = (d: -1 | 1) => {
     const w = byeWeek ?? matchup?.week;
-    if (canGo(d) && w != null) setWeekWanted(w + d);
+    if (canGo(d) && w != null) { setViewRid(null); setWeekWanted(w + d); }
   };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
@@ -1125,14 +1154,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
    *  whose game has begun, means no — everything else is fair game, including
    *  mid-week once other players have played. */
   const canEdit = (slot: string): boolean =>
-    !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+    !browsing && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
   /** Write one or more spots in a single save. A MOVE touches two (the target
    *  and the spot the player left), and they have to travel together — writing
    *  only the target would leave the same player standing in two spots until
    *  the next poll. */
   const applyMove = async (writes: { slot: string; player: string | null }[]) => {
-    if (!matchup || !writes.length) return;
+    if (!matchup || !writes.length || browsing) return;
     const before = mine;
     const next = { ...mine };
     for (const w of writes) next[w.slot] = w.player;
@@ -1173,7 +1202,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // which is the real guard; the ref just avoids the round trip).
   const autoSlotted = useRef(false);
   useEffect(() => {
-    if (autoSlotted.current || state !== 'ready' || locked || !matchup) return;
+    if (autoSlotted.current || state !== 'ready' || locked || !matchup || browsing) return;
     // The slate gates the WRITE path too (v0.252.0): rows written bye-blind
     // would stand — a spot with a row is never revisited. The worker fills
     // within a tick if the client never gets a slate.
@@ -1199,7 +1228,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         return next;
       });
     }).catch(() => {});
-  }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
+  }, [state, locked, matchup, userId, browsing, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
   if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
   const weekBtn = (on: boolean): React.CSSProperties => ({
@@ -1213,6 +1242,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} className="mono" style={weekBtn(canGo(-1))}>‹ WK {byeWeek - 1}</button>
         <button onClick={() => goWeek(1)} disabled={!canGo(1)} className="mono" style={weekBtn(canGo(1))}>WK {byeWeek + 1} ›</button>
+        {weekList.length > 0 && (
+          <button onClick={() => { const n = nextMatchupSeat(weekList, ros?.rosterId); if (n != null) setViewRid(n === mySeat ? null : n); }}
+            className="mono" style={weekBtn(true)} title="The week's matchups">▸ {matchupOrdinal(weekList, ros?.rosterId)}</button>
+        )}
       </div>
     </NoGameScreen>
   );
@@ -1280,6 +1313,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                 style={{ ...stepBtn, opacity: canGo(1) ? 1 : 0.3 }}>›</button>
             </span>
           )}
+          {/* ▸ THE NEXT MATCHUP (v0.424.0, founder). One click walks the week's
+              ring — every pair in the league, mine included — and the chip
+              says where in it you are. Lit while the pair on screen isn't
+              yours. */}
+          {matchup && weekList.length > 1 && (
+            <button onClick={() => { const n = nextMatchupSeat(weekList, ros?.rosterId); if (n != null) setViewRid(n === mySeat ? null : n); }}
+              title="Next matchup this week" aria-label="next matchup this week" className="mono"
+              style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: browsing ? 'var(--on-accent)' : 'var(--text)', background: browsing ? 'var(--you)' : 'var(--bg)', border: `1px solid ${browsing ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '6px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              ▸ {matchupOrdinal(weekList, ros?.rosterId)}
+            </button>
+          )}
           {/* ▦ FIELDS (founder) — the drip board's all-fields idea, over the
               week's feed. Offered once FEEDS exist, not once STARTERS do
               (v0.412.0, founder: "add the fields chip to the matchup view in
@@ -1302,9 +1346,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         </div>
       </div>
 
+      {browsing && matchup && (
+        <button onClick={() => setViewRid(null)} className="mono"
+          style={{ display: 'block', width: '100%', marginTop: 6, background: 'none', border: 0, padding: '2px 0', fontSize: 8.5, letterSpacing: '0.08em', color: 'var(--faint)', cursor: 'pointer', textAlign: 'center' }}>
+          VIEWING {names.me.toUpperCase()} vs {names.opp.toUpperCase()} · ↩ MY MATCHUP
+        </button>
+      )}
       {/* 🪓 CHOPPED (v0.385.0) — the app twin's banner. A manager whose team
           fell saw a normal board with an empty lineup and nothing saying why. */}
-      {chopped != null && (
+      {chopped != null && !browsing && (
         <div className="mono" style={{ marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🪓 CHOPPED IN WEEK {chopped}</div>
           <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>

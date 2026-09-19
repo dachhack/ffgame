@@ -257,14 +257,19 @@ export function Sheet({ title, subtitle, onClose, max = 620, zIndex = 60, childr
 
 const INJURY_COLOR: Record<string, string> = { O: '#FF4F62', IR: '#C2304A', D: '#FF8A3D', Q: '#E8B23A' };
 const INJURY_LABEL: Record<string, string> = { O: 'Out', IR: 'Injured Reserve', D: 'Doubtful', Q: 'Questionable' };
+/** The badge for a designation already in hand (v0.424.0) — the roster
+ *  screen reads the week-less sheet (`injuryTags`) rather than the boards'
+ *  week-keyed cache, so it hands the status in. Nothing for null/unknown. */
+export function InjuryTag({ status, style }: { status: string | null | undefined; style?: CSSProperties }) {
+  const c = status ? INJURY_COLOR[status] : undefined;
+  if (!status || !c) return null;
+  return (
+    <span className="mono" title={INJURY_LABEL[status]} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em', color: c, border: `1px solid ${c}`, borderRadius: 2, padding: '0 3px', lineHeight: 1.5, flex: 'none', ...style }}>{status}</span>
+  );
+}
 /** Info-only weekly injury / IR badge for a player slug, or nothing. */
 export function InjuryBadge({ week, slug, style }: { week: number; slug: string; style?: CSSProperties }) {
-  const s = injuryFor(week, slug);
-  if (!s) return null;
-  const c = INJURY_COLOR[s];
-  return (
-    <span className="mono" title={INJURY_LABEL[s]} style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em', color: c, border: `1px solid ${c}`, borderRadius: 2, padding: '0 3px', lineHeight: 1.5, flex: 'none', ...style }}>{s}</span>
-  );
+  return <InjuryTag status={injuryFor(week, slug)} style={style} />;
 }
 
 /** The commissioner's flag on a player (0141), or nothing. Same anatomy as

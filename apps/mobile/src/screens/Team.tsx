@@ -39,7 +39,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
-import { FlagChip } from '../ui/rosterGroup';
+import { FlagChip, InjuryBadge } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -205,7 +205,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
  *      player, two taps to confirm, and the same button wherever you found him.
  */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }: {
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -221,6 +221,10 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }
    *  a roster in a cap league is a payroll, and hiding the money made a
    *  waiver signing look free. */
   deal?: ContractDeal;
+  /** The NFL report's designation (v0.424.0, founder: "current injury status
+   *  in the team view") — O/D/Q/IR, or nothing. The screen has read the
+   *  sheet for the IR gate since 0198; it just never drew it on the row. */
+  inj?: string | null;
 }) {
   const posC = badgePos ? t.pos[badgePos as keyof typeof t.pos] : undefined;
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
@@ -249,6 +253,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal }
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
               <Mono size={8.5} tone="faint">{p.team}</Mono>
+              <InjuryBadge status={inj ?? null} size={7.5} />
               <FlagChip slug={p.slug} size={7.5} />
             </View>
           </Pressable>
@@ -413,6 +418,19 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
+  // WHOSE ROSTER IS ON THE CARD (v0.424.0, founder: "a selector to see other
+  // teams in your league in this view"). Every seat's roster is already in
+  // `rosters` — nativeRosters is league-wide — so looking at a rival is a
+  // filter, not a fetch. `mine` stays MINE for everything that ACTS (the
+  // wire, trades, keepers, the stash pickers); only the roster card follows
+  // `viewRid`, and it drops its controls while it does.
+  const [viewRid, setViewRid] = useState<number | null>(null);
+  const shownRid = viewRid ?? myRoster;
+  const viewingMine = shownRid === myRoster;
+  const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
+    .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
+    .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
+  const shownName = useMemo(() => (team?.waiver_order ?? []).find((w) => w.roster_id === shownRid)?.team ?? null, [team, shownRid]);
   const cap = team?.roster_cap ?? null;
   // FULL means "no ACTIVE seat left" (0199), not "the roster total is
   // reached": a signing always lands active, and an empty taxi or IR place is
@@ -467,17 +485,17 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     [gm]);
   const slotNames = useMemo(() => slotDisplayNames(slotDefs), [slotDefs]);
   const bySpot = useMemo(() => {
-    const active = mine.filter((p) => p.spot === 'active');
+    const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));
     const find = (id?: string | null) => (id ? active.find((p) => p.slug === id) ?? null : null);
     const started = new Set(seat.spots.map((r) => r.player?.id).filter(Boolean) as string[]);
     return {
       starters: seat.spots.map((r, i) => ({ label: slotNames[i] ?? r.def.slot, pos: r.def.pos, player: find(r.player?.id) })),
       bench: active.filter((p) => !started.has(p.slug)),
-      ir: mine.filter((p) => p.spot === 'ir'),
-      taxi: mine.filter((p) => p.spot === 'taxi'),
+      ir: shown.filter((p) => p.spot === 'ir'),
+      taxi: shown.filter((p) => p.spot === 'taxi'),
     };
-  }, [mine, slotDefs, slotNames, expMap]);
+  }, [shown, slotDefs, slotNames, expMap]);
 
   /** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
    *  kickers if there is no kicker spot on the roster"). Null = no restriction. */
@@ -703,8 +721,19 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         {/* Just the count (v0.356.2, founder: "we don't need all the info
             text. Just 'My Roster (x/x)'") — position tallies read off the
             rows themselves, and the money story lives on 📜 CONTRACTS. */}
-        <Mono size={9} tone="faint" track={0.12}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</Mono>
-        {mine.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No players yet.</Mono>}
+        {/* THE SEATS (v0.424.0) — one chip per team, mine first and lit by
+            default. Tap a rival to read their roster laid out the same way;
+            the card says whose it is and takes its controls off. */}
+        {(team.waiver_order?.length ?? 0) > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+            {[...team.waiver_order].sort((a, b) => (a.roster_id === myRoster ? -1 : b.roster_id === myRoster ? 1 : a.roster_id - b.roster_id)).map((w) => (
+              <Chip key={w.roster_id} on={w.roster_id === shownRid} onPress={() => setViewRid(w.roster_id === myRoster ? null : w.roster_id)}
+                label={w.roster_id === myRoster ? 'MY TEAM' : (w.team ?? `Team ${w.roster_id}`).toUpperCase()} />
+            ))}
+          </ScrollView>
+        )}
+        <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
+        {shown.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No players yet.</Mono>}
 
         {/* ── STARTERS ─────────────────────────────────────────────────────
             One row per starting spot the league plays, filled by assignSpots
@@ -712,10 +741,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             the FIT, not the lineup: drip sets its lineup per window on the
             board and classic sets one per week, so calling this "your
             lineup" would be the one thing this screen must not say. */}
-        {mine.length > 0 && slotDefs.length > 0 && (<>
+        {shown.length > 0 && slotDefs.length > 0 && (<>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 10 }}>STARTING SPOTS</Mono>
           {bySpot.starters.map((row, i) => (
-            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} />
+            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} inj={row.player ? injTags[row.player.slug] : null} />
           ))}
         </>)}
 
@@ -723,7 +752,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         {bySpot.bench.length > 0 && (<>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>BENCH ({bySpot.bench.length})</Mono>
           {bySpot.bench.map((p) => (
-            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} />
+            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
           ))}
         </>)}
 
@@ -736,11 +765,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </Mono>
           {bySpot.ir.map((p) => (
-            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t}
-              slotVerb="injured reserve" onSlot={() => { tap(); setFillFor('ir'); }} />
+              slotVerb="injured reserve" onSlot={viewingMine ? () => { tap(); setFillFor('ir'); } : undefined} />
           ))}
         </>)}
 
@@ -750,11 +779,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </Mono>
           {bySpot.taxi.map((p) => (
-            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
-              slotVerb="taxi squad" onSlot={() => { tap(); setFillFor('taxi'); }} />
+              slotVerb="taxi squad" onSlot={viewingMine ? () => { tap(); setFillFor('taxi'); } : undefined} />
           ))}
         </>)}
 
