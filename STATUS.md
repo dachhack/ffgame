@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.423.0 — IR spots after the draft, and the injury feed's new shape
+
+Founder, week 2: "Michael Pittman is out. Can we make sure his injury
+status is correct and that players can move him to IR in the classic
+leagues?"
+
+THE STATUS WAS RIGHT. ESPN's report has him O (foot, ruled out for Sunday,
+designated 17:09Z Saturday); the worker's poll resolves "Michael Pittman
+Jr." to `michael-pittman` (one man in the directory with that name, and
+his espn id maps too), and O has been on the default IR list since 0164.
+The poll runs hourly inside 24h of a kickoff, every three hours otherwise.
+`scripts/db/pittman-ir-diag.sql` (dbquery.yml, read-only) prints his row,
+the poll's freshness, and every league's IR shape, for anyone who wants to
+see it rather than take my word.
+
+WHAT WAS IN THE WAY: THE SHAPE. A classic league that drafted with no IR
+spots had none — the team screen shows no IR place when the shape says
+zero, and set_roster_spot would have said "IR is full — 0 spots" — and
+set_league_roster_shape refused to add any once the draft had started.
+That lock is right for the bench and the taxi squad (drafted rounds), and
+wrong for IR: since 0193 an IR spot is not a round, it is extra room, so
+adding one in September takes nothing from anyone.
+
+0296: after the draft the setter takes the IR number and holds bench and
+taxi where they are (the refusal for a bench or taxi tap says so, and says
+IR still moves; a stale bench sent beside a real IR change is held, not
+refused). A never-shaped league has its bench derived as rounds − starters
+so its active seats (0199) do not move. draft.rounds moves by the IR delta,
+because roster_illegal_reason still bounds holdings by it and a team that
+stashes a player and signs his replacement holds one more than it drafted.
+A spot someone is standing in cannot be removed. `ir-after-draft-probes.sql`
+(scratch DB, 30 assertions) covers the failure as found, the add, the
+stash, the signing into the freed seat, the legal roster at rounds + 1, the
+guarded removal, and the never-shaped league. Both commissioner screens'
+hint text says which numbers lock and which don't.
+
+AND THE FEED HAD CHANGED UNDER US. ESPN's bulk injuries payload now carries
+team entries as `{ id, displayName }` — no abbreviation — and athletes with
+no `id`, so every designation reached the resolver as (name, null, '') and
+the id-first / team-settled resolution (0200, v0.345.0) had quietly
+degraded to the ranked-name guess for all 800 entries, with `team` stored
+as '' on every row. The id is still in the player-card link and the team is
+ESPN's numeric team id (the same 1..34 the roster poll enumerates): the
+normalizer reads both back out (`athleteIdOf`, `teamAbbrOf`), verified
+against all 32 names in today's feed; check:injuries pins the new shape,
+the old shape, and the "nothing invented" case.
+
+Battery: root + mobile tsc, check:parity (37 suites), vite build; scratch
+DB: ir-after-draft, ir-eligibility, ir-rounds, roster-size pass. Web + APK
++ migration 0296.
+
 ### v0.422.1 — the widget paints first and fetches second
 
 Founder, on the phone: "There's a lot of lag when you press the buttons.

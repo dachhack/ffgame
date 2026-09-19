@@ -2433,7 +2433,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · locks at draft.
+            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · bench and taxi lock at the draft; IR spots can be added any time.
           </Mono>
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>
