@@ -18,6 +18,76 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.428.0 — the AI bids against the room: FAAB pricing for the frenzy, and the blade skips practice
+
+Founder: "How about guillotine leagues? Any AI interactions we need for
+those? Waiver wire can be a frenzy. We need a good way for AIs to make FAAB
+bids with competitive valuations without over bidding as much as possible."
+
+THE AUDIT. A guillotine league needs nothing new of the AI beyond what it
+already does — its lineup is set to survive the chop, a chopped seat is shut
+off the wire (0272; the sweep asks once and moves on), there is no steal.
+What it needed was a BID. The old one (v0.338.0 wireBid) was $3 a point of
+THIS WEEK'S lineup gain, capped at a quarter of what was left: fine for a
+streamer, hopeless in a frenzy, where the chopped roster lands whole and a
+top-12 back goes for half a budget. Worse, the upgrade bar was this week's
+gain alone, so a chopped star on his bye added nothing on Sunday and was
+passed over for a streamer with a game. And it never looked at the room.
+
+THE PRICE (core `faabMarket`, pure, check:faab), in three parts:
+  1. THE MARKET SHARE. What share of a rival's remaining budget a player
+     commands, saturating in his SURPLUS — rest-of-season value over the
+     best FREE body at his position, since a player anyone can sign for
+     nothing is worth nothing on the wire. Half the ceiling at 6 points a
+     week, never above 60%: nobody bids it all.
+  2. THE ROOM. The expected top rival bid is that share of the rivals'
+     money, leaning toward the deepest pocket (the one bidder who can pay
+     sets the price), CALIBRATED by the league's own resolved claims: the
+     median of what winners actually paid against the curve, clamped to
+     0.5–2× so one wild bid does not reprice the season, and trusted only
+     from three samples. A league that overpays teaches the AI to pay; a
+     thrifty league teaches it not to. Lost bids never calibrate.
+  3. THE CEILING. His worth to THIS roster — the share for his rest-of-
+     season lineup gain, of the budget left, less a 15% reserve while more
+     than three weeks remain (the next chop brings the next star). The bid
+     is the expected top rival plus 5% (at least $1), never above the
+     ceiling: just enough to win at the price the room has set. A HOLE this
+     week still floors at $3 a point so an injury is answered in a quiet
+     room; an upgrade in a quiet room bids the minimum.
+
+THE PLANNER (seatWaivers). The upgrade bar is met by EITHER this week's
+gain or the rest-of-season lineup gain, and a claim is ranked by the larger,
+so the frenzy's prize is the first claim. A free agent costs nothing to
+sign; only a held player is priced. Each claim is priced from the running
+budget, so a sweep's claims never sum past it.
+
+THE SWEEP. Once per league it reads the room: every living seat's FAAB (a
+chopped seat cannot bid), the weeks still to come, the last 200 resolved
+claims re-priced at today's surplus against the league's starting budget.
+While the wire is DEEP — three or more held players worth two points over
+replacement, which is what a chop looks like — a seat may hold four claims
+out instead of two: one bid on the star and one consolation is not a bid in
+a frenzy.
+
+THE BLADE SKIPS PRACTICE (0301). The same hole 0297 closed for the vampire:
+guillotine_tick's last final week was `max(week)` with no practice filter,
+so a finaled practice week with a clear loser was a week the blade could
+drop on. Practice results are throwaway; nobody loses a season to one.
+
+Assertions: check-faab-market (31): the share curve's shape, richer and
+deeper-pocketed rivals raising the price, calibration from three winners
+and its clamps, lost bids and no-surplus claims ignored, the bid just over
+the room and never above the ceiling or the balance, the reserve spent in
+the last weeks, the hole floor in a quiet room, the league's own prices
+moving the bid both ways, and through the planner the bye-week star taken
+first, priced over the room and under his worth, claims within budget.
+check-seat-waivers 55. chopping-block-probes: the practice blade — no
+elimination on a finaled practice week, the regular week still chops.
+
+Battery: web tsc, mobile tsc, check:faab, check:seatwire, check:bite,
+check:changelog; scratch DB through 0301: format, chopping-block,
+block-history, guillotine-weeks — green.
+
 ### v0.427.1 — a live week's best-ball fill ranks by projected final, and IR rows drop their projection
 
 Founder, Saturday evening: "I was able to put Tate in but the game swapped

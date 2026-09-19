@@ -66,6 +66,19 @@ import { seatAgentsFor } from './agents.js';
  *  and then goes quiet until the waiver run answers. */
 const MAX_OUTSTANDING_CLAIMS = 2;
 
+/** THE FRENZY (v0.428.0). When the wire holds several players worth real
+ *  surplus at once — a guillotine chop just dropped a whole roster — two
+ *  outstanding claims is one bid on the star and one consolation. A seat
+ *  may have this many out while the pile is deep; the planner prices each
+ *  from the running budget, so they never sum past it. */
+const FRENZY_MAX_CLAIMS = 4;
+/** …a pile is "deep" when at least this many held players clear this
+ *  surplus (pts/wk over the best free agent at their position). */
+const FRENZY_MIN_PLAYERS = 3;
+const FRENZY_MIN_SURPLUS = 2;
+/** Resolved claims read for calibration — the recent past, not the archive. */
+const HISTORY_ROWS = 200;
+
 /** Most OPEN roster places one sweep fills. Adds into an open seat are
  *  immediate `add_free_agent` calls, not pending claims, so they are not
  *  bounded by MAX_OUTSTANDING_CLAIMS — and a roster the draft left empty
@@ -181,9 +194,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       // handed a bot's chair since. Agent seats prove it through seat_agent
       // (the claim trigger retires the row); AI seats through the membership
       // row itself. The RPC re-checks both anyway (0298); this just keeps a
-      // refused call out of the log.
+      // refused call out of the log. faab_budget and eliminated_week ride
+      // along for THE ROOM below.
       const { data: memRows } = await db().from('league_membership')
-        .select('sleeper_roster_id,app_user_id,controller').eq('league_id', lg.id);
+        .select('sleeper_roster_id,app_user_id,controller,faab_budget,eliminated_week').eq('league_id', lg.id);
       const memOf = new Map((memRows ?? []).map((m) => [m.sleeper_roster_id, m]));
 
       const { data: irTagRows } = await db().rpc('league_ir_tags', { p_league_id: lg.id });
@@ -192,6 +206,29 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       const faab = mode2 === 'faab';
       const { data: seats } = await db().rpc('league_active_seats', { p_league_id: lg.id });
       const activeSeats = Number(seats) || 0;
+
+      // ── THE ROOM (v0.428.0) ─────────────────────────────────────────────
+      // Founder: "Waiver wire can be a frenzy. We need a good way for AIs to
+      // make FAAB bids with competitive valuations without over bidding."
+      // What a bid has to beat is read once per league: every living seat's
+      // remaining FAAB (a chopped guillotine seat cannot bid), the weeks
+      // still to come, and the league's own resolved claims — each re-priced
+      // at today's surplus against the league's starting budget, the honest
+      // stand-in for the bidder's balance at the time. The pricing itself
+      // is core's faabMarket, through the planner.
+      const startBudget = Number(lg.settings_json?.faab_budget) || 100;
+      const budgetOf = (m) => (Number.isFinite(Number(m?.faab_budget)) && m?.faab_budget != null ? Number(m.faab_budget) : startBudget);
+      let weeksLeft = 0;
+      let history = [];
+      if (faab) {
+        const { data: wks } = await db().from('matchup').select('week')
+          .eq('league_id', lg.id).gte('week', week).lt('week', 100);
+        weeksLeft = new Set((wks ?? []).map((w) => w.week)).size;
+        const { data: past } = await db().from('waiver_claim')
+          .select('add_slug,bid,status').eq('league_id', lg.id).in('status', ['won', 'lost']).gt('bid', 0)
+          .order('processed_at', { ascending: false }).limit(HISTORY_ROWS);
+        history = past ?? [];
+      }
 
       const agents = await seatAgentsFor([lg.id]);
       for (const seat of seatRows.filter((r) => r.league_id === lg.id)) {
@@ -217,6 +254,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // here is logged and left — the RPC is the authority. `mine` is
         // updated in place so the plan below reads the roster as it now is.
         const statuses = await injuryStatusMap();
+        // Rest-of-season value (v0.426.0), needed here already for the depth
+        // of the wire and again below for every drop and price.
+        const statusesRos = (p) => (statuses.get(p.id) === 'IR' ? 0
+          : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }));
         const irTags = new Set((irTagsOf.get(lg.id) ?? []).map((t) => String(t).toUpperCase()));
         const irCap = Number(lg.settings_json?.roster_shape?.ir) || 0;
         const qualifies = (slug) => irTags.has(statuses.get(slug) ?? '');
@@ -243,8 +284,21 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // planner may spend — it reasons about the ACTIVE roster only (0164).
         const pending = pendingBySeat.get(seat.roster_id) ?? [];
         // Already at its outstanding limit: it has spoken, and the waiver run
-        // is what answers next. Nothing to compute.
-        const room = MAX_OUTSTANDING_CLAIMS - pending.length;
+        // is what answers next. Nothing to compute. The limit widens while
+        // the wire is deep (v0.428.0 — a chop just landed): one claim on the
+        // star and one consolation is not a bid in a frenzy.
+        const deep = (() => {
+          const repl = new Map();
+          const rv = (p) => (statusesRos(p));
+          let n = 0;
+          for (const p of available) {
+            if (!p.onWaivers) continue;
+            if (!repl.has(p.pos)) repl.set(p.pos, Math.max(0, ...available.filter((q) => !q.onWaivers && q.pos === p.pos).map(rv)));
+            if (rv(p) - repl.get(p.pos) >= FRENZY_MIN_SURPLUS) n += 1;
+          }
+          return n >= FRENZY_MIN_PLAYERS;
+        })();
+        const room = (faab && deep ? FRENZY_MAX_CLAIMS : MAX_OUTSTANDING_CLAIMS) - pending.length;
         if (room <= 0) continue;
         const pendingAdds = new Set(pending.map((c) => c.add_slug));
         const pendingDrops = new Set(pending.map((c) => c.drop_slug).filter(Boolean));
@@ -277,8 +331,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // Rest-of-season value: the season projection under the league's
         // catalog, untouched by this week's bye or a one-game Out, zero for a
         // season-ending IR. This is what a drop is judged by (v0.426.0).
-        const rosValueOf = (p) => (statuses.get(p.id) === 'IR' ? 0
-          : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }));
+        const rosValueOf = statusesRos;
 
         // A pending claim with no drop will TAKE a seat if it wins, so the
         // places still open are the ones nothing has been promised.
@@ -292,6 +345,23 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // a hole.
         const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id)), rosValueOf);
 
+        // Replacement level: the best FREE body at a position — what anyone
+        // could sign for nothing this minute — so a claim is measured over
+        // it, not over zero. A held player's surplus is what the room bids on.
+        const replacementOf = (pos) => Math.max(0, ...available.filter((p) => !p.onWaivers && p.pos === pos).map(rosValueOf));
+        const market = faab ? {
+          rivalBudgets: (memRows ?? [])
+            .filter((m) => m.sleeper_roster_id !== seat.roster_id && m.eliminated_week == null)
+            .map(budgetOf),
+          weeksLeft,
+          history: history.map((h) => {
+            const p = meta.get(h.add_slug);
+            const surplus = p && p.pos ? rosValueOf({ id: p.slug, pos: p.pos, team: p.team }) - replacementOf(p.pos) : 0;
+            return { surplus, bid: Number(h.bid) || 0, won: h.status === 'won', ref: startBudget };
+          }),
+          replacementOf,
+        } : undefined;
+
         // Open places may be filled beyond the claim cap — those adds land at
         // once and leave nothing pending. Claims on held players (waivers)
         // stay capped at `room` below.
@@ -301,6 +371,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           openSeats,
           maxClaims: room + fills,
           rosValueOf,
+          market,
         });
 
         let filed = 0;   // waiver claims this sweep, against `room`
