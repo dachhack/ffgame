@@ -1189,7 +1189,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         const d = slotDefs.find((x) => x.slot === target);
         const p = pool.find((x) => x.slug === cand);
         return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
-      }));
+      }, bestball));
 
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
   // The worker sets every classic team's lineup each week (autoSlotClassic-
@@ -1753,7 +1753,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           .filter((p) => spotOf.get(p.slug) !== pickerSlot)          // already here
           // If he is starting somewhere his game has locked, he cannot leave —
           // the DB would refuse the vacating write, so don't offer the move.
-          .filter((p) => { const from = spotOf.get(p.slug); return !from || canEdit(from); });
+          // …but a BEST-BALL spot never holds anyone (v0.424.1, founder: "I
+          // can't move him into my WR spot"): the fill parked him there and
+          // will simply pick someone else once he starts manually.
+          .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); });
         return (
           <div onClick={() => setPickerSlot(null)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>

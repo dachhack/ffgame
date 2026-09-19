@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.426.1 — a best-ball occupant can be started anywhere he's eligible
+
+Founder: "Carnell Tate was slotted in my rookie bestball spot and I can't
+move him into my WR spot. It should be the best ball spots pull from bench
+spots and you can slot anyone eligible for a best ball spot in one of your
+non bestball spots. They would be ineligible for the best ball calculation
+if they were slotted in a starting spot."
+
+That is exactly the rule the engine already ran — bestballFillBy excludes
+every manual starter and fills from what is left — and the PICKER broke it
+one step earlier. It builds "where is this player starting" from the
+EFFECTIVE lineup, fills included, and then drops anyone whose current spot
+can't be edited so a locked starter is never offered a move the DB would
+refuse. A best-ball spot is never editable, so a player the fill had parked
+there was filtered out of every picker on the board: Tate could not be
+chosen for WR 1 at all. And had he got through, planSpotMove would have
+written a "vacating" row into the best-ball spot — a spot that ignores rows
+(0159).
+
+Both hosts' pickers now let a best-ball occupant through (the fill simply
+picks someone else once he starts manually), and planSpotMove takes the
+best-ball list and treats such a spot as no "from": one write, like the
+bench. check:spots pins the plan and the recompute (a rookie started
+manually in WR leaves the rookie best-ball spot to the next rookie).
+
+Battery: root + mobile tsc, check:parity (37 suites), vite build. Web + APK.
+
 ### v0.426.0 — the AI manager: lineups it revisits, IR it uses, drops it judges by the season
 
 Founder: "This AI team has AJ Brown in despite him on IR. Can the AI teams

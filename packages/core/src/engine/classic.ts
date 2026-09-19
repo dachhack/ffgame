@@ -1135,14 +1135,25 @@ export function autoSlotPlan(
 // S3" is a change to S3 that has to reach the server.
 export interface SpotMove { slot: string; player: string | null }
 
+// A BEST-BALL SPOT IS NOT A "FROM" (v0.424.1). Founder: "Carnell Tate was
+// slotted in my rookie bestball spot and I can't move him into my WR spot."
+// The lineup the picker hands in is the EFFECTIVE one — manual picks plus the
+// best-ball fills — so a player the fill had parked in a best-ball spot looked
+// like a starter who had to be moved OUT of it, and the plan wrote a row into
+// a spot that ignores rows (0159). Nothing is vacated when he leaves a
+// best-ball spot: the fill simply recomputes without him (bestballFillBy
+// excludes manual starters), so the move is one write, exactly as from the
+// bench. `bestball` names those spots; omitted, every spot is manual.
 export function planSpotMove(
   slots: ClassicSlotDef[],
   lineup: Record<string, string | null | undefined>,
   target: string,
   incoming: string,
   eligible: (slot: string, slug: string) => boolean,
+  bestball: string[] = [],
 ): SpotMove[] {
-  const from = slots.find((d) => d.slot !== target && lineup[d.slot] === incoming)?.slot ?? null;
+  const bb = new Set(bestball);
+  const from = slots.find((d) => d.slot !== target && !bb.has(d.slot) && lineup[d.slot] === incoming)?.slot ?? null;
   const displaced = lineup[target] ?? null;
   if (!from) return [{ slot: target, player: incoming }];
   return [
