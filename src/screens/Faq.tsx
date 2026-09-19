@@ -72,9 +72,10 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Do I need an account to try it?',
-          a: <>No. On the landing page, tap <b>DRIP</b> or <b>CLASSIC</b> in the <i>Which game</i> row and a full demo week of that game
-            opens right there, no sign-up. If you want to see the demo re-skinned over your own league, type your <b>Sleeper
-            username</b> under the board — that's it. An account (magic-link email) is only needed for the invited live pilot.</>,
+          a: <>No. On the landing page, dress the mascot however you like, then tap <b>▶ PLAY A WEEK</b> on the <i>Drip Battle</i> or
+            <i>Classic Fantasy</i> card and a full demo week of that game opens right there, no sign-up. If you want to see the demo
+            re-skinned over your own league, type your <b>Sleeper username</b> under the board — that's it. An account is only needed
+            at the very end, when you hit GO to create a real league.</>,
         },
         {
           q: 'How do I actually play a week?',

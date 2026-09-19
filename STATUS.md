@@ -18,6 +18,74 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.420.0 — the mascot builder
+
+Founder: "Build a mascot! … Every selection changes the mascot in some way.
+So start with four base mascot models. Like a blooper, gritty, etc. Then
+maybe put on a flashy gold chain with the drip logo if it's a drip league.
+Then something for the draft mode. Then additional features for each of the
+league modes. Then hit a button and the mascot slides to the left and you
+can interact with dialogues to set the rest of the league up: rosters,
+scoring, teams, draft settings, waivers, go → share link."
+
+THE MASCOT. Four questions in the founder's order, each a layer: LEAGUE TYPE
+(Redraft | Keeper | Dynasty | Contract Dynasty) is the BODY — Rook, Vault,
+Duke and Suits; MATCHUP STYLE (Drip Battle | Classic Fantasy) is the NECK —
+the gold chain with the drip mark, or a foam finger; DRAFT TYPE (Snake |
+Auction) is the HAND — a snake over the shoulders or a gavel; LEAGUE MODE
+(Classic | Golf | Vampire | Guillotine) is the HEAD — nothing, a visor, fangs
+and a cape (the cape BEHIND the body), a hood and an axe. Sixty-four builds,
+no two wearing the same layers — check-mascot pins that, plus the order and
+the names. Stickers are placed by ANCHOR (neck, hand, head, back) over the
+body, not pixel-registered, because generated art never lines up across
+four bodies; every file falls back to an emoji until it exists, the icon
+sets' rule, and the body falls back to a drawn SVG character in the type's
+colour so the stage is never empty. Files and prompts: public/mascot/README.
+Each choice pops the stage and re-names the mascot ("Duke the Last One
+Standing").
+
+WHAT CAN'T EXIST. set_league_golf refuses a drip league (0200), so the Golf
+card wears a CLASSIC SCORING tag under Drip Battle and picking it switches
+the matchup to Classic Fantasy rather than building a league the server
+would refuse. A contract league drafts by auction whatever the draft card
+holds — the seed says so and the draft dialogue tells the commissioner.
+Guillotine lifts teams to 18 and FAAB to $1000 the moment it's picked, the
+create screen's own presets.
+
+THE SLIDE. BUILD THIS LEAGUE → the mascot slides to the left column (on a
+phone it shrinks into a header beside its name) and the right side is the
+checklist: LEAGUE NAME, ROSTER (classic: the thirteen slot types plus
+bench/taxi/IR; drip: roster size and the six position limits; keepers or
+rookie rounds where the type asks), SCORING (classic: reception value, pass
+TD, TE premium, best ball; drip: the game's own, tunable on the tab later),
+TEAMS, DRAFT SETTINGS (pace, clocks, budget, bell, lots, overnight pause),
+WAIVERS (FAAB/rolling/standings, budget, clear time and days, hold, free
+agents instant or after the run). Each row opens its own dialogue in place
+and reads back one line when shut. "Lists" from the founder's note is
+folded into ROSTER as the position limits — flagged in chat.
+
+GO. Signs the visitor in WITHOUT leaving the page — email + password, or an
+emailed 6-digit code — because a magic-link bounce would land them in the
+live app with the builder's state behind them. Then the create screen's own
+calls in the create screen's own order: create_native_league with the seed
+(continuity, game mode, draft mode, caps), then the dialogues as ONE
+blueprint through applyBlueprint (format, PPR, roster, shape, scoring, best
+ball, golf, waivers), the pool, the schedule. Refusals from applyBlueprint
+don't roll back a league that now exists; the done screen lists them and
+points at the tabs. The share link is inviteLink(invite_code) with Copy and
+native Share. create_native_league is gated by the `native` flag, so an
+account without it lands on "your league is designed, the pilot is
+invite-only" and a Request button that opens the invite modal with the
+whole design in the note (RequestCodeModal grew `initialNote`). Build and
+setup both persist on the device across a reload.
+
+NOT HERE: real art (the README is the spec); "Lists" if it meant something
+other than limits; trade review and taxi/IR eligibility rules (defaults;
+on the tabs).
+
+Battery: web tsc, check:mascot, check:tagline, check:changelog, vite build —
+green.
+
 ### v0.419.1 — the league builder
 
 Founder, on the merged landing: "Looking good. Anyway we can make this from

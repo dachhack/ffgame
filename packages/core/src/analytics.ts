@@ -25,6 +25,10 @@ export interface AnalyticsSink {
 
 // Canonical event names (string-constant'd to avoid typos; doc'd in analytics-plan.md).
 export const Ev = {
+  // The landing's mascot builder (v0.420.0): a demo opened from a matchup card,
+  // and the GO button — with whether it created a league or fell to a request.
+  mascotPlay: 'mascot_play',
+  mascotGo: 'mascot_go',
   appOpen: 'app_open',
   sleeperConnected: 'sleeper_connected',
   screenView: 'screen_view',

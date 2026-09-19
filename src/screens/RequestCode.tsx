@@ -41,12 +41,12 @@ const REF_GUIDE: Record<string, { placeholder: string; hint: string }> = {
   '': { placeholder: 'your league URL or ID', hint: 'Pick your platform above and we’ll show where to find this.' },
 };
 
-export function RequestCodeModal({ initialPlatform, onClose }: { initialPlatform: string; onClose: () => void }) {
+export function RequestCodeModal({ initialPlatform, onClose, initialNote }: { initialPlatform: string; onClose: () => void; /** Pre-filled note — the mascot builder hands over the league it designed (v0.420.0). */ initialNote?: string }) {
   const [email, setEmail] = useState('');
   const [platform, setPlatform] = useState(initialPlatform);
   const [league, setLeague] = useState('');
   const [leagueRef, setLeagueRef] = useState('');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initialNote ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
