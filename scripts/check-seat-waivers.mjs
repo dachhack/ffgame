@@ -11,7 +11,7 @@
 // fixture league, so there is no excuse for the policy to be unpinned.
 // Run: npx tsx scripts/check-seat-waivers.mjs
 import {
-  seatWirePlan, wireBid, UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
+  seatWirePlan, wireBid, shortlistWire, UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { clearLeagueFlags, setLeagueFlags } from '../packages/core/src/data/commish.ts';
 
@@ -179,6 +179,65 @@ ok(seatWirePlan(SLOTS, [rb('a')], [], projOf({ a: 5 }), OPTS).length === 0,
 ok(seatWirePlan([], [rb('a')], [free(rb('b'))], projOf({ a: 1, b: 9 }), OPTS).length === 0,
   'a league with no slots yields no claims');
 ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (the asymmetry is the design)');
+
+// ── 14. An EMPTY roster fills its open seats (v0.425.0) ───────────────────
+// A bot vampire sits out the draft (0268) and starts with nobody. The worker
+// used to skip a seat with no active roster; the planner itself never did —
+// every spot is a hole, and each open place is filled best-first, so the
+// vampire is a team by the next lock rather than eight sweeps later.
+{
+  const pool = [free(rb('r1'), false), free(rb('r2'), false), free(rb('r3'), false), free(wr('w1'), false), free(wr('w2'), false)];
+  const proj = projOf({ r1: 12, r2: 9, r3: 4, w1: 8, w2: 3 });
+  const plan = seatWirePlan(SLOTS, [], pool, proj, { faab: false, budget: 0, openSeats: 4, maxClaims: 4 });
+  ok(plan.length === 4, `an empty roster with four open places files four adds (${plan.length})`);
+  ok(plan.every((c) => c.drop === null), 'every one lands in an open seat — there is nobody to drop');
+  ok(plan.slice(0, 3).every((c) => c.kind === 'hole'), 'the three starting spots are holes, filled on any gain');
+  ok(plan[0]?.add === 'r1' && plan[1]?.add === 'r2', 'best first: the two RB starters, then the flex');
+  ok(plan.map((c) => c.add).includes('w1'), 'the flex takes the best remaining body whatever his position');
+  // The fourth place is BENCH: the lineup gains nothing, so it is depth —
+  // the best free body left, at no cost to anyone.
+  ok(plan[3]?.kind === 'depth' && plan[3]?.add === 'r3' && plan[3]?.bid === 0,
+    'the fourth is depth: the best remaining free agent (r3 at 4 > w2 at 3), bid 0');
+  // The claim cap is what limits it, not the roster: capped at two, it stops.
+  ok(seatWirePlan(SLOTS, [], pool, proj, { faab: false, budget: 0, openSeats: 4, maxClaims: 2 }).length === 2,
+    'maxClaims still bounds an open-seat fill');
+  // No open seat and no roster: nothing to drop, nowhere to put him.
+  ok(seatWirePlan(SLOTS, [], pool, proj, { faab: false, budget: 0, openSeats: 0, maxClaims: 4 }).length === 0,
+    'an empty roster with no open seat cannot transact (a legitimate answer, not a throw)');
+  // Depth never touches a HELD player: with every body on waivers the bench
+  // stays open rather than spending a claim on a spare.
+  const held = pool.map((p) => ({ ...p, onWaivers: true }));
+  const heldPlan = seatWirePlan(SLOTS, [], held, proj, { faab: false, budget: 0, openSeats: 4, maxClaims: 4 });
+  ok(heldPlan.length === 3 && heldPlan.every((c) => c.kind === 'hole'),
+    'depth is free agents only — holes still claim held players, the bench does not');
+  // A full lineup with a bench place open takes depth, and a full roster
+  // takes nothing: the agent seats that drafted a full roster never see it.
+  const starters = [rb('s1'), rb('s2'), wr('s3')];
+  const dProj = projOf({ s1: 10, s2: 9, s3: 8, spare: 2, w2: 1 });
+  const dPlan = seatWirePlan(SLOTS, starters, [free(rb('spare'), false), free(wr('w2'), false)], dProj, { faab: false, budget: 0, openSeats: 1 });
+  ok(dPlan.length === 1 && dPlan[0].kind === 'depth' && dPlan[0].add === 'spare' && dPlan[0].drop === null,
+    'a full lineup with one open place adds one bench body and stops');
+  ok(seatWirePlan(SLOTS, starters, [free(rb('spare'), false)], dProj, { faab: false, budget: 0, openSeats: 0 }).length === 0,
+    'a full roster with nothing to gain does nothing (no churn)');
+  ok(seatWirePlan(SLOTS, starters, [free(rb('zero'), false)], projOf({ s1: 10, s2: 9, s3: 8, zero: 0 }), { faab: false, budget: 0, openSeats: 1 }).length === 0,
+    'depth wants a body that projects — a zero is left in the pool');
+}
+
+// ── 15. The shortlist keeps the best few PER POSITION (v0.425.0) ──────────
+{
+  const big = [];
+  for (let i = 0; i < 30; i++) big.push(free(rb(`rb${i}`), false));
+  for (let i = 0; i < 30; i++) big.push(free(wr(`wr${i}`), false));
+  big.push({ id: 'k1', pos: 'K', onWaivers: false });
+  const t = {}; big.forEach((p, i) => { t[p.id] = p.pos === 'K' ? 0.5 : (p.id.endsWith('7') ? 20 : i % 10); });
+  const cut = shortlistWire(big, projOf(t), 3);
+  ok(cut.filter((p) => p.pos === 'RB').length === 3 && cut.filter((p) => p.pos === 'WR').length === 3,
+    'three per position survive the cut');
+  ok(cut.some((p) => p.id === 'k1'), 'a thin position keeps what it has — the lone kicker stays');
+  ok(cut.filter((p) => p.pos === 'RB').every((p) => p.id.endsWith('7')), 'the survivors are the best projected, not the first listed');
+  ok(cut.map((p) => p.id).join() === big.filter((p) => cut.some((c) => c.id === p.id)).map((p) => p.id).join(),
+    'pool order is preserved, so the planner\'s tie-break reads the same list run to run');
+}
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

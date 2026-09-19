@@ -36,6 +36,10 @@ const agentEmail = (leagueId, rosterId) => `agent-${String(leagueId).slice(0, 8)
  *  `sideLineup` takes its sealed-first branch instead, and the seat quietly
  *  loses both. Those seats are not missing a manager — they ARE the manager.
  *
+ *  (The WIRE is a different matter: since v0.425.0 seatWire.js walks AI seats
+ *  nobody holds beside the agent seats, through the same widened gate — 0298
+ *  agent_wire_seat — with no agent row involved. Lineups stay aiSide's.)
+ *
  *  Returns the number of agents newly provisioned. */
 export async function ensureSeatAgents() {
   const { data: seats } = await db().from('league_membership')

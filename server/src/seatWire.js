@@ -12,10 +12,23 @@
 // rule those functions enforce (seat caps, position caps, FAAB balances, the FA
 // window, commissioner flags) binds the agent for free, and anything this file
 // gets wrong is REFUSED rather than written.
+//
+// ── AI SEATS TOO (v0.425.0) ──────────────────────────────────────────────────
+// Founder: "It's essential that the AI makes waiver moves in the vampire
+// league." A seat whose controller is 'ai' (🤖) is deliberately NOT agented —
+// agents.js explains why: its lineup is composed at resolve by aiSide, and an
+// agent's sealed rows would override that. The unmeasured cost was that an AI
+// seat could never transact at all: no seat_agent row, so 0213's gate refused
+// the worker, so this sweep never even asked. In a vampire league that is a
+// bot vampire — which does not draft (0268) — sitting on an EMPTY roster all
+// season, because the pool was its only cradle and the only hand that could
+// reach in was never allowed to. 0298 widens the gate to an AI seat nobody
+// holds; this sweep now walks those seats beside the agent seats, and lets a
+// roster with open places FILL them rather than filing two claims an hour.
 import { db } from './supabase.js';
 import { ruledOutSlugs } from './injuries.js';
 import { leagueSlotDefs, leagueBestball, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
-import { seatWirePlan } from '../../packages/core/src/engine/seatWaivers.ts';
+import { seatWirePlan, shortlistWire } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { modeOfSettings } from './resolve.js';
@@ -33,19 +46,37 @@ import { seatAgentsFor } from './agents.js';
  *  and then goes quiet until the waiver run answers. */
 const MAX_OUTSTANDING_CLAIMS = 2;
 
+/** Most OPEN roster places one sweep fills. Adds into an open seat are
+ *  immediate `add_free_agent` calls, not pending claims, so they are not
+ *  bounded by MAX_OUTSTANDING_CLAIMS — and a roster the draft left empty
+ *  should be a roster by the next lock, not eight sweeps later. */
+const MAX_OPEN_SEAT_FILLS = 16;
+
 /**
- * File waiver claims and free-agent adds for every unclaimed seat that wants
- * them. Returns how many transactions were accepted.
+ * File waiver claims and free-agent adds for every seat the worker may act
+ * for — unclaimed (agent) seats and AI seats nobody holds — that wants them.
+ * Returns how many transactions were accepted.
  *
  * `week` and `slate` come from the tick, exactly as `autoSlotClassicLineups`
  * takes them, so byes are proven from the same source the lineup fill uses.
  */
 export async function sweepSeatWire(week, slate = null, log = () => {}) {
-  // Only leagues that HAVE an agent seat are worth loading. seat_agent is
-  // server-only and small, so this is the cheapest possible starting set.
+  // Only leagues that HAVE a seat the worker may act for are worth loading:
+  // agent seats (seat_agent is server-only and small) and AI seats nobody
+  // holds (v0.425.0 — the same "nobody at the seat" rule 0298's gate
+  // re-checks; a manager who flipped their OWN team to auto-pilot keeps
+  // their roster, so app_user_id must be null here as it is there).
   const { data: agentRows } = await db().from('seat_agent').select('league_id,roster_id');
-  if (!agentRows?.length) return 0;
-  const leagueIds = [...new Set(agentRows.map((r) => r.league_id))];
+  const { data: aiRows } = await db().from('league_membership')
+    .select('league_id,sleeper_roster_id').eq('controller', 'ai').is('app_user_id', null);
+  const seatRows = (agentRows ?? []).map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
+  const agented = new Set(seatRows.map((r) => `${r.league_id}:${r.roster_id}`));
+  for (const r of aiRows ?? []) {
+    if (agented.has(`${r.league_id}:${r.sleeper_roster_id}`)) continue;   // an agented seat is an agent seat
+    seatRows.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
+  }
+  if (!seatRows.length) return 0;
+  const leagueIds = [...new Set(seatRows.map((r) => r.league_id))];
 
   const { data: lgs } = await db().from('league')
     .select('id,settings_json,lineup_policy').in('id', leagueIds);
@@ -124,14 +155,35 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         }));
       if (!available.length) continue;
 
+      // THE SEAT IS STILL THE WORKER'S TO ACT FOR — re-read now, not at the
+      // top of the sweep: a human may have claimed an agent seat or been
+      // handed a bot's chair since. Agent seats prove it through seat_agent
+      // (the claim trigger retires the row); AI seats through the membership
+      // row itself. The RPC re-checks both anyway (0298); this just keeps a
+      // refused call out of the log.
+      const { data: memRows } = await db().from('league_membership')
+        .select('sleeper_roster_id,app_user_id,controller').eq('league_id', lg.id);
+      const memOf = new Map((memRows ?? []).map((m) => [m.sleeper_roster_id, m]));
+
       const { data: mode2 } = await db().rpc('league_waiver_mode', { p_league_id: lg.id });
       const faab = mode2 === 'faab';
       const { data: seats } = await db().rpc('league_active_seats', { p_league_id: lg.id });
       const activeSeats = Number(seats) || 0;
 
       const agents = await seatAgentsFor([lg.id]);
-      for (const seat of agentRows.filter((r) => r.league_id === lg.id)) {
-        if (!agents.has(`${lg.id}:${seat.roster_id}`)) continue;   // claimed since we read
+      for (const seat of seatRows.filter((r) => r.league_id === lg.id)) {
+        if (seat.kind === 'agent') {
+          if (!agents.has(`${lg.id}:${seat.roster_id}`)) continue;   // claimed since we read
+        } else {
+          const m = memOf.get(seat.roster_id);
+          if (!m || m.controller !== 'ai' || m.app_user_id) continue;   // handed back, or a human sat down
+        }
+        // A seat the format has shut out of the wire — a chopped guillotine
+        // seat, a non-vampire under the vampire's wire lock (0272) — would be
+        // refused by the RPC on every claim, every hour. Ask once and move on.
+        const { data: blocked } = await db().rpc('wire_block_reason',
+          { p_league_id: lg.id, p_roster_id: seat.roster_id });
+        if (blocked) continue;
         const mine = (allRos ?? []).filter((r) => r.roster_id === seat.roster_id);
         // taxi/IR never start, so they are neither lineup value nor a drop the
         // planner may spend — it reasons about the ACTIVE roster only (0164).
@@ -151,7 +203,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           .map((r) => meta.get(r.slug))
           .filter((p) => p && p.pos && !pendingDrops.has(p.slug))
           .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null }));
-        if (!roster.length) continue;
+        // An EMPTY roster is not "nothing to do" — it is the most to do. A bot
+        // vampire sits out the draft (0268) and starts the season with no one;
+        // before v0.425.0 this line skipped it, so the seat the format most
+        // needs on the wire was the one seat the wire never touched.
 
         let budget = 0;
         if (faab) {
@@ -166,16 +221,32 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const outs = await ruledOutSlugs();
         const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
 
-        const plan = seatWirePlan(slots, roster, available.filter((p) => !pendingAdds.has(p.id)), valueOf, {
+        // A pending claim with no drop will TAKE a seat if it wins, so the
+        // places still open are the ones nothing has been promised.
+        const openSeats = Math.max(0, activeSeats - roster.length - pending.filter((c) => !c.drop_slug).length);
+        const fills = Math.min(openSeats, MAX_OPEN_SEAT_FILLS);
+
+        // The candidates: the best few at each position by this week's
+        // projection (core's shortlistWire — deterministic, ties by slug).
+        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id)), valueOf);
+
+        // Open places may be filled beyond the claim cap — those adds land at
+        // once and leave nothing pending. Claims on held players (waivers)
+        // stay capped at `room` below.
+        const plan = seatWirePlan(slots, roster, candidates, valueOf, {
           faab,
           budget,
-          // A pending claim with no drop will TAKE a seat if it wins, so the
-          // places still open are the ones nothing has been promised.
-          openSeats: Math.max(0, activeSeats - roster.length - pending.filter((c) => !c.drop_slug).length),
-          maxClaims: room,
+          openSeats,
+          maxClaims: room + fills,
         });
 
+        let filed = 0;   // waiver claims this sweep, against `room`
         for (const c of plan) {
+          // The plan is greedy and sequential: each later claim assumes the
+          // earlier ones landed (its drop is a bench body in THAT lineup). So
+          // a claim we will not file is not skipped over — the rest of the
+          // plan is abandoned and the next sweep replans from the true state.
+          if (c.onWaivers && filed >= room) break;
           try {
             const r = c.onWaivers
               ? await db().rpc('submit_waiver_claim', {
@@ -187,6 +258,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
                 p_add_slug: c.add, p_drop_slug: c.drop,
               });
             const ok = r?.data?.ok === true;
+            if (c.onWaivers) filed += 1;   // filed or refused, the slot is spent this sweep
             if (ok) {
               done += 1;
               // The pool this sweep is planning against is now stale for every
@@ -196,7 +268,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
               owned.add(c.add);
               const i = available.findIndex((p) => p.id === c.add);
               if (i >= 0) available.splice(i, 1);
-              log('seat wire', lg.id, seat.roster_id, c.kind, c.add,
+              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, c.kind, c.add,
                 c.drop ? `for ${c.drop}` : '(open seat)', faab ? `$${c.bid}` : '');
             } else if (r?.data?.error) {
               // Not an error condition: the RPCs are the authority and refuse

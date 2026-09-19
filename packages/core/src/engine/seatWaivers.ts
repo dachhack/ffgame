@@ -50,7 +50,11 @@ export interface WireClaim {
   bid: number;
   /** Projected points per week this claim adds to the starting lineup. */
   gain: number;
-  kind: 'hole' | 'upgrade';
+  /** hole — a starting spot nobody legal (or nobody scoring) was in;
+   *  upgrade — a starter displaced by a clearly better player;
+   *  depth — an OPEN roster place filled with the best free body when the
+   *  lineup itself had nothing to gain (v0.425.0: a bot vampire's bench). */
+  kind: 'hole' | 'upgrade' | 'depth';
   onWaivers: boolean;
 }
 
@@ -124,6 +128,37 @@ export function wireBid(gain: number, budget: number, faab: boolean): number {
   const cap = Math.max(1, Math.floor(budget * FAAB_MAX_SHARE));
   // Never over the balance: a bid above `member_faab` is rejected outright.
   return Math.min(budget, Math.max(1, Math.min(cap, Math.ceil(gain * FAAB_PER_POINT))));
+}
+
+/** How deep into the pool the planner looks, PER POSITION, ranked by this
+ *  week's projection. The planner solves a lineup per candidate per claim, so
+ *  an empty roster (a bot vampire's, after a draft it sat out — v0.425.0)
+ *  against a 2,000-player pool would be tens of thousands of solves inside a
+ *  25-second tick. A seat that wants a player never wants the 40th-best at
+ *  his position, so the cut costs nothing the policy would have chosen. */
+export const POOL_DEPTH_PER_POS = 12;
+
+/** The best `depth` players at each position by projection, returned in the
+ *  ORIGINAL pool order so the planner's "earlier candidate wins a tie" rule
+ *  still reads the same list run to run. A thin position keeps what it has. */
+export function shortlistWire<P extends SpotPlayer>(
+  available: P[],
+  valueOf: (p: SpotPlayer) => number,
+  depth = POOL_DEPTH_PER_POS,
+): P[] {
+  const byPos = new Map<string, P[]>();
+  for (const p of available) {
+    if (!byPos.has(p.pos)) byPos.set(p.pos, []);
+    byPos.get(p.pos)!.push(p);
+  }
+  const keep = new Set<string>();
+  for (const list of byPos.values()) {
+    list.slice()
+      .sort((a, b) => (valueOf(b) - valueOf(a)) || String(a.id).localeCompare(String(b.id)))
+      .slice(0, Math.max(0, depth))
+      .forEach((p) => keep.add(p.id));
+  }
+  return available.filter((p) => keep.has(p.id));
 }
 
 /**
@@ -204,6 +239,20 @@ export function seatWirePlan(
           onWaivers: cand.onWaivers,
         };
       }
+    }
+    // DEPTH (v0.425.0). The lineup wants nothing — but a roster place is
+    // open, and a seat nobody manages should not carry an empty bench into
+    // the byes: a bot vampire sits out the draft (0268) and, filled to its
+    // starters alone, would need a fresh hole every week. Free agents ONLY —
+    // a held player is a claim to win and a priority to spend, and a bench
+    // body is worth neither — best projected first, only if he projects at
+    // all. No drop, no bid: it costs nobody anything. A full roster never
+    // reaches here, so the agent seats that drafted are untouched by it.
+    if (!best && seats > 0) {
+      const body = pool
+        .filter((p) => !p.onWaivers && !used.has(p.id) && !have.some((q) => q.id === p.id) && valueOf(p) > 0)
+        .sort((a, b) => (valueOf(b) - valueOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
+      if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, kind: 'depth', onWaivers: false };
     }
     if (!best) break;
 

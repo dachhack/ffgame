@@ -18,6 +18,100 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.425.0 — practice weeks are not fresh blood, and the AI works the wire
+
+Founder: "Looks like the vampire lost but took Amon-Ra. Should have not been
+able to take a player. It's essential that the AI makes waiver moves in the
+vampire league. How is our AI team waiver system?"
+
+TWO ANSWERS, ONE VERSION. The bite and the wire were separate holes.
+
+THE BITE (0297). `vampire_steal` refuses a loss outright — the founder's
+instinct was right that a losing vampire cannot feed — so the question was
+which result the window READ. "The latest fully-final week" was `max(week)`
+over the league's matchups, and nothing excluded the PRESEASON PRACTICE
+weeks (0110: board weeks 101-103). A league that played its practice weeks
+carries final rows at 101+ for the rest of the season, so `max(week)`
+answered 103 forever: week 1 finaling changed nothing, because 1 < 103. A
+vampire that won practice week 103 kept its window open on that win through
+a real week-1 loss, naming the practice-week opponent as the victim.
+`league_standings` (0269) already skipped practice weeks; the vampire, its
+state and its record did not. One filter — `not is_practice_week(week)` —
+in the window (vampire_steal, vampire_state) and in the chair's record and
+week list (_vampire_seat_state). Bodies are 0268's re-read, only the filter
+added. The guillotine's `guillotine_tick` has the same `max(week)` and the
+same exposure; noted, left for its own change. A bite already executed on a
+practice win is not unwound here — the register printed it, and putting the
+player back is the commissioner's call (a trade or commish move does it).
+New `scripts/db/vampire-bite-diag.sql` (read-only) says which of four
+shapes a given bite was: the practice-week window, finals rewritten under a
+stamped sandbox week (admin_stamp_week then the resolver), a plain pool add
+by a vampire that never drafted (0268 lets it), or another vampire in a
+coven.
+
+THE WIRE (0298 + worker). The honest audit: there was no AI waiver system
+for AI seats. `sweepSeatWire` (v0.338.0) walks seat_agent rows, and
+`ensureSeatAgents` mints those only for UNCLAIMED seats whose controller is
+'human' — a 🤖 seat is deliberately never agented, because its lineup is
+composed at resolve by `aiSide` and an agent's sealed rows would override
+that. The unmeasured cost: an AI seat had no agent row, so 0213's gate
+refused the worker, so the sweep never asked. It drafted, it fielded a
+lineup, and it never once touched the wire. In a vampire league that is the
+worst possible seat to leave out — a bot vampire does not draft (0268), the
+pool is its only cradle, and the one hand that could reach in was never
+allowed to. It sat on an EMPTY roster.
+
+  • `agent_wire_seat` (0298) now admits a seat when EITHER a seat_agent row
+    exists OR controller = 'ai' — and app_user_id is null in both cases.
+    0213's guarantee stays exactly where it was: a seat a human holds is
+    never transacted over by the worker, including one the human flipped to
+    🤖 auto-pilot (0022). Auto-pilot composes their lineup; their roster,
+    their drops and their FAAB stay theirs. Same two RPCs, same guard shape,
+    same commissioner switch (league_agent_waivers — its copy in both hosts
+    now names AI teams), every rule still binding. Nothing forks.
+  • The sweep walks AI seats nobody holds beside the agent seats, re-reads
+    the membership row per league so a seat handed back mid-sweep is
+    skipped, and asks `wire_block_reason` once per seat so a non-vampire
+    under the wire lock (or a chopped guillotine seat) is not refused hourly
+    in the log.
+  • An EMPTY roster is no longer skipped — it is the most to do.
+  • OPEN PLACES FILL. Adds into an open seat are immediate `add_free_agent`
+    calls, not pending claims, so the sweep plans `room + open seats` and
+    caps only the waiver claims at MAX_OUTSTANDING_CLAIMS. A claim it will
+    not file abandons the REST of the plan rather than skipping over it —
+    the plan is greedy and sequential, and a later drop assumes the earlier
+    add landed. The next hourly sweep replans from the true state.
+  • DEPTH, in the planner (core, pure): when the lineup wants nothing but a
+    roster place is open, take the best FREE body that projects at all — no
+    drop, no bid, free agents only (a held player is a claim to win and a
+    priority to spend, and a bench body is worth neither). A full roster
+    never reaches it, so the agent seats that drafted are untouched. Without
+    it a bot vampire filled its starters and carried an empty bench into the
+    byes, needing a fresh hole every week.
+  • `shortlistWire` (core): the best 12 per position by projection before
+    planning, in pool order. The planner solves a lineup per candidate per
+    claim; an empty roster against a 2,000-player pool was tens of
+    thousands of solves inside a 25-second tick.
+
+What this does NOT do: a bot vampire still does not BITE — the steal stays
+the vampire's own claim to make, and nothing in the worker declares one.
+That is a separate decision (which player, which to give back, whether a
+bot should feed at all) and is not assumed here.
+
+Assertions: check-seat-waivers grew the empty-roster fill, the claim cap
+over a fill, depth on a full lineup with one open place, depth refusing a
+held player and a zero, and the shortlist's cut and order (29 → 45).
+agent-wire-probes grew section 9: the AI branch of the gate without an
+agent row, the idle human seat still refused, the worker signing into an
+empty bot roster, a manager on auto-pilot keeping their roster, an outsider
+unable to borrow the branch, the flag handed back closing the gate, and the
+vampire wire lock binding a bot and admitting a bot vampire.
+vampire-rules-probes grew vr6: a finaled practice week is no completed
+week, a week-1 loss beneath it is what the window reads, the record and the
+week list count the season only, and a real week-2 win still feeds.
+
+Battery: web tsc, mobile tsc, check:seatwire, check:changelog, scratch-DB
+agent-wire / vampire-rules / vampire-coven / format probes — green.
 ### v0.424.0 — every matchup in the league, and the roster with its injuries
 
 Founder: "Let's have a way in web and app for players to see the matchup

@@ -153,6 +153,47 @@ begin
   perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false,
     'vr5c nobody feeds with no coven: ' || r::text);
 
+  -- ══ a PRACTICE-WEEK win is not fresh blood (0297, v0.425.0) ══════════════
+  -- Founder: "the vampire lost but took Amon-Ra." Practice weeks (101+) are
+  -- final rows that sit ABOVE every regular week, so `max(week)` used to
+  -- answer 103 all season — a vampire that won practice week 103 kept its
+  -- window open on that win through a real week-1 loss.
+  lid := _vr_league('VR Practice Blood', 'vrp-', 4, '[2]'::jsonb);
+  perform vr_as('1');
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, lock_at, home_final, away_final)
+    values (lid, 103, 2, 1, 'final', now() - interval '30 days', 130.0, 70.0),
+           (lid, 103, 3, 4, 'final', now() - interval '30 days', 130.0, 70.0);
+  r := vampire_state(lid);
+  perform vr_true(r ->> 'week' is null, 'vr6 a finaled practice week is no completed week: ' || coalesce(r ->> 'week', 'null'));
+  perform vr_true(coalesce((r ->> 'won')::boolean, true) is false, 'vr6a …and opens no window');
+  select slug into tk from native_roster where league_id = lid and roster_id = 1 limit 1;
+  select slug into gv from native_roster where league_id = lid and roster_id = 2 limit 1;
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false
+      and position('no completed week' in coalesce(r ->> 'error', '')) > 0,
+    'vr6b a practice win feeds nobody: ' || r::text);
+  perform _vr_final(lid, 1, array[1, 3]);        -- the vampire LOSES week 1
+  r := vampire_state(lid);
+  perform vr_true((r ->> 'week')::int = 1, 'vr6c week 1 is the latest completed week, not 103: ' || coalesce(r ->> 'week', 'null'));
+  perform vr_true(coalesce((r ->> 'won')::boolean, true) is false, 'vr6d the week-1 loss is what the window reads');
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false
+      and position('lost week 1' in coalesce(r ->> 'error', '')) > 0,
+    'vr6e the vampire that lost week 1 cannot bite: ' || r::text);
+  r := vampire_state(lid);
+  perform vr_true((r -> 'record' ->> 'wins')::int = 0 and (r -> 'record' ->> 'losses')::int = 1,
+    'vr6f the record counts the season only (0-1), not the practice win: ' || (r -> 'record')::text);
+  perform vr_true(jsonb_array_length(r -> 'weeks') = 1 and (r -> 'weeks' -> 0 ->> 'week')::int = 1,
+    'vr6g the week list carries week 1 alone');
+  perform _vr_final(lid, 2, array[2]);           -- …and WINS week 2
+  r := vampire_state(lid);
+  perform vr_true((r ->> 'week')::int = 2 and coalesce((r ->> 'won')::boolean, false),
+    'vr6h a real win still opens the window');
+  vic := (r ->> 'victim')::int;
+  select slug into tk from native_roster where league_id = lid and roster_id = vic limit 1;
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, false), 'vr6i …and feeds: ' || r::text);
+
   raise notice 'vampire-rules probes done';
 end $$;
 
