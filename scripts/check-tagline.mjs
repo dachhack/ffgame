@@ -131,6 +131,8 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   }
   ok('every menu line is one sentence a manager can read, not a paragraph', LEAGUE_MENU.every((g) => g.notes.every((n) => n.line.length > 30 && n.line.length < 220)));
   ok('no two menu entries share a name', new Set(names).size === names.length, names);
+  ok('every builder card has a glyph', LEAGUE_MENU.every((g) => g.notes.every((n) => typeof n.icon === 'string' && n.icon.length > 0)));
+  ok('the plain shape is on the menu beside the wild ones', names.includes('Head-to-head'));
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

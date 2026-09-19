@@ -137,28 +137,32 @@ export interface FormatNote {
   name: string;
   /** What it changes, in one line, from the manager's side of the screen. */
   line: string;
+  /** The glyph the landing's builder cards wear (v0.419.1). Optional so the
+   *  join card, which has no room for one, can keep ignoring it. */
+  icon?: string;
 }
 
 /** How the season ENDS differently. */
 export const FORMAT_NOTES: FormatNote[] = [
-  { name: 'Guillotine', line: 'The lowest score each week is eliminated and their whole roster hits the wire. Last team standing takes it.' },
-  { name: 'Vampire', line: 'Vampires skip the draft and live off the pool. Win the week and they bite: one of yours for one of theirs.' },
-  { name: 'Golf', line: 'The lowest weekly total wins. Every scoring value stays exactly the same — only the target moves.' },
+  { name: 'Head-to-head', icon: '🤝', line: 'One opponent a week, a record, a playoff bracket. The shape everybody knows.' },
+  { name: 'Guillotine', icon: '🪓', line: 'The lowest score each week is eliminated and their whole roster hits the wire. Last team standing takes it.' },
+  { name: 'Vampire', icon: '🧛', line: 'Vampires skip the draft and live off the pool. Win the week and they bite: one of yours for one of theirs.' },
+  { name: 'Golf', icon: '⛳', line: 'The lowest weekly total wins. Every scoring value stays exactly the same — only the target moves.' },
 ];
 
 /** What CARRIES from one season to the next. */
 export const CONTINUITY_NOTES: FormatNote[] = [
-  { name: 'Redraft', line: 'Everyone starts empty every year. The draft is the whole season\u2019s roster decision.' },
-  { name: 'Keeper', line: 'Hold a set number of players through the offseason and give up the picks they cost.' },
-  { name: 'Dynasty', line: 'Keep the lot. Rookie drafts each spring, and future picks you can trade years ahead.' },
-  { name: 'Contract', line: 'Every player carries a salary and a term under a cap. Auction bids ARE the salaries — extend, tag or let them walk.' },
+  { name: 'Redraft', icon: '🔁', line: 'Everyone starts empty every year. The draft is the whole season\u2019s roster decision.' },
+  { name: 'Keeper', icon: '🔒', line: 'Hold a set number of players through the offseason and give up the picks they cost.' },
+  { name: 'Dynasty', icon: '👑', line: 'Keep the lot. Rookie drafts each spring, and future picks you can trade years ahead.' },
+  { name: 'Contract', icon: '📝', line: 'Every player carries a salary and a term under a cap. Auction bids ARE the salaries — extend, tag or let them walk.' },
 ];
 
 /** How the roster gets FILLED. */
 export const DRAFT_NOTES: FormatNote[] = [
-  { name: 'Snake', line: 'Pick order reverses each round. The usual.' },
-  { name: 'Linear', line: 'Same order every round — the wooden spoon gets first pick eighteen times.' },
-  { name: 'Auction', line: 'Nominate and bid. Anyone can own anyone, if the budget stretches.' },
+  { name: 'Snake', icon: '🐍', line: 'Pick order reverses each round. The usual.' },
+  { name: 'Linear', icon: '➡️', line: 'Same order every round — the wooden spoon gets first pick eighteen times.' },
+  { name: 'Auction', icon: '🔨', line: 'Nominate and bid. Anyone can own anyone, if the budget stretches.' },
 ];
 
 // ── THE SITE LEADS WITH THE LEAGUE YOU CAN BUILD (v0.419.0) ───────────────
@@ -191,16 +195,16 @@ export const SITE_PITCH = {
  *  game; classic is the one everybody already knows. Neither is the default
  *  here — the create screen makes the commissioner choose (v0.251.0). */
 export const GAME_NOTES: FormatNote[] = [
-  { name: 'Drip', line: 'Eight starters in kickoff windows, each with a sealed scoring metric that reveals at kickoff and fires effects live — nukes, erasures, hot streaks, power-ups.' },
-  { name: 'Classic', line: 'A positional lineup, weekly point totals, scoring you tune knob by knob. Every spot locks at its own kickoff and scores live.' },
+  { name: 'Drip', icon: '💧', line: 'Eight starters in kickoff windows, each with a sealed scoring metric that reveals at kickoff and fires effects live — nukes, erasures, hot streaks, power-ups.' },
+  { name: 'Classic', icon: '🏈', line: 'A positional lineup, weekly point totals, scoring you tune knob by knob. Every spot locks at its own kickoff and scores live.' },
 ];
 
 /** What the SCORING can be, whichever game runs it. */
 export const SCORING_NOTES: FormatNote[] = [
-  { name: 'Reception value', line: 'Standard, half, full PPR or anything between — plus the per-stat knobs under it, about forty in all.' },
-  { name: 'Best ball', line: 'Your best lineup is started for you after the fact. No lineup to set, nobody left on the bench by mistake.' },
-  { name: 'IDP', line: 'Defensive linemen, linebackers and backs as real starters, with tackles, sacks and takeaways scored live.' },
-  { name: 'K & D/ST', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores — on or off per league.' },
+  { name: 'Reception value', icon: '🎯', line: 'Standard, half, full PPR or anything between — plus the per-stat knobs under it, about forty in all.' },
+  { name: 'Best ball', icon: '🤖', line: 'Your best lineup is started for you after the fact. No lineup to set, nobody left on the bench by mistake.' },
+  { name: 'IDP', icon: '🛡️', line: 'Defensive linemen, linebackers and backs as real starters, with tackles, sacks and takeaways scored live.' },
+  { name: 'K & D/ST', icon: '🦵', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores — on or off per league.' },
 ];
 
 /** The gallery the landing draws: every group is a question the create screen

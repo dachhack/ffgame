@@ -567,9 +567,33 @@ export function DemoBoard() {
   // the fold on a phone, so each row shows its names and opens one line on a
   // tap. The WHICH GAME row doubles as the demo switch — tapping CLASSIC there
   // is the same as tapping it on the band below.
-  const [openNote, setOpenNote] = useState<string | null>(null);
+  // ── THE BUILDER (v0.419.1) ──────────────────────────────────────────────
+  // Founder, on the chip rows: "Anyway we can make this from a boring table
+  // into something sexy." The rows were a settings form. This is the thing
+  // the settings form builds: a league readout at the top that assembles as
+  // you tap — "Classic · Guillotine · Dynasty · Auction draft" — and card
+  // strips underneath with a glyph, the name and the line always showing, so
+  // nothing has to be tapped to be read. One pick per row, any mix of the
+  // scoring cards. The two game cards carry ▶ PLAY A WEEK, the door to the
+  // demo; selecting a game card only changes the readout. Nothing here is
+  // stored — it is a picture of what the create screen offers, not a form.
+  const [build, setBuild] = useState<Record<string, string>>({
+    'WHICH GAME': 'Classic', 'HOW THE SEASON ENDS': 'Guillotine', 'WHAT CARRIES OVER': 'Dynasty', 'HOW THE ROSTER FILLS': 'Auction',
+  });
+  const [scoring, setScoring] = useState<Set<string>>(() => new Set(['Reception value']));
+  const isOn = (heading: string, name: string) => (heading === 'HOW IT SCORES' ? scoring.has(name) : build[heading] === name);
+  const toggleCard = (heading: string, name: string) => {
+    if (heading === 'HOW IT SCORES') setScoring((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+    else setBuild((b) => ({ ...b, [heading]: name }));
+  };
+  const recipe = [build['HOW THE SEASON ENDS'], build['WHAT CARRIES OVER'], `${build['HOW THE ROSTER FILLS']} draft`].join(' · ');
+  const scoringLine = scoring.size ? Array.from(scoring).join(' · ') : 'Standard scoring';
   const hero = (
-    <section style={{ maxWidth: 760, margin: '0 auto', padding: '10px 14px 4px' }}>
+    <section style={{ width: '100%', maxWidth: 760, minWidth: 0, boxSizing: 'border-box', margin: '0 auto', padding: '10px 14px 4px' }}>
+      {/* width:100% + minWidth:0 — this section is a flex item, and a flex
+          item's automatic minimum is its min-content width, which the card
+          strips (four cards abreast before they scroll) would otherwise push
+          past a phone's viewport and give the whole page a sideways scroll. */}
       <div style={{ textAlign: 'center' }}>
         <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)' }}>
           {SITE_PITCH.kicker}
@@ -586,48 +610,43 @@ export function DemoBoard() {
         </div>
       </div>
 
-      <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 12px 4px' }}>
-        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 8 }}>
-          EVERY SWITCH A COMMISSIONER HAS · TAP ONE
-        </div>
-        {LEAGUE_MENU.map(({ heading, notes }) => {
-          const isGame = heading === 'WHICH GAME';
-          const open = notes.find((n: FormatNote) => openNote === `${heading}|${n.name}`);
-          return (
-            <div key={heading} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 8px', flexWrap: 'wrap' }}>
-                <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', width: 128, flex: 'none' }}>{heading}</span>
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                  {notes.map((n: FormatNote) => {
-                    const key = `${heading}|${n.name}`;
-                    const lit = isGame ? game === n.name.toLowerCase() : openNote === key;
-                    return (
-                      <button key={n.name} className="mono" aria-pressed={lit}
-                        onClick={() => {
-                          setOpenNote((o) => (o === key && !isGame ? null : key));
-                          if (isGame) openGame(n.name.toLowerCase() as 'drip' | 'classic');
-                        }}
-                        style={{
-                          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
-                          color: lit ? 'var(--on-accent)' : 'var(--text)',
-                          background: lit ? 'var(--you)' : 'var(--bg)',
-                          border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`,
-                        }}>{n.name.toUpperCase()}</button>
-                    );
-                  })}
-                  {isGame && !game && (
-                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', alignSelf: 'center' }}>▶ TAP ONE TO PLAY A WEEK — FREE, NO SIGN-IN</span>
-                  )}
-                </div>
-              </div>
-              {open && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, margin: '6px 0 2px', paddingLeft: narrow ? 0 : 136 }}>
-                  <b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}
-                </div>
-              )}
+      <LeagueBuilderCss />
+      <div className="lb-panel">
+        <div className="lb-head">
+          <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+            <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)' }}>YOUR LEAGUE, SO FAR</div>
+            <div className="grotesk" style={{ fontSize: 'clamp(17px, 4.6vw, 22px)', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2, marginTop: 4, color: 'var(--text)' }}>
+              <span style={{ color: 'var(--you)' }}>{build['WHICH GAME']}</span> · {recipe}
             </div>
-          );
-        })}
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>{scoringLine} · tap any card to change it</div>
+          </div>
+          <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, width: 'auto', padding: '10px 16px', flex: 'none' }}>Start this league →</button>
+        </div>
+        {LEAGUE_MENU.map(({ heading, notes }) => (
+          <div key={heading}>
+            <div className="mono lb-h">{heading}{heading === 'HOW IT SCORES' ? ' · PICK ANY' : ''}</div>
+            <div className="lb-strip">
+              {notes.map((n: FormatNote) => {
+                const on = isOn(heading, n.name);
+                const g = heading === 'WHICH GAME' ? (n.name.toLowerCase() as 'drip' | 'classic') : null;
+                return (
+                  <div key={n.name} role="button" tabIndex={0} aria-pressed={on} className={`lb-card${on ? ' on' : ''}`}
+                    onClick={() => toggleCard(heading, n.name)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(heading, n.name); } }}>
+                    <div className="lb-icon"><Emoji e={n.icon} size={20} /></div>
+                    <div className="grotesk lb-name">{n.name}</div>
+                    <div className="mono lb-line">{n.line}</div>
+                    {g && (
+                      <button className="mono lb-play" onClick={(e) => { e.stopPropagation(); openGame(g); }} title={`Play a free demo week of ${n.name}`}>
+                        ▶ PLAY A WEEK
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {!game && (
@@ -1418,3 +1437,40 @@ const miniBtn: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'va
 const speedSeg: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: 'none', padding: '5px 8px', cursor: 'pointer' };
 const cta: React.CSSProperties = { width: '100%', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 7, padding: '12px 0', cursor: 'pointer' };
 const optCard = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 9%, var(--surface))' : 'var(--surface)', border: `1.5px solid ${on ? 'var(--you)' : 'var(--bd)'}`, boxShadow: on ? '0 0 0 3px color-mix(in srgb, var(--you) 14%, transparent)' : 'none', transition: 'all .15s' });
+
+// The builder's look lives in one injected sheet (the CardTableCss pattern):
+// hover lift, the selected glow, the snap-scrolling strips on a phone and the
+// wrapped grid on a desk. Colors are the theme's own tokens so all nine
+// themes and the colorblind pair keep their contrast.
+const LB_CSS = `
+.lb-panel{margin-top:18px;border:1px solid var(--bd);border-radius:12px;padding:14px 0 4px;overflow:hidden;background:
+  radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--you) 14%, transparent), transparent 60%),
+  radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--opp) 8%, transparent), transparent 60%),
+  var(--surface)}
+.lb-head{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:0 14px 12px;border-bottom:1px solid var(--bd);margin-bottom:4px}
+.lb-h{font-size:8px;font-weight:700;letter-spacing:.14em;color:var(--faint);padding:8px 14px 0}
+.lb-strip{display:flex;gap:8px;min-width:0;overflow-x:auto;padding:6px 14px 10px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.lb-strip::-webkit-scrollbar{display:none}
+.lb-card{flex:0 0 156px;scroll-snap-align:start;position:relative;display:flex;flex-direction:column;gap:5px;padding:10px 11px 9px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;outline:none;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease}
+.lb-card:hover,.lb-card:focus-visible{transform:translateY(-2px);border-color:color-mix(in srgb,var(--you) 45%,var(--bd))}
+.lb-card.on{border-color:var(--you);background:color-mix(in srgb,var(--you) 12%,var(--bg));box-shadow:0 0 0 1px var(--you) inset,0 8px 24px color-mix(in srgb,var(--you) 22%,transparent)}
+.lb-card.on::after{content:'✓';position:absolute;top:7px;right:9px;font:700 10px/1 monospace;color:var(--you)}
+.lb-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--you) 10%,transparent);border:1px solid color-mix(in srgb,var(--you) 25%,transparent);transition:background .18s ease}
+.lb-card.on .lb-icon{background:color-mix(in srgb,var(--you) 28%,transparent);border-color:var(--you)}
+.lb-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.lb-line{font-size:9.5px;line-height:1.45;color:var(--dim);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.lb-play{margin-top:auto;align-self:flex-start;font-size:8.5px;font-weight:700;letter-spacing:.1em;padding:5px 9px;border-radius:5px;border:1px solid color-mix(in srgb,var(--you) 55%,var(--bd));background:var(--you);color:var(--on-accent);cursor:pointer;box-shadow:0 0 14px color-mix(in srgb,var(--you) 35%,transparent)}
+.lb-play:hover{filter:brightness(1.08)}
+@media (min-width:720px){.lb-strip{flex-wrap:wrap;overflow:visible}.lb-card{flex:1 1 150px;max-width:200px}}
+`;
+function LeagueBuilderCss() {
+  useEffect(() => {
+    if (document.getElementById('lb-css')) return;
+    const el = document.createElement('style');
+    el.id = 'lb-css';
+    el.textContent = LB_CSS;
+    document.head.appendChild(el);
+  }, []);
+  return null;
+}

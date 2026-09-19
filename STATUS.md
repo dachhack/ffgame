@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.419.1 — the league builder
+
+Founder, on the merged landing: "Looking good. Anyway we can make this from
+a boring table into something sexy."
+
+The menu was chip rows: a settings form with nothing showing until tapped.
+It is now the thing the form builds. A readout at the top assembles as you
+tap — "Classic · Guillotine · Dynasty · Auction draft", scoring under it —
+with Start this league → beside it. Under that, one card strip per question:
+glyph, name, and the one line always visible, so nothing has to be tapped
+to be read. Snap-scrolling strips on a phone, a wrapped grid on a desk.
+One pick per row; the scoring row takes any mix. A selected card lifts and
+glows in the theme's own accent, so all nine themes and the colorblind pair
+keep their contrast. The plain shape joined the season row — Head-to-head
+beside Guillotine, Vampire and Golf — because a readout with a hole in it
+reads as broken.
+
+The two game cards carry ▶ PLAY A WEEK, which opens that game's demo under
+the panel as before; selecting a game card only changes the readout. The
+"tap one to play a week" nudge is gone with the chips — the button is the
+nudge. Nothing here is stored: it is a picture of what the create screen
+offers, not a form. Glyphs live on the core notes (`FormatNote.icon`) and
+check-tagline requires one on every card.
+
+Battery: web tsc, check:tagline, check:changelog, vite build — green.
+
 ### v0.419.0 — the site leads with the league you can build
 
 Founder, strategizing: "Drip fantasy is becoming more of a 'Create your
