@@ -31,6 +31,7 @@ import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
 import { sweepNative } from './native.js';
 import { sweepSim } from './simsweep.js';
 import { sweepSeatWire } from './seatWire.js';
+import { sweepVampireBites } from './vampireBite.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
@@ -455,6 +456,12 @@ async function tickContext(ctx, season) {
       const wired = await sweepSeatWire(week, slate, log);
       if (wired) log(`[${ctx.tag}] seat wire`, wired, 'agent transactions');
     } catch (e) { log(`[${ctx.tag}] seat wire`, e.message); }
+    // THE BOT VAMPIRE BITES (v0.427.0), on the same hourly slot: a win is
+    // fresh for a week, and an hour after the finals is soon enough.
+    try {
+      const bites = await sweepVampireBites(log);
+      if (bites) log(`[${ctx.tag}] vampire`, bites, 'bites');
+    } catch (e) { log(`[${ctx.tag}] vampire bites`, e.message); }
   }
 
   const locked = await lockDueMatchups(new Date(), wk, week);

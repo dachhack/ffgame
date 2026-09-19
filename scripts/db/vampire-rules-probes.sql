@@ -197,4 +197,79 @@ begin
   raise notice 'vampire-rules probes done';
 end $$;
 
+-- ══ the BOT VAMPIRE bites (0300, v0.427.0) ═══════════════════════════════
+-- The worker (service role, no uid) may read the window and declare the
+-- bite for a vampire seat nobody manages — and for no other seat.
+create or replace function vr_as_worker() returns void language plpgsql as $$
+begin
+  perform set_config('app.uid', '', false);
+  perform set_config('app.email', '', false);
+end $$;
+
+do $$
+declare lid uuid; r jsonb; vic int; tk text; gv text;
+begin
+  -- a 🤖 vampire: seat 2, no human, controller 'ai'
+  lid := _vr_league('VR Bot Fangs', 'vrbf-', 4, '[2]'::jsonb);
+  perform vr_as('1');
+  update league_membership set controller = 'ai', app_user_id = null where league_id = lid and sleeper_roster_id = 2;
+  perform _vr_final(lid, 1, array[2]);
+  perform vr_as_worker();
+  r := vampire_state(lid);
+  perform vr_true(r ->> 'error' is null and coalesce((r ->> 'vampire')::boolean, false),
+    'vr7 the worker reads the window: ' || left(r::text, 60));
+  perform vr_true(coalesce((r ->> 'won')::boolean, false) and (r ->> 'victim') is not null,
+    'vr7a …and sees the fresh win and the victim');
+  vic := (r ->> 'victim')::int;
+  select slug into tk from native_roster where league_id = lid and roster_id = vic limit 1;
+  select slug into gv from native_roster where league_id = lid and roster_id = 2 limit 1;
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, false) and r ->> 'status' = 'executed',
+    'vr7b the worker bites for the bot vampire: ' || r::text);
+  perform vr_true((select roster_id from native_roster where league_id = lid and slug = tk) = 2
+      and (select roster_id from native_roster where league_id = lid and slug = gv) = vic,
+    'vr7c the players changed hands');
+  r := vampire_steal(lid, gv, tk, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false,
+    'vr7d one bite per win still binds the worker: ' || r::text);
+  -- the worker names the seat: a non-vampire seat is refused
+  r := vampire_steal(lid, tk, gv, 3);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false, 'vr7e a seat that is not a vampire is refused: ' || r::text);
+
+  -- a HUMAN-CONTROLLED vampire nobody has claimed and nobody agents: not the worker's
+  lid := _vr_league('VR Human Fangs', 'vrhf-', 4, '[2]'::jsonb);
+  perform vr_as('1');
+  update league_membership set controller = 'human', app_user_id = null where league_id = lid and sleeper_roster_id = 2;
+  perform _vr_final(lid, 1, array[2]);
+  perform vr_as_worker();
+  r := vampire_state(lid); vic := (r ->> 'victim')::int;
+  select slug into tk from native_roster where league_id = lid and roster_id = vic limit 1;
+  select slug into gv from native_roster where league_id = lid and roster_id = 2 limit 1;
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false
+      and position('only the vampire feeds' in coalesce(r ->> 'error', '')) > 0,
+    'vr7f a vampire seat with no bot and no agent is not the worker''s to feed: ' || r::text);
+  -- …until it is agented (0180's row), on the wire's own terms (0213)
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000c3fa1', 'vr-agent@test.dev') on conflict (id) do nothing;
+  insert into app_user (id, email) values ('00000000-0000-0000-0000-0000000c3fa1', 'vr-agent@test.dev') on conflict (id) do nothing;
+  insert into seat_agent (league_id, roster_id, agent_user_id) values (lid, 2, '00000000-0000-0000-0000-0000000c3fa1') on conflict do nothing;
+  r := vampire_steal(lid, tk, gv, 2);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, false), 'vr7g an agented vampire seat feeds through the worker: ' || r::text);
+
+  -- a vampire a HUMAN holds: never the worker's, whatever the controller says
+  lid := _vr_league('VR Held Fangs', 'vrhe-', 4, '[1]'::jsonb);   -- seat 1 is user 1's
+  perform vr_as('1');
+  update league_membership set controller = 'ai' where league_id = lid and sleeper_roster_id = 1;
+  perform _vr_final(lid, 1, array[1]);
+  perform vr_as_worker();
+  r := vampire_state(lid); vic := (r ->> 'victim')::int;
+  select slug into tk from native_roster where league_id = lid and roster_id = vic limit 1;
+  select slug into gv from native_roster where league_id = lid and roster_id = 1 limit 1;
+  r := vampire_steal(lid, tk, gv, 1);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false,
+    'vr7h a human on auto-pilot keeps the bite as their own: ' || r::text);
+
+  raise notice 'bot-vampire probes done';
+end $$;
+
 select 'ALL VAMPIRE-RULES PROBES PASSED' as status;
