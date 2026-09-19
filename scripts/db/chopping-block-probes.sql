@@ -181,4 +181,31 @@ begin
   raise notice 'chopping-block probes done';
 end $$;
 
+-- ══ the blade never falls on a PRACTICE week (0301, v0.428.0) ═══════════
+do $$
+declare lid uuid; r jsonb;
+begin
+  lid := _cb_league('Practice Blade', 'pb-', 4, 'guillotine');
+  perform cb_as('1');
+  -- a finaled practice week with a clear loser, and no regular week final
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, lock_at, home_final, away_final)
+    values (lid, 103, 1, 2, 'final', now() - interval '30 days', 90.0, 30.0),
+           (lid, 103, 3, 4, 'final', now() - interval '30 days', 80.0, 70.0);
+  r := guillotine_tick(lid);
+  perform cb_ok(r, 'pb1 the tick runs');
+  perform cb_true((r ->> 'eliminated')::int = 0, 'pb1a …and nobody dies on a practice week: ' || r::text);
+  perform cb_true((select count(*) from league_membership where league_id = lid and eliminated_week is not null) = 0,
+    'pb1b every seat still alive');
+  -- week 1 finals: the blade falls on the REGULAR week's floor, seat 4 (65)
+  update matchup set status = 'final',
+      home_final = case when home_roster_id = 4 then 65.0 else 100.0 end,
+      away_final = case when away_roster_id = 4 then 65.0 else 100.0 end
+    where league_id = lid and week = 1;
+  r := guillotine_tick(lid);
+  perform cb_true((r ->> 'eliminated')::int = 1
+      and (select eliminated_week from league_membership where league_id = lid and sleeper_roster_id = 4) = 1,
+    'pb2 the regular week still chops its floor: ' || r::text);
+  raise notice 'practice-blade probes done';
+end $$;
+
 select 'ALL CHOPPING-BLOCK PROBES PASSED' as status;

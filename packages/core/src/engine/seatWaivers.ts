@@ -36,6 +36,7 @@
 import type { ClassicSlotDef, SpotPlayer } from './classic';
 import { optimalLineup } from './classic';
 import { flagRulesFor } from '../data/commish';
+import { faabBid, type MarketClaim } from './faabMarket';
 
 /** A player the agent could acquire. `onWaivers` splits the two write paths:
  *  a player still inside his `waived_until` hold is a `submit_waiver_claim`,
@@ -50,6 +51,9 @@ export interface WireClaim {
   bid: number;
   /** Projected points per week this claim adds to the starting lineup. */
   gain: number;
+  /** Rest-of-season points per week it adds to the best lineup (v0.428.0;
+   *  0 when the caller gave no season value). */
+  rosGain: number;
   /** hole — a starting spot nobody legal (or nobody scoring) was in;
    *  upgrade — a starter displaced by a clearly better player;
    *  depth — an OPEN roster place filled with the best free body when the
@@ -76,6 +80,22 @@ export interface WireOpts {
    *  which is the pre-0.426 behaviour and wrong in exactly one way: a star
    *  on his bye projects 0 THIS week and was the first man overboard. */
   rosValueOf?: (p: SpotPlayer) => number;
+  /** THE ROOM (v0.428.0) — what a FAAB bid has to beat, and what this league
+   *  has paid. When given (and `faab`), each claim is priced by faabMarket
+   *  instead of the flat $3-a-point of this week's gain: the expected top
+   *  rival bid for the player's surplus over replacement, calibrated by the
+   *  league's resolved claims, capped by his worth to this roster. */
+  market?: {
+    /** Remaining FAAB of every other seat that can still bid. */
+    rivalBudgets: number[];
+    /** Weeks still to come. */
+    weeksLeft: number;
+    /** This league's resolved FAAB claims. */
+    history: MarketClaim[];
+    /** Rest-of-season value of the best FREE body at a position — what
+     *  anyone could sign for nothing, so what a claim is measured over. */
+    replacementOf: (pos: string) => number;
+  };
 }
 
 /** Points per week an upgrade must add before it is worth transacting for.
@@ -223,6 +243,7 @@ export function seatWirePlan(
 
   for (let n = 0; n < maxClaims; n++) {
     const base = lineupValue(slots, have, valueOf);
+    const rosBase = opts.rosValueOf ? lineupValue(slots, have, rosOf) : 0;
     const hole = hasHole(slots, have, valueOf);
 
     // Only a player who is NOT in the best lineup may be dropped. This is the
@@ -255,17 +276,26 @@ export function seatWirePlan(
         if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)) continue;
         const next = have.filter((p) => !drop || p.id !== drop.id).concat(cand);
         const gain = lineupValue(slots, next, valueOf) - base;
+        // THE SEASON COUNTS TOO (v0.428.0). A chopped star on his bye adds
+        // nothing THIS week and is the best player on the wire all year; the
+        // upgrade bar is met by either measure, and the claim is ranked by
+        // the larger, so the frenzy's prize is not passed over for a
+        // streamer with a game on Sunday.
+        const rosGain = opts.rosValueOf ? lineupValue(slots, next, rosOf) - rosBase : 0;
         const kind: 'hole' | 'upgrade' = hole ? 'hole' : 'upgrade';
-        if (gain < (hole ? HOLE_MIN_GAIN : UPGRADE_MIN_GAIN)) continue;
+        const clears = hole ? gain >= HOLE_MIN_GAIN : (gain >= UPGRADE_MIN_GAIN || rosGain >= UPGRADE_MIN_GAIN);
+        if (!clears) continue;
+        const score = Math.max(gain, rosGain);
         // Ties break toward the SMALLER move: keeping a roster spot open beats
         // filling it for the same projected points, and an earlier candidate
         // beats a later one, so the plan is deterministic for a given pool.
-        if (best && !(gain > best.gain + 1e-9)) continue;
+        if (best && !(score > Math.max(best.gain, best.rosGain) + 1e-9)) continue;
         best = {
           add: cand.id,
           drop: drop?.id ?? null,
           bid: 0,               // priced below, once the claim is settled
           gain,
+          rosGain,
           kind,
           onWaivers: cand.onWaivers,
         };
@@ -291,11 +321,28 @@ export function seatWirePlan(
           && need.has(p.pos) && rosOf(p) > 0)
         .sort((a, b) => ((need.get(a.pos) ?? 0) - (need.get(b.pos) ?? 0))
           || (rosOf(b) - rosOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
-      if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, kind: 'depth', onWaivers: false };
+      if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, rosGain: 0, kind: 'depth', onWaivers: false };
     }
     if (!best) break;
 
-    best.bid = wireBid(best.gain, budget, opts.faab);
+    // THE PRICE. With the room in hand (v0.428.0) a claim on a held player
+    // is priced against what the others will pay and capped by his worth
+    // here; a free agent costs nothing to sign, and without the room the
+    // old flat rate stands.
+    const added = pool.find((p) => p.id === best!.add)!;
+    best.bid = !opts.faab || !best.onWaivers ? 0
+      : opts.market
+        ? faabBid({
+          surplus: rosOf(added) - opts.market.replacementOf(added.pos),
+          myGain: best.rosGain,
+          gainNow: best.gain,
+          hole: best.kind === 'hole',
+          budget,
+          rivalBudgets: opts.market.rivalBudgets,
+          weeksLeft: opts.market.weeksLeft,
+          history: opts.market.history,
+        })
+        : wireBid(best.gain, budget, opts.faab);
     claims.push(best);
     used.add(best.add);
     if (best.drop) used.add(best.drop);
