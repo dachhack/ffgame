@@ -344,6 +344,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
   const [stashed, setStashed] = useState<Set<string>>(new Set());
+  // WHICH of the stashed are on IR (v0.427.2, founder: "Taxi spot players
+  // should still get a projection. They could score this week. IR guys are
+  // not going to play so no points"). The board draws taxi and IR in one
+  // card; this is what tells the two rows apart there.
+  const [onIr, setOnIr] = useState<Set<string>>(new Set());
   // Tenure by slug (0172) — loaded only when a spot actually filters on it.
   const [expMap, setExpMap] = useState<Record<string, number>>({});
   // AUTO-SLOT PRE-CONDITIONS (v0.247.0). The fill below writes to the server,
@@ -447,6 +452,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         weekMatchups(leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
+          setOnIr(new Set(rows.filter((x) => x.spot === 'ir').map((x) => x.slug)));
           setStashReady(true);
         }).catch(() => {});
         leagueGameMode(leagueId).then(async (gm) => {
@@ -1424,11 +1430,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)}
                              onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
                       <Mono size={12.5} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42, textAlign: 'right' }}>
-                        {h ? (k === 'ir' && h.state === 'pre' ? '—' : scoreOf(h)) : ''}
+                        {h ? (k === 'ir' && onIr.has(h.slug) && h.state === 'pre' ? '—' : scoreOf(h)) : ''}
                       </Mono>
-                      <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : 'IR'}</Mono>
+                      <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : onIr.has((h ?? a)!.slug) ? 'IR' : 'TX'}</Mono>
                       <Mono size={12.5} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
-                        {a ? (k === 'ir' && a.state === 'pre' ? '—' : scoreOf(a)) : ''}
+                        {a ? (k === 'ir' && onIr.has(a.slug) && a.state === 'pre' ? '—' : scoreOf(a)) : ''}
                       </Mono>
                       {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)}
                              onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
