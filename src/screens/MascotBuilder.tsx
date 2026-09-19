@@ -133,12 +133,15 @@ function Num({ v, set, min, max, step = 1, fmt }: { v: number; set: (n: number) 
 // file is asked for once, not on every re-render.
 const missing = new Set<string>();
 const BODY_COLOR: Record<string, string> = { redraft: '#35D07F', keeper: '#4F8CFF', dynasty: '#A86BFF', contract_dynasty: '#FF9F43' };
-const ANCHOR_BOX: Record<MascotAnchor, CSSProperties> = {
-  body: { inset: 0 },
-  back: { inset: '-4% 0 0 0' },
-  neck: { top: '46%', left: '22%', width: '56%', height: '22%' },
-  hand: { top: '48%', left: '64%', width: '36%', height: '34%' },
-  head: { top: '-6%', left: '22%', width: '56%', height: '34%' },
+// Anchor boxes are tuned to the four cut-out bodies (public/mascot/base-*):
+// full figures on a 1024 canvas, feet at the bottom, head in the top fifth,
+// hands at about two-thirds down on either side.
+const ANCHOR_BOX: Record<MascotAnchor, { top: number; left: number; width: number; height: number }> = {
+  body: { top: 0, left: 0, width: 100, height: 100 },
+  back: { top: 6, left: 10, width: 80, height: 80 },
+  neck: { top: 26, left: 34, width: 32, height: 12 },
+  hand: { top: 52, left: 68, width: 26, height: 20 },
+  head: { top: -4, left: 34, width: 32, height: 15 },
 };
 
 function PlaceholderBody({ type, name }: { type: string; name: string }) {
@@ -162,15 +165,18 @@ function PlaceholderBody({ type, name }: { type: string; name: string }) {
   );
 }
 
-function Sticker({ layer, type, name }: { layer: MascotLayer; type: string; name: string }) {
+function Sticker({ layer, type, name, size }: { layer: MascotLayer; type: string; name: string; size: number }) {
   const [broken, setBroken] = useState(missing.has(layer.file));
-  const src = `${import.meta.env.BASE_URL}mascot/${layer.file}.png`;
-  const box = ANCHOR_BOX[layer.anchor];
+  const src = `${import.meta.env.BASE_URL}mascot/${layer.file}.webp`;
+  const b = ANCHOR_BOX[layer.anchor];
   const isBody = layer.anchor === 'body';
+  // A placeholder emoji fills most of its anchor box and no more — the box is
+  // the sticker's real footprint, so the stand-in must not cover the face.
+  const px = Math.round((size * b.height) / 100 * (layer.anchor === 'back' ? 0.7 : 0.85));
   return (
-    <div className={`mb-layer mb-${layer.key}`} style={{ position: 'absolute', ...box, zIndex: layer.z + 10, display: 'grid', placeItems: layer.anchor === 'head' ? 'end center' : 'center', pointerEvents: 'none' }}>
+    <div className={`mb-layer mb-${layer.key}`} style={{ position: 'absolute', top: `${b.top}%`, left: `${b.left}%`, width: `${b.width}%`, height: `${b.height}%`, zIndex: layer.z + 10, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
       {broken
-        ? (isBody ? <PlaceholderBody type={type} name={name} /> : <Emoji e={layer.emoji} size={layer.anchor === 'back' ? '52%' : '62%'} style={{ fontSize: layer.anchor === 'back' ? 'min(9vw, 54px)' : 'min(11vw, 64px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,.35))' }} />)
+        ? (isBody ? <PlaceholderBody type={type} name={name} /> : <Emoji e={layer.emoji} size={px} style={{ filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.45))' }} />)
         : <img src={src} alt="" draggable={false} onError={() => { missing.add(layer.file); setBroken(true); }} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
     </div>
   );
@@ -182,8 +188,8 @@ function Stage({ build, size }: { build: MascotBuild; size: number }) {
   return (
     <div className="mb-stage" key={describeBuild(build)} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
       <div className="mb-glow" style={{ position: 'absolute', inset: '12% 8% 4% 8%', borderRadius: '50%', background: `radial-gradient(closest-side, ${BODY_COLOR[build.type]}44, transparent)`, filter: 'blur(6px)' }} />
-      <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: 4, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,.35)', filter: 'blur(4px)' }} />
-      {layers.map((l) => <Sticker key={l.key} layer={l} type={build.type} name={name} />)}
+      <div style={{ position: 'absolute', left: '18%', right: '18%', bottom: '1%', height: '4%', borderRadius: '50%', background: 'rgba(0,0,0,.4)', filter: 'blur(4px)' }} />
+      {layers.map((l) => <Sticker key={l.key} layer={l} type={build.type} name={name} size={size} />)}
     </div>
   );
 }
@@ -307,7 +313,7 @@ export function MascotBuilder({ onPlay, onRequest, narrow }: {
 
   const requestNote = `Designed on the site: ${describeBuild(build)} · ${setup.teams} teams · ${setup.name.trim() || 'unnamed'} · ${rosterLine} · ${scoringLine} · ${draftLine} · ${waiverLine}`;
 
-  const stageSize = phase === 'build' ? (narrow ? 200 : 240) : (narrow ? 132 : 200);
+  const stageSize = phase === 'build' ? (narrow ? 250 : 320) : (narrow ? 140 : 220);
 
   // ── render ──
   return (

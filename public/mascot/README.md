@@ -23,7 +23,7 @@ filling the frame.
 
 ## Spec
 
-- **PNG with transparent background.** No scene, no ground shadow, no text.
+- **WebP (or PNG) with transparent background.** The app asks for `.webp`; export PNG from the generator and convert (`cwebp -q 82`, or Pillow). No scene, no ground shadow, no text.
 - **Bases:** 1024 × 1024, the character centered, feet near the bottom
   edge, head near the top, facing the viewer, arms visible at the sides so
   a hand sticker has somewhere to land. Same pose across all four.
@@ -33,17 +33,21 @@ filling the frame.
 
 ## Files (12)
 
-Base bodies, one per league type. Four distinct characters in one style,
-the way a city's four mascots share a sport but not a face:
+Base bodies, one per league type — **DONE** (v0.420.0): the founder's four
+renders, cut out and placed on the 1024 canvas. Kept here as the brief they
+answered, and for whoever redraws them:
 
-- `base-redraft.png` — **Rook.** A round, fuzzy, bright green rookie: wide
-  eyes, eager grin, a number 1 on the chest, bouncing on its toes.
-- `base-keeper.png` — **Vault.** A squat blue mascot whose torso is a small
-  safe with a dial, hugging two player cards to its chest, protective.
-- `base-dynasty.png` — **Duke.** A tall regal purple mascot with a long
-  fur collar and an upturned chin, one paw on its hip, built for a crown.
-- `base-contract_dynasty.png` — **Suits.** An orange mascot in a tiny navy
-  blazer, tie loosened, briefcase in one paw, reading glasses on its head.
+- `base-redraft.webp` — **Rook.** The orange shaggy one: wild fur, huge
+  eyebrows, navy jersey with orange stripes. Fresh chaos, every August.
+- `base-keeper.webp` — **Vault.** The stone golem: mossy rock arms, green
+  jersey, built to hold on. Nothing gets pried loose.
+- `base-dynasty.webp` — **Duke.** The horned bison: tan mane, navy jersey,
+  the oldest head in the room. Plans in seasons, not weeks.
+- `base-contract_dynasty.webp` — **Suits.** The blue bird: sharp beak, crisp
+  white jersey, reads the fine print before it signs.
+
+Bench (cut out, not wired — swap any in by renaming): the purple cyclops, the
+blue mohawk, the purple ogre, the red cyclops.
 
 Matchup style:
 
@@ -76,6 +80,7 @@ League mode:
 > magenta or gold. Transparent background, no text, no scene, no ground
 > shadow. Square composition.
 
-Use the same block for every file, and hand the first finished base back
-in as a reference image so the other three match it. Nothing here may
+For the eight stickers, attach the cut-out body the sticker will sit on as a
+reference image and ask for the object ALONE, in that render style — thick
+fur, worn fabric, cinematic lighting — on a transparent background. Nothing here may
 reference a real team, a real mascot, or a named game character.
