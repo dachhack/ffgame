@@ -1,11 +1,11 @@
-// THE WIDGET'S TASK (v0.421.0) — what repaints it, and when.
+// THE WIDGET'S TASK (v0.421.0, v0.422.0) — what repaints it, and when.
 //
 // Android repaints a widget through a HEADLESS JS task: no screen, no React
 // tree, just this handler with the widget's id and why it woke. It wakes for
 // four reasons, all of which end in the same repaint:
 //   • Android's own timer (updatePeriodMillis in app.json; 30 min is the
 //     floor Android allows),
-//   • a tap on the card's ▸ or ⟳ chips (WIDGET_CLICK),
+//   • a tap on the card's chips (WIDGET_CLICK: next league, refresh, flip),
 //   • the app coming to the foreground or a board saving (App.tsx calls
 //     refreshMatchupWidgets),
 //   • the worker's SILENT push (kind 'widget'), which expo-notifications hands
@@ -13,19 +13,25 @@
 //     That push carries no score — it only says "repaint" — so the widget can
 //     never draw a number older than the read it makes right now.
 //
-// The league a widget shows is a per-widget preference in the app's own
-// storage (MMKV through core's platform seam), keyed by the widget id Android
-// gives it, so two widgets can watch two leagues.
+// Two per-widget preferences live in the app's own storage (MMKV through
+// core's platform seam), keyed by the widget id Android gives it: which
+// league it shows, and whether the manager flipped it to the score or the
+// lineup view. Unflipped, the feed decides which view leads.
 import React from 'react';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import { registerWidgetTaskHandler, requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-android-widget';
+import { registerWidgetTaskHandler, requestWidgetUpdate, type WidgetTaskHandlerProps, type WidgetInfo } from 'react-native-android-widget';
 import { platform } from '@drip/core/platform';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
-import { widgetSnapshot, nextWidgetLeague } from '@drip/core/data/widgetFeed';
+import { widgetSnapshot, nextWidgetLeague, type WidgetView } from '@drip/core/data/widgetFeed';
 import { MatchupWidget, MATCHUP_WIDGET_NAME, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
 
-const PREF = (widgetId: number) => `widget:league:${widgetId}`;
+const PREF_LEAGUE = (widgetId: number) => `widget:league:${widgetId}`;
+const PREF_VIEW = (widgetId: number) => `widget:view:${widgetId}`;
+
+const readView = (widgetId: number): WidgetView | undefined => {
+  try { const v = platform().storage.get(PREF_VIEW(widgetId)); return v === 'score' || v === 'lineup' ? v : undefined; } catch { return undefined; }
+};
 
 /** Build the picture for one widget, reading the world fresh. Never throws:
  *  a failed read draws the error card, because a widget that silently keeps
@@ -35,43 +41,58 @@ export async function widgetState(widgetId: number, advance = false): Promise<Wi
     const session = await getSession();
     if (!session) return { kind: 'signed-out' };
     const store = platform().storage;
-    const want = store.get(PREF(widgetId));
-    let { leagues, snapshot } = await widgetSnapshot(want);
+    const want = store.get(PREF_LEAGUE(widgetId));
+    let { leagues, snapshot } = await widgetSnapshot(want, session.user.id);
     if (advance && leagues.length > 1) {
       const next = nextWidgetLeague(leagues, snapshot?.leagueId ?? want);
       if (next) {
-        store.set(PREF(widgetId), next.id);
-        ({ leagues, snapshot } = await widgetSnapshot(next.id));
+        store.set(PREF_LEAGUE(widgetId), next.id);
+        // A new league is a new question: forget the flip along with it.
+        store.remove(PREF_VIEW(widgetId));
+        ({ leagues, snapshot } = await widgetSnapshot(next.id, session.user.id));
       }
     }
     if (!snapshot) return { kind: 'no-leagues' };
     // Remember what we showed, so a stored league that vanished is replaced
     // by the one that took its place rather than re-resolved every time.
-    if (snapshot.leagueId !== want) store.set(PREF(widgetId), snapshot.leagueId);
+    if (snapshot.leagueId !== want) store.set(PREF_LEAGUE(widgetId), snapshot.leagueId);
     return { kind: 'ok', snap: snapshot, leagues: leagues.length };
   } catch (e) {
     return { kind: 'error', message: friendlyError(e) };
   }
 }
 
+const paint = async (info: WidgetInfo, advance = false) =>
+  React.createElement(MatchupWidget, { state: await widgetState(info.widgetId, advance), heightDp: info.height, view: readView(info.widgetId) });
+
 async function handler(props: WidgetTaskHandlerProps): Promise<void> {
   const { widgetInfo, widgetAction, clickAction } = props;
   if (widgetInfo.widgetName !== MATCHUP_WIDGET_NAME) return;
   switch (widgetAction) {
     case 'WIDGET_DELETED':
-      try { platform().storage.remove(PREF(widgetInfo.widgetId)); } catch { /* ignore */ }
+      try { platform().storage.remove(PREF_LEAGUE(widgetInfo.widgetId)); platform().storage.remove(PREF_VIEW(widgetInfo.widgetId)); } catch { /* ignore */ }
       return;
     case 'WIDGET_CLICK': {
       // OPEN_URI is handled natively (it opens the app); only our own actions
       // reach here.
+      if (clickAction === WIDGET_CLICK.flip) {
+        // Flip relative to what is SHOWING: the stored flip if any, else the
+        // feed's lead — so the first tap always changes the picture.
+        const state = await widgetState(widgetInfo.widgetId);
+        const showing = readView(widgetInfo.widgetId) ?? (state.kind === 'ok' ? state.snap.lead : 'score');
+        const next: WidgetView = showing === 'score' ? 'lineup' : 'score';
+        try { platform().storage.set(PREF_VIEW(widgetInfo.widgetId), next); } catch { /* ignore */ }
+        props.renderWidget(React.createElement(MatchupWidget, { state, heightDp: widgetInfo.height, view: next }));
+        return;
+      }
       const advance = clickAction === WIDGET_CLICK.next;
       if (!advance && clickAction !== WIDGET_CLICK.refresh) return;
-      props.renderWidget(React.createElement(MatchupWidget, { state: await widgetState(widgetInfo.widgetId, advance) }));
+      props.renderWidget(await paint(widgetInfo, advance));
       return;
     }
     default:
       // WIDGET_ADDED, WIDGET_UPDATE (the timer), WIDGET_RESIZED
-      props.renderWidget(React.createElement(MatchupWidget, { state: await widgetState(widgetInfo.widgetId) }));
+      props.renderWidget(await paint(widgetInfo));
   }
 }
 
@@ -79,10 +100,7 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
  *  none (one native call), so callers need not check first. */
 export async function refreshMatchupWidgets(): Promise<void> {
   try {
-    await requestWidgetUpdate({
-      widgetName: MATCHUP_WIDGET_NAME,
-      renderWidget: async (info) => React.createElement(MatchupWidget, { state: await widgetState(info.widgetId) }),
-    });
+    await requestWidgetUpdate({ widgetName: MATCHUP_WIDGET_NAME, renderWidget: (info) => paint(info) });
   } catch { /* no widget host, or a build without the module — nothing to repaint */ }
 }
 

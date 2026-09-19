@@ -18,6 +18,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.422.0 — the widget's second view, and the window strip
+
+Founder: "We can include a lot more info in that widget. What else should we
+add? Also a lineup assessment widget would be a second add or make it a
+selection in the current widget." Then: "Let's go."
+
+A MODE, NOT A SECOND WIDGET. Same seat, same reads, and the two views are
+separated by the clock: the assessment matters until the last window locks,
+the score matters from the first kickoff, and they are never wanted at the
+same moment. The feed says which view LEADS — LINEUP while something needs
+fixing and a window is still open to fix it in (and before the first lock
+even when READY, since there is nothing to score yet); SCORE otherwise, and
+always on a final — and the ⇄ chip flips it, remembered per widget and
+forgotten when ▸ changes the league. A classic seat has no sealed picks to
+read, so it gets the score view and the strip and no chip.
+
+THE LINEUP VIEW. A verdict — READY ✓, or N FIXES — then the fixes by window:
+empty slots (capacity from slotsFor against filled picks), metrics not yet
+sealed, starters tagged OUT / IR / DOUBTFUL (QUESTIONABLE is noise on a
+Sunday and stays off), starters whose team has no game this week (the
+pool's team against windowForTeam, only when the slate has games at all).
+Only windows still in SETUP count — a locked window cannot be fixed, so the
+card stops nagging window by window as the day goes. The header names the
+next lock. Reads: myPicks as the seat OWNER (pick_user_id, else the session
+user), myPool for names and teams, injuryTags — the board's own three.
+
+THE SCORE VIEW GAINS. The window strip: one pill per window in kickoff
+order, coloured by who leads it (✓ / ✗ / – when final, ● while live, quiet
+while sealed). Who is still to play: mine from my picks in sealed and live
+windows; theirs revealed where kicked, assumed the window's full complement
+where still sealed. How many of my slots are hot, from slot_scores. Height
+picks the tier — Android hands the task the widget's dp — so a 4×2 shows
+score, state and strip; a 4×3 adds yet-to-play, hot and the empty-slot
+alarm; a 4×4 adds a line per window.
+
+check-widget grew to 41 assertions: the strip's order and phases, hot from
+each seat, yet-to-play arithmetic, READY, each fix kind by name, the lead
+rule at pre-lock, between windows, once everything is locked, and on a
+final, and the league helpers carrying game mode and seat owner.
+
+Battery: web tsc, mobile tsc, check:widget, check:changelog — green.
+
 ### v0.421.0 — the Android live matchup widget
 
 Founder: "What would it take to add widgets to the app?" then "Let's do the
