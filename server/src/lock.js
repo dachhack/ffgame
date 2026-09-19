@@ -366,8 +366,23 @@ export async function autoSlotClassicLineups(week, slate = null) {
     }
 
     const { data: mems } = await db().from('league_membership')
-      .select('sleeper_roster_id,app_user_id').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+      .select('sleeper_roster_id,app_user_id,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
     const userOf = new Map((mems ?? []).filter((x) => x.app_user_id).map((x) => [x.sleeper_roster_id, x.app_user_id]));
+    // A SEAT ON 🤖 AUTO-PILOT IS RE-PLANNED LIKE AN AGENT (v0.426.0). Founder:
+    // "This AI team has AJ Brown in despite him on IR. Can the AI teams set
+    // ideal lineups based on projections and injury status?" A human seat
+    // flipped to controller 'ai' (0022) still has an app_user, so it took the
+    // MANAGED branch below: its rows were "decisions", filled once and never
+    // revisited — a starter who landed on IR on Wednesday stayed in the flex
+    // through Sunday, because the one manager who could have moved him had
+    // handed the team to the AI. The AI IS the manager now, so its unlocked
+    // rows are the worker's own answer to re-plan every tick, exactly as an
+    // agent seat's are; only LOCKED rows stand. The rows still live under the
+    // human's uid, so the board reads them as before and a flip back to
+    // 'human' hands them over as a lineup already set. (An AI seat with no
+    // app_user has nowhere to store rows; the board and the resolver compute
+    // its best healthy lineup live — classicLineup's unmanagedStart.)
+    const aiOf = new Set((mems ?? []).filter((x) => x.controller === 'ai' && x.app_user_id).map((x) => x.sleeper_roster_id));
     // SEAT AGENTS (0180): an unclaimed seat writes as its agent. The mapping
     // exists only for classic leagues, and the claim trigger retires it the
     // moment a human takes the seat.
@@ -401,7 +416,7 @@ export async function autoSlotClassicLineups(week, slate = null) {
         const uid = userOf.get(rosterId);
         const roster = rosterOf.get(rosterId);
         if (!roster?.length) continue;
-        if (uid) {
+        if (uid && !aiOf.has(rosterId)) {
           // A MANAGED seat: fill only the spots with no row at all. A row is a
           // decision — including a NULL a manager wrote on purpose.
           const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
@@ -413,7 +428,9 @@ export async function autoSlotClassicLineups(week, slate = null) {
           }
           continue;
         }
-        const agent = agentOf(rosterId);
+        // An auto-pilot seat writes under its own manager's uid; an unclaimed
+        // seat under its agent's.
+        const agent = (uid && aiOf.has(rosterId)) ? uid : agentOf(rosterId);
         if (!agent) continue;
         // An AGENT seat is a DILIGENT manager, not a Tuesday snapshot: its
         // unlocked rows are the worker's own prior writes, never a decision,

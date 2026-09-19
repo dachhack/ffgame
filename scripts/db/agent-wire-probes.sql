@@ -333,4 +333,57 @@ begin
     'aw9z a bot vampire builds from the pool under its own wire lock');
 end $$;
 
+-- ══ 10. THE WORKER STASHES ON IR, ON THE SAME TERMS (0299, v0.426.0) ═════
+-- set_roster_spot admitted the seat's owner, the commissioner and an admin —
+-- never the worker — so a seat the worker tends could sign and drop but not
+-- stash. Now the 0213 branch, and every 0198 rule still binds it.
+do $$
+declare
+  r jsonb; lid uuid; code text; bot_seat int; d_seat int; i int;
+begin
+  perform probe_as('a');
+  r := create_native_league('AgentWireIR', '2024', 3, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  perform assert_ok(r, 'aw10 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  perform probe_as('d'); perform assert_ok(native_join(code, 'AW-D2'), 'aw10a D takes a seat'); perform probe_as('a');
+  perform assert_ok(set_league_classic_slots(lid,
+    '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'aw10b three starting spots');
+  perform assert_ok(set_league_roster_shape(lid, 2, 0, 2), 'aw10c two bench, two IR places');
+  perform seed_league_pool(lid, (
+    select jsonb_agg(jsonb_build_object('slug', 'awir-' || g, 'full', 'P' || g, 'pos', 'RB', 'team', 'KC', 'exp', 0))
+    from generate_series(1, 20) g));
+  select sleeper_roster_id into d_seat from league_membership
+    where league_id = lid and app_user_id = '00000000-0000-0000-0000-00000000000d';
+  select min(sleeper_roster_id) into bot_seat from league_membership where league_id = lid and app_user_id is null;
+  perform assert_ok(set_team_controller(lid, bot_seat, 'ai'), 'aw10d the unclaimed seat becomes a bot');
+  for i in 1..5 loop
+    insert into native_roster (league_id, roster_id, slug, acquired) values (lid, bot_seat, 'awir-' || i, 'draft');
+    insert into native_roster (league_id, roster_id, slug, acquired) values (lid, d_seat, 'awir-' || (10 + i), 'draft');
+  end loop;
+  update draft set status = 'complete' where league_id = lid;
+  insert into injury_status (player_slug, status) values ('awir-1', 'O'), ('awir-2', 'Q'), ('awir-11', 'O')
+    on conflict (player_slug) do update set status = excluded.status;
+
+  perform probe_as_worker();
+  perform assert_ok(set_roster_spot(lid, 'awir-1', 'ir'),
+    'aw10e the worker stashes the bot''s ruled-out player on IR');
+  perform assert_true((select spot from native_roster where league_id = lid and slug = 'awir-1') = 'ir',
+    'aw10f …and he is on IR');
+  perform assert_err(set_roster_spot(lid, 'awir-2', 'ir'), 'IR is for players designated',
+    'aw10g a questionable player is refused — 0198''s list binds the worker');
+  perform assert_err(set_roster_spot(lid, 'awir-11', 'ir'), 'forbidden',
+    'aw10h and D''s ruled-out player is not the worker''s to move');
+  perform assert_ok(add_free_agent(lid, bot_seat, 'awir-8', null),
+    'aw10i the freed active place takes a signing without a drop');
+  update injury_status set status = 'Q' where player_slug = 'awir-1';
+  perform assert_err(set_roster_spot(lid, 'awir-1', 'active'), 'active roster is full',
+    'aw10j a healed player cannot come back while the active roster is full (0198, unchanged)');
+  perform assert_ok(add_free_agent(lid, bot_seat, 'awir-9', 'awir-8'),
+    'aw10k (a swap keeps the count where it is)');
+  perform probe_as('a');
+  perform assert_ok(set_team_controller(lid, bot_seat, 'human'), 'aw10l the seat handed back');
+  perform probe_as_worker();
+  perform assert_err(set_roster_spot(lid, 'awir-1', 'active'), 'forbidden',
+    'aw10m …and the worker may no longer move its players');
+end $$;
+
 select 'ALL AGENT-WIRE PROBES PASSED' as result;

@@ -68,6 +68,14 @@ export interface WireOpts {
   /** Most claims one sweep may produce. Small on purpose: the sweep runs
    *  often, and a burst of claims is the churn the policy exists to avoid. */
   maxClaims?: number;
+  /** REST-OF-SEASON value (v0.426.0) — the season projection, NOT zeroed for
+   *  this week's bye or a one-game Out, zero for a season-ending IR. When
+   *  given it decides who may be DROPPED: bench bodies are spent cheapest-
+   *  for-the-season first, and no claim drops a player worth more for the
+   *  rest of the year than the one it adds. Without it `valueOf` stands in,
+   *  which is the pre-0.426 behaviour and wrong in exactly one way: a star
+   *  on his bye projects 0 THIS week and was the first man overboard. */
+  rosValueOf?: (p: SpotPlayer) => number;
 }
 
 /** Points per week an upgrade must add before it is worth transacting for.
@@ -89,6 +97,19 @@ export const FAAB_PER_POINT = 3;
  *  the whole reason "bid proportional to gain" is safe: an enormous projected
  *  gain (a QB1 hitting waivers) would otherwise bid the entire budget. */
 export const FAAB_MAX_SHARE = 0.25;
+
+/** How thin a roster is at each position: bodies at the position minus the
+ *  starting spots that take ONLY that position. Flex-type spots are not
+ *  counted against anyone — they are covered by whoever is left. A position
+ *  no spot accepts at all is absent, so a kicker is never "needed" in a
+ *  league with no K spot. Exported for the assertion suite. */
+export function positionNeed(slots: ClassicSlotDef[], roster: SpotPlayer[]): Map<string, number> {
+  const need = new Map<string, number>();
+  for (const d of slots) for (const pos of d.pos) if (!need.has(pos)) need.set(pos, 0);
+  for (const d of slots) if (d.pos.length === 1) need.set(d.pos[0], (need.get(d.pos[0]) ?? 0) - 1);
+  for (const p of roster) if (need.has(p.pos)) need.set(p.pos, (need.get(p.pos) ?? 0) + 1);
+  return need;
+}
 
 /** The value of the best legal lineup this roster can field. */
 function lineupValue(
@@ -196,6 +217,9 @@ export function seatWirePlan(
   let budget = opts.budget;
   let seats = opts.openSeats;
   const used = new Set<string>();   // added or dropped already this sweep
+  // What a body is worth for the REST OF THE SEASON — the measure every drop
+  // is judged by. Falls back to this week's value when the caller has none.
+  const rosOf = opts.rosValueOf ?? valueOf;
 
   for (let n = 0; n < maxClaims; n++) {
     const base = lineupValue(slots, have, valueOf);
@@ -204,12 +228,13 @@ export function seatWirePlan(
     // Only a player who is NOT in the best lineup may be dropped. This is the
     // "never drops a healthy contributor" rail, and it is structural rather
     // than a threshold: if he is starting, he is not a drop candidate, full
-    // stop. Cheapest bench body first.
+    // stop. Cheapest bench body first — cheapest for the SEASON (v0.426.0),
+    // so a star on his bye or a one-week Out is not the first man overboard.
     const starting = new Set(optimalLineup(slots, have, valueOf).spots
       .flatMap((r) => (r.player ? [r.player.id] : [])));
     const droppable = have
       .filter((p) => !starting.has(p.id) && !used.has(p.id))
-      .sort((a, b) => valueOf(a) - valueOf(b));
+      .sort((a, b) => (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
 
     // With a seat open the add costs nobody; otherwise the worst bench body
     // goes. A roster that is full AND has no droppable bench player cannot
@@ -222,6 +247,12 @@ export function seatWirePlan(
     for (const cand of pool) {
       if (used.has(cand.id) || have.some((p) => p.id === cand.id)) continue;
       for (const drop of dropOpts) {
+        // NEVER DROP A MORE VALUABLE PLAYER THAN THE ONE COMING IN (v0.426.0).
+        // A streamer who fills this week's hole is still a streamer; if the
+        // cheapest bench body is worth more for the rest of the season, the
+        // hole stays open this week rather than costing the season. An open
+        // seat (no drop) is never subject to it.
+        if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)) continue;
         const next = have.filter((p) => !drop || p.id !== drop.id).concat(cand);
         const gain = lineupValue(slots, next, valueOf) - base;
         const kind: 'hole' | 'upgrade' = hole ? 'hole' : 'upgrade';
@@ -248,10 +279,18 @@ export function seatWirePlan(
     // body is worth neither — best projected first, only if he projects at
     // all. No drop, no bid: it costs nobody anything. A full roster never
     // reaches here, so the agent seats that drafted are untouched by it.
+    //
+    // WHERE THE ROSTER IS THIN FIRST (v0.426.0). Founder: "if the team … is
+    // light on RBs". positionNeed counts bodies beyond the dedicated starting
+    // spots; the position with the fewest is filled first, and within it the
+    // best rest-of-season body. A position no spot accepts is never taken.
     if (!best && seats > 0) {
+      const need = positionNeed(slots, have);
       const body = pool
-        .filter((p) => !p.onWaivers && !used.has(p.id) && !have.some((q) => q.id === p.id) && valueOf(p) > 0)
-        .sort((a, b) => (valueOf(b) - valueOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
+        .filter((p) => !p.onWaivers && !used.has(p.id) && !have.some((q) => q.id === p.id)
+          && need.has(p.pos) && rosOf(p) > 0)
+        .sort((a, b) => ((need.get(a.pos) ?? 0) - (need.get(b.pos) ?? 0))
+          || (rosOf(b) - rosOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
       if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, kind: 'depth', onWaivers: false };
     }
     if (!best) break;

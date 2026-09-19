@@ -18,6 +18,88 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.426.0 — the AI manager: lineups it revisits, IR it uses, drops it judges by the season
+
+Founder: "This AI team has AJ Brown in despite him on IR. Can the AI teams
+set ideal line ups based on projections and injury status? Also put players
+in IR? Make FAAB waiver claims and free agency adds? Do we have a good
+projections logic for deciding those pick ups would help the team? Like if
+the team doesn't have a WR to fill a spot or is light on RBs, the AI
+controlled team will make a waiver move (and not drop players that have
+more value or score well rest of season)."
+
+THE HONEST AUDIT, question by question, before the fixes:
+
+  • Lineups. An AI seat with NO account has its best healthy lineup computed
+    live by the board and the resolver (classicLineup's unmanagedStart,
+    O/IR benched since v0.252.0). A human seat FLIPPED to 🤖 (0022) still
+    has an account, so the lock-time fill took it for a managed human: rows
+    are decisions, filled once, never revisited. AJ Brown went into the flex
+    while healthy and stayed there through IR because the one manager who
+    could have moved him had handed the team to the AI. Fixed.
+  • IR. Nobody the worker acts for could stash: set_roster_spot admitted
+    the owner, the commissioner and an admin. Fixed (0299).
+  • FAAB claims and free-agent adds. Yes since v0.338.0 for unclaimed
+    seats and since v0.425.0 for AI seats — the same two RPCs a manager
+    calls, bids proportional to gain and capped at a quarter of what is
+    left.
+  • The judgement. Holes (a spot nobody legal or nobody scoring is in) on
+    any gain, upgrades only past 2 points a week, never a starter dropped —
+    all sound. But the DROP was chosen by THIS WEEK'S value, which zeroes a
+    bye and a one-game Out: a benched star on his bye was the cheapest body
+    on the roster and the first man overboard. Fixed. "Light on RBs" was
+    not a consideration at all. Fixed.
+
+THE LINEUP (lock.js). A seat whose controller is 'ai' and has an account is
+re-planned like an agent seat: its unlocked rows are the worker's own
+answer, rewritten at the current values every tick — a player ruled Out or
+IR on Friday drops from Sunday's spots as a careful human would drop him —
+and only LOCKED rows stand. The rows still live under the manager's uid, so
+the board reads them as before and a flip back to 'human' hands over a
+lineup already set. An AI seat with no account is unchanged: it has nowhere
+to store rows, and its computed lineup already benches O/IR.
+
+IR (0299 + the sweep). set_roster_spot gains 0213's worker branch —
+`auth.uid() is null and agent_wire_seat(league, seat)` — with every 0198
+rule intact: the league's own IR list, the cap, the taxi tenure ceiling and
+lock, the active count on the way back. Before it plans, the sweep stashes
+any active player whose designation is on the league's list (league_ir_tags,
+default IR/O) while an IR place is open, and brings back a player on IR
+whose designation has cleared while an active place is open. Freeing the
+seat is what lets the replacement be signed without a drop. The new
+`injuryStatusMap` in injuries.js tells IR from O; ruledOutSlugs still lumps
+them for "cannot play this week".
+
+THE JUDGEMENT (core planner, pure). `rosValueOf` — the season projection
+under the league's catalog, untouched by this week's bye or a one-game Out,
+zero for a season-ending IR — decides every drop: bench bodies are spent
+cheapest-for-the-season first, and NO claim drops a player worth more for
+the rest of the year than the one it adds. A streamer who fills this
+week's hole is still a streamer; if every bench body is worth more for the
+season, the hole stays open this week rather than costing the year (an open
+seat takes him with no drop). Depth adds go WHERE THE ROSTER IS THIN:
+`positionNeed` counts bodies beyond the dedicated starting spots (flex
+spots count against nobody; a position no spot accepts is never taken),
+the thinnest position is filled first, the best season body within it. The
+shortlist ranks by the season too, so a bye-week starter is still on the
+list for a depth add while this week's value still decides a hole.
+
+Assertions: check-seat-waivers 45 → 55 — the bye-week star no longer the
+first overboard, the hole filled with the cheapest season body, the hole
+left open rather than dropping a better player, the open seat taking him
+free, the IR body spent first, the starting rail untouched, positionNeed's
+arithmetic, light-on-RBs taking the back over the better receiver, and a
+no-spot position never taken. agent-wire-probes section 10: the worker
+stashes a bot's ruled-out player, a questionable player is refused by the
+league's list, another manager's player is not the worker's to move, the
+freed place takes a signing without a drop, a healed player stays until an
+active place opens, and the seat handed back closes the branch.
+
+Battery: web tsc, mobile tsc, check:seatwire, check:changelog; scratch DB
+(every migration through 0299): native-league, taxi-ir, seat-agent,
+agent-wire, ir-eligibility, ir-after-draft, vampire-rules, vampire-coven,
+format — green.
+
 ### v0.425.0 — practice weeks are not fresh blood, and the AI works the wire
 
 Founder: "Looks like the vampire lost but took Amon-Ra. Should have not been

@@ -11,7 +11,7 @@
 // fixture league, so there is no excuse for the policy to be unpinned.
 // Run: npx tsx scripts/check-seat-waivers.mjs
 import {
-  seatWirePlan, wireBid, shortlistWire, UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
+  seatWirePlan, wireBid, shortlistWire, positionNeed, UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { clearLeagueFlags, setLeagueFlags } from '../packages/core/src/data/commish.ts';
 
@@ -237,6 +237,67 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(cut.filter((p) => p.pos === 'RB').every((p) => p.id.endsWith('7')), 'the survivors are the best projected, not the first listed');
   ok(cut.map((p) => p.id).join() === big.filter((p) => cut.some((c) => c.id === p.id)).map((p) => p.id).join(),
     'pool order is preserved, so the planner\'s tie-break reads the same list run to run');
+}
+
+// ── 16. A drop is judged by the SEASON, not the week (v0.426.0) ──────────
+// Founder: "not drop players that have more value or score well rest of
+// season." This week's value zeroes a bye and a one-game Out, which made a
+// benched star the cheapest body on the roster. With rosValueOf the planner
+// spends the cheapest SEASON body, and never drops a man worth more for the
+// year than the one coming in.
+{
+  // starter2 is hurt (this week 0); the streamer fills the hole.
+  // Bench: `star` is on his BYE (week 0, season 15) and `scrub` (week 2, season 2).
+  const roster = [rb('starter1'), rb('hurt'), wr('flexguy'), rb('star'), wr('scrub')];
+  const week = projOf({ starter1: 10, hurt: 0, flexguy: 4, star: 0, scrub: 2, streamer: 6 });
+  const ros = projOf({ starter1: 10, hurt: 9, flexguy: 4, star: 15, scrub: 2, streamer: 5 });
+  const naive = seatWirePlan(SLOTS, roster, [free(rb('streamer'))], week, OPTS);
+  ok(naive[0]?.drop === 'star', 'WITHOUT a season value the bye-week star is the first man overboard (the old behaviour)');
+  const plan = seatWirePlan(SLOTS, roster, [free(rb('streamer'))], week, { ...OPTS, rosValueOf: ros });
+  ok(plan.length === 1 && plan[0].add === 'streamer' && plan[0].drop === 'scrub',
+    'with it the hole is still filled — paying with the cheapest SEASON body, not the star');
+  // Every bench body is worth more for the season than the streamer: the
+  // hole stays open this week rather than costing the year.
+  const ros2 = projOf({ starter1: 10, hurt: 9, flexguy: 4, star: 15, scrub: 8, streamer: 5 });
+  ok(seatWirePlan(SLOTS, roster, [free(rb('streamer'))], week, { ...OPTS, rosValueOf: ros2 }).length === 0,
+    'no drop of a player worth more for the season than the add — the hole stays');
+  // …unless a seat is open, where the add costs nobody.
+  const open = seatWirePlan(SLOTS, roster, [free(rb('streamer'))], week, { ...OPTS, rosValueOf: ros2, openSeats: 1 });
+  ok(open.length === 1 && open[0].drop === null, 'an open seat takes the streamer with no drop at all');
+  // A season-ending IR (season value 0) is the first body spent.
+  const roster3 = [rb('starter1'), rb('hurt'), wr('flexguy'), rb('star'), wr('done')];
+  const ros3 = projOf({ starter1: 10, hurt: 9, flexguy: 4, star: 15, done: 0, streamer: 5 });
+  const week3 = projOf({ starter1: 10, hurt: 0, flexguy: 4, star: 0, done: 0, streamer: 6 });
+  const p3 = seatWirePlan(SLOTS, roster3, [free(rb('streamer'))], week3, { ...OPTS, rosValueOf: ros3 });
+  ok(p3[0]?.drop === 'done', 'a season-ending IR on the active roster is the body spent');
+  // The starting rail is untouched: a starter is never a drop candidate
+  // however cheap his season looks.
+  const ros4 = projOf({ starter1: 1, hurt: 9, flexguy: 4, star: 15, scrub: 2, streamer: 5 });
+  const p4 = seatWirePlan(SLOTS, roster, [free(rb('streamer'))], week, { ...OPTS, rosValueOf: ros4 });
+  ok(p4[0]?.drop === 'scrub', 'a starter is still never dropped, whatever his season value');
+}
+
+// ── 17. Depth goes where the roster is THIN (v0.426.0) ────────────────────
+// Founder: "if the team … is light on RBs". Two dedicated RB spots and one
+// flex: with three RBs and one WR on the roster, the WR side has more spare
+// bodies than the RB side? No — need counts bodies beyond DEDICATED spots:
+// RB 3 − 2 = 1, WR 1 − 0 = 1 → a tie, broken by season value. With two RBs
+// the RB need is 0 and the depth add is a running back even when a better
+// receiver is free.
+{
+  const need = positionNeed(SLOTS, [rb('a'), rb('b'), rb('c'), wr('d')]);
+  ok(need.get('RB') === 1 && need.get('WR') === 1 && need.get('TE') === 0 && !need.has('QB'),
+    'positionNeed: bodies beyond dedicated spots, flex counted against nobody, no-spot positions absent');
+  const starters = [rb('s1'), rb('s2'), wr('s3')];
+  const proj = projOf({ s1: 10, s2: 9, s3: 8, rbx: 3, wrx: 6, k1: 9 });
+  const pool = [free(rb('rbx'), false), free(wr('wrx'), false), { id: 'k1', pos: 'K', onWaivers: false }];
+  const plan = seatWirePlan(SLOTS, starters, pool, proj, { ...OPTS, openSeats: 1, rosValueOf: proj });
+  ok(plan.length === 1 && plan[0].kind === 'depth' && plan[0].add === 'rbx',
+    'light on RBs: the depth add is the running back, not the better-projected receiver');
+  const plan2 = seatWirePlan(SLOTS, [...starters, rb('s4')], pool, proj, { ...OPTS, openSeats: 1, rosValueOf: proj });
+  ok(plan2[0]?.add === 'wrx', 'with a spare RB the receiver side is thinner and gets the body');
+  ok(!plan.some((c) => c.add === 'k1') && !plan2.some((c) => c.add === 'k1'),
+    'a position no spot accepts is never a depth add, whatever it projects');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
