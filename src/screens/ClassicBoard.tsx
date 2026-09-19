@@ -11,12 +11,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFill, bestballFillBy, type ClassicPick, type ClassicScoring, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, projectEntry, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { setRuntimeSlate } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -54,7 +54,12 @@ import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
  *  bare figure beside "Yet to play" is ambiguous exactly when the manager is
  *  deciding something: before kickoff it reads `proj 15.3` in the quiet colour;
  *  once the ball is live it's points, in full. */
-function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 'right'; onOpen?: () => void }) {
+function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 'left' | 'right'; onOpen?: () => void;
+  /** A TAXI/IR row (v0.427.1, founder: "Stribling is on IR and has a
+   *  projection"): he cannot score for this side, so the pre-game number is
+   *  a dash rather than a projection that reads like it counts. Live points
+   *  still print — they are a fact about the game, not a claim on the total. */
+  stashed?: boolean }) {
   const right = align === 'right';
   const box: React.CSSProperties = {
     background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8,
@@ -90,7 +95,7 @@ function GameCard({ e, align, onOpen }: { e: BoardEntry | null; align: 'left' | 
             {/* NO "proj" LABEL (founder, v0.241.0): the number alone — the
                 quiet colour says it is a projection. 16px since v0.368.1. */}
             <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-              {e.proj.toFixed(1)}
+              {stashed ? '—' : e.proj.toFixed(1)}
             </span>
           </div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: right ? 'right' : 'left', lineHeight: 1.5 }}>
@@ -864,55 +869,6 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     [matchup, slate],
   );
 
-  // The EFFECTIVE lineup per side: manual picks in non-best-ball slots, plus
-  // the engine's fills — the same bestballFill the worker scores with. Fills
-  // only exist once locked (pre-lock there are no scores to chase).
-  const effective = useMemo(() => {
-    void playsAt;
-    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
-      const out: Record<string, string | null> = {};
-      const manualPicks: ClassicPick[] = [];
-      for (const d of slotDefs) {
-        if (bb.has(d.slot)) { out[d.slot] = null; continue; }
-        out[d.slot] = manual[d.slot] ?? null;
-        if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
-      }
-      // exp rides along (0172) so tenure-filtered spots fill honestly.
-      const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
-      // THE SEAT NOBODY MANAGES (v0.248.0). sealed_pick hangs off a user, so a
-      // seat with no claimed manager cannot store a lineup at all — the worker's
-      // auto-slot never reaches it. The engine fields its best projected lineup
-      // from the roster instead (classicLineup), and this is the same call, so
-      // what this board draws is what the resolver scores. Only when the side
-      // stored NOTHING: a seat with rows is managed, and everything it stored
-      // stands, empty spots included.
-      if (!Object.keys(manual).length && ros.length) {
-        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, fillValue)) {
-          out[r.slot] = r.player;
-          manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
-        }
-      }
-      if (matchup && bb.size) {
-        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
-        // itself with whoever scores most, so before anyone has scored it used
-        // to render empty and count ZERO toward the projected total —
-        // understating a best-ball team by however many spots it auto-fills.
-        // Same algorithm either way (bestballFillBy owns eligibility, the
-        // manual-start exclusion, one-player-one-spot and the fill order); only
-        // the number it sorts on changes, so the preview and the real fill can
-        // never disagree about who is ALLOWED, just about who is best.
-        const fills = locked
-          ? bestballFill(manualPicks, bestball, ros, matchup.week, sc, slotDefs)
-          : bestballFillBy(manualPicks, bestball, ros, slotDefs, fillValue);
-        for (const f of fills) out[f.slot] = f.player.id;
-      }
-      return out;
-    };
-    return {
-      mine: build(mine, pool.map((p) => p.slug)),
-      theirs: build(theirs, oppPool.map((p) => p.slug)),
-    };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue]);
 
   // Only MANUAL starters reserve players; best-ball slots never block the picker.
   const used = useMemo(() => new Set(
@@ -1005,6 +961,69 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
   }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams]);
+
+  // The EFFECTIVE lineup per side: manual picks in non-best-ball slots, plus
+  // the engine's fills — the same bestballFill the worker scores with. Fills
+  // only exist once locked (pre-lock there are no scores to chase).
+  const effective = useMemo(() => {
+    void playsAt;
+    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
+      const out: Record<string, string | null> = {};
+      const manualPicks: ClassicPick[] = [];
+      for (const d of slotDefs) {
+        if (bb.has(d.slot)) { out[d.slot] = null; continue; }
+        out[d.slot] = manual[d.slot] ?? null;
+        if (manual[d.slot]) manualPicks.push({ slot: d.slot, player: mkPlayer(manual[d.slot]!) });
+      }
+      // exp rides along (0172) so tenure-filtered spots fill honestly.
+      const ros = rosterSlugs.filter((x) => !stashed.has(x)).map((x) => ({ ...mkPlayer(x), exp: expMap[x] ?? null }));
+      // THE SEAT NOBODY MANAGES (v0.248.0). sealed_pick hangs off a user, so a
+      // seat with no claimed manager cannot store a lineup at all — the worker's
+      // auto-slot never reaches it. The engine fields its best projected lineup
+      // from the roster instead (classicLineup), and this is the same call, so
+      // what this board draws is what the resolver scores. Only when the side
+      // stored NOTHING: a seat with rows is managed, and everything it stored
+      // stands, empty spots included.
+      if (!Object.keys(manual).length && ros.length) {
+        for (const r of autoSlotPlan(slotDefs, bestball, {}, ros, fillValue)) {
+          out[r.slot] = r.player;
+          manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
+        }
+      }
+      if (matchup && bb.size) {
+        // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
+        // itself with whoever scores most, so before anyone has scored it used
+        // to render empty and count ZERO toward the projected total —
+        // understating a best-ball team by however many spots it auto-fills.
+        // Same algorithm either way (bestballFillBy owns eligibility, the
+        // manual-start exclusion, one-player-one-spot and the fill order); only
+        // the number it sorts on changes, so the preview and the real fill can
+        // never disagree about who is ALLOWED, just about who is best.
+        // THE PROJECTED FINAL, NOT THE LIVE SCORE (v0.427.1). Founder, on a
+        // Saturday: "the game swapped in Washington into the bestball spot
+        // despite Sadiq having a higher projection." Once the week's first
+        // game had kicked off this ranked by LIVE points (bestballFill) — so
+        // every man whose game was still to come was worth exactly 0, the
+        // fill tied across the whole bench and fell to roster order. The
+        // resolver's live ranking is right at the END, when every game is
+        // final; mid-week the honest value of a player is what the board
+        // already projects for him — his points if he is done, his
+        // projection if he hasn't started, the blend while he plays
+        // (projectEntry) — and that is the same number at the end.
+        const finalValue = (p: { id: string; pos?: string | null; team?: string | null }, d: ClassicSlotDef) => {
+          const e = entryFor(p.id, d.pos, d.slot);
+          return e ? projectEntry(e) : fillValue(p, d);
+        };
+        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked ? finalValue : fillValue);
+        for (const f of fills) out[f.slot] = f.player.id;
+      }
+      return out;
+    };
+    return {
+      mine: build(mine, pool.map((p) => p.slug)),
+      theirs: build(theirs, oppPool.map((p) => p.slug)),
+    };
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -1675,8 +1694,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                         {a ? <BoardCell e={a} align="right" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 7 }}>
-                        {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} /> : <span />}
-                        {a ? <GameCard e={a} align="right" onOpen={fieldOpener(a)} /> : <span />}
+                        {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} stashed={k === 'ir'} /> : <span />}
+                        {a ? <GameCard e={a} align="right" onOpen={fieldOpener(a)} stashed={k === 'ir'} /> : <span />}
                       </div>
                     </div>
                   );

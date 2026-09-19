@@ -384,5 +384,44 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   ok('ring: the input is not reordered in place', wk[0].id === 'c');
 }
 
+// ── THE LIVE-WEEK BEST-BALL FILL RANKS BY PROJECTED FINAL (v0.427.1) ─────
+// Founder, on a Saturday after the Thursday game: "the game swapped in
+// Washington into the bestball spot despite Sadiq having a higher
+// projection." Once the week's first game kicked off the boards ranked the
+// fill by LIVE points, so everyone still to play was worth 0 and the fill
+// fell to roster order. The value must be projectEntry: a done man is his
+// points, a pre man his projection, a live man the blend — the same number
+// the resolver reaches at the end, and the right one every day before it.
+{
+  const { bestballFillBy } = await import('../packages/core/src/engine/classic.ts');
+  const slots = [{ slot: 'S1', type: '', pos: ['RB', 'WR', 'TE', 'QB'] }];
+  const roster = [
+    { id: 'washington', pos: 'RB', team: 'LV' },
+    { id: 'sadiq', pos: 'TE', team: 'NYJ' },
+    { id: 'kittle', pos: 'TE', team: 'SF' },
+    { id: 'gibbs', pos: 'RB', team: 'DET' },
+  ];
+  // Saturday: DET has played (done, 23.3), nobody else has. Live points alone
+  // would be 0/0/0/23.3 — but a projected-final ranking puts Gibbs' final
+  // against the others' projections, and Kittle's 14.3 is not 0.
+  const entries = {
+    washington: E({ live: 0, proj: 3.2, state: 'pre' }),
+    sadiq: E({ live: 0, proj: 12.4, state: 'pre' }),
+    kittle: E({ live: 0, proj: 14.3, state: 'pre' }),
+    gibbs: E({ live: 23.3, proj: 18.0, state: 'done' }),
+  };
+  const byFinal = (p) => projectEntry(entries[p.id]);
+  const byLive = (p) => entries[p.id].live;
+  ok('live-only ranking is the bug: everyone unplayed ties at 0 and the first man in roster order wins',
+    bestballFillBy([], ['S1'], roster.slice(0, 3), slots, byLive)[0]?.player.id === 'washington');
+  ok('projected-final ranking seats the best projection among the unplayed',
+    bestballFillBy([], ['S1'], roster.slice(0, 3), slots, byFinal)[0]?.player.id === 'kittle');
+  ok('…and a finished man competes on his real points', bestballFillBy([], ['S1'], roster, slots, byFinal)[0]?.player.id === 'gibbs');
+  ok('a manual starter is out of the pool either way',
+    bestballFillBy([{ slot: 'S0', player: roster[2] }], ['S1'], roster.slice(0, 3), slots, byFinal)[0]?.player.id === 'sadiq');
+  ok('a live man is worth the blend, not zero and not double',
+    projectEntry(E({ live: 6, proj: 12, state: 'live' })) === 12 && projectEntry(E({ live: 20, proj: 12, state: 'live' })) === 20);
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

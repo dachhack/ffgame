@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.427.1 — a live week's best-ball fill ranks by projected final, and IR rows drop their projection
+
+Founder, Saturday evening: "I was able to put Tate in but the game swapped
+in Washington into the bestball spot despite Sadiq having a higher
+projection. Also, Stribling is on IR and has a projection."
+
+THE FILL. Both boards switched the best-ball fill the moment the week's
+first game kicked off: before it, bestballFillBy ranked by the projection;
+after it, bestballFill ranked by LIVE points. On a Saturday after the
+Thursday game that made every man whose game was still to come worth
+exactly 0 — Kittle 14.3, Sadiq 12.4, Skattebo 13.8 all tied at nothing —
+and the assignment fell to roster order, which is how a 3.2 running back
+took the spot. (Before Tate moved out, Tate had been first in that order;
+the same bug had been quietly picking him.) The engine was never wrong
+about the maths — it was handed the wrong number. The fill now ranks by
+the board's own projected final (projectEntry): a finished man is his
+points, a man yet to play is his projection, a man on the field the blend.
+At the end of the week that is the live score the resolver ranks by, so
+the two agree where it counts and the board is honest every day before.
+The `effective` memo moved below `entryFor` to reach it. check:board pins
+the live-only failure and the projected-final fix (five assertions).
+
+IR ROWS print a dash for the pre-game number on both hosts: a stashed
+player cannot score for this side, so a projection there read as a claim
+on the total. Live points still print — those are facts about the game.
+
+Battery: root + mobile tsc, check:parity (37 suites), vite build. Web + APK.
+
 ### v0.427.0 — the bot vampire bites
 
 Founder: "Let's have the bot vampire take a bite."
