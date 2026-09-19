@@ -31,7 +31,49 @@ filling the frame.
 - Keep each file under ~150 KB (they ship as static assets).
 - Must read against both a dark teal and a cream background.
 
-## Files (12)
+## Files (28)
+
+Three kinds, by what they touch. Deliver in any order: the app tries the
+geared body first, then the plain body plus a head sticker, then a drawn
+stand-in; a scene simply doesn't appear until its file exists.
+
+### Scenes — one per league mode (4)
+
+Wide, behind the mascot, cropped to a square on the stage with the bottom
+fading out. Dark and moody so the character pops; no text, no logos.
+
+- `bg-classic.webp` — a night stadium from the tunnel mouth, floodlights
+  and haze, empty field, crowd as bokeh.
+- `bg-golf.webp` — a manicured putting green at dawn, a flag in the hole,
+  the fairway running to a pair of goalposts in the mist.
+- `bg-vampire.webp` — a floodlit stadium at midnight under a full moon,
+  bats over the goalposts, fog on the turf.
+- `bg-guillotine.webp` — an empty stadium at night with a real wooden
+  guillotine standing on the fifty-yard line, torches along the sideline,
+  one just gone out.
+
+### Geared bodies — each body wearing each mode (12)
+
+Ask ChatGPT to EDIT the plain cutout (attach it): same character, same
+pose, same lighting, plain white background, and add the gear. One line
+each, times four bodies:
+
+- `base-<type>-golf.webp` — a white golf visor and a putter held in the
+  right hand, head-cover on the club.
+- `base-<type>-vampire.webp` — vampire fangs in the grin, a high-collared
+  black cloak with red lining over the shoulders, the eyes catching light.
+- `base-<type>-guillotine.webp` — a black executioner's hood over the head
+  (eyes visible through the holes) and a broad blade held in the right hand.
+
+Where `<type>` is `redraft` (Rook), `keeper` (Vault), `dynasty` (Duke),
+`contract_dynasty` (Suits).
+
+### Body-agnostic stickers (4), and stand-ins (4)
+
+The chain, finger, snake and gavel below overlay any body. The four
+`mode-*` head stand-ins are drawn only while a geared body is missing.
+
+## The plain bodies
 
 Base bodies, one per league type — **DONE** (v0.420.0): the founder's four
 renders, cut out and placed on the 1024 canvas. Kept here as the brief they

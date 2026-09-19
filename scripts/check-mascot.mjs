@@ -41,9 +41,13 @@ const ok = (name, cond, got) => {
   }
   ok('sixty-four builds', all.length === 64, all.length);
   const sig = (b) => mascotLayers(b).map((l) => l.file).join('+');
+  ok('every build has a scene, first, named for its league mode', all.every((b) => mascotLayers(b)[0].key === 'scene' && mascotLayers(b)[0].file === `bg-${b.mode}`));
+  ok('a geared mode asks for the baked body and falls back to the plain one', all.filter((b) => b.mode !== 'classic').every((b) => { const body = mascotLayers(b).find((l) => l.key === 'body'); return body.file === `base-${b.type}-${b.mode}` && body.fallbacks[0] === `base-${b.type}`; }));
+  ok('classic mode wears the plain body with no fallback', all.filter((b) => b.mode === 'classic').every((b) => { const body = mascotLayers(b).find((l) => l.key === 'body'); return body.file === `base-${b.type}` && !body.fallbacks; }));
+  ok('head gear and the cape stand down when the body is baked', all.every((b) => mascotLayers(b).filter((l) => l.anchor === 'head' || l.anchor === 'back').every((l) => l.unlessBaked)));
   const sigs = new Set(all.map(sig));
   ok('no two builds wear the same layers', sigs.size === 64, sigs.size);
-  ok('the body is always the league type', all.every((b) => mascotLayers(b).some((l) => l.key === 'body' && l.file === `base-${b.type}`)));
+  ok('the body is always the league type', all.every((b) => mascotLayers(b).some((l) => l.key === 'body' && l.file.startsWith(`base-${b.type}`))));
   ok('a drip league wears the chain; a classic one does not',
     all.every((b) => mascotLayers(b).some((l) => l.key === 'chain') === (b.matchup === 'drip')));
   ok('the snake and the gavel never share a mascot',
@@ -53,8 +57,9 @@ const ok = (name, cond, got) => {
     return l.findIndex((x) => x.key === 'cape') < l.findIndex((x) => x.key === 'body') && l.findIndex((x) => x.key === 'fangs') > l.findIndex((x) => x.key === 'body');
   })());
   ok('layers come out bottom first', all.every((b) => { const z = mascotLayers(b).map((l) => l.z); return z.every((v, i) => i === 0 || v >= z[i - 1]); }));
-  ok('every layer names a planned sticker file', all.every((b) => mascotLayers(b).every((l) => MASCOT_FILES.includes(l.file))));
-  ok('every planned sticker file is worn by some build', MASCOT_FILES.every((f) => all.some((b) => mascotLayers(b).some((l) => l.file === f))));
+  ok('every layer names a planned file, fallbacks included', all.every((b) => mascotLayers(b).every((l) => MASCOT_FILES.includes(l.file) && (l.fallbacks ?? []).every((f) => MASCOT_FILES.includes(f)))));
+  ok('every planned file is asked for by some build', MASCOT_FILES.every((f) => all.some((b) => mascotLayers(b).some((l) => l.file === f || (l.fallbacks ?? []).includes(f)))));
+  ok('twenty-eight files in all: 4 scenes, 4 bodies, 12 geared bodies, 4 stickers, 4 stand-ins', MASCOT_FILES.length === 28, MASCOT_FILES.length);
   ok('names are never empty and carry the body', all.every((b) => mascotName(b).length > 4));
   ok('the recipe line names all four answers', describeBuild({ type: 'dynasty', matchup: 'drip', draft: 'auction', mode: 'guillotine' }) === 'Dynasty · Drip Battle · Auction · Guillotine');
 }

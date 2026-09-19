@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.420.1 — the four bodies are real, and the scene changes
+
+Founder picked the mascots from two generated sheets, then: "What are the
+variations we need? … Ooooh or the background changes. A golf course, an
+actual guillotine, etc." And: "You can keep the white background and I'll
+do the alpha channel elsewhere."
+
+THE CUT-OUT. The checkerboard was baked into the composites (a generator's
+fake transparency), so the alpha is made here. A "bright, neutral, noisy"
+test ate two white jerseys; the one that holds matches only the checker's
+7px alternation — opposite tone 7px over in x and y, same tone diagonally
+— then closes the 1px seams, treats EVERY matching region as background
+(a border flood misses the pockets between legs), opens away specks,
+splits characters by the emptiest gap rather than fixed quadrants (feet
+cross the midline), keeps each quadrant's main blob, and fills enclosed
+holes under 900px (jersey squares that happened to alternate). All eight
+cut out; four wired as 1024 WebP bases (~100 KB each), every body scaled
+to one height so the head, chest and hand anchors land in the same place.
+Rook = the orange shaggy one, Vault = the stone golem, Duke = the horned
+bison, Suits = the blue bird. The bench (purple cyclops, blue mohawk,
+purple ogre, red cyclops) is a rename away.
+
+THE VARIATIONS, by what they touch. Mode gear that wraps the head and
+shoulders is BAKED onto the body as its own render (`base-<type>-<mode>`,
+12 files) because a sticker cannot wrap; the chain, finger, snake and gavel
+stay body-agnostic overlays; and one SCENE per league mode (`bg-<mode>`,
+4 files) sits behind the stage, cover-cropped with the bottom faded. The
+layer plan carries fallbacks: a geared body falls back to the plain body,
+which falls back to the drawn stand-in; the head sticker and the cape
+stand down the moment a baked body loads (or the mascot wears two
+visors); a missing scene draws nothing. check-mascot pins the order, the
+fallbacks, the stand-down rule and the 28-file inventory. README rewritten
+as the brief: generate on PLAIN WHITE (generators fake transparency with a
+checkerboard; flat white keys cleanly), alpha afterwards.
+
+Battery: web tsc, check:mascot, check:changelog, vite build — green.
+
 ### v0.420.0 — the mascot builder
 
 Founder: "Build a mascot! … Every selection changes the mascot in some way.

@@ -95,7 +95,7 @@ export function optionFor<K extends keyof MascotBuild>(key: K, id: MascotBuild[K
 // never line up pixel for pixel across four bodies, and an anchor box that the
 // host can tune per base is the honest way to composite it.
 
-export type MascotAnchor = 'body' | 'neck' | 'hand' | 'head' | 'back';
+export type MascotAnchor = 'scene' | 'body' | 'neck' | 'hand' | 'head' | 'back';
 
 export interface MascotLayer {
   /** Stable key for React and for the parity check. */
@@ -107,31 +107,56 @@ export interface MascotLayer {
   anchor: MascotAnchor;
   /** Draw order: lower first. The body is 0; a cape goes BEHIND the body. */
   z: number;
+  /** Files to try in order when `file` is missing, before the emoji. The
+   *  body's baked mode render falls back to the plain body this way. */
+  fallbacks?: string[];
+  /** Head gear and the cape are only drawn when the BODY did not load a
+   *  baked render that already wears them (v0.420.1). */
+  unlessBaked?: boolean;
 }
 
 /** Everything the mascot wears for a build, bottom layer first. */
 export function mascotLayers(b: MascotBuild): MascotLayer[] {
   const out: MascotLayer[] = [];
-  if (b.mode === 'vampire') out.push({ key: 'cape', file: 'mode-vampire-cape', emoji: '🦇', anchor: 'back', z: -1 });
-  out.push({ key: 'body', file: `base-${b.type}`, emoji: optionFor('type', b.type).icon, anchor: 'body', z: 0 });
+  // THE SCENE (v0.420.1). Founder: "Ooooh or the background changes. A golf
+  // course, an actual guillotine, etc." One backdrop per league mode, behind
+  // everything; nothing is drawn in its place until the file exists.
+  out.push({ key: 'scene', file: `bg-${b.mode}`, emoji: '', anchor: 'scene', z: -2 });
+  if (b.mode === 'vampire') out.push({ key: 'cape', file: 'mode-vampire-cape', emoji: '🦇', anchor: 'back', z: -1, unlessBaked: true });
+  // THE BODY. Mode gear that wraps the head and shoulders — fangs and cloak,
+  // hood and blade, visor and club — is BAKED onto the body as its own render
+  // (`base-<type>-<mode>`), because a sticker can't wrap. Until that render
+  // exists the plain body loads and the head sticker stands in.
+  out.push(b.mode === 'classic'
+    ? { key: 'body', file: `base-${b.type}`, emoji: optionFor('type', b.type).icon, anchor: 'body', z: 0 }
+    : { key: 'body', file: `base-${b.type}-${b.mode}`, fallbacks: [`base-${b.type}`], emoji: optionFor('type', b.type).icon, anchor: 'body', z: 0 });
   out.push(b.matchup === 'drip'
     ? { key: 'chain', file: 'chain-drip', emoji: '📿', anchor: 'neck', z: 2 }
     : { key: 'finger', file: 'finger-classic', emoji: '☝️', anchor: 'hand', z: 2 });
   out.push(b.draft === 'snake'
     ? { key: 'snake', file: 'draft-snake', emoji: '🐍', anchor: 'neck', z: 3 }
     : { key: 'gavel', file: 'draft-auction', emoji: '🔨', anchor: 'hand', z: 3 });
-  if (b.mode === 'golf') out.push({ key: 'visor', file: 'mode-golf', emoji: '⛳', anchor: 'head', z: 4 });
-  if (b.mode === 'vampire') out.push({ key: 'fangs', file: 'mode-vampire', emoji: '🧛', anchor: 'head', z: 4 });
-  if (b.mode === 'guillotine') out.push({ key: 'hood', file: 'mode-guillotine', emoji: '🪓', anchor: 'head', z: 4 });
+  if (b.mode === 'golf') out.push({ key: 'visor', file: 'mode-golf', emoji: '⛳', anchor: 'head', z: 4, unlessBaked: true });
+  if (b.mode === 'vampire') out.push({ key: 'fangs', file: 'mode-vampire', emoji: '🧛', anchor: 'head', z: 4, unlessBaked: true });
+  if (b.mode === 'guillotine') out.push({ key: 'hood', file: 'mode-guillotine', emoji: '🪓', anchor: 'head', z: 4, unlessBaked: true });
   return out.sort((a, c) => a.z - c.z);
 }
 
 /** Every sticker file the builder can ever ask for — the README's checklist
  *  and the parity check's "nothing references a file that isn't planned". */
+const TYPES_ = ['redraft', 'keeper', 'dynasty', 'contract_dynasty'] as const;
+const GEAR_MODES = ['golf', 'vampire', 'guillotine'] as const;
 export const MASCOT_FILES = [
-  'base-redraft', 'base-keeper', 'base-dynasty', 'base-contract_dynasty',
+  // scenes, one per league mode
+  'bg-classic', 'bg-golf', 'bg-vampire', 'bg-guillotine',
+  // the four plain bodies
+  ...TYPES_.map((t) => `base-${t}`),
+  // the four bodies wearing each mode's gear (12)
+  ...TYPES_.flatMap((t) => GEAR_MODES.map((m) => `base-${t}-${m}`)),
+  // body-agnostic stickers
   'chain-drip', 'finger-classic',
   'draft-snake', 'draft-auction',
+  // head-gear stand-ins, drawn only while a baked body is missing
   'mode-golf', 'mode-vampire', 'mode-vampire-cape', 'mode-guillotine',
 ] as const;
 

@@ -137,6 +137,7 @@ const BODY_COLOR: Record<string, string> = { redraft: '#35D07F', keeper: '#4F8CF
 // full figures on a 1024 canvas, feet at the bottom, head in the top fifth,
 // hands at about two-thirds down on either side.
 const ANCHOR_BOX: Record<MascotAnchor, { top: number; left: number; width: number; height: number }> = {
+  scene: { top: 0, left: 0, width: 100, height: 100 },
   body: { top: 0, left: 0, width: 100, height: 100 },
   back: { top: 6, left: 10, width: 80, height: 80 },
   neck: { top: 26, left: 34, width: 32, height: 12 },
@@ -165,19 +166,30 @@ function PlaceholderBody({ type, name }: { type: string; name: string }) {
   );
 }
 
-function Sticker({ layer, type, name, size }: { layer: MascotLayer; type: string; name: string; size: number }) {
-  const [broken, setBroken] = useState(missing.has(layer.file));
-  const src = `${import.meta.env.BASE_URL}mascot/${layer.file}.webp`;
+function Sticker({ layer, type, name, size, onBody }: { layer: MascotLayer; type: string; name: string; size: number; onBody?: (baked: boolean) => void }) {
+  // The chain of files to try: the layer's own, then its fallbacks (a geared
+  // body falls back to the plain body), then the stand-in. Files already
+  // known missing this session are skipped without a request.
+  const chain = [layer.file, ...(layer.fallbacks ?? [])];
+  const [idx, setIdx] = useState(() => { let i = 0; while (i < chain.length && missing.has(chain[i])) i++; return i; });
+  const broken = idx >= chain.length;
+  const file = chain[idx];
   const b = ANCHOR_BOX[layer.anchor];
   const isBody = layer.anchor === 'body';
+  const isScene = layer.anchor === 'scene';
   // A placeholder emoji fills most of its anchor box and no more — the box is
   // the sticker's real footprint, so the stand-in must not cover the face.
   const px = Math.round((size * b.height) / 100 * (layer.anchor === 'back' ? 0.7 : 0.85));
+  // A scene has no stand-in: nothing is drawn until the file exists.
+  if (isScene && broken) return null;
   return (
-    <div className={`mb-layer mb-${layer.key}`} style={{ position: 'absolute', top: `${b.top}%`, left: `${b.left}%`, width: `${b.width}%`, height: `${b.height}%`, zIndex: layer.z + 10, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
+    <div className={`mb-layer mb-${layer.key}`} style={{ position: 'absolute', top: `${b.top}%`, left: `${b.left}%`, width: `${b.width}%`, height: `${b.height}%`, zIndex: layer.z + 10, display: 'grid', placeItems: 'center', pointerEvents: 'none', ...(isScene ? { borderRadius: 16, overflow: 'hidden' } : {}) }}>
       {broken
         ? (isBody ? <PlaceholderBody type={type} name={name} /> : <Emoji e={layer.emoji} size={px} style={{ filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.45))' }} />)
-        : <img src={src} alt="" draggable={false} onError={() => { missing.add(layer.file); setBroken(true); }} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+        : <img key={file} src={`${import.meta.env.BASE_URL}mascot/${file}.webp`} alt="" draggable={false}
+            onLoad={() => { if (isBody && onBody) onBody(idx === 0 && chain.length > 1); }}
+            onError={() => { missing.add(file); setIdx((i) => i + 1); if (isBody && onBody && idx + 1 >= chain.length) onBody(false); }}
+            style={{ width: '100%', height: '100%', objectFit: isScene ? 'cover' : 'contain', ...(isScene ? { opacity: 0.92, maskImage: 'linear-gradient(to bottom, #000 78%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, #000 78%, transparent)' } : {}) }} />}
     </div>
   );
 }
@@ -185,11 +197,14 @@ function Sticker({ layer, type, name, size }: { layer: MascotLayer; type: string
 function Stage({ build, size }: { build: MascotBuild; size: number }) {
   const layers = mascotLayers(build);
   const name = mascotName(build);
+  // Did the body load a BAKED render (mode gear already on it)? Then the head
+  // sticker and the cape stand down, or the mascot wears two visors.
+  const [baked, setBaked] = useState(false);
   return (
     <div className="mb-stage" key={describeBuild(build)} style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <div className="mb-glow" style={{ position: 'absolute', inset: '12% 8% 4% 8%', borderRadius: '50%', background: `radial-gradient(closest-side, ${BODY_COLOR[build.type]}44, transparent)`, filter: 'blur(6px)' }} />
-      <div style={{ position: 'absolute', left: '18%', right: '18%', bottom: '1%', height: '4%', borderRadius: '50%', background: 'rgba(0,0,0,.4)', filter: 'blur(4px)' }} />
-      {layers.map((l) => <Sticker key={l.key} layer={l} type={build.type} name={name} size={size} />)}
+      <div className="mb-glow" style={{ position: 'absolute', inset: '12% 8% 4% 8%', borderRadius: '50%', background: `radial-gradient(closest-side, ${BODY_COLOR[build.type]}44, transparent)`, zIndex: 9, filter: 'blur(6px)' }} />
+      <div style={{ position: 'absolute', left: '18%', right: '18%', bottom: '1%', height: '4%', borderRadius: '50%', background: 'rgba(0,0,0,.4)', filter: 'blur(4px)', zIndex: 9 }} />
+      {layers.filter((l) => !(l.unlessBaked && baked)).map((l) => <Sticker key={l.key} layer={l} type={build.type} name={name} size={size} onBody={l.key === 'body' ? setBaked : undefined} />)}
     </div>
   );
 }
