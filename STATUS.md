@@ -18,6 +18,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.424.0 — every matchup in the league, and the roster with its injuries
+
+Founder: "Let's have a way in web and app for players to see the matchup
+view for all match ups in the league for every week. We have a week chip
+that changes the week, let's also have a chip that goes to the next matchup
+for that week. Let's also have current injury status in the team view and a
+selector to see other teams in your league in this view."
+
+▸ THE NEXT MATCHUP (classic boards, both hosts). Beside ‹ WEEK n › there is
+now a `▸ 2/6` chip: one tap walks the week's ring — every pair in the
+league, yours included — and the chip says where in it you are (`–/6` from
+a bye, which also gets the chip). The board draws whatever seat it is
+handed on the LEFT: `viewRid` replaces the `rosterId` prop everywhere the
+loader, the poll and the side builder read it, so a rival pair renders
+through the same code path. A browsed seat's lineup is read from the
+league-readable classic picks (0178) keyed by the account in that seat
+(`matchupTeams` now carries `user_id`), the poll splits revealed rows by
+that account instead of by "me", and editing is off end to end — canEdit,
+applyMove and the auto-slot-on-open all refuse while the seat isn't yours.
+A "VIEWING X vs Y · ↩ MY MATCHUP" strip sits under the header; stepping
+the week returns to your own pair. `weekMatchups(leagueId, week)` is the
+one new read (same row, same RLS as leagueResults); the ring order lives in
+core's `matchupBrowse.ts` and check:board pins it (ten assertions).
+
+NOT IN THIS CUT: the DRIP board. Its picks are sealed to third parties by
+design until… never — 0262's reveal opens a lineup to the OPPONENT at
+kickoff, not to the league — and the web drip board runs off the sim store
+with one fixed YOU. Browsing drip pairs needs a reveal policy decision and
+a board refactor; it is a separate piece of work.
+
+THE TEAM SCREEN (both hosts). Every roster row now wears the NFL report's
+designation — O/D/Q/IR — off the same `injuryTags` sheet the IR gate has
+read since 0198 (the web gets a status-taking `InjuryTag`; the boards' week-
+keyed badge could not drop in). Above MY ROSTER, one chip per seat (MY TEAM
+first, lit by default): tap a rival to read their roster laid out the same
+way — starting-spot fit, bench, IR, taxi — from the rosters the screen
+already held (nativeRosters is league-wide; no new read). The card says
+whose it is and takes its controls off: no stash buttons, no empty-place
+invitations, and `mine` stays MINE for the wire, trades, keepers and
+contracts.
+
+Battery: root + mobile tsc, check:parity (37 suites), vite build. Web + APK.
+
 ### v0.423.0 — IR spots after the draft, and the injury feed's new shape
 
 Founder, week 2: "Michael Pittman is out. Can we make sure his injury

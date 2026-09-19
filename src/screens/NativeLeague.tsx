@@ -7,7 +7,7 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PosPill, PlayerImg, Avatar, FlagChip } from '../app/ui';
+import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag } from '../app/ui';
 import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
@@ -2386,7 +2386,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
  *  labels FIT the box rather than being cut to fit it; a longer custom name
  *  wraps inside the same width.
  */
-function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
+function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
   badge: string;
   badgePos?: string;
   /** A CSS colour for the badge on IR/taxi lines; starters take their position's. */
@@ -2396,6 +2396,8 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
   /** IR/taxi only: fill this place, or empty it. Absent on starters + bench. */
   onSlot?: () => void;
   slotVerb?: string;
+  /** The NFL report's designation (v0.424.0) — O/D/Q/IR, or nothing. */
+  inj?: string | null;
 }) {
   const fg = tone ?? (badgePos ? `var(--pos-${badgePos}-fg, var(--dim))` : 'var(--dim)');
   const bg = tone || !badgePos ? 'transparent' : `var(--pos-${badgePos}-bg, transparent)`;
@@ -2422,6 +2424,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb }: {
             <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
             <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
           </button>
+          <InjuryTag status={inj} />
           <FlagChip slug={p.slug} />
         </>
       ) : onSlot ? (
@@ -2806,6 +2809,18 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
+  // WHOSE ROSTER IS ON THE CARD (v0.424.0, founder: "a selector to see other
+  // teams in your league in this view"). Every seat's roster is already in
+  // `rosters` (nativeRosters is league-wide), so a rival's is a filter, not a
+  // fetch. `mine` stays MINE for everything that acts; only the roster card
+  // follows `viewRid`, and it drops its controls while it does.
+  const [viewRid, setViewRid] = useState<number | null>(null);
+  const shownRid = viewRid ?? myRoster;
+  const viewingMine = shownRid === myRoster;
+  const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
+    .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
+    .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
+  const shownName = useMemo(() => (team?.waiver_order ?? []).find((w) => w.roster_id === shownRid)?.team ?? null, [team, shownRid]);
   const cap = team?.roster_cap ?? null;
   // FULL means "no ACTIVE seat for another player" (0199), not "the roster
   // total is reached": a signing always lands active, and a taxi or IR place
@@ -2830,17 +2845,17 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     [gm]);
   const slotNames = useMemo(() => slotDisplayNames(slotDefs), [slotDefs]);
   const bySpot = useMemo(() => {
-    const active = mine.filter((p) => p.spot === 'active');
+    const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));
     const find = (id?: string | null) => (id ? active.find((p) => p.slug === id) ?? null : null);
     const started = new Set(seat.spots.map((r) => r.player?.id).filter(Boolean) as string[]);
     return {
       starters: seat.spots.map((r, i) => ({ label: slotNames[i] ?? r.def.slot, pos: r.def.pos, player: find(r.player?.id) })),
       bench: active.filter((p) => !started.has(p.slug)),
-      ir: mine.filter((p) => p.spot === 'ir'),
-      taxi: mine.filter((p) => p.spot === 'taxi'),
+      ir: shown.filter((p) => p.spot === 'ir'),
+      taxi: shown.filter((p) => p.spot === 'taxi'),
     };
-  }, [mine, slotDefs, slotNames, expMap]);
+  }, [shown, slotDefs, slotNames, expMap]);
 
   /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
    *  button on every line. The server still enforces the caps and the IR
@@ -3064,22 +3079,34 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         {/* JUST THE COUNT (v0.356.10, founder: "we don't need all the text
             under my roster") — the pos-caps readout and the explainers left;
             the app's card has been this bare since v0.356.2. */}
-        <div style={hdr}>MY ROSTER ({mine.length}{cap != null ? `/${cap}` : ''})</div>
-        {mine.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
+        {/* THE SEATS (v0.424.0) — one chip per team, mine first and lit by
+            default. Click a rival to read their roster laid out the same way;
+            the card says whose it is and takes its controls off. */}
+        {(team.waiver_order?.length ?? 0) > 1 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {[...team.waiver_order].sort((a, b) => (a.roster_id === myRoster ? -1 : b.roster_id === myRoster ? 1 : a.roster_id - b.roster_id)).map((w) => (
+              <Chip key={w.roster_id} on={w.roster_id === shownRid} onClick={() => setViewRid(w.roster_id === myRoster ? null : w.roster_id)}>
+                {w.roster_id === myRoster ? 'MY TEAM' : (w.team ?? `Team ${w.roster_id}`).toUpperCase()}
+              </Chip>
+            ))}
+          </div>
+        )}
+        <div style={hdr}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</div>
+        {shown.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
 
         {/* STARTERS — one row per starting spot the league plays, filled by
             assignSpots. Labelled as the FIT, not the lineup. */}
-        {mine.length > 0 && slotDefs.length > 0 && (<>
+        {shown.length > 0 && slotDefs.length > 0 && (<>
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>STARTING SPOTS</div>
           {bySpot.starters.map((r, i) => (
-            <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} />
+            <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} inj={r.player ? injTags[r.player.slug] : null} />
           ))}
         </>)}
 
         {/* BENCH */}
         {bySpot.bench.length > 0 && (<>
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>BENCH ({bySpot.bench.length})</div>
-          {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} />)}
+          {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} inj={injTags[p.slug]} />)}
         </>)}
 
         {/* INJURED RESERVE — the empty places are drawn too, up to the
@@ -3090,11 +3117,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </div>
           {bySpot.ir.map((p) => (
-            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterLine key={`ir-empty-${i}`} badge="IR" tone="var(--warn)" p={null} busy={busy}
-              slotVerb="injured reserve" onSlot={() => setFillFor('ir')} />
+              slotVerb="injured reserve" onSlot={viewingMine ? () => setFillFor('ir') : undefined} />
           ))}
         </>)}
 
@@ -3104,11 +3131,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </div>
           {bySpot.taxi.map((p) => (
-            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} onSlot={() => moveToSpot(p.slug, 'active')} />
+            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterLine key={`tx-empty-${i}`} badge="TX" tone="var(--you)" p={null} busy={busy}
-              slotVerb="taxi squad" onSlot={() => setFillFor('taxi')} />
+              slotVerb="taxi squad" onSlot={viewingMine ? () => setFillFor('taxi') : undefined} />
           ))}
         </>)}
 

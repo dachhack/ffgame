@@ -860,6 +860,14 @@ export async function leagueResults(leagueId: string): Promise<MatchupResult[]> 
     .eq('league_id', leagueId).order('week');
   return (data ?? []) as MatchupResult[];
 }
+/** Every matchup in a league for ONE week (v0.424.0) — the ring the classic
+ *  board's ▸ chip walks. Same row, same RLS (any league member). */
+export async function weekMatchups(leagueId: string, week: number): Promise<MatchupResult[]> {
+  const { data } = await (await client()).from('matchup')
+    .select('id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+    .eq('league_id', leagueId).eq('week', week).order('home_roster_id');
+  return (data ?? []) as MatchupResult[];
+}
 
 /** The caller's player pool for a week (their Sleeper roster, from sleeper_lineup). */
 export async function myPool(leagueId: string, week: number, rosterId: number): Promise<PoolPlayer[]> {
@@ -1089,13 +1097,18 @@ export async function slateWeeks(season: string): Promise<{ week: number; kickof
 
 /** Both teams' display identity (name + avatar) for a matchup — league members can
  *  read all memberships (RLS), so this drives the live board's team headers. */
-export interface TeamInfo { roster_id: number; team_name: string | null; avatar: string | null }
+export interface TeamInfo {
+  roster_id: number; team_name: string | null; avatar: string | null;
+  /** The account in the seat (v0.424.0) — what a browsed board splits the
+   *  week's revealed classic picks by. Null for an unclaimed seat. */
+  user_id?: string | null;
+}
 export async function matchupTeams(leagueId: string, rosterIds: number[]): Promise<Record<number, TeamInfo>> {
   const { data } = await (await client()).from('league_membership')
-    .select('sleeper_roster_id, team_name, avatar_url').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+    .select('sleeper_roster_id, team_name, avatar_url, app_user_id').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
   const out: Record<number, TeamInfo> = {};
-  for (const m of (data ?? []) as { sleeper_roster_id: number; team_name: string | null; avatar_url: string | null }[]) {
-    out[m.sleeper_roster_id] = { roster_id: m.sleeper_roster_id, team_name: m.team_name, avatar: m.avatar_url };
+  for (const m of (data ?? []) as { sleeper_roster_id: number; team_name: string | null; avatar_url: string | null; app_user_id: string | null }[]) {
+    out[m.sleeper_roster_id] = { roster_id: m.sleeper_roster_id, team_name: m.team_name, avatar: m.avatar_url, user_id: m.app_user_id ?? null };
   }
   return out;
 }

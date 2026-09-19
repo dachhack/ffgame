@@ -41,6 +41,8 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
+import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
  *  Founder: "the middle of the top is super empty. Maybe have the week's game
@@ -386,6 +388,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // the arrows or by a swipe.
   const [weekWanted, setWeekWanted] = useState<number | null>(null);
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
+  // ── EVERY MATCHUP IN THE LEAGUE (v0.424.0, founder: "a chip that goes to
+  //    the next matchup for that week") ─────────────────────────────────────
+  // `viewRid` is the seat on the LEFT of the board; null is mine. Everything
+  // below that used to read the `rosterId` prop reads `seat`, so a rival pair
+  // renders through the same path — its lineup read from the league-readable
+  // classic picks (0178) rather than myPicks — and editing is off while the
+  // seat isn't mine. `seatUser` is the account in that seat, what the poll
+  // splits revealed rows by.
+  const [viewRid, setViewRid] = useState<number | null>(null);
+  const seat = viewRid ?? rosterId;
+  const browsing = seat !== rosterId;
+  const [seatUser, setSeatUser] = useState<string | null>(userId);
+  const [weekList, setWeekList] = useState<MatchupResult[]>([]);
+  useEffect(() => { setViewRid(null); }, [leagueId, rosterId]);
   // 🧪 LIVE TEST — non-null marks a sandbox; the rehearsal feed then drives
   // per-player state (see simTeams below).
   const [testLive, setTestLive] = useState<number | null>(null);
@@ -415,17 +431,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // weekWanted meant "whatever week the league is on" in the comment and
         // "the league's first week, for ever" in the call, on both hosts.
         const wk = weekWanted ?? await defaultOpenWeek(leagueId).catch(() => null);
-        const m = await myMatchup(leagueId, rosterId, wk ?? undefined);
+        const m = await myMatchup(leagueId, seat, wk ?? undefined);
         if (!m) {
           // No row for this seat is either a BYE or a schedule nobody has
           // built, and only the league-wide view knows which (0247).
           const role = wk == null ? 'unbuilt'
-            : await leagueWeekRole(leagueId, rosterId, wk).catch(() => 'unbuilt');
+            : await leagueWeekRole(leagueId, seat, wk).catch(() => 'unbuilt');
+          // The ring is still there from a bye — the ▸ chip is the way in.
+          if (wk != null) weekMatchups(leagueId, wk).then(setWeekList).catch(() => {});
           if (role === 'bye') { setByeWeek(wk); setState('ready'); return; }
           setState('none'); return;
         }
         setByeWeek(null);
         setMatchup(m);
+        weekMatchups(leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
           setStashReady(true);
@@ -454,7 +473,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         leagueScoringGet(leagueId).then((sc) => {
           if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
-        const oppRoster = m.home_roster_id === rosterId ? m.away_roster_id : m.home_roster_id;
+        const oppRoster = m.home_roster_id === seat ? m.away_roster_id : m.home_roster_id;
         // THE LIVE INJURY REPORT (v0.299.1). This screen had never loaded it —
         // `injuryFor` was answering out of the BAKED 2025 report, so one player
         // wore last year's Q and everybody else wore nothing.
@@ -486,9 +505,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           const me = (Array.isArray(rows) ? rows : []).find((row) => row.roster_id === rosterId);
           setChopped(me?.eliminated ?? null);
         }).catch(() => {});
-        matchupTeams(leagueId, [rosterId, oppRoster]).then((tm: Record<number, TeamInfo>) => {
-          setAvatars({ me: tm[rosterId]?.avatar ?? null, opp: tm[oppRoster]?.avatar ?? null });
-          setNames({ me: tm[rosterId]?.team_name || 'YOU', opp: tm[oppRoster]?.team_name || 'OPPONENT' });
+        const teamsP = matchupTeams(leagueId, [seat, oppRoster]);
+        teamsP.then((tm: Record<number, TeamInfo>) => {
+          setAvatars({ me: tm[seat]?.avatar ?? null, opp: tm[oppRoster]?.avatar ?? null });
+          setNames({ me: tm[seat]?.team_name || (browsing ? 'HOME' : 'YOU'), opp: tm[oppRoster]?.team_name || (browsing ? 'AWAY' : 'OPPONENT') });
         }).catch(() => {});
         // The worker's player→team drift (0142) must be in its cache BEFORE the
         // overlay below resolves a single team — this board never loaded it at
@@ -496,7 +516,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         await loadTeamOverrides();
         // 0293 — the depth chart the projected box prefers before kickoff.
         await loadDepthChart().catch(() => 0);
-        const [pl, pk] = await Promise.all([myPool(leagueId, m.week, rosterId), myPicks(m.id, userId)]);
+        // A browsed seat's lineup comes off the league-readable classic picks
+        // (0178), keyed by the account in that seat; mine still comes from
+        // myPicks, which also carries the per-spot seal.
+        const vu = browsing ? ((await teamsP.catch(() => ({} as Record<number, TeamInfo>)))[seat]?.user_id ?? null) : userId;
+        setSeatUser(vu);
+        const [pl, pk] = await Promise.all([myPool(leagueId, m.week, seat),
+          browsing ? revealedPicksOf(m.id).then((rows) => rows.filter((p) => vu != null && p.app_user_id === vu)) : myPicks(m.id, userId)]);
         setPool(pl);
         // The league's OWN roster meta beats the bake (0200.1): a 2026 rookie
         // the baked slug map has never heard of otherwise resolves to WR with
@@ -527,7 +553,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, leagueId, rosterId, weekWanted]);
+  }, [userId, leagueId, rosterId, seat, weekWanted]);
 
   // THE WEEK IS UNDERWAY — presentation only (live scores rather than
   // projections, the win bar, the best-ball fill). Since 0178 it is NOT
@@ -589,7 +615,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     if (!matchup) return;
     let stop = false;
     // Best ball fills from the opponent's FULL roster, so fetch it once.
-    const oppRoster = matchup.home_roster_id === rosterId ? matchup.away_roster_id : matchup.home_roster_id;
+    const oppRoster = matchup.home_roster_id === seat ? matchup.away_roster_id : matchup.home_roster_id;
     // The opponent's ROSTER, always — not just in best-ball leagues. Since
     // v0.248.0 an unmanaged seat (no app_user_id, so sealed_pick has nowhere to
     // store a lineup) fields its best projected lineup from its roster, and
@@ -605,7 +631,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         if (stop) return;
         const opp: Record<string, string> = {};
         for (const p of rev) {
-          if (p.app_user_id === userId || p.game_window !== CLASSIC_WIN || !p.player_slug) continue;
+          if (p.app_user_id === seatUser || p.game_window !== CLASSIC_WIN || !p.player_slug) continue;
           opp[p.roster_slot] = p.player_slug;
         }
         setTheirs(opp);
@@ -627,7 +653,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     // gap). 10s under LIVE TEST, the usual 60s outside — the web twin's rule.
     const id = setInterval(() => { void load(); }, testLive != null ? 10_000 : 60_000);
     return () => { stop = true; clearInterval(id); loadRef.current = null; };
-  }, [matchup, userId, leagueId, rosterId, testLive]);
+  }, [matchup, userId, leagueId, seat, seatUser, testLive]);
 
   // Through leagueCatalogOf (0209) so the ORDER lives in one place: `ppr`
   // has a settings_json home and a catalog home, and a bare `{...scoring,
@@ -811,7 +837,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
   const board = useMemo(() => {
     if (!matchup) return null;
-    const oppRoster = matchup.home_roster_id === rosterId ? matchup.away_roster_id : matchup.home_roster_id;
+    const oppRoster = matchup.home_roster_id === seat ? matchup.away_roster_id : matchup.home_roster_id;
     const mkSide = (rid: number, team: string, avatar: string | null, lineup: Record<string, string | null>, benchList: PoolPlayer[]) => ({
       rosterId: rid, team, avatar,
       record: records[rid] ?? null,
@@ -829,14 +855,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     };
     return buildMatchupBoard({
       week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
-      home: mkSide(rosterId, names.me, avatars.me, effective.mine, benchOf(pool, effective.mine)),
+      home: mkSide(seat, names.me, avatars.me, effective.mine, benchOf(pool, effective.mine)),
       // THEIR BENCH TOO (v0.249.0, founder). Classic lineups are open all week
       // (0178) and the board already fills their spots from that same roster —
       // so there was never anything here to withhold, only a column nobody had
       // wired up.
       away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
-  }, [matchup, rosterId, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
+  }, [matchup, seat, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
 
   // EVERY GAME'S SCORE (v0.323.0). `gameFeeds` is the whole week's feeds, and
   // the worker polls every live game rather than only rostered ones, so this is
@@ -926,7 +952,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   };
   const goWeek = (d: -1 | 1) => {
     const w = byeWeek ?? matchup?.week;
-    if (canGo(d) && w != null) { tap(); setWeekWanted(w + d); }
+    if (canGo(d) && w != null) { tap(); setViewRid(null); setWeekWanted(w + d); }
   };
 
   /** SWIPE (founder: "a swipe action would be cool"). Left goes forward, the
@@ -965,13 +991,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   /** May I still change this spot? Sealed by the server, or holding a player
    *  whose game has begun, means no. */
   const canEdit = (slot: string): boolean =>
-    !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+    !browsing && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
   /** Write one or more spots in a single save. A MOVE touches two — the target
    *  and the spot the player left — and they must travel together, or the same
    *  player stands in two spots until the next poll. */
   const applyMove = async (writes: { slot: string; player: string | null }[]) => {
-    if (!matchup || !writes.length) return;
+    if (!matchup || !writes.length || browsing) return;
     const before = mine;
     const next = { ...mine };
     for (const w of writes) next[w.slot] = w.player;
@@ -1012,7 +1038,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // which is the real guard; the ref just avoids the round trip).
   const autoSlotted = useRef(false);
   useEffect(() => {
-    if (autoSlotted.current || state !== 'ready' || locked || !matchup) return;
+    if (autoSlotted.current || state !== 'ready' || locked || !matchup || browsing) return;
     // The slate gates the WRITE path too (v0.252.0): rows written bye-blind
     // would stand — a spot with a row is never revisited. The worker fills
     // within a tick if the client never gets a slate.
@@ -1038,7 +1064,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         return next;
       });
     }).catch(() => {});
-  }, [state, locked, matchup, userId, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
+  }, [state, locked, matchup, userId, browsing, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
 
   if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
@@ -1047,6 +1073,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
         <Chip label={`‹ WK ${byeWeek - 1}`} disabled={!canGo(-1)} onPress={() => goWeek(-1)} />
         <Chip label={`WK ${byeWeek + 1} ›`} disabled={!canGo(1)} onPress={() => goWeek(1)} />
+        {weekList.length > 0 && (
+          <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} a11y="the week's matchups"
+            onPress={() => { const n = nextMatchupSeat(weekList, seat); if (n != null) setViewRid(n === rosterId ? null : n); }} />
+        )}
       </View>
     </NoGame>
   );
@@ -1079,11 +1109,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             </Pressable>
           </View>
         )}
+        {/* ▸ THE NEXT MATCHUP (v0.424.0, founder). One tap walks the week's
+            ring — every pair in the league, mine included — and the chip says
+            where in it you are. Lit while the pair on screen isn't yours. */}
+        {matchup && weekList.length > 1 && (
+          <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} on={browsing} a11y="next matchup this week"
+            onPress={() => { const n = nextMatchupSeat(weekList, seat); if (n != null) setViewRid(n === rosterId ? null : n); }} />
+        )}
         {/* ▦ FIELDS (founder) — the same all-fields idea the drip board has,
             fed by classic's starters. Only offered once feeds exist: a chip
             into an empty sheet would read as broken. */}
         {fieldGames.length > 0 && <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />}
       </View>
+      {browsing && matchup && (
+        <Pressable onPress={() => { tap(); setViewRid(null); }} accessibilityRole="button"
+          style={{ alignItems: 'center', paddingVertical: 2 }}>
+          <Mono size={8.5} tone="faint" track={0.08}>VIEWING {names.me.toUpperCase()} vs {names.opp.toUpperCase()} · ↩ MY MATCHUP</Mono>
+        </Pressable>
+      )}
 
       {/* ── SCOREBOARD (v0.229.0) ─────────────────────────────────────────
           The web board's header, in RN. Pre-lock the projection half stays
@@ -1095,7 +1138,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             saw a normal board with an empty lineup and nothing saying why. The
             block's CHOPPED list was the only record, and it isn't on this
             screen. Now the board says it, where they actually look. */}
-        {chopped != null && (
+        {chopped != null && !browsing && (
           <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
             <Mono size={11} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {chopped}</Mono>
             <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
