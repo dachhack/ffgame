@@ -84,6 +84,16 @@ the thinnest position is filled first, the best season body within it. The
 shortlist ranks by the season too, so a bye-week starter is still on the
 list for a depth add while this week's value still decides a hole.
 
+THE NUMBER ON THE ROW (both boards). Founder, next: "AJ Brown is on IR, how
+does he have a projection?" Because the bake is a season per-game number
+and the row printed it raw: `projectedPoints` never asks about injuries or
+byes, so a man on IR read 13.7, was summed into the side's projected total
+and moved the win chance — while the board's own fill value (slateAwareProj
+with the O/IR predicate, v0.252.0) had already valued him at 0 to decide
+who starts. The row now prints the value it is filled by: O/IR and a proven
+bye read 0.0; Q and D keep their number, as they keep their spot. One line
+on each board; the entry memo already re-ran when the live report landed.
+
 Assertions: check-seat-waivers 45 → 55 — the bye-week star no longer the
 first overboard, the hole filled with the cheapest season body, the hole
 left open rather than dropping a better player, the open seat taking him
