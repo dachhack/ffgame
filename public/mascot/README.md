@@ -23,7 +23,7 @@ filling the frame.
 
 ## Spec
 
-- **WebP (or PNG) with transparent background.** The app asks for `.webp`; export PNG from the generator and convert (`cwebp -q 82`, or Pillow). No scene, no ground shadow, no text.
+- **WebP with transparent background** is what the app loads. Generate on plain white, key the white out afterwards, convert (`cwebp -q 82`, or Pillow). No scene, no ground shadow, no text.
 - **Bases:** 1024 × 1024, the character centered, feet near the bottom
   edge, head near the top, facing the viewer, arms visible at the sides so
   a hand sticker has somewhere to land. Same pose across all four.
@@ -82,5 +82,8 @@ League mode:
 
 For the eight stickers, attach the cut-out body the sticker will sit on as a
 reference image and ask for the object ALONE, in that render style — thick
-fur, worn fabric, cinematic lighting — on a transparent background. Nothing here may
+fur, worn fabric, cinematic lighting — on a PLAIN WHITE background. Ask for
+white, not transparent: generators fake transparency with a checkerboard,
+and a flat white keys out cleanly. The alpha is done afterwards (the
+checkerboard cut-out script in the session notes handles white too). Nothing here may
 reference a real team, a real mascot, or a named game character.
