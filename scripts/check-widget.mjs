@@ -7,7 +7,7 @@
 // with no matchup row at all. The league-choice helpers that make the ▸ tap
 // cycle are pinned too, because a widget that outlives its league must fall
 // forward rather than draw a hole.
-import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague } from '../packages/core/src/data/widgetFeed';
+import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues } from '../packages/core/src/data/widgetFeed';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 
 let fails = 0;
@@ -172,6 +172,26 @@ const state = [
   ok('no leagues = null, not a crash', pickWidgetLeague([], 'a') === null && nextWidgetLeague([], 'a') === null);
   ok('▸ cycles and wraps', nextWidgetLeague(ls, 'a').id === 'b' && nextWidgetLeague(ls, 'b').id === 'a');
   ok('▸ from an unknown league starts at the first', nextWidgetLeague(ls, 'zzz').id === 'a');
+}
+
+// ── v0.422.1: the cache that makes a tap instant ──
+{
+  const t0 = 1_800_000_000_000;
+  cacheSet('k', { a: 1 }, t0);
+  ok('a fresh entry is served', JSON.stringify(cacheGet('k', 60_000, t0 + 30_000)) === '{"a":1}');
+  ok('an entry past its lifetime is not', cacheGet('k', 60_000, t0 + 61_000) === null);
+  ok('an entry from the future (clock went backwards) is not trusted', cacheGet('k', 60_000, t0 - 120_000) === null);
+  ok('a miss is null, not undefined', cacheGet('nope', 60_000, t0) === null);
+  cacheSet('n', null, t0);
+  ok('a cached null reads as a miss (so the loader runs again)', cacheGet('n', 60_000, t0) === null);
+  cacheSet('z', 0, t0);
+  ok('a cached zero is a hit', cacheGet('z', 60_000, t0) === 0);
+  const league2 = { id: 'L2', name: 'Other', rosterId: 1, gameMode: 'drip' };
+  const snap = summarize({ league: league2, week: WEEK, matchup: null, state: [], teams: {}, nowMs: kick(0) });
+  rememberSnapshot({ leagues: [league, league2], snapshot: snap });
+  ok('the remembered picture comes back by league', recallSnapshot('L2')?.snapshot.leagueName === 'Other' && recallSnapshot('L2')?.leagues.length === 2);
+  ok('a league never drawn has no picture', recallSnapshot('L9') === null);
+  ok('the leagues list is remembered only by the feed (nothing wrote it here)', recallLeagues() === null);
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }

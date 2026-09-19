@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.422.1 — the widget paints first and fetches second
+
+Founder, on the phone: "There's a lot of lag when you press the buttons.
+Almost unusable."
+
+WHY. A chip tap wakes a HEADLESS JS task — a cold JavaScript context when
+the app isn't running — and that task made nine network reads (session,
+enrollments, the open week's two queries, the matchup row, its state, team
+names, the slate, the picks, the pool, the whole injury sheet) before it
+drew a single pixel. ⇄ flip, which changes nothing but which half of the
+same data is on top, paid the full price. ▸ paid it twice.
+
+PAINT FIRST. The feed now remembers the last picture it drew, per league,
+and the leagues list. Every wake draws the remembered frame at once and
+only then reads: a ⇄ flip redraws the remembered frame with the other view
+and never touches the network; a ▸ draws the next league's remembered
+frame (or a one-line "Switching to X…" card) and then reads; ⟳, the timer,
+the silent push and a resize draw the frame, read, and draw again. A read
+that fails after a good remembered frame keeps the frame rather than
+replacing a real score with an apology.
+
+FETCH LESS. The reads that change on the order of hours are cached in the
+app's storage with a lifetime each: the leagues you hold (5 min), the
+league's open week (10 min), team names and the week's slate (60 min), the
+roster and the injury sheet (30 min). Only the matchup row, its state and
+the picks — the three that move on a Sunday — are always read fresh. The
+app in the foreground bypasses every cache (a league just joined, a lineup
+just saved), so what the app knows first the widget knows next. A cached
+null is a miss, a cached zero a hit, and an entry from the future (a clock
+that went backwards) is not trusted; check-widget pins all of it.
+
+What remains is Android's own cold start of the JS context, which no
+caching removes — the frame now lands the moment that finishes rather than
+seconds after.
+
+Battery: web tsc, mobile tsc, check:widget, check:changelog — green.
+
 ### v0.422.0 — the widget's second view, and the window strip
 
 Founder: "We can include a lot more info in that widget. What else should we
