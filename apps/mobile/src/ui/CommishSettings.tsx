@@ -412,8 +412,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           </View>
           <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: 12 }}>
             {agentWaivers
-              ? 'Seats nobody manages fill holes and take clear upgrades from waivers and free agency — never dropping a player who is in their starting lineup.'
-              : 'Seats nobody manages still set their lineups, but never add or drop.'}
+              ? 'Seats nobody manages — empty seats and 🤖 AI teams — fill holes and take clear upgrades from waivers and free agency, never dropping a player who is in their starting lineup. A bot vampire builds its roster from the pool this way.'
+              : 'Seats nobody manages — empty seats and 🤖 AI teams — still set their lineups, but never add or drop.'}
           </Mono>
 
           <View style={{ marginTop: 14 }}>

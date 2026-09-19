@@ -609,8 +609,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           </div>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5, maxWidth: 320 }}>
             {agentWaivers
-              ? 'Seats nobody manages fill holes and take clear upgrades from waivers and free agency — never dropping a player in their starting lineup.'
-              : 'Seats nobody manages still set lineups, but never add or drop.'}
+              ? 'Seats nobody manages — empty seats and 🤖 AI teams — fill holes and take clear upgrades from waivers and free agency, never dropping a player in their starting lineup. A bot vampire builds its roster from the pool this way.'
+              : 'Seats nobody manages — empty seats and 🤖 AI teams — still set lineups, but never add or drop.'}
           </div>
         </div>
 

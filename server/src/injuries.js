@@ -34,5 +34,21 @@ export async function ruledOutSlugs(now = Date.now()) {
   return cache.outs;
 }
 
-/** Test hook: drop the cache so the next call re-reads. */
-export function clearRuledOutCache() { cache = null; }
+let statusCache = null; // { at: ms, map: Map<slug, status> }
+
+/** Every designation the worker's ESPN poll holds, slug → status (O, D, Q,
+ *  IR, …), for the paths that need to tell IR from O rather than lump both
+ *  as "cannot play this week" (v0.426.0): the seat wire stashes on the
+ *  league's own IR list and values a season-ending IR at nothing for the
+ *  rest of the year, while an O is one missed Sunday. Same cache rule as
+ *  ruledOutSlugs — a failed read serves the last known map. */
+export async function injuryStatusMap(now = Date.now()) {
+  if (statusCache && now - statusCache.at < TTL_MS) return statusCache.map;
+  const { data, error } = await db().from('injury_status').select('player_slug,status');
+  if (error) return statusCache?.map ?? new Map();
+  statusCache = { at: now, map: new Map((data ?? []).map((r) => [r.player_slug, String(r.status ?? '').toUpperCase()])) };
+  return statusCache.map;
+}
+
+/** Test hook: drop the caches so the next call re-reads. */
+export function clearRuledOutCache() { cache = null; statusCache = null; }

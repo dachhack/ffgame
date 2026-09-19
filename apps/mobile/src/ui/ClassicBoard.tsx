@@ -22,7 +22,7 @@ import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
 import { setRuntimeSlate } from '@drip/core/data/nflSlate';
-import type { WindowId } from '@drip/core/types';
+import type { Pos, WindowId } from '@drip/core/types';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
@@ -813,7 +813,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // LEAGUE- AND SPOT-AWARE (v0.308.0) — see the web twin. Was the raw
         // bake, so a custom-scoring league projected under rules it does not
         // play by, and a spot-scoped bonus never showed in the spot it pays.
-        proj: projectedPoints({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot, slotPos),
+        // AND INJURY- AND BYE-AWARE (v0.426.0). Founder: "AJ Brown is on IR,
+        // how does he have a projection?" The bake is a season per-game
+        // number and this printed it raw — a man on IR read 13.7, was summed
+        // into the side's projected total and moved the win chance. The
+        // fills already valued him at 0 through fillValue; the row now prints
+        // the same value it is filled by (O/IR and a proven bye → 0.0; Q and
+        // D keep their number, as they keep their spot).
+        proj: fillValue({ id: slug, pos: meta.pos ?? '', team: meta.team },
+          slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,

@@ -978,7 +978,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // custom-scoring league projected under rules it does not play by —
         // and a spot-scoped bonus never appeared in the spot it pays. Same
         // three layers the live scorer applies, in the same order.
-        proj: projectedPoints({ id: slug, pos: m.pos ?? "", team: m.team }, slot, slotPos),
+        // Injury- and bye-aware (v0.426.0): the row prints the value it is
+        // filled by — O/IR and a proven bye read 0.0 — not the raw season
+        // bake, which had a man on IR at 13.7 and in the projected total.
+        proj: fillValue({ id: slug, pos: m.pos ?? "", team: m.team },
+          slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,
