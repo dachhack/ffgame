@@ -788,7 +788,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started.
+            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. Bench and taxi lock at the draft; IR spots can be added (or taken away, once empty) at any time.
           </div>
 
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────────

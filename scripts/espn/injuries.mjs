@@ -14,9 +14,46 @@
 // names ("Tip Reiman"), so name→slug matching is reliable here — there's none of
 // the first-initial ambiguity that affects play-by-play text. Per-game
 // `summary.injuries` carries athlete ids and can cross-check if ever needed.
-import { normName } from './espnAdapter.mjs';
+import { normName, fixTeam } from './espnAdapter.mjs';
 
 const ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries';
+
+// WHAT THE BULK FEED STOPPED SAYING (v0.423.0). By September 2026 the report's
+// team entries carry only `{ id, displayName }` — no abbreviation — and its
+// athletes carry no `id` at all. Both were the resolver's strongest signals:
+// the athlete id is what keeps a designation off a namesake (0200), and the
+// team is what settles two live men with one name (v0.345.0). Both are still
+// IN the payload, just not where they were: the team's numeric ESPN id is the
+// same one the roster poll enumerates, and every athlete's player-card link
+// ends in `/id/<espnId>/<slug>`. Read them back out rather than let every row
+// fall through to the ranked-name guess.
+//
+// ESPN's own team ids (1..34, 31/32 unused), verified against the feed's
+// displayNames. Codes are the slate's vocabulary (fixTeam: LA, WAS, JAX).
+export const ESPN_TEAM_BY_ID = {
+  1: 'ATL', 2: 'BUF', 3: 'CHI', 4: 'CIN', 5: 'CLE', 6: 'DAL', 7: 'DEN', 8: 'DET',
+  9: 'GB', 10: 'TEN', 11: 'IND', 12: 'KC', 13: 'LV', 14: 'LA', 15: 'MIA', 16: 'MIN',
+  17: 'NE', 18: 'NO', 19: 'NYG', 20: 'NYJ', 21: 'PHI', 22: 'ARI', 23: 'PIT', 24: 'LAC',
+  25: 'SF', 26: 'SEA', 27: 'TB', 28: 'WAS', 29: 'CAR', 30: 'JAX', 33: 'BAL', 34: 'HOU',
+};
+/** The team code for one of the feed's team entries: its abbreviation when it
+ *  has one, else its ESPN id looked up, else ''. */
+export function teamAbbrOf(team) {
+  const ab = team?.team?.abbreviation || team?.abbreviation;
+  if (ab) return fixTeam(String(ab).toUpperCase());
+  const id = Number(team?.team?.id ?? team?.id);
+  return ESPN_TEAM_BY_ID[id] ?? '';
+}
+/** The athlete's ESPN id: the field when present, else the number in the
+ *  player-card link (`…/player/_/id/4035687/michael-pittman-jr`). */
+export function athleteIdOf(athlete) {
+  if (athlete?.id != null && athlete.id !== '') return String(athlete.id);
+  for (const l of athlete?.links ?? []) {
+    const m = /\/id\/(\d+)(?:\/|$)/.exec(String(l?.href ?? ''));
+    if (m) return m[1];
+  }
+  return null;
+}
 
 // ESPN status/type → our InjuryStatus ('O' | 'D' | 'Q' | 'IR'); 'Active' ⇒ none.
 const STATUS = { O: 'O', D: 'D', Q: 'Q', IR: 'IR' };
@@ -36,7 +73,7 @@ export function mapStatus(item) {
 export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace(/\s+/g, '-')) {
   const out = {};
   for (const team of feed?.injuries ?? []) {
-    const abbr = team?.team?.abbreviation || team?.abbreviation || '';
+    const abbr = teamAbbrOf(team);
     for (const item of team?.injuries ?? []) {
       const status = mapStatus(item);
       if (!status) continue; // skip Active
@@ -46,7 +83,7 @@ export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace
       // TEAM whose section of the report this is (v0.345.0) — for a player
       // Sleeper carries no espn_id for, that is what keeps a designation off a
       // retired namesake. One- and two-arg resolvers ignore the extras.
-      const slug = resolveSlug(name, item?.athlete?.id ?? null, abbr);
+      const slug = resolveSlug(name, athleteIdOf(item?.athlete), abbr);
       if (!slug) continue; // not a league player we track
       const prev = out[slug];
       const date = item?.date || null;

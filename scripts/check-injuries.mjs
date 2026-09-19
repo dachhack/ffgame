@@ -80,5 +80,48 @@ eq('engine: Doubtful is startable', healthy('p-d'), true);
 eq('engine: an unlisted player is startable', healthy('p-clean'), true);
 
 clearLiveInjuries();
+
+// 8. THE BULK FEED'S SHAPE (v0.423.0). By September 2026 ESPN's report carried
+//    team entries as `{ id, displayName }` with no abbreviation, and athletes
+//    with no `id` — so every designation reached the resolver with team ''
+//    and id null, and the id-first / team-settled resolution (0200, v0.345.0)
+//    silently degraded to a ranked-name guess. The normalizer now reads the
+//    id off the player-card link and the team off ESPN's team id.
+const { normalizeInjuries, athleteIdOf, teamAbbrOf } = await import('../scripts/espn/injuries.mjs');
+const seen = [];
+const feed = { injuries: [
+  { id: '23', displayName: 'Pittsburgh Steelers', injuries: [
+    { status: 'Out', type: { abbreviation: 'O' }, date: '2026-09-19T17:09Z', details: { returnDate: '2026-09-27' },
+      shortComment: 'Pittman (foot) has been ruled out',
+      athlete: { displayName: 'Michael Pittman Jr.', links: [
+        { href: 'https://www.espn.com/nfl/player/_/id/4035687/michael-pittman-jr' },
+        { href: 'sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4035687' },
+      ] } },
+    { status: 'Active', type: { abbreviation: 'A' }, athlete: { displayName: 'Healthy Guy', links: [{ href: 'https://www.espn.com/nfl/player/_/id/1/healthy-guy' }] } },
+  ] },
+  // The older shape still resolves the same way.
+  { team: { abbreviation: 'LAR' }, injuries: [
+    { status: 'Questionable', type: { abbreviation: 'Q' }, athlete: { id: 111, displayName: 'Old Shape' } },
+  ] },
+  // A team the table does not know, an athlete with no link: nothing invented.
+  { id: '99', displayName: 'Nowhere', injuries: [
+    { status: 'Doubtful', type: { abbreviation: 'D' }, athlete: { displayName: 'No Link' } },
+  ] },
+] };
+const rows = normalizeInjuries(feed, (name, espnId, team) => { seen.push({ name, espnId, team }); return name.toLowerCase().replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '-'); });
+eq('feed: athlete id read off the player-card link', athleteIdOf(feed.injuries[0].injuries[0].athlete), '4035687');
+eq('feed: an explicit id still wins', athleteIdOf({ id: 111, links: [{ href: 'https://x/_/id/222/y' }] }), '111');
+eq('feed: no id anywhere is null, not ""', athleteIdOf({ displayName: 'No Link' }), null);
+eq('feed: team from ESPN id', teamAbbrOf(feed.injuries[0]), 'PIT');
+eq('feed: team from abbreviation, in the slate vocabulary', teamAbbrOf(feed.injuries[1]), 'LA');
+eq('feed: unknown team id is ""', teamAbbrOf(feed.injuries[2]), '');
+eq('feed: the resolver sees Pittman with id and team', JSON.stringify(seen[0]), JSON.stringify({ name: 'Michael Pittman Jr.', espnId: '4035687', team: 'PIT' }));
+eq('feed: Active is skipped before resolution', seen.length, 3);
+eq('feed: status O', rows['michael-pittman-jr']?.status, 'O');
+eq('feed: team stored', rows['michael-pittman-jr']?.team, 'PIT');
+eq('feed: return date', rows['michael-pittman-jr']?.returnDate, '2026-09-27');
+eq('feed: the old shape resolves with its id', JSON.stringify(seen[1]), JSON.stringify({ name: 'Old Shape', espnId: '111', team: 'LA' }));
+eq('feed: nothing invented', JSON.stringify(seen[2]), JSON.stringify({ name: 'No Link', espnId: null, team: '' }));
+
 console.log(fails ? `FAIL  ${fails} injury assertion(s) failed` : 'OK    injury report precedence');
 process.exit(fails ? 1 : 0);
