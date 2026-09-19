@@ -18,6 +18,179 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.421.0 — the Android live matchup widget
+
+Founder: "What would it take to add widgets to the app?" then "Let's do the
+Android live matchup widget."
+
+THE PICTURE. A 4×2 home-screen card: league and week, my team and score
+against theirs, and one state line — "LIVE · SUN 1PM", "Locks Sun, Sep 21
+1:00 PM", "TNF locks …" between windows, "FINAL · W 121.4–98.2", "BYE". Tap
+the card and the app opens on that seat's board; ▸ walks to the next league
+you hold (per-widget choice, so two widgets can watch two leagues); ⟳
+repaints now. Signed out, no seats, and a failed read each draw a notice
+card that opens the app. react-native-android-widget (0.22.1, Expo ≥54)
+renders it to RemoteViews from JSX; the config plugin registers the
+provider in prebuild, so CI's release-apk needs nothing new. Fixed dark
+palette — a widget has no ThemeCtx and a home screen is not the app.
+
+THE WORDS ARE PURE. `widgetFeed.summarize()` in core turns the rows every
+board already reads (myEnrollments, the matchup row, matchup_state, the
+slate) into the card's lines, with `nowMs` a parameter; check-widget stands
+at each moment of week 3 — pre-lock, in a window, between windows, final as
+W/L/T, bye, unknown names — from the home seat and the away seat, and pins
+the league helpers (mocks and archived never reach a home screen; a stored
+league you left falls forward; ▸ wraps). No new RPC.
+
+WHEN IT REPAINTS. Android's timer (30 min, the floor), the app coming
+forward or signing in (App.tsx), a tap on ▸/⟳, and the worker's SILENT push:
+push.js's detectWidget enqueues kind 'widget' for both owners while a
+matchup's state is being written, once per 3 minutes per seat (the dedupe
+key carries the time bucket), sent DATA-ONLY at high priority (no
+notification block, web devices skipped) — migration 0295 admits the kind.
+expo-task-manager's background task repaints on any message that reaches
+it; the push carries no score, so a late one can never paint a stale
+number. The deep link is resolved through the enrollments, not trusted
+from the URL.
+
+NOT VERIFIED HERE: no Android SDK in this container, so the APK was not
+built — CI builds it on merge (prebuild + gradle). Verified: mobile tsc,
+check:widget, `expo config --type prebuild` accepts the plugin, the
+worker's syntax, and the preview image renders.
+
+Battery: web tsc, mobile tsc, check:widget, check:changelog — green.
+
+### v0.420.1 — the four bodies are real, and the scene changes
+
+Founder picked the mascots from two generated sheets, then: "What are the
+variations we need? … Ooooh or the background changes. A golf course, an
+actual guillotine, etc." And: "You can keep the white background and I'll
+do the alpha channel elsewhere."
+
+THE CUT-OUT. The checkerboard was baked into the composites (a generator's
+fake transparency), so the alpha is made here. A "bright, neutral, noisy"
+test ate two white jerseys; the one that holds matches only the checker's
+7px alternation — opposite tone 7px over in x and y, same tone diagonally
+— then closes the 1px seams, treats EVERY matching region as background
+(a border flood misses the pockets between legs), opens away specks,
+splits characters by the emptiest gap rather than fixed quadrants (feet
+cross the midline), keeps each quadrant's main blob, and fills enclosed
+holes under 900px (jersey squares that happened to alternate). All eight
+cut out; four wired as 1024 WebP bases (~100 KB each), every body scaled
+to one height so the head, chest and hand anchors land in the same place.
+Rook = the orange shaggy one, Vault = the stone golem, Duke = the horned
+bison, Suits = the blue bird. The bench (purple cyclops, blue mohawk,
+purple ogre, red cyclops) is a rename away.
+
+THE VARIATIONS, by what they touch. Mode gear that wraps the head and
+shoulders is BAKED onto the body as its own render (`base-<type>-<mode>`,
+12 files) because a sticker cannot wrap; the chain, finger, snake and gavel
+stay body-agnostic overlays; and one SCENE per league mode (`bg-<mode>`,
+4 files) sits behind the stage, cover-cropped with the bottom faded. The
+layer plan carries fallbacks: a geared body falls back to the plain body,
+which falls back to the drawn stand-in; the head sticker and the cape
+stand down the moment a baked body loads (or the mascot wears two
+visors); a missing scene draws nothing. check-mascot pins the order, the
+fallbacks, the stand-down rule and the 28-file inventory. README rewritten
+as the brief: generate on PLAIN WHITE (generators fake transparency with a
+checkerboard; flat white keys cleanly), alpha afterwards.
+
+Battery: web tsc, check:mascot, check:changelog, vite build — green.
+
+### v0.420.0 — the mascot builder
+
+Founder: "Build a mascot! … Every selection changes the mascot in some way.
+So start with four base mascot models. Like a blooper, gritty, etc. Then
+maybe put on a flashy gold chain with the drip logo if it's a drip league.
+Then something for the draft mode. Then additional features for each of the
+league modes. Then hit a button and the mascot slides to the left and you
+can interact with dialogues to set the rest of the league up: rosters,
+scoring, teams, draft settings, waivers, go → share link."
+
+THE MASCOT. Four questions in the founder's order, each a layer: LEAGUE TYPE
+(Redraft | Keeper | Dynasty | Contract Dynasty) is the BODY — Rook, Vault,
+Duke and Suits; MATCHUP STYLE (Drip Battle | Classic Fantasy) is the NECK —
+the gold chain with the drip mark, or a foam finger; DRAFT TYPE (Snake |
+Auction) is the HAND — a snake over the shoulders or a gavel; LEAGUE MODE
+(Classic | Golf | Vampire | Guillotine) is the HEAD — nothing, a visor, fangs
+and a cape (the cape BEHIND the body), a hood and an axe. Sixty-four builds,
+no two wearing the same layers — check-mascot pins that, plus the order and
+the names. Stickers are placed by ANCHOR (neck, hand, head, back) over the
+body, not pixel-registered, because generated art never lines up across
+four bodies; every file falls back to an emoji until it exists, the icon
+sets' rule, and the body falls back to a drawn SVG character in the type's
+colour so the stage is never empty. Files and prompts: public/mascot/README.
+Each choice pops the stage and re-names the mascot ("Duke the Last One
+Standing").
+
+WHAT CAN'T EXIST. set_league_golf refuses a drip league (0200), so the Golf
+card wears a CLASSIC SCORING tag under Drip Battle and picking it switches
+the matchup to Classic Fantasy rather than building a league the server
+would refuse. A contract league drafts by auction whatever the draft card
+holds — the seed says so and the draft dialogue tells the commissioner.
+Guillotine lifts teams to 18 and FAAB to $1000 the moment it's picked, the
+create screen's own presets.
+
+THE SLIDE. BUILD THIS LEAGUE → the mascot slides to the left column (on a
+phone it shrinks into a header beside its name) and the right side is the
+checklist: LEAGUE NAME, ROSTER (classic: the thirteen slot types plus
+bench/taxi/IR; drip: roster size and the six position limits; keepers or
+rookie rounds where the type asks), SCORING (classic: reception value, pass
+TD, TE premium, best ball; drip: the game's own, tunable on the tab later),
+TEAMS, DRAFT SETTINGS (pace, clocks, budget, bell, lots, overnight pause),
+WAIVERS (FAAB/rolling/standings, budget, clear time and days, hold, free
+agents instant or after the run). Each row opens its own dialogue in place
+and reads back one line when shut. "Lists" from the founder's note is
+folded into ROSTER as the position limits — flagged in chat.
+
+GO. Signs the visitor in WITHOUT leaving the page — email + password, or an
+emailed 6-digit code — because a magic-link bounce would land them in the
+live app with the builder's state behind them. Then the create screen's own
+calls in the create screen's own order: create_native_league with the seed
+(continuity, game mode, draft mode, caps), then the dialogues as ONE
+blueprint through applyBlueprint (format, PPR, roster, shape, scoring, best
+ball, golf, waivers), the pool, the schedule. Refusals from applyBlueprint
+don't roll back a league that now exists; the done screen lists them and
+points at the tabs. The share link is inviteLink(invite_code) with Copy and
+native Share. create_native_league is gated by the `native` flag, so an
+account without it lands on "your league is designed, the pilot is
+invite-only" and a Request button that opens the invite modal with the
+whole design in the note (RequestCodeModal grew `initialNote`). Build and
+setup both persist on the device across a reload.
+
+NOT HERE: real art (the README is the spec); "Lists" if it meant something
+other than limits; trade review and taxi/IR eligibility rules (defaults;
+on the tabs).
+
+Battery: web tsc, check:mascot, check:tagline, check:changelog, vite build —
+green.
+
+### v0.419.1 — the league builder
+
+Founder, on the merged landing: "Looking good. Anyway we can make this from
+a boring table into something sexy."
+
+The menu was chip rows: a settings form with nothing showing until tapped.
+It is now the thing the form builds. A readout at the top assembles as you
+tap — "Classic · Guillotine · Dynasty · Auction draft", scoring under it —
+with Start this league → beside it. Under that, one card strip per question:
+glyph, name, and the one line always visible, so nothing has to be tapped
+to be read. Snap-scrolling strips on a phone, a wrapped grid on a desk.
+One pick per row; the scoring row takes any mix. A selected card lifts and
+glows in the theme's own accent, so all nine themes and the colorblind pair
+keep their contrast. The plain shape joined the season row — Head-to-head
+beside Guillotine, Vampire and Golf — because a readout with a hole in it
+reads as broken.
+
+The two game cards carry ▶ PLAY A WEEK, which opens that game's demo under
+the panel as before; selecting a game card only changes the readout. The
+"tap one to play a week" nudge is gone with the chips — the button is the
+nudge. Nothing here is stored: it is a picture of what the create screen
+offers, not a form. Glyphs live on the core notes (`FormatNote.icon`) and
+check-tagline requires one on every card.
+
+Battery: web tsc, check:tagline, check:changelog, vite build — green.
+
 ### v0.419.0 — the site leads with the league you can build
 
 Founder, strategizing: "Drip fantasy is becoming more of a 'Create your

@@ -10,9 +10,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth, signOut, leagueTouch, nativeTeamState } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments } from '@drip/core/data/liveApi';
+import { refreshMatchupWidgets } from './src/widget/widgetTask';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -116,6 +118,37 @@ export function App() {
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
   const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
+
+  // ── THE HOME-SCREEN WIDGET (v0.421.0) ──────────────────────────────────
+  // Repaint it whenever the app comes forward or the account changes: the
+  // headless task is the widget's normal painter, but the app in hand knows
+  // things first (a lineup just saved, a sign-in that just happened).
+  useEffect(() => {
+    void refreshMatchupWidgets();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void refreshMatchupWidgets(); });
+    return () => sub.remove();
+  }, [session?.user.id]);
+  // A tap on the widget: dripfantasy://matchup?league=…&roster=… opens that
+  // seat's board. Resolved through the enrollments rather than trusted from
+  // the URL — a link can name a seat you don't hold, and then it opens nothing.
+  useEffect(() => {
+    if (!session) return;
+    let dead = false;
+    const openFrom = async (url: string | null) => {
+      if (!url || !/\/\/matchup\b/.test(url)) return;
+      let league = '', roster = NaN;
+      try { const u = Linking.parse(url); league = String(u.queryParams?.league ?? ''); roster = Number(u.queryParams?.roster); } catch { return; }
+      if (!league || !Number.isFinite(roster)) return;
+      const enr = (await myEnrollments('').catch(() => [] as Awaited<ReturnType<typeof myEnrollments>>)).find((e) => e.league_id === league && e.sleeper_roster_id === roster);
+      if (dead || !enr) return;
+      track(Ev.leagueOpened, { live: true, via: 'widget' });
+      setOpen({ leagueId: league, rosterId: roster, name: enr.league?.name ?? 'League', native: enr.league?.provider === 'native', pickUserId: enr.pick_user_id });
+      setView('picks');
+    };
+    void Linking.getInitialURL().then(openFrom);
+    const sub = Linking.addEventListener('url', ({ url }) => { void openFrom(url); });
+    return () => { dead = true; sub.remove(); };
+  }, [session?.user.id]);
   // League-home SHOP tile (0182): bumping this opens the shop on the board.
   const [shopSignal, setShopSignal] = useState(0);
   // Whether the open league's draft is done — the ⛏ DRAFT room leaves the bar

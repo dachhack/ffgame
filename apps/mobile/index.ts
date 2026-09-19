@@ -10,6 +10,12 @@ import './src/intl-polyfill';
 // src/platform.native.ts.
 import './src/platform.native';
 
+// The home-screen widget (v0.421.0): its headless task handler and the silent
+// push task have to be registered when the BUNDLE loads — HeadlessJS runs this
+// file with no root component — and after the platform adapter, because the
+// handler reads the session and the per-widget league out of storage.
+import { registerMatchupWidget } from './src/widget/widgetTask';
+
 import { registerRootComponent } from 'expo';
 import { initAnalytics } from '@drip/core/analytics';
 import { initNativeAnalytics } from './src/analytics.native';
@@ -24,4 +30,5 @@ initNativeAnalytics();
 // the web sends `standalone` from the same seam.
 initAnalytics({ native: true });
 
+registerMatchupWidget();
 registerRootComponent(App);
