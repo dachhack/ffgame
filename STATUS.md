@@ -18,6 +18,61 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.427.0 — the bot vampire bites
+
+Founder: "Let's have the bot vampire take a bite."
+
+The steal was always the vampire's own claim to make — the app's 🩸 card —
+so a vampire seat nobody manages (a 🤖 AI seat, or an unclaimed seat tended
+by its agent) won its matchups and never fed: a vampire league without a
+vampire. v0.425.0 let such a seat work the wire; this lets it bite.
+
+0300. `vampire_steal` gains the wire's worker branch — `auth.uid() is null
+and agent_wire_seat(league, seat)`, the service role for a seat nobody
+holds, the seat named by p_vampire — and `vampire_state` admits the service
+role so the sweep reads the same window the app shows. Every 0297 rule is
+intact and binds the bot: the latest fully-final REGULAR week, a win (a tie
+is not one), one bite per win, the beaten team's active roster, one of its
+own back, the 1-for-1 shape check both ways, and the commissioner's
+steal_review parking the bite as pending. A vampire a human holds — on
+auto-pilot or not — keeps the bite as their own.
+
+THE JUDGEMENT (core `vampireBitePlan`, pure, check:bite). A bite is a
+season-long acquisition, so it is judged by rest-of-season value (the
+season projection under the league's catalog, zero for a season-ending
+IR), never by this week's slate — a star on his bye is exactly who a
+vampire should take. Pairs are ranked by what the bite adds to the best
+lineup the vampire can field, then by the raw asset swing (take − give);
+one hard rail: NEVER give back a player worth more for the season than
+the one taken — a reward is never a downgrade, and such pairs are not
+offered at all. A player worth nothing for the season is never taken.
+The give-back comes from the ACTIVE roster only, mirroring the rule that
+the victim's stash is off the menu.
+
+THE SWEEP (`server/src/vampireBite.js`, on the hourly seat-wire slot — a
+win is fresh for a week, and an hour after the finals is soon enough).
+Vampire leagues → the seats the settings name → the ones nobody manages
+(no human at the seat; 🤖 controller or an agent row) → the commissioner's
+"seats nobody manages may transact" switch (0213; a bite moves two players,
+it is a transaction) → the window → the two active rosters → the ranked
+pairs, offered to the RPC in order until one is accepted. A refusal the
+plan cannot see (a position cap, a stash, a roster that moved) tries the
+next pair; a refusal about the window itself stops. Push already tells
+both sides of a bite (0273), so the victim hears the same way as from a
+human vampire.
+
+Assertions: check-vampire-bite (13): the stud taken for the cheapest bench
+body, the gain as the lineup delta, no bite when nothing beats what we
+have, the flex give-back that lifts the lineup over the RB2 that doesn't,
+the bye-week star taken, IR and unpriced players never taken, a
+bench-for-bench bite on swing, the bounded and order-independent list.
+vampire-rules-probes vr7: the worker reads the window, bites for the 🤖
+vampire, is bound by one-bite-per-win and by naming a real vampire seat,
+is refused for a human-controlled unagented seat until an agent row
+exists, and is refused for a vampire a human holds on auto-pilot.
+
+Battery: web tsc, mobile tsc, check:bite, check:seatwire, check:changelog;
+scratch DB through 0300: vampire-rules — green.
 ### v0.426.1 — a best-ball occupant can be started anywhere he's eligible
 
 Founder: "Carnell Tate was slotted in my rookie bestball spot and I can't
@@ -44,6 +99,7 @@ bench. check:spots pins the plan and the recompute (a rookie started
 manually in WR leaves the rookie best-ball spot to the next rookie).
 
 Battery: root + mobile tsc, check:parity (37 suites), vite build. Web + APK.
+
 
 ### v0.426.0 — the AI manager: lineups it revisits, IR it uses, drops it judges by the season
 
