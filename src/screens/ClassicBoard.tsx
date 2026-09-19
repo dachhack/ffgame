@@ -55,10 +55,11 @@ import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
  *  deciding something: before kickoff it reads `proj 15.3` in the quiet colour;
  *  once the ball is live it's points, in full. */
 function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 'left' | 'right'; onOpen?: () => void;
-  /** A TAXI/IR row (v0.427.1, founder: "Stribling is on IR and has a
-   *  projection"): he cannot score for this side, so the pre-game number is
-   *  a dash rather than a projection that reads like it counts. Live points
-   *  still print — they are a fact about the game, not a claim on the total. */
+  /** An IR row (v0.427.1, founder: "Stribling is on IR and has a
+   *  projection"; v0.427.2 narrowed it from taxi too — "taxi spot players
+   *  should still get a projection, they could score this week"): a man on
+   *  IR is not going to play, so the pre-game number is a dash rather than a
+   *  projection that reads like it counts. Live points still print. */
   stashed?: boolean }) {
   const right = align === 'right';
   const box: React.CSSProperties = {
@@ -454,6 +455,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
   const [stashed, setStashed] = useState<Set<string>>(new Set());
+  // WHICH of the stashed are on IR (v0.427.2, founder: "Taxi spot players
+  // should still get a projection. They could score this week. IR guys are
+  // not going to play so no points"). The board draws taxi and IR in one
+  // card; this is what tells the two rows apart there.
+  const [onIr, setOnIr] = useState<Set<string>>(new Set());
   // Tenure by slug (0172) — loaded only when a spot actually filters on it.
   const [expMap, setExpMap] = useState<Record<string, number>>({});
   // AUTO-SLOT PRE-CONDITIONS (v0.247.0). The fill below writes to the server,
@@ -604,6 +610,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         weekMatchups(r.leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(r.leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
+          setOnIr(new Set(rows.filter((x) => x.spot === 'ir').map((x) => x.slug)));
           setStashReady(true);
         }).catch(() => {});
         leagueGameMode(r.leagueId).then(async (gm) => {
@@ -1689,13 +1696,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                       <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${spotCol}px minmax(0, 1fr)`, alignItems: 'center', gap: colGap }}>
                         {h ? <BoardCell e={h} align="left" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
-                          {k === 'bench' ? 'BN' : 'IR'}
+                          {k === 'bench' ? 'BN' : onIr.has((h ?? a)!.slug) ? 'IR' : 'TX'}
                         </span>
                         {a ? <BoardCell e={a} align="right" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: a.slug, name: a.name, pos: a.pos, team: a.team ?? '', week: matchup?.week, userId })} /> : <span />}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 7 }}>
-                        {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} stashed={k === 'ir'} /> : <span />}
-                        {a ? <GameCard e={a} align="right" onOpen={fieldOpener(a)} stashed={k === 'ir'} /> : <span />}
+                        {h ? <GameCard e={h} align="left" onOpen={fieldOpener(h)} stashed={k === 'ir' && onIr.has(h.slug)} /> : <span />}
+                        {a ? <GameCard e={a} align="right" onOpen={fieldOpener(a)} stashed={k === 'ir' && onIr.has(a.slug)} /> : <span />}
                       </div>
                     </div>
                   );

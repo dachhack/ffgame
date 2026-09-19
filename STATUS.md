@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.428.1 — the dash is for IR, not the taxi squad
+
+Founder: "Taxi spot players should still get a projection. They could
+score this week. IR guys are not going to play so no points."
+
+v0.427.1 blanked the pre-game number on the whole TAXI / IR card, because
+the board had only ever known "stashed" — one set for both places. It now
+also knows which of them are on IR: a taxi row keeps its projection (he
+can be activated and play), an IR row prints the dash, and the row's badge
+says TX or IR instead of IR for both. Both hosts.
+
+Battery: root + mobile tsc, check:parity, vite build. Web + APK.
+
 ### v0.428.0 — the AI bids against the room: FAAB pricing for the frenzy, and the blade skips practice
 
 Founder: "How about guillotine leagues? Any AI interactions we need for
