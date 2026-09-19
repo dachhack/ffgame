@@ -32,6 +32,7 @@ import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
 
 const SCAN_MS = 10 * 60_000;          // detector trailing window
+const WIDGET_EVERY_MS = 3 * 60_000;   // widget repaint pings, per matchup per owner
 const LOCK_LEAD_MS = 3_600_000;       // picks lock 1h before kickoff (nflSlate.LOCK_LEAD_MS)
 const ALARM_MIN_MS = 55 * 60_000;     // notify when the lock is 55–65 min out —
 const ALARM_MAX_MS = 65 * 60_000;     // one sweep-width band, so each window fires once
@@ -75,17 +76,22 @@ async function fcmAccessToken() {
   return cachedToken.token;
 }
 
-async function fcmSend(token, deviceToken, { title, body, data }) {
+async function fcmSend(token, deviceToken, { title, body, data, kind }) {
   const acct = serviceAccount();
+  // kind 'widget' (v0.421.0) is DATA-ONLY: no notification block, so nothing
+  // shows in the shade; the app's background task wakes on it and repaints
+  // the home-screen widget. Still high priority — a normal-priority data
+  // message is deferred by Doze for exactly as long as a Sunday lasts.
+  const silent = kind === 'widget';
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${acct.project_id}/messages:send`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       message: {
         token: deviceToken,
-        notification: { title, body },
-        data: Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [k, String(v)])),
-        android: { priority: 'high', notification: { channel_id: 'drip-default' } },
+        ...(silent ? {} : { notification: { title, body } }),
+        data: Object.fromEntries(Object.entries({ ...(data ?? {}), kind }).map(([k, v]) => [k, String(v)])),
+        android: { priority: 'high', ...(silent ? {} : { notification: { channel_id: 'drip-default' } }) },
       },
     }),
   });
@@ -551,7 +557,8 @@ async function flush() {
   }
   let sent = 0;
   for (const p of pending) {
-    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false);
+    // A widget ping has no browser to go to: web devices are skipped for it.
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false && !(p.kind === 'widget' && t.platform === 'web'));
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
     // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;
@@ -592,6 +599,31 @@ async function flush() {
 // Windows on league_membership.enrolled_at, which 0241 added and stamps by
 // trigger. Rows that predate the column are NULL and never match, so the first
 // sweep after deploy does not announce every existing member as new.
+// ── THE HOME-SCREEN WIDGET (v0.421.0) ────────────────────────────────────
+// While a matchup's state is being written it is live. Both owners get a
+// silent, data-only push at most once per WIDGET_EVERY_MS (the dedupe key
+// carries the time bucket), and the push carries NO score: the widget reads
+// fresh on wake, so a push that arrives late can never paint a stale number.
+async function detectWidget() {
+  const since = new Date(Date.now() - 2 * 60_000).toISOString();
+  const { data: states } = await db().from('matchup_state').select('matchup_id').gt('updated_at', since);
+  const ids = [...new Set((states ?? []).map((s) => s.matchup_id))];
+  if (!ids.length) return;
+  const { data: ms } = await db().from('matchup').select('id, league_id, home_roster_id, away_roster_id').in('id', ids);
+  if (!ms?.length) return;
+  const owners = await ownersFor(ms.flatMap((m) => [[m.league_id, m.home_roster_id], [m.league_id, m.away_roster_id]]));
+  const bucket = Math.floor(Date.now() / WIDGET_EVERY_MS);
+  await enqueue(ms.flatMap((m) => [m.home_roster_id, m.away_roster_id].flatMap((rid) => {
+    const uid = owners.get(`${m.league_id}:${rid}`);
+    if (!uid) return [];
+    return [{
+      app_user_id: uid, kind: 'widget', title: 'Drip Fantasy', body: 'score update',
+      data: { league_id: m.league_id, matchup_id: m.id, silent: '1' },
+      dedupe_key: `widget:${m.id}:${rid}:${bucket}`,
+    }];
+  })));
+}
+
 async function detectMembers() {
   const { data: joins } = await db().from('league_membership')
     .select('id, league_id, team_name, app_user_id, enrolled_at')
@@ -628,6 +660,7 @@ export async function sweepPush() {
   await detectDraft().catch((e) => log('draft detector error', e.message));
   await detectWaivers().catch((e) => log('waivers detector error', e.message));
   await detectLineup().catch((e) => log('lineup detector error', e.message));
+  try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));
   await flush().catch((e) => log('flush error', e.message));

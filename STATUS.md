@@ -18,6 +18,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.421.0 — the Android live matchup widget
+
+Founder: "What would it take to add widgets to the app?" then "Let's do the
+Android live matchup widget."
+
+THE PICTURE. A 4×2 home-screen card: league and week, my team and score
+against theirs, and one state line — "LIVE · SUN 1PM", "Locks Sun, Sep 21
+1:00 PM", "TNF locks …" between windows, "FINAL · W 121.4–98.2", "BYE". Tap
+the card and the app opens on that seat's board; ▸ walks to the next league
+you hold (per-widget choice, so two widgets can watch two leagues); ⟳
+repaints now. Signed out, no seats, and a failed read each draw a notice
+card that opens the app. react-native-android-widget (0.22.1, Expo ≥54)
+renders it to RemoteViews from JSX; the config plugin registers the
+provider in prebuild, so CI's release-apk needs nothing new. Fixed dark
+palette — a widget has no ThemeCtx and a home screen is not the app.
+
+THE WORDS ARE PURE. `widgetFeed.summarize()` in core turns the rows every
+board already reads (myEnrollments, the matchup row, matchup_state, the
+slate) into the card's lines, with `nowMs` a parameter; check-widget stands
+at each moment of week 3 — pre-lock, in a window, between windows, final as
+W/L/T, bye, unknown names — from the home seat and the away seat, and pins
+the league helpers (mocks and archived never reach a home screen; a stored
+league you left falls forward; ▸ wraps). No new RPC.
+
+WHEN IT REPAINTS. Android's timer (30 min, the floor), the app coming
+forward or signing in (App.tsx), a tap on ▸/⟳, and the worker's SILENT push:
+push.js's detectWidget enqueues kind 'widget' for both owners while a
+matchup's state is being written, once per 3 minutes per seat (the dedupe
+key carries the time bucket), sent DATA-ONLY at high priority (no
+notification block, web devices skipped) — migration 0295 admits the kind.
+expo-task-manager's background task repaints on any message that reaches
+it; the push carries no score, so a late one can never paint a stale
+number. The deep link is resolved through the enrollments, not trusted
+from the URL.
+
+NOT VERIFIED HERE: no Android SDK in this container, so the APK was not
+built — CI builds it on merge (prebuild + gradle). Verified: mobile tsc,
+check:widget, `expo config --type prebuild` accepts the plugin, the
+worker's syntax, and the preview image renders.
+
+Battery: web tsc, mobile tsc, check:widget, check:changelog — green.
+
 ### v0.420.1 — the four bodies are real, and the scene changes
 
 Founder picked the mascots from two generated sheets, then: "What are the
