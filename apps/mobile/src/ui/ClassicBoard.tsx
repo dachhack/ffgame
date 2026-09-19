@@ -1029,7 +1029,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       const d = slotDefs.find((x) => x.slot === target);
       const p = pool.find((x) => x.slug === cand);
       return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
-    }));
+    }, bestball));
 
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
   // The worker sets every classic team's lineup each week (autoSlotClassic-
@@ -1512,7 +1512,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             .filter((p) => spotOf.get(p.slug) !== pickerSlot)
             // Starting in a spot that has locked means he cannot leave it: the
             // DB refuses the vacating write, so don't offer the move.
-            .filter((p) => { const from = spotOf.get(p.slug); return !from || canEdit(from); });
+            // …but a BEST-BALL spot never holds anyone (v0.424.1, founder:
+            // "I can't move him into my WR spot"): the fill parked him there
+            // and will simply pick someone else once he starts manually.
+            .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); });
           return (
             // The body must be able to SHRINK or the sheet clips its own bottom
             // — the one contract ui/Overlay asks of every caller, and the bug

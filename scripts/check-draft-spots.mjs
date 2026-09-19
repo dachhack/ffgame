@@ -372,6 +372,35 @@ const filled = (a) => a.spots.filter((s) => s.player).length;
   // picker that only wrote the target would leave the same player in two spots.
   ok('the vacated spot is always part of the plan',
     planSpotMove(s, { S1: 'rb1', S2: null, S3: null }, 'S3', 'rb1', legal).length === 2);
+  // A BEST-BALL spot is not a from (v0.424.1). The lineup handed in is the
+  // EFFECTIVE one, fills included — so a player the fill parked in S2 is not
+  // vacating anything by starting manually in S3. One write, like the bench;
+  // no row into a spot that ignores rows.
+  ok('a best-ball occupant moves like a bench player — one write, nothing vacated',
+    JSON.stringify(planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: null }, 'S3', 'te1', legal, ['S2']))
+      === JSON.stringify([{ slot: 'S3', player: 'te1' }]),
+    planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: null }, 'S3', 'te1', legal, ['S2']));
+  ok('…and the same spot IS a from when it is not best ball',
+    planSpotMove(s, { S1: 'rb1', S2: 'te1', S3: null }, 'S3', 'te1', legal, []).length === 2);
+  // The fill then recomputes without him: a manual starter is out of the
+  // best-ball pool, so the rookie spot takes the next eligible rookie.
+  {
+    const bbSlots = [
+      { slot: 'W', pos: ['WR'] },
+      { slot: 'RK', pos: ['QB', 'RB', 'WR', 'TE'], flt: { max_exp: 0 } },
+    ];
+    const roster = [
+      { id: 'tate', pos: 'WR', team: 'TEN', exp: 0 },
+      { id: 'vet', pos: 'WR', team: 'PHI', exp: 6 },
+      { id: 'rook2', pos: 'TE', team: 'NYJ', exp: 0 },
+    ];
+    const val = { tate: 15, vet: 13, rook2: 10 };
+    const fillsBefore = bestballFillBy([], ['RK'], roster, bbSlots, (p) => val[p.id]);
+    ok('unstarted, the rookie best-ball spot takes the best rookie', fillsBefore[0]?.player.id === 'tate', fillsBefore);
+    const fillsAfter = bestballFillBy([{ slot: 'W', player: roster[0] }], ['RK'], roster, bbSlots, (p) => val[p.id]);
+    ok('started manually in WR, he is out of the best-ball pool and the next rookie fills',
+      fillsAfter[0]?.player.id === 'rook2', fillsAfter);
+  }
 }
 
 // ── Tenure bands (the waiver wire's filter, and 0172's neighbour) ──────────
