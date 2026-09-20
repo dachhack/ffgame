@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.8 — the Kickoff League's add market does not wait for the run
+
+0310's log: "fa_mode open → open, open now: f, 18 pending claim(s)
+re-stamped". Free agency was ALREADY open. What shut it today was the
+after-waivers gate (0127, the console's FA AFTER WAIVERS day picker):
+fa_after_waivers_dow lists today, so instant adds stay closed until
+today's waiver run has cleared. That is the gate the founder is asking to
+lift — "I need the turn free agency on … Right now." — so 0311 sets
+fa_after_waivers_dow to [] (never wait) on the newest league named
+Kickoff…, printing the days it held so the commissioner can restore them
+from the console if the gate was wanted on other days. The run itself is
+untouched: pending claims still settle there. Idempotent, scoped by name,
+a no-op without the league.
+
 ### v0.433.7 — free agency on for the Kickoff League (a data migration)
 
 Founder: "I need the turn free agency on for kick off league." Then:
