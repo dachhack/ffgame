@@ -281,10 +281,29 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
  *  there is nowhere to put the row. Those score the honest zero they always did.
  *
  *  Returns the number of spots slotted. */
-export async function autoSlotClassicLineups(week, slate = null) {
+export async function autoSlotClassicLineups(week, slate = null, now = new Date()) {
+  // SCHEDULED matchups fill every seat; LIVE matchups (v0.432.1) re-plan the
+  // seats the worker manages — agents and 🤖 auto-pilot — for the players
+  // whose games have not started. Founder: an AI team's back was ruled Out
+  // on Saturday and stayed in RB2, because the fill stopped looking at the
+  // week the moment Thursday kicked off. A human could late-swap him (the
+  // seal is per player, 0178); the AI had nobody to. Two rails below keep
+  // this the same move a human is allowed: a player already kicked off is
+  // never seated and never benched.
   const { data: ms } = await db().from('matchup')
-    .select('id,league_id,home_roster_id,away_roster_id').eq('week', week).eq('status', 'scheduled');
+    .select('id,league_id,home_roster_id,away_roster_id,status').eq('week', week).in('status', ['scheduled', 'live']);
   if (!ms?.length) return 0;
+  const teamKicks = teamKickoffs(slate);
+  const nowMs = now.getTime();
+  const firstKick = Object.keys(teamKicks).length ? Math.min(...Object.values(teamKicks)) : Infinity;
+  // Has this player's game started? The same rule the seal applies: his
+  // team's kickoff, or the week's first when he cannot be placed (unknown
+  // team, or a bye) — unknown falls to the stricter answer, as it does there.
+  const kickedOff = (team) => {
+    const t = team ? String(team).toUpperCase() : null;
+    const kick = t && Number.isFinite(teamKicks[t]) ? teamKicks[t] : firstKick;
+    return kick <= nowMs;
+  };
   // SLATE-AWARE VALUES (v0.252.0). PROJ_2026 is a season constant that knows
   // neither byes nor Friday's injury report, so ranking by it raw seats a
   // 20-point projection who is guaranteed to score zero. The tick's slate
@@ -420,7 +439,12 @@ export async function autoSlotClassicLineups(week, slate = null) {
         const uid = userOf.get(rosterId);
         const roster = rosterOf.get(rosterId);
         if (!roster?.length) continue;
+        const live = m.status === 'live';
         if (uid && !aiOf.has(rosterId)) {
+          // A human's seat is filled at lock and then left to the human: the
+          // per-player seal already lets them late-swap, and a fill landing
+          // mid-week would be a decision made for them.
+          if (live) continue;
           // A MANAGED seat: fill only the spots with no row at all. A row is a
           // decision — including a NULL a manager wrote on purpose.
           const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
@@ -443,9 +467,23 @@ export async function autoSlotClassicLineups(week, slate = null) {
         // human would drop him. Only LOCKED rows stand (his game started; the
         // seal is the seal), and their players stay reserved.
         const k = `${m.id}#${agent}`;
-        const lockedMap = lockedBy.get(k) ?? {};
         const current = storedBy.get(k) ?? {};
-        for (const p of autoSlotPlan(slots, bestball, lockedMap, roster, valueOf)) {
+        // ON A LIVE WEEK (v0.432.1), the late-swap rails a human is held to:
+        //   • a stored player whose game has started STANDS, sealed or not —
+        //     the seal runs after this fill in the same tick, and a player
+        //     benched in the seconds between would forfeit points he scored;
+        //   • a player whose game has started is never newly seated — the
+        //     trigger (classic_player_kickoff) refuses a manager that, and
+        //     the worker must not do what a manager cannot.
+        const lockedMap = { ...(lockedBy.get(k) ?? {}) };
+        let cands = roster;
+        if (live) {
+          for (const [slot, slug] of Object.entries(current)) {
+            if (slug && lockedMap[slot] == null && kickedOff(meta.get(slug)?.team)) lockedMap[slot] = slug;
+          }
+          cands = roster.filter((p) => !kickedOff(p.team));
+        }
+        for (const p of autoSlotPlan(slots, bestball, lockedMap, cands, valueOf)) {
           if (current[p.slot] === p.player) continue;   // already right — no churn
           agentPayload.push({
             matchup_id: m.id, app_user_id: agent, game_window: CLASSIC_WIN,

@@ -47,6 +47,14 @@ export const config = {
   // manager set his lineup on Thursday. 3h off-days, still 1h near games.
   injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 10800000),
   injuryPollGamedayMs: Number(process.env.INJURY_POLL_MS_GAMEDAY || 3600000),
+  // THE RAMP INTO KICKOFF (v0.432.1): inside injuryRampMs of the next kickoff
+  // the poll runs every injuryPollRampMs; inside injuryRampNearMs, every
+  // injuryPollNearMs. Inactives drop ~90 minutes out; ten minutes catches
+  // them with time to re-plan, three minutes closes the last gap.
+  injuryRampMs: Number(process.env.INJURY_RAMP_MS || 7200000),               // 2h
+  injuryPollRampMs: Number(process.env.INJURY_POLL_MS_RAMP || 600000),       // 10m
+  injuryRampNearMs: Number(process.env.INJURY_RAMP_NEAR_MS || 2700000),      // 45m
+  injuryPollNearMs: Number(process.env.INJURY_POLL_MS_NEAR || 180000),       // 3m
   // The ESPN roster sweep (32 small fetches): where every player currently
   // plays. Separate from the Sleeper DIRECTORY refresh below, which is 14MB and
   // stays daily because Sleeper asks for at most one pull a day — one feed

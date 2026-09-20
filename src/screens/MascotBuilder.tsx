@@ -280,7 +280,7 @@ export function MascotBuilder({ onPlay, onRequest, narrow }: {
         rules: {
           waiverMode: setup.waiverMode, faabBudget: setup.waiverMode === 'faab' ? setup.faab : null, tradeReview: null,
           waiverClearMin: setup.clearMin, waiverClearDow: setup.clearDow, faAfterWaiversDow: setup.faAfter ? setup.clearDow : [],
-          waiverHoldDays: setup.holdDays, faStartMin: null, faEndMin: null, taxiMaxExp: null, taxiLock: null, irTags: null,
+          waiverHoldDays: setup.holdDays, faStartMin: null, faEndMin: null, taxiMaxExp: null, taxiLock: null, irTags: null, outTags: null,
         },
         classic: classic ? {
           ppr: setup.ppr, golf: seed.golf, bestball: setup.bestball ? Object.keys(setup.roster) : null,
