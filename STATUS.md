@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.3 — the notification icon is a drop with football laces
+
+Founder: "The notification icon is just a drop of water. I think we can do
+better."
+
+A bare droplet in a status bar is a hydration reminder or a weather app;
+nothing about it says football and nothing says it is ours. The drop stays
+— it is the brand — and wears a football's laces, KNOCKED OUT of the mask:
+one seam down the centre and three cross-laces. Laces are the one piece of
+football that survives as an alpha mask (Android keeps only the alpha and
+tints the shape itself), because they are a few thick strokes rather than a
+shape that must keep its proportions: every stroke and every gap is at
+least four units in the 96-unit box, so at 24dp on a modern phone (66px
+and up) the seam and each lace are two to four pixels of clear space, and
+at the 24px floor the drop reads as striped rather than smudged. Three
+laces, not four: at 24px four merged into a bar. The clear space never
+reaches the drop's edge — a lace that opens onto the background is a notch.
+
+Same generator (`scripts/gen-notification-icon.py`, pure Python, exact
+coverage), same two outputs — the app's Android small icon and the web
+push badge — so both surfaces still wear one mark. The generator asserts
+the corners clear, the body opaque, the seam and top lace clear, the gap
+between laces opaque, and the laces short of the edge. Previewed at 24, 36,
+48, 66 and 96px on the dark bar and the light one before wiring.
+
 ### v0.433.2 — the classic widget projects the final and names the spots that want attention
 
 Founder: "For classic leagues, let's show predicted score rather than

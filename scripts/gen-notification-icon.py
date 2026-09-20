@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bake the notification SILHOUETTE — the droplet, white on transparent.
+"""Bake the notification SILHOUETTE — the droplet with football laces, white on transparent.
 
     python3 scripts/gen-notification-icon.py
 
@@ -16,8 +16,21 @@ own default robot instead. That is exactly what both surfaces were doing: the
 app declared no icon at all, and sw.js pointed `badge` at icon-192.png.
 
 So this asset is a MASK, not a picture. Nothing here is worth painting in
-colour, and anything with interior detail (the DF letters, the mascot) turns to
-mush by 18px — which is the size that actually matters.
+colour, and fine interior detail (the DF letters, the mascot) turns to mush by
+18px — which is the size that actually matters.
+
+── WHY THE LACES (v0.433.3) ──────────────────────────────────────────────────
+Founder: "The notification icon is just a drop of water. I think we can do
+better." A bare droplet in a status bar is a hydration reminder or a weather
+app; nothing about it says football, and nothing says it is ours. The drop
+stays — it is the brand — and wears a football's laces, KNOCKED OUT of the
+mask: one seam down the middle and three cross-laces. Laces are the one piece
+of football that survives as a mask, because they are a few thick strokes
+rather than a shape that must keep its proportions: at 24dp on a modern
+phone (66px and up) the seam and every lace are two to four pixels of clear
+space, and even at the 24px floor the drop reads as striped rather than
+smudged. Every stroke is at least 4 units in a 96-unit box, the gap between
+laces the same, so nothing collapses before the whole glyph does.
 
 ── WHY IT IS COMPUTED RATHER THAN RENDERED ───────────────────────────────────
 Coverage is exact arithmetic, so we compute it instead of rasterising: headless
@@ -49,6 +62,15 @@ SIZE = 96
 CX, CY, R, APEX_Y = 48.0, 60.0, 28.0, 8.0
 SS = 4  # samples per axis, so edges are anti-aliased rather than stepped
 
+# THE LACES, in the same box: a seam down the centre and three cross-laces,
+# each a rectangle KNOCKED OUT of the drop. Sized to the bulb, not the apex —
+# the top lace sits where the drop is already wide enough that the clear
+# space stays clear of the edge (≥ 6 units of white on either side).
+SEAM_W = 4.0                     # the seam's width
+SEAM_Y0, SEAM_Y1 = 36.0, 80.0    # the seam's run
+LACE_W, LACE_H = 20.0, 4.5       # each cross-lace: width across, thickness
+LACE_YS = (46.0, 58.0, 70.0)     # three, not four: at 24px four laces merge into a bar
+
 
 def tangent_points():
     """Where the straight sides meet the circle, so the join has no kink."""
@@ -69,10 +91,24 @@ def _in_triangle(x, y, a, b, c):
     return not ((s1 < 0 or s2 < 0 or s3 < 0) and (s1 > 0 or s2 > 0 or s3 > 0))
 
 
-def inside(x, y):
+def _in_drop(x, y):
     if (x - CX) ** 2 + (y - CY) ** 2 <= R * R:
         return True
     return _in_triangle(x, y, APEX, TL, TR)
+
+
+def _in_laces(x, y):
+    if abs(x - CX) <= SEAM_W / 2 and SEAM_Y0 <= y <= SEAM_Y1:
+        return True
+    for ly in LACE_YS:
+        if abs(x - CX) <= LACE_W / 2 and abs(y - ly) <= LACE_H / 2:
+            return True
+    return False
+
+
+def inside(x, y):
+    """White where the drop is and the laces are not."""
+    return _in_drop(x, y) and not _in_laces(x, y)
 
 
 def coverage(size):
@@ -121,7 +157,14 @@ if __name__ == '__main__':
     # the corners must be fully transparent (or Android draws a square) and the
     # body must be fully opaque (or the glyph reads as a smudge).
     assert rows[0][0] == rows[0][-1] == rows[-1][0] == rows[-1][-1] == 0, 'corner not transparent'
-    assert rows[60][48] == 255, 'body not opaque'
+    assert rows[60][30] == 255, 'body not opaque'
+    # The laces are clear, the drop between them is not, and the clear space
+    # never reaches the edge — a lace that opens onto the background is a
+    # notch, not a lace.
+    assert rows[48][48] == 0, 'seam not clear'
+    assert rows[46][40] == 0 and rows[46][56] == 0, 'top lace not clear'
+    assert rows[52][40] == 255, 'gap between laces not opaque'
+    assert rows[46][33] == 255 and rows[46][63] == 255, 'lace reaches the edge'
     for out in OUTPUTS:
         write_png(out, rows)
         print(f'wrote {out.relative_to(ROOT)}  {SIZE}x{SIZE}')
