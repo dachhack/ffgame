@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.431.1 — browse-as sees their team
+### v0.431.2 — browse-as sees their team
 
 Founder: "I need to check if Mooney can put a player in IR. If I use the
 view as admin feature, it's still viewing my team as me instead of viewing
@@ -46,6 +46,24 @@ commissioner, null user refused, the admin's own read unchanged.
 
 Battery: scratch probes, web tsc, check:changelog, vite build — green.
 Migration 0306; web only.
+
+### v0.431.1 — the commissioner stashes anyone
+
+Founder: "I need an option as a commissioner to move players in team
+lineups. For example move a player to IR or to taxi."
+
+The server has allowed it since 0164 — set_roster_spot answers to the
+seat's owner, the commissioner or an admin, and the commissioner is even
+exempt from the taxi lock. What was missing was a door: the team screen's
+seat selector (v0.424.0) takes the card's controls off for a rival's
+roster. For the commissioner they now stay on: the IR and TX badges send a
+player back to active, the empty places open the picker, and the picker
+lists THAT team's active roster with the same eligibility greying (the IR
+tag list, the taxi tenure ceiling). The card says so in one line under the
+team name, and the picker's title names the team. Both hosts. Same RPC,
+same rules; nothing changed on the server.
+
+Battery: root + mobile tsc, check:parity, vite build. Web + APK.
 
 ### v0.431.0 — a played card leaves the hand for good, the app gets the matchup switcher, and Extra Slot is a card you play on a window
 
