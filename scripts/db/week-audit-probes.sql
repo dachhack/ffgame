@@ -112,9 +112,12 @@ begin
     (lg, 'add', 2, 'wa-wire-add', null),
     (lg, 'commish', 4, 'wa-agent-one', ux);
   insert into waiver_claim (league_id, roster_id, add_slug, drop_slug, bid, status) values (lg, 2, 'wa-wire-add', null, 0, 'lost');
-  -- the human bought something this week
+  -- the human bought something this week — an EXTRA SLOT (0027): their board
+  -- is nine wide, everyone else's eight (0303).
   insert into coin_ledger (league_id, roster_id, matchup_id, week, delta, reason, idem_key) values
-    (lg, 1, mid, 3, -20, 'spend:ghost', 'wa-probe-spend-' || lg::text);
+    (lg, 1, mid, 3, -20, 'spend:extra-slot', 'wa-probe-spend-' || lg::text);
+  insert into applied_state (matchup_id, app_user_id, week, payload_json) values
+    (mid, ua, 3, '{"extra": 1}'::jsonb);
 
   -- ── not an admin → refused ───────────────────────────────────────────────
   perform set_config('app.uid', ua::text, false);
@@ -149,19 +152,23 @@ begin
     'wa3 four slots were set by the PLAYER: ' || (th -> 'lineup')::text);
   perform wa_true((th -> 'lineup' -> 'sources' ->> 'auto')::int = 1,
     'wa3a one slot was filled by the COMPUTER (worker write on a human seat): ' || (th -> 'lineup')::text);
-  perform wa_true((th -> 'lineup' ->> 'fielded')::int = 5 and (th -> 'lineup' ->> 'expected')::int = 8
-              and (th -> 'lineup' ->> 'empty')::int = 3,
-    'wa3b 5 of 8 fielded → 3 EMPTY: ' || (th -> 'lineup')::text);
+  perform wa_true((th -> 'lineup' ->> 'fielded')::int = 5 and (th -> 'lineup' ->> 'expected')::int = 9
+              and (th -> 'lineup' ->> 'empty')::int = 4,
+    'wa3b 5 of 9 fielded (base 8 + the bought slot, 0303) → 4 EMPTY: ' || (th -> 'lineup')::text);
   perform wa_true((ta -> 'lineup' -> 'sources' ->> 'ai')::int = 1 and (ta -> 'lineup' ->> 'fielded')::int = 1,
     'wa3c the AI seat''s resolver-only lineup counts as AI: ' || (ta -> 'lineup')::text);
   perform wa_true((tg -> 'lineup' -> 'sources' ->> 'agent')::int = 1,
     'wa3d the unclaimed seat''s worker rows count as AGENT: ' || (tg -> 'lineup')::text);
   perform wa_true((te -> 'lineup' ->> 'fielded')::int = 0 and (te -> 'lineup' ->> 'empty')::int = 8,
     'wa3e a seat with nothing behind it is all empty: ' || (te -> 'lineup')::text);
+  perform wa_true((ta -> 'lineup' ->> 'expected')::int = 8 and (tg -> 'lineup' ->> 'expected')::int = 8,
+    'wa3e2 only the seat that bought the slot is judged against nine (0303)');
   perform wa_true(th ->> 'kind' = 'human' and ta ->> 'kind' = 'ai' and tg ->> 'kind' = 'agent' and te ->> 'kind' = 'empty',
     'wa3f seat kinds are named');
   perform wa_true(th ->> 'manager' = 'Human Manager', 'wa3g the human seat names its manager');
 
+  -- The bought slot survives the window override too (it is the board, not
+  -- activity) — asserted in wa8a below via fielded/expected.
   -- ── 4. OUT and BYE starters, named, with who started them ────────────────
   perform wa_true(jsonb_array_length(th -> 'lineup' -> 'out_started') = 1
               and th -> 'lineup' -> 'out_started' -> 0 ->> 'slug' = 'wa-out-man'
@@ -173,7 +180,7 @@ begin
   perform wa_true(jsonb_array_length(ta -> 'lineup' -> 'bye_started') = 0 and jsonb_array_length(ta -> 'lineup' -> 'out_started') = 0,
     'wa4b a healthy KC/PHI lineup flags nothing');
   perform wa_true((l -> 'lineup' ->> 'out_started')::int = 1 and (l -> 'lineup' ->> 'bye_started')::int = 1
-              and (l -> 'lineup' ->> 'empty')::int = 3 + 7 + 7 + 8,
+              and (l -> 'lineup' ->> 'empty')::int = 4 + 7 + 7 + 8 and (l -> 'lineup' ->> 'expected')::int = 9 + 8 + 8 + 8,
     'wa4c the league rolls its teams up: ' || (l -> 'lineup')::text);
 
   -- ── 5. MOVES BY SOURCE ───────────────────────────────────────────────────
@@ -220,7 +227,7 @@ begin
   -- The shop is keyed by WEEK (coin_ledger.week), not by the clock — a spend
   -- for week 3 is week 3's whatever window is asked for.
   perform wa_true((th -> 'activity' ->> 'shop')::int = 1, 'wa8b …while the week''s shop spend stays (week-keyed)');
-  perform wa_true((th -> 'lineup' ->> 'fielded')::int = 5, 'wa8a …but the lineup is what it was');
+  perform wa_true((th -> 'lineup' ->> 'fielded')::int = 5 and (th -> 'lineup' ->> 'expected')::int = 9, 'wa8a …but the lineup is what it was');
 
   -- ── 9. WEEK DEFAULTS TO THE LATEST FINAL WEEK OF THE SEASON ─────────────
   r := admin_week_audit(null, '2077');

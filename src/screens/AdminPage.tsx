@@ -3429,10 +3429,13 @@ function SourceBar({ sources, total }: { sources: Partial<Record<AuditSource, nu
   );
 }
 
-function AuditTeamRow({ t, expected }: { t: AuditTeam; expected: number }) {
+function AuditTeamRow({ t }: { t: AuditTeam }) {
   const [open, setOpen] = useState(false);
   const grade = activityGrade(t);
   const a = t.activity, l = t.lineup;
+  // The seat's OWN count: the league's base plus any extra slot it bought
+  // (v0.430.1) — a bought-and-filled slot reads 10/10, not 10/9.
+  const expected = l.expected;
   const res = t.result === 'bye' ? 'bye' : t.result ? `${t.result} ${nz(t.pf).toFixed(1)}–${nz(t.pa).toFixed(1)}` : t.pf != null ? `${nz(t.pf).toFixed(1)}–${nz(t.pa).toFixed(1)}` : '—';
   const flags: string[] = [];
   if (l.empty) flags.push(`${l.empty} empty`);
@@ -3478,7 +3481,6 @@ function AuditTeamRow({ t, expected }: { t: AuditTeam; expected: number }) {
 function AuditLeagueCard({ l }: { l: AuditLeague }) {
   const [open, setOpen] = useState(true);
   const share = humanShare(l.lineup.sources);
-  const perSeat = l.seats.total ? Math.round(l.lineup.expected / l.seats.total) : 0;
   return (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
       <button onClick={() => setOpen((o) => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
@@ -3496,7 +3498,7 @@ function AuditLeagueCard({ l }: { l: AuditLeague }) {
           {' — '}moves {sourcesLine(l.activity.txns)} · claims {sourcesLine(l.activity.claims)}{Object.keys(l.activity.claims_won ?? {}).length ? ` (won: ${sourcesLine(l.activity.claims_won)})` : ''} · chat {l.activity.chat} · shop {l.activity.shop}
         </div>
       </button>
-      {open && <div style={{ marginTop: 6 }}>{l.teams.map((t) => <AuditTeamRow key={t.roster_id} t={t} expected={perSeat} />)}</div>}
+      {open && <div style={{ marginTop: 6 }}>{l.teams.map((t) => <AuditTeamRow key={t.roster_id} t={t} />)}</div>}
     </div>
   );
 }

@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.430.1 — the audit counts a bought slot
+
+Founder, reading the week's audit: "I think I added a slot in one of my drip
+leagues but they both say x/9 slots filled."
+
+0302 judged every drip seat against the league's base count — the week's
+windows, never fewer than eight. A drip league has no league-wide way to add
+a slot; a seat adds one by BUYING it (0027 buy_extra_slot), which lands in
+that seat's applied_state.payload_json.extra for that matchup, and
+enforce_slot_cap has always allowed exactly base + extra. 0303 redefines
+admin_week_audit so a seat's expected is the base plus its own extras on its
+matchup: a bought-and-filled slot reads 10/10, one left empty 9/10 with one
+EMPTY — instead of 10/9 and 9/9. Classic leagues untouched (their spot list
+is the cap; no extras exist there). The panel's seat rows now read each
+seat's own `lineup.expected` rather than the league average it had been
+dividing out. Probes: the human seat buys a slot (applied_state extra 1) and
+is judged against nine while its neighbours stay at eight; the league's
+expected and empty roll-ups move with it. Battery green. Migration 0303; web.
+
 ### v0.430.0 — the weekly matchup audit
 
 Founder: "Let's create a weekly audit of matchups for me. I'd love to know
