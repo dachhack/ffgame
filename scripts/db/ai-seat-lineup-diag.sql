@@ -34,33 +34,33 @@ select 'seat' as section, lg.name as league, lg.settings_json ->> 'game_mode' as
        wire_block_reason(lg.id, seat.sleeper_roster_id) as wire_block,
        league_agent_waivers(lg.id) as agent_waivers_on,
        league_waiver_mode(lg.id) as waiver_mode
-from lg, seat;
+from lg cross join seat;
 
 with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1),
      seat as (select m.* from lg join league_membership m on m.league_id = lg.id where lower(m.team_name) like lower('Steelers%') limit 1)
 select 'week' as section, mu.id as matchup_id, mu.week, mu.status, mu.lock_at, mu.home_roster_id, mu.away_roster_id, mu.home_final, mu.away_final
-from lg, seat
+from lg cross join seat
 join matchup mu on mu.league_id = lg.id and seat.sleeper_roster_id in (mu.home_roster_id, mu.away_roster_id)
 where mu.week between 1 and 18
 order by mu.week desc limit 3;
 
 with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1),
      seat as (select m.* from lg join league_membership m on m.league_id = lg.id where lower(m.team_name) like lower('Steelers%') limit 1),
-     wk as (select mu.id, mu.week from lg, seat join matchup mu on mu.league_id = lg.id and seat.sleeper_roster_id in (mu.home_roster_id, mu.away_roster_id)
+     wk as (select mu.id, mu.week from lg cross join seat join matchup mu on mu.league_id = lg.id and seat.sleeper_roster_id in (mu.home_roster_id, mu.away_roster_id)
             where mu.week between 1 and 18 and mu.status in ('scheduled', 'live') order by mu.week limit 1)
 select 'rows' as section, wk.week, sp.roster_slot, sp.player_slug, sp.locked, sp.app_user_id,
        case when sp.app_user_id = seat.app_user_id then 'the seat''s account'
             when exists (select 1 from seat_agent sa where sa.agent_user_id = sp.app_user_id) then 'an agent'
             else 'someone else' end as written_as,
        sp.updated_at
-from lg, seat, wk
+from lg cross join seat cross join wk
 join sealed_pick sp on sp.matchup_id = wk.id and sp.game_window = 'wk'
 order by sp.app_user_id, sp.roster_slot;
 
 with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1),
      seat as (select m.* from lg join league_membership m on m.league_id = lg.id where lower(m.team_name) like lower('Steelers%') limit 1)
 select 'roster' as section, nr.slug, nr.spot, nr.acquired, lp.pos, lp.team, ist.status as designation, ist.updated_at as designated_at
-from lg, seat
+from lg cross join seat
 join native_roster nr on nr.league_id = lg.id and nr.roster_id = seat.sleeper_roster_id
 left join league_pool lp on lp.league_id = lg.id and lp.slug = nr.slug
 left join injury_status ist on ist.player_slug = nr.slug
@@ -69,7 +69,7 @@ order by lp.pos, nr.spot, nr.slug;
 with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1),
      seat as (select m.* from lg join league_membership m on m.league_id = lg.id where lower(m.team_name) like lower('Steelers%') limit 1)
 select 'claims' as section, wc.add_slug, wc.drop_slug, wc.bid, wc.status, wc.note, wc.created_at, wc.processed_at
-from lg, seat
+from lg cross join seat
 join waiver_claim wc on wc.league_id = lg.id and wc.roster_id = seat.sleeper_roster_id
 order by wc.created_at desc limit 12;
 
