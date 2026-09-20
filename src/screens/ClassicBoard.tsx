@@ -16,7 +16,7 @@ import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, projectEntry, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { setRuntimeSlate } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -1027,9 +1027,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // already projects for him — his points if he is done, his
         // projection if he hasn't started, the blend while he plays
         // (projectEntry) — and that is the same number at the end.
+        // By the FILL's number, not the row's (v0.430.2): the row prints the
+        // bare projection (showValue), while the fill ranks by fillValue —
+        // golf's expected score, and a zero worth the spot's fill. A man
+        // yet to play is worth that; a finished man his points; a man on the
+        // field the same blend projectEntry draws.
         const finalValue = (p: { id: string; pos?: string | null; team?: string | null }, d: ClassicSlotDef) => {
           const e = entryFor(p.id, d.pos, d.slot);
-          return e ? projectEntry(e) : fillValue(p, d);
+          if (!e || e.state === 'pre') return fillValue(p, d);
+          if (e.state === 'done') return e.live;
+          return Math.max(e.live, fillValue(p, d));
         };
         const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked ? finalValue : fillValue);
         for (const f of fills) out[f.slot] = f.player.id;

@@ -173,7 +173,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   }, [switchOpen, seats, userId]);
   // The ARMED strip's sheet (v0.431.0): one armed buff and its blurb.
   const [armedOpen, setArmedOpen] = useState<string | null>(null);
-  // EXTRA SLOTS (0304, v0.431.0, founder: "I don't see the extra slot I
+  // EXTRA SLOTS (0305, v0.431.0, founder: "I don't see the extra slot I
   // added"): the windows this seat has widened, {win: n}, read from the
   // server's record with the targeted plays. `extraPick` is the card's
   // window chooser, open after ARM on the Extra Slot card.
@@ -531,7 +531,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   };
   const allLocked = !!matchup && locked && wins.every((w) => winLocked(w.id));
   // The windows as the board draws them: the week's base slots PLUS the
-  // Extra Slot cards played on each (0304). Index-keyed like the web
+  // Extra Slot cards played on each (0305). Index-keyed like the web
   // (slotKey = `${win}#${i}`), so the ninth pick is simply slot 8 of its
   // window and the resolver reads it like any other row.
   const winsX = useMemo(() => wins.map((w) => ({ ...w, slots: w.slots + (extraSlots[w.id] ?? 0) })), [wins, extraSlots]);
@@ -698,7 +698,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  impossible arm is refused before it spends a card. */
   const armFromHand = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
-    // Extra Slot is played on a WINDOW (0304); any other aimed card is not a
+    // Extra Slot is played on a WINDOW (0305); any other aimed card is not a
     // buff and must never be filed as one (v0.431.0).
     if (id === 'extra-slot') { setExtraPick(true); return; }
     if (powerupById(id)?.target) { setErr('That card is aimed at a spot or window — play it on the web for now.'); return; }
@@ -771,7 +771,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       };
     });
 
-  /** Play an Extra Slot card on a window (0304): the server consumes the card,
+  /** Play an Extra Slot card on a window (0305): the server consumes the card,
    *  raises the pick cap and records the window; the board widens on ok. */
   const playExtraSlot = async (win: string) => {
     if (!matchup || buffBusy) return;
@@ -1129,7 +1129,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           <Text style={{ fontSize: 11.5, color: t.dim, lineHeight: 17 }}>It shows on every spot it applies to (the ⚡ chip on the card). A played card stays played — there are no take-backs.</Text>
         </View>
       </Overlay>
-      {/* EXTRA SLOT → which window (0304). Every window of the week is open
+      {/* EXTRA SLOT → which window (0305). Every window of the week is open
           while the matchup is still 'scheduled' (the card's whole clock). */}
       <Overlay visible={extraPick} title="Extra Slot · pick a window" subtitle="ADDS ONE SPOT TO THAT WINDOW · NO TAKE-BACKS" onClose={() => setExtraPick(false)}>
         <View style={{ padding: 12, gap: 8 }}>

@@ -1,4 +1,4 @@
--- 0304 probes: EXTRA SLOT IS A CARD YOU PLAY ON A WINDOW.
+-- 0305 probes: EXTRA SLOT IS A CARD YOU PLAY ON A WINDOW.
 --
 -- What must hold:
 --   • playing the card consumes ONE owned card and records the slot in all

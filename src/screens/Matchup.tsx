@@ -476,7 +476,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
     else if (pendingApply === 'extra-slot') {
       setPendingApply(null);
-      // LIVE (0304): the server plays the card — consumes it, bumps the slot
+      // LIVE (0305): the server plays the card — consumes it, bumps the slot
       // cap (enforce_slot_cap reads applied_state.extra) and records the
       // window for both boards. The local record follows only on ok; before
       // this the web wrote its own blob and the ninth pick was refused at

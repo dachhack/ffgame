@@ -1,4 +1,4 @@
--- 0304: EXTRA SLOT IS A CARD YOU PLAY ON A WINDOW (v0.431.0).
+-- 0305: EXTRA SLOT IS A CARD YOU PLAY ON A WINDOW (v0.431.0).
 --
 -- Founder, on the app: "I don't see the extra slot I added."
 --

@@ -224,9 +224,9 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
-    // The zero-fill rule (0200). Never sent on a best-ball spot — the server
+    // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the toggle below can't produce it either.
-    ...(!s.bb && s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
+    ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
@@ -686,18 +686,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   title="name this spot — e.g. Only NFC Players. Naming it doesn't change who may fill it; the chips and 🔎 filter do that."
                   className="mono" style={{ fontFamily: 'inherit', fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: sp.label ? 'var(--text)' : 'var(--faint)', border: `1px solid ${sp.label ? 'var(--bd)' : 'transparent'}`, borderRadius: RADIUS, flex: 1, minWidth: 90, textAlign: 'right' }} />
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
-                  onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb, zero: x.bb ? x.zero : '' })); setSpotsDirty(true); }}
+                  onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
                 {/* THE ZERO-FILL RULE (v0.303.0): what this spot banks when it
-                    is empty, or when whoever stands in it scores nothing.
-                    Greyed out on a best-ball spot — that spot fills itself, so
-                    "unfilled" is not a state it has, and the server refuses the
-                    pair rather than storing half of it. */}
-                <span title={sp.bb ? "a best-ball spot fills itself — it is never unfilled, so it can't carry this rule"
+                    is empty, or when whoever stands in it scores nothing. On
+                    best-ball spots too since 0304 (v0.430.2): the fill seats a
+                    body, but a body can still score nothing, and the fill ranks
+                    by what the spot banks — a bye is worth the fill. */}
+                <span title={sp.bb ? 'ZERO-FILL: points this spot banks if its player scores nothing. The fill ranks by what the spot banks, so a bye is worth this number.'
                   : 'ZERO-FILL: points this spot banks if it is empty, or if its player scores nothing. Blank = off.'}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, opacity: sp.bb ? 0.35 : 1 }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>⛳</span>
-                  <input value={sp.zero} disabled={busy || !!sp.bb} inputMode="numeric" placeholder="—" maxLength={3}
+                  <input value={sp.zero} disabled={busy} inputMode="numeric" placeholder="—" maxLength={3}
                     onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: v })); setSpotsDirty(true); }}
                     className="mono" style={{ fontFamily: 'inherit', fontSize: 11, width: 34, textAlign: 'center', padding: '3px 4px', background: 'var(--bg)', color: sp.zero ? 'var(--warn)' : 'var(--faint)', border: `1px solid ${sp.zero ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: RADIUS }} />
                 </span>
@@ -751,7 +751,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               onClick={() => { setSpots((cur) => [...cur!, { pos: ['RB', 'WR', 'TE'], label: '', fTeams: '', fMin: '', fMax: '', fFlags: [], zero: '' }]); setSpotsDirty(true); }}
               className="mono" style={{ ...pill(false), padding: '4px 14px' }}>＋ ADD SPOT</button>
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · ⛳ is the ZERO-FILL: points the spot banks if it's empty or its player scores nothing (blank = off; not available on a BB spot) · 🔎 limits who may fill the spot (teams / tenure / a commissioner flag — an RB spot for rookies only, or a spot only your franchise tag may stand in) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
+              ⠿ drag (or focus + ↑/↓) to reorder · name a spot anything you like — the name is a label, the chips and 🔎 decide who may fill it · 🎯 BB spots fill themselves with the top scorer · ⛳ is the ZERO-FILL: points the spot banks if it's empty or its player scores nothing (blank = off; on a BB spot the fill ranks by what the spot banks, so a bye is worth the fill) · 🔎 limits who may fill the spot (teams / tenure / a commissioner flag — an RB spot for rookies only, or a spot only your franchise tag may stand in) · tenure filters need a pool re-seed so player experience is loaded · locks once the draft starts (after that you may only remove spots from the end — the escape hatch for a lineup bigger than the draft).
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>

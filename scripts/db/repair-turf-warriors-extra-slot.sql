@@ -4,10 +4,10 @@
 -- Founder: "I don't see the extra slot I added." → "Turf Warriors 1pm window
 -- I added a slot."
 --
--- Before 0304 the app's hand ARMed the Extra Slot card into the buff list
+-- Before 0305 the app's hand ARMed the Extra Slot card into the buff list
 -- (nothing reads it) and consumed the card; the web wrote its own hero_applied
 -- blob without touching the cap. Either way the card is gone and the slot is
--- not recorded. This writes the record 0304's apply_extra_slot would have
+-- not recorded. This writes the record 0305's apply_extra_slot would have
 -- written, for the founder's seat in Turf Warriors on the league's current
 -- (first non-final) regular week: applied_state.extra (the cap),
 -- applied_state.extraSlots.early = 1 (the app), hero_applied.extraSlots.early

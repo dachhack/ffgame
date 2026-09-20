@@ -537,9 +537,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // Backups: the server's targeted record wins (0137 — it's the store
             // the worker scores and the only one writable post-lock), the
             // pre-lock hero blob fills any older entries.
-            // Extra slots: the server's record wins (0304 apply_extra_slot
+            // Extra slots: the server's record wins (0305 apply_extra_slot
             // writes applied_state.extraSlots — the cap's own row), the
-            // pre-0304 hero blob fills older weeks.
+            // pre-0305 hero blob fills older weeks.
             extraSlots: (tgt.extraSlots ?? b.extraSlots ?? {}) as AppliedWeek['extraSlots'], swaps, backups: { ...(b.backups ?? {}), ...(tgt.backups ?? {}) },
             doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
@@ -636,7 +636,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  // `synced` (0304): on the live board the server took the card and recorded
+  // `synced` (0305): on the live board the server took the card and recorded
   // the slot (apply_extra_slot); record it locally without a second consume.
   const applyExtraSlot = (week: number, win: WindowId, opts?: { synced?: boolean }): boolean =>
     consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }), opts);

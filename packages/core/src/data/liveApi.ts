@@ -1820,7 +1820,7 @@ export interface TargetedState {
   bunker?: Record<string, number>;
   clutchEncore?: Record<string, number>;
   clutchCounter?: Record<string, number>;
-  /** Extra Slot cards played this week, by window (0304 apply_extra_slot):
+  /** Extra Slot cards played this week, by window (0305 apply_extra_slot):
    *  {win: n}. Read from the same applied_state row as the targeted plays. */
   extraSlots?: Record<string, number>;
 }
@@ -1841,7 +1841,7 @@ export async function myTargeted(matchupId: string, userId: string): Promise<Tar
   if (pj?.extraSlots && typeof pj.extraSlots === 'object') t.extraSlots = pj.extraSlots;
   return t;
 }
-/** Play one owned Extra Slot card on a window (0304): before the week's first
+/** Play one owned Extra Slot card on a window (0305): before the week's first
  *  lock, consumes the card, bumps the slot cap and records the window for
  *  both boards. No refunds. */
 export const applyExtraSlotCard = (matchupId: string, win: string) =>
