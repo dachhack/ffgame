@@ -100,7 +100,7 @@ begin
   perform assert_true((r -> 'shape' ->> 'ir')::int = 0 and (r ->> 'rounds')::int = 5, 'ia2d …unchanged');
   r := set_league_roster_shape(lid, 2, 0, 1);
   perform assert_ok(r, 'ia3 one IR spot, after the draft');
-  perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 1}'::jsonb, 'ia3a the shape carries it');
+  perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 1, "out": 0}'::jsonb, 'ia3a the shape carries it');
   perform assert_true((r ->> 'rounds')::int = 6 and (r ->> 'draft_rounds')::int = 5,
     'ia3b the roster grew by one; the draft did not');
   perform assert_true((select rounds from draft where league_id = lid) = 6, 'ia3c draft.rounds moved with it');
@@ -109,7 +109,7 @@ begin
   -- a real IR change must not block the IR change.
   r := set_league_roster_shape(lid, 6, 0, 2);
   perform assert_ok(r, 'ia3e a stale bench beside an IR change is ignored, not refused');
-  perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 2}'::jsonb, 'ia3f …the bench held, IR moved');
+  perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 2, "out": 0}'::jsonb, 'ia3f …the bench held, IR moved');
   perform assert_ok(set_league_roster_shape(lid, 2, 0, 1), 'ia3g back to one');
 
   -- ══ THE OUT PLAYER GOES ON IR ════════════════════════════════════════════
@@ -141,7 +141,7 @@ begin
   perform assert_true(seats = 8, 'ia6c its whole roster is active seats (0199)');
   r := set_league_roster_shape(lid2, 0, 0, 2);
   perform assert_ok(r, 'ia7 two IR spots, after the draft, on a never-shaped league');
-  perform assert_true(r -> 'shape' = '{"bench": 5, "taxi": 0, "ir": 2}'::jsonb,
+  perform assert_true(r -> 'shape' = '{"bench": 5, "taxi": 0, "ir": 2, "out": 0}'::jsonb,
     'ia7a the bench is derived from the rounds (8 − 3 starters)');
   perform assert_true((r ->> 'rounds')::int = 10, 'ia7b the roster is rounds + IR');
   perform assert_true(league_active_seats(lid2) = seats, 'ia7c active seats did not move');

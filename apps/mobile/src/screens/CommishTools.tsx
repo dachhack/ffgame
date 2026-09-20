@@ -23,7 +23,7 @@ import {
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
   setLeagueGolf,
-  setTaxiRules, setIrRules,
+  setTaxiRules, setIrRules, setOutRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
   leagueContracts, setContractRules, setSalaryRules, setRookieYears, type LeagueContracts,
@@ -1825,7 +1825,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // Current key order, refreshed every render AND spliced eagerly on swap, so
   // a fast drag crossing two rows in one frame reads correct neighbours.
   const orderRef = useRef<number[]>([]);
-  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number; out: number }>({ bench: 6, taxi: 0, ir: 0, out: 0 });
   // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
   // round count, so this bounds starters + bench + taxi + IR.
   const MAX_ROUNDS = 99;
@@ -1835,11 +1835,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // WHO MAY GO ON IR (0198): the commissioner's own list of designations, off
   // the same call. Default is IR/O — the pair 0164 hardcoded.
   const [irTags, setIrTags] = useState<string[] | null>(null);
+  // …and who may go on OUT (0307), IR's week-to-week sibling. Default O/D.
+  const [outTags, setOutTags] = useState<string[] | null>(null);
   const loadTaxi = () => {
     rosterRules(leagueId).then((r) => {
       if (!r.ok) return;
       setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
       setIrTags(r.ir_tags?.length ? r.ir_tags : ['IR', 'O']);
+      setOutTags(r.out_tags?.length ? r.out_tags : ['O', 'D']);
     }).catch(() => {});
   };
   useEffect(loadTaxi, [leagueId]);
@@ -1863,6 +1866,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       const next = on ? irTags.filter((x) => x !== tag) : [...irTags, tag];
       const r = await setIrRules(leagueId, next);
       if (r.ok) { commit(); setIrTags(r.tags?.length ? r.tags : next); setNote('✓ IR eligibility saved'); }
+      else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
+  const saveOutTag = async (tag: string) => {
+    if (busy || !outTags) return;
+    const on = outTags.includes(tag);
+    if (on && outTags.length === 1) { warn(); setNote('OUT needs at least one designation.'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const next = on ? outTags.filter((x) => x !== tag) : [...outTags, tag];
+      const r = await setOutRules(leagueId, next);
+      if (r.ok) { commit(); setOutTags(r.tags?.length ? r.tags : next); setNote('✓ OUT eligibility saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
   };
@@ -1899,7 +1914,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
         ? r.slots.map(toSpotDraft)
         : legacy.map((d) => toSpotDraft({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
-      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
+      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0, out: r.shape.out ?? 0 });
       setRounds(r.rounds ?? null);
       setExtraPos(r.positions ?? []);
       setFltTeams((r.pool_filter?.teams ?? []).join(', '));
@@ -2017,12 +2032,12 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     } catch { warn(); }
     finally { setBusy(false); }
   };
-  const saveShape = async (next: { bench: number; taxi: number; ir: number }) => {
+  const saveShape = async (next: { bench: number; taxi: number; ir: number; out: number }) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir);
-      if (r.ok) { commit(); setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
+      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir, next.out);
+      if (r.ok) { commit(); setShape(r.shape ? { bench: r.shape.bench, taxi: r.shape.taxi, ir: r.shape.ir, out: r.shape.out ?? 0 } : next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -2124,7 +2139,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       )}
       {view === 'lineup' && mode === 'classic' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
-        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir;
+        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out;
         return (
         <View>
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
@@ -2381,7 +2396,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             {/* THE TOTAL IS THE CEILING (0192): bench 20 / taxi 8 / IR 8 were
                 per-box numbers that ran a deep dynasty out of room with rounds
                 to spare. The draft's 5–99 window is the only real limit. */}
-            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir']] as const).map(([label, key]) => (
+            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir'], ['OUT', 'out']] as const).map(([label, key]) => (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>{label}</Text>
                 <Pressable disabled={busy || shape[key] === 0} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) }); }} hitSlop={6}>
@@ -2395,7 +2410,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             ))}
             {/* TWO NUMBERS SINCE 0193: the roster is what a team may HOLD, the
                 draft is what it FILLS — IR spots are the difference. */}
-            <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir}{shape.ir > 0 ? ' (no IR)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
+            <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out}{shape.ir + shape.out > 0 ? ' (no IR/OUT)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
           {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────
               Who may ride it and when it shuts — and unlike the shape, these
@@ -2428,6 +2443,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 {([['IR', 'IR'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
                   <Pill key={tag} on={irTags.includes(tag)} label={label} onPress={() => void saveIrTag(tag)} />
+                ))}
+              </View>
+            </View>
+          )}
+          {/* ── WHO MAY GO ON OUT (0307) — IR's week-to-week sibling ─────── */}
+          {shape.out > 0 && outTags && (
+            <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+              <LabelInfo label="OUT ELIGIBILITY"
+                info={'Which injury designations may be stashed on the OUT shelf — the week-to-week sibling of IR (O/D by default).\n\nTwo shelves, two lists: a season-ending injury goes on IR, a week\u2019s absence on OUT. Most leagues that open OUT narrow IR to IR alone.'} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                {([['IR', 'IR'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
+                  <Pill key={tag} on={outTags.includes(tag)} label={label} onPress={() => void saveOutTag(tag)} />
                 ))}
               </View>
             </View>

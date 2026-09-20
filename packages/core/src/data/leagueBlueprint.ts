@@ -25,7 +25,7 @@
 // rules. Reverse them and the copied FAAB budget is overwritten by the preset.
 import {
   draftState, leagueGameMode, leagueScoringGet, rosterRules,
-  leagueScoringSet, setLeagueFormat, setTransactionRules, setTaxiRules, setIrRules,
+  leagueScoringSet, setLeagueFormat, setTransactionRules, setTaxiRules, setIrRules, setOutRules,
   setLeagueGolf, setLeagueBestball, setLeagueClassicRoster, setLeagueClassicSlots,
   setLeagueRosterShape, setLeagueClassicScoring, setLeagueGameMode,
   type LeagueContinuity, type LeagueFormat, type PosCaps, type WaiverMode, type TradeReview,
@@ -57,6 +57,8 @@ export interface BlueprintRules {
   taxiMaxExp: number | null;
   taxiLock: boolean | null;
   irTags: string[] | null;
+  /** OUT's own list (0307); null = the default O/D. */
+  outTags: string[] | null;
 }
 
 /** The classic-league SHAPE (0175 onward): what a classic league is actually
@@ -168,6 +170,7 @@ export async function readBlueprint(leagueId: string, src: BlueprintSource = {})
         taxiMaxExp: rules.taxi_max_exp ?? null,
         taxiLock: typeof rules.taxi_lock === 'boolean' ? rules.taxi_lock : null,
         irTags: Array.isArray(rules.ir_tags) ? (rules.ir_tags as string[]) : null,
+        outTags: Array.isArray(rules.out_tags) ? (rules.out_tags as string[]) : null,
       }
       : null,
     classic: gameMode === 'classic' && game && !game.error
@@ -253,6 +256,7 @@ export async function applyBlueprint(leagueId: string, bp: LeagueBlueprint): Pro
       await run('taxi squad', () => setTaxiRules(leagueId, r.taxiMaxExp, r.taxiLock));
     }
     if (r.irTags && r.irTags.length) await run('IR tags', () => setIrRules(leagueId, r.irTags as string[]));
+    if (r.outTags && r.outTags.length) await run('OUT tags', () => setOutRules(leagueId, r.outTags as string[]));
   }
 
   return steps;

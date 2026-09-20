@@ -18,6 +18,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.432.0 — two injured shelves: OUT and IR
+
+Founder: "You know what would be cool? If we could have two types of IR spots
+just like the league: Out and IR. Commish can pick the type of injury type
+qualifies for each."
+
+THE SECOND SHELF (0307). The NFL keeps two: injured reserve for the long stay,
+the weekly OUT for a man who misses a Sunday. The game had one (0164 'ir',
+with the commissioner's list of qualifying designations since 0198). OUT is
+now a full sibling rather than a flag on IR: native_roster.spot gains 'out'
+(a stashed player, never a starter — everything that reads `spot <> 'active'`
+needs nothing); roster_shape gains `out`, a count beside bench/taxi/IR that,
+like IR since 0193/0296, is not a draft round (extra room, added or removed
+after the draft, in draft.stash_slots with IR); settings_json.out.tags is the
+OUT list — league_out_tags() reads it, O/D by default, set_out_rules sets it
+with the report's vocabulary and nothing else. IR's default (IR/O) is
+untouched, so no league moves; a commissioner who opens OUT will usually
+narrow IR to IR alone. set_roster_spot takes 'out' with OUT's cap and OUT's
+list — a player can be right for one shelf and wrong for the other, and the
+refusal names the list either way; roster_rules carries out_tags. The shape
+setter grows a fifth argument; the four-argument form stays for older builds
+and leaves OUT where it is.
+
+BOTH HOSTS. MY TEAM draws OUT places under IR (empties included), fills them
+from the same picker with the greying that names OUT's list, and sends a
+player back to active from either shelf. ⚑ COMMISH → ROSTER gets an OUT box
+beside IR and, once it is above zero, an OUT ELIGIBILITY row (IR / OUT /
+DOUBTFUL / QUESTIONABLE) beside IR's; ROSTER = / DRAFT = subtract both
+shelves. The classic boards' injured-shelf marking covers OUT; the admin's
+roster counts say "· 2 OUT". The seat wire's IR housekeeping (v0.426.0)
+stashes onto IR first and OUT second, and brings a player back from whichever
+shelf he no longer qualifies for. The league blueprint copies the OUT list
+with the IR list.
+
+Probes: out-spot-probes (wired): the shape takes OUT and the 4-arg setter
+leaves it; stash_slots counts both; OUT defaults O/D and its list moves
+without touching IR's; an Out player fits OUT and not IR-only, an IR player
+fits IR and not OUT, a healthy player fits neither; OUT's own cap; after the
+draft OUT grows and a shelf someone stands on cannot be removed; roster_rules
+carries both lists. ir-after-draft's shape assertions carry the new key.
+Battery: scratch probes, web tsc, mobile tsc, check:parity, vite build,
+server tests — green. Migration 0307; both hosts; the APK ships itself.
+
 ### v0.431.2 — browse-as sees their team
 
 Founder: "I need to check if Mooney can put a player in IR. If I use the

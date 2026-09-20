@@ -143,8 +143,8 @@ begin
               and jsonb_array_length((select settings_json -> 'roster_slots' from league where id = mid)) = 3,
     'pr10a the roster builder''s spots came across, as the RPC stored them');
   perform pr_true((select settings_json -> 'roster_shape' from league where id = mid)
-                = '{"bench": 5, "taxi": 2, "ir": 1}'::jsonb,
-    'pr10b and the bench / taxi / IR counts');
+                = '{"bench": 5, "taxi": 2, "ir": 1, "out": 0}'::jsonb,
+    'pr10b and the bench / taxi / IR / OUT counts (0307: the shape carries out)');
   perform pr_true((select settings_json -> 'scoring_classic' from league where id = mid) = '{"pass_td": 6}'::jsonb
               and (select settings_json ->> 'ppr' from league where id = mid) = '0.5',
     'pr10c and the scoring the league plays');

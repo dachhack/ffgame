@@ -769,7 +769,8 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
     const mine = rosters.filter((r) => r.roster_id === rid);
     const taxi = mine.filter((r) => r.spot === 'taxi').length;
     const ir = mine.filter((r) => r.spot === 'ir').length;
-    return `${mine.length} rostered${taxi ? ` · ${taxi} taxi` : ''}${ir ? ` · ${ir} IR` : ''}`;
+    const out = mine.filter((r) => r.spot === 'out').length;
+    return `${mine.length} rostered${taxi ? ` · ${taxi} taxi` : ''}${ir ? ` · ${ir} IR` : ''}${out ? ` · ${out} OUT` : ''}`;
   };
   const holdLeft = (until: string | null): string | null => {
     if (!until) return null;
