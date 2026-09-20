@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.432.2 — the mascot builder comes off the landing
+
+Founder: "The mascot work in progress is live on the site. It's not ready
+for primetime yet. Can we revert that?"
+
+web only, no APK. The landing shows the v0.419.1 menu of switches again
+— EVERY SWITCH A COMMISSIONER HAS, one row per question, WHICH GAME
+doubling as the demo switch — exactly as it did before v0.420.0 put the
+mascot in its place. MascotBuilder, core's mascot.ts, the four cut-out
+bodies and the art brief in public/mascot/README.md all stay in the tree,
+unmounted, for when the stickers exist; check:mascot still pins the data.
+The v0.421.0 squash also carried the Android widget, so this is a
+targeted restore of the landing hunk rather than a git revert. The
+unmounted builder also learns the blueprint's OUT list, so root tsc is
+clean again.
+
+Battery: root tsc, check:parity, vite build.
+
 ### v0.432.1 — the AI late-swaps: the fill walks the live week, and the injury poll ramps into kickoff
 
 Founder: "Steelers is on AI control. Are they going to move Jacobs to the
