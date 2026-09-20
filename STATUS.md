@@ -18,13 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.431.0 — a played card leaves the hand for good, and the app gets the matchup switcher
+### v0.431.0 — a played card leaves the hand for good, the app gets the matchup switcher, and Extra Slot is a card you play on a window
 
 Founder, on the app, Sunday morning with Momentum armed: "If I used momentum
 it shouldn't be in my hand anymore. It should show on the spots though." And:
 "where is the matchup switcher so I can go directly to my other matchups?"
 Then, on the first cut's DISARM buttons: "No disarming. If you use a power
-up you can't take it back."
+up you can't take it back." And: "I don't see the extra slot I added."
 
 THE HAND (app). An armed team buff stayed fanned in the hand, painted ARMED,
 because the hand was the only place to disarm it — which read as the card
@@ -51,8 +51,33 @@ OPEN → hands the seat to the shell, which opens that league on its matchup
 (commissioner status looked up on the way so the ⚑ door still hangs off it).
 Read from my_teams when the sheet opens, not on the board's hot path.
 
-Battery: mobile tsc, web tsc, check:changelog, vite build — green. No
-migration. The APK ships itself.
+THE EXTRA SLOT (0304). Two halves that never met: buy_extra_slot (0027)
+charges COIN and bumps applied_state.extra — the number enforce_slot_cap
+reads — but nobody has called it since the shop started selling Extra Slot
+as a CARD. The web played the card by writing its own hero_applied blob and
+consuming it, so the board drew a slot the save then refused; the app had
+no path at all — its hand offered the card with ARM, which filed
+'extra-slot' into the buff list (nothing reads it) and ate the card. That is
+the slot the founder could not see. apply_extra_slot(matchup, window) is
+the one path now: before the week's first lock (scope 1, 0260), consume one
+owned card (0256 model, practice purse on a practice week, row locked),
+refuse past extra_slot_cap(), then record it where each reader looks —
+applied_state.extra (the cap, the AI fill), applied_state.extraSlots {win:n}
+(the app, through my_targeted's row) and hero_applied.extraSlots (the web
+board's blob). The app's Extra Slot card now ARMs into a window chooser and
+the board widens on ok; the web's tap-a-window apply goes through the RPC
+and records locally only on ok (a refusal is loud). Any other AIMED card in
+the app's hand (Rivalry, Double or Nothing, Jinx…) had the same ARM bug —
+it is not ARMable there now and says "play it on the web for now"; a
+phantom targeted id already in a seat's buff list is not shown as ARMED.
+Probes: extra-slot-card-probes (wired): the card consumes once and lands in
+all three records, stacks a window to +2, the cap refuses a third without
+consuming, no card → not owned, outsider → forbidden, a slate that lacks the
+window refuses it, the started week refuses, and THE POINT — ten picks save
+with two extras played where an eleventh is refused.
+
+Battery: scratch probes, mobile tsc, web tsc, check:changelog, vite build —
+green. Migration 0304. The APK ships itself.
 
 ### v0.430.1 — the audit counts a bought slot
 

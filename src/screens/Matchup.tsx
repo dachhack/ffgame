@@ -29,7 +29,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
@@ -474,7 +474,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // via effWinClock); the sim board uses the manual playback clock. Either way
     // EMP freezes forward from the current position, never retroactively.
     if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
-    else if (pendingApply === 'extra-slot') { applyExtraSlot(week, win); setPendingApply(null); }
+    else if (pendingApply === 'extra-slot') {
+      setPendingApply(null);
+      // LIVE (0304): the server plays the card — consumes it, bumps the slot
+      // cap (enforce_slot_cap reads applied_state.extra) and records the
+      // window for both boards. The local record follows only on ok; before
+      // this the web wrote its own blob and the ninth pick was refused at
+      // save. A refusal is loud, like every other server apply.
+      if (liveCtx) {
+        applyExtraSlotCard(liveCtx.matchupId, win)
+          .then((r) => { if (r.ok) applyExtraSlot(week, win, { synced: true }); else window.alert(`Extra Slot did NOT apply: ${friendlyError(r.error ?? 'apply failed')}`); })
+          .catch((e) => window.alert(`Extra Slot did NOT apply: ${friendlyError(e)}`));
+      } else applyExtraSlot(week, win);
+    }
     else if (pendingApply === 'rivalry') { if (applyRivalry(week, win)) liveTargeted('rivalry', { win }); setPendingApply(null); }
   }
   // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/

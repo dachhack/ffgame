@@ -218,7 +218,7 @@ interface Store {
   hydrateInventory: (inv: Record<string, number>) => void;
   applied: Record<number, AppliedWeek>; // week -> applied powerup effects
   /** Apply an Extra Slot to a window for a week (consumes one). Returns success. */
-  applyExtraSlot: (week: number, win: WindowId) => boolean;
+  applyExtraSlot: (week: number, win: WindowId, opts?: { synced?: boolean }) => boolean;
   /** Real-time Metric Swap on a slot, effective from real time `atRt` (consumes one). */
   applyMetricSwap: (week: number, slotKey: string, atClock: number, atRt: number, toMetricId: string) => boolean;
   /** Real-time Player Swap on a slot, effective from real time `atRt` (consumes one). */
@@ -537,7 +537,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // Backups: the server's targeted record wins (0137 — it's the store
             // the worker scores and the only one writable post-lock), the
             // pre-lock hero blob fills any older entries.
-            extraSlots: b.extraSlots ?? {}, swaps, backups: { ...(b.backups ?? {}), ...(tgt.backups ?? {}) },
+            // Extra slots: the server's record wins (0304 apply_extra_slot
+            // writes applied_state.extraSlots — the cap's own row), the
+            // pre-0304 hero blob fills older weeks.
+            extraSlots: (tgt.extraSlots ?? b.extraSlots ?? {}) as AppliedWeek['extraSlots'], swaps, backups: { ...(b.backups ?? {}), ...(tgt.backups ?? {}) },
             doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
@@ -633,8 +636,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const applyExtraSlot = (week: number, win: WindowId): boolean =>
-    consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }));
+  // `synced` (0304): on the live board the server took the card and recorded
+  // the slot (apply_extra_slot); record it locally without a second consume.
+  const applyExtraSlot = (week: number, win: WindowId, opts?: { synced?: boolean }): boolean =>
+    consumeAndApply('extra-slot', week, (cur) => ({ ...cur, extraSlots: { ...cur.extraSlots, [win]: (cur.extraSlots[win] ?? 0) + 1 } }), opts);
 
   const armBuff = (week: number, id: string): boolean => {
     if (applied[week]?.buffs?.[id]) return false;

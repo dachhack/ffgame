@@ -189,3 +189,4 @@ $RUN -f scripts/db/fa-off-probes.sql | grep -E "PROBE FAIL|ALL FA-OFF PROBES" ||
 $RUN -f scripts/db/txn-chat-probes.sql | grep -E "PROBE FAIL|ALL TXN-CHAT PROBES" || { echo "TXN-CHAT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/player-depth-probes.sql | grep -E "PROBE FAIL|ALL PLAYER-DEPTH PROBES" || { echo "PLAYER-DEPTH PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/week-audit-probes.sql | grep -E "PROBE FAIL|ALL WEEK-AUDIT PROBES" || { echo "WEEK-AUDIT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/extra-slot-card-probes.sql | grep -E "PROBE FAIL|ALL EXTRA-SLOT-CARD PROBES" || { echo "EXTRA-SLOT-CARD PROBES FAILED"; exit 1; }
