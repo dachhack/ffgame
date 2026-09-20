@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.430.2 — in golf a zero banks the fill, and best-ball spots carry one
+
+Founder: "I guess best ball in golf should slot 0 players over players
+with more than 10 points."
+
+That sentence is only true if the spot BANKS 10 for a zero — the zero-fill
+rule — and two things stood in its way.
+
+THE RULE COULD NOT SIT ON A BEST-BALL SPOT. Refused since v0.303.0 ("it
+fills itself, so it is never unfilled"): true of the unfilled half of the
+rule, blind to the other half — whoever the fill seats can still score
+nothing, and in golf that zero was the best score on the board with no
+price on it. 0304 drops the refusal (0201's setter verbatim minus four
+lines); classicSlotsFromSpec keeps the rule on a best-ball spot; the
+resolver and the board already paid it there (they walk every slot); both
+commissioner consoles open the ⛳ field on best-ball spots.
+
+A ZERO WAS AN ABSENCE, NOT A PRICE. v0.429.0's expected golf score
+(P + p·Z) priced a man who MIGHT blank, and still returned 0 for a man who
+certainly will — ruled out, on bye, projected at nothing — which golfValue
+files behind everyone. That is the p = 1 limit of the same formula: he is
+worth Z. slateAwareProj now says so in golf (0 on the row and outside
+golf), bestballFillBy says so for the LIVE points the resolver ranks by
+(zeroFill against the spot's own rule, golf only), and the boards' live-
+week fill values a man yet to play by the FILL's number rather than the
+row's, which had quietly dropped golf's expected score from the mid-week
+ranking. With a 10-point fill a zero beats a 12 and loses to an 8; without
+a fill a zero is still a zero.
+
+check-golf: the spec keeps the rule on a best-ball spot; the fill in golf
+seats the zero over a twelve and the eight over the zero; no fill → the
+zero never fills; outside golf nothing changes; ruled out / bye / no
+projection each worth the fill through slateAwareProj, 0 on the row.
+
+Battery: root + mobile tsc, check:parity, vite build. Web + APK +
+migration 0304.
+
 ### v0.430.1 — the audit counts a bought slot
 
 Founder, reading the week's audit: "I think I added a slot in one of my drip

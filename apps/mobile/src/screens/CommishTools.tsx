@@ -1638,9 +1638,9 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     // FLAGS (v0.301.0) — the app collected them and never sent them; the web
     // twin has carried them since the day they landed.
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
-    // The zero-fill rule (0200). Never sent on a best-ball spot — the server
+    // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the control below can't produce it either.
-    ...(!s.bb && s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
+    ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
 const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length || s.zero.trim());
@@ -2345,13 +2345,13 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
 
                 {/* ── THE ZERO-FILL RULE (v0.303.0) ────────────────────────
                     What this spot banks when it is EMPTY, or when whoever
-                    stands in it scores nothing. Not available on a best-ball
-                    spot: that spot fills itself, so "unfilled" is not a state
-                    it has, and the server refuses the pair rather than storing
-                    half of what was asked for. */}
+                    stands in it scores nothing. On best-ball spots too since
+                    0304 (v0.430.2): the fill seats a body, but a body can
+                    still score nothing, and the fill ranks by what the spot
+                    banks — so with a 10-point rule a bye week is worth ten. */}
                 <View style={{ marginTop: 14 }}><LabelInfo label="ZERO-FILL"
-                  info={'The points this spot banks when it is empty, or when its player scores nothing. Blank turns it off.\n\nNot available on a best-ball spot — that spot fills itself from whoever is left, so it is never unfilled. Turn best ball off first.'} /></View>
-                {sp.bb ? null : (
+                  info={'The points this spot banks when it is empty, or when its player scores nothing. Blank turns it off.\n\nOn a best-ball spot the fill ranks players by what the spot would bank for them — with a 10-point rule a player on bye is worth 10, so in golf he beats a 12 and loses to an 8.'} /></View>
+                {(
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                       <TextInput value={sp.zero}
