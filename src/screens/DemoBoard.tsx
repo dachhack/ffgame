@@ -8,8 +8,7 @@ import { METRICS } from '@drip/core/data/metrics';
 import { loadRealWeek } from '@drip/core/data/realPbp';
 import { gamesInWindow, windowsForWeek } from '@drip/core/data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '@drip/core/data/demoNarration';
-import { readRecruitGame, recruitFraming, SITE_PITCH } from '@drip/core/data/leagueTagline';
-import { MascotBuilder } from './MascotBuilder';
+import { readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, type FormatNote } from '@drip/core/data/leagueTagline';
 import { ClassicDemo } from './ClassicDemo';
 import { classifyEvent } from '@drip/core/engine/moments';
 import { avatarUrl } from '@drip/core/data/media';
@@ -568,12 +567,12 @@ export function DemoBoard() {
   // the fold on a phone, so each row shows its names and opens one line on a
   // tap. The WHICH GAME row doubles as the demo switch — tapping CLASSIC there
   // is the same as tapping it on the band below.
-  // ── THE MASCOT BUILDER (v0.420.0) ─────────────────────────────────────
-  // Founder: "Build a mascot!" The v0.419.1 card grid became a character that
-  // wears the four answers, then slides left for the setup dialogues and a
-  // share link — all in MascotBuilder. What stays here is the door out for an
-  // account the server won't let create: the invite request, with the league
-  // it designed already written into the note.
+  // THE MASCOT BUILDER IS OFF THE LANDING (v0.432.1). Founder: "The mascot
+  // work in progress is live on the site. It's not ready for primetime yet."
+  // MascotBuilder (v0.420.0/v0.421.0) stays in the tree, unmounted, with its
+  // art brief in public/mascot/README.md, until the stickers exist; the
+  // landing shows the v0.419.1 menu of switches again, exactly as it did.
+  const [openNote, setOpenNote] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | undefined>(undefined);
   const hero = (
     <section style={{ width: '100%', maxWidth: 760, minWidth: 0, boxSizing: 'border-box', margin: '0 auto', padding: '10px 14px 4px' }}>
@@ -597,7 +596,49 @@ export function DemoBoard() {
         </div>
       </div>
 
-      <MascotBuilder narrow={narrow} onPlay={openGame} onRequest={(note) => { setRequestNote(note); setRequesting(true); }} />
+      <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 12px 4px' }}>
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 8 }}>
+          EVERY SWITCH A COMMISSIONER HAS · TAP ONE
+        </div>
+        {LEAGUE_MENU.map(({ heading, notes }) => {
+          const isGame = heading === 'WHICH GAME';
+          const open = notes.find((n: FormatNote) => openNote === `${heading}|${n.name}`);
+          return (
+            <div key={heading} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 8px', flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', width: 128, flex: 'none' }}>{heading}</span>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                  {notes.map((n: FormatNote) => {
+                    const key = `${heading}|${n.name}`;
+                    const lit = isGame ? game === n.name.toLowerCase() : openNote === key;
+                    return (
+                      <button key={n.name} className="mono" aria-pressed={lit}
+                        onClick={() => {
+                          setOpenNote((o) => (o === key && !isGame ? null : key));
+                          if (isGame) openGame(n.name.toLowerCase() as 'drip' | 'classic');
+                        }}
+                        style={{
+                          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
+                          color: lit ? 'var(--on-accent)' : 'var(--text)',
+                          background: lit ? 'var(--you)' : 'var(--bg)',
+                          border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`,
+                        }}>{n.name.toUpperCase()}</button>
+                    );
+                  })}
+                  {isGame && !game && (
+                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', alignSelf: 'center' }}>▶ TAP ONE TO PLAY A WEEK — FREE, NO SIGN-IN</span>
+                  )}
+                </div>
+              </div>
+              {open && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, margin: '6px 0 2px', paddingLeft: narrow ? 0 : 136 }}>
+                  <b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {!game && (
         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
