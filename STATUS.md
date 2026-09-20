@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.1 — the lineup alarm does not page a classic seat
+
+Founder, relaying Farmer Casey in the Kickoff League chat: "why do I keep
+getting a message that says I have 2 empty roster spots? But it looks like
+I am full." He was full.
+
+The lineup push (server/src/push.js detectLineup, 0150) is a DRIP alarm:
+55–65 minutes before a slate window locks it counts a manager's sealed
+rows in THAT window against the window's slot count and pages the
+difference. It scanned every matchup of the week, classic leagues
+included — and a classic seat stores one weekly lineup under the 'wk'
+window, never a row per slate window, so the count for 'early' or 'late'
+was always zero and every window lock paged "N empty slots" to a full
+roster. The detector now reads the league's game mode with the matchup
+and skips classic leagues. A classic lineup has no window slots to be
+empty; its open spots are the board's and the widget's business
+(v0.433.2), and the lock-time fill closes them.
+
 ### v0.434.0 — a backup needs a whole empty window, and an empty window reveals an hour before it locks
 
 Founder: "We should have players sub only if every opposing slot in their

@@ -434,12 +434,21 @@ async function detectLineup() {
     const cap = slotsFor(win, week);
     if (!cap) continue;
     const { data: matchups } = await db().from('matchup')
-      .select('id, league_id, week, status, home_roster_id, away_roster_id, league:league_id(name, season)')
+      .select('id, league_id, week, status, home_roster_id, away_roster_id, league:league_id(name, season, settings_json)')
       .eq('week', week).in('status', ['scheduled', 'live']);
     const lockLabel = new Date(kick - LOCK_LEAD_MS)
       .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
     for (const m of matchups ?? []) {
       if (m.league?.season && String(m.league.season) !== String(season)) continue;
+      // DRIP ONLY (v0.434.1). Founder, relaying a manager: "why do I keep
+      // getting a message that says I have 2 empty roster spots? But it looks
+      // like I am full." He was full. His league is CLASSIC: one weekly
+      // lineup stored under the 'wk' window, never a row per slate window —
+      // so this count, which asks for rows in 'early' or 'late', found none
+      // and paged him for every window lock all Sunday. A classic lineup has
+      // no window slots to be empty; its open spots are the board's and the
+      // widget's business (v0.433.2), and the lock-time fill closes them.
+      if ((m.league?.settings_json?.game_mode ?? 'drip') === 'classic') continue;
       const owners = await ownersFor([[m.league_id, m.home_roster_id], [m.league_id, m.away_roster_id]]);
       for (const rid of [m.home_roster_id, m.away_roster_id]) {
         const uid = owners.get(`${m.league_id}:${rid}`);
