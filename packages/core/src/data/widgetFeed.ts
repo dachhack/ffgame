@@ -29,8 +29,14 @@ import {
   myEnrollments, myMatchupFrom, getMatchupState, matchupTeams, defaultOpenWeek, liveSlate, myPicks, myPool, injuryTags,
   type Enrollment, type LiveMatchup, type WindowScore, type PickRow, type PoolPlayer,
 } from './liveApi';
-import { windowsForWeek, windowPhase, windowLockMs, windowDateLabel, windowTimeLabel, weekLabel, setRuntimeSlate, windowForTeam, gamesInWindow, type WindowPhase } from './nflSlate';
+import { windowsForWeek, windowPhase, windowLockMs, windowKickoffMs, windowDateLabel, windowTimeLabel, weekLabel, setRuntimeSlate, windowForTeam, gamesInWindow, type WindowPhase } from './nflSlate';
 import { slotsFor } from '../engine/matchup';
+import { CLASSIC_WIN, slotAllows, slotDisplayNames, slotBadgeLabel, optimalLineup, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
+import { zeroFill, setLeagueGolf, clearLeagueGolf } from '../engine/golf';
+import { setLeagueProjScoring, clearLeagueProjScoring } from '../engine/projScoring';
+import { playRisk } from '../engine/golfFloor';
+import { setSlugSleeperIds } from './slugMeta';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters } from './liveApi';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
 
@@ -46,11 +52,14 @@ export interface WidgetWindow {
   them: number;
 }
 
-/** One thing to fix before a window locks, in the words the card prints. */
+/** One thing to fix before a window locks, in the words the card prints.
+ *  In a classic league (v0.433.2) `win` is the SPOT (its slot id) and
+ *  `winLabel` its name — "RB 2", "FLEX" — and `swap` is a bench player who
+ *  projects SWAP_MIN_GAIN or more over the starter he could replace. */
 export interface WidgetFix {
   win: string;
   winLabel: string;
-  kind: 'empty' | 'metric' | 'injury' | 'bye';
+  kind: 'empty' | 'metric' | 'injury' | 'bye' | 'swap';
   text: string;
 }
 
@@ -85,6 +94,16 @@ export interface WidgetSnapshot {
   assessable: boolean;
   /** What the card leads with, by phase and by whether anything needs fixing. */
   lead: WidgetView;
+  // ── v0.433.2 ──
+  /** CLASSIC: `me.score` and `them.score` are PROJECTED FINALS — each starter's
+   *  points if his game is done, his projection if it hasn't started, the
+   *  larger of the two while he plays (the board's projectEntry blend) — and
+   *  `fixes` names the spots that want attention, drawn on the score card
+   *  itself. Absent or false: the scores are the live totals. */
+  projected?: boolean;
+  /** CLASSIC: the opponent's lineup could not be read (or they have nobody),
+   *  so `them.score` is their live total, not a projection. */
+  themLive?: boolean;
 }
 
 /** A league the widget can show — the seats you hold, minus what a home
@@ -150,7 +169,44 @@ export interface SummarizeInput {
   pool?: Pick<PoolPlayer, 'slug' | 'full' | 'team'>[];
   /** slug → injury designation, from the hourly sync. */
   injuries?: Record<string, string>;
+  /** CLASSIC (v0.433.2): the lineup, the roster, and how to value a player. */
+  classic?: ClassicWidgetInput;
 }
+
+/** A rostered player as the classic summary sees him: the pool row plus what
+ *  the fills need (tenure, Sleeper id for the bake). ACTIVE roster only — the
+ *  caller strips IR/OUT/taxi, who can neither start nor be suggested. */
+export interface ClassicRosterPlayer { slug: string; full: string; pos: string; team: string | null; exp?: number | null; sleeperId?: string | null }
+
+export interface ClassicWidgetInput {
+  /** The league's starting spots, in order (leagueSlotDefs). */
+  slots: ClassicSlotDef[];
+  /** Slot ids that fill themselves at scoring time (leagueBestball). */
+  bestball: string[];
+  /** My stored classic picks (the 'wk' window rows). A spot with no row and
+   *  a spot holding null both read as EMPTY here — the widget reports what
+   *  the roster will score, and neither scores. */
+  picks: PickRow[];
+  roster: ClassicRosterPlayer[];
+  /** The opponent's revealed classic rows and roster, when readable. An
+   *  EMPTY pick list with a roster is a seat nobody manages, which the
+   *  resolver fields from its roster (classicLineup) — so do we. */
+  theirPicks?: PickRow[] | null;
+  theirRoster?: ClassicRosterPlayer[] | null;
+  /** What a player is worth in a spot: the caller's slateAwareProj (bye → 0,
+   *  ruled out → 0, the league's catalog, golf's expected score). */
+  projOf: (p: SpotPlayer, d?: ClassicSlotDef) => number;
+  /** Golf: lowest wins, so "better" is lower-but-not-zero. */
+  golf?: boolean;
+}
+
+/** A bench player must project this many points over the starter before the
+ *  card suggests the swap (founder: "projected to score 2+ more points"). */
+export const SWAP_MIN_GAIN = 2;
+/** How long after kickoff a game reads as DONE to the widget, which has no
+ *  play feed to tell it (the boards use the feed's final teams). Three and
+ *  three-quarter hours covers every game short of a marathon overtime. */
+const GAME_MS = 3.75 * 60 * 60 * 1000;
 
 /** The PURE half: rows in, the picture's words out. `nowMs` is a parameter
  *  so the check can stand at any moment of a week. */
@@ -229,11 +285,161 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     left = { me: meLeft, them: themLeft };
   }
 
-  // ── the state line, and which view leads ──
+  // ── CLASSIC (v0.433.2): the projected finals, and the spots that want attention ──
+  // Founder: "For classic leagues, let's show predicted score rather than
+  // current. There's still a lot of room in the widget. We can show empty
+  // starting spots, starting spots with out/bye players, and starters where
+  // a player that is projected to score 2+ more points is on the bench and
+  // could replace. No need to make this a separate view."
   const final = matchup.status === 'final';
+  let projected = false;
+  let themLive = false;
+  const c = input.classic;
+  if (c && league.gameMode === 'classic') {
+    projected = true;
+    // Golf's order, spelled out here rather than through golfValue: that
+    // helper reads the module flag, which the check never installs and the
+    // task may or may not have set — the input says which game this is.
+    const gv = (v: number) => (c.golf ? (v > 0 ? 1e6 - v : 0) : v);
+    const better = (a: number, b: number) => gv(a) > gv(b);
+    const gainOver = (a: number, b: number) => gv(a) - gv(b);
+    const stateOf = (team: string | null | undefined): 'pre' | 'live' | 'done' => {
+      if (final) return 'done';
+      const w = windowForTeam(week, team);
+      const k = w ? windowKickoffMs(week, w) : null;
+      if (k == null || k > nowMs) return 'pre';          // a bye never kicks: 'pre' at a value of 0
+      return k + GAME_MS <= nowMs ? 'done' : 'live';
+    };
+    const wkRow = byWin.get(CLASSIC_WIN);
+    const spot = (p: ClassicRosterPlayer): SpotPlayer => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeperId ?? null });
+    const bb = new Set(c.bestball);
+    const names = slotDisplayNames(c.slots).map(slotBadgeLabel);
+
+    /** One side's lineup and projected final. */
+    const sideOf = (picks: PickRow[] | null | undefined, roster: ClassicRosterPlayer[], side: 'home' | 'away') => {
+      const bySlug = new Map(roster.map((p) => [p.slug, p]));
+      const liveOf = new Map<string, { slug: string | null; score: number }>();
+      for (const r of wkRow?.slot_scores ?? []) if (r.side === side) liveOf.set(r.slot, { slug: r.slug, score: Number(r.score) || 0 });
+      const lineup = new Map<string, ClassicRosterPlayer | null>();
+      const stored = new Map((picks ?? []).filter((p) => String(p.game_window) === CLASSIC_WIN).map((p) => [p.roster_slot, p.player_slug]));
+      // A seat with NO rows at all is fielded from its roster, as the
+      // resolver does (classicLineup); a seat with rows stands as stored.
+      const unmanaged = !(picks ?? []).length && roster.length > 0;
+      if (unmanaged) {
+        const opt = optimalLineup(c.slots, roster.map(spot), (p) => c.projOf(p));
+        for (const r of opt.spots) lineup.set(r.def.slot, r.player ? bySlug.get(r.player.id) ?? null : null);
+      } else {
+        for (const d of c.slots) {
+          if (bb.has(d.slot)) continue;
+          const slug = stored.get(d.slot) ?? null;
+          lineup.set(d.slot, slug ? bySlug.get(slug) ?? null : null);   // a stored man no longer rostered is an empty spot
+        }
+        // Best-ball spots: what the resolver has already filled (the slot
+        // row's slug) once the week is scoring, else the best of the rest.
+        const bbDefs = c.slots.filter((d) => bb.has(d.slot));
+        if (bbDefs.length) {
+          const taken = new Set([...lineup.values()].filter(Boolean).map((p) => (p as ClassicRosterPlayer).slug));
+          for (const d of bbDefs) { const l = liveOf.get(d.slot); if (l?.slug && bySlug.has(l.slug)) { lineup.set(d.slot, bySlug.get(l.slug)!); taken.add(l.slug); } }
+          const rest = roster.filter((p) => !taken.has(p.slug)).map(spot);
+          const open = bbDefs.filter((d) => !lineup.has(d.slot));
+          if (open.length && rest.length) {
+            const opt = optimalLineup(open, rest, (p) => c.projOf(p));
+            for (const r of opt.spots) lineup.set(r.def.slot, r.player ? bySlug.get(r.player.id) ?? null : null);
+          }
+        }
+      }
+      let total = 0;
+      const left = { waiting: 0, playing: 0 };
+      for (const d of c.slots) {
+        const p = lineup.get(d.slot) ?? null;
+        const live = liveOf.get(d.slot)?.score ?? 0;
+        let v = 0;
+        let settled = true;
+        if (p) {
+          const st = stateOf(p.team);
+          const proj = c.projOf(spot(p), d);
+          v = st === 'done' ? live : st === 'pre' ? proj : Math.max(live, proj);
+          settled = st === 'done';
+          if (st === 'pre' && windowForTeam(week, p.team)) left.waiting += 1;
+          if (st === 'live') left.playing += 1;
+        }
+        // GOLF: an empty spot, or a settled zero, pays the spot's fill.
+        total += c.golf ? zeroFill(v, d.zeroPts ?? null, settled) : v;
+      }
+      return { lineup, total: round1(total), left };
+    };
+
+    const mineSide = sideOf(c.picks, c.roster, mySide);
+    me.score = mineSide.total;
+    const theirs = c.theirRoster?.length ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
+    if (theirs) them.score = theirs.total; else themLive = true;
+    left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0 } };
+
+    // ── the spots that want attention (mine) ──
+    const starting = new Set([...mineSide.lineup.values()].filter(Boolean).map((p) => (p as ClassicRosterPlayer).slug));
+    const slateHasGames = wins.some((w) => gamesInWindow(week, w.id as WindowId).length > 0);
+    // The bench a swap can come from: rostered, not starting, game not yet
+    // kicked off (a man on the field cannot be moved in), worth something.
+    const bench = c.roster.filter((p) => !starting.has(p.slug) && stateOf(p.team) === 'pre');
+    const used = new Set<string>();
+    const bestFor = (d: ClassicSlotDef): { p: ClassicRosterPlayer; v: number } | null => {
+      let best: { p: ClassicRosterPlayer; v: number } | null = null;
+      for (const p of bench) {
+        if (used.has(p.slug) || !slotAllows(d, spot(p))) continue;
+        const v = c.projOf(spot(p), d);
+        if (v <= 0) continue;
+        if (!best || better(v, best.v)) best = { p, v };
+      }
+      return best;
+    };
+    const word = (tag: string) => INJURY_WORD[tag] ?? tag;
+    const one = (n: number) => (Number.isInteger(n) ? `${n}.0` : String(n));
+    const startText = (b: { p: ClassicRosterPlayer; v: number } | null) => (b ? ` · start ${shortName(b.p.full)} ${one(round1(b.v))}` : '');
+    // IN THE FOUNDER'S ORDER, as three passes over the spots: the EMPTY spots
+    // take the best bench men first, then the spots whose starter cannot play
+    // (out, on bye), and only then the upgrades — so the best back on the
+    // bench fills the hole rather than displacing a starter who merely
+    // projects less, and each bench man is promised to one spot.
+    const rows = c.slots.map((d, i) => ({ d, label: names[i], p: mineSide.lineup.get(d.slot) ?? null })).filter((r) => !bb.has(r.d.slot));
+    const found: WidgetFix[] = [];
+    for (const { d, label, p } of rows) {
+      if (p) continue;
+      const b = bestFor(d);
+      if (b) used.add(b.p.slug);
+      found.push({ win: d.slot, winLabel: label, kind: 'empty', text: b ? `empty${startText(b)}` : 'empty' });
+    }
+    const movable = rows.filter((r) => r.p && stateOf(r.p.team) === 'pre');   // on the field or done: locked in
+    const cannot = new Set<string>();
+    for (const { d, label, p } of movable) {
+      const tag = injuries?.[p!.slug];
+      const bye = slateHasGames && !!p!.team && !windowForTeam(week, p!.team);
+      if (tag && (tag === 'O' || tag === 'IR' || tag === 'D')) {
+        const b = bestFor(d); if (b) used.add(b.p.slug); cannot.add(d.slot);
+        found.push({ win: d.slot, winLabel: label, kind: 'injury', text: `${shortName(p!.full)} is ${word(tag)}${startText(b)}` });
+      } else if (bye) {
+        const b = bestFor(d); if (b) used.add(b.p.slug); cannot.add(d.slot);
+        found.push({ win: d.slot, winLabel: label, kind: 'bye', text: `${shortName(p!.full)} is on BYE${startText(b)}` });
+      }
+    }
+    for (const { d, label, p } of movable) {
+      if (cannot.has(d.slot)) continue;
+      const b = bestFor(d);
+      const sv = c.projOf(spot(p!), d);
+      if (b && gainOver(b.v, sv) >= SWAP_MIN_GAIN) {
+        used.add(b.p.slug);
+        found.push({ win: d.slot, winLabel: label, kind: 'swap', text: `${shortName(b.p.full)} ${one(round1(b.v))} over ${shortName(p!.full)} ${one(round1(sv))}` });
+      }
+    }
+    // Printed in spot order, whatever pass found them.
+    const order = new Map(c.slots.map((d, i) => [d.slot, i]));
+    found.sort((a, b) => (order.get(a.win) ?? 0) - (order.get(b.win) ?? 0));
+    fixes.push(...found);
+  }
+
+  // ── the state line, and which view leads ──
   const openWindow = windows.some((w) => w.phase === 'setup');
   const lead: WidgetView = assessable && openWindow && (fixes.length > 0 || !windows.some((w) => w.phase !== 'setup')) ? 'lineup' : 'score';
-  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead };
+  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, ...(projected ? { projected, themLive } : {}) };
   if (final) {
     const r = me.score > them.score ? 'W' : me.score < them.score ? 'L' : 'T';
     return { ...common, phase: 'final', line: `FINAL · ${r} ${me.score}–${them.score}`, lead: 'score' };
@@ -307,14 +513,26 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   const week = matchup?.week ?? openWeek;
   const pickUser = league.pickUserId ?? userId ?? null;
   const drip = league.gameMode === 'drip' && !!matchup && !!pickUser;
+  // CLASSIC (v0.433.2): the card projects the finals and reads the lineup, so
+  // it needs what the classic board needs — the league's spots and catalog,
+  // my rows and the opponent's revealed ones (0178: league-readable), both
+  // rosters, the shelf (IR/OUT/taxi can't start), tenure for a filtered spot,
+  // and the pool's Sleeper ids so the bake answers for a "Kenny" (v0.432.4).
+  const classic = league.gameMode === 'classic' && !!matchup;
+  const oppId = matchup ? (matchup.home_roster_id === league.rosterId ? matchup.away_roster_id : matchup.home_roster_id) : null;
   const teamIds = matchup ? [matchup.home_roster_id, matchup.away_roster_id] : [league.rosterId];
-  const [state, teams, slate, picks, pool, injuries] = await Promise.all([
+  const [state, teams, slate, picks, pool, injuries, gm, revealed, spots, ids, oppPool] = await Promise.all([
     matchup ? getMatchupState(matchup.id) : Promise.resolve([] as WindowScore[]),
     cached(`teams:${league.id}:${teamIds.join(',')}`, 60 * MIN, fresh, () => matchupTeams(league.id, teamIds)),
     cached(`slate:${week}`, 60 * MIN, fresh, () => liveSlate(week).catch(() => [])),
-    drip ? myPicks(matchup!.id, pickUser as string).catch(() => undefined) : Promise.resolve(undefined),
-    drip ? cached(`pool:${league.id}:${week}:${league.rosterId}`, 30 * MIN, fresh, () => myPool(league.id, week, league.rosterId).catch(() => [])) : Promise.resolve([]),
-    drip ? cached('injuries', 30 * MIN, fresh, () => injuryTags().catch(() => ({}))) : Promise.resolve({}),
+    (drip || classic) && pickUser ? myPicks(matchup!.id, pickUser).catch(() => undefined) : Promise.resolve(undefined),
+    drip || classic ? cached(`pool:${league.id}:${week}:${league.rosterId}`, 30 * MIN, fresh, () => myPool(league.id, week, league.rosterId).catch(() => [])) : Promise.resolve([]),
+    drip || classic ? cached('injuries', 30 * MIN, fresh, () => injuryTags().catch(() => ({}))) : Promise.resolve({}),
+    classic ? cached(`mode:${league.id}`, 60 * MIN, fresh, () => leagueGameMode(league.id).catch(() => null)) : Promise.resolve(null),
+    classic ? getRevealedPicks(matchup!.id).catch(() => []) : Promise.resolve([]),
+    classic ? cached(`spots:${league.id}`, 30 * MIN, fresh, () => nativeRosters(league.id).catch(() => [])) : Promise.resolve([]),
+    classic ? cached(`ids:${league.id}`, 60 * MIN, fresh, () => leaguePoolIds(league.id).then((r) => r?.ids ?? {}).catch(() => ({}))) : Promise.resolve({}),
+    classic && oppId != null ? cached(`pool:${league.id}:${week}:${oppId}`, 30 * MIN, fresh, () => myPool(league.id, week, oppId).catch(() => [])) : Promise.resolve([]),
   ]);
   // The baked slate has no kickoff clocks; the headless task starts from a
   // cold module, so the week's real kickoffs are installed here exactly as
@@ -326,7 +544,37 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
       kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
     })));
   }
-  const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks, pool, injuries });
-  rememberSnapshot({ leagues, snapshot });
-  return { leagues, snapshot };
+  let classicIn: ClassicWidgetInput | undefined;
+  if (classic && gm?.ok) {
+    const slots = leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null });
+    const tenure = (gm.slots ?? []).some((x) => x.min_exp != null || x.max_exp != null);
+    const exp = tenure ? await cached(`exp:${league.id}`, 60 * MIN, fresh, () => leaguePoolExp(league.id).catch(() => ({}))) : {};
+    const stashed = new Set((spots ?? []).filter((r) => r.spot && r.spot !== 'active').map((r) => `${r.roster_id}:${r.slug}`));
+    const rosterOf = (rows: PoolPlayer[], rosterId: number): ClassicRosterPlayer[] => rows
+      .filter((p) => !stashed.has(`${rosterId}:${p.slug}`))
+      .map((p) => ({ slug: p.slug, full: p.full, pos: p.pos, team: p.team || null, exp: (exp as Record<string, number>)[p.slug] ?? null, sleeperId: (ids as Record<string, string>)[p.slug] ?? null }));
+    const oppUser = oppId != null ? teams[oppId]?.user_id ?? null : null;
+    const theirPicks = oppUser ? (revealed ?? []).filter((r) => r.app_user_id === oppUser) : [];
+    // The league's own rules, installed for the projection and cleared below
+    // (the headless task shares a module with the next league's paint).
+    setLeagueProjScoring(gm.scoring ?? {});
+    setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm));
+    setSlugSleeperIds(ids as Record<string, string>);
+    const tags = injuries as Record<string, string>;
+    const projOf = slateAwareProj(week, slate, (slug) => {
+      const st = tags[slug];
+      return st === 'O' || st === 'IR' ? true : playRisk(st);
+    });
+    classicIn = {
+      slots, bestball: leagueBestball(gm), picks: picks ?? [], roster: rosterOf(pool, league.rosterId),
+      theirPicks, theirRoster: oppId != null ? rosterOf(oppPool, oppId) : null, projOf, golf: gm.golf === true,
+    };
+  }
+  try {
+    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, classic: classicIn });
+    rememberSnapshot({ leagues, snapshot });
+    return { leagues, snapshot };
+  } finally {
+    if (classicIn) { clearLeagueProjScoring(); clearLeagueGolf(); }
+  }
 }

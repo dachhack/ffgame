@@ -18,6 +18,124 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.4 — the notification icon is a drop cut out of a football
+
+Founder, from a sheet of eleven candidates (drops, footballs, helmets, and
+mashups of the three, each rendered at 24/36/48/66/96px on the dark bar
+and the light one): "Let's try 11 but with the solid drop of 5."
+
+So: the football, plain, with the drop KNOCKED OUT of it. Two shapes, both
+of which survive as an alpha mask — the ball one solid lens, the drop one
+solid hole — and together a mark nobody else in the status bar wears. No
+laces and no end seams: at 24px those thinned to specks that read as
+damage on the ball's edge, and the drop is the detail worth keeping. The
+drop is 56% of the full droplet, chosen from three sizes so its bulb
+clears the ball's edge on every side at every density (a hole that opens
+onto the background is a bite, not a drop). Same generator, same two
+outputs — the Android small icon and the web push badge — now asserting
+the ball opaque, the drop clear at apex and bulb, and white ball between
+the drop and the background top, bottom and both sides.
+
+### v0.433.3 — the notification icon is a drop with football laces
+
+Founder: "The notification icon is just a drop of water. I think we can do
+better."
+
+A bare droplet in a status bar is a hydration reminder or a weather app;
+nothing about it says football and nothing says it is ours. The drop stays
+— it is the brand — and wears a football's laces, KNOCKED OUT of the mask:
+one seam down the centre and three cross-laces. Laces are the one piece of
+football that survives as an alpha mask (Android keeps only the alpha and
+tints the shape itself), because they are a few thick strokes rather than a
+shape that must keep its proportions: every stroke and every gap is at
+least four units in the 96-unit box, so at 24dp on a modern phone (66px
+and up) the seam and each lace are two to four pixels of clear space, and
+at the 24px floor the drop reads as striped rather than smudged. Three
+laces, not four: at 24px four merged into a bar. The clear space never
+reaches the drop's edge — a lace that opens onto the background is a notch.
+
+Same generator (`scripts/gen-notification-icon.py`, pure Python, exact
+coverage), same two outputs — the app's Android small icon and the web
+push badge — so both surfaces still wear one mark. The generator asserts
+the corners clear, the body opaque, the seam and top lace clear, the gap
+between laces opaque, and the laces short of the edge. Previewed at 24, 36,
+48, 66 and 96px on the dark bar and the light one before wiring.
+
+### v0.433.2 — the classic widget projects the final and names the spots that want attention
+
+Founder: "For classic leagues, let's show predicted score rather than
+current. There's still a lot of room in the widget. We can show empty
+starting spots, starting spots with out/bye players, and starters where a
+player that is projected to score 2+ more points is on the bench and could
+replace. No need to make this a separate view."
+
+THE NUMBER. A classic seat's score on the card is now the PROJECTED FINAL,
+the board's own blend (projectEntry): a starter's points if his game is
+done, his projection if it has not started, the larger of the two while he
+plays. The widget has no play feed to say a game is final, so a game reads
+as done three and three-quarter hours after kickoff, and the matchup's
+final closes everything. The "vs" between the scores reads PROJ. The
+opponent's lineup is read the way the browse ring reads it (0178's
+league-readable classic rows); a seat with no rows is fielded from its
+roster exactly as the resolver fields it (classicLineup), and an opponent
+whose roster cannot be read keeps their live total, marked PROJ · LIVE.
+Golf sums with the spot's zero-fill on an empty or settled-zero spot.
+
+THE SPOTS. Drawn on the score card itself, in the room the window strip
+used (a classic week scores as one window, so the strip had nothing to
+say). Three passes over the starting spots, in the founder's order, each
+bench man promised to one spot: the EMPTY spots take the best bench man
+first ("RB 2 · empty · start B. Robinson 22.2"); then the spots whose
+starter cannot play — OUT/IR/DOUBTFUL by the injury sheet, or on BYE by the
+slate — with the best bench man to start; then the UPGRADES, a bench man
+who projects SWAP_MIN_GAIN (2) or more over the starter ("RB 1 · K.
+Gainwell 11.9 over E. Heidenreich 0.6"). A starter whose game has kicked
+off is locked in and never flagged; a bench man whose game has kicked off
+is never suggested. Golf reads "better" as lower-but-not-zero. Two lines
+on a 4×2, four on a 4×3, eight on a 4×4, "+N more" past that; a set lineup
+says so on the taller sizes. Not a separate view: the classic card has no
+⇄ chip, and the lineup view stays a drip feature.
+
+THE READS. The classic paint adds what the classic board reads: the
+league's spots and catalog (league_game_mode, cached an hour), my rows and
+the opponent's revealed ones (fresh), both rosters (30 min), the shelf —
+IR/OUT/taxi can neither start nor be suggested (30 min), tenure when a spot
+filters on it (an hour), and the pool's Sleeper ids (an hour) so the bake
+answers by id (v0.432.4). The catalog and golf flag are installed for the
+projection and cleared after; the headless task shares a module with the
+next league's paint.
+
+PROVED. check:widget stands a classic seat up on the week-3 slate and pins
+the projected final before kickoff, on Thursday night (a live man's max),
+on Sunday (a finished game banks, a live starter is never a swap, a bench
+man on the field is never suggested), at the final, with an unreadable
+opponent, in golf (the lowest bench man fills the hole; lower is the
+swap), and that a drip league is untouched.
+
+### v0.433.1 — the widget's error card is the retry, and a failed read keeps the picture
+
+Founder, with a home screen that said "Couldn't reach the league — Network
+error" more often than not: "The widget shows this a lot. If it's not
+connected, can we just have a press to reconnect."
+
+WHY IT SHOWED SO OFTEN. The task's own wakes (the timer, the chips) have
+kept the remembered picture over a failed read since v0.422.1. The other
+two repaint paths did not: the worker's silent push and the app coming to
+the foreground both go through `refreshMatchupWidgets`, which drew
+WHATEVER THE READ RETURNED. A push that landed while the radio was asleep
+(Doze), or a foreground on a dead signal, replaced a good score with the
+apology, and there it sat until the next wake — up to Android's 30-minute
+timer. That path now follows the same rule as the rest: a failed read
+keeps the remembered picture.
+
+THE PRESS. Two of them. On the error card itself — drawn only when there is
+no picture to keep — a tap ANYWHERE is a REFRESH click, the card paints
+"Reconnecting…" the instant it is tapped so the press is seen before the
+read returns, and OPEN → moves to a chip in the corner for whoever wanted
+the app instead. On a kept picture the state carries `offline`: the ⟳ chip
+reads "⟳ offline · retry" in amber, so the manager knows the score is the
+last one read and has the retry under their thumb.
+
 ### v0.433.0 — the wire keeps the league's clock, and humans get the first hour
 
 Founder: "We shouldn't be working the wire at times not in line with what

@@ -7,7 +7,8 @@
 // with no matchup row at all. The league-choice helpers that make the ▸ tap
 // cycle are pinned too, because a widget that outlives its league must fall
 // forward rather than draw a hole.
-import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues } from '../packages/core/src/data/widgetFeed';
+import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN } from '../packages/core/src/data/widgetFeed';
+import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 
 let fails = 0;
@@ -192,6 +193,100 @@ const state = [
   ok('the remembered picture comes back by league', recallSnapshot('L2')?.snapshot.leagueName === 'Other' && recallSnapshot('L2')?.leagues.length === 2);
   ok('a league never drawn has no picture', recallSnapshot('L9') === null);
   ok('the leagues list is remembered only by the feed (nothing wrote it here)', recallLeagues() === null);
+}
+
+// ── CLASSIC (v0.433.2): projected finals and the spots that want attention ──
+// Founder: "For classic leagues, let's show predicted score rather than
+// current… empty starting spots, starting spots with out/bye players, and
+// starters where a player that is projected to score 2+ more points is on the
+// bench and could replace."
+{
+  const cl = { id: 'C', name: 'Kickoff League', rosterId: 4, gameMode: 'classic' };
+  const slots = classicSlots({ QB: 1, RB: 2, WR: 1, FLEX: 1 });   // QB, RB1, RB2, WR, FLEX
+  const slotOf = (type) => slots.find((d) => d.slot === type).slot;
+  // Teams on the week-3 runtime slate above: BUF/MIA (TNF), ATL/CAR (early),
+  // DEN/LAC (late), KC/NYG (SNF), DET/BAL (MNF). PIT is not on it: a bye.
+  const P = (slug, full, pos, team) => ({ slug, full, pos, team });
+  const roster = [
+    P('josh-allen', 'Josh Allen', 'QB', 'BUF'),
+    P('eli-heidenreich', 'Eli Heidenreich', 'RB', 'ATL'),
+    P('kenny-gainwell', 'Kenny Gainwell', 'RB', 'DEN'),
+    P('bijan-robinson', 'Bijan Robinson', 'RB', 'ATL'),
+    P('aj-brown', 'AJ Brown', 'WR', 'KC'),
+    P('george-pickens', 'George Pickens', 'WR', 'PIT'),
+    P('jaxon-smith-njigba', 'Jaxon Smith-Njigba', 'WR', 'DET'),
+    P('travis-kelce', 'Travis Kelce', 'TE', 'KC'),
+  ];
+  const proj = { 'josh-allen': 21.6, 'eli-heidenreich': 0.6, 'kenny-gainwell': 11.9, 'bijan-robinson': 22.2, 'aj-brown': 15.3, 'george-pickens': 12.1, 'jaxon-smith-njigba': 14.4, 'travis-kelce': 12.5 };
+  const injuries = { 'aj-brown': 'IR' };
+  // The caller's slateAwareProj zeroes a bye and a ruled-out man; the check's
+  // stand-in does the same from the fixture.
+  const projOf = (p) => (injuries[p.id] === 'IR' || p.team === 'PIT' ? 0 : proj[p.id] ?? 0);
+  const pick = (slot, slug) => ({ game_window: 'wk', roster_slot: slot, player_slug: slug, metric_id: null, locked: false });
+  const myPicks = [pick(slotOf('QB'), 'josh-allen'), pick(slotOf('RB1'), 'eli-heidenreich'), pick(slotOf('WR'), 'aj-brown'), pick(slotOf('FLEX'), 'george-pickens')];   // RB2 has no row
+  const theirRoster = [P('lamar-jackson', 'Lamar Jackson', 'QB', 'BAL'), P('derrick-henry', 'Derrick Henry', 'RB', 'BAL'), P('rico-dowdle', 'Rico Dowdle', 'RB', 'CAR'), P('drake-london', 'Drake London', 'WR', 'ATL'), P('bucky-irving', 'Bucky Irving', 'RB', 'MIA')];
+  const theirProj = { 'lamar-jackson': 20, 'derrick-henry': 18, 'rico-dowdle': 10, 'drake-london': 13, 'bucky-irving': 12 };
+  const projBoth = (p) => (theirProj[p.id] != null ? theirProj[p.id] : projOf(p));
+  const cteams = { 4: { team_name: 'Steelers' }, 7: { team_name: 'Ravens' } };
+  const cmatch = (status = 'open') => ({ ...matchup(status), league_id: 'C' });
+  const classic = (over = {}) => ({ slots, bestball: [], picks: myPicks, roster, theirPicks: [], theirRoster, projOf: projBoth, ...over });
+
+  // Before anything kicks off.
+  const pre = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000, classic: classic() });
+  ok('classic: the scores are projected', pre.projected === true && pre.themLive === false, pre);
+  ok('classic: my projected final sums the starters — QB 21.6 + RB1 0.6 + RB2 empty 0 + WR on IR 0 + FLEX on bye 0', pre.me.score === 22.2, pre.me.score);
+  ok('classic: an opponent with no rows is fielded from their roster (QB 20 + RB 18 + RB 12 + WR 13 + FLEX 10)', pre.them.score === 73, pre.them.score);
+  ok('classic: not assessable, no flip — the fixes live on the score card', pre.assessable === false && pre.lead === 'score');
+  const byKind = Object.fromEntries(pre.fixes.map((f) => [f.kind, f]));
+  ok('classic: the empty RB 2 is a fix, with the best bench back to start', byKind.empty?.winLabel === 'RB 2' && /empty · start B\. Robinson 22\.2/.test(byKind.empty?.text), byKind.empty);
+  ok('classic: the IR receiver is a fix, with the bench receiver to start', byKind.injury?.winLabel === 'WR' && /A\. Brown is IR · start J\. Smith-Njigba 14\.4/.test(byKind.injury?.text), byKind.injury);
+  ok('classic: the bye flex is a fix; the next best bench man (Kelce, the WR is spoken for) is suggested', byKind.bye?.winLabel === 'FLEX' && /G\. Pickens is on BYE · start T\. Kelce 12\.5/.test(byKind.bye?.text), byKind.bye);
+  ok('classic: Heidenreich at RB 1 gets the 2+ swap, Gainwell (Robinson already promised to RB 2)', byKind.swap?.winLabel === 'RB 1' && /K\. Gainwell 11\.9 over E\. Heidenreich 0\.6/.test(byKind.swap?.text), byKind.swap);
+  ok('classic: a bench man is suggested once', new Set(pre.fixes.map((f) => f.text.match(/start (\S+ \S+)|^(\S+ \S+) \d/)?.[0])).size === pre.fixes.length, pre.fixes.map((f) => f.text));
+  ok('classic: the yet-to-play line counts starters with a game (QB, RB1, WR — not the bye)', pre.left?.me.waiting === 3 && pre.left?.me.playing === 0, pre.left);
+  ok('SWAP_MIN_GAIN is two points', SWAP_MIN_GAIN === 2);
+
+  // A swap that does not clear the margin is not suggested.
+  const close = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+    classic: classic({ picks: [pick(slotOf('QB'), 'josh-allen'), pick(slotOf('RB1'), 'bijan-robinson'), pick(slotOf('RB2'), 'kenny-gainwell'), pick(slotOf('WR'), 'jaxon-smith-njigba'), pick(slotOf('FLEX'), 'travis-kelce')], projOf: (p) => (p.id === 'george-pickens' ? 13.9 : projBoth(p)) }) });
+  ok('classic: a bench man 1.4 better than the flex is not a swap; a set lineup has no fixes', close.fixes.length === 0, close.fixes);
+  ok('classic: …and projects the five starters', close.me.score === 82.6, close.me.score);
+
+  // Thursday night: Allen (BUF) is on the field with 9.1 on the board, projection 21.6 → max; Robinson still to come.
+  const liveState = [{ game_window: 'wk', home_score: 9.1, away_score: 0, slot_scores: [{ side: 'home', slot: slotOf('QB'), slug: 'josh-allen', metric: null, score: 9.1 }] }];
+  const live = summarize({ league: cl, week: WEEK, matchup: cmatch('live'), state: liveState, teams: cteams, injuries, nowMs: kick(0) + 30 * 60_000, classic: classic() });
+  ok('classic live: a man on the field is worth the larger of his points and his projection', live.me.score === 22.2 && live.phase === 'live', live.me.score);
+  ok('classic live: the QB is playing, the others still to come', live.left?.me.playing === 1 && live.left?.me.waiting === 2, live.left);
+  // Sunday evening: TNF long done (9.1 banks), the early game (Heidenreich, ATL) is on and he has 4.0.
+  const sunState = [{ game_window: 'wk', home_score: 13.1, away_score: 0, slot_scores: [
+    { side: 'home', slot: slotOf('QB'), slug: 'josh-allen', metric: null, score: 9.1 },
+    { side: 'home', slot: slotOf('RB1'), slug: 'eli-heidenreich', metric: null, score: 4.0 }] }];
+  const sun = summarize({ league: cl, week: WEEK, matchup: cmatch('live'), state: sunState, teams: cteams, injuries, nowMs: kick(1) + 30 * 60_000, classic: classic() });
+  ok('classic Sunday: a finished game banks its points (9.1, not 21.6) and a live man his max (4.0 over 0.6)', sun.me.score === 13.1, sun.me.score);
+  ok('classic Sunday: a starter on the field is never a swap (Heidenreich is locked in)', !sun.fixes.some((f) => f.kind === 'swap'), sun.fixes);
+  ok('classic Sunday: the empty RB 2 still suggests a man whose game has not kicked (Gainwell, DEN late) — not Robinson, who is playing', /start K\. Gainwell/.test(sun.fixes.find((f) => f.kind === 'empty')?.text ?? ''), sun.fixes);
+
+  // Final: the points are the points.
+  const fin = summarize({ league: cl, week: WEEK, matchup: cmatch('final'), state: sunState, teams: cteams, injuries, nowMs: kick(4) + 5 * 3_600_000, classic: classic() });
+  ok('classic final: every starter is done, the total is the live total, and the line says FINAL', fin.me.score === 13.1 && fin.phase === 'final' && /^FINAL/.test(fin.line), fin);
+
+  // No opponent roster readable: their score stays live, and the card says so.
+  const noOpp = summarize({ league: cl, week: WEEK, matchup: cmatch('live'), state: liveState, teams: cteams, injuries, nowMs: kick(0) + 30 * 60_000, classic: classic({ theirRoster: null }) });
+  ok('classic: an unreadable opponent keeps the live total and is flagged', noOpp.themLive === true && noOpp.them.score === 0, noOpp);
+
+  // Golf: better is lower-but-not-zero, an empty spot pays the fill.
+  const gslots = slots.map((d) => ({ ...d, zeroPts: 10 }));
+  const golf = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+    classic: classic({ slots: gslots, golf: true, picks: [pick(slotOf('QB'), 'josh-allen'), pick(slotOf('RB1'), 'bijan-robinson'), pick(slotOf('RB2'), 'kenny-gainwell'), pick(slotOf('WR'), 'jaxon-smith-njigba')] }) });
+  ok('golf: the empty flex pays the 10-point fill', golf.me.score === 21.6 + 22.2 + 11.9 + 14.4 + 10, golf.me.score);
+  ok('golf: the empty flex takes the LOWEST bench man above zero (Heidenreich 0.6, not Kelce 12.5) — and once promised he is nobody\'s swap', golf.fixes.length === 1 && /empty · start E\. Heidenreich 0\.6/.test(golf.fixes[0]?.text ?? ''), golf.fixes);
+  const golf2 = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+    classic: classic({ slots: gslots, golf: true, picks: [pick(slotOf('QB'), 'josh-allen'), pick(slotOf('RB1'), 'bijan-robinson'), pick(slotOf('RB2'), 'kenny-gainwell'), pick(slotOf('WR'), 'jaxon-smith-njigba'), pick(slotOf('FLEX'), 'travis-kelce')] }) });
+  ok('golf: with the flex filled, Heidenreich 0.6 is the swap for Robinson 22.2 — lower is better', /E\. Heidenreich 0\.6 over B\. Robinson 22\.2/.test(golf2.fixes.find((f) => f.kind === 'swap' && f.winLabel === 'RB 1')?.text ?? ''), golf2.fixes);
+
+  // A drip league is untouched.
+  const drip = summarize({ league, week: WEEK, matchup: matchup(), state, teams, nowMs: kick(0) + 30 * 60_000, classic: classic() });
+  ok('a drip league ignores a classic input: live totals, not projected', drip.projected === undefined && drip.me.score === 42.6, drip);
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }
