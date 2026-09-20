@@ -28,6 +28,7 @@ import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
 import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/leagueScoring.ts';
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
+import { leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
@@ -545,7 +546,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // GOLF (v0.303.1) rides the same synchronous install, and is set
     // UNCONDITIONALLY: it is a module global, so skipping the false case would
     // leave the previous matchup's golf league in force over this one.
-    setLeagueGolf(gameMode.golf === true);
+    setLeagueGolf(gameMode.golf === true, leagueGolfZeroPtsOf(gameMode));
     // AND THE PROJECTION CATALOG (v0.310.0). An UNMANAGED seat has no stored
     // lineup, so `classicLineup` computes one through `slateAwareProj` — which
     // now ranks by the league's own scoring. Installed with exactly the catalog

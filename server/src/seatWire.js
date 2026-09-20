@@ -47,7 +47,8 @@
 //   • THE THIN POSITION fills first when the lineup itself wants nothing.
 import { db } from './supabase.js';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
-import { leagueSlotDefs, leagueBestball, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
+import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
+import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { seatWirePlan, shortlistWire } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
@@ -142,7 +143,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       // the league's catalog decides what a point is. Skipping the default case
       // leaves the PREVIOUS league's rule in force over this one, which is how
       // a single golf league quietly mis-ranks the whole sweep.
-      setLeagueGolf(mode?.golf === true);
+      setLeagueGolf(mode?.golf === true, leagueGolfZeroPtsOf(mode));
       setLeagueProjScoring(leagueCatalogOf(mode));
 
       const slots = leagueSlotDefs(mode);
@@ -327,7 +328,8 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // slate and the outs, and reads the league catalog at CALL time — which
         // is now, after the installs above.
         const outs = await ruledOutSlugs();
-        const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
+        // Play risk rides along (v0.429.0): priced in golf, ignored elsewhere.
+        const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))));
         // Rest-of-season value: the season projection under the league's
         // catalog, untouched by this week's bye or a one-game Out, zero for a
         // season-ending IR. This is what a drop is judged by (v0.426.0).

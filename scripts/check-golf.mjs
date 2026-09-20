@@ -13,7 +13,9 @@
 import { readFileSync } from 'node:fs';
 import { classicSlotsFromSpec, resolveClassicMatchup, optimalLineup } from '../packages/core/src/engine/classic';
 import { buildMatchupBoard } from '../packages/core/src/engine/matchupBoard';
-import { setLeagueGolf, clearLeagueGolf, leagueIsGolf, betterScore, golfValue, zeroFill } from '../packages/core/src/engine/golf';
+import { setLeagueGolf, clearLeagueGolf, leagueIsGolf, betterScore, golfValue, zeroFill, leagueGolfZeroPts } from '../packages/core/src/engine/golf';
+import { zeroProbability, golfExpectedScore, playRisk, touchesPerGame, ZERO_FLOOR } from '../packages/core/src/engine/golfFloor';
+import { slateAwareProj, leagueGolfZeroPtsOf } from '../packages/core/src/engine/classic';
 import { clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
 import { installRealWeek } from '../packages/core/src/data/realPbp';
 
@@ -177,6 +179,52 @@ const side = (picks, roster) => ({ picks, roster, hasLineup: true, bestball: [] 
   const off = modeOfSettings({ game_mode: 'classic' });
   ok('the worker\u2019s league mapper carries the golf flag', on.golf === true, on);
   ok('\u2026and defaults it to false rather than undefined', off.golf === false, off);
+}
+
+// ── THE FLOOR ABOVE ZERO (v0.429.0) ────────────────────────────────────────
+// Founder: "Players need to get close to zero without actually getting zero."
+// The fills used to seat the LOWEST projection above zero — the 1-to-3-point
+// bodies who most often post nothing and take the zero-fill. Now they seat by
+// the EXPECTED golf score: projection + P(blank) × zero-fill, with P(blank) =
+// 0.01 + 0.99·e^(−touches/week), the curve fitted on 2025 game logs.
+{
+  // The curve, as fitted: no touches → the floor's complement; the Poisson
+  // decay in touches; kickers and defences at their constants.
+  const pz = (lam) => ZERO_FLOOR + (1 - ZERO_FLOOR) * Math.exp(-lam);
+  ok('a player the bake has no line for is priced off his projection', near(zeroProbability({ id: 'nobody-at-all', pos: 'WR' }, 2.2), pz(1)), zeroProbability({ id: 'nobody-at-all', pos: 'WR' }, 2.2));
+  ok('\u2026and with no projection either he is a certain blank', zeroProbability({ id: 'nobody-at-all', pos: 'WR' }, 0) === 1);
+  ok('a kicker blanks at his constant, not his line', zeroProbability({ id: 'den-k', pos: 'K' }, 8) === 0.03);
+  ok('a defence almost never posts exactly zero', zeroProbability({ id: 'den-dst', pos: 'DST' }, 6) === 0.02);
+  // Real bodies from the bake: a quarter-touch-a-week back vs a 3.6-touch back.
+  const saylors = touchesPerGame('jacob-saylors'), kaleb = touchesPerGame('kaleb-johnson');
+  ok('the bake\u2019s stat line yields a weekly touch rate', saylors != null && kaleb != null && saylors < 0.5 && kaleb > 3, { saylors, kaleb });
+  ok('a quarter-touch-a-week back blanks three weeks in four', near(zeroProbability({ id: 'jacob-saylors', pos: 'RB' }, 0.1), pz(saylors)) && zeroProbability({ id: 'jacob-saylors', pos: 'RB' }, 0.1) > 0.7);
+  ok('a 3.6-touch back blanks one week in twenty-five', zeroProbability({ id: 'kaleb-johnson', pos: 'RB' }, 4.2) < 0.05);
+  // The expected score: projection + P(blank) × zero-fill.
+  const eSay = golfExpectedScore({ id: 'jacob-saylors', pos: 'RB' }, 0.1, 10), eKal = golfExpectedScore({ id: 'kaleb-johnson', pos: 'RB' }, 4.2, 10);
+  ok('against a 10 zero-fill the 0.1-point back EXPECTS more than the 4.2-point back', eSay > 7 && eKal < 5 && eSay > eKal, { eSay, eKal });
+  ok('with no zero-fill on the spot the projection stands', golfExpectedScore({ id: 'jacob-saylors', pos: 'RB' }, 0.1, null) === 0.1);
+  // A designation is a play risk, priced not benched.
+  ok('Q plays four in five, D one in four, O/IR never', playRisk('Q') === 0.2 && playRisk('D') === 0.75 && playRisk('O') === 1 && playRisk('IR') === 1 && playRisk(null) === 0);
+  const eQ = golfExpectedScore({ id: 'kaleb-johnson', pos: 'RB' }, 4.2, 10, 0.2);
+  ok('a questionable tag raises the expected score by the risk of the blank', eQ > eKal && near(eQ, 4.2 * 0.8 + (0.2 + 0.8 * zeroProbability({ id: 'kaleb-johnson', pos: 'RB' }, 4.2)) * 10), { eQ, eKal });
+  // Through slateAwareProj: golf on, zero-fill installed with it.
+  ok('leagueGolfZeroPtsOf reads the largest zero_pts on any spot', leagueGolfZeroPtsOf({ slots: [{ pos: ['RB'], zero_pts: 10 }, { pos: ['WR'], zero_pts: 8 }, { pos: ['TE'] }] }) === 10 && leagueGolfZeroPtsOf({ slots: [{ pos: ['RB'] }] }) === null);
+  setLeagueGolf(true, 10);
+  ok('the install carries the zero-fill', leagueGolfZeroPts() === 10);
+  const vGolf = slateAwareProj(1, []);
+  ok('in golf the fill value is the EXPECTED score, so the usage back is worth more (lower) than the scratch', vGolf({ id: 'kaleb-johnson', pos: 'RB', team: null }) < vGolf({ id: 'jacob-saylors', pos: 'RB', team: null }));
+  ok('\u2026which golfValue turns into a higher rank for the usage back', golfValue(vGolf({ id: 'kaleb-johnson', pos: 'RB', team: null })) > golfValue(vGolf({ id: 'jacob-saylors', pos: 'RB', team: null })));
+  const vShow = slateAwareProj(1, [], undefined, { expected: false });
+  ok('a board printing the projection asks for the raw number and gets it', near(vShow({ id: 'kaleb-johnson', pos: 'RB', team: null }), 4.2), vShow({ id: 'kaleb-johnson', pos: 'RB', team: null }));
+  const vRisk = slateAwareProj(1, [], () => 0.2);
+  ok('a fractional ruled-out answer is a play risk, priced in golf', vRisk({ id: 'kaleb-johnson', pos: 'RB', team: null }) > vGolf({ id: 'kaleb-johnson', pos: 'RB', team: null }));
+  ok('\u2026and a risk of 1 is still simply out', slateAwareProj(1, [], () => 1)({ id: 'kaleb-johnson', pos: 'RB', team: null }) === 0);
+  clearLeagueGolf();
+  const vPlain = slateAwareProj(1, [], () => 0.2);
+  ok('outside golf a play risk changes nothing — a Q still starts at full value', near(vPlain({ id: 'kaleb-johnson', pos: 'RB', team: null }), 4.2));
+  ok('outside golf the value is the projection, floor or no floor', near(slateAwareProj(1, [])({ id: 'jacob-saylors', pos: 'RB', team: null }), 0.1));
+  ok('clearing golf clears the zero-fill', leagueGolfZeroPts() === null);
 }
 
 if (fails) { console.log(`\n${fails} GOLF ASSERTION(S) FAILED`); process.exit(1); }

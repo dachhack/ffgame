@@ -23,7 +23,8 @@
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor, flagFor } from '../data/commish';
-import { golfValue, zeroFill } from './golf';
+import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
+import { golfExpectedScore } from './golfFloor';
 import { scopedAdjustFor } from './leagueScoring';
 import { projectedPoints } from './projScoring';
 import { normTeam } from '../data/slugMeta';
@@ -1224,7 +1225,20 @@ export interface ClassicSide {
 export function slateAwareProj(
   week: number,
   slate?: { home?: string | null; away?: string | null }[] | null,
-  ruledOut?: (slug: string) => boolean,
+  // true (or ≥ 1) → ruled out, worth 0. A FRACTION (v0.429.0) is the chance a
+  // designation keeps him off the field: a normal league still plays him at
+  // full value (Q and D play too often to bench by rule); a GOLF league
+  // prices it into the expected score below.
+  ruledOut?: (slug: string) => boolean | number,
+  opts?: {
+    /** GOLF (v0.429.0): value a player by what the spot is EXPECTED to score
+     *  with him in it — his projection plus the zero-fill weighted by his
+     *  chance of a blank (golfFloor.ts) — rather than by the projection
+     *  alone, which in golf seats the lowest number above zero: exactly the
+     *  bodies who most often post nothing. Default on; a board printing the
+     *  projection itself passes false. No effect outside golf. */
+    expected?: boolean;
+  },
 ): (p: { id: string; pos?: string | null; team?: string | null }, d?: ClassicSlotDef) => number {
   const onBye = (team: string | null | undefined): boolean => {
     const t = normTeam(team ?? '');
@@ -1242,10 +1256,24 @@ export function slateAwareProj(
   // by their full skill line would seat the best receiver rather than the best
   // returner, which is the same mistake the board was making on screen.
   return (p, d) => {
-    if (ruledOut?.(p.id)) return 0;
+    const r = ruledOut?.(p.id);
+    const risk = typeof r === 'number' ? Math.min(1, Math.max(0, r)) : (r ? 1 : 0);
+    if (risk >= 1) return 0;
     if (onBye(p.team)) return 0;
-    return projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }, d?.slot, d?.pos);
+    const v = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }, d?.slot, d?.pos);
+    if (leagueIsGolf() && opts?.expected !== false && v > 0) {
+      return golfExpectedScore(p, v, d?.zeroPts ?? leagueGolfZeroPts(), risk);
+    }
+    return v;
   };
+}
+
+/** The league's typical zero-fill for golf: the largest `zero_pts` any
+ *  starting spot carries, null when no spot has the rule. Installed beside
+ *  the golf flag (setLeagueGolf) by every caller that values a lineup. */
+export function leagueGolfZeroPtsOf(mode?: { roster?: ClassicRoster | null; slots?: SlotSpec[] | null } | null): number | null {
+  const zs = leagueSlotDefs(mode).map((d) => d.zeroPts).filter((z): z is number => z != null && Number.isFinite(z));
+  return zs.length ? Math.max(...zs) : null;
 }
 
 // ── The seat nobody manages (v0.248.0) ─────────────────────────────────────
