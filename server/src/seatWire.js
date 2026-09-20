@@ -49,7 +49,7 @@ import { db } from './supabase.js';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
-import { seatWirePlan, shortlistWire } from '../../packages/core/src/engine/seatWaivers.ts';
+import { seatWirePlan, shortlistWire, wireInstrument } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
 import { modeOfSettings } from './resolve.js';
@@ -183,14 +183,44 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       const { data: flagRows } = await db().from('player_flag').select('slug,rules').eq('league_id', lg.id);
       const noAdd = new Set((flagRows ?? []).filter((f) => f.rules?.no_add === true).map((f) => f.slug));
 
+      // ── THE LEAGUE'S CLOCK (v0.433.0) ────────────────────────────────────
+      // Founder: "We shouldn't be working the wire at times not in line with
+      // what the league has." Two readings, both the database's own: may an
+      // add land THIS MINUTE (fa_window_open — the window, the after-waivers
+      // gate, a league with no free agency), and when did that last become
+      // true (fa_open_since, 0309). core's wireInstrument turns them into
+      // the instrument per player: a CLAIM for anyone held or unreachable
+      // now — the same rule the pool screen shows a manager (0288), and the
+      // claim clears at the league's run (0291); an ADD only when the door
+      // is open; and a WAIT on a player who became addable within the hour,
+      // so every human gets the first hour on him and the worker, which
+      // wakes on the hour, is never the fastest hand at the window.
+      const { data: faOpenRow } = await db().rpc('fa_window_open', { p_league_id: lg.id });
+      const faOpen = faOpenRow === true;
+      let openSince = null;
+      if (faOpen) {
+        const { data: sinceRow } = await db().rpc('fa_open_since', { p_league_id: lg.id });
+        const t = sinceRow ? Date.parse(sinceRow) : NaN;
+        openSince = Number.isFinite(t) ? t : null;
+      }
       const now = Date.now();
       const available = pool
         .filter((p) => !owned.has(p.slug) && !noAdd.has(p.slug) && p.pos)
-        .map((p) => ({
-          id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null,
-          onWaivers: !!p.waived_until && new Date(p.waived_until).getTime() > now,
-        }));
+        .map((p) => {
+          const heldUntil = p.waived_until ? new Date(p.waived_until).getTime() : null;
+          const inst = wireInstrument({ heldUntil }, { faOpen, openSince }, now);
+          return {
+            id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null,
+            held: heldUntil != null && heldUntil > now,
+            onWaivers: inst === 'claim',
+            // Still counted as what a human could sign for nothing (the
+            // replacement level below); just not this sweep's to take.
+            wait: inst === 'wait',
+          };
+        });
       if (!available.length) continue;
+      const waiting = available.filter((p) => p.wait).length;
+      if (waiting) log('seat wire', lg.id, faOpen ? 'free agency open' : 'free agency shut', '—', waiting, 'newly addable, humans first');
 
       // THE SEAT IS STILL THE WORKER'S TO ACT FOR — re-read now, not at the
       // top of the sweep: a human may have claimed an agent seat or been
@@ -311,16 +341,18 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           const rv = (p) => (statusesRos(p));
           let n = 0;
           for (const p of available) {
-            if (!p.onWaivers) continue;
-            if (!repl.has(p.pos)) repl.set(p.pos, Math.max(0, ...available.filter((q) => !q.onWaivers && q.pos === p.pos).map(rv)));
+            if (!p.held) continue;   // the hold itself, not the shut door (v0.433.0)
+            if (!repl.has(p.pos)) repl.set(p.pos, Math.max(0, ...available.filter((q) => !q.held && q.pos === p.pos).map(rv)));
             if (rv(p) - repl.get(p.pos) >= FRENZY_MIN_SURPLUS) n += 1;
           }
           return n >= FRENZY_MIN_PLAYERS;
         })();
-        const room = (faab && deep ? FRENZY_MAX_CLAIMS : MAX_OUTSTANDING_CLAIMS) - pending.length;
-        if (room <= 0) continue;
-        const pendingAdds = new Set(pending.map((c) => c.add_slug));
+        // The cap is on SWAPS — a claim that spends a bench body. A claim
+        // into an open place is bounded by the places (below), not by this
+        // (v0.433.0), so it is not counted here either.
         const pendingDrops = new Set(pending.map((c) => c.drop_slug).filter(Boolean));
+        const room = (faab && deep ? FRENZY_MAX_CLAIMS : MAX_OUTSTANDING_CLAIMS) - pendingDrops.size;
+        const pendingAdds = new Set(pending.map((c) => c.add_slug));
 
         // A player already promised as the price of a pending claim is spent.
         // Removing him CANNOT change the lineup this plans against — a drop is
@@ -369,18 +401,24 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // places still open are the ones nothing has been promised.
         const openSeats = Math.max(0, activeSeats - roster.length - pending.filter((c) => !c.drop_slug).length);
         const fills = Math.min(openSeats, MAX_OPEN_SEAT_FILLS);
+        // Nothing to spend and nowhere to put anyone: it has spoken, and the
+        // waiver run is what answers next. Nothing to compute.
+        if (room <= 0 && fills <= 0) continue;
 
         // The candidates: the best few at each position for the REST OF THE
         // SEASON (core's shortlistWire — deterministic, ties by slug). Ranked
         // by the season rather than the week so a bye-week starter is still
         // on the list for a depth add, and this week's value still decides
         // a hole.
-        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id)), rosValueOf);
+        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), rosValueOf);
 
         // Replacement level: the best FREE body at a position — what anyone
         // could sign for nothing this minute — so a claim is measured over
         // it, not over zero. A held player's surplus is what the room bids on.
-        const replacementOf = (pos) => Math.max(0, ...available.filter((p) => !p.onWaivers && p.pos === pos).map(rosValueOf));
+        // Not HELD (v0.433.0), whether or not the door is open this minute:
+        // with it shut every player is a claim, and measured over zero every
+        // bid would be the player's whole worth.
+        const replacementOf = (pos) => Math.max(0, ...available.filter((p) => !p.held && p.pos === pos).map(rosValueOf));
         const market = faab ? {
           rivalBudgets: (memRows ?? [])
             .filter((m) => m.sleeper_roster_id !== seat.roster_id && m.eliminated_week == null)
@@ -401,7 +439,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           faab,
           budget,
           openSeats,
-          maxClaims: room + fills,
+          maxClaims: Math.max(0, room) + fills,
           rosValueOf,
           market,
         });
@@ -412,7 +450,11 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           // earlier ones landed (its drop is a bench body in THAT lineup). So
           // a claim we will not file is not skipped over — the rest of the
           // plan is abandoned and the next sweep replans from the true state.
-          if (c.onWaivers && filed >= room) break;
+          // A claim INTO AN OPEN PLACE is bounded by the places (openSeats,
+          // through `fills`), not by the claim cap (v0.433.0): with the door
+          // shut an empty roster fills by $0 claims, and two a day would
+          // leave a bot vampire's bench empty into the byes.
+          if (c.onWaivers && c.drop && filed >= room) break;
           try {
             const r = c.onWaivers
               ? await db().rpc('submit_waiver_claim', {
@@ -424,7 +466,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
                 p_add_slug: c.add, p_drop_slug: c.drop,
               });
             const ok = r?.data?.ok === true;
-            if (c.onWaivers) filed += 1;   // filed or refused, the slot is spent this sweep
+            if (c.onWaivers && c.drop) filed += 1;   // filed or refused, the slot is spent this sweep
             if (ok) {
               done += 1;
               // The pool this sweep is planning against is now stale for every

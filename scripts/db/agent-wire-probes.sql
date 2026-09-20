@@ -391,4 +391,61 @@ begin
     'aw10m …and the worker may no longer move its players');
 end $$;
 
+-- ── aw11: WHEN DID THE DOOR OPEN? (0309) ────────────────────────────────────
+-- fa_open_since is the sweep's grace clock: null while shut, the instant the
+-- window (or the after-waivers gate) last opened, and "at least two days" for
+-- a door that has stood open. Windows are set around the CURRENT ET minute so
+-- the probe holds at any hour it is run.
+do $$
+declare
+  r jsonb; lid uuid; nowmin int; since timestamptz;
+begin
+  perform probe_as('a');
+  r := create_native_league('AW11Clock', '2024', 4, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  perform assert_ok(r, 'aw11 classic league'); lid := (r ->> 'league_id')::uuid;
+  nowmin := et_minutes(now());
+
+  -- 'open', no gate: open the whole time.
+  perform assert_ok(set_transaction_rules(lid, p_fa_mode => 'open'), 'aw11a free agency open');
+  perform assert_true(fa_window_open(lid), 'aw11b …and it is open');
+  since := fa_open_since(lid);
+  perform assert_true(since is not null and since <= now() - interval '2 days' + interval '1 minute',
+    'aw11c a door that has stood open reads "at least two days"');
+
+  -- 'off': never open, so never "since".
+  perform assert_ok(set_transaction_rules(lid, p_fa_mode => 'off'), 'aw11d free agency off');
+  perform assert_true(fa_open_since(lid) is null, 'aw11e shut ⇒ null');
+
+  -- A window that opened ten minutes ago and runs for six hours: since ≈ ten
+  -- minutes ago, to the minute.
+  perform assert_ok(set_transaction_rules(lid, p_fa_mode => 'window',
+    p_fa_start_min => (nowmin - 10 + 1440) % 1440, p_fa_end_min => (nowmin + 350) % 1440), 'aw11f window opened 10 min ago');
+  perform assert_true(fa_window_open(lid), 'aw11g …and it is open');
+  since := fa_open_since(lid);
+  perform assert_true(since is not null and now() - since between interval '9 minutes' and interval '12 minutes',
+    'aw11h since = the window''s start, ten minutes ago (got ' || coalesce((now() - since)::text, 'null') || ')');
+
+  -- A window that opened three hours ago: since = three hours ago.
+  perform assert_ok(set_transaction_rules(lid,
+    p_fa_start_min => (nowmin - 180 + 1440) % 1440, p_fa_end_min => (nowmin + 180) % 1440), 'aw11i window opened 3h ago');
+  since := fa_open_since(lid);
+  perform assert_true(now() - since between interval '179 minutes' and interval '182 minutes',
+    'aw11j since = three hours ago (got ' || coalesce((now() - since)::text, 'null') || ')');
+
+  -- A window that opens in ten minutes: shut now, so null.
+  perform assert_ok(set_transaction_rules(lid,
+    p_fa_start_min => (nowmin + 10) % 1440, p_fa_end_min => (nowmin + 300) % 1440), 'aw11k window opens in 10 min');
+  perform assert_true(not fa_window_open(lid) and fa_open_since(lid) is null, 'aw11l shut ⇒ null');
+
+  -- 'open' with the after-waivers gate on today: the door opened at the
+  -- clear time. Clear time set to five minutes ago, gate on every day.
+  perform assert_ok(set_transaction_rules(lid, p_fa_mode => 'open',
+    p_waiver_clear_min => (nowmin - 5 + 1440) % 1440,
+    p_fa_after_waivers_dow => '[0,1,2,3,4,5,6]'::jsonb), 'aw11m open, but not before the run');
+  perform assert_true(fa_window_open(lid), 'aw11n the run has spoken, the door is open');
+  since := fa_open_since(lid);
+  perform assert_true(now() - since between interval '4 minutes' and interval '7 minutes',
+    'aw11o since = the run, five minutes ago (got ' || coalesce((now() - since)::text, 'null') || ')');
+end $$;
+
 select 'ALL AGENT-WIRE PROBES PASSED' as result;

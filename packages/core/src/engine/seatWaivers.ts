@@ -43,7 +43,40 @@ import { faabBid, type MarketClaim } from './faabMarket';
  *  anyone past it is an `add_free_agent`. The planner does not care which —
  *  it ranks them together, because the RIGHT player is the right player — but
  *  it carries the flag through so the worker knows which RPC to call. */
-export interface WirePlayer extends SpotPlayer { onWaivers: boolean }
+export interface WirePlayer extends SpotPlayer {
+  onWaivers: boolean;
+  /** THE HOLD ITSELF (v0.433.0), apart from the instrument. `onWaivers` now
+   *  also says "a claim because free agency is shut right now" (0288's rule),
+   *  so a caller who knows the difference passes it: replacement level and
+   *  the frenzy read the players a human could sign for nothing at the next
+   *  opening, and a depth body may be CLAIMED for $0 when the door is shut.
+   *  Absent, it reads as `onWaivers`, which is the pre-0.433 meaning. */
+  held?: boolean;
+}
+
+/** THE LEAGUE'S CLOCK DECIDES THE INSTRUMENT (v0.433.0). Founder: "We
+ *  shouldn't be working the wire at times not in line with what the league
+ *  has." A player inside his hold is a claim; so is anyone at all while free
+ *  agency cannot reach him this minute (the window shut, or a league that
+ *  has none) — 0288's rule for the pool screen, which the sweep had never
+ *  learned. And a first-come ADD gets no bot's edge: a player who has only
+ *  just become addable — his hold cleared, or the window opened, within
+ *  HUMANS_FIRST_MS — is `wait`ed on, and taken next sweep if still there.
+ *  Claims settle at the league's run against everyone, so they need no
+ *  such courtesy and are filed the hour a human could file them. */
+export const HUMANS_FIRST_MS = 60 * 60 * 1000;
+export type WireInstrument = 'claim' | 'add' | 'wait';
+export function wireInstrument(
+  p: { heldUntil?: number | null },
+  league: { faOpen: boolean; openSince?: number | null },
+  now: number,
+): WireInstrument {
+  const held = p.heldUntil != null && p.heldUntil > now;
+  if (held || !league.faOpen) return 'claim';
+  const since = Math.max(p.heldUntil ?? -Infinity, league.openSince ?? -Infinity);
+  if (Number.isFinite(since) && now - since < HUMANS_FIRST_MS) return 'wait';
+  return 'add';
+}
 
 export interface WireClaim {
   add: string;
@@ -316,12 +349,15 @@ export function seatWirePlan(
     // best rest-of-season body. A position no spot accepts is never taken.
     if (!best && seats > 0) {
       const need = positionNeed(slots, have);
+      // NOT HELD, rather than not-a-claim (v0.433.0): with the door shut the
+      // body is a $0 claim that clears at the run, and an empty bench in a
+      // league with no free agency must still be filled somehow.
       const body = pool
-        .filter((p) => !p.onWaivers && !used.has(p.id) && !have.some((q) => q.id === p.id)
+        .filter((p) => !(p.held ?? p.onWaivers) && !used.has(p.id) && !have.some((q) => q.id === p.id)
           && need.has(p.pos) && rosOf(p) > 0)
         .sort((a, b) => ((need.get(a.pos) ?? 0) - (need.get(b.pos) ?? 0))
           || (rosOf(b) - rosOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
-      if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, rosGain: 0, kind: 'depth', onWaivers: false };
+      if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, rosGain: 0, kind: 'depth', onWaivers: body.onWaivers };
     }
     if (!best) break;
 
@@ -330,7 +366,7 @@ export function seatWirePlan(
     // here; a free agent costs nothing to sign, and without the room the
     // old flat rate stands.
     const added = pool.find((p) => p.id === best!.add)!;
-    best.bid = !opts.faab || !best.onWaivers ? 0
+    best.bid = !opts.faab || !best.onWaivers || best.kind === 'depth' ? 0
       : opts.market
         ? faabBid({
           surplus: rosOf(added) - opts.market.replacementOf(added.pos),

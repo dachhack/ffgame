@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.0 — the wire keeps the league's clock, and humans get the first hour
+
+Founder: "We shouldn't be working the wire at times not in line with what
+the league has."
+
+WHAT IT DID. The seat wire chose its instrument by one thing: a player
+inside his `waived_until` hold was a claim, anyone else an add. The
+league's own clock never entered it. 0288 settled what a manager sees at
+the pool — a player free agency cannot reach RIGHT NOW (the window shut, a
+league with none) is a claim, hold or no hold, clearing at the league's run
+(0291) — and the sweep never learned it. In a FAAB league with free agency
+off it called add_free_agent on every unheld player, was told "put in a
+waiver claim instead", and filed nothing, every hour, all season. In a
+windowed league it added only when its hour fell inside the window and was
+refused otherwise. And where it could add, it did so on the hour — a
+faster hand than any manager's at a first-come door.
+
+THE CLOCK. Per league per sweep, two readings the database already
+defines: `fa_window_open` (may an add land this minute) and the new
+`fa_open_since` (0309: when did that last become true — the window's
+start, or the after-waivers gate lifting at the clear time; null while
+shut; "at least two days" for a door that has stood open). core's
+`wireInstrument` turns them into the instrument per player:
+  • CLAIM for anyone held, or anyone at all while the door is shut — the
+    pool screen's own rule, and the claim clears at the league's run;
+  • ADD only through an open door;
+  • WAIT on a player who became addable within the hour — his hold cleared
+    or the window opened (HUMANS_FIRST_MS) — so every human gets the first
+    hour on him and the worker takes him next sweep if he is still there.
+    Claims settle at the run against everyone, so they need no courtesy.
+`WirePlayer.held` now carries the hold itself, apart from the instrument:
+replacement level and the frenzy read the players a human could sign for
+nothing at the next opening (over zero, every bid in a shut league would
+have been the player's whole worth), and a depth body may be CLAIMED for
+$0 when the door is shut — an empty bench in a league with no free agency
+must still be filled. The claim cap is on SWAPS: a claim into an open
+place is bounded by the places, not by two a day, so a bot vampire's bench
+fills by $0 claims rather than staying empty into the byes.
+
+PROVED. check:seatwire pins the instrument table (ten cases) and the
+depth-claim behind a shut door; agent-wire probes aw11 pin `fa_open_since`
+against windows set around the current ET minute (open ten minutes / three
+hours ago, opening in ten, the after-waivers gate five minutes past its
+run, 'off', 'open'); fa-off probes unchanged and green. The AI-seat
+diagnostic's wire section now prints the league's clock: fa_mode, open
+now, open since, next opening, next waiver run, and the raw settings.
+
 ### v0.432.4 — the bake answers by Sleeper id, so the worker prices "Kenny" as "Kenneth"
 
 Founder's diagnostic run (ai-seat-lineup-diag.sql on the Kickoff League):
