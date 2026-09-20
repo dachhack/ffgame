@@ -82,10 +82,18 @@ export interface SlotFilter {
  *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
  *  label can never make a spot behave differently than it reads. */
 /** `zero_pts` (v0.303.0) is THE ZERO-FILL RULE on this spot: an unfilled spot,
- *  or one whose player scores nothing, banks this many points instead. Mutually
- *  exclusive with `bb` — the founder's rule verbatim ("these spots can't also
- *  be best ball"), and it could hardly be otherwise: a best-ball spot fills
- *  itself from whoever is left, so "unfilled" is not a state it has. */
+ *  or one whose player scores nothing, banks this many points instead.
+ *
+ *  ON A BEST-BALL SPOT TOO (v0.430.2). The pair was refused from v0.303.0
+ *  ("a best-ball spot fills itself, so it is never unfilled") — true of the
+ *  UNFILLED half of the rule and blind to the other half: whoever the fill
+ *  seats can still score nothing (a bye, a late scratch, a bench role), and
+ *  in a golf league that zero was the best score on the board with nothing to
+ *  price it. Founder: "best ball in golf should slot 0 players over players
+ *  with more than 10 points" — which is only a sentence if the spot banks 10
+ *  for a zero. So the rule rides on best-ball spots like any other, the
+ *  resolver and the board already pay it there (they walk every slot), and
+ *  the fill ranks candidates by what the spot would BANK for them. */
 export interface SlotSpec extends SlotFilter { pos: string[]; bb?: boolean; label?: string; zero_pts?: number | null }
 
 export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[] | null {
@@ -100,9 +108,9 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // keys off it changes meaning.
     if (s.label?.trim()) d.label = s.label.trim();
     // Per-spot allowable-player filter (0172) rides along to the pickers + fill.
-    // The zero-fill rule (v0.303.0) rides along to the resolver and the board.
-    // Never on a best-ball spot: the two are mutually exclusive by definition.
-    if (s.zero_pts != null && !s.bb) d.zeroPts = s.zero_pts;
+    // The zero-fill rule (v0.303.0) rides along to the resolver and the board —
+    // best-ball spots included (v0.430.2, see SlotSpec).
+    if (s.zero_pts != null) d.zeroPts = s.zero_pts;
     if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length) {
       d.flt = {
         teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null,
@@ -844,10 +852,21 @@ export function bestballFillBy(
   const w = order.map((d) => cands.map((c) => {
     if (!slotAllows(d, c)) return -Infinity;
     const v = valueOf(c, d);
+    // WHAT THE SPOT WOULD BANK (v0.430.2). In golf a candidate worth zero —
+    // a bye, a ruled-out man, a projection of nothing, or at resolve a man
+    // who posted a blank — is worth the spot's zero-fill where it carries
+    // one, because that is what the spot scores with him in it. Founder:
+    // "best ball in golf should slot 0 players over players with more than
+    // 10 points" — with a 10-point fill, a zero IS ten, so he beats a 12 and
+    // loses to an 8. slateAwareProj already says so for a projection; this
+    // is what says so for the LIVE points the resolver ranks by. Without a
+    // fill the zero stays a zero and golfValue keeps its rule that a zero is
+    // an absence, not a low score. Outside golf nothing changes.
+    const banked = leagueIsGolf() ? zeroFill(Number.isFinite(v) ? v : 0, d.zeroPts) : (Number.isFinite(v) ? v : 0);
     // GOLF (v0.303.0): the fill takes the LOWEST scorer there. Re-expressing
     // the value keeps this search — and its tie canonicalization below —
     // exactly as written; only what "more valuable" means changes.
-    return golfValue(Number.isFinite(v) ? v : 0);
+    return golfValue(banked);
   }));
   const heldBy = assignByValue(order.length, cands.length, w);
   // Canonicalize ties: when two spots could swap occupants at the SAME total,
@@ -1263,13 +1282,24 @@ export function slateAwareProj(
   return (p, d) => {
     const r = ruledOut?.(p.id);
     const risk = typeof r === 'number' ? Math.min(1, Math.max(0, r)) : (r ? 1 : 0);
-    if (risk >= 1) return 0;
-    if (onBye(p.team)) return 0;
+    // A ZERO BANKS THE FILL (v0.430.2). Founder: "best ball in golf should
+    // slot 0 players over players with more than 10 points." A man who is
+    // certain to score nothing — ruled out, on bye, or projected at nothing
+    // — is worth exactly the spot's zero-fill in golf, because that is what
+    // the spot scores with him in it: with a 10-point rule he beats a 12 and
+    // loses to an 8. It is the p = 1 limit of the expected score below, and
+    // it used to come back 0, which golfValue reads as an absence and files
+    // behind everyone. Outside golf, and on the row (expected: false), a
+    // zero is still a zero.
+    const z = d?.zeroPts ?? leagueGolfZeroPts();
+    const banked = leagueIsGolf() && opts?.expected !== false && z != null && z > 0 ? z : 0;
+    if (risk >= 1) return banked;
+    if (onBye(p.team)) return banked;
     const v = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }, d?.slot, d?.pos);
     if (leagueIsGolf() && opts?.expected !== false && v > 0) {
       return golfExpectedScore(p, v, d?.zeroPts ?? leagueGolfZeroPts(), risk);
     }
-    return v;
+    return v > 0 ? v : banked;
   };
 }
 

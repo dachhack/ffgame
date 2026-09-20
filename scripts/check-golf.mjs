@@ -15,7 +15,7 @@ import { classicSlotsFromSpec, resolveClassicMatchup, optimalLineup } from '../p
 import { buildMatchupBoard } from '../packages/core/src/engine/matchupBoard';
 import { setLeagueGolf, clearLeagueGolf, leagueIsGolf, betterScore, golfValue, zeroFill, leagueGolfZeroPts } from '../packages/core/src/engine/golf';
 import { zeroProbability, golfExpectedScore, playRisk, touchesPerGame, ZERO_FLOOR } from '../packages/core/src/engine/golfFloor';
-import { slateAwareProj, leagueGolfZeroPtsOf } from '../packages/core/src/engine/classic';
+import { slateAwareProj, leagueGolfZeroPtsOf, bestballFillBy } from '../packages/core/src/engine/classic';
 import { clearLeagueScoring } from '../packages/core/src/engine/leagueScoring';
 import { installRealWeek } from '../packages/core/src/data/realPbp';
 
@@ -88,11 +88,44 @@ const side = (picks, roster) => ({ picks, roster, hasLineup: true, bestball: [] 
     !r.slots.some((x) => x.slot === 'S2'), r.slots.map((x) => x.slot));
 }
 
-// ── A BEST-BALL SPOT CANNOT CARRY THE RULE ─────────────────────────────────
+// ── A BEST-BALL SPOT CARRIES THE RULE TOO (v0.428.2) ───────────────────────
+// Founder: "best ball in golf should slot 0 players over players with more
+// than 10 points" — which only means something if the spot banks 10 for a
+// zero. So the spec keeps the rule on a best-ball spot, and the fill ranks
+// every candidate by what the spot would BANK for him.
 {
   const slots = classicSlotsFromSpec([{ pos: ['RB'], zero_pts: 10, bb: true }]);
-  ok('the spec drops a zero-fill from a best-ball spot — the two are mutually exclusive',
-    slots[0].zeroPts === undefined, slots[0]);
+  ok('the spec keeps a zero-fill on a best-ball spot', slots[0].zeroPts === 10, slots[0]);
+  const bbSlots = classicSlotsFromSpec([{ pos: ['RB'], zero_pts: 10, bb: true }]);
+  const bare = classicSlotsFromSpec([{ pos: ['RB'], bb: true }]);
+  const roster = [mk('bye-guy', 'RB', 'KC'), mk('eight', 'RB', 'KC'), mk('twelve', 'RB', 'KC')];
+  const val = { 'bye-guy': 0, eight: 8, twelve: 12 };
+  const fill = (slots, ros) => bestballFillBy([], ['S1'], ros, slots, (p) => val[p.id])[0]?.player.id;
+  setLeagueGolf(true);
+  ok('golf: a zero is worth the fill — ten beats a twelve', fill(bbSlots, [roster[0], roster[2]]) === 'bye-guy');
+  ok('golf: …and loses to an eight', fill(bbSlots, roster) === 'eight');
+  ok('golf, no fill on the spot: a zero is still an absence, not a low score', fill(bare, [roster[0], roster[2]]) === 'twelve');
+  clearLeagueGolf();
+  ok('outside golf a zero stays a zero — the eight fills, whatever the spot would bank', fill(bbSlots, [roster[0], roster[1]]) === 'eight');
+  ok('outside golf the top projection fills', fill(bbSlots, roster) === 'twelve');
+  ok('outside golf, no fill: the zero never fills', fill(bare, roster) === 'twelve');
+  // And the same rule through slateAwareProj — the value every PRE-KICKOFF
+  // fill ranks by: ruled out, on bye, or projected at nothing is worth the
+  // fill in golf, and 0 on the row and outside golf.
+  const spot = classicSlotsFromSpec([{ pos: ['RB'], zero_pts: 10, bb: true }])[0];
+  const bareSpot = classicSlotsFromSpec([{ pos: ['RB'], bb: true }])[0];
+  setLeagueGolf(true, 10);
+  const vFill = slateAwareProj(1, [{ home: 'BUF', away: 'MIA' }], (slug) => slug === 'out-man');
+  ok('golf: a ruled-out man is worth the spot\'s fill', vFill({ id: 'out-man', pos: 'RB', team: 'BUF' }, spot) === 10);
+  ok('golf: a man on bye is worth the spot\'s fill', vFill({ id: 'bye-man', pos: 'RB', team: 'KC' }, spot) === 10);
+  ok('golf: a man the bake projects at nothing is worth the fill', vFill({ id: 'probe-ghost-player', pos: 'RB', team: 'BUF' }, spot) === 10);
+  ok('golf: without a spot in hand the league\'s typical fill stands in', vFill({ id: 'bye-man', pos: 'RB', team: 'KC' }) === 10);
+  const vRow = slateAwareProj(1, [{ home: 'BUF', away: 'MIA' }], (slug) => slug === 'out-man', { expected: false });
+  ok('golf: the ROW still prints 0.0 for him', vRow({ id: 'out-man', pos: 'RB', team: 'BUF' }, spot) === 0);
+  setLeagueGolf(true, null);
+  ok('golf with no fill anywhere: a zero is still a zero', vFill({ id: 'bye-man', pos: 'RB', team: 'KC' }, bareSpot) === 0);
+  clearLeagueGolf();
+  ok('outside golf a ruled-out man is worth 0, fill or no fill', vFill({ id: 'out-man', pos: 'RB', team: 'BUF' }, spot) === 0);
 }
 
 // ── SETTLED-ONLY, ON A LIVE BOARD ──────────────────────────────────────────
@@ -219,7 +252,9 @@ const side = (picks, roster) => ({ picks, roster, hasLineup: true, bestball: [] 
   ok('a board printing the projection asks for the raw number and gets it', near(vShow({ id: 'kaleb-johnson', pos: 'RB', team: null }), 4.2), vShow({ id: 'kaleb-johnson', pos: 'RB', team: null }));
   const vRisk = slateAwareProj(1, [], () => 0.2);
   ok('a fractional ruled-out answer is a play risk, priced in golf', vRisk({ id: 'kaleb-johnson', pos: 'RB', team: null }) > vGolf({ id: 'kaleb-johnson', pos: 'RB', team: null }));
-  ok('\u2026and a risk of 1 is still simply out', slateAwareProj(1, [], () => 1)({ id: 'kaleb-johnson', pos: 'RB', team: null }) === 0);
+  // v0.430.2: a risk of 1 is out, and OUT in golf is worth the fill — the
+  // p = 1 limit of the expected score, exactly what the spot banks with him.
+  ok('\u2026and a risk of 1 is out — worth the installed fill in golf, not filed as an absence', slateAwareProj(1, [], () => 1)({ id: 'kaleb-johnson', pos: 'RB', team: null }) === 10);
   clearLeagueGolf();
   const vPlain = slateAwareProj(1, [], () => 0.2);
   ok('outside golf a play risk changes nothing — a Q still starts at full value', near(vPlain({ id: 'kaleb-johnson', pos: 'RB', team: null }), 4.2));
