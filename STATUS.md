@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.6 — the widget says BYE only when it can prove one
+
+Founder, with the widget reading "BYE · WK 2 — On a bye this week —
+nothing to sweat" over a team it could not even name: "Looks like it
+assumes your team is on a bye if there is no data. Let's not do that.
+Let's only say on a bye if actually on a bye."
+
+It did assume. `summarize` read "no matchup row for this seat" as a bye,
+and a row is missing for other reasons — the schedule not built yet, an
+open week past the schedule, a league that plays elsewhere, a read that
+came back empty. A bye is a claim with evidence: the league HAS matchups
+this week and this seat is in none of them. The feed now reads the week's
+matchups only when the seat has no row (weekMatchups, one small read, and
+a failed read is no claim); `summarize` takes `weekScheduled`, says BYE
+only when it is true, and otherwise draws a new `idle` phase — "NO
+MATCHUP · WK 2 / No matchup scheduled this week yet." — in the quiet
+colour. check:widget pins the three cases: scheduled week ⇒ bye; no word
+⇒ no matchup; a week with no matchups ⇒ no matchup.
+
 ### v0.433.5 — the drip matchup's felt is flat
 
 Founder, on the phone: "Can we get rid of the gradient background on the

@@ -77,8 +77,14 @@ const state = [
 }
 // ── bye / no row ──
 {
-  const s = summarize({ league, week: WEEK, matchup: null, state: [], teams, nowMs: kick(0) });
-  ok('no matchup row: a bye, opponent null, my name still shown', s.phase === 'bye' && s.them === null && s.me.name === 'Taco Time Titans' && /BYE/.test(s.line), s);
+  const s = summarize({ league, week: WEEK, matchup: null, state: [], teams, nowMs: kick(0), weekScheduled: true });
+  ok('no matchup row in a scheduled week: a bye, opponent null, my name still shown', s.phase === 'bye' && s.them === null && s.me.name === 'Taco Time Titans' && /BYE/.test(s.line), s);
+  // A BYE NEEDS EVIDENCE (v0.433.6). Founder: "Looks like it assumes your team
+  // is on a bye if there is no data. Let's not do that."
+  const none = summarize({ league, week: WEEK, matchup: null, state: [], teams, nowMs: kick(0) });
+  ok('no matchup row and no word on the week: NOT a bye — no matchup', none.phase === 'idle' && none.them === null && /NO MATCHUP/.test(none.line) && !/BYE/.test(none.line), none);
+  const unbuilt = summarize({ league, week: WEEK, matchup: null, state: [], teams, nowMs: kick(0), weekScheduled: false });
+  ok('no matchup row in a week with no matchups at all: no matchup, not a bye', unbuilt.phase === 'idle' && /NO MATCHUP/.test(unbuilt.line), unbuilt);
 }
 // ── missing names never blank the picture ──
 {

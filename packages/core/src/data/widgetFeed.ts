@@ -36,11 +36,16 @@ import { zeroFill, setLeagueGolf, clearLeagueGolf } from '../engine/golf';
 import { setLeagueProjScoring, clearLeagueProjScoring } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters } from './liveApi';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups } from './liveApi';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
 
-export type WidgetPhase = 'pre' | 'live' | 'final' | 'bye';
+/** `idle` (v0.433.6): no matchup row for the seat AND no proof the week is
+ *  scheduled — the schedule not built yet, a week past it, a league that
+ *  plays elsewhere. Founder: "Looks like it assumes your team is on a bye if
+ *  there is no data. Let's not do that." A BYE is a claim with evidence:
+ *  the league has matchups this week and this seat is in none of them. */
+export type WidgetPhase = 'pre' | 'live' | 'final' | 'bye' | 'idle';
 export type WidgetView = 'score' | 'lineup';
 
 export interface WidgetWindow {
@@ -171,6 +176,10 @@ export interface SummarizeInput {
   injuries?: Record<string, string>;
   /** CLASSIC (v0.433.2): the lineup, the roster, and how to value a player. */
   classic?: ClassicWidgetInput;
+  /** Whether the league HAS matchups this week (v0.433.6) — read only when
+   *  the seat has none. True proves a bye; false or absent is no claim, and
+   *  the card says there is no matchup rather than inventing a bye. */
+  weekScheduled?: boolean;
 }
 
 /** A rostered player as the classic summary sees him: the pool row plus what
@@ -220,7 +229,12 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   };
   const myName = teams[league.rosterId]?.team_name || 'Your team';
   if (!matchup) {
-    return { ...base, me: { name: myName, score: 0 }, them: null, phase: 'bye', line: `BYE · ${wl}` };
+    // A bye needs evidence (v0.433.6): the week is scheduled and this seat
+    // is not in it. Otherwise there is simply no matchup to show — the
+    // schedule isn't built, the week is past it, or nothing could be read —
+    // and the card says that, not "nothing to sweat".
+    if (input.weekScheduled === true) return { ...base, me: { name: myName, score: 0 }, them: null, phase: 'bye', line: `BYE · ${wl}` };
+    return { ...base, me: { name: myName, score: 0 }, them: null, phase: 'idle', line: `NO MATCHUP · ${wl}` };
   }
   const home = matchup.home_roster_id === league.rosterId;
   const mySide: 'home' | 'away' = home ? 'home' : 'away';
@@ -511,6 +525,9 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   const openWeek = await cached(`week:${league.id}`, 10 * MIN, fresh, () => defaultOpenWeek(league.id));
   const matchup = await myMatchupFrom(league.id, league.rosterId, openWeek);
   const week = matchup?.week ?? openWeek;
+  // No row for the seat: is the week scheduled at all? Read only in that
+  // case (v0.433.6), and a failed read is no claim.
+  const weekScheduled = matchup ? undefined : await weekMatchups(league.id, week).then((rows) => rows.length > 0).catch(() => undefined);
   const pickUser = league.pickUserId ?? userId ?? null;
   const drip = league.gameMode === 'drip' && !!matchup && !!pickUser;
   // CLASSIC (v0.433.2): the card projects the finals and reads the lineup, so
@@ -571,7 +588,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     };
   }
   try {
-    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, classic: classicIn });
+    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, classic: classicIn, weekScheduled });
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };
   } finally {
