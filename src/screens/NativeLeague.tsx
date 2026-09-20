@@ -8,6 +8,7 @@
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag } from '../app/ui';
+import { useStore } from '../app/store';
 import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
@@ -26,7 +27,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  leaguePool, nativeRosters, nativeTeamState, addFreeAgent, setRosterSpot,
+  leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
   setTeamName, setTeamAvatar,
@@ -948,6 +949,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
    *  cross-view CTAs (the dashboard provides the chrome). */
   embedded?: boolean;
 }) {
+  const { viewAs } = useStore();   // browse-as (0306): read the viewed seat, refuse writes
   const [st, setSt] = useState<DraftState | null>(null);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
@@ -1201,7 +1203,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
 
   /** The caller's seat in this league, and the queue that hangs off it. */
   const loadTeam = () => {
-    nativeTeamState(leagueId).then((t) => {
+    (viewAs ? adminUserNativeTeamState(viewAs.userId, leagueId) : nativeTeamState(leagueId)).then((t) => {
       setTeamOk(true);
       setTeam(t);
       if (t.my_roster_id != null) {
@@ -1226,6 +1228,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     // re-derives who is on the clock and refuses the second — but at a SNAKE
     // TURNAROUND picks N and N+1 belong to the same seat, both pass, and a
     // double-tap burns two picks on two players.
+    if (viewAs) { setErr(`Read-only: you're browsing as ${viewAs.label}. Exit view-as to use this.`); return; }
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true); setErr(null);
@@ -2666,6 +2669,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // league's own panels — who holds him, and the league's moves on him
   // (v0.282.0). Cleared on the way out so the context never outlives the page.
   useEffect(() => { setCardLeague(leagueId); return () => setCardLeague(null); }, [leagueId]);
+  // BROWSE-AS SEES THEIR TEAM (0306, v0.431.1, founder: "it's still viewing
+  // my team as me instead of viewing Mooney's team as Mooney"). Under
+  // "BROWSING AS x" the desk reads x's seat through the admin twin and
+  // refuses every write — the writes would run as the admin, and
+  // set_roster_spot from a browsing admin moves the ADMIN's own player.
+  const { viewAs } = useStore();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
@@ -2776,8 +2785,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     try {
       // Clearing due waiver claims first keeps this screen self-driving even
       // with no worker running (process_waivers is idempotent).
-      await processWaivers(leagueId).catch(() => {});
-      const [t, r, p] = await Promise.all([nativeTeamState(leagueId), nativeRosters(leagueId), leaguePool(leagueId)]);
+      if (!viewAs) await processWaivers(leagueId).catch(() => {});
+      const [t, r, p] = await Promise.all([
+        viewAs ? adminUserNativeTeamState(viewAs.userId, leagueId) : nativeTeamState(leagueId),
+        nativeRosters(leagueId), leaguePool(leagueId)]);
       if (t.error) { setErr(friendlyError(t.error)); return; }
       skew.current = Date.parse(t.server_now) - Date.now();
       setTeam(t); setRosters(r); setPool(p); setErr(null);
@@ -2914,6 +2925,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   };
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    if (viewAs) { setErr(`Read-only: you're browsing as ${viewAs.label}. Exit view-as to use this.`); return; }
     if (busy) return;
     setBusy(true); setErr(null);
     try {
@@ -2971,7 +2983,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           {nameDraft === null ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.my_team ?? `Team ${myRoster}`}</span>
-              <button onClick={() => setNameDraft(team.my_team ?? '')} title="edit team name or avatar" className="mono" style={linkBtn}>✎</button>
+              {!viewAs && <button onClick={() => setNameDraft(team.my_team ?? '')} title="edit team name or avatar" className="mono" style={linkBtn}>✎</button>}
             </div>
           ) : (
             <>

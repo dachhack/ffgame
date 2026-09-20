@@ -3188,6 +3188,12 @@ export interface NativeTeamState {
   my_claims: WaiverClaimRow[];
 }
 export const nativeTeamState = (leagueId: string) => rpc<NativeTeamState>('native_team_state', { p_league_id: leagueId });
+/** native_team_state for the VIEWED user — the browse-as twin (0306). MY TEAM
+ *  under "BROWSING AS x" reads x's seat, claims, FAAB and is_commish as x
+ *  would; admin-gated server-side. Read-only by construction: the desk's
+ *  writes are refused client-side under browse-as. */
+export const adminUserNativeTeamState = (appUserId: string, leagueId: string) =>
+  rpc<NativeTeamState>('admin_user_native_team_state', { p_app_user_id: appUserId, p_league_id: leagueId });
 /** Pick your own team's avatar (manager, commish or admin); null clears it. */
 export const setTeamAvatar = (leagueId: string, rosterId: number, url: string | null) =>
   rpc<{ ok: boolean; error?: string; avatar?: string | null }>('set_team_avatar', { p_league_id: leagueId, p_roster_id: rosterId, p_url: url });
