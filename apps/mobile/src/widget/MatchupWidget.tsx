@@ -208,7 +208,7 @@ function ClassicFixes({ snap, tier }: { snap: WidgetSnapshot; tier: Tier }) {
 }
 
 function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapshot; leagues: number; tier: Tier; view: WidgetView; offline?: boolean }) {
-  const lineColor: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : snap.phase === 'bye' ? C.faint : C.warn;
+  const lineColor: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : snap.phase === 'bye' || snap.phase === 'idle' ? C.faint : C.warn;
   const leading = snap.them ? (snap.me.score > snap.them.score ? 'me' : snap.me.score < snap.them.score ? 'them' : null) : null;
   const left = leftLine(snap);
   const projected = snap.projected === true && snap.phase !== 'final';
@@ -224,7 +224,7 @@ function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapsho
       ) : (
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
           <TextWidget text={snap.me.name} maxLines={1} style={{ fontSize: 16, color: C.text, fontWeight: 'bold' }} />
-          <TextWidget text="On a bye this week — nothing to sweat." maxLines={1} style={{ fontSize: 11, color: C.dim }} />
+          <TextWidget text={snap.phase === 'bye' ? 'On a bye this week — nothing to sweat.' : 'No matchup scheduled this week yet.'} maxLines={1} style={{ fontSize: 11, color: C.dim }} />
         </FlexWidget>
       )}
       {snap.them && snap.projected ? <ClassicFixes snap={snap} tier={tier} /> : null}
