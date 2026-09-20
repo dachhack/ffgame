@@ -174,6 +174,16 @@ async function activeContexts(season) {
 
 /** Is any game in the tick's pooled slate live, or within ~24h of kickoff? Drives
  *  the injury cadence (hourly near games, daily otherwise). */
+/** How often to poll injuries right now: the daily cadence, the game-day
+ *  cadence inside a day of a game, and a ramp into the next kickoff. */
+export function injuryPollEvery(games, now = Date.now()) {
+  const next = Math.min(...games.map((g) => g.kickoffMs).filter((k) => Number.isFinite(k) && k > now));
+  const untilKick = Number.isFinite(next) ? next - now : Infinity;
+  if (untilKick <= config.injuryRampNearMs) return config.injuryPollNearMs;
+  if (untilKick <= config.injuryRampMs) return config.injuryPollRampMs;
+  return gameDay(games, now) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
+}
+
 function gameDay(games, now = Date.now()) {
   return games.some((g) => g.state === 'in' || (g.kickoffMs && g.kickoffMs - now < 24 * 3600e3 && g.kickoffMs - now > -6 * 3600e3));
 }
@@ -573,7 +583,17 @@ async function tick() {
   }
 
   // Week-agnostic work, once per tick regardless of how many contexts ran.
-  const injEvery = gameDay(seen) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
+  //
+  // THE INJURY POLL RAMPS INTO KICKOFF (v0.432.1). Founder: "AI to make optimal
+  // line up moves regularly throughout the day and with increasing frequency
+  // before games and during Sundays." The lineup fill already re-plans every
+  // tick; what it re-plans FROM is this poll, and inactives drop about ninety
+  // minutes before kickoff — an hourly poll could carry a scratch past his
+  // own kickoff. Inside two hours of the NEXT kickoff the poll runs every ten
+  // minutes, inside forty-five every three; keyed on the next kickoff rather
+  // than "a game is on", so the late window's inactives are caught while the
+  // early games play.
+  const injEvery = injuryPollEvery(seen, Date.now());
   if (Date.now() - lastInjuryPoll >= injEvery) {
     try { const r = await pollInjuries(playerIndex); lastInjuryPoll = Date.now(); log('injuries', r.count, '@', r.feedTimestamp); }
     catch (e) { log('injury poll error', e.message); }

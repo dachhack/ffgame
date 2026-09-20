@@ -18,6 +18,51 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.432.1 — the AI late-swaps: the fill walks the live week, and the injury poll ramps into kickoff
+
+Founder: "Steelers is on AI control. Are they going to move Jacobs to the
+bench?" (Jacobs ruled Out, in RB2, 0.0, Sunday 1:00.) Then: "make that
+change and merge it. We need AI to make optimal line up moves regularly
+throughout the day and with increasing frequency before games and during
+Sundays."
+
+THE ANSWER WAS NO. The lock-time fill re-plans an agent or 🤖 auto-pilot
+seat every tick — but only on matchups still `scheduled`, and a week's
+matchup goes `live` at the first kickoff, Thursday night. A back ruled Out
+on Saturday was never seen. A human could late-swap him (the seal is per
+player, 0178); the AI had nobody to.
+
+THE FILL WALKS THE LIVE WEEK. `autoSlotClassicLineups` reads scheduled AND
+live matchups. On a live matchup only the seats the worker manages act —
+a human's seat is filled at lock and then left to the human — and two
+rails keep the move exactly what a human is allowed:
+  • a stored player whose game has started STANDS, sealed or not. The
+    seal (sealDueClassicPicks) runs after this fill in the same tick, and
+    a player benched in the seconds between would forfeit points he scored;
+  • a player whose game has started is never newly seated — the trigger
+    (classic_player_kickoff) refuses a manager that, and the worker must
+    not do what a manager cannot.
+"Started" is the seal's own rule: his team's kickoff off the tick's slate,
+the week's first when he cannot be placed. So Jacobs leaves RB2 at the
+next tick after his Out lands, as long as the Packers have not kicked off,
+and the best body whose game is still ahead takes the spot.
+
+THE POLL RAMPS INTO KICKOFF. The fill already re-plans every 25-second
+tick; what it re-plans FROM is the injury poll, and that was hourly on a
+game day — inactives drop about ninety minutes out, so a scratch could ride
+past his own kickoff unseen. `injuryPollEvery`: inside two hours of the
+NEXT kickoff, every ten minutes; inside forty-five, every three; keyed on
+the next kickoff rather than "a game is on", so the late window's
+inactives are caught while the early games play. Four env knobs
+(INJURY_RAMP_MS, INJURY_POLL_MS_RAMP, INJURY_RAMP_NEAR_MS,
+INJURY_POLL_MS_NEAR), defaults 2h / 10m / 45m / 3m.
+
+Also: the web typecheck was red on main since v0.432.0 — `BlueprintRules`
+gained `outTags` and the mascot builder's literal did not. One field added.
+
+Battery: web tsc, node --check on the worker, check:changelog — green.
+Worker + web; no migration.
+
 ### v0.432.0 — two injured shelves: OUT and IR
 
 Founder: "You know what would be cool? If we could have two types of IR spots
