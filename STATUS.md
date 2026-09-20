@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.431.1 — browse-as sees their team
+
+Founder: "I need to check if Mooney can put a player in IR. If I use the
+view as admin feature, it's still viewing my team as me instead of viewing
+Mooney's team as Mooney."
+
+The 0125 regression, one screen over. Browse-as (0108/0109/0149) reads the
+VIEWED user's data through admin-gated twins wherever a player-path RPC keys
+on auth.uid(). MY TEAM's whole desk — the roster with its IR/taxi places,
+FAAB, claims, the header's name and crest — comes from native_team_state,
+which keys on auth.uid() and had no twin; so "BROWSING AS mooney" drew the
+banner and then the ADMIN's own seat in that league ("dachhack"). 0306 moves
+the body verbatim into _native_team_state_for(league, uid, commish) and
+gives it two callers: native_team_state (unchanged for a manager: same gate,
+same is_commish) and admin_user_native_team_state(user, league) — admin-only,
+the viewed user's seat, is_commish as THEY would see it. The web's MY TEAM
+(TeamManage) and the draft desk read the twin under browse-as, skip the
+process_waivers nudge, hide the name editor, and refuse every write with
+the read-only line every other browse-as screen uses — set_roster_spot from
+a browsing admin would have moved the ADMIN's own player. Now the IR
+eligibility Mooney sees is exactly what the founder sees browsing as
+Mooney. Probes: browse-as-team-probes (wired) — c sees c, the commissioner
+still reads as commissioner, non-admin refused, the admin browsing as c gets
+c's roster/name/is_commish, browsing as the commissioner reads as
+commissioner, null user refused, the admin's own read unchanged.
+
+Battery: scratch probes, web tsc, check:changelog, vite build — green.
+Migration 0306; web only.
+
 ### v0.431.0 — a played card leaves the hand for good, the app gets the matchup switcher, and Extra Slot is a card you play on a window
 
 Founder, on the app, Sunday morning with Momentum armed: "If I used momentum
