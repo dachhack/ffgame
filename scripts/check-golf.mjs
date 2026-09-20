@@ -227,5 +227,26 @@ const side = (picks, roster) => ({ picks, roster, hasLineup: true, bestball: [] 
   ok('clearing golf clears the zero-fill', leagueGolfZeroPts() === null);
 }
 
+// ── THE RESOLVER PRICES A Q TOO (v0.429.1) ─────────────────────────────────
+// The unmanaged seat's lineup is computed at resolve from ClassicSide.ruledOut,
+// a boolean set — so a Q was priced at no risk there while the lock-time fill
+// priced him. ClassicSide.playRisk closes it: same predicate shape as the fill.
+{
+  setLeagueGolf(true, 10);
+  const KALEB = mk('kaleb-johnson', 'RB', 'PIT'), SAYLORS = mk('jacob-saylors', 'RB', 'JAX');
+  const slots = spec({ pos: ['RB'], zero_pts: 10 }, { pos: ['QB'] });
+  const unmanaged = (extra) => ({ picks: [], roster: [KALEB, SAYLORS], hasLineup: false, bestball: [], ...extra });
+  const seated = (r) => r.slots.find((x) => x.side === 'home' && x.slot === 'S1')?.slug;
+  const plain = resolveClassicMatchup(unmanaged({}), side([], []), WEEK, { ppr: 1 }, slots);
+  ok('an unmanaged golf seat fields the usage back over the scratch', seated(plain) === KALEB.id, seated(plain));
+  const risked = resolveClassicMatchup(unmanaged({ playRisk: (slug) => (slug === KALEB.id ? 0.75 : 0) }), side([], []), WEEK, { ppr: 1 }, slots);
+  ok('…and with the usage back DOUBTFUL the resolver prices the risk and fields the scratch', seated(risked) === SAYLORS.id, seated(risked));
+  const out = resolveClassicMatchup(unmanaged({ ruledOut: new Set([KALEB.id]), playRisk: () => 0 }), side([], []), WEEK, { ppr: 1 }, slots);
+  ok('ruled out still means out, whatever the risk says', seated(out) === SAYLORS.id, seated(out));
+  clearLeagueGolf();
+  const normal = resolveClassicMatchup(unmanaged({ playRisk: (slug) => (slug === KALEB.id ? 0.75 : 0) }), side([], []), WEEK, { ppr: 1 }, slots);
+  ok('outside golf a doubtful starter still starts — the risk changes nothing', seated(normal) === KALEB.id, seated(normal));
+}
+
 if (fails) { console.log(`\n${fails} GOLF ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL GOLF ASSERTIONS PASSED');

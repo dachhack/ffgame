@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.429.1 — the resolver prices a Q too
+
+Founder: "Let's fix the resolver so a Q is priced at resolve too."
+
+v0.429.0 left one seam: the unmanaged seat's lineup is computed at resolve
+from `ClassicSide.ruledOut`, a boolean set, so a questionable or doubtful
+player was priced at no risk there while the lock-time fill priced him.
+`ClassicSide` gains `playRisk` — the same predicate shape the fills use —
+and `unmanagedStart` hands slateAwareProj "ruled out → out, else the risk".
+The resolver reads injury_status beside the ruled-out set (one read, only
+when a side looks unmanaged, as before) and passes `playRisk` over it. A
+normal league is untouched: a risk short of 1 is full value outside golf.
+
+check-golf 45 → 49: an unmanaged golf seat fields the usage back over the
+scratch; with the usage back DOUBTFUL the resolver fields the scratch;
+ruled out still means out whatever the risk says; outside golf a doubtful
+starter still starts.
+
+Battery: web tsc, mobile tsc, check:golf, check:changelog — green. Worker
+only; no migration.
+
 ### v0.429.0 — golf: the floor above zero
 
 Founder: "How about golf? Players need to get close to zero without

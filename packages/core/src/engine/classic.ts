@@ -1179,6 +1179,11 @@ export interface ClassicSide {
    *  evidence (the worker reads injury_status). Feeds the unmanaged seat's
    *  value function; never a guess, so absent means no claim. */
   ruledOut?: Set<string>;
+  /** PLAY RISK (v0.429.1): the chance a designation keeps a player off the
+   *  field this week (golfFloor.playRisk over the caller's own report — the
+   *  worker's injury_status). A normal league still starts him at full value;
+   *  a golf league prices the blank he might post. Absent means no claim. */
+  playRisk?: (slug: string) => number;
 }
 
 // ── What a player is WORTH to an auto-fill (v0.252.0) ───────────────────────
@@ -1302,7 +1307,13 @@ function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>
   // Slate-aware (v0.252.0): a bye or ruled-out player is worth zero here, so
   // the computed lineup benches him for the best healthy body — the one
   // correction no manager exists to make on this seat.
-  const value = slateAwareProj(week, undefined, s.ruledOut ? (slug) => s.ruledOut!.has(slug) : undefined);
+  // Ruled out is out; a designation short of that is a play risk, which only
+  // golf prices (v0.429.1 — the resolver used to hand this fill a Q at no
+  // risk while the lock-time fill priced him).
+  const value = slateAwareProj(week, undefined,
+    s.ruledOut || s.playRisk
+      ? (slug) => (s.ruledOut?.has(slug) ? true : (s.playRisk?.(slug) ?? 0))
+      : undefined);
   return optimalLineup(open, cands, value)
     .spots.flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
 }

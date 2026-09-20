@@ -32,7 +32,8 @@ import { leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
-import { ruledOutSlugs } from './injuries.js';
+import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
+import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -487,6 +488,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // unmanaged, which is at most one extra read per classic matchup.
     const storedBy = new Set();
     let ruledOut;
+    let riskOf;
     if (homePicks == null || awayPicks == null) {
       const uids = [homeMem?.app_user_id, awayMem?.app_user_id].filter(Boolean);
       if (uids.length) {
@@ -499,6 +501,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       // the one correction no manager exists to make (v0.252.0). injury_status
       // is the worker's own ESPN poll; O/IR only, same bar as the auto-slot.
       ruledOut = await ruledOutSlugs();
+      // …and a Q or D is a PLAY RISK (v0.429.1), priced by a golf league's
+      // fill and ignored by everyone else — the same answer the lock-time
+      // fill gives, so the lineup this seat is given at resolve is the one
+      // it would have been given at lock.
+      const statuses = await injuryStatusMap();
+      riskOf = (slug) => playRisk(statuses.get(slug));
     }
     const hasRows = (picks, rosterId) => picks != null
       || storedBy.has(byRoster.get(rosterId)?.app_user_id);
@@ -532,6 +540,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       roster: rosters.get(rosterId) ?? [],
       bestball,
       ruledOut,
+      playRisk: riskOf,
     });
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,
