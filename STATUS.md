@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.2 — the classic widget projects the final and names the spots that want attention
+
+Founder: "For classic leagues, let's show predicted score rather than
+current. There's still a lot of room in the widget. We can show empty
+starting spots, starting spots with out/bye players, and starters where a
+player that is projected to score 2+ more points is on the bench and could
+replace. No need to make this a separate view."
+
+THE NUMBER. A classic seat's score on the card is now the PROJECTED FINAL,
+the board's own blend (projectEntry): a starter's points if his game is
+done, his projection if it has not started, the larger of the two while he
+plays. The widget has no play feed to say a game is final, so a game reads
+as done three and three-quarter hours after kickoff, and the matchup's
+final closes everything. The "vs" between the scores reads PROJ. The
+opponent's lineup is read the way the browse ring reads it (0178's
+league-readable classic rows); a seat with no rows is fielded from its
+roster exactly as the resolver fields it (classicLineup), and an opponent
+whose roster cannot be read keeps their live total, marked PROJ · LIVE.
+Golf sums with the spot's zero-fill on an empty or settled-zero spot.
+
+THE SPOTS. Drawn on the score card itself, in the room the window strip
+used (a classic week scores as one window, so the strip had nothing to
+say). Three passes over the starting spots, in the founder's order, each
+bench man promised to one spot: the EMPTY spots take the best bench man
+first ("RB 2 · empty · start B. Robinson 22.2"); then the spots whose
+starter cannot play — OUT/IR/DOUBTFUL by the injury sheet, or on BYE by the
+slate — with the best bench man to start; then the UPGRADES, a bench man
+who projects SWAP_MIN_GAIN (2) or more over the starter ("RB 1 · K.
+Gainwell 11.9 over E. Heidenreich 0.6"). A starter whose game has kicked
+off is locked in and never flagged; a bench man whose game has kicked off
+is never suggested. Golf reads "better" as lower-but-not-zero. Two lines
+on a 4×2, four on a 4×3, eight on a 4×4, "+N more" past that; a set lineup
+says so on the taller sizes. Not a separate view: the classic card has no
+⇄ chip, and the lineup view stays a drip feature.
+
+THE READS. The classic paint adds what the classic board reads: the
+league's spots and catalog (league_game_mode, cached an hour), my rows and
+the opponent's revealed ones (fresh), both rosters (30 min), the shelf —
+IR/OUT/taxi can neither start nor be suggested (30 min), tenure when a spot
+filters on it (an hour), and the pool's Sleeper ids (an hour) so the bake
+answers by id (v0.432.4). The catalog and golf flag are installed for the
+projection and cleared after; the headless task shares a module with the
+next league's paint.
+
+PROVED. check:widget stands a classic seat up on the week-3 slate and pins
+the projected final before kickoff, on Thursday night (a live man's max),
+on Sunday (a finished game banks, a live starter is never a swap, a bench
+man on the field is never suggested), at the final, with an unreadable
+opponent, in golf (the lowest bench man fills the hole; lower is the
+swap), and that a drip league is untouched.
+
 ### v0.433.1 — the widget's error card is the retry, and a failed read keeps the picture
 
 Founder, with a home screen that said "Couldn't reach the league — Network

@@ -182,17 +182,43 @@ function leftLine(snap: WidgetSnapshot): string | null {
   return `You ${part(snap.left.me)}  ·  Them ${part(snap.left.them)}`;
 }
 
+/** CLASSIC (v0.433.2). Founder: "For classic leagues, let's show predicted
+ *  score rather than current. There's still a lot of room in the widget. We
+ *  can show empty starting spots, starting spots with out/bye players, and
+ *  starters where a player that is projected to score 2+ more points is on
+ *  the bench and could replace. No need to make this a separate view." The
+ *  scores are the projected finals (the feed says so with `projected`), the
+ *  "vs" reads PROJ, and the spots that want attention print on the score
+ *  card in the room the window strip used — a classic week scores as one
+ *  window, so the strip had nothing to say there. */
+function ClassicFixes({ snap, tier }: { snap: WidgetSnapshot; tier: Tier }) {
+  const max = tier === 'compact' ? 2 : tier === 'roomy' ? 4 : 8;
+  const shown = snap.fixes.slice(0, max);
+  const more = snap.fixes.length - shown.length;
+  if (!snap.fixes.length) return tier === 'compact' ? null : <Line text="✓ lineup set — nothing to fix" color={C.ok} />;
+  return (
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
+      {shown.map((f, i) => (
+        <Line key={`${f.win}-${f.kind}-${i}`} text={`${f.winLabel} · ${f.text}`}
+          color={f.kind === 'swap' ? C.you : f.kind === 'empty' || f.kind === 'injury' || f.kind === 'bye' ? C.warn : C.text} />
+      ))}
+      {more > 0 ? <Line text={`+${more} more`} color={C.faint} size={9.5} /> : null}
+    </FlexWidget>
+  );
+}
+
 function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapshot; leagues: number; tier: Tier; view: WidgetView; offline?: boolean }) {
   const lineColor: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : snap.phase === 'bye' ? C.faint : C.warn;
   const leading = snap.them ? (snap.me.score > snap.them.score ? 'me' : snap.me.score < snap.them.score ? 'them' : null) : null;
   const left = leftLine(snap);
+  const projected = snap.projected === true && snap.phase !== 'final';
   return (
     <Frame clickAction={WIDGET_CLICK.open} clickActionData={{ uri: matchupDeepLink(snap.leagueId, snap.rosterId) }}>
       <Header left={`${snap.leagueName.toUpperCase()} · ${snap.weekLabel.toUpperCase()}`} right={snap.line.toUpperCase()} rightColor={lineColor} />
       {snap.them ? (
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
           <Side name={snap.me.name} score={snap.me.score} color={leading === 'them' ? C.dim : C.you} align="left" />
-          <TextWidget text="vs" style={{ fontSize: 11, color: C.faint, paddingHorizontal: 10 }} />
+          <TextWidget text={projected ? (snap.themLive ? 'PROJ · LIVE' : 'PROJ') : 'vs'} style={{ fontSize: projected ? 9 : 11, color: C.faint, fontWeight: projected ? 'bold' : 'normal', paddingHorizontal: 10 }} />
           <Side name={snap.them.name} score={snap.them.score} color={leading === 'me' ? C.dim : C.opp} align="right" />
         </FlexWidget>
       ) : (
@@ -201,7 +227,8 @@ function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapsho
           <TextWidget text="On a bye this week — nothing to sweat." maxLines={1} style={{ fontSize: 11, color: C.dim }} />
         </FlexWidget>
       )}
-      {snap.them && snap.windows.length > 0 ? <Strip windows={snap.windows} /> : null}
+      {snap.them && snap.projected ? <ClassicFixes snap={snap} tier={tier} /> : null}
+      {snap.them && !snap.projected && snap.windows.length > 0 ? <Strip windows={snap.windows} /> : null}
       {tier !== 'compact' && snap.them ? (
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
           {left ? <Line text={left} /> : null}
@@ -209,7 +236,7 @@ function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapsho
           {snap.alarm && snap.alarm.empty > 0 ? <Line text={`⚠ ${snap.alarm.empty} empty in ${snap.alarm.winLabel} · locks ${clock(snap.alarm.lockMs)}`} color={C.warn} /> : null}
         </FlexWidget>
       ) : null}
-      {tier === 'tall' && snap.them ? (
+      {tier === 'tall' && snap.them && !snap.projected ? (
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
           {snap.windows.map((w) => (
             <FlexWidget key={w.id} style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'space-between' }}>
