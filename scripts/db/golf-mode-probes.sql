@@ -127,9 +127,14 @@ begin
   perform assert_true((r -> 'slots' -> 0 ->> 'zero_pts')::int = 10, 'gf9a stored on the spot that asked');
   perform assert_true((r -> 'slots' -> 1 ? 'zero_pts') = false, 'gf9b and nowhere else');
   perform assert_true((r -> 'slots' -> 2 ->> 'zero_pts')::int = 7, 'gf9c each spot names its own number');
-  perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"zero_pts":10,"bb":true}]'::jsonb),
-    'can''t also carry a zero-points rule',
-    'gf10 a best-ball spot is REFUSED, not silently stripped — it fills itself, so it is never unfilled');
+  -- 0304 (v0.430.2): a best-ball spot CARRIES the zero-fill rule now — the
+  -- fill seats a body, but a body can still score nothing, and in golf that
+  -- blank should bank the fill. The refusal this probe pinned since v0.303.0
+  -- went with it; the rule rides the spot instead.
+  r := set_league_classic_slots(lid, '[{"pos":["QB"],"zero_pts":10,"bb":true}]'::jsonb);
+  perform assert_ok(r, 'gf10 a best-ball spot may carry a zero-fill rule (0304)');
+  perform assert_true((r -> 'slots' -> 0 ->> 'zero_pts')::int = 10 and (r -> 'slots' -> 0 ->> 'bb')::boolean,
+    'gf10 …and keeps both the rule and the best-ball flag');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"zero_pts":500}]'::jsonb),
     'must be 0-200', 'gf10a an absurd fill is refused');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"zero_pts":"ten"}]'::jsonb),

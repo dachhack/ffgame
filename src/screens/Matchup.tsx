@@ -29,7 +29,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
@@ -474,7 +474,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // via effWinClock); the sim board uses the manual playback clock. Either way
     // EMP freezes forward from the current position, never retroactively.
     if (pendingApply === 'emp') { const clock = effWinClock(win); if (applyEmp(week, win, clock)) liveTargeted('emp', { win, clock }); setPendingApply(null); }
-    else if (pendingApply === 'extra-slot') { applyExtraSlot(week, win); setPendingApply(null); }
+    else if (pendingApply === 'extra-slot') {
+      setPendingApply(null);
+      // LIVE (0305): the server plays the card — consumes it, bumps the slot
+      // cap (enforce_slot_cap reads applied_state.extra) and records the
+      // window for both boards. The local record follows only on ok; before
+      // this the web wrote its own blob and the ninth pick was refused at
+      // save. A refusal is loud, like every other server apply.
+      if (liveCtx) {
+        applyExtraSlotCard(liveCtx.matchupId, win)
+          .then((r) => { if (r.ok) applyExtraSlot(week, win, { synced: true }); else window.alert(`Extra Slot did NOT apply: ${friendlyError(r.error ?? 'apply failed')}`); })
+          .catch((e) => window.alert(`Extra Slot did NOT apply: ${friendlyError(e)}`));
+      } else applyExtraSlot(week, win);
+    }
     else if (pendingApply === 'rivalry') { if (applyRivalry(week, win)) liveTargeted('rivalry', { win }); setPendingApply(null); }
   }
   // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/
@@ -1261,7 +1273,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
-  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
+  // NO TAKE-BACKS on an armed buff (v0.431.0, founder: "if you use a power up
+  // you can't take it back"): it used to carry REMOVE through setup. The
+  // position auto-refund below (a buff whose only eligible starter was
+  // benched) is the game's correction, not a player's, and stays.
+  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field · no take-backs' }); }
   if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => { clearDoubleOrNothing(week); liveClearTargeted('double-or-nothing'); } : undefined }); }
   if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => { clearByeSteal(week); liveClearTargeted('bye-steal'); } : undefined });
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
@@ -1284,7 +1300,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // kicking after the arm (buffsAt stamps), and targeted plays aim at an
   // un-kicked window — the server gates per target window.
   const openWins = liveCtx ? windowsForWeek(week).filter((w) => winRt(w.id) === 'setup') : [];
-  const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0).map((p) => {
+  // A PLAYED CARD LEAVES THE HAND (v0.431.0, founder, on the app: "if I used
+  // momentum it shouldn't be in my hand anymore. It should show on the spots
+  // though"). An armed team buff used to stay fanned here, dimmed "already
+  // armed", whenever a copy was still counted; it lives in ◈ ACTIVE (with
+  // REMOVE) and on every spot it applies to, so the hand deals only what is
+  // still to be played.
+  const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 && !(isTeamBuff(p.id) && buffs[p.id])).map((p) => {
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
@@ -1299,7 +1321,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       ok = liveWins.length > 0;
       deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';
     }
-    if (buff && buffs[p.id]) ok = false; // already armed → lives in Active
     // Window-targeted plays (Extra Slot / Rivalry / EMP) also enter tap-a-target
     // mode — you play the card, then tap the window to apply it.
     const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : (SPOT_APPLY.has(p.id) || p.target === 'window') ? 'apply' : 'hint';
@@ -2707,7 +2728,7 @@ function ActivePowerupsModal({ effects, onClose }: {
           {e.onRemove ? (
             <button onClick={e.onRemove} className="mono" style={{ flex: 'none', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--opp)', color: 'var(--opp)', background: 'var(--surface)' }}>REMOVE</button>
           ) : (
-            <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>LOCKED</span>
+            <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>IN PLAY</span>
           )}
         </div>
       ))}

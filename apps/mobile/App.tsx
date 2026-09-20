@@ -13,7 +13,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Animated, AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments, commishOverview } from '@drip/core/data/liveApi';
 import { refreshMatchupWidgets } from './src/widget/widgetTask';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
@@ -487,6 +487,20 @@ export function App() {
               native={open.native}
               onBack={() => setView('home')}
               openShopSignal={shopSignal}
+              // THE MATCHUP SWITCHER (v0.431.0): the board's "Your matchups"
+              // sheet hands over a seat; this is the leagues list's own open
+              // step, landing on the matchup. Whether you commission the
+              // league is looked up on the way (the ⚑ door hangs off it).
+              onSwitchLeague={(e) => {
+                track(Ev.leagueOpened, { live: true });
+                void leagueTouch(e.league_id).catch(() => {});
+                const next: OpenLeague = { leagueId: e.league_id, rosterId: e.sleeper_roster_id, name: e.league?.name ?? 'League', native: e.league?.provider === 'native', commish: false, pickUserId: e.pick_user_id };
+                setOpen(next);
+                setView('picks');
+                commishOverview().then((cl) => {
+                  if (cl.some((l) => l.league_id === e.league_id)) setOpen((cur) => (cur && cur.leagueId === e.league_id ? { ...cur, commish: true } : cur));
+                }).catch(() => {});
+              }}
             />
           </View>
         ) : (

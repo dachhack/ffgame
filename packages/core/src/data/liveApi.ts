@@ -1820,6 +1820,9 @@ export interface TargetedState {
   bunker?: Record<string, number>;
   clutchEncore?: Record<string, number>;
   clutchCounter?: Record<string, number>;
+  /** Extra Slot cards played this week, by window (0305 apply_extra_slot):
+   *  {win: n}. Read from the same applied_state row as the targeted plays. */
+  extraSlots?: Record<string, number>;
 }
 
 /** Record (or clear, with a null target) a manual backup assignment (0137).
@@ -1833,8 +1836,16 @@ export const setBackupAssign = (matchupId: string, backupKey: string, targetKey:
 export async function myTargeted(matchupId: string, userId: string): Promise<TargetedState> {
   const { data } = await (await client()).from('applied_state').select('payload_json')
     .eq('matchup_id', matchupId).eq('app_user_id', userId).maybeSingle();
-  return ((data?.payload_json as { targeted?: TargetedState } | null)?.targeted) ?? {};
+  const pj = data?.payload_json as { targeted?: TargetedState; extraSlots?: Record<string, number> } | null;
+  const t: TargetedState = { ...(pj?.targeted ?? {}) };
+  if (pj?.extraSlots && typeof pj.extraSlots === 'object') t.extraSlots = pj.extraSlots;
+  return t;
 }
+/** Play one owned Extra Slot card on a window (0305): before the week's first
+ *  lock, consumes the card, bumps the slot cap and records the window for
+ *  both boards. No refunds. */
+export const applyExtraSlotCard = (matchupId: string, win: string) =>
+  rpc<{ ok: boolean; error?: string; extra?: number; extraSlots?: Record<string, number>; win?: string }>('apply_extra_slot', { p_matchup_id: matchupId, p_win: win });
 
 // Metric unlocks (M2): arm before a locked metric (Combo Drip / Return / Air Raid)
 // can be picked. Same applied_state store, free this season.

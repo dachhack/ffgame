@@ -32,6 +32,7 @@ import {
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
+  myEnrollments, type Enrollment, applyExtraSlotCard,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames } from '@drip/core/data/gameFeed';
@@ -106,8 +107,14 @@ const fmtLock = (iso: string | null) => {
   catch { return iso; }
 };
 
-export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShopSignal }: {
+export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShopSignal, onSwitchLeague }: {
   userId: string; leagueId?: string; rosterId?: number;
+  /** THE MATCHUP SWITCHER (v0.431.0, founder: "where is the matchup switcher
+   *  so I can go directly to my other matchups"). The web board has had it
+   *  since v0.388.0; the app never did. Tapping ▾ on the week line opens
+   *  "Your matchups" — your other seats — and picking one hands the seat to
+   *  the shell, which opens that league's board. */
+  onSwitchLeague?: (e: Enrollment) => void;
   /** Native league: check roster legality — an over-limit roster is locked out
    *  of picks and power-ups (0072/0128), and the ban deserves a banner here,
    *  not just an error after a tap. */
@@ -153,6 +160,25 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
+  // THE MATCHUP SWITCHER (v0.431.0): your other seats, read when the sheet
+  // opens (my_teams is the leagues page's own call), never on the board's
+  // hot path. Null until the first open.
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [seats, setSeats] = useState<Enrollment[] | null>(null);
+  useEffect(() => {
+    if (!switchOpen || seats) return;
+    let dead = false;
+    myEnrollments(userId).then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); }).catch(() => { if (!dead) setSeats([]); });
+    return () => { dead = true; };
+  }, [switchOpen, seats, userId]);
+  // The ARMED strip's sheet (v0.431.0): one armed buff and its blurb.
+  const [armedOpen, setArmedOpen] = useState<string | null>(null);
+  // EXTRA SLOTS (0305, v0.431.0, founder: "I don't see the extra slot I
+  // added"): the windows this seat has widened, {win: n}, read from the
+  // server's record with the targeted plays. `extraPick` is the card's
+  // window chooser, open after ARM on the Extra Slot card.
+  const [extraSlots, setExtraSlots] = useState<Record<string, number>>({});
+  const [extraPick, setExtraPick] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
   // PULL TO REFRESH (v0.344.4, founder: "swipe down to refresh your matchup").
@@ -295,7 +321,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // it (v0.375.0, founder: "we don't get to see which power ups are
         // assigned to Keenum on his card"). Display-only until targeted
         // applies port to the app; the web is the apply surface meanwhile.
-        myTargeted(m.id, userId).then((tg) => { if (alive) setTargeted(tg ?? {}); }).catch(() => {});
+        myTargeted(m.id, userId).then((tg) => { if (alive) { setTargeted(tg ?? {}); setExtraSlots(tg?.extraSlots ?? {}); } }).catch(() => {});
         // The week's NFL injury report. Cleared first so a league or week switch
         // can never show the previous board's designations against this pool.
         // Off the critical path on purpose — it swallows its own failures and
@@ -504,7 +530,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     return ms != null ? ms <= nowTs : true;
   };
   const allLocked = !!matchup && locked && wins.every((w) => winLocked(w.id));
-  const slots = useMemo(() => slotsFor(wins), [wins]);
+  // The windows as the board draws them: the week's base slots PLUS the
+  // Extra Slot cards played on each (0305). Index-keyed like the web
+  // (slotKey = `${win}#${i}`), so the ninth pick is simply slot 8 of its
+  // window and the resolver reads it like any other row.
+  const winsX = useMemo(() => wins.map((w) => ({ ...w, slots: w.slots + (extraSlots[w.id] ?? 0) })), [wins, extraSlots]);
+  const slots = useMemo(() => slotsFor(winsX), [winsX]);
 
   const week = matchup?.week ?? 0;
   /** Every NFL game with a slotted player, deduped by game and ordered by the
@@ -667,6 +698,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  impossible arm is refused before it spends a card. */
   const armFromHand = async (id: string) => {
     if (!matchup || locked || buffBusy) return;
+    // Extra Slot is played on a WINDOW (0305); any other aimed card is not a
+    // buff and must never be filed as one (v0.431.0).
+    if (id === 'extra-slot') { setExtraPick(true); return; }
+    if (powerupById(id)?.target) { setErr('That card is aimed at a spot or window — play it on the web for now.'); return; }
     if (!liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
     if (buffs.has(id)) return;
     const armed = new Set(buffs);
@@ -696,54 +731,77 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     } finally { setBuffBusy(null); }
   };
 
-  const disarmFromHand = async (id: string) => {
-    if (!matchup || locked || buffBusy) return;
-    if (!buffs.has(id)) return;
-    setBuffBusy(id); setErr(null);
-    try {
-      const next = [...buffs].filter((b) => b !== id);
-      const r = await heroSetBuffs(matchup.id, next);
-      if (r?.ok) {
-        await refundInventory(matchup.id, id).catch(() => {});
-        setBuffs(new Set(next));
-        setInventory((inv) => ({ ...inv, [id]: (inv[id] ?? 0) + 1 }));
-      } else setErr(r?.error ?? 'Could not disarm that power-up.');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not disarm that power-up.');
-    } finally { setBuffBusy(null); }
-  };
 
-  /** The hand: everything owned, plus anything currently armed (an armed card
-   *  has left the inventory, so it would otherwise vanish from view). */
+  /** The hand: what you OWN and have not played (v0.431.0). An armed card
+   *  used to stay fanned here, painted ARMED, so it could be disarmed — and
+   *  the founder read that as the card never having left: "if I used
+   *  momentum it shouldn't be in my hand anymore. It should show on the
+   *  spots though." So a played card leaves the hand for good ("if you use
+   *  a power up you can't take it back" — there is no disarm anywhere); it
+   *  shows on every spot it applies to (SetupRow's ⚡ chip) and in the
+   *  ARMED strip under the week line. A second copy of an armed buff stays
+   *  hidden too — it cannot be armed twice this week, and a card that can
+   *  do nothing is not a card to deal. */
   const hand: HandCard[] = POWERUPS
     // Metric unlock cards use through the metric PICKER (pickMetricWithCard),
     // not the hand — played from here they'd arm into `buffs`, which nothing
     // reads for them. Underdog (0257, a slot-targeted modifier) is likewise
     // excluded until the app grows targeted applies: playable on web meanwhile.
     .filter((p) => p.kind !== 'metric' && p.id !== 'unlock-underdog')
-    .filter((p) => (inventory[p.id] ?? 0) > 0 || buffs.has(p.id))
+    .filter((p) => (inventory[p.id] ?? 0) > 0 && !buffs.has(p.id))
     .map((p) => {
-      const armed = buffs.has(p.id);
       const pre = p.timing === 'pre';
+      // A TARGETED card (a window or a spot) is not a whole-field buff: ARM
+      // used to file it into the buff list, which nothing reads, and eat the
+      // card (v0.431.0 — the founder's Extra Slot). Extra Slot now plays
+      // through its window chooser; the rest wait for the app's targeted
+      // applies and say so, playable on the web meanwhile.
+      const targeted = !!p.target && p.id !== 'extra-slot';
+      const extra = p.id === 'extra-slot';
       return {
         id: p.id,
         qty: inventory[p.id] ?? 0,
-        armed,
-        usable: !locked && pre,
-        note: locked ? 'The week has started — arms are closed.'
+        armed: false,
+        usable: !locked && pre && !targeted && !(extra && (matchup?.status ?? 'scheduled') !== 'scheduled'),
+        note: targeted ? 'Aimed cards play on the web for now — coming to the app.'
+          : extra ? (locked || (matchup?.status ?? 'scheduled') !== 'scheduled' ? 'Extra Slot plays before the week’s first lock.' : 'ARM, then pick the window to widen.')
+          : locked ? 'The week has started — arms are closed.'
           : pre ? undefined
           : 'Real-time card — playable once this window kicks off.',
       };
     });
 
+  /** Play an Extra Slot card on a window (0305): the server consumes the card,
+   *  raises the pick cap and records the window; the board widens on ok. */
+  const playExtraSlot = async (win: string) => {
+    if (!matchup || buffBusy) return;
+    setExtraPick(false);
+    setBuffBusy('extra-slot'); setErr(null);
+    try {
+      const r = await applyExtraSlotCard(matchup.id, win);
+      if (!r?.ok) {
+        setErr(r?.error === 'cap' ? 'Extra Slot cap reached for this week.'
+          : r?.error === 'locked' ? 'The week has locked — Extra Slot plays before the first lock.'
+          : r?.error === 'not owned' ? 'You don’t own that card — buy it in the shop.'
+          : friendlyError(r?.error ?? 'Could not play that card.'));
+        return;
+      }
+      commit();
+      setExtraSlots(r.extraSlots ?? {});
+      setInventory((inv) => ({ ...inv, 'extra-slot': Math.max(0, (inv['extra-slot'] ?? 1) - 1) }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not play that card.');
+    } finally { setBuffBusy(null); }
+  };
+
   // What's ATTACHED to one slot: targeted plays (keyed 'win|slot' in the
   // payload) PLUS armed team buffs that matter to this spot — the same two
   // sources the web board's chips draw from (v0.375.1; targeted-only missed
   // buffed players entirely).
-  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { icon: string; name: string; blurb: string }[] => {
+  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { id?: string; icon: string; name: string; blurb: string }[] => {
     const k = `${win}|${slot}`;
-    const out: { icon: string; name: string; blurb: string }[] = [];
-    const add = (id: string) => { const p = powerupById(id); out.push({ icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
+    const out: { id?: string; icon: string; name: string; blurb: string }[] = [];
+    const add = (id: string) => { const p = powerupById(id); out.push({ id, icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
     if (targeted.don?.win === win && targeted.don?.slot === slot) add('double-or-nothing');
     if (targeted.byeSteal?.win === win && targeted.byeSteal?.slot === slot) add('bye-steal');
     const lists: [string, string[] | undefined][] = [
@@ -922,9 +980,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         <WeekNav />
         {/* Who's playing, on the week line rather than heading a card of its
             own. It takes the slack that was an empty spacer. */}
-        <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>
-          {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
-        </Text>
+        {/* THE MATCHUP SWITCHER (v0.431.0): the pairing is the door to your
+            other matchups — tap it (or the ▾) for "Your matchups". Only
+            offered when the shell can open another league. */}
+        <Pressable onPress={onSwitchLeague ? () => { tap(); setSwitchOpen(true); } : undefined} hitSlop={6}
+          accessibilityRole={onSwitchLeague ? 'button' : undefined} accessibilityLabel="Switch to another of your matchups"
+          style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>
+            {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
+          </Text>
+          {onSwitchLeague && <Mono size={10} tone="faint">▾</Mono>}
+        </Pressable>
         {/* SCHEDULED is the default and says nothing a 0–0 score doesn't; it
             cost ~70px on the one line that now has to hold a team name too.
             LIVE and FINAL are worth the room, so they still get it. */}
@@ -1043,11 +1109,68 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         )}
       </Card>
 
+      {/* ◈ ARMED (v0.431.0): every team buff in play this week, by name. A
+          played card leaves the hand (see `hand`), and a buff that no fielded
+          spot answers yet — Momentum armed before a drip metric is picked —
+          would otherwise be nowhere on screen. Tap one for what it does.
+          No take-backs: a played card is played. */}
+      {[...buffs].some((id) => !powerupById(id)?.target) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          <Mono size={8.5} weight="700" track={0.14} tone="faint">◈ ARMED</Mono>
+          {[...buffs].filter((id) => !powerupById(id)?.target).map((id) => { const p = powerupById(id); return (
+            <Chip key={id} on label={`${p?.icon ?? '✦'} ${(p?.name ?? id).toUpperCase()}`} onPress={() => setArmedOpen(id)} a11y={`${p?.name ?? id}, armed`} />
+          ); })}
+        </View>
+      )}
+      <Overlay visible={!!armedOpen} title={armedOpen ? `${powerupById(armedOpen)?.icon ?? '✦'} ${powerupById(armedOpen)?.name ?? armedOpen}` : ''}
+        subtitle="ARMED · IN PLAY THIS WEEK" onClose={() => setArmedOpen(null)}>
+        <View style={{ padding: 14, gap: 12 }}>
+          <Text style={{ fontSize: 13, color: t.mid, lineHeight: 19 }}>{armedOpen ? powerupById(armedOpen)?.blurb : ''}</Text>
+          <Text style={{ fontSize: 11.5, color: t.dim, lineHeight: 17 }}>It shows on every spot it applies to (the ⚡ chip on the card). A played card stays played — there are no take-backs.</Text>
+        </View>
+      </Overlay>
+      {/* EXTRA SLOT → which window (0305). Every window of the week is open
+          while the matchup is still 'scheduled' (the card's whole clock). */}
+      <Overlay visible={extraPick} title="Extra Slot · pick a window" subtitle="ADDS ONE SPOT TO THAT WINDOW · NO TAKE-BACKS" onClose={() => setExtraPick(false)}>
+        <View style={{ padding: 12, gap: 8 }}>
+          {winsX.map((w) => (
+            <Pressable key={w.id} onPress={() => { tap(); void playExtraSlot(w.id); }}
+              android_ripple={{ color: alpha(t.you, 16) }}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.bg, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 })}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{w.label}</Text>
+                <Mono size={9.5}>{w.slots} spot{w.slots === 1 ? '' : 's'} now{(extraSlots[w.id] ?? 0) > 0 ? ` · +${extraSlots[w.id]} played` : ''}</Mono>
+              </View>
+              <Mono size={9} weight="700" tone="you" track={0.08}>+1 SPOT →</Mono>
+            </Pressable>
+          ))}
+        </View>
+      </Overlay>
+      {/* "Your matchups" — the switcher's sheet (v0.431.0). */}
+      <Overlay visible={switchOpen} title="Your matchups" subtitle={`NOW · ${(myTeam?.team_name ?? 'YOU').toUpperCase()}`} onClose={() => setSwitchOpen(false)}>
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+          {seats === null && <Mono size={10.5} style={{ padding: 8 }}>Loading your leagues…</Mono>}
+          {seats?.filter((e) => e.league_id !== leagueId).map((e) => (
+            <Pressable key={`${e.league_id}-${e.sleeper_roster_id}`}
+              onPress={() => { tap(); setSwitchOpen(false); onSwitchLeague?.(e); }}
+              android_ripple={{ color: alpha(t.you, 16) }}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.bg, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 })}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{e.league?.name ?? 'League'}</Text>
+                <Mono size={9.5} numberOfLines={1}>{e.team_name}{e.league?.game_mode === 'classic' ? ' · CLASSIC' : ''}{e.comanager ? ' · CO-MANAGER' : ''}</Mono>
+              </View>
+              <Mono size={9} weight="700" tone="you" track={0.08}>OPEN →</Mono>
+            </Pressable>
+          ))}
+          {seats && !seats.some((e) => e.league_id !== leagueId) && <Mono size={10.5} style={{ padding: 8 }}>No other leagues — join or build one from My Leagues.</Mono>}
+        </ScrollView>
+      </Overlay>
+
       {/* Windows. Each one phases on its OWN kickoff, which is the whole reason
           this can be one screen: at any moment on a Sunday some windows are
           still yours to set and others are already scoring, and a board split
           by tab could only ever show you one of those at a time. */}
-      {wins.map((w) => {
+      {winsX.map((w) => {
         const winSlots = slots.filter((s) => s.win === w.id);
         const elig = gateOn ? pool.filter((pl) => winBySlug[pl.slug] === 'any' || winBySlug[pl.slug] === w.id).length : pool.length;
         const setN = winSlots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
@@ -1469,7 +1592,6 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       cards={hand}
       busyId={buffBusy}
       onArm={armFromHand}
-      onDisarm={disarmFromHand}
     />
     </View>
   );
