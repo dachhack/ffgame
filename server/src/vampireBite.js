@@ -17,7 +17,7 @@
 // and an hour after the week finals is soon enough to bite.
 import { db } from './supabase.js';
 import { injuryStatusMap } from './injuries.js';
-import { leagueSlotDefs } from '../../packages/core/src/engine/classic.ts';
+import { leagueSlotDefs, leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
 import { vampireBitePlan } from '../../packages/core/src/engine/vampireBite.ts';
@@ -78,7 +78,7 @@ export async function sweepVampireBites(log = () => {}) {
       if (!open.length) continue;
 
       // Module globals, installed unconditionally (the v0.303.1 lesson).
-      setLeagueGolf(mode?.golf === true);
+      setLeagueGolf(mode?.golf === true, leagueGolfZeroPtsOf(mode));
       setLeagueProjScoring(leagueCatalogOf(mode));
       const slots = leagueSlotDefs(mode);
       if (!slots.length) continue;

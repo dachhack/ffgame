@@ -32,10 +32,19 @@
 // to it.
 
 let golf = false;
+let golfZero: number | null = null;
 
-/** Install the league's rule. */
-export function setLeagueGolf(on?: boolean | null): void { golf = on === true; }
-export function clearLeagueGolf(): void { golf = false; }
+/** Install the league's rule — and, since v0.429.0, its typical ZERO-FILL
+ *  (the largest zero_pts on any starting spot), so a fill that values a
+ *  player without a spot in hand (optimalLineup) can still price the blank
+ *  he might post. See golfFloor.ts. */
+export function setLeagueGolf(on?: boolean | null, zeroPts?: number | null): void {
+  golf = on === true;
+  golfZero = golf && zeroPts != null && Number.isFinite(zeroPts) ? zeroPts : null;
+}
+export function clearLeagueGolf(): void { golf = false; golfZero = null; }
+/** The league's typical zero-fill, when golf is on and one was installed. */
+export function leagueGolfZeroPts(): number | null { return golfZero; }
 /** Does this league play golf — lowest total wins? */
 export function leagueIsGolf(): boolean { return golf; }
 

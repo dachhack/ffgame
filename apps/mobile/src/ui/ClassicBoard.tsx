@@ -6,7 +6,7 @@
 // the same live play stream, refreshed every 60s.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
@@ -14,6 +14,7 @@ import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCa
 import { buildMatchupBoard, projectEntry, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
+import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag, liveTeamFor } from '@drip/core/data/slugMeta';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { shortName } from '@drip/core/data/players';
@@ -458,7 +459,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         leagueGameMode(leagueId).then(async (gm) => {
           // GOLF (v0.303.0) rides the same load: a league setting the engine
           // reads at scoring time, installed like the scoring adjustments.
-          if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true); }
+          if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -707,8 +708,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const fillValue = useMemo(
     () => slateAwareProj(matchup?.week ?? 1, slate, (slug) => {
       const st = injuryFor(matchup?.week ?? 1, slug);
-      return st === 'O' || st === 'IR';
+      // O/IR → out. A Q or D is a PLAY RISK (v0.429.0): a normal league still
+      // starts him at full value; a golf league prices the blank he might post.
+      return st === 'O' || st === 'IR' ? true : playRisk(st);
     }),
+    [matchup, slate],
+  );
+  // THE NUMBER ON THE ROW: the projection itself — bye and O/IR at 0.0 —
+  // never golf's expected score, which is the fill's business, not the row's.
+  const showValue = useMemo(
+    () => slateAwareProj(matchup?.week ?? 1, slate, (slug) => {
+      const st = injuryFor(matchup?.week ?? 1, slug);
+      return st === 'O' || st === 'IR';
+    }, { expected: false }),
     [matchup, slate],
   );
 
@@ -778,7 +790,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // fills already valued him at 0 through fillValue; the row now prints
         // the same value it is filled by (O/IR and a proven bye → 0.0; Q and
         // D keep their number, as they keep their spot).
-        proj: fillValue({ id: slug, pos: meta.pos ?? '', team: meta.team },
+        proj: showValue({ id: slug, pos: meta.pos ?? '', team: meta.team },
           slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,

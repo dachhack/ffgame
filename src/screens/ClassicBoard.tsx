@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
-import { leagueSlotDefs, leagueBestball, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
+import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
@@ -21,6 +21,7 @@ import { setRuntimeSlate } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
+import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -618,7 +619,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           // GOLF (v0.303.0) rides the same load: it is a league setting the
           // engine reads at scoring time, installed exactly like the scoring
           // adjustments below and cleared on exit with them.
-          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true); setGolf(gm.golf === true); }
+          if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -871,8 +872,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   const fillValue = useMemo(
     () => slateAwareProj(matchup?.week ?? 1, slate, (slug) => {
       const st = injuryFor(matchup?.week ?? 1, slug);
-      return st === 'O' || st === 'IR';
+      // O/IR → out. A Q or D is a PLAY RISK (v0.429.0): priced in golf only.
+      return st === 'O' || st === 'IR' ? true : playRisk(st);
     }),
+    [matchup, slate],
+  );
+  // The row prints the projection itself, never golf's expected score.
+  const showValue = useMemo(
+    () => slateAwareProj(matchup?.week ?? 1, slate, (slug) => {
+      const st = injuryFor(matchup?.week ?? 1, slug);
+      return st === 'O' || st === 'IR';
+    }, { expected: false }),
     [matchup, slate],
   );
 
@@ -944,7 +954,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // Injury- and bye-aware (v0.426.0): the row prints the value it is
         // filled by — O/IR and a proven bye read 0.0 — not the raw season
         // bake, which had a man on IR at 13.7 and in the projected total.
-        proj: fillValue({ id: slug, pos: m.pos ?? "", team: m.team },
+        proj: showValue({ id: slug, pos: m.pos ?? "", team: m.team },
           slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
         kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,

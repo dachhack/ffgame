@@ -9,8 +9,9 @@
 // integrity window.
 import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
-import { autoSlotPlan, leagueSlotDefs, leagueBestball, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
+import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
+import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { autoLineup } from './engine.js';
 import { modeOfSettings } from './resolve.js';
@@ -18,7 +19,7 @@ import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
-import { ruledOutSlugs } from './injuries.js';
+import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
 /** A team's armed loadout (applied_state) — what it already OWNS coming into the
@@ -291,7 +292,10 @@ export async function autoSlotClassicLineups(week, slate = null) {
   // Only O and IR — questionable and doubtful players play often enough that
   // benching them automatically would overrule real decisions.
   const outs = await ruledOutSlugs();
-  const valueOf = slateAwareProj(week, slate, (slug) => outs.has(slug));
+  // A designation's PLAY RISK rides along (v0.429.0): a normal league still
+  // starts a Q at full value; a golf league prices the blank he might post.
+  const statuses = await injuryStatusMap();
+  const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))));
   const { data: lgs } = await db().from('league')
     .select('id,settings_json,lineup_policy').in('id', [...new Set(ms.map((m) => m.league_id))]);
   // Through modeOfSettings, never raw: settings_json calls the builder spec
@@ -319,7 +323,7 @@ export async function autoSlotClassicLineups(week, slate = null) {
     // module global. Installed per league and set UNCONDITIONALLY — skipping
     // the false case would leave the previous league's rule in force over this
     // one, which is how one golf league would quietly mis-slot the whole tick.
-    setLeagueGolf(mode?.golf === true);
+    setLeagueGolf(mode?.golf === true, leagueGolfZeroPtsOf(mode));
     // THE LEAGUE'S SCORING (v0.310.0), on the same terms and for the same
     // reason. `slateAwareProj` ranks candidates through `projectedPoints`, so
     // without this a league paying 6 for a passing touchdown, or a TE premium,

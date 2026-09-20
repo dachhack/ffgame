@@ -18,6 +18,72 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.429.0 — golf: the floor above zero
+
+Founder: "How about golf? Players need to get close to zero without
+actually getting zero. Is there a way we can get the AI to pick those
+players? A lot of players with like 3 points projected will actually get
+zero so it takes a lot of logic to decide who to play that probably has a
+floor above zero."
+
+WHAT THE FILLS DID. Golf inverts "best" (v0.303.0): optimalLineup, the
+best-ball fill and the unmanaged seat seated the LOWEST projection above
+zero. That is exactly the 1-to-3-point body who most often posts nothing —
+and a blank takes the spot's zero-fill (usually 10), the worst thing that
+can happen to it. The projection is the wrong number; the chance of a blank
+is the number.
+
+THE MODEL (core `golfFloor.ts`), fitted rather than guessed. A week is a
+blank when a player touches the ball zero times; if touches arrive at a
+weekly rate λ the chance is e^(−λ). Checked against 2025 game logs
+(StatHead: every WR weeks 1–6, every RB weeks 1–4, 1,135 player-weeks),
+binned by each player's mean receptions + carries per week — observed
+blank rates .87 / .48 / .31 / .21 / .07 / .05 / .02 / .01 against e^(−λ)
+.88 / .49 / .30 / .19 / .09 / .03 / .01 / .00. A least-squares fit gives
+c = 1.02 and a floor of 0.01 (the healthy scratch): the Poisson rate IS the
+model, and the rate comes from the baked season line (projStats2026:
+receptions, and carries read off rushing yards at 4.3 a carry, over 17
+games). Quarterbacks count ten attempts as a unit; kickers and defences sit
+at 3% and 2%; a player the bake has no line for is priced off his
+projection at 2.2 points a touch.
+
+THE EXPECTED GOLF SCORE. The projection is the mean over games played, so
+with p the blank chance and Z the zero-fill, the spot expects P + p·Z. A
+designation folds in as a chance r of not playing at all: P·(1−r) +
+(r + (1−r)·p)·Z. Q (one in five) and D (three in four) are not benched by
+rule — v0.252.0's reason stands in a normal league — they are PRICED,
+which is the difference golf makes. From the bake: Jacob Saylors, 0.1
+projected on a quarter-touch a week, expects 7.7 against a 10 zero-fill;
+Kaleb Johnson, 4.2 projected on 3.6 touches, expects 4.6. The fill now
+takes Johnson.
+
+WHERE IT LIVES. `slateAwareProj` — the one value every fill ranks by —
+returns the expected golf score when golf is on (the projection otherwise,
+and always outside golf), reading the spot's zero_pts when it has the spot
+and the league's typical zero-fill otherwise: `setLeagueGolf(on, zeroPts)`
+now carries it, `leagueGolfZeroPtsOf(mode)` reads the largest zero_pts on
+any spot, and every install site (lock-time fill, seat wire, bite sweep,
+resolver, both boards) passes it. Its ruled-out predicate may now answer a
+FRACTION — the play risk — which the worker reads off injury_status
+(`playRisk`) and the boards off the live report; a fraction changes nothing
+outside golf. The row on the board still prints the projection (`expected:
+false`), never the expected score: the fill's number is the fill's.
+
+Not in this cut: the resolver's unmanaged-seat lineup still passes a
+boolean ruled-out set, so at resolve a Q is priced at no risk; the lock-time
+fill, which sets the lineup that actually stands, prices it.
+
+Assertions: check-golf 24 → 45 — the curve as fitted, the bake's touch rate,
+the quarter-touch back blanking three in four and the 3.6-touch back one in
+twenty-five, the expected scores either side of a 10 zero-fill, no zero-fill
+→ the projection, Q/D/O/IR risks, a Q raising the expected score by the
+arithmetic, the install carrying the zero-fill, the fill ranking the usage
+back over the scratch, the board's raw number, a fractional risk priced in
+golf and simply out at 1, and nothing changing outside golf.
+
+Battery: web tsc, mobile tsc, check:golf, check:seatwire, check:faab,
+check:bite, check:changelog — green. Worker + web + APK; no migration.
+
 ### v0.428.1 — the dash is for IR, not the taxi squad
 
 Founder: "Taxi spot players should still get a projection. They could
