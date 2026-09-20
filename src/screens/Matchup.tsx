@@ -29,7 +29,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, opponentEmptyWindows, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
@@ -528,6 +528,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const [liveOppPicks, setLiveOppPicks] = useState<Record<string, Pick> | null>(null);
   // The opponent's REAL armed buffs, revealed at lock (null → keep AI buffs).
   const [liveOppBuffs, setLiveOppBuffs] = useState<string[] | null>(null);
+  // THE WINDOWS THE OPPONENT LEFT EMPTY (v0.434.0, 0312), known from an hour
+  // before each locks: the one thing about a sealed lineup that may be shown
+  // early, because it is nothing. Founder: "an hour before when the players
+  // lock, the window can reveal and players can do the substitution action."
+  // A slot of mine in such a window is a backup (core's bestBallBackups)
+  // and the sub can be assigned while there is still time to choose it.
+  const [emptyOppWins, setEmptyOppWins] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     if (!liveCtx) { setLiveOppPicks(null); setLiveOppBuffs(null); return; }
     let alive = true;
@@ -537,9 +544,10 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const load = async () => {
       if (document.hidden) return; // don't poll a backgrounded tab
       try {
-        const [rows, oppBuffs] = await Promise.all([
+        const [rows, oppBuffs, emptyWins] = await Promise.all([
           getRevealedPicks(liveCtx.matchupId),
           revealedOppBuffs(liveCtx.matchupId, liveCtx.userId).catch(() => null),
+          opponentEmptyWindows(liveCtx.matchupId),
         ]);
         const opp: Record<string, Pick> = {};
         for (const r of rows) {
@@ -549,6 +557,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         if (alive) {
           setLiveOppPicks(Object.keys(opp).length ? opp : null);
           setLiveOppBuffs(oppBuffs);
+          setEmptyOppWins((prev) => (prev.size === emptyWins.length && emptyWins.every((w) => prev.has(w)) ? prev : new Set(emptyWins)));
           // Windows reveal one at a time (each seals at its OWN kickoff), so keep
           // polling all week — but back off once the first reveal lands: later
           // reveals arrive at window kickoffs, hours apart, not seconds.
@@ -1266,10 +1275,12 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // and the first multi-window live night counted all of them as backups
     // ("7 unopposed" over a fully-opposed board). The demo/sim knows the whole
     // AI lineup up front, so it keeps the pre-kick prompt.
-    if (liveCtx && liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final') return false;
+    // …unless the server has said the opponent left this window EMPTY
+    // (v0.434.0): that reveals no pick, so it is known an hour before lock.
+    if (liveCtx && liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final' && !emptyOppWins.has(s.win)) return false;
     if (ZERO_BANK_METRICS.has(`${s.you.player.pos}:${s.you.metricId}`)) return false;
     return !backupAssign[slotKey(s.win, s.slotIndex)];
-  }), [resolved, backupAssign, liveCtx, liveWinState]);
+  }), [resolved, backupAssign, liveCtx, liveWinState, emptyOppWins]);
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
@@ -2125,11 +2136,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               </div>
             )}
             {/* Live board: a nudge (not a forced modal) to assign best-ball backups. */}
-            {liveCtx && phase === 'live' && pendingBackups.length > 0 && (
+            {liveCtx && (phase === 'live' || emptyOppWins.size > 0) && pendingBackups.length > 0 && (
               <button
                 onClick={() => { const s0 = pendingBackups[0]; setBackupMenu({ key: slotKey(s0.win, s0.slotIndex) }); }}
                 className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))', border: '1px solid var(--you)', borderRadius: 6, padding: '7px 11px', cursor: 'pointer' }}>
-                🔁 {pendingBackups.length} {pendingBackups.length === 1 ? 'backup' : 'backups'} auto-subbed for best score — reassign →
+                🔁 {(() => {
+                  // Pre-kick, the reveal is the news: name the window the opponent left empty.
+                  const early = pendingBackups.filter((s) => liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final' && emptyOppWins.has(s.win));
+                  if (early.length) {
+                    const labels = [...new Set(early.map((s) => windowsForWeek(week).find((w) => w.id === s.win)?.label ?? s.win))].join(' & ');
+                    return `opponent left ${labels} empty — ${early.length} ${early.length === 1 ? 'backup' : 'backups'} can sub · assign →`;
+                  }
+                  return `${pendingBackups.length} ${pendingBackups.length === 1 ? 'backup' : 'backups'} auto-subbed for best score — reassign →`;
+                })()}
               </button>
             )}
             {phase === 'live' && !liveCtx && (

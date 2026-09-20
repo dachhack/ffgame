@@ -153,7 +153,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }
 
 /** One side of a live duel: the mini card plus everything that changes. */
-export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
+export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
   side: 'you' | 'their';
   slug?: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's back at the mini footprint, no identity leaked. */
@@ -162,6 +162,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
    *  secret (0137-era honesty fix). Renders an explicit empty seat instead of
    *  a card back that promises a flip that will never come. */
   unopposed?: boolean;
+  /** With `unopposed`: this side left the WHOLE window empty (v0.434.0), so
+   *  the facing player is a backup who can sub; otherwise he simply plays
+   *  unopposed and banks his points here. */
+  windowEmpty?: boolean;
   gameLabel?: string | null;
   metricName?: string | null;
   stat?: string | null;
@@ -190,7 +194,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
             <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '800', letterSpacing: 1, color: t.dim }}>NO PLAYER</Text>
           </View>
-          <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>unopposed — the facing player subs as a backup</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{windowEmpty ? 'window left empty — the facing player subs as a backup' : 'unopposed — the facing player banks here'}</Text>
         </View>
       </View>
     );

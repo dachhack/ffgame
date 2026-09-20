@@ -1827,6 +1827,16 @@ export interface TargetedState {
   extraSlots?: Record<string, number>;
 }
 
+/** The windows in which the caller's opponent has NO filled pick, from an
+ *  hour before each window locks (0312, v0.434.0). The one thing about a
+ *  sealed lineup that may be shown early, because it is nothing: the board
+ *  draws those windows' opposing halves empty and offers the sub in time.
+ *  [] for non-participants, classic matchups, and any read that fails. */
+export async function opponentEmptyWindows(matchupId: string): Promise<string[]> {
+  const r = await rpc<unknown>('opponent_empty_windows', { p_matchup_id: matchupId }).catch(() => null);
+  return Array.isArray(r) ? r.filter((x): x is string => typeof x === 'string') : [];
+}
+
 /** Record (or clear, with a null target) a manual backup assignment (0137).
  *  Post-lock is the POINT — backups are auto-assigned at lock and reassigned
  *  after — so unlike hero_applied this store accepts writes until the matchup

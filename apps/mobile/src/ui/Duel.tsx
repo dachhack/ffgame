@@ -164,7 +164,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  window that kicked hours ago is a promise the board can't keep. */
   const liveFor = (p: RevealedPick | undefined, side: 'home' | 'away', who: 'you' | 'their', win: string, slot: string, idx: number) => {
     const player = p?.player_slug ? pool[p.player_slug] : null;
-    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed={!winKicked(win)} unopposed={winKicked(win)} idx={idx} />;
+    // THE WHOLE WINDOW, NOT THE SLOT (v0.434.0): an empty seat is a backup
+    // for the facing player only when its side left the WHOLE window empty;
+    // a seat left empty in a window that side partly filled just plays the
+    // facing player unopposed. The card's line says which.
+    const sideRows = (who === 'their' ? theirs : mine).filter((q) => q.game_window === win && q.player_slug);
+    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed={!winKicked(win)} unopposed={winKicked(win)} windowEmpty={sideRows.length === 0} idx={idx} />;
     const metric = metricById(player.pos as Pos, p.metric_id);
     const row = rowOf(p, side);
     const ex = liveExtras?.(win, p.roster_slot, who);
