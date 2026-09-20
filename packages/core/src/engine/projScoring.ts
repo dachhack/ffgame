@@ -46,7 +46,7 @@
 // components are missing from BOTH sides of the ratio, so they never distort
 // it; they simply are not reflected. A kicker or defence has no line at all,
 // and falls back to 1 by the same rule that catches an unbaked player.
-import { PROJ_2026 } from '../data/proj2026';
+import { PROJ_2026, PROJ_2026_SID } from '../data/proj2026';
 import { PROJ_LINES, type ProjStatLine } from '../data/projStats2026';
 import { PROJ_KICK, PROJ_DST, type ProjKickLine, type ProjDstLine } from '../data/projKdst2026';
 import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
@@ -280,7 +280,8 @@ const kdstBaseCache = new Map<string, number>();
  *  check against `PROJ_2026` alone would have quietly kept every kicker and
  *  defence at the bottom of the list this change exists to lift them off. */
 export function hasProjection(slug: string, sleeperId?: string | null): boolean {
-  return PROJ_2026.has(slug) || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
+  return PROJ_2026.has(slug) || (sleeperId != null && PROJ_2026_SID.has(sleeperId))
+    || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
     || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null || PROJ_FB[slug] != null
     || idpLineFor(slug, sleeperId) != null;
 }
@@ -516,7 +517,14 @@ export function projectedPoints(
     const zadj = scopedAdjustFor(player, { slot });
     return Math.round((raw / SEASON_GAMES * zadj.mult + zadj.pts) * 10) / 10;
   }
-  const base = PROJ_2026.get(player.id) ?? kdstBase(player.id, sid);
+  // BY SLUG, THEN BY SLEEPER ID (v0.432.4). Founder: an AI seat started a
+  // 0.6-point back over Kenny Gainwell. The bake spells him "Kenneth
+  // Gainwell" (slug kenneth-gainwell), the pool "Kenny" — and this lookup was
+  // slug-only, so the worker priced him at nothing and benched him behind a
+  // scratch. PROJ_2026_SID has always carried the same number under the
+  // stable id; every pool row has carried that id since 0205; the worker now
+  // hands it in (SpotPlayer.sleeperId) and the boards install it.
+  const base = PROJ_2026.get(player.id) ?? (sid ? PROJ_2026_SID.get(sid) : undefined) ?? kdstBase(player.id, sid);
   if (!base) return 0;
   const scaled = base * leagueProjRatio(player.id, player.pos, undefined, sid);
   const adj = scopedAdjustFor(player, { slot });

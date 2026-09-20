@@ -922,7 +922,7 @@ export function bestballFillBy(
 // only "who is legal where", the half of the question that is knowable. Once
 // the season starts `bestballFill` does the score-driven half on top of the
 // same `slotAllows` eligibility.
-export interface SpotPlayer { id: string; pos: string; team?: string | null; exp?: number | null }
+export interface SpotPlayer { id: string; pos: string; team?: string | null; exp?: number | null; sleeperId?: string | null }
 /** One starting spot and its occupant — `null` when nothing on the roster is
  *  legal for it yet (an unfilled spot is information, not an error). */
 export interface SpotRow { def: ClassicSlotDef; player: SpotPlayer | null }
@@ -1263,7 +1263,7 @@ export function slateAwareProj(
      *  projection itself passes false. No effect outside golf. */
     expected?: boolean;
   },
-): (p: { id: string; pos?: string | null; team?: string | null }, d?: ClassicSlotDef) => number {
+): (p: { id: string; pos?: string | null; team?: string | null; sleeperId?: string | null }, d?: ClassicSlotDef) => number {
   const onBye = (team: string | null | undefined): boolean => {
     const t = normTeam(team ?? '');
     if (!t) return false;                          // unknown team: no claim
@@ -1295,7 +1295,7 @@ export function slateAwareProj(
     const banked = leagueIsGolf() && opts?.expected !== false && z != null && z > 0 ? z : 0;
     if (risk >= 1) return banked;
     if (onBye(p.team)) return banked;
-    const v = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }, d?.slot, d?.pos);
+    const v = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? null }, d?.slot, d?.pos);
     if (leagueIsGolf() && opts?.expected !== false && v > 0) {
       return golfExpectedScore(p, v, d?.zeroPts ?? leagueGolfZeroPts(), risk);
     }
