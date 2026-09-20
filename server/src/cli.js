@@ -136,6 +136,22 @@ async function main() {
       console.log(JSON.stringify(await ensurePods(week, season, idx)));
       break;
     }
+    case 'audit': {
+      // THE WEEKLY MATCHUP AUDIT (0302, v0.430.0): who actually played the
+      // week — per league and seat, slots a person set vs the computer vs an
+      // AI seat, empties, OUT/bye starters, and whose moves the transactions
+      // were. Same RPC the admin console's SYSTEM panel calls; printed as text.
+      //   node src/cli.js audit [week] [season] [--json]
+      const { db } = await import('./supabase.js');
+      const { auditText } = await import('../../packages/core/src/data/weekAudit.ts');
+      const pos = args.filter((a) => !a.startsWith('--'));
+      const { data, error } = await db().rpc('admin_week_audit', {
+        p_week: pos[0] ? Number(pos[0]) : null, p_season: pos[1] ?? config.season, p_from: null, p_to: null,
+      });
+      if (error) throw new Error(error.message);
+      console.log(args.includes('--json') ? JSON.stringify(data, null, 1) : auditText(data));
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
@@ -143,7 +159,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json]');
   }
 }
 

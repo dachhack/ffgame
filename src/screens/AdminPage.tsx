@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { activityGrade, GRADE_LABEL, SOURCE_LABEL, SOURCE_ORDER, SEAT_LABEL, sourcesLine, humanShare, leagueLine, auditHeadline, type WeekAudit, type AuditTeam, type AuditLeague, type AuditSource } from '@drip/core/data/weekAudit';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
   adminAdmins, adminSetAdmin, adminUsers, adminLeagueMembers, adminRegenCode, redeemCommish, commishOverview, commishAudit,
   adminCodeRequests, adminSetCodeRequestHandled, adminSetCodeRequestEmail, adminMatchupBoard, adminResetMatchup, dispatchSim,
-  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, adminWeekReportState, adminRequestWeekReport, type WeekReportState, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
+  adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminWeekAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, adminWeekReportState, adminRequestWeekReport, type WeekReportState, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
   leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
@@ -259,6 +260,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
       {tab === 'system' && (
         <>
           <HealthPanel />
+          <WeekAuditPanel />
           <MarketPanel />
           {/* The audit sits under health because it answers the same kind of
               question — "is anything quietly wrong right now" — but on demand. */}
@@ -3395,6 +3397,181 @@ function MarketPanel() {
               </div>
             );
           })}
+        </>
+      )}
+    </div>
+  );
+}
+
+// THE WEEKLY MATCHUP AUDIT (0302, v0.430.0). Founder: "Let's create a weekly
+// audit of matchups for me. I'd love to know how active each team and league
+// is. What moves were from the computer vs player vs AI players. Were slots
+// left empty or out players started. What waiver pickups were player vs AI."
+// One RPC builds the week from rows the game already writes; the reading
+// (grades, labels, lines) is core data/weekAudit.ts so the worker's CLI says
+// the same thing. Phone-first: one compact row per seat, tap for its detail.
+const GRADE_COLOR: Record<string, string> = {
+  active: 'var(--you)', 'set-and-forget': 'var(--warn)', idle: 'var(--opp)', bot: 'var(--faint)', open: 'var(--faint)',
+};
+const SOURCE_COLOR: Record<AuditSource, string> = {
+  player: 'var(--you)', admin: 'var(--dim)', auto: 'var(--warn)', agent: 'var(--faint)', ai: 'var(--opp)', commish: 'var(--dim)', system: 'var(--faint)',
+};
+const nz = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+function SourceBar({ sources, total }: { sources: Partial<Record<AuditSource, number>>; total: number }) {
+  if (!total) return <div style={{ height: 6, background: 'var(--bd)', borderRadius: 3 }} />;
+  return (
+    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--bd)' }} title={sourcesLine(sources)}>
+      {SOURCE_ORDER.filter((k) => nz(sources[k]) > 0).map((k) => (
+        <div key={k} style={{ width: `${(nz(sources[k]) / total) * 100}%`, background: SOURCE_COLOR[k] }} />
+      ))}
+    </div>
+  );
+}
+
+function AuditTeamRow({ t, expected }: { t: AuditTeam; expected: number }) {
+  const [open, setOpen] = useState(false);
+  const grade = activityGrade(t);
+  const a = t.activity, l = t.lineup;
+  const res = t.result === 'bye' ? 'bye' : t.result ? `${t.result} ${nz(t.pf).toFixed(1)}–${nz(t.pa).toFixed(1)}` : t.pf != null ? `${nz(t.pf).toFixed(1)}–${nz(t.pa).toFixed(1)}` : '—';
+  const flags: string[] = [];
+  if (l.empty) flags.push(`${l.empty} empty`);
+  if (l.out_started.length) flags.push(`${l.out_started.length} OUT`);
+  if (l.bye_started.length) flags.push(`${l.bye_started.length} bye`);
+  const last = a.last_active_at ? new Date(a.last_active_at) : null;
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: GRADE_COLOR[grade], minWidth: 78 }}>{GRADE_LABEL[grade]}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
+            {t.team}{t.kind !== 'human' ? <span style={{ color: 'var(--faint)', fontWeight: 400 }}> · {SEAT_LABEL[t.kind as keyof typeof SEAT_LABEL] ?? t.kind}</span> : t.controller === 'ai' ? <span style={{ color: 'var(--faint)', fontWeight: 400 }}> · 🤖 auto-pilot</span> : null}
+          </span>
+          <span className="mono" style={{ ...mono, fontSize: 11.5, color: t.result === 'W' ? 'var(--you)' : t.result === 'L' ? 'var(--opp)' : 'var(--dim)', whiteSpace: 'nowrap' }}>{res}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+          <div style={{ flex: 1, minWidth: 0 }}><SourceBar sources={l.sources} total={Math.max(l.fielded, expected)} /></div>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: flags.length ? 'var(--warn)' : 'var(--faint)', whiteSpace: 'nowrap' }}>
+            {l.fielded}/{expected}{flags.length ? ` · ${flags.join(' · ')}` : ''}
+          </span>
+        </div>
+      </button>
+      {open && (
+        <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, marginTop: 6, paddingLeft: 4 }}>
+          <div>{t.manager ? <>manager <b style={{ color: 'var(--text)' }}>{t.manager}</b> · </> : null}slots: {sourcesLine(l.sources)}</div>
+          {t.kind === 'human' && (
+            <div>lineup edits {a.pick_edits} · moves {nz(a.txns?.player)}{nz(a.txns?.auto) ? ` (+${nz(a.txns?.auto)} computer)` : ''} · claims {a.claims_n}{a.claims_n ? ` (${Object.entries(a.claims).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''} · chat {a.chat} · shop {a.shop}{nz(a.shop_coin) ? ` (◈${nz(a.shop_coin)})` : ''}</div>
+          )}
+          {t.kind !== 'human' && (
+            <div>moves {nz(a.txns?.ai) + nz(a.txns?.agent)} · claims {a.claims_n}{a.claims_n ? ` (${Object.entries(a.claims).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''}{a.shop ? ` · shop ${a.shop}` : ''}</div>
+          )}
+          {!!Object.keys(a.txn_kinds ?? {}).length && <div>transactions: {Object.entries(a.txn_kinds).map(([k, v]) => `${v} ${k}`).join(' · ')}</div>}
+          {l.out_started.length > 0 && <div style={{ color: 'var(--opp)' }}>OUT started: {l.out_started.map((x) => `${x.slug} (${SOURCE_LABEL[x.source as AuditSource] ?? x.source})`).join(', ')}</div>}
+          {l.bye_started.length > 0 && <div style={{ color: 'var(--warn)' }}>on bye started: {l.bye_started.map((x) => `${x.slug} (${SOURCE_LABEL[x.source as AuditSource] ?? x.source})`).join(', ')}</div>}
+          {t.kind === 'human' && <div style={{ color: 'var(--faint)' }}>last active {last ? last.toLocaleString() : 'never this week'}{a.last_seen_at ? ` · last seen ${new Date(a.last_seen_at).toLocaleString()}` : ''}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuditLeagueCard({ l }: { l: AuditLeague }) {
+  const [open, setOpen] = useState(true);
+  const share = humanShare(l.lineup.sources);
+  const perSeat = l.seats.total ? Math.round(l.lineup.expected / l.seats.total) : 0;
+  return (
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{l.game_mode}{l.format !== 'standard' ? `/${l.format}` : ''} · {l.provider} · {l.finals}/{l.matchups} final</span>
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)', marginTop: 3, lineHeight: 1.5 }}>{leagueLine(l)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
+          <div style={{ flex: 1 }}><SourceBar sources={l.lineup.sources} total={Math.max(l.lineup.fielded, l.lineup.expected)} /></div>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: share != null && share < 50 ? 'var(--warn)' : 'var(--faint)', whiteSpace: 'nowrap' }}>{l.lineup.fielded}/{l.lineup.expected} slots</span>
+        </div>
+        <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+          seats {l.seats.human} human · {l.seats.ai} AI · {l.seats.agent} auto-managed{l.seats.empty ? ` · ${l.seats.empty} empty` : ''}
+          {' — '}moves {sourcesLine(l.activity.txns)} · claims {sourcesLine(l.activity.claims)}{Object.keys(l.activity.claims_won ?? {}).length ? ` (won: ${sourcesLine(l.activity.claims_won)})` : ''} · chat {l.activity.chat} · shop {l.activity.shop}
+        </div>
+      </button>
+      {open && <div style={{ marginTop: 6 }}>{l.teams.map((t) => <AuditTeamRow key={t.roster_id} t={t} expected={perSeat} />)}</div>}
+    </div>
+  );
+}
+
+function WeekAuditPanel() {
+  const [a, setA] = useState<WeekAudit | null>(null);
+  const [week, setWeek] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async (w?: number | null) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await adminWeekAudit(w ?? (week.trim() ? Number(week) : null));
+      setA(r);
+      if (r.ok && r.week != null && !week.trim()) setWeek(String(r.week));
+    } catch (e) { setErr(errMsg(e, 'audit failed')); }
+    finally { setBusy(false); }
+  };
+  const t = a?.ok ? a.totals : undefined;
+  const step = (d: number) => { const w = (Number(week) || a?.week || 1) + d; if (w < 1) return; setWeek(String(w)); run(w); };
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ ...h, marginBottom: 0 }}>WEEKLY MATCHUP AUDIT</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => step(-1)} disabled={busy || !a} className="mono" style={{ ...btn(false), padding: '6px 8px', opacity: busy || !a ? 0.5 : 1 }} title="previous week">‹</button>
+          <input value={week} onChange={(e) => setWeek(e.target.value.replace(/[^\d]/g, ''))} placeholder="wk" inputMode="numeric"
+            style={{ ...inp, width: 44, padding: '6px 6px', fontSize: 13, textAlign: 'center' }} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} />
+          <button onClick={() => step(1)} disabled={busy || !a} className="mono" style={{ ...btn(false), padding: '6px 8px', opacity: busy || !a ? 0.5 : 1 }} title="next week">›</button>
+          <button onClick={() => run()} disabled={busy} className="mono" style={{ ...btn(false), opacity: busy ? 0.5 : 1 }}>
+            {busy ? '…' : a ? '↻ re-run' : 'RUN AUDIT'}
+          </button>
+        </div>
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        Who actually played the week. Every seat: what a <b style={{ color: 'var(--you)' }}>player</b> set vs the
+        {' '}<b style={{ color: 'var(--warn)' }}>computer</b> fill vs an <b style={{ color: 'var(--opp)' }}>AI</b> seat,
+        slots left empty, OUT or bye players started, and whose moves and claims the week's transactions were.
+        Leave the week blank for the latest with a final.
+      </div>
+      {err && <Muted text={err} />}
+      {a && !a.ok && <Muted text={a.error ?? 'forbidden'} />}
+      {a?.ok && a.week == null && <Muted text={a.note ?? 'nothing to audit'} />}
+      {a?.ok && t && (
+        <>
+          <div className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.5 }}>{auditHeadline(a)}</div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 4 }}>
+            season {a.season} · activity window {a.window ? `${new Date(a.window.from).toLocaleDateString()} → ${new Date(a.window.to).toLocaleDateString()}` : '—'}
+            {a.slate_loaded === false ? ' · no slate loaded, byes not judged' : ''}
+            {a.injury_as_of ? ` · injuries as of ${new Date(a.injury_as_of).toLocaleString()}` : ''}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 6, marginTop: 6 }}>
+            {([
+              ['humans active', `${t.seats.active} / ${t.seats.human}`, t.seats.human && t.seats.active < t.seats.human / 2 ? 'var(--warn)' : 'var(--you)'],
+              ['player-set slots', humanShare(t.lineup.sources) == null ? '—' : `${humanShare(t.lineup.sources)}%`, 'var(--text)'],
+              ['empty slots', String(t.lineup.empty), t.lineup.empty ? 'var(--warn)' : 'var(--text)'],
+              ['OUT started', String(t.lineup.out_started), t.lineup.out_started ? 'var(--opp)' : 'var(--text)'],
+              ['bye started', String(t.lineup.bye_started), t.lineup.bye_started ? 'var(--warn)' : 'var(--text)'],
+              ['moves', sourcesLine(t.activity.txns), 'var(--text)'],
+              ['claims', sourcesLine(t.activity.claims), 'var(--text)'],
+              ['claims won', sourcesLine(t.activity.claims_won), 'var(--text)'],
+            ] as [string, string, string][]).map(([label, value, color]) => (
+              <div key={label} style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 9px', minWidth: 0 }}>
+                <div className="mono" style={{ ...mono, fontSize: 10, letterSpacing: '0.1em', color: 'var(--faint)' }}>{label.toUpperCase()}</div>
+                <div className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color, wordBreak: 'break-word' }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)', marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {SOURCE_ORDER.filter((k) => k !== 'commish' && k !== 'system').map((k) => (
+              <span key={k}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: SOURCE_COLOR[k], marginRight: 4, verticalAlign: 'middle' }} />{SOURCE_LABEL[k]}</span>
+            ))}
+          </div>
+          {a.leagues.map((l) => <AuditLeagueCard key={l.league_id} l={l} />)}
         </>
       )}
     </div>

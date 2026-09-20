@@ -18,6 +18,68 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.430.0 — the weekly matchup audit
+
+Founder: "Let's create a weekly audit of matchups for me. I'd love to know
+how active each team and league is. What moves were from the computer vs
+player vs AI players. Were slots left empty or out players started. What
+waiver pickups were player vs AI. Etc"
+
+ONE READ, NOTHING NEW WRITTEN. `admin_week_audit(week, season)` (0302) reads
+the week from rows the game already keeps. The distinction the founder is
+asking for has been recorded since 0001: every sealed_pick write is audited
+with `actor = auth.uid()` — a person's uid from a browser, NULL from the
+worker — and league_txn (0186) carries the same `actor`. So a fielded slot's
+SOURCE is: **player** (a human on that seat wrote the player who is in it),
+**admin** (another human did — commish/admin tools), **auto** (the computer:
+the lock-time fill on a human-held seat, or the resolve-time fallback),
+**agent** (the auto-managed unclaimed seat, 0180), or **ai** (a 🤖 seat's
+resolver lineup, or an auto-pilot manager's rows). What counts as fielded is
+the seat's sealed rows UNION what matchup_state.slot_scores says scored for
+that side — the union is what makes an AI seat with no account (whose lineup
+is never stored) visible at all. Moves read the same way; a NULL actor on a
+HELD seat is the waiver run processing that manager's own claim (0213/0298
+never let the worker file for a held seat), and on an agent/AI seat it is the
+wire. Waiver claims carry no actor, so a claim's source is whose seat it is.
+
+EMPTY / OUT / BYE. Expected slots per seat are enforce_slot_cap's own rule
+(0163): a classic league's spot list, a drip week's week_slot_count; empty is
+expected minus fielded, floored at zero. "OUT started" is a fielded player
+whose injury_status is O/IR now (the payload carries `injury_as_of`); "bye
+started" is a fielded player whose league_pool team is absent from the week's
+nfl_slate — a league with no pool row for him is not judged rather than
+guessed. Each is named with the source that started him, which is the
+question behind the question: the fill never fields a ruled-out player
+(v0.341.2), so an OUT starter is a human's call or a post-lock ruling.
+
+THE WINDOW for activity (lineup edits, moves, claims, chat, shop spend) runs
+from five hours after the previous week's last kickoff to five hours after
+this week's; a season with no slate falls back to lock_at −6d/+1d, and both
+ends can be passed explicitly. Week null → the latest week with a stamped
+final. A seat is ACTIVE when a human on it did any of those; bots are never
+active and never idle. Core `data/weekAudit.ts` holds the shape and its
+reading — the grade (ACTIVE / SET & FORGET / IDLE / BOT / OPEN), the source
+line, the human share, a text rendering — so the admin panel, the worker's
+`cli.js audit [wk] [season] [--json]` and the check say the same thing.
+
+WHERE IT LIVES. Super admin → SYSTEM → **WEEKLY MATCHUP AUDIT**, right under
+health: week stepper, the headline ("week 3 · 4 leagues · 21 of 40 humans
+active · 58% player-set · 5 empty · 1 OUT started"), eight tiles, then a
+card per league (its one-liner, a source bar, seats/moves/claims) with one
+compact row per seat — grade, result, source bar, fielded/expected and its
+flags — that opens into the detail. Phone-first.
+
+COST. audit_log had no way to find "the rows of THIS pick" (0058 indexed by
+time only); a partial index on row_id for sealed_pick rows makes the per-slot
+source an index probe. `concurrently`, as 0058 did.
+
+Probes: week-audit-probes (wired; a fixture with a human, an AI, an agent and
+an empty seat — each source lands in its own bucket, OUT and bye named, the
+window gates activity, week defaults, the audit writes nothing).
+check-week-audit pins the reading. Battery: scratch probes, web tsc, mobile
+tsc, check:parity, vite build, server tests — green. Migration 0302; worker
+CLI; web only otherwise (the app has no admin console).
+
 ### v0.429.1 — the resolver prices a Q too
 
 Founder: "Let's fix the resolver so a Q is priced at resolve too."
