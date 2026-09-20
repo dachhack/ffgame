@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.4 — the notification icon is a drop cut out of a football
+
+Founder, from a sheet of eleven candidates (drops, footballs, helmets, and
+mashups of the three, each rendered at 24/36/48/66/96px on the dark bar
+and the light one): "Let's try 11 but with the solid drop of 5."
+
+So: the football, plain, with the drop KNOCKED OUT of it. Two shapes, both
+of which survive as an alpha mask — the ball one solid lens, the drop one
+solid hole — and together a mark nobody else in the status bar wears. No
+laces and no end seams: at 24px those thinned to specks that read as
+damage on the ball's edge, and the drop is the detail worth keeping. The
+drop is 56% of the full droplet, chosen from three sizes so its bulb
+clears the ball's edge on every side at every density (a hole that opens
+onto the background is a bite, not a drop). Same generator, same two
+outputs — the Android small icon and the web push badge — now asserting
+the ball opaque, the drop clear at apex and bulb, and white ball between
+the drop and the background top, bottom and both sides.
+
 ### v0.433.3 — the notification icon is a drop with football laces
 
 Founder: "The notification icon is just a drop of water. I think we can do
