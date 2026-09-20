@@ -611,7 +611,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         weekMatchups(r.leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(r.leagueId).then((rows) => {
           setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
-          setOnIr(new Set(rows.filter((x) => x.spot === 'ir').map((x) => x.slug)));
+          setOnIr(new Set(rows.filter((x) => x.spot === 'ir' || x.spot === 'out').map((x) => x.slug)));   // OUT (0307) is the injured shelf too
           setStashReady(true);
         }).catch(() => {});
         leagueGameMode(r.leagueId).then(async (gm) => {

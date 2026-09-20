@@ -15,7 +15,7 @@ import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar, inp, btn } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
-import { rosterRules, setTaxiRules, setIrRules, playerFlags } from '@drip/core/data/liveApi';
+import { rosterRules, setTaxiRules, setIrRules, setOutRules, playerFlags } from '@drip/core/data/liveApi';
 
 // Commissioner dashboard — one tabbed management card (LeagueRow) per league you
 // run. Opened from a league card's "manage" (focusId → just that league), as
@@ -396,7 +396,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     leagueScoringGet(leagueId).then((r) => { if (r && r.ok) setAdjust(parseScoring(r)); }).catch(() => {});
   }, [view, leagueId, adjust]);
   // BENCH/TAXI/IR (0164) — with the derived draft-rounds readout.
-  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number }>({ bench: 6, taxi: 0, ir: 0 });
+  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number; out: number }>({ bench: 6, taxi: 0, ir: 0, out: 0 });
   // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
   // round count, so this is the ceiling on starters + bench + taxi + IR.
   const MAX_ROUNDS = 99;
@@ -407,11 +407,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // WHO MAY GO ON IR (0198) — the commissioner's own list of designations,
   // read from the same call. Default is IR/O, the pair 0164 hardcoded.
   const [irTags, setIrTags] = useState<string[] | null>(null);
+  // …and who may go on OUT (0307), IR's week-to-week sibling. Default O/D.
+  const [outTags, setOutTags] = useState<string[] | null>(null);
   const loadTaxi = () => {
     rosterRules(leagueId).then((r) => {
       if (!r.ok) return;
       setTaxi({ maxExp: r.taxi_max_exp ?? null, lock: r.taxi_lock !== false, lockedNow: !!r.taxi_locked_now });
       setIrTags(r.ir_tags?.length ? r.ir_tags : ['IR', 'O']);
+      setOutTags(r.out_tags?.length ? r.out_tags : ['O', 'D']);
     }).catch(() => {});
   };
   useEffect(loadTaxi, [leagueId]);
@@ -439,6 +442,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
+  const toggleOutTag = async (tag: string) => {
+    if (busy || !outTags) return;
+    const on = outTags.includes(tag);
+    if (on && outTags.length === 1) { setNote('OUT needs at least one designation — an OUT spot nobody can qualify for is a spot to remove.'); return; }
+    const next = on ? outTags.filter((x) => x !== tag) : [...outTags, tag];
+    setBusy(true); setNote(null);
+    try {
+      const r = await setOutRules(leagueId, next);
+      if (r.ok) { setOutTags(r.tags?.length ? r.tags : next); setNote('✓ OUT eligibility saved'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
@@ -462,7 +477,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         ? r.slots.map(toSpotDraft)
         : legacy.map((d) => toSpotDraft({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
-      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0 });
+      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0, out: r.shape.out ?? 0 });
       setRounds(r.rounds ?? null);
       setExtraPos(r.positions ?? []);
       setFltTeams((r.pool_filter?.teams ?? []).join(', '));
@@ -532,12 +547,12 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
-  const saveShape = async (next: { bench: number; taxi: number; ir: number }) => {
+  const saveShape = async (next: { bench: number; taxi: number; ir: number; out: number }) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir);
-      if (r.ok) { setShape(r.shape ?? next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); notifyLeagueSettingsChanged(leagueId); }
+      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir, next.out);
+      if (r.ok) { setShape(r.shape ? { bench: r.shape.bench, taxi: r.shape.taxi, ir: r.shape.ir, out: r.shape.out ?? 0 } : next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); notifyLeagueSettingsChanged(leagueId); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -623,7 +638,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       )}
       {view === 'lineup' && mode === 'classic' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
-        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir;
+        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out;
         return (
         <div style={{ marginTop: 10 }}>
           {/* The roster POSITION BUILDER (0163, the founder's sketch): each row is
@@ -760,7 +775,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                 ran out of room with rounds to spare. The draft's 5–99 window is
                 the only real limit, so the ＋ stops when the SUM would leave
                 it. */}
-            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir']] as const).map(([label, key]) => (
+            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir'], ['OUT', 'out']] as const).map(([label, key]) => (
               <span key={key} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--dim)', border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '4px 8px' }}>
                 {label}
                 <button onClick={() => void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) })} disabled={busy || shape[key] === 0} className="mono" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12.5 }}>−</button>
@@ -772,7 +787,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               {/* TWO NUMBERS SINCE 0193: the roster is what a team may HOLD,
                   the draft is what it FILLS. IR spots are the difference —
                   you stash into them in November, you don't draft into them. */}
-              ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir} ROUNDS{shape.ir > 0 ? ` (IR isn't drafted)` : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
+              ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out} ROUNDS{shape.ir + shape.out > 0 ? ` (${[shape.ir > 0 ? 'IR' : '', shape.out > 0 ? 'OUT' : ''].filter(Boolean).join('/')} isn't drafted)` : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
 
             {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
                 does not lengthen a draft that already has its rounds, so a
@@ -807,6 +822,26 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               </div>
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
                 A player with none of these — including a healthy one — can't be put on IR by anyone, YOU included: this is a fact about the player, not a deadline. A player already stashed stays put when you narrow the list; he just can't go back on once he's off.
+              </div>
+            </div>
+          )}
+
+          {/* ── WHO MAY GO ON OUT (0307) ─────────────────────────────────────
+              Founder: "two types of IR spots just like the league: Out and
+              IR. Commish can pick the type of injury that qualifies for each."
+              OUT is the week-to-week shelf; O/D by default. Most leagues that
+              open it will narrow IR to IR alone above. */}
+          {shape.out > 0 && outTags && (
+            <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🩹 OUT ELIGIBILITY · which designations may be stashed on the OUT shelf</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
+                {([['IR', 'IR (season-ending)'], ['O', 'OUT'], ['D', 'DOUBTFUL'], ['Q', 'QUESTIONABLE']] as const).map(([tag, label]) => (
+                  <button key={tag} onClick={() => void toggleOutTag(tag)} disabled={busy} className="mono"
+                    style={pill(outTags.includes(tag))}>{label}</button>
+                ))}
+              </div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+                Two shelves, two lists: a manager stashes a season-ending injury on IR and a week's absence on OUT. A player with none of these can't go on OUT by anyone, YOU included.
               </div>
             </div>
           )}

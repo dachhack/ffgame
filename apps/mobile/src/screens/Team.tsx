@@ -295,7 +295,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // a tab that isn't there.
   const [keeperCount, setKeeperCount] = useState(0);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
-  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' }[]>([]);
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   // POSITIONS ARE A MULTI-SELECT NOW (v0.302.0). Empty = every position the
@@ -324,17 +324,18 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
   // Which empty place is asking to be filled — 'taxi' or 'ir' (v0.285.0).
-  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | null>(null);
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | null>(null);
   // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
   // The server has enforced both since 0164/0196, but no screen read the
   // rules — so the picker offered every name and the rule only appeared as a
   // red error AFTER the tap.
-  const [stashRules, setStashRules] = useState<{ irTags: string[]; taxiMaxExp: number | null; taxiLocked: boolean } | null>(null);
+  const [stashRules, setStashRules] = useState<{ irTags: string[]; outTags: string[]; taxiMaxExp: number | null; taxiLocked: boolean } | null>(null);
   const [injTags, setInjTags] = useState<Record<string, string>>({});
   useEffect(() => {
     rosterRules(leagueId).then((r) => {
       if (r.ok) setStashRules({
         irTags: r.ir_tags?.length ? r.ir_tags : ['IR', 'O'],
+        outTags: r.out_tags?.length ? r.out_tags : ['O', 'D'],   // OUT (0307), IR's week-to-week sibling
         taxiMaxExp: r.taxi_max_exp ?? null,
         taxiLocked: !!r.taxi_locked_now,
       });
@@ -452,8 +453,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   /** Why this player may NOT go in that place — null when he may. The wording
    *  matches the server's refusal: the server is still the authority, and a
    *  screen that disagreed with it would be worse than one that stayed quiet. */
-  const stashBlock = (slug: string, spot: 'taxi' | 'ir'): string | null => {
+  const stashBlock = (slug: string, spot: 'taxi' | 'ir' | 'out'): string | null => {
     if (!stashRules) return null;
+    if (spot === 'out') {
+      const tag = injTags[slug];
+      if (!tag) return `OUT is for players designated ${stashRules.outTags.join('/')} — he has no designation`;
+      if (!stashRules.outTags.includes(tag)) return `OUT is for players designated ${stashRules.outTags.join('/')} — he is ${tag}`;
+      return null;
+    }
     if (spot === 'ir') {
       const tag = injTags[slug];
       if (!tag) return `IR is for players designated ${stashRules.irTags.join('/')} — he has no designation`;
@@ -469,7 +476,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     if (stashRules.taxiLocked && !team?.is_commish) return 'the taxi squad locked at the season’s first kickoff — you can still take players OFF it';
     return null;
   };
-  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir') => {
+  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out') => {
     tap();
     setFillFor(null);
     void run(() => setRosterSpot(leagueId, slug, spot));
@@ -499,6 +506,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       starters: seat.spots.map((r, i) => ({ label: slotNames[i] ?? r.def.slot, pos: r.def.pos, player: find(r.player?.id) })),
       bench: active.filter((p) => !started.has(p.slug)),
       ir: shown.filter((p) => p.spot === 'ir'),
+      out: shown.filter((p) => p.spot === 'out'),
       taxi: shown.filter((p) => p.spot === 'taxi'),
     };
   }, [shown, slotDefs, slotNames, expMap]);
@@ -782,6 +790,20 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           ))}
         </>)}
 
+        {/* ── OUT (0307) — IR's week-to-week sibling ──────────────────────── */}
+        {(bySpot.out.length > 0 || !!gm?.shape?.out) && (<>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
+            OUT ({bySpot.out.length}{gm?.shape?.out ? `/${gm.shape.out}` : ''})
+          </Mono>
+          {bySpot.out.map((p) => (
+            <RosterRow key={p.slug} badge="OUT" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+          ))}
+          {Array.from({ length: Math.max(0, (gm?.shape?.out ?? 0) - bySpot.out.length) }, (_, i) => (
+            <RosterRow key={`out-empty-${i}`} badge="OUT" tone="warn" p={null} busy={busy} t={t}
+              slotVerb="the OUT shelf" onSlot={canStash ? () => { tap(); setFillFor('out'); } : undefined} />
+          ))}
+        </>)}
+
         {/* ── TAXI SQUAD ──────────────────────────────────────────────────── */}
         {(bySpot.taxi.length > 0 || !!gm?.shape?.taxi) && (<>
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
@@ -1039,9 +1061,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           active first (tap his badge), which keeps every move one legal step
           the server can answer for rather than a silent two-step. */}
       <Overlay visible={!!fillFor}
-        title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}`}
+        title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Move to injured reserve' : fillFor === 'out' ? 'Move to OUT' : 'Move to the taxi squad'}`}
         subtitle={fillFor === 'ir'
           ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is greyed out below.`
+          : fillFor === 'out'
+          ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report \u2014 the week-to-week shelf; your commissioner sets that list. Everyone else is greyed out below.`
           : stashRules?.taxiMaxExp != null
             ? `The taxi squad holds prospects off your active roster \u2014 your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer.`
             : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}
@@ -1056,15 +1080,15 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             // greyed out", and the answer prints right under him.
             const why = fillFor ? stashBlock(p.slug, fillFor) : null;
             return (
-            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : 'taxi')}
+            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : fillFor === 'out' ? 'out' : 'taxi')}
               style={{ paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy || why ? 0.45 : 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Face slug={p.slug} pos={p.pos} />
                 <PosPill pos={p.pos} size={8} />
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
-                {fillFor === 'ir' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
+                {fillFor !== 'taxi' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
                 <Mono size={8.5} tone="faint">{p.team}</Mono>
-                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : '\u2192TX'}</Mono>
+                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : '\u2192TX'}</Mono>
               </View>
               {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}
             </Pressable>

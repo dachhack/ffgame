@@ -120,6 +120,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
 
   let done = 0;
   const irTagsOf = new Map();
+  const outTagsOf = new Map();   // 0307: the OUT shelf's list, per league
   try {
     for (const lg of lgs ?? []) {
       // Through modeOfSettings, never the raw row: settings_json calls the
@@ -203,6 +204,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
 
       const { data: irTagRows } = await db().rpc('league_ir_tags', { p_league_id: lg.id });
       irTagsOf.set(lg.id, Array.isArray(irTagRows) ? irTagRows : ['IR', 'O']);
+      // OUT (0307): the week-to-week shelf, its own list (O/D by default).
+      const { data: outTagRows } = await db().rpc('league_out_tags', { p_league_id: lg.id });
+      outTagsOf.set(lg.id, Array.isArray(outTagRows) ? outTagRows : ['O', 'D']);
       const { data: mode2 } = await db().rpc('league_waiver_mode', { p_league_id: lg.id });
       const faab = mode2 === 'faab';
       const { data: seats } = await db().rpc('league_active_seats', { p_league_id: lg.id });
@@ -262,10 +266,17 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const irTags = new Set((irTagsOf.get(lg.id) ?? []).map((t) => String(t).toUpperCase()));
         const irCap = Number(lg.settings_json?.roster_shape?.ir) || 0;
         const qualifies = (slug) => irTags.has(statuses.get(slug) ?? '');
+        // THE SECOND SHELF (0307). OUT has its own list and cap; a player is
+        // stashed on IR first (the longer stay) and on OUT when IR is full or
+        // he only fits OUT; he comes back from whichever shelf he no longer
+        // qualifies for. set_roster_spot is still the authority on every move.
+        const outTags = new Set((outTagsOf.get(lg.id) ?? []).map((t) => String(t).toUpperCase()));
+        const outCap = Number(lg.settings_json?.roster_shape?.out) || 0;
+        const qualifiesOut = (slug) => outTags.has(statuses.get(slug) ?? '');
         const move = async (row, spot) => {
           try {
             const r = await db().rpc('set_roster_spot', { p_league_id: lg.id, p_slug: row.slug, p_spot: spot });
-            if (r?.data?.ok === true) { row.spot = spot; log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, spot === 'ir' ? 'stashed' : 'activated', row.slug, `(${statuses.get(row.slug) ?? 'no tag'})`); return true; }
+            if (r?.data?.ok === true) { row.spot = spot; log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, spot === 'active' ? 'activated' : `stashed on ${spot.toUpperCase()}`, row.slug, `(${statuses.get(row.slug) ?? 'no tag'})`); return true; }
             if (r?.data?.error) log('seat wire refused', lg.id, seat.roster_id, row.slug, '→', spot, r.data.error);
           } catch (e) { log('seat wire', lg.id, seat.roster_id, row.slug, '→', spot, e.message); }
           return false;
@@ -276,7 +287,13 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
             await move(row, 'ir');
           }
         }
-        for (const row of mine.filter((r) => r.spot === 'ir' && !qualifies(r.slug))) {
+        if (outCap > 0) {
+          for (const row of mine.filter((r) => r.spot === 'active' && qualifiesOut(r.slug))) {
+            if (mine.filter((r) => r.spot === 'out').length >= outCap) break;
+            await move(row, 'out');
+          }
+        }
+        for (const row of mine.filter((r) => (r.spot === 'ir' && !qualifies(r.slug)) || (r.spot === 'out' && !qualifiesOut(r.slug)))) {
           if (mine.filter((r) => r.spot === 'active').length >= activeSeats) break;
           await move(row, 'active');
         }
