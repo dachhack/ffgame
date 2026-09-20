@@ -188,15 +188,17 @@ const CSS = `
    warn/target highlights keep winning. ───────────────────────────────────── */
 .mx-felt{position:relative;}
 .mx-felt>*{position:relative;z-index:1;}
+/* THE FELT IS FLAT (v0.433.5). Founder: "Can we get rid of the gradient
+   background on the drip matchup?" This layer used to paint three team-colour
+   glows (yours top-left, theirs bottom-right, a third mid-board) and a
+   vignette over the felt, which read as a teal-to-magenta wash down the whole
+   page. Now it is the felt tint alone, with the paper-grain noise kept for
+   texture; the drift blobs the card-table demo animates (.ct-b1/.ct-b2) were
+   never on this board. */
 .mx-felt .ct-feltlayers{position:absolute;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(70% 60% at 18% 8%, color-mix(in srgb, var(--you, #36E59B) 34%, transparent), transparent 62%),
-    radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp, #FF5266) 30%, transparent), transparent 60%),
-    radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn, #14424A) 26%, transparent), transparent 65%),
-    color-mix(in srgb, var(--ct-felt, #0B1F1A) 80%, var(--bg, #0B1F1A));}
+  background:color-mix(in srgb, var(--ct-felt, #0B1F1A) 80%, var(--bg, #0B1F1A));}
 .mx-felt .ct-feltlayers::before{content:"";position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
-.mx-felt .ct-feltlayers::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.5) 100%);}
 
 @keyframes mx-wob{from{transform:rotate(.7deg)}to{transform:rotate(-.8deg) translateY(-2px)}}
 .ctable .mx-winsec{border:2px solid rgba(0,0,0,.75);border-radius:12px;padding:10px 10px 12px;

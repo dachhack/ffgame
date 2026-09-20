@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.5 — the drip matchup's felt is flat
+
+Founder, on the phone: "Can we get rid of the gradient background on the
+drip matchup?"
+
+The hero board's felt layer (`.mx-felt .ct-feltlayers` in cardTable.tsx)
+painted three team-colour radial glows — yours top-left, theirs
+bottom-right, a third mid-board — and a vignette over the felt tint, which
+on a tall phone read as a teal-to-magenta wash down the whole page. The
+layer is now the felt tint alone (the skin's `--ct-felt` mixed with the
+theme background, as before), with the paper-grain noise kept for texture.
+The card faces, backs, window sections and chips are untouched; so is the
+card-table demo's drifting glow, which was never on this board.
+
 ### v0.433.4 — the notification icon is a drop cut out of a football
 
 Founder, from a sheet of eleven candidates (drops, footballs, helmets, and
