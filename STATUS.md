@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.0 — a backup needs a whole empty window, and an empty window reveals an hour before it locks
+
+Founder: "We should have players sub only if every opposing slot in their
+window is unopposed. That way, an hour before when the players lock, the
+window can reveal and players can do the substitution action." And: "do
+it that way" — a slot unopposed inside a partly filled window plays in
+place and banks its own points.
+
+THE RULE (core scoringRules.bestBallBackups). Until now ANY of your slots
+whose facing seat was empty was a backup: zeroed in place, its would-be
+score movable onto your lowest beatable starter, all-or-nothing. That
+could only be known at kickoff, when the opponent's sealed picks turned
+face-up, so the sub arrived with the game already on. Now a slot is a
+backup only when the opponent left its WHOLE window empty (no slot in the
+window has an opponent). A slot unopposed in a window the opponent partly
+filled is not a backup: it plays against the empty seat and keeps the
+points the slot resolver already scored for it. A same-window sub no
+longer exists (a window with an opposed starter is not empty); a manual
+assignment on a slot that is not a backup does nothing. Both engines
+(the boards' and the resolver's) run the one function. check:backupwin
+pins the partly filled window (banks in place, no subs), the empty
+window (backups as before), the ignored assignment, and the rewritten
+same-window case.
+
+THE REVEAL (0312 `opponent_empty_windows`). The opponent's picks stay
+sealed until kickoff (0262), but a window they left entirely empty
+reveals nothing about any pick — only that there are none — so it can be
+shown early. The function lists, for a participant's matchup, the windows
+in which the opponent has no filled pick and which are within an hour of
+locking (lock is kickoff − 1h, so from kickoff − 2h) or already locked.
+"Empty" follows the resolver: a seat with rows scores from its rows (a
+window with none is empty); a seat with NO rows is fielded by the resolver
+under best_lineup, and an AI, unenrolled or unclaimed seat always, so
+nothing reveals for those; under the 'empty' policy a rowless seat is
+empty everywhere due. Classic matchups and non-participants get []. The
+opponent can still fill a revealed window until it locks; then it drops
+off the list, the engine makes no backup, and an assignment made in the
+meantime is simply unused. scripts/db/empty-window-probes.sql pins all
+of it against kickoffs set around now().
+
+THE BOARDS. The web board polls the list beside the revealed picks; a
+pending backup in a revealed-empty window surfaces the sub nudge BEFORE
+kickoff — "opponent left SUN 1PM empty — 2 backups can sub · assign →" —
+and the existing backup menu assigns it (set_backup_assign already takes
+a pre-kick target). The mobile duel's empty seat says which case it is:
+"window left empty — the facing player subs as a backup" or "unopposed —
+the facing player banks here". The web's slot copy follows the engine
+flag and needs no change.
+
 ### v0.433.9 — the drip widget deals your cards, with a status chip and a warning on every open slot
 
 Founder: "Can we actually show the images of the cards of your players

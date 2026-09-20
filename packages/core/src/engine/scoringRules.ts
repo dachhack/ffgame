@@ -79,14 +79,28 @@ export interface SideLens<S> {
 }
 
 // ── Best-ball backups ──────────────────────────────────────────────────────
-/** A side's unopposed slots don't score in place: each becomes a BACKUP whose
- *  would-be score can replace one of that side's lowest beatable starter
- *  scores. Manual assignments (keyed `win#slot` → `win#slot`) are honored
- *  first — only when the backup actually outscores the target — then the
- *  unassigned rest auto-maximize greedily (biggest backup into the smallest
- *  beatable starter). All-or-nothing: a backup that doesn't sub in stays 0.
- *  An assigned-but-invalid backup is left benched (the explicit choice is
- *  respected; it does not fall through to auto).
+/** A side's slots in a window THE OPPONENT LEFT ENTIRELY EMPTY don't score in
+ *  place: each becomes a BACKUP whose would-be score can replace one of that
+ *  side's lowest beatable starter scores. Manual assignments (keyed
+ *  `win#slot` → `win#slot`) are honored first — only when the backup actually
+ *  outscores the target — then the unassigned rest auto-maximize greedily
+ *  (biggest backup into the smallest beatable starter). All-or-nothing: a
+ *  backup that doesn't sub in stays 0. An assigned-but-invalid backup is left
+ *  benched (the explicit choice is respected; it does not fall through to
+ *  auto).
+ *
+ *  THE WHOLE WINDOW, NOT THE SLOT (v0.434.0). Founder: "We should have
+ *  players sub only if every opposing slot in their window is unopposed.
+ *  That way, an hour before when the players lock, the window can reveal and
+ *  players can do the substitution action." Until now ANY unopposed slot was
+ *  a backup — which could only be known at kickoff, when the opponent's
+ *  sealed picks turned face-up, so the sub arrived with the game already on.
+ *  A window the opponent left empty reveals nothing about anyone's picks, so
+ *  it can be shown an hour before it locks (opponent_empty_windows, 0312)
+ *  and the sub assigned in time. A slot unopposed inside a window the
+ *  opponent PARTLY filled is not a backup any more: it plays unopposed and
+ *  banks its own points against the empty seat, which is what the slot
+ *  resolver already scored for it.
  *
  *  `hooks` let the board record its display bookkeeping (the struck-through
  *  would-be score, the "subbed in for X" chip) without the rule knowing the
@@ -104,7 +118,9 @@ export function bestBallBackups<S>(slots: S[], lens: SideLens<S>, assign: Record
    *  slate behave as before. */
   winRank?: (win: string) => number;
 }): void {
-  const backups = slots.filter((s) => lens.player(s) && !lens.opp(s));
+  // A window is EMPTY for this side when no slot in it has an opponent.
+  const opposedWins = new Set(slots.filter((s) => lens.opp(s)).map((s) => lens.win(s)));
+  const backups = slots.filter((s) => lens.player(s) && !lens.opp(s) && !opposedWins.has(lens.win(s)));
   if (!backups.length) return;
   const wouldBe = new Map<S, number>();
   for (const b of backups) { wouldBe.set(b, lens.get(b)); hooks?.zeroed?.(b, lens.get(b)); lens.set(b, 0); }
