@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.9 — the drip widget deals your cards, with a status chip and a warning on every open slot
+
+Founder: "Can we actually show the images of the cards of your players
+picked in the widget for drip scoring leagues? Have a status chip and a
+warning for any unfilled slots?"
+
+THE CARDS. The feed's drip summary now carries `cards`: one per slot of
+every window in kickoff order, empties included — the headshot (the baked
+map, else the league pool's ESPN id, read once a day), the short name, the
+position and team, the sealed metric's name, the points and hot streak
+from the slot row once the window has kicked, and a STATUS: `empty` (an
+open slot with nobody in it — THE WARNING), `missed` (locked with nobody),
+`unsealed` (a player without a metric, window open), `set`, `sealed`,
+`live` (points so far), `final` (points banked).
+
+THE CARD. The lineup view draws each window as a row: the window's label
+and how many slots are still open down the left, its cards across — a
+30dp headshot with rounded corners (a position pill when there is no
+photo), the name, the metric, and the chip: "⚠ EMPTY" and "NO METRIC" in
+amber on an amber-bordered card, "SET ✓", "SEALED", "● 9.1" (🔥 when hot)
+on a live-bordered card, "9.1 ✓" at the final, "MISSED" in the quiet
+colour. One window on a 4×2, two on a 4×3, four on a 4×4 — the open ones
+first (there is something to do), then live, locked, final — drawn back
+in kickoff order. The header's right side counts the empties ("⚠ 2 EMPTY
+· SUN 1PM LOCKS 12:00 PM ET"); OUT and BYE starters, which a card cannot
+show on its own, keep a line each on the taller sizes. The score view is
+untouched, and a classic seat has no cards (its spots print as fixes,
+v0.433.2).
+
+PROVED. check:widget stands the cards up on the week-3 slate: every window
+in order, the live pick's points/hot/name/photo, EMPTY for the open hole,
+UNSEALED for a player without a metric, SET with the metric's name, MISSED
+once the hole's window locks, SEALED once a pick's window locks, FINAL
+with the points, and none for a classic seat.
+
 ### v0.433.8 — the Kickoff League's add market does not wait for the run
 
 0310's log: "fa_mode open → open, open now: f, 18 pending claim(s)

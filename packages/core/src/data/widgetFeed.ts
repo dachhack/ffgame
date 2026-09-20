@@ -31,12 +31,15 @@ import {
 } from './liveApi';
 import { windowsForWeek, windowPhase, windowLockMs, windowKickoffMs, windowDateLabel, windowTimeLabel, weekLabel, setRuntimeSlate, windowForTeam, gamesInWindow, type WindowPhase } from './nflSlate';
 import { slotsFor } from '../engine/matchup';
+import { metricById } from './metrics';
+import { headshot, espnHeadshot } from './media';
+import type { Pos } from '../types';
 import { CLASSIC_WIN, slotAllows, slotDisplayNames, slotBadgeLabel, optimalLineup, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 import { zeroFill, setLeagueGolf, clearLeagueGolf } from '../engine/golf';
 import { setLeagueProjScoring, clearLeagueProjScoring } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups } from './liveApi';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool } from './liveApi';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
 
@@ -66,6 +69,39 @@ export interface WidgetFix {
   winLabel: string;
   kind: 'empty' | 'metric' | 'injury' | 'bye' | 'swap';
   text: string;
+}
+
+/** ONE CARD ON THE HOME SCREEN (v0.433.9) — a drip seat's pick in one slot
+ *  of one window, as the widget draws it: the headshot, the name, the metric,
+ *  and a status chip. Founder: "show the images of the cards of your players
+ *  picked in the widget for drip scoring leagues. Have a status chip and a
+ *  warning for any unfilled slots." An EMPTY slot is a card too — the
+ *  warning — and a slot left empty in a window already locked is MISSED. */
+export interface WidgetCard {
+  win: string;
+  winLabel: string;
+  /** The window's phase, so a row can be coloured as a whole. */
+  phase: WindowPhase;
+  slot: string;
+  slug: string | null;
+  /** "J. Jacobs", or "" for an empty slot. */
+  name: string;
+  pos: string | null;
+  team: string | null;
+  /** The sealed metric's name ("Rush Yards"), or null when none is sealed. */
+  metric: string | null;
+  /** Headshot URL when one is known (baked or the league pool's ESPN id), else null. */
+  image: string | null;
+  /** empty — nothing picked, window still open (THE WARNING);
+   *  missed — nothing picked and the window has locked;
+   *  unsealed — a player without a metric, window open;
+   *  set — player and metric in, window open;
+   *  sealed — locked, not yet kicked off;
+   *  live — on the field, `points` so far;
+   *  final — done, `points` banked. */
+  status: 'empty' | 'missed' | 'unsealed' | 'set' | 'sealed' | 'live' | 'final';
+  points: number | null;
+  hot: boolean;
 }
 
 export interface WidgetSnapshot {
@@ -109,6 +145,10 @@ export interface WidgetSnapshot {
   /** CLASSIC: the opponent's lineup could not be read (or they have nobody),
    *  so `them.score` is their live total, not a projection. */
   themLive?: boolean;
+  // ── v0.433.9 ──
+  /** DRIP: my picks as cards, every slot of every window in kickoff order,
+   *  empty slots included. Empty when the seat is not assessable. */
+  cards?: WidgetCard[];
 }
 
 /** A league the widget can show — the seats you hold, minus what a home
@@ -171,9 +211,11 @@ export interface SummarizeInput {
   /** The seat's sealed picks (drip). Undefined = not readable → no assessment. */
   picks?: PickRow[];
   /** The seat's roster, for names, teams (bye) and positions. */
-  pool?: Pick<PoolPlayer, 'slug' | 'full' | 'team'>[];
+  pool?: Pick<PoolPlayer, 'slug' | 'full' | 'team'>[] | Pick<PoolPlayer, 'slug' | 'full' | 'team' | 'pos'>[];
   /** slug → injury designation, from the hourly sync. */
   injuries?: Record<string, string>;
+  /** slug → headshot URL (v0.433.9), for the cards. Absent = no photos. */
+  images?: Record<string, string>;
   /** CLASSIC (v0.433.2): the lineup, the roster, and how to value a player. */
   classic?: ClassicWidgetInput;
   /** Whether the league HAS matchups this week (v0.433.6) — read only when
@@ -220,12 +262,13 @@ const GAME_MS = 3.75 * 60 * 60 * 1000;
 /** The PURE half: rows in, the picture's words out. `nowMs` is a parameter
  *  so the check can stand at any moment of a week. */
 export function summarize(input: SummarizeInput): WidgetSnapshot {
-  const { league, week, matchup, state, teams, nowMs, picks, pool, injuries } = input;
+  const { league, week, matchup, state, teams, nowMs, picks, pool, injuries, images } = input;
   const wl = weekLabel(week);
   const wins = windowsForWeek(week);
   const base = {
     leagueId: league.id, leagueName: league.name, rosterId: league.rosterId, week, weekLabel: wl, at: nowMs,
     windows: [] as WidgetWindow[], left: null, hot: 0, alarm: null, fixes: [] as WidgetFix[], assessable: false, lead: 'score' as WidgetView,
+    cards: [] as WidgetCard[],
   };
   const myName = teams[league.rosterId]?.team_name || 'Your team';
   if (!matchup) {
@@ -260,6 +303,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   // ── the assessment (sealed picks: drip) ──
   const assessable = Array.isArray(picks);
   const fixes: WidgetFix[] = [];
+  const cards: WidgetCard[] = [];
   let alarm: WidgetSnapshot['alarm'] = null;
   let left: WidgetSnapshot['left'] = null;
   if (assessable) {
@@ -273,6 +317,33 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       const cap = slotsFor(winId as WindowId, week);
       const s = byWin.get(winId);
       const theirRevealed = (s?.slot_scores ?? []).filter((r) => r.side !== mySide && r.slug).length;
+      // ── THE CARDS (v0.433.9): one per slot, in slot order, empties included ──
+      const mineScored = new Map((s?.slot_scores ?? []).filter((r) => r.side === mySide).map((r) => [String(r.slot), r]));
+      const bySlot = new Map(inWin.map((p) => [String(p.roster_slot), p]));
+      const slotIds = [...new Set([...bySlot.keys(), ...Array.from({ length: cap }, (_, i) => String(i + 1))])]
+        .sort((a, b) => Number(a) - Number(b)).slice(0, cap);
+      for (const slotId of slotIds) {
+        const p = bySlot.get(slotId);
+        const slug = p?.player_slug ?? null;
+        const pl = slug ? poolBySlug.get(slug) : undefined;
+        const sc = mineScored.get(slotId);
+        const open = w.phase === 'setup';
+        const status: WidgetCard['status'] = !slug ? (open ? 'empty' : 'missed')
+          : open ? (p?.metric_id ? 'set' : 'unsealed')
+          : w.phase === 'locked' ? 'sealed'
+          : w.phase === 'live' ? 'live' : 'final';
+        const pos = pl && 'pos' in pl ? (pl as { pos?: string }).pos ?? null : null;
+        const metric = p?.metric_id && pos ? metricById(pos as Pos, p.metric_id)?.name ?? null : null;
+        cards.push({
+          win: winId, winLabel: w.label, phase: w.phase, slot: slotId, slug,
+          name: slug ? (pl ? shortName(pl.full) : slug) : '',
+          pos, team: pl?.team ?? null, metric,
+          image: slug ? images?.[slug] ?? null : null,
+          status,
+          points: sc && (status === 'live' || status === 'final') ? round1(Number(sc.score) || 0) : null,
+          hot: !!sc?.hot,
+        });
+      }
       if (w.phase === 'setup' || w.phase === 'locked') {
         meLeft.waiting += filled.length;
         // Theirs are sealed until kickoff: assume the window's full complement.
@@ -453,7 +524,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   // ── the state line, and which view leads ──
   const openWindow = windows.some((w) => w.phase === 'setup');
   const lead: WidgetView = assessable && openWindow && (fixes.length > 0 || !windows.some((w) => w.phase !== 'setup')) ? 'lineup' : 'score';
-  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, ...(projected ? { projected, themLive } : {}) };
+  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, cards, ...(projected ? { projected, themLive } : {}) };
   if (final) {
     const r = me.score > them.score ? 'W' : me.score < them.score ? 'L' : 'T';
     return { ...common, phase: 'final', line: `FINAL · ${r} ${me.score}–${them.score}`, lead: 'score' };
@@ -538,7 +609,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   const classic = league.gameMode === 'classic' && !!matchup;
   const oppId = matchup ? (matchup.home_roster_id === league.rosterId ? matchup.away_roster_id : matchup.home_roster_id) : null;
   const teamIds = matchup ? [matchup.home_roster_id, matchup.away_roster_id] : [league.rosterId];
-  const [state, teams, slate, picks, pool, injuries, gm, revealed, spots, ids, oppPool] = await Promise.all([
+  const [state, teams, slate, picks, pool, injuries, gm, revealed, spots, ids, oppPool, espnIds] = await Promise.all([
     matchup ? getMatchupState(matchup.id) : Promise.resolve([] as WindowScore[]),
     cached(`teams:${league.id}:${teamIds.join(',')}`, 60 * MIN, fresh, () => matchupTeams(league.id, teamIds)),
     cached(`slate:${week}`, 60 * MIN, fresh, () => liveSlate(week).catch(() => [])),
@@ -550,7 +621,20 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     classic ? cached(`spots:${league.id}`, 30 * MIN, fresh, () => nativeRosters(league.id).catch(() => [])) : Promise.resolve([]),
     classic ? cached(`ids:${league.id}`, 60 * MIN, fresh, () => leaguePoolIds(league.id).then((r) => r?.ids ?? {}).catch(() => ({}))) : Promise.resolve({}),
     classic && oppId != null ? cached(`pool:${league.id}:${week}:${oppId}`, 30 * MIN, fresh, () => myPool(league.id, week, oppId).catch(() => [])) : Promise.resolve([]),
+    // THE FACES (v0.433.9): the league pool's ESPN ids, for the headshots the
+    // baked map lacks. A day is fine — a photo id does not change.
+    drip ? cached(`espn:${league.id}`, 24 * 60 * MIN, fresh, () => leaguePool(league.id)
+      .then((rows) => Object.fromEntries(rows.filter((r) => r.espn_id).map((r) => [r.slug, r.espn_id as string])))
+      .catch(() => ({} as Record<string, string>))) : Promise.resolve({} as Record<string, string>),
   ]);
+  let images: Record<string, string> | undefined;
+  if (drip) {
+    images = {};
+    for (const p of pool) {
+      const url = headshot(p.slug) ?? espnHeadshot((espnIds as Record<string, string>)[p.slug]);
+      if (url) images[p.slug] = url;
+    }
+  }
   // The baked slate has no kickoff clocks; the headless task starts from a
   // cold module, so the week's real kickoffs are installed here exactly as
   // the boards and the lineup alarm install them. Without this every window
@@ -588,7 +672,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     };
   }
   try {
-    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, classic: classicIn, weekScheduled });
+    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, images, classic: classicIn, weekScheduled });
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };
   } finally {

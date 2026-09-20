@@ -20,8 +20,8 @@
 // ship, no animation, no clock. Colours are fixed to the app's dark palette:
 // a widget has no ThemeCtx, and a home screen is not the app.
 import React from 'react';
-import { FlexWidget, TextWidget, type ColorProp } from 'react-native-android-widget';
-import type { WidgetSnapshot, WidgetView, WidgetWindow } from '@drip/core/data/widgetFeed';
+import { FlexWidget, TextWidget, ImageWidget, type ColorProp } from 'react-native-android-widget';
+import type { WidgetSnapshot, WidgetView, WidgetWindow, WidgetCard } from '@drip/core/data/widgetFeed';
 
 const C = {
   bg: '#0E1F22',
@@ -251,25 +251,103 @@ function ScoreView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapsho
   );
 }
 
+/** THE CARDS (v0.433.9). Founder: "show the images of the cards of your
+ *  players picked in the widget for drip scoring leagues. Have a status chip
+ *  and a warning for any unfilled slots." One small card per slot: the
+ *  headshot (or a position pill when there is no photo), the name, the sealed
+ *  metric, and a STATUS CHIP — EMPTY in amber with a warning mark for a slot
+ *  still open and unfilled, MISSED for one that locked unfilled, SET, SEALED,
+ *  LIVE with the points so far, FINAL with the points banked. */
+const CARD_W = 78;
+const FACE = 30;
+
+function statusChip(c: WidgetCard): { text: string; color: ColorProp; bg: ColorProp } {
+  const pts = c.points != null ? fmt(c.points) : null;
+  switch (c.status) {
+    case 'empty': return { text: '⚠ EMPTY', color: '#1A1300', bg: C.warn };
+    case 'missed': return { text: 'MISSED', color: C.faint, bg: C.bg };
+    case 'unsealed': return { text: 'NO METRIC', color: '#1A1300', bg: C.warn };
+    case 'set': return { text: 'SET ✓', color: C.ok, bg: C.bg };
+    case 'sealed': return { text: 'SEALED', color: C.dim, bg: C.bg };
+    case 'live': return { text: `${c.hot ? '🔥 ' : '● '}${pts ?? '0.0'}`, color: C.live, bg: C.bg };
+    default: return { text: `${pts ?? '0.0'} ✓`, color: C.text, bg: C.bg };
+  }
+}
+
+function Card({ c }: { c: WidgetCard }) {
+  const chip = statusChip(c);
+  const warn = c.status === 'empty' || c.status === 'unsealed';
+  return (
+    <FlexWidget style={{ width: CARD_W, flexDirection: 'column', alignItems: 'center', backgroundColor: C.bg, borderRadius: 10, padding: 5, marginRight: 5,
+      borderWidth: 1, borderColor: warn ? C.warn : c.status === 'live' ? C.live : C.line }}>
+      {c.image
+        ? <ImageWidget image={c.image as `https:${string}`} imageWidth={FACE} imageHeight={FACE} radius={8} resizeMode="cover" />
+        : <TextWidget text={c.pos ?? (c.status === 'empty' ? '+' : '—')} maxLines={1}
+            style={{ width: FACE, height: FACE, fontSize: 12, color: warn ? C.warn : C.faint, fontWeight: 'bold', textAlign: 'center', backgroundColor: C.card, borderRadius: 8 }} />}
+      <TextWidget text={c.name || (c.status === 'empty' ? 'pick one' : 'nobody')} truncate="END" maxLines={1}
+        style={{ fontSize: 9.5, color: c.name ? C.text : C.faint, fontWeight: 'bold', marginTop: 3 }} />
+      <TextWidget text={c.metric ?? (c.slug ? 'no metric' : ' ')} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: C.dim }} />
+      <TextWidget text={chip.text} maxLines={1}
+        style={{ fontSize: 8.5, color: chip.color, backgroundColor: chip.bg, fontWeight: 'bold', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, marginTop: 3 }} />
+    </FlexWidget>
+  );
+}
+
+/** One window's row: its label down the left, its cards across. */
+function CardRow({ win, cards }: { win: WidgetWindow; cards: WidgetCard[] }) {
+  const color: ColorProp = win.phase === 'live' ? C.live : win.phase === 'setup' ? C.warn : C.faint;
+  const empties = cards.filter((c) => c.status === 'empty').length;
+  return (
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+      <FlexWidget style={{ width: 44, flexDirection: 'column' }}>
+        <TextWidget text={win.label} maxLines={2} style={{ fontSize: 9, color, fontWeight: 'bold' }} />
+        <TextWidget text={win.phase === 'setup' ? (empties ? `${empties} open` : 'set') : win.phase.toUpperCase()} maxLines={1} style={{ fontSize: 8, color: empties && win.phase === 'setup' ? C.warn : C.faint }} />
+      </FlexWidget>
+      {cards.map((c) => <Card key={`${c.win}-${c.slot}`} c={c} />)}
+    </FlexWidget>
+  );
+}
+
+/** Which windows a tier shows: one on a 4×2, two on a 4×3, four on a 4×4 —
+ *  the open ones first (there is something to do), then live, then locked,
+ *  then final — drawn back in kickoff order. */
+function windowsToShow(snap: WidgetSnapshot, tier: Tier): WidgetWindow[] {
+  const n = tier === 'compact' ? 1 : tier === 'roomy' ? 2 : 4;
+  const rank = (w: WidgetWindow) => (w.phase === 'setup' ? 0 : w.phase === 'live' ? 1 : w.phase === 'locked' ? 2 : 3);
+  const order = new Map(snap.windows.map((w, i) => [w.id, i]));
+  return [...snap.windows].sort((a, b) => rank(a) - rank(b) || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)).slice(0, n)
+    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
 function LineupView({ snap, leagues, tier, view, offline }: { snap: WidgetSnapshot; leagues: number; tier: Tier; view: WidgetView; offline?: boolean }) {
   const n = snap.fixes.length;
   const ready = n === 0;
-  const max = tier === 'compact' ? 2 : tier === 'roomy' ? 4 : 8;
-  const shown = snap.fixes.slice(0, max);
-  const more = n - shown.length;
   const lockLine = snap.alarm ? `${snap.alarm.winLabel} locks ${clock(snap.alarm.lockMs)}` : 'Every window is locked';
+  const cards = snap.cards ?? [];
+  const rows = windowsToShow(snap, tier).map((w) => ({ w, cards: cards.filter((c) => c.win === w.id) })).filter((r) => r.cards.length);
+  const empties = cards.filter((c) => c.status === 'empty').length;
+  // Fixes the cards cannot show on their own (an OUT or BYE starter, a
+  // missing metric is on the chip already) — a line each on the taller sizes.
+  const notes = snap.fixes.filter((f) => f.kind === 'injury' || f.kind === 'bye').slice(0, tier === 'tall' ? 3 : tier === 'roomy' ? 1 : 0);
   return (
     <Frame clickAction={WIDGET_CLICK.open} clickActionData={{ uri: matchupDeepLink(snap.leagueId, snap.rosterId) }}>
-      <Header left={`${snap.leagueName.toUpperCase()} · ${snap.weekLabel.toUpperCase()}`} right={lockLine.toUpperCase()} rightColor={ready ? C.dim : C.warn} />
-      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
-        <TextWidget text={ready ? 'READY ✓' : `${n} FIX${n === 1 ? '' : 'ES'}`} maxLines={1} style={{ fontSize: 26, color: ready ? C.ok : C.warn, fontWeight: 'bold' }} />
-        <TextWidget text={ready ? '  your lineup is set' : `  vs ${snap.them?.name ?? 'bye'}`} truncate="END" maxLines={1} style={{ fontSize: 11, color: C.dim }} />
-      </FlexWidget>
-      <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
-        {shown.map((f, i) => <Line key={`${f.win}-${f.kind}-${i}`} text={`${f.winLabel} · ${f.text}`} color={f.kind === 'empty' || f.kind === 'injury' ? C.warn : C.text} />)}
-        {more > 0 ? <Line text={`+${more} more`} color={C.faint} size={9.5} /> : null}
-        {ready && tier !== 'compact' && snap.left ? <Line text={`${snap.left.me.waiting + snap.left.me.playing} starters in · ${snap.hot ? `${snap.hot} hot` : 'all sealed'}`} /> : null}
-      </FlexWidget>
+      <Header left={`${snap.leagueName.toUpperCase()} · ${snap.weekLabel.toUpperCase()}`}
+        right={ready ? lockLine.toUpperCase() : `⚠ ${empties ? `${empties} EMPTY` : `${n} FIX${n === 1 ? '' : 'ES'}`} · ${lockLine.toUpperCase()}`} rightColor={ready ? C.dim : C.warn} />
+      {rows.length ? (
+        <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
+          {rows.map((r) => <CardRow key={r.w.id} win={r.w} cards={r.cards} />)}
+        </FlexWidget>
+      ) : (
+        <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+          <TextWidget text={ready ? 'READY ✓' : `${n} FIX${n === 1 ? '' : 'ES'}`} maxLines={1} style={{ fontSize: 26, color: ready ? C.ok : C.warn, fontWeight: 'bold' }} />
+          <TextWidget text={ready ? '  your lineup is set' : `  vs ${snap.them?.name ?? 'bye'}`} truncate="END" maxLines={1} style={{ fontSize: 11, color: C.dim }} />
+        </FlexWidget>
+      )}
+      {notes.length ? (
+        <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
+          {notes.map((f, i) => <Line key={`${f.win}-${f.kind}-${i}`} text={`${f.winLabel} · ${f.text}`} color={C.warn} size={9.5} />)}
+        </FlexWidget>
+      ) : null}
       <Chips snap={snap} leagues={leagues} view={view} offline={offline} />
     </Frame>
   );
