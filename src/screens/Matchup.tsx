@@ -1284,7 +1284,13 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // kicking after the arm (buffsAt stamps), and targeted plays aim at an
   // un-kicked window — the server gates per target window.
   const openWins = liveCtx ? windowsForWeek(week).filter((w) => winRt(w.id) === 'setup') : [];
-  const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0).map((p) => {
+  // A PLAYED CARD LEAVES THE HAND (v0.431.0, founder, on the app: "if I used
+  // momentum it shouldn't be in my hand anymore. It should show on the spots
+  // though"). An armed team buff used to stay fanned here, dimmed "already
+  // armed", whenever a copy was still counted; it lives in ◈ ACTIVE (with
+  // REMOVE) and on every spot it applies to, so the hand deals only what is
+  // still to be played.
+  const appliable = POWERUPS.filter((p) => (inventory[p.id] ?? 0) > 0 && !(isTeamBuff(p.id) && buffs[p.id])).map((p) => {
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
@@ -1299,7 +1305,6 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       ok = liveWins.length > 0;
       deadline = liveWins.length ? `Live now: ${liveWins.map((w) => w.label).join(', ')}` : 'When a window goes live';
     }
-    if (buff && buffs[p.id]) ok = false; // already armed → lives in Active
     // Window-targeted plays (Extra Slot / Rivalry / EMP) also enter tap-a-target
     // mode — you play the card, then tap the window to apply it.
     const action: 'arm' | 'apply' | 'hint' = buff ? 'arm' : (SPOT_APPLY.has(p.id) || p.target === 'window') ? 'apply' : 'hint';

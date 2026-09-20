@@ -18,6 +18,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.431.0 — a played card leaves the hand, and the app gets the matchup switcher
+
+Founder, on the app, Sunday morning with Momentum armed: "If I used momentum
+it shouldn't be in my hand anymore. It should show on the spots though." And:
+"where is the matchup switcher so I can go directly to my other matchups?"
+
+THE HAND (app). An armed team buff stayed fanned in the hand, painted ARMED,
+because the hand was the only place to disarm it — which read as the card
+never having been played. Now the hand deals only what you own and have not
+played; a second copy of an armed buff stays hidden too (it cannot be armed
+twice this week). The played card shows in two places: on every spot it
+applies to — the ⚡ chip now carries each power-up's ICON (📈) where it
+carried a count ("1" said something was here, not what) — and in a new
+◈ ARMED strip under the week line, by name, which also catches a buff no
+fielded spot answers yet (Momentum armed before a drip metric is picked).
+Tap either for what it does and, until the week locks, DISARM · BACK TO
+HAND. Web parity: an armed team buff leaves the web hand as well; it was
+already in ◈ ACTIVE with REMOVE and named on its spots.
+
+THE SWITCHER (app). The web board has had "Your matchups" since v0.388.0
+(v0.418.1 on a phone); the app never did — the only way between your
+leagues was back out to My Leagues. On the drip board's week line the
+pairing ("Humans vs Robots ▾") now opens the same sheet: your other seats,
+OPEN → hands the seat to the shell, which opens that league on its matchup
+(commissioner status looked up on the way so the ⚑ door still hangs off it).
+Read from my_teams when the sheet opens, not on the board's hot path.
+
+Battery: mobile tsc, web tsc, check:changelog, vite build — green. No
+migration. The APK ships itself.
+
 ### v0.430.1 — the audit counts a bought slot
 
 Founder, reading the week's audit: "I think I added a slot in one of my drip

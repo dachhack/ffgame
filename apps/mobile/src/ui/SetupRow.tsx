@@ -23,10 +23,14 @@ import { teamLogo } from '@drip/core/data/media';
 export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twin, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
   /** Power-ups attached to THIS slot — targeted plays plus armed team buffs
-   *  that matter to it (v0.375.1). Worn as one ⚡N chip on the card's
-   *  shoulder; tapping it lists them (founder: "click the chip to see what
-   *  power ups apply"). */
-  applied?: { icon: string; name: string; blurb: string }[];
+   *  that matter to it (v0.375.1). Worn on the card's shoulder as ONE gold
+   *  ⚡ chip that shows each one's ICON (v0.431.0, founder: "if I used
+   *  momentum it shouldn't be in my hand anymore. It should show on the
+   *  spots though" — a bare count said something was here, not what);
+   *  tapping it lists them, and an armed team buff offers DISARM there
+   *  (`onRemove`) — the card left the hand when it was played, so the spot
+   *  is where it is taken back. */
+  applied?: { id?: string; icon: string; name: string; blurb: string; onRemove?: () => void }[];
   /** TWIN GENERALS pairs this card with another Field General in the same
    *  window (v0.417.0, founder: "I armed twin generals for 1pm but I don't
    *  see it on the cards"). Worn on the card rather than only inside the ⚡
@@ -130,10 +134,14 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
           </View>
         )}
         {!!applied?.length && (
-          <Pressable onPress={() => setPuOpen(true)} hitSlop={6} accessibilityLabel={`${applied.length} power-ups on this card`}
+          <Pressable onPress={() => setPuOpen(true)} hitSlop={6}
+            accessibilityLabel={`${applied.map((a) => a.name).join(', ')} on this card`}
             style={{ position: 'absolute', top: -7, left: -5, zIndex: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#241A08', borderWidth: 1.5, borderColor: '#E9B959', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 }}>
             <Text style={{ fontSize: 11 }}>⚡</Text>
-            <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: '#E9B959' }}>{applied.length}</Text>
+            {/* The icons themselves — 📈 says Momentum where "1" said only
+                "something". Three fit a narrow card; past that, a +N. */}
+            <Text style={{ fontSize: 11 }}>{applied.slice(0, 3).map((a) => a.icon).join('')}</Text>
+            {applied.length > 3 && <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: '#E9B959' }}>+{applied.length - 3}</Text>}
           </Pressable>
         )}
         </View>
@@ -157,6 +165,14 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{a.name}</Text>
                 {!!a.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{a.blurb}</Text>}
+                {/* An armed team buff can be taken back here until the week
+                    locks — this is where the card went when it left the hand. */}
+                {a.onRemove && (
+                  <Pressable onPress={() => { a.onRemove?.(); setPuOpen(false); }} hitSlop={6}
+                    style={{ alignSelf: 'flex-start', marginTop: 4, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: t.opp }}>DISARM · BACK TO HAND</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           ))}
