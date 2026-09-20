@@ -427,6 +427,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [viewRid, setViewRid] = useState<number | null>(null);
   const shownRid = viewRid ?? myRoster;
   const viewingMine = shownRid === myRoster;
+  // THE COMMISSIONER MOVES ANYONE (v0.430.3, founder: "I need an option as a
+  // commissioner to move players in team lineups. For example move a player
+  // to IR or to taxi"). set_roster_spot has answered to the commissioner
+  // since 0164; the card just took its controls off for a rival's roster.
+  // For the commissioner they stay on, and the pickers offer THAT roster.
+  const canStash = viewingMine || !!team?.is_commish;
   const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
@@ -733,6 +739,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           </ScrollView>
         )}
         <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
+        {!viewingMine && canStash && (
+          <Mono size={8.5} tone="you" style={{ marginTop: 4 }}>Commissioner: you can move this team’s players to and from IR and the taxi squad below.</Mono>
+        )}
         {shown.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 6 }}>No players yet.</Mono>}
 
         {/* ── STARTERS ─────────────────────────────────────────────────────
@@ -765,11 +774,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </Mono>
           {bySpot.ir.map((p) => (
-            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t}
-              slotVerb="injured reserve" onSlot={viewingMine ? () => { tap(); setFillFor('ir'); } : undefined} />
+              slotVerb="injured reserve" onSlot={canStash ? () => { tap(); setFillFor('ir'); } : undefined} />
           ))}
         </>)}
 
@@ -779,11 +788,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </Mono>
           {bySpot.taxi.map((p) => (
-            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
-              slotVerb="taxi squad" onSlot={viewingMine ? () => { tap(); setFillFor('taxi'); } : undefined} />
+              slotVerb="taxi squad" onSlot={canStash ? () => { tap(); setFillFor('taxi'); } : undefined} />
           ))}
         </>)}
 
@@ -1030,7 +1039,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           active first (tap his badge), which keeps every move one legal step
           the server can answer for rather than a silent two-step. */}
       <Overlay visible={!!fillFor}
-        title={fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
+        title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}`}
         subtitle={fillFor === 'ir'
           ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is greyed out below.`
           : stashRules?.taxiMaxExp != null
@@ -1038,10 +1047,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}
         onClose={() => setFillFor(null)}>
         <ScrollView style={{ maxHeight: 380 }}>
-          {mine.filter((p) => p.spot === 'active').length === 0 && (
+          {shown.filter((p) => p.spot === 'active').length === 0 && (
             <Mono size={10} tone="faint" style={{ paddingVertical: 10 }}>Nobody on your active roster to move.</Mono>
           )}
-          {mine.filter((p) => p.spot === 'active').map((p) => {
+          {shown.filter((p) => p.spot === 'active').map((p) => {
             // Ineligible names stay VISIBLE and greyed rather than vanishing:
             // "why isn't he in the list" is a worse question than "why is he
             // greyed out", and the answer prints right under him.

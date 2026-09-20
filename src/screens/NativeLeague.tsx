@@ -2817,6 +2817,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const [viewRid, setViewRid] = useState<number | null>(null);
   const shownRid = viewRid ?? myRoster;
   const viewingMine = shownRid === myRoster;
+  // THE COMMISSIONER MOVES ANYONE (v0.430.3, founder): set_roster_spot has
+  // answered to the commissioner since 0164; the card just took its controls
+  // off for a rival's roster. For the commissioner they stay on, and the
+  // pickers offer THAT roster.
+  const canStash = viewingMine || !!team?.is_commish;
   const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
@@ -3092,6 +3097,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           </div>
         )}
         <div style={hdr}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</div>
+        {!viewingMine && canStash && (
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginBottom: 6 }}>Commissioner: you can move this team’s players to and from IR and the taxi squad below.</div>
+        )}
         {shown.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No players yet.</div>}
 
         {/* STARTERS — one row per starting spot the league plays, filled by
@@ -3117,11 +3125,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </div>
           {bySpot.ir.map((p) => (
-            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterLine key={`ir-empty-${i}`} badge="IR" tone="var(--warn)" p={null} busy={busy}
-              slotVerb="injured reserve" onSlot={viewingMine ? () => setFillFor('ir') : undefined} />
+              slotVerb="injured reserve" onSlot={canStash ? () => setFillFor('ir') : undefined} />
           ))}
         </>)}
 
@@ -3131,11 +3139,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </div>
           {bySpot.taxi.map((p) => (
-            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={viewingMine ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterLine key={`tx-empty-${i}`} badge="TX" tone="var(--you)" p={null} busy={busy}
-              slotVerb="taxi squad" onSlot={viewingMine ? () => setFillFor('taxi') : undefined} />
+              slotVerb="taxi squad" onSlot={canStash ? () => setFillFor('taxi') : undefined} />
           ))}
         </>)}
 
@@ -3353,7 +3361,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         <div onClick={() => setFillFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-              {fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
+              {viewingMine ? '' : `${shownName ?? 'This team'}: `}{fillFor === 'ir' ? 'Move to injured reserve' : 'Move to the taxi squad'}
             </div>
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
               {fillFor === 'ir'
@@ -3362,10 +3370,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   ? `The taxi squad holds prospects off your active roster — your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer. He can’t be started while he’s on it.`
                   : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
             </div>
-            {mine.filter((p) => p.spot === 'active').length === 0 && (
-              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Nobody on your active roster to move.</div>
+            {shown.filter((p) => p.spot === 'active').length === 0 && (
+              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Nobody on the active roster to move.</div>
             )}
-            {mine.filter((p) => p.spot === 'active').map((p) => {
+            {shown.filter((p) => p.spot === 'active').map((p) => {
               // Ineligible names stay VISIBLE and greyed rather than vanishing:
               // "why isn't he in the list" is a worse question than "why is he
               // greyed out", and the answer is printed right beside him.
