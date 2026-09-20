@@ -96,13 +96,13 @@ const MAX_OPEN_SEAT_FILLS = 16;
  */
 export async function sweepSeatWire(week, slate = null, log = () => {}) {
   // Only leagues that HAVE a seat the worker may act for are worth loading:
-  // agent seats (seat_agent is server-only and small) and AI seats nobody
-  // holds (v0.425.0 — the same "nobody at the seat" rule 0298's gate
-  // re-checks; a manager who flipped their OWN team to auto-pilot keeps
-  // their roster, so app_user_id must be null here as it is there).
+  // agent seats (seat_agent is server-only and small) and every seat on 🤖
+  // auto-pilot (v0.432.3 — account or not: the founder's rule is that a seat
+  // on AI control is the AI's to manage, roster included; 0308's gate says
+  // the same).
   const { data: agentRows } = await db().from('seat_agent').select('league_id,roster_id');
   const { data: aiRows } = await db().from('league_membership')
-    .select('league_id,sleeper_roster_id').eq('controller', 'ai').is('app_user_id', null);
+    .select('league_id,sleeper_roster_id').eq('controller', 'ai');
   const seatRows = (agentRows ?? []).map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
   const agented = new Set(seatRows.map((r) => `${r.league_id}:${r.roster_id}`));
   for (const r of aiRows ?? []) {
@@ -241,7 +241,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           if (!agents.has(`${lg.id}:${seat.roster_id}`)) continue;   // claimed since we read
         } else {
           const m = memOf.get(seat.roster_id);
-          if (!m || m.controller !== 'ai' || m.app_user_id) continue;   // handed back, or a human sat down
+          if (!m || m.controller !== 'ai') continue;   // handed back to a human since
         }
         // A seat the format has shut out of the wire — a chopped guillotine
         // seat, a non-vampire under the vampire's wire lock (0272) — would be

@@ -50,7 +50,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import { normName } from './players';
 
-/** Live StatHead pool, pulled 2026-08-26T12:16:06Z (445 skill players + games + sleeper ids; K/DST rows from the pull are dropped — kicker/DST projections ride the v0.311.0 team-id mechanism, not player slugs). */
+/** Live StatHead pool, pulled 2026-08-26T12:16:06Z (445 skill players + games + sleeper ids, plus the players the 2026-09-20 pull carried that this one did not — late signings such as Stefon Diggs, appended in v0.432.3 with their September lines; K/DST rows from the pull are dropped — kicker/DST projections ride the v0.311.0 team-id mechanism, not player slugs). */
 export const PROJ_AS_OF = '2026-08-26';
 
 const PROJ_CSV = `Jahmyr Gibbs,RB,25.94,17,9221
@@ -497,7 +497,127 @@ Ben Yurosek,TE,0.30,10,13121
 Chris Manhertz,TE,0.33,9,3048
 Jacob Saylors,RB,0.15,13,11237
 Roschon Johnson,RB,0.10,10,10235
-Sione Vaki,RB,0.09,11,11729`;
+Sione Vaki,RB,0.09,11,11729
+Anthony Richardson,QB,15.33,3,9229
+Carson Wentz,QB,15,3,3161
+Kyle McCord,QB,14.33,3,12494
+Gardner Minshew,QB,17,2,6011
+Garrett Nussmeier,QB,24,1,13404
+Zach Wilson,QB,22,1,7538
+Clayton Tune,QB,21,1,10217
+Joshua Dobbs,QB,21,1,4179
+Josh Johnson,QB,19,1,260
+Kurtis Rourke,QB,19,1,12477
+Cooper Rush,QB,19,1,4574
+Drew Lock,QB,19,1,5854
+Case Keenum,QB,18,1,1737
+Russell Wilson,QB,18,1,1234
+Tommy DeVito,QB,18,1,11292
+Will Howard,QB,17,1,12511
+Stetson Bennett,QB,17,1,10857
+Aidan O'Connell,QB,17,1,10866
+Sam Howell,QB,17,1,8162
+Athan Kaliakmanis,QB,16,1,13557
+Brandon Allen,QB,16,1,3357
+Andy Dalton,QB,15,1,829
+Tanner McKee,QB,15,1,9230
+Joe Fagnano,QB,15,1,13350
+Haynes King,QB,14,1,13415
+Sam Ehlinger,QB,13,1,7583
+Jalon Daniels,QB,13,1,13425
+Brady Cook,QB,12,1,12538
+Dillon Gabriel,QB,9,1,12486
+Chris Oladokun,QB,4,1,8413
+Kareem Hunt,RB,6.35,17,4098
+Nick Chubb,RB,6.53,15,4988
+Austin Ekeler,RB,10.63,8,4663
+Najee Harris,RB,7.25,8,7528
+Jaleel McLaughlin,RB,4.27,11,11439
+Hunter Luepke,RB,2.87,15,11510
+Raheem Mostert,RB,2.64,14,2749
+DJ Herman,RB,1.71,14,
+Julius Chestnut,RB,1.25,16,8254
+CJ Donaldson,RB,1.43,14,13277
+Max Bredeson,RB,1.21,14,13516
+Trayveon Williams,RB,1.5,10,6144
+Trey Benson,RB,9,1,11589
+Audric Estimé,RB,8,1,11579
+Corey Kiner,RB,0.67,9,12491
+Jeremy McNichols,RB,5,1,4219
+DeeJay Dallas,RB,0.33,9,6931
+Ty Chandler,RB,3,1,8230
+Cam Akers,RB,0.11,9,6938
+Stefon Diggs,WR,10.94,17,2449
+Keenan Allen,WR,9.12,17,1479
+Mack Hollins,WR,7.8,15,4177
+Deebo Samuel Sr.,WR,7.25,16,5872
+Brycen Tremayne,WR,3.67,15,11157
+Isaiah Bond,WR,3,15,12503
+Demarcus Robinson,WR,2.93,15,3286
+Devontez Walker,WR,4,11,11629
+Konata Mumpfield,WR,2.92,12,12718
+Kevin Coleman Jr.,WR,2.36,14,13338
+Tez Johnson,WR,2.13,15,12485
+Montorie Foster Jr,WR,1.43,14,13199
+Barion Brown,WR,1.36,14,13533
+Jordan Watkins,WR,2.25,8,12634
+Odell Beckham Jr.,WR,1.29,14,2078
+Isaiah Hodgins,WR,1.8,10,6920
+Jalen Brooks,WR,2,9,11034
+Elijah Moore,WR,1.42,12,7596
+Arian Smith,WR,1.21,14,12539
+Josh Reynolds,WR,1.89,9,4171
+Kevin Austin Jr.,WR,1.78,9,8200
+Bo Melton,WR,1,14,8204
+Travis Hunter,WR,1,14,12530
+Jonathan Mingo,WR,1.56,9,10225
+Dohnte Meyers,WR,0.86,14,13264
+Chris Blair,WR,1.71,7,7521
+Tom Kennedy,WR,1.2,10,6588
+Jared Wayne,WR,1.71,7,11056
+Jalen Royals,WR,1.38,8,12505
+Ben Skowronek,WR,0.44,16,7757
+Darius Cooper,WR,0.6,10,13150
+Tai Felton,WR,0.43,14,12496
+Tylan Wallace,WR,0.38,13,7595
+Calvin Austin III,WR,5,1,8125
+David Sills,WR,4,1,6154
+Tyrell Shavers,WR,3,1,11377
+Dareke Young,WR,0.18,11,8527
+Efton Chism III,WR,0.18,11,12542
+Tay Martin,WR,0.25,8,8250
+Ray-Ray McCloud,WR,2,1,5096
+Beaux Collins,WR,2,1,12889
+KeAndre Lambert-Smith,WR,2,1,12670
+Mason Tipton,WR,2,1,11895
+Tyler Higbee,TE,7.75,12,3271
+Jonnu Smith,TE,5,17,4144
+Terrance Ferguson,TE,5.77,13,12487
+Darren Waller,TE,4.17,12,2505
+Brevyn Spann-Ford,TE,2.69,16,11593
+Eric Saubert,TE,3.42,12,4189
+John Bates,TE,3,12,7716
+Johnny Mundt,TE,1.93,14,4314
+Adam Trautman,TE,1.79,14,6869
+Drew Sample,TE,1.64,14,6001
+Payne Durham,TE,1.82,11,10227
+Quintin Morris,TE,1.46,13,7536
+Durham Smythe,TE,1.64,11,5008
+Hunter Long,TE,1.36,11,7535
+Gavin Bartholomew,TE,1,14,12700
+Erick All,TE,0.93,14,11592
+Jake Briningstool,TE,0.86,14,12817
+Tanner Arkin,TE,0.86,14,13827
+Robert Tonyan,TE,1.25,8,4602
+E.J. Jenkins,TE,1.43,7,11304
+Thomas Fidone II,TE,1.43,7,12715
+Blake Whiteheart,TE,0.75,12,11201
+Kylen Granson,TE,0.5,14,7602
+Ko Kieft,TE,0.5,8,8484
+Will Mallory,TE,3,1,10220
+Moliki Matavao,TE,3,1,12480
+Brayden Willis,TE,0.2,10,10224
+Tip Reiman,TE,2,1,11716`;
 
 /** A full NFL season, for turning a per-GAME rate into a per-WEEK expectation.
  *  17 rather than 18: the bye is a week the player was never going to play, and

@@ -18,6 +18,54 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.432.3 — a seat on auto-pilot works the wire, and the bake learns the late signings
+
+Founder, Sunday 7:41: "Diggs should have a projection. Heidenreich in a
+starting RB spot is not optimal. There are like 20 better options on
+waivers. Steelers should have added an RB on waivers."
+
+THE WIRE (0308 + both sweeps). 0298 admitted the worker to a seat when
+nobody was at it: an agent row, or controller 'ai' — AND no account. The
+null was 0213's guarantee kept in place: a manager who flipped their own
+team to auto-pilot kept their roster, their drops and their FAAB, and the AI
+composed only their lineup. The Steelers are that seat — an account, on 🤖 —
+so the wire never acted for them, the IR shelf never took their injured,
+and a bot vampire in that shape would never bite. The founder's rule now: a
+seat on AI control is the AI's to manage, roster included. `agent_wire_seat`
+admits controller = 'ai' whether or not an account is at the seat; the
+agent-row branch keeps its null (a claimed seat is the human's the moment
+they sit down). Same helper, same four callers (submit_waiver_claim,
+add_free_agent, set_roster_spot, vampire_steal), same commissioner switch.
+The seat wire and the bite sweep walk every 🤖 seat. Flipping back to
+'human' closes the gate the same tick. agent-wire-probes aw9m–aw9o3 and
+vampire-rules vr7h/vr7i now pin the open gate and the shut one.
+
+THE BAKE. `proj2026.ts` and `projStats2026.ts` were pulled on 26 August and
+Stefon Diggs signed after — no row, so the board printed 0.0 and every fill
+valued him at nothing. A fresh StatHead pull (2026-09-20) carries 493 skill
+players; 120 that the August bake lacked are APPENDED with their September
+lines (Diggs, Keenan Allen, Deebo Samuel, Kareem Hunt, Nick Chubb, the
+backups and the reserve-list rows), and every existing row stands. Not a
+re-bake: the September pull moves every line toward what the player is
+actually doing, and a dozen assertions across check:projscoring,
+check:golf and check:spots pin the August numbers on purpose (the bake's
+own header says so). Refreshing the whole pool is its own change with its
+own pins. Kyle Juszczyk stays in the fullback bake rather than joining as
+an RB. PROJ_AS_OF unchanged for the same reason.
+
+THE DIAGNOSTIC. `scripts/db/ai-seat-lineup-diag.sql` (read-only, for
+dbquery.yml): the seat (controller, account, agent row, the gate's answer,
+the wire block, the switch), the week's matchup, the stored rows and who
+wrote them, the roster with designations, the seat's claims, the wire's
+depth, and the free RBs — everything that decides what the fill and the
+wire do. Heidenreich at RB2 over three better backs on the bench is not
+explained by the code as read; this is what answers it.
+
+Battery: web tsc, mobile tsc, check:projscoring, check:golf, check:spots,
+check:engineparity, check:seatwire, check:faab, check:bite,
+check:changelog; scratch DB through 0308: agent-wire, vampire-rules,
+taxi-ir — green. Worker + web + APK + migration 0308.
+
 ### v0.432.2 — the mascot builder comes off the landing
 
 Founder: "The mascot work in progress is live on the site. It's not ready
