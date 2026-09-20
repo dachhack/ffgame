@@ -201,6 +201,37 @@ const state = [
   ok('the leagues list is remembered only by the feed (nothing wrote it here)', recallLeagues() === null);
 }
 
+// ── THE CARDS (v0.433.9): every slot of every window, empties as the warning ──
+// The check's slate carries one game per window, so every window holds one
+// slot here: TNF live, SUN 1PM a player without a metric, SUN 4PM nobody (the
+// warning), SNF set.
+{
+  const pool = [{ slug: 'a', full: 'Aaron Guy', team: 'BUF', pos: 'QB' }, { slug: 'x', full: 'Xavier Guy', team: 'ATL', pos: 'RB' }, { slug: 'z', full: 'Zed Guy', team: 'KC', pos: 'WR' }];
+  const picks = [
+    { game_window: wins[0].id, roster_slot: '1', player_slug: 'a', metric_id: 'pass_yd' },   // TNF: live
+    { game_window: wins[1].id, roster_slot: '1', player_slug: 'x', metric_id: null },        // SUN 1PM: no metric
+    { game_window: wins[3].id, roster_slot: '1', player_slug: 'z', metric_id: 'recyd' },     // SNF: set
+  ];
+  const images = { a: 'https://a.espncdn.com/i/headshots/nfl/players/full/1.png' };
+  const st = [{ game_window: wins[0].id, home_score: 9.1, away_score: 0, slot_scores: [{ side: 'home', slot: '1', slug: 'a', metric: 'pass_yd', score: 9.1, hot: true }] }];
+  const s = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) + 30 * 60_000, picks, pool, images });
+  const card = (snap, i) => snap.cards.find((c) => c.win === wins[i].id);
+  ok('cards: one per slot of every window, in kickoff order', s.cards.length === wins.length && s.cards.map((c) => c.win).join() === wins.map((w) => w.id).join(), s.cards.map((c) => `${c.win}:${c.slot}`));
+  ok('cards: a live pick carries its points, its hot streak, its name and its photo', card(s, 0).status === 'live' && card(s, 0).points === 9.1 && card(s, 0).hot && card(s, 0).name === 'A. Guy' && card(s, 0).image === images.a, card(s, 0));
+  ok('cards: an open slot with nobody in it is EMPTY — the warning', card(s, 2).status === 'empty' && card(s, 2).slug === null && card(s, 2).name === '', card(s, 2));
+  ok('cards: a player without a metric in an open window is UNSEALED', card(s, 1).status === 'unsealed' && card(s, 1).metric === null && card(s, 1).image === null, card(s, 1));
+  ok('cards: a set pick names its metric', card(s, 3).status === 'set' && typeof card(s, 3).metric === 'string' && card(s, 3).metric.length > 0, card(s, 3));
+  // A minute before the late window kicks: it has locked with nobody in it — MISSED; SNF still SET; the early pick is on the field.
+  const locked = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(2) - 60_000, picks, pool, images });
+  ok('cards: a window that locked with nobody in it is MISSED, a set pick elsewhere stays SET', card(locked, 2).status === 'missed' && card(locked, 3).status === 'set', [card(locked, 2), card(locked, 3)]);
+  // A minute before SNF kicks: the SNF pick is SEALED, no points yet.
+  const sealed = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(3) - 60_000, picks, pool, images });
+  ok('cards: once its window locks a pick is SEALED with no points', card(sealed, 3).status === 'sealed' && card(sealed, 3).points === null, card(sealed, 3));
+  const fin = summarize({ league, week: WEEK, matchup: matchup('final'), state: st, teams, nowMs: kick(4) + 5 * 3_600_000, picks, pool, images });
+  ok('cards: at the final a scored pick is FINAL with its points', card(fin, 0).status === 'final' && card(fin, 0).points === 9.1, card(fin, 0));
+  ok('cards: a classic seat (not assessable) has none', summarize({ league: { ...league, gameMode: 'classic' }, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) }).cards.length === 0);
+}
+
 // ── CLASSIC (v0.433.2): projected finals and the spots that want attention ──
 // Founder: "For classic leagues, let's show predicted score rather than
 // current… empty starting spots, starting spots with out/bye players, and
