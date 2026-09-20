@@ -1348,6 +1348,18 @@ export interface MetriclessAudit {
 export const adminMetriclessPicks = (limit = 200) =>
   rpc<MetriclessAudit>('admin_metricless_picks', { p_limit: limit });
 
+/** THE WEEKLY MATCHUP AUDIT (0302, v0.430.0): who actually played the week —
+ *  per league and per seat, which slots a person set vs the computer vs an
+ *  AI seat, what was left empty, who started an OUT or bye player, and whose
+ *  moves and claims the week's transactions were. Week null → the latest
+ *  week with a stamped final; season null → the newest season with matchups;
+ *  the activity window can be overridden. Admin-only. The shape and its
+ *  reading live in core data/weekAudit.ts. */
+export const adminWeekAudit = (week?: number | null, season?: string | null, from?: string | null, to?: string | null) =>
+  rpc<import('./weekAudit').WeekAudit>('admin_week_audit', {
+    p_week: week ?? null, p_season: season ?? null, p_from: from ?? null, p_to: to ?? null,
+  });
+
 /** One market_board refresh run (0237): what the pull applied and what moved. */
 export interface MarketRefreshRun {
   id: number; as_of: string; applied_at: string; players: number;
