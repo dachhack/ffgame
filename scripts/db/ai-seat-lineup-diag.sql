@@ -73,14 +73,20 @@ from lg cross join seat
 join waiver_claim wc on wc.league_id = lg.id and wc.roster_id = seat.sleeper_roster_id
 order by wc.created_at desc limit 12;
 
-with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1)
-select 'wire' as section, count(*) filter (where lp.waived_until > now()) as on_waivers_now,
+with lg as (select id, settings_json from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1)
+select 'wire' as section,
+       league_fa_mode(lg.id) as fa_mode, fa_window_open(lg.id) as fa_open_now, fa_open_since(lg.id) as fa_open_since,
+       fa_opens_at(lg.id) as fa_opens_at, next_waiver_run(lg.id) as next_waiver_run,
+       lg.settings_json ->> 'fa_start_min' as fa_start_min, lg.settings_json ->> 'fa_end_min' as fa_end_min,
+       lg.settings_json ->> 'waiver_clear_min' as waiver_clear_min, lg.settings_json -> 'waiver_clear_dow' as waiver_clear_dow,
+       count(*) filter (where lp.waived_until > now()) as on_waivers_now,
        count(*) filter (where lp.waived_until is null or lp.waived_until <= now()) as free_agents,
        count(*) filter (where lp.pos = 'RB' and (lp.waived_until is null or lp.waived_until <= now())) as free_rbs,
        (select count(*) from injury_status) as designations_on_file,
        (select max(updated_at) from injury_status) as last_injury_poll
 from lg join league_pool lp on lp.league_id = lg.id
-where not exists (select 1 from native_roster nr where nr.league_id = lg.id and nr.slug = lp.slug);
+where not exists (select 1 from native_roster nr where nr.league_id = lg.id and nr.slug = lp.slug)
+group by lg.id, lg.settings_json;
 
 with lg as (select id from league where lower(name) like lower('Kickoff%') order by created_at desc limit 1)
 select 'free RBs' as section, lp.slug, lp.team, lp.waived_until, ist.status as designation

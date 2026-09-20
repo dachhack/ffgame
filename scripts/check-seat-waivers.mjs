@@ -11,7 +11,8 @@
 // fixture league, so there is no excuse for the policy to be unpinned.
 // Run: npx tsx scripts/check-seat-waivers.mjs
 import {
-  seatWirePlan, wireBid, shortlistWire, positionNeed, UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
+  seatWirePlan, wireBid, shortlistWire, positionNeed, wireInstrument, HUMANS_FIRST_MS,
+  UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { clearLeagueFlags, setLeagueFlags } from '../packages/core/src/data/commish.ts';
 
@@ -298,6 +299,50 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(plan2[0]?.add === 'wrx', 'with a spare RB the receiver side is thinner and gets the body');
   ok(!plan.some((c) => c.add === 'k1') && !plan2.some((c) => c.add === 'k1'),
     'a position no spot accepts is never a depth add, whatever it projects');
+}
+
+// ── THE LEAGUE'S CLOCK DECIDES THE INSTRUMENT (v0.433.0) ─────────────────
+// Founder: "We shouldn't be working the wire at times not in line with what
+// the league has." A claim for anyone held or unreachable this minute; an add
+// only through an open door; and a WAIT on a player who became addable within
+// the hour, so the worker is never the fastest hand at the window.
+{
+  const now = 10_000_000_000;
+  const H = HUMANS_FIRST_MS;
+  const open = { faOpen: true, openSince: now - 3 * H };
+  ok(wireInstrument({ heldUntil: now + 1000 }, open, now) === 'claim', 'a player inside his hold is a claim, door open or not');
+  ok(wireInstrument({ heldUntil: null }, { faOpen: false, openSince: null }, now) === 'claim',
+    'with free agency shut, a never-held player is a claim too (0288\'s rule for the pool screen)');
+  ok(wireInstrument({ heldUntil: now - 5 * H }, { faOpen: false }, now) === 'claim', '…and so is one whose hold cleared long ago');
+  ok(wireInstrument({ heldUntil: null }, open, now) === 'add', 'never held, door open for hours: an add');
+  ok(wireInstrument({ heldUntil: now - 2 * H }, open, now) === 'add', 'hold cleared two hours ago: an add');
+  ok(wireInstrument({ heldUntil: now - H / 2 }, open, now) === 'wait', 'hold cleared half an hour ago: humans first');
+  ok(wireInstrument({ heldUntil: null }, { faOpen: true, openSince: now - H / 3 }, now) === 'wait',
+    'the window opened twenty minutes ago: humans first, even for a never-held player');
+  ok(wireInstrument({ heldUntil: now - 2 * H }, { faOpen: true, openSince: now - H / 3 }, now) === 'wait',
+    'the later of the two clocks is the one that counts');
+  ok(wireInstrument({ heldUntil: null }, { faOpen: true, openSince: null }, now) === 'add',
+    'no opening on record (the door has stood open): an add');
+  ok(wireInstrument({ heldUntil: now - H }, open, now) === 'add', 'exactly an hour is enough');
+
+  // A depth body may be CLAIMED for $0 when the door is shut: an empty bench
+  // in a league with no free agency must still be filled.
+  const starters = [rb('s1'), rb('s2'), wr('s3')];
+  const proj = projOf({ s1: 12, s2: 11, s3: 10, body: 6, held: 9 });
+  const pool = [
+    { ...rb('body'), onWaivers: true, held: false },   // a claim only because the door is shut
+    { ...rb('held'), onWaivers: true, held: true },    // a real hold
+  ];
+  const plan = seatWirePlan(SLOTS, starters, pool, proj, { faab: true, budget: 50, openSeats: 1, rosValueOf: proj, maxClaims: 1 });
+  ok(plan.length === 1 && plan[0].add === 'body' && plan[0].kind === 'depth',
+    'the unheld body fills the open place as a depth claim; the held one is a claim to win, not a bench body');
+  ok(plan[0]?.onWaivers === true && plan[0]?.bid === 0, '…filed as a claim, for $0');
+  const openDoor = seatWirePlan(SLOTS, starters, pool.map((p) => ({ ...p, onWaivers: p.held })), proj,
+    { faab: true, budget: 50, openSeats: 1, rosValueOf: proj, maxClaims: 1 });
+  ok(openDoor[0]?.add === 'body' && openDoor[0]?.onWaivers === false, 'door open: the same body is an add');
+  const legacy = seatWirePlan(SLOTS, starters, [{ ...rb('body'), onWaivers: true }], proj,
+    { faab: true, budget: 50, openSeats: 1, rosValueOf: proj, maxClaims: 1 });
+  ok(legacy.length === 0, 'without `held` the flag keeps its old meaning: a claim is never a depth body');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
