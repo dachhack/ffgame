@@ -906,5 +906,18 @@ for (const p of [QB, WR, RB, TE]) {
     projectedPoints(WR) === PROJ_2026.get(WR.id) && projectedPoints(QB) === PROJ_2026.get(QB.id));
 }
 
+// ── BY SLUG, THEN BY SLEEPER ID (v0.432.4) ────────────────────────────────
+// The bake spells him "Kenneth Gainwell"; the pool says "Kenny". A slug-only
+// lookup priced him at nothing and an AI seat benched him behind a scratch.
+{
+  clearLeagueProjScoring();
+  const kenneth = projectedPoints({ id: 'kenneth-gainwell', pos: 'RB', team: 'TB' });
+  ok('the bake knows him by its own spelling', kenneth > 0, kenneth);
+  ok('\u2026and not by the pool\u2019s, slug alone', projectedPoints({ id: 'kenny-gainwell', pos: 'RB', team: 'TB' }) === 0);
+  ok('with the pool\u2019s Sleeper id the pool\u2019s spelling prices the same', projectedPoints({ id: 'kenny-gainwell', pos: 'RB', team: 'TB', sleeperId: '7567' }) === kenneth);
+  ok('hasProjection answers by the id too', hasProjection('kenny-gainwell', '7567') && !hasProjection('kenny-gainwell'));
+  ok('an id the bake has never seen is still nothing', projectedPoints({ id: 'kenny-gainwell', pos: 'RB', team: 'TB', sleeperId: '0000000' }) === 0);
+}
+
 if (fails) { console.log(`\n${fails} PROJ-SCORING ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL PROJ-SCORING ASSERTIONS PASSED');

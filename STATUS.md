@@ -18,6 +18,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.432.4 — the bake answers by Sleeper id, so the worker prices "Kenny" as "Kenneth"
+
+Founder's diagnostic run (ai-seat-lineup-diag.sql on the Kickoff League):
+the Steelers' backs are McCaffrey (Q), Heidenreich, Gainwell, and Jacobs on
+IR. Tuten, Stevenson and Dobbins — the "three better backs on the bench" —
+were another pair's bench in the browse ring. So the fill's RB2 choice was
+between Gainwell and Heidenreich, and it took the 0.6-point rookie.
+
+WHY. The bake spells him "Kenneth Gainwell" (slug kenneth-gainwell, Sleeper
+id 7567); the pool says "Kenny" (kenny-gainwell). `projectedPoints` looked
+the scalar up BY SLUG ONLY — `PROJ_2026.get(id)`, then the K/DST base — and
+never consulted `PROJ_2026_SID`, which has carried the same number under
+the stable id since v0.307.0. The boards install slug → id from the pool
+(leaguePoolIds / setSlugSleeperIds) and were still missing him for the same
+reason; the worker never installed ids at all. Gainwell priced at nothing
+everywhere, and a scratch who projects 0.6 beat a starter who projects 0.
+
+THE FIX. `projectedPoints`: by slug, then by Sleeper id, then the K/DST
+base; `hasProjection` answers by the id too. `SpotPlayer` carries
+`sleeperId`; `slateAwareProj` hands it on; every worker caller reads
+`sleeper_id` off the pool row and attaches it — the lock-time fill, the
+seat wire (roster, candidates, the market's history), the bite sweep, and
+the resolver's unmanaged lineup (which now reads the pool row for every
+classic matchup, not only under a tenure filter). The boards needed no
+change beyond core: their id map was already installed.
+
+ALSO, THE WIRE ON A LIVE WEEK. A free agent whose game has already kicked
+off is worth nothing THIS week to the sweep — the fill can never seat him
+(the late-swap rail), so signing him for a hole wastes the seat. His
+rest-of-season value is untouched, so depth adds still see him. Rostered
+players keep their weekly value: a starter who already played is locked in
+place and must still count.
+
+check-proj-scoring: the bake knows him by its own spelling, not by the
+pool's slug alone, the same number with the pool's id, hasProjection by id,
+an unknown id still nothing.
+
+Battery: web tsc, mobile tsc, check:projscoring, check:seatwire,
+check:golf, check:spots, check:changelog — green. Worker + web + APK; no
+migration.
+
 ### v0.432.3 — a seat on auto-pilot works the wire, and the bake learns the late signings
 
 Founder, Sunday 7:41: "Diggs should have a projection. Heidenreich in a

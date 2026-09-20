@@ -521,17 +521,20 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const { data: ros } = await db().from('native_roster').select('roster_id,slug')
         .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
         .in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
-      // Per-slot tenure filters (0172) check years_exp — visible only via
-      // league_pool, so fetch it when a spot actually filters on it.
-      const expBySlug = new Map();
-      if (slotDefs.some((d) => d.flt && (d.flt.min_exp != null || d.flt.max_exp != null))) {
-        const { data: lp } = await db().from('league_pool').select('slug,exp')
-          .eq('league_id', matchup.league_id).not('exp', 'is', null).range(0, 1999);
-        for (const r of lp ?? []) expBySlug.set(r.slug, r.exp);
+      // The pool row rides along: years_exp for the per-slot tenure filters
+      // (0172) and, since v0.432.4, the Sleeper id the projection bake answers
+      // by when the pool's slug and the bake's spelling differ — the unmanaged
+      // seat's computed lineup must price a player the same way the fill does.
+      const poolBySlug = new Map();
+      {
+        const { data: lp } = await db().from('league_pool').select('slug,exp,sleeper_id')
+          .eq('league_id', matchup.league_id).range(0, 1999);
+        for (const r of lp ?? []) poolBySlug.set(r.slug, r);
       }
       for (const row of ros ?? []) {
         if (!rosters.has(row.roster_id)) rosters.set(row.roster_id, []);
-        rosters.get(row.roster_id).push({ ...player(row.slug), exp: expBySlug.get(row.slug) ?? null });
+        const lp = poolBySlug.get(row.slug);
+        rosters.get(row.roster_id).push({ ...player(row.slug), exp: lp?.exp ?? null, sleeperId: lp?.sleeper_id ?? null });
       }
     }
     const sideOf = (picks, rosterId) => ({

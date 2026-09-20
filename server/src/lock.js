@@ -364,7 +364,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     // slotAllows needs. A Sleeper-imported classic league has no pool of its
     // own, so it has no auto-slot either (and no draft that built one).
     const { data: pool } = await db().from('league_pool')
-      .select('slug,pos,team,exp').eq('league_id', leagueId).range(0, 1999);
+      .select('slug,pos,team,exp,sleeper_id').eq('league_id', leagueId).range(0, 1999);
     if (!pool?.length) continue;
     const meta = new Map(pool.map((p) => [p.slug, p]));
 
@@ -385,7 +385,9 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
       const p = meta.get(r.slug);
       if (!p || noStart.has(r.slug)) continue;
       if (!rosterOf.has(r.roster_id)) rosterOf.set(r.roster_id, []);
-      rosterOf.get(r.roster_id).push({ id: r.slug, pos: p.pos, team: p.team, exp: p.exp ?? null });
+      // sleeperId (v0.432.4): the bake answers by it when the pool's slug and
+      // the bake's spelling differ ("Kenny" vs "Kenneth" Gainwell).
+      rosterOf.get(r.roster_id).push({ id: r.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null });
     }
 
     const { data: mems } = await db().from('league_membership')

@@ -53,6 +53,7 @@ import { seatWirePlan, shortlistWire } from '../../packages/core/src/engine/seat
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
 import { modeOfSettings } from './resolve.js';
+import { teamKickoffs } from './lock.js';
 import { seatAgentsFor } from './agents.js';
 
 /** How many claims a seat may have OUTSTANDING — pending ones included, not
@@ -154,7 +155,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       if (!slots.length || slots.every((d) => bestball.includes(d.slot))) continue;
 
       const { data: pool } = await db().from('league_pool')
-        .select('slug,pos,team,exp,waived_until').eq('league_id', lg.id).range(0, 1999);
+        .select('slug,pos,team,exp,waived_until,sleeper_id').eq('league_id', lg.id).range(0, 1999);
       if (!pool?.length) continue;                 // a Sleeper mirror has no pool of its own
       const meta = new Map(pool.map((p) => [p.slug, p]));
 
@@ -186,7 +187,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       const available = pool
         .filter((p) => !owned.has(p.slug) && !noAdd.has(p.slug) && p.pos)
         .map((p) => ({
-          id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null,
+          id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null,
           onWaivers: !!p.waived_until && new Date(p.waived_until).getTime() > now,
         }));
       if (!available.length) continue;
@@ -262,7 +263,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // Rest-of-season value (v0.426.0), needed here already for the depth
         // of the wire and again below for every drop and price.
         const statusesRos = (p) => (statuses.get(p.id) === 'IR' ? 0
-          : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }));
+          : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? meta.get(p.id)?.sleeper_id ?? null }));
         const irTags = new Set((irTagsOf.get(lg.id) ?? []).map((t) => String(t).toUpperCase()));
         const irCap = Number(lg.settings_json?.roster_shape?.ir) || 0;
         const qualifies = (slug) => irTags.has(statuses.get(slug) ?? '');
@@ -328,7 +329,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const roster = mine.filter((r) => r.spot === 'active')
           .map((r) => meta.get(r.slug))
           .filter((p) => p && p.pos && !pendingDrops.has(p.slug))
-          .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null }));
+          .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null }));
         // An EMPTY roster is not "nothing to do" — it is the most to do. A bot
         // vampire sits out the draft (0268) and starts the season with no one;
         // before v0.425.0 this line skipped it, so the seat the format most
@@ -347,6 +348,18 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         const outs = await ruledOutSlugs();
         // Play risk rides along (v0.429.0): priced in golf, ignored elsewhere.
         const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))));
+        // A FREE AGENT WHOSE GAME HAS ALREADY KICKED OFF (v0.432.4) is worth
+        // nothing THIS week: the fill can never seat him (the late-swap rail),
+        // so signing him to fill a hole wastes the seat and the add. His
+        // rest-of-season value is untouched, so depth adds still see him.
+        // Rostered players keep their weekly value — a starter who already
+        // played is locked in place and must still count.
+        const teamKicks = teamKickoffs(slate);
+        const nowMs = Date.now();
+        const kickedIds = new Set(available
+          .filter((p) => { const t = p.team ? String(p.team).toUpperCase() : null; return t && Number.isFinite(teamKicks[t]) && teamKicks[t] <= nowMs; })
+          .map((p) => p.id));
+        const valueOfWire = (p, d) => (kickedIds.has(p.id) ? 0 : valueOf(p, d));
         // Rest-of-season value: the season projection under the league's
         // catalog, untouched by this week's bye or a one-game Out, zero for a
         // season-ending IR. This is what a drop is judged by (v0.426.0).
@@ -375,7 +388,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           weeksLeft,
           history: history.map((h) => {
             const p = meta.get(h.add_slug);
-            const surplus = p && p.pos ? rosValueOf({ id: p.slug, pos: p.pos, team: p.team }) - replacementOf(p.pos) : 0;
+            const surplus = p && p.pos ? rosValueOf({ id: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id ?? null }) - replacementOf(p.pos) : 0;
             return { surplus, bid: Number(h.bid) || 0, won: h.status === 'won', ref: startBudget };
           }),
           replacementOf,
@@ -384,7 +397,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // Open places may be filled beyond the claim cap — those adds land at
         // once and leave nothing pending. Claims on held players (waivers)
         // stay capped at `room` below.
-        const plan = seatWirePlan(slots, roster, candidates, valueOf, {
+        const plan = seatWirePlan(slots, roster, candidates, valueOfWire, {
           faab,
           budget,
           openSeats,

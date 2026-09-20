@@ -83,19 +83,19 @@ export async function sweepVampireBites(log = () => {}) {
       const slots = leagueSlotDefs(mode);
       if (!slots.length) continue;
 
-      const { data: pool } = await db().from('league_pool').select('slug,pos,team,exp').eq('league_id', lg.id).range(0, 1999);
+      const { data: pool } = await db().from('league_pool').select('slug,pos,team,exp,sleeper_id').eq('league_id', lg.id).range(0, 1999);
       const meta = new Map((pool ?? []).map((p) => [p.slug, p]));
       const { data: rows } = await db().from('native_roster').select('roster_id,slug,spot').eq('league_id', lg.id);
       const statuses = await injuryStatusMap();
       // Rest-of-season value: the season projection under the league's
       // catalog, zero for a season-ending IR — a bite is for the season.
       const rosValueOf = (p) => (statuses.get(p.id) === 'IR' ? 0
-        : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team }));
+        : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? null }));
       const activeOf = (rid) => (rows ?? [])
         .filter((r) => r.roster_id === rid && (r.spot ?? 'active') === 'active')
         .map((r) => meta.get(r.slug))
         .filter((p) => p && p.pos)
-        .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null }));
+        .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null, sleeperId: p.sleeper_id ?? null }));
 
       for (const chair of open) {
         const seat = Number(chair.seat);
