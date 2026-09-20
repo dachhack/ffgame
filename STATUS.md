@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.433.1 — the widget's error card is the retry, and a failed read keeps the picture
+
+Founder, with a home screen that said "Couldn't reach the league — Network
+error" more often than not: "The widget shows this a lot. If it's not
+connected, can we just have a press to reconnect."
+
+WHY IT SHOWED SO OFTEN. The task's own wakes (the timer, the chips) have
+kept the remembered picture over a failed read since v0.422.1. The other
+two repaint paths did not: the worker's silent push and the app coming to
+the foreground both go through `refreshMatchupWidgets`, which drew
+WHATEVER THE READ RETURNED. A push that landed while the radio was asleep
+(Doze), or a foreground on a dead signal, replaced a good score with the
+apology, and there it sat until the next wake — up to Android's 30-minute
+timer. That path now follows the same rule as the rest: a failed read
+keeps the remembered picture.
+
+THE PRESS. Two of them. On the error card itself — drawn only when there is
+no picture to keep — a tap ANYWHERE is a REFRESH click, the card paints
+"Reconnecting…" the instant it is tapped so the press is seen before the
+read returns, and OPEN → moves to a chip in the corner for whoever wanted
+the app instead. On a kept picture the state carries `offline`: the ⟳ chip
+reads "⟳ offline · retry" in amber, so the manager knows the score is the
+last one read and has the retry under their thumb.
+
 ### v0.433.0 — the wire keeps the league's clock, and humans get the first hour
 
 Founder: "We shouldn't be working the wire at times not in line with what

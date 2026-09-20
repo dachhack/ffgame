@@ -46,7 +46,7 @@ const readLeague = (widgetId: number): string | null => { try { return store().g
 
 /** The remembered picture for what this widget shows, if there is one. The
  *  instant frame: no session check, no network. */
-function rememberedState(widgetId: number): WidgetState | null {
+function rememberedState(widgetId: number): Extract<WidgetState, { kind: 'ok' }> | null {
   const leagues = recallLeagues();
   const want = readLeague(widgetId) ?? leagues?.[0]?.id ?? null;
   if (!want) return null;
@@ -76,14 +76,25 @@ export async function widgetState(widgetId: number, opts: { fresh?: boolean } = 
 const el = (state: WidgetState, info: WidgetInfo, view?: WidgetView) =>
   React.createElement(MatchupWidget, { state, heightDp: info.height, view: view ?? readView(info.widgetId) });
 
-/** The standard wake: the remembered frame now, the fresh one when it lands. */
-async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void, opts: { fresh?: boolean } = {}) {
+/** The standard wake: the remembered frame now, the fresh one when it lands.
+ *
+ *  A READ THAT FAILS (v0.433.1). Founder, on a home screen that said
+ *  "Couldn't reach the league" more often than not: "If it's not connected,
+ *  can we just have a press to reconnect." With a remembered picture, the
+ *  picture stays and is marked `offline`, so the ⟳ chip says so and is the
+ *  retry. Without one, the error card is drawn — and that card is itself
+ *  the retry (a tap anywhere on it is a REFRESH click), with a
+ *  "Reconnecting…" frame painted the instant it is tapped so the press is
+ *  seen before the read returns. */
+async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void, opts: { fresh?: boolean; tapped?: boolean } = {}) {
   const now = rememberedState(info.widgetId);
   if (now) render(now);
+  else if (opts.tapped) render({ kind: 'loading', title: 'Reconnecting…', body: 'Reading the matchup.' });
   const fresh = await widgetState(info.widgetId, opts);
   // An error after a good remembered frame would replace a real score with
-  // an apology; keep the picture and let the next wake try again.
-  if (fresh.kind === 'error' && now) return;
+  // an apology; keep the picture, say the read failed, and let the chip (or
+  // the next wake) try again.
+  if (fresh.kind === 'error' && now) { render({ ...now, offline: true }); return; }
   render(fresh);
 }
 
@@ -125,7 +136,7 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
         render(await widgetState(widgetInfo.widgetId));
         return;
       }
-      if (clickAction === WIDGET_CLICK.refresh) { await paintThenFetch(widgetInfo, render); return; }
+      if (clickAction === WIDGET_CLICK.refresh) { await paintThenFetch(widgetInfo, render, { tapped: true }); return; }
       return;
     }
     default:
@@ -141,7 +152,23 @@ export async function refreshMatchupWidgets(opts: { fresh?: boolean } = {}): Pro
   try {
     await requestWidgetUpdate({
       widgetName: MATCHUP_WIDGET_NAME,
-      renderWidget: async (info) => el(await widgetState(info.widgetId, opts), info),
+      renderWidget: async (info) => {
+        // THIS WAS WHERE THE APOLOGY CAME FROM (v0.433.1). The silent push
+        // and the app's foreground both repaint through here, and until now
+        // this path drew whatever the read returned — so a push that landed
+        // while the radio was asleep, or a foreground on a dead signal,
+        // replaced a good remembered score with "Couldn't reach the league",
+        // where it then sat until the next wake. The same rule as the task's
+        // own wakes now: a failed read keeps the remembered picture, marked
+        // offline, and the error card is drawn only when there is nothing
+        // better to show.
+        const fresh = await widgetState(info.widgetId, opts);
+        if (fresh.kind === 'error') {
+          const now = rememberedState(info.widgetId);
+          if (now) return el({ ...now, offline: true }, info);
+        }
+        return el(fresh, info);
+      },
     });
   } catch { /* no widget host, or a build without the module — nothing to repaint */ }
 }
