@@ -15,7 +15,7 @@
 //
 // So: same geometry as the web. Cards peek up from the bottom edge, rotated
 // about the centre; tapping one straightens it, lifts it, and opens its tip
-// above with the ARM / DISARM action. At most MAX_HAND fan, the rest sit behind
+// above with the ARM action. At most MAX_HAND fan, the rest sit behind
 // a "+N MORE" tile that opens the full list.
 //
 // ALWAYS DEALT (v0.375.0, founder: "power up rail on mobile floats in an
@@ -48,6 +48,9 @@ export interface HandCard {
   usable: boolean;
   /** Why not, or when it can be — shown on the tip. */
   note?: string;
+  /** Always false since v0.431.0: a played card leaves the hand for good
+   *  ("if you use a power up you can't take it back"). Kept optional so the
+   *  fan's tint code reads the same; nothing sets it. */
   armed?: boolean;
 }
 
@@ -69,11 +72,10 @@ const STOCK = '#2A2115';
 const STOCK_EDGE = '#000';
 const INK = '#EFE4C8';
 
-export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
+export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
   cards: HandCard[];
   busyId?: string | null;
   onArm: (id: string) => void;
-  onDisarm: (id: string) => void;
   /** Extra bottom offset — the shell's room bar (v0.356.0) parks under the
    *  hand, so league boards lift it clear of the bar. */
   lift?: number;
@@ -242,24 +244,15 @@ export function PowerupHand({ cards, busyId, onArm, onDisarm, lift = 0 }: {
         titleLeft={<Text style={{ fontSize: 28 }}>{tipPu?.icon ?? '◈'}</Text>}
         onClose={() => setRaised(null)}
         footer={tip ? (
-          tip.armed ? (
-            <Pressable
-              onPress={() => { onDisarm(tip.id); setRaised(null); }}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 13, alignItems: 'center' }}
-            >
-              <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: t.dim }}>DISARM · RETURN TO HAND</Text>
-            </Pressable>
-          ) : (
             <Pressable
               onPress={() => { if (tip.usable) { onArm(tip.id); setRaised(null); } }}
               disabled={!tip.usable}
               style={{ backgroundColor: tip.usable ? t.you : t.sh, borderRadius: 8, paddingVertical: 14, alignItems: 'center' }}
             >
               <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: tip.usable ? t.onAccent : t.faint }}>
-                {tip.usable ? 'ARM' : 'CAN’T PLAY YET'}
+                {tip.usable ? 'ARM · NO TAKE-BACKS' : 'CAN’T PLAY YET'}
               </Text>
             </Pressable>
-          )
         ) : undefined}
       >
         <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>

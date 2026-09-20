@@ -171,7 +171,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     myEnrollments(userId).then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); }).catch(() => { if (!dead) setSeats([]); });
     return () => { dead = true; };
   }, [switchOpen, seats, userId]);
-  // The ARMED strip's sheet (v0.431.0): one armed buff, its blurb, DISARM.
+  // The ARMED strip's sheet (v0.431.0): one armed buff and its blurb.
   const [armedOpen, setArmedOpen] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -716,32 +716,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     } finally { setBuffBusy(null); }
   };
 
-  const disarmFromHand = async (id: string) => {
-    if (!matchup || locked || buffBusy) return;
-    if (!buffs.has(id)) return;
-    setBuffBusy(id); setErr(null);
-    try {
-      const next = [...buffs].filter((b) => b !== id);
-      const r = await heroSetBuffs(matchup.id, next);
-      if (r?.ok) {
-        await refundInventory(matchup.id, id).catch(() => {});
-        setBuffs(new Set(next));
-        setInventory((inv) => ({ ...inv, [id]: (inv[id] ?? 0) + 1 }));
-      } else setErr(r?.error ?? 'Could not disarm that power-up.');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not disarm that power-up.');
-    } finally { setBuffBusy(null); }
-  };
 
   /** The hand: what you OWN and have not played (v0.431.0). An armed card
    *  used to stay fanned here, painted ARMED, so it could be disarmed — and
    *  the founder read that as the card never having left: "if I used
    *  momentum it shouldn't be in my hand anymore. It should show on the
-   *  spots though." So a played card leaves the hand; it shows on every spot
-   *  it applies to (SetupRow's ⚡ chip) and in the ARMED strip under the
-   *  week line, and either of those is where it is taken back. A second
-   *  copy of an armed buff stays hidden too — it cannot be armed twice this
-   *  week, and a card that can do nothing is not a card to deal. */
+   *  spots though." So a played card leaves the hand for good ("if you use
+   *  a power up you can't take it back" — there is no disarm anywhere); it
+   *  shows on every spot it applies to (SetupRow's ⚡ chip) and in the
+   *  ARMED strip under the week line. A second copy of an armed buff stays
+   *  hidden too — it cannot be armed twice this week, and a card that can
+   *  do nothing is not a card to deal. */
   const hand: HandCard[] = POWERUPS
     // Metric unlock cards use through the metric PICKER (pickMetricWithCard),
     // not the hand — played from here they'd arm into `buffs`, which nothing
@@ -766,10 +751,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   // payload) PLUS armed team buffs that matter to this spot — the same two
   // sources the web board's chips draw from (v0.375.1; targeted-only missed
   // buffed players entirely).
-  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { id?: string; icon: string; name: string; blurb: string; onRemove?: () => void }[] => {
+  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { id?: string; icon: string; name: string; blurb: string }[] => {
     const k = `${win}|${slot}`;
-    const out: { id?: string; icon: string; name: string; blurb: string; onRemove?: () => void }[] = [];
-    const add = (id: string, onRemove?: () => void) => { const p = powerupById(id); out.push({ id, icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '', onRemove }); };
+    const out: { id?: string; icon: string; name: string; blurb: string }[] = [];
+    const add = (id: string) => { const p = powerupById(id); out.push({ id, icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
     if (targeted.don?.win === win && targeted.don?.slot === slot) add('double-or-nothing');
     if (targeted.byeSteal?.win === win && targeted.byeSteal?.slot === slot) add('bye-steal');
     const lists: [string, string[] | undefined][] = [
@@ -783,9 +768,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     for (const [id, rec] of maps) if (rec && k in rec) add(id);
     const sw = targeted.swaps?.[k];
     if (sw) add(sw.kind === 'player-swap' ? 'player-swap' : sw.kind === 'mulligan' ? 'mulligan' : 'metric-swap');
-    // An armed team buff can be disarmed from the spot until the week locks
-    // (v0.431.0) — the card left the hand when it was played.
-    if (pos) for (const id of buffs) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id, locked ? undefined : () => void disarmFromHand(id));
+    if (pos) for (const id of buffs) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id);
     // Twin Generals is decided a window at a time (twinGeneralKeys), so the
     // caller passes the verdict in — the ⚡ chip must count it and the list
     // behind the chip must name it, or the card badge would be the only place
@@ -1082,8 +1065,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       {/* ◈ ARMED (v0.431.0): every team buff in play this week, by name. A
           played card leaves the hand (see `hand`), and a buff that no fielded
           spot answers yet — Momentum armed before a drip metric is picked —
-          would otherwise be nowhere on screen. Tap one for what it does and,
-          until the week locks, DISARM. */}
+          would otherwise be nowhere on screen. Tap one for what it does.
+          No take-backs: a played card is played. */}
       {buffs.size > 0 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
           <Mono size={8.5} weight="700" track={0.14} tone="faint">◈ ARMED</Mono>
@@ -1093,13 +1076,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         </View>
       )}
       <Overlay visible={!!armedOpen} title={armedOpen ? `${powerupById(armedOpen)?.icon ?? '✦'} ${powerupById(armedOpen)?.name ?? armedOpen}` : ''}
-        subtitle={locked ? 'ARMED · THE WEEK HAS STARTED' : 'ARMED · IN PLAY THIS WEEK'} onClose={() => setArmedOpen(null)}>
+        subtitle="ARMED · IN PLAY THIS WEEK" onClose={() => setArmedOpen(null)}>
         <View style={{ padding: 14, gap: 12 }}>
           <Text style={{ fontSize: 13, color: t.mid, lineHeight: 19 }}>{armedOpen ? powerupById(armedOpen)?.blurb : ''}</Text>
-          <Text style={{ fontSize: 11.5, color: t.dim, lineHeight: 17 }}>It shows on every spot it applies to (the ⚡ chip on the card). {locked ? 'The week has started, so it stays in play.' : 'Disarming returns the card to your hand.'}</Text>
-          {!locked && armedOpen && (
-            <Chip label="DISARM · BACK TO HAND" onPress={() => { const id = armedOpen; setArmedOpen(null); void disarmFromHand(id); }} />
-          )}
+          <Text style={{ fontSize: 11.5, color: t.dim, lineHeight: 17 }}>It shows on every spot it applies to (the ⚡ chip on the card). A played card stays played — there are no take-backs.</Text>
         </View>
       </Overlay>
       {/* "Your matchups" — the switcher's sheet (v0.431.0). */}
@@ -1548,7 +1528,6 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       cards={hand}
       busyId={buffBusy}
       onArm={armFromHand}
-      onDisarm={disarmFromHand}
     />
     </View>
   );

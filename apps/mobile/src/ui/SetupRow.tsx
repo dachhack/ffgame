@@ -27,10 +27,9 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
    *  ⚡ chip that shows each one's ICON (v0.431.0, founder: "if I used
    *  momentum it shouldn't be in my hand anymore. It should show on the
    *  spots though" — a bare count said something was here, not what);
-   *  tapping it lists them, and an armed team buff offers DISARM there
-   *  (`onRemove`) — the card left the hand when it was played, so the spot
-   *  is where it is taken back. */
-  applied?: { id?: string; icon: string; name: string; blurb: string; onRemove?: () => void }[];
+   *  tapping it lists them. No take-backs (founder: "if you use a power up
+   *  you can't take it back") — the sheet reads, it never disarms. */
+  applied?: { id?: string; icon: string; name: string; blurb: string }[];
   /** TWIN GENERALS pairs this card with another Field General in the same
    *  window (v0.417.0, founder: "I armed twin generals for 1pm but I don't
    *  see it on the cards"). Worn on the card rather than only inside the ⚡
@@ -165,14 +164,6 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{a.name}</Text>
                 {!!a.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{a.blurb}</Text>}
-                {/* An armed team buff can be taken back here until the week
-                    locks — this is where the card went when it left the hand. */}
-                {a.onRemove && (
-                  <Pressable onPress={() => { a.onRemove?.(); setPuOpen(false); }} hitSlop={6}
-                    style={{ alignSelf: 'flex-start', marginTop: 4, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: t.opp }}>DISARM · BACK TO HAND</Text>
-                  </Pressable>
-                )}
               </View>
             </View>
           ))}

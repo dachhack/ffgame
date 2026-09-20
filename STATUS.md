@@ -18,11 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.431.0 — a played card leaves the hand, and the app gets the matchup switcher
+### v0.431.0 — a played card leaves the hand for good, and the app gets the matchup switcher
 
 Founder, on the app, Sunday morning with Momentum armed: "If I used momentum
 it shouldn't be in my hand anymore. It should show on the spots though." And:
 "where is the matchup switcher so I can go directly to my other matchups?"
+Then, on the first cut's DISARM buttons: "No disarming. If you use a power
+up you can't take it back."
 
 THE HAND (app). An armed team buff stayed fanned in the hand, painted ARMED,
 because the hand was the only place to disarm it — which read as the card
@@ -33,9 +35,13 @@ applies to — the ⚡ chip now carries each power-up's ICON (📈) where it
 carried a count ("1" said something was here, not what) — and in a new
 ◈ ARMED strip under the week line, by name, which also catches a buff no
 fielded spot answers yet (Momentum armed before a drip metric is picked).
-Tap either for what it does and, until the week locks, DISARM · BACK TO
-HAND. Web parity: an armed team buff leaves the web hand as well; it was
-already in ◈ ACTIVE with REMOVE and named on its spots.
+Tap either for what it does. NO TAKE-BACKS: there is no disarm anywhere —
+the app's hand loses its DISARM tip, the strip and the spot sheet only read,
+and the web's ◈ ACTIVE stops offering REMOVE on an armed buff (it reads IN
+PLAY). The game's own position auto-refund (a buff whose only eligible
+starter was benched) is a correction, not a take-back, and stays. Web
+parity otherwise: an armed team buff leaves the web hand as well; it was
+already in ◈ ACTIVE and named on its spots.
 
 THE SWITCHER (app). The web board has had "Your matchups" since v0.388.0
 (v0.418.1 on a phone); the app never did — the only way between your

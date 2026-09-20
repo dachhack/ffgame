@@ -1261,7 +1261,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
 
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
-  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field', onRemove: phase === 'setup' ? () => disarmBuff(week, id) : undefined }); }
+  // NO TAKE-BACKS on an armed buff (v0.431.0, founder: "if you use a power up
+  // you can't take it back"): it used to carry REMOVE through setup. The
+  // position auto-refund below (a buff whose only eligible starter was
+  // benched) is the game's correction, not a player's, and stays.
+  for (const id of Object.keys(buffs)) if (buffs[id]) { const p = powerupById(id); if (p) activeEffects.push({ key: 'b-' + id, id, icon: p.icon, name: p.name, detail: 'Armed · whole field · no take-backs' }); }
   if (aw?.doubleOrNothing) { const s = resolved.windows.flatMap((w) => w.slots).find((s) => slotKey(s.win, s.slotIndex) === aw.doubleOrNothing); activeEffects.push({ key: 'don', id: 'double-or-nothing', icon: '⚖️', name: 'Double or Nothing', detail: 'Staked ' + (s?.you?.player.name ?? '—'), onRemove: phase === 'setup' ? () => { clearDoubleOrNothing(week); liveClearTargeted('double-or-nothing'); } : undefined }); }
   if (aw?.byeSteal) activeEffects.push({ key: 'bye', id: 'bye-steal', icon: '🪂', name: 'Bye Steal', detail: 'Fielded ' + (getPlayer(aw.byeSteal.playerId)?.name ?? '—'), onRemove: phase === 'setup' ? () => { clearByeSteal(week); liveClearTargeted('bye-steal'); } : undefined });
   if (aw?.spy) { const sp = aw.spy; activeEffects.push({ key: 'spy', id: 'spy', icon: '👁️', name: 'Spy', detail: `Revealed a slot’s ${sp.reveal}`, onRemove: preKickPhase && !liveCtx ? () => clearSpy(week) : undefined }); } // live: use_spy already consumed the item — no undo
@@ -2712,7 +2716,7 @@ function ActivePowerupsModal({ effects, onClose }: {
           {e.onRemove ? (
             <button onClick={e.onRemove} className="mono" style={{ flex: 'none', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 4, padding: '6px 10px', cursor: 'pointer', border: '1px solid var(--opp)', color: 'var(--opp)', background: 'var(--surface)' }}>REMOVE</button>
           ) : (
-            <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>LOCKED</span>
+            <span className="mono" style={{ flex: 'none', fontSize: 7.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '3px 5px' }}>IN PLAY</span>
           )}
         </div>
       ))}
