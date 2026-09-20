@@ -293,15 +293,20 @@ begin
   perform assert_err(add_free_agent(lid, idle_seat, 'awai-2', null), 'forbidden',
     'aw9l but not for the idle human seat that has no agent row');
 
-  -- a manager on auto-pilot keeps their roster: D flips their OWN team to 🤖
-  -- and the worker still may not transact over it
+  -- a manager on auto-pilot hands the roster over too (0308, v0.432.3 —
+  -- founder: a seat on AI control is the AI's to manage): D flips their OWN
+  -- team to 🤖 and the worker may now transact for it; back to 'human' shuts it
   perform probe_as('d');
   perform assert_ok(set_team_controller(lid, d_seat, 'ai'), 'aw9m D sets their own team to auto-pilot');
-  perform assert_true(not agent_wire_seat(lid, d_seat),
-    'aw9n …and the gate still says no — a human is at that seat');
+  perform assert_true(agent_wire_seat(lid, d_seat),
+    'aw9n …and the gate opens — the seat is the AI''s to manage, account or not');
   perform probe_as_worker();
-  perform assert_err(add_free_agent(lid, d_seat, 'awai-3', null), 'forbidden',
-    'aw9o the worker cannot sign for a human on auto-pilot');
+  perform assert_ok(add_free_agent(lid, d_seat, 'awai-3', null),
+    'aw9o the worker signs for a manager on auto-pilot');
+  perform probe_as('d');
+  perform assert_ok(set_team_controller(lid, d_seat, 'human'), 'aw9o2 D takes the team back');
+  perform assert_true(not agent_wire_seat(lid, d_seat),
+    'aw9o3 …and the gate shuts the same instant');
 
   -- a signed-in outsider cannot borrow the worker's branch for the bot seat
   perform probe_as('b');

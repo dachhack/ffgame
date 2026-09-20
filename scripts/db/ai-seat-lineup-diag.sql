@@ -26,6 +26,7 @@ with lg as (select id, name, settings_json, lineup_policy from league where lowe
      seat as (select m.* from lg join league_membership m on m.league_id = lg.id where lower(m.team_name) like lower('Steelers%') limit 1)
 select 'seat' as section, lg.name as league, lg.settings_json ->> 'game_mode' as game_mode,
        lg.settings_json ->> 'golf' as golf, lg.lineup_policy,
+       lg.settings_json -> 'roster_slots' as roster_slots,
        seat.sleeper_roster_id as roster_id, seat.team_name, seat.controller, seat.app_user_id,
        seat.enrolled, seat.eliminated_week,
        exists (select 1 from seat_agent sa where sa.league_id = lg.id and sa.roster_id = seat.sleeper_roster_id) as agent_row,

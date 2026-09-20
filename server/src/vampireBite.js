@@ -55,14 +55,14 @@ export async function sweepVampireBites(log = () => {}) {
       const mode = modeOfSettings(lg.settings_json);
       if (mode?.mode !== 'classic') continue;   // the bite is judged by classic slots
 
-      // Which vampires does nobody manage? The same rule as the wire (0298):
-      // no human at the seat, and either a 🤖 controller or an agent row.
+      // Which vampires are the worker's to feed? The wire's rule (0308): a 🤖
+      // controller, account or not — or an agent row with nobody at the seat.
       const { data: mems } = await db().from('league_membership')
         .select('sleeper_roster_id,app_user_id,controller').eq('league_id', lg.id).in('sleeper_roster_id', seats);
       const agents = await seatAgentsFor([lg.id]);
       const bots = seats.filter((s) => {
         const m = (mems ?? []).find((x) => x.sleeper_roster_id === s);
-        return m && !m.app_user_id && (m.controller === 'ai' || agents.has(`${lg.id}:${s}`));
+        return m && (m.controller === 'ai' || (!m.app_user_id && agents.has(`${lg.id}:${s}`)));
       });
       if (!bots.length) continue;
 

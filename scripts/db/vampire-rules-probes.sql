@@ -256,10 +256,10 @@ begin
   r := vampire_steal(lid, tk, gv, 2);
   perform vr_true(coalesce((r ->> 'ok')::boolean, false), 'vr7g an agented vampire seat feeds through the worker: ' || r::text);
 
-  -- a vampire a HUMAN holds: never the worker's, whatever the controller says
+  -- a vampire a HUMAN holds on 🤖 auto-pilot: the worker's to feed (0308,
+  -- v0.432.3 — a seat on AI control is the AI's to manage); on 'human', not
   lid := _vr_league('VR Held Fangs', 'vrhe-', 4, '[1]'::jsonb);   -- seat 1 is user 1's
   perform vr_as('1');
-  update league_membership set controller = 'ai' where league_id = lid and sleeper_roster_id = 1;
   perform _vr_final(lid, 1, array[1]);
   perform vr_as_worker();
   r := vampire_state(lid); vic := (r ->> 'victim')::int;
@@ -267,7 +267,13 @@ begin
   select slug into gv from native_roster where league_id = lid and roster_id = 1 limit 1;
   r := vampire_steal(lid, tk, gv, 1);
   perform vr_true(coalesce((r ->> 'ok')::boolean, true) is false,
-    'vr7h a human on auto-pilot keeps the bite as their own: ' || r::text);
+    'vr7h a human-controlled vampire a human holds keeps the bite as their own: ' || r::text);
+  perform vr_as('1');
+  update league_membership set controller = 'ai' where league_id = lid and sleeper_roster_id = 1;
+  perform vr_as_worker();
+  r := vampire_steal(lid, tk, gv, 1);
+  perform vr_true(coalesce((r ->> 'ok')::boolean, false),
+    'vr7i …and on auto-pilot the worker feeds for them: ' || r::text);
 
   raise notice 'bot-vampire probes done';
 end $$;
