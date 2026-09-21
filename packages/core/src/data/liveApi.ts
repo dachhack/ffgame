@@ -2068,6 +2068,12 @@ export const rosterRules = (leagueId: string) =>
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null;
   fa_mode?: FaMode;
+        /** 0319, Sleeper parity: the FAAB floor ($0 = none), the days free
+         *  agency may open (absent = every day; a day outside the set is
+         *  waivers-only), the trade deadline week (null = none) and whether
+         *  it has already passed. */
+        faab_min_bid?: number; fa_dow?: number[] | null;
+        trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
         /** The taxi squad's rules (0196): the tenure ceiling (null = anyone),
          *  whether the squad shuts at the season's first kickoff, whether it is
          *  shut RIGHT NOW, and when that kickoff is. */
@@ -2160,6 +2166,11 @@ export const setTransactionRules = (
    *  reads from the hours, so a league that has never touched this keeps
    *  exactly the behaviour it has. */
   faMode: FaMode | null = null,
+  /** 0319: the FAAB floor (-1 clears to $0), the days free agency may open
+   *  ([] clears to every day) and the trade deadline week (-1 clears). */
+  faabMinBid: number | null = null,
+  faDow: number[] | null = null,
+  tradeDeadlineWeek: number | null = null,
 ) =>
   rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean; fa_mode?: FaMode }>(
     'set_transaction_rules', {
@@ -2168,6 +2179,7 @@ export const setTransactionRules = (
       p_fa_start_min: faStartMin, p_fa_end_min: faEndMin,
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
       p_agent_waivers: agentWaivers, p_fa_mode: faMode,
+      p_faab_min_bid: faabMinBid, p_fa_dow: faDow, p_trade_deadline_week: tradeDeadlineWeek,
     });
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player

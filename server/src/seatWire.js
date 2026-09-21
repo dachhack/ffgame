@@ -253,6 +253,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
       // stand-in for the bidder's balance at the time. The pricing itself
       // is core's faabMarket, through the planner.
       const startBudget = Number(lg.settings_json?.faab_budget) || 100;
+      // 0319: the commissioner's floor. A claim below it is refused, so the
+      // wire files at the floor when its own price is lower — an open-seat
+      // fill priced at $0 becomes a $1 claim in a $1-minimum league.
+      const minBid = Math.max(0, Number(lg.settings_json?.faab_min_bid) || 0);
       const budgetOf = (m) => (Number.isFinite(Number(m?.faab_budget)) && m?.faab_budget != null ? Number(m.faab_budget) : startBudget);
       let weeksLeft = 0;
       let history = [];
@@ -459,7 +463,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
             const r = c.onWaivers
               ? await db().rpc('submit_waiver_claim', {
                 p_league_id: lg.id, p_roster_id: seat.roster_id,
-                p_add_slug: c.add, p_drop_slug: c.drop, p_bid: c.bid,
+                p_add_slug: c.add, p_drop_slug: c.drop, p_bid: faab ? Math.max(c.bid, minBid) : c.bid,
               })
               : await db().rpc('add_free_agent', {
                 p_league_id: lg.id, p_roster_id: seat.roster_id,

@@ -474,6 +474,9 @@ interface TxnRules {
   holdDays: number; faStart: number | null; faEnd: number | null;
   faMode: FaMode;
   agentWaivers: boolean;
+  /** 0319: the FAAB floor, the days free agency may open (null = every
+   *  day), the trade deadline week (null = none). */
+  minBid: number; faDays: number[] | null; deadline: number | null;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [init, setInit] = useState<TxnRules | null>(null);
@@ -492,6 +495,10 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [faEnd, setFaEnd] = useState<number | null>(null);
   // 0287: the window said open-or-hours; the MODE can also say none at all.
   const [faMode, setFaMode] = useState<FaMode>('open');
+  const [minBid, setMinBid] = useState(0);
+  const [faDays, setFaDays] = useState<number[] | null>(null);    // days FA may open; null = every day
+  const [deadline, setDeadline] = useState<number | null>(null);  // trade deadline week; null = none
+  const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -509,11 +516,15 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         faMode: r.fa_mode ?? (r.fa_start_min != null ? 'window' : 'open'),
         // Absent means ON (0213), the same default league_agent_waivers uses.
         agentWaivers: r.agent_waivers !== false,
+        minBid: r.faab_min_bid ?? 0,
+        faDays: Array.isArray(r.fa_dow) && r.fa_dow.length ? [...r.fa_dow].sort() : null,
+        deadline: r.trade_deadline_week ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading_(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
+      setMinBid(cur.minBid); setFaDays(cur.faDays); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
   if (!init) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
@@ -525,6 +536,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
       const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
+      const faDaysChanged = JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? []);
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
@@ -536,8 +548,11 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         dowChanged ? (clearDow ?? []) : null,
         faDowChanged ? (faDow ?? []) : null,
         agentWaivers !== init.agentWaivers ? agentWaivers : null,
-        faMode !== init.faMode ? faMode : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers }); setMsg('✓ saved'); }
+        faMode !== init.faMode ? faMode : null,
+        mode === 'faab' && minBid !== init.minBid ? minBid : null,
+        faDaysChanged ? (faDays ?? []) : null,
+        deadline !== init.deadline ? (deadline ?? -1) : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, faDays, deadline }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -586,12 +601,34 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
+        {mode === 'faab' && (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" title="A claim below this is refused. $0 allows free claims." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>MINIMUM BID ($)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+              <button onClick={() => setMinBid(Math.max(0, minBid - 1))} className="mono" style={stepBtnStyle}>−</button>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{minBid}</span>
+              <button onClick={() => setMinBid(Math.min(budget, minBid + 1))} className="mono" style={stepBtnStyle}>＋</button>
+            </div>
+          </div>
+        )}
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
             {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
             {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
           </div>
+        </div>
+        <div>
+          <div className="mono" title="Trades may be offered and accepted through this week; once it is final, no more." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE DEADLINE</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+            {toggle(deadline === null, 'NONE', () => setDeadline(null))}
+            {toggle(deadline !== null, deadline === null ? 'WEEK…' : `THROUGH WEEK ${deadline}`, () => setDeadline(deadline ?? 11))}
+            {deadline !== null && <button onClick={() => setDeadline(Math.max(1, deadline - 1))} className="mono" style={stepBtnStyle}>−</button>}
+            {deadline !== null && <button onClick={() => setDeadline(Math.min(18, deadline + 1))} className="mono" style={stepBtnStyle}>＋</button>}
+          </div>
+          {deadlinePassed && init.deadline === deadline && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginTop: 5 }}>passed — trades are closed for the season</div>
+          )}
         </div>
         {/* THE PICK SWITCH (0190). Saved on the CLICK rather than with the save
             button beside it: turning it on PROVISIONS this league's draft slots
@@ -646,8 +683,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           <div style={{ textAlign: 'center' }}>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (DAYS)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
-              <button onClick={() => setHoldDays(Math.max(1, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
-              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays}</span>
+              <button onClick={() => setHoldDays(Math.max(0, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
+              <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays === 0 ? 'NONE' : holdDays}</span>
               <button onClick={() => setHoldDays(Math.min(7, holdDays + 1))} className="mono" style={stepBtnStyle}>＋</button>
             </div>
           </div>
@@ -690,6 +727,26 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
                 unowned player is a claim. */}
             {toggle(faMode === 'off', '🚫 NONE — WAIVERS ONLY', () => setFaMode('off'))}
           </div>
+          {faMode !== 'off' && (
+            <div style={{ marginTop: 8 }}>
+              <div className="mono" title="Sleeper's per-day schedule: on a day not checked, every unowned player is a waiver claim." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY DAYS (ET)</div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+                {toggle(faDays === null, 'ALL', () => setFaDays(null))}
+                {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
+                  <span key={`fad-${d}`}>{toggle(!!faDays?.includes(i), d, () => {
+                    const cur = faDays ?? [];
+                    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
+                    setFaDays(next.length ? next : null);
+                  })}</span>
+                ))}
+              </div>
+              {faDays !== null && (
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5, maxWidth: 360 }}>
+                  Other days are waivers-only: every unowned player is a claim, clearing at the run or the next free-agency morning, whichever comes first.
+                </div>
+              )}
+            </div>
+          )}
           {faMode === 'off' && (
             <div className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--warn)', marginTop: 6, lineHeight: 1.5 }}>
               No instant pickups at all. EVERY unowned player — including anyone who went undrafted — has to be won
