@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy — Drip Fantasy</title>
+<meta name="description" content="What Drip Fantasy collects, why, who it is shared with, and how to get rid of it." />
+<style>
+  :root { color-scheme: dark light; --bg:#0d1b1f; --surface:#122a30; --text:#e8f4f4; --dim:#9fb9bd; --bd:#1e4048; --you:#34E5D9; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f4f8f8; --surface:#fff; --text:#12262b; --dim:#4c6a70; --bd:#d6e4e6; --you:#0b8f88; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:44rem; margin:0 auto; padding:2.5rem 1rem 4rem; }
+  h1 { font-size:1.6rem; margin:0 0 .25rem; }
+  h2 { font-size:1.05rem; margin:2rem 0 .5rem; color:var(--you); }
+  p, li { color:var(--text); }
+  .sub { color:var(--dim); margin:0 0 2rem; font-size:.95rem; }
+  a { color:var(--you); }
+  table { width:100%; border-collapse:collapse; margin:.5rem 0 1rem; font-size:.95rem; }
+  th, td { text-align:left; padding:.5rem .4rem; border-bottom:1px solid var(--bd); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--bd); color:var(--dim); font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p class="sub">Drip Fantasy · last updated 21 September 2026</p>
+
+  <p>Drip Fantasy is a fantasy football game. This page says what it stores, why it
+  stores it, who else sees it, and how to make it go away. It describes what the
+  software actually does; if something here does not match what you see, the
+  software is the thing that is wrong, and we want to hear about it.</p>
+
+  <h2>What is collected</h2>
+  <table>
+    <tr><th>What</th><th>Why</th></tr>
+    <tr><td>Your email address</td><td>It is how you sign in, and how a league invite reaches you. Sign-in is a link or a code sent to that address, or Google sign-in.</td></tr>
+    <tr><td>A display name, team names and avatars you choose</td><td>So the other managers in your league know who they are playing.</td></tr>
+    <tr><td>Everything you do in a league</td><td>Rosters, draft picks, lineups, waiver claims, trades, chat messages, and the league's settings. This is the game.</td></tr>
+    <tr><td>A push token, if you turn notifications on</td><td>To send the notification. Turning notifications off removes it.</td></tr>
+    <tr><td>Usage analytics, if analytics are enabled on the build you are using</td><td>Which screens are opened and which actions are taken, so the app can be made less annoying. Sent to PostHog. Events are tied to your account id only after you sign in.</td></tr>
+    <tr><td>Payment records, if you buy something</td><td>Handled by Stripe. Card numbers never reach us — we store only that a purchase happened and what it unlocked.</td></tr>
+  </table>
+
+  <h2>What is not collected</h2>
+  <p>No location, no contacts, no photos beyond an avatar you pick, no
+  advertising identifiers, no tracking across other apps or websites. Your data
+  is not sold, and it is not shared with advertisers.</p>
+
+  <h2>Leagues you connect from elsewhere</h2>
+  <p>If you import a league from Sleeper, ESPN or Yahoo, we read that league's
+  public or authorised data to mirror it — rosters, scoring, matchups. Where a
+  platform requires credentials (an ESPN cookie, a Yahoo sign-in), those are
+  used to make that request and are not shared with anyone else. Disconnecting
+  stops the mirroring.</p>
+
+  <h2>Who can see your league</h2>
+  <p>Your league's members can see everything in it, which is the point of a
+  league. Beyond that:</p>
+  <ul>
+    <li>Leagues created on Drip are readable through our public read API by
+      anyone who has the league's link. There is no directory — no endpoint
+      lists leagues, and a league id is an unguessable identifier — so this
+      means "whoever you share it with", not "indexed on the internet".</li>
+    <li>Your commissioner can turn that off in one tap, and a league that is off
+      returns nothing at all.</li>
+    <li>Leagues imported from another platform are never published this way
+      unless a commissioner explicitly turns it on.</li>
+    <li>Hidden picks before they are revealed, pending waiver bids, trade offers
+      still being negotiated, email addresses, invite codes and chat are never
+      served by that API to anybody, published or not.</li>
+  </ul>
+
+  <h2>Who else processes it</h2>
+  <p>Supabase (database, authentication and file storage), Fly.io (the
+  background worker that scores games), Stripe (payments), PostHog (analytics,
+  where enabled), Expo and the Apple and Google push services (notifications),
+  and ESPN, Sleeper and Yahoo (for the game data and any league you connect).
+  Each receives only what it needs to do its job.</p>
+
+  <h2>How long it is kept</h2>
+  <p>League data is kept while the league exists — past seasons are the point of
+  a record book. Player news is kept for 30 days. Analytics are kept by PostHog
+  under their retention policy. Deleting your account removes your account and
+  its personal details; leagues you played in keep the results, with your seat
+  shown by team name.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li><strong>See it or take it away</strong> — email the address below and we
+      will send you what we hold or delete your account. No form to fill in.</li>
+    <li><strong>Notifications</strong> — off by default, on by your choice, off
+      again whenever you like in the app or your device settings.</li>
+    <li><strong>Leaving a league</strong> — you can leave from the league menu;
+      your seat opens for the next manager.</li>
+    <li><strong>Making a league private</strong> — the commissioner's console,
+      one tap.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>Drip Fantasy is not directed at children under 13 and accounts are not
+  knowingly created for them. If one has been, email us and it will be removed.</p>
+
+  <h2>Changes</h2>
+  <p>If this page changes in a way that matters, the app will say so rather than
+  quietly swapping the text.</p>
+
+  <footer>
+    Questions, requests, or something here that looks wrong:
+    <a href="mailto:hello@dripfantasy.com">hello@dripfantasy.com</a> ·
+    <a href="/">dripfantasy.com</a>
+  </footer>
+</main>
+</body>
+</html>

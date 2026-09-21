@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.446.0 — ready for the stores, as far as code goes
+
+The last row on the gap list that was still open, and the only one where the
+work splits cleanly into "what a repo can do" and "what needs a person with
+an account". This is the first half, done properly, and an honest checklist
+for the second.
+
+  1. TWO REAL PAGES, live with the site rather than promised: /privacy.html
+     and /support.html. Both stores REQUIRE a reachable privacy URL, and
+     most apps satisfy it with boilerplate that does not describe the app.
+     This one describes what the code actually does — the email, the league
+     content, the push token, the analytics where a build has a key, Stripe
+     for purchases — plus the thing no template would know to say: that a
+     league created here is readable through the public API by whoever holds
+     its link, that there is no directory, that a commissioner can shut it
+     in one tap, and that hidden picks, pending bids, live offers, emails
+     and chat are never served to anybody either way. Static HTML, no JS, so
+     a reviewer's browser and a crawler both just get the page.
+  2. THE SUBMISSION CONFIG. eas.json grew a real submit.production for both
+     platforms, reading every credential from the environment — an App Store
+     Connect key and a Play service-account JSON are secrets and a repo is
+     not where they live — while the non-secret ids stay in the file, where
+     a change to them is a reviewable diff.
+  3. THE LISTING COPY, in apps/mobile/store.config.json for
+     `eas metadata:push`: title, subtitle, the long description, keywords and
+     the three URLs. In the repo for the same reason: a listing change should
+     be a diff, not a form somebody edited at midnight.
+  4. THE HONEST QUESTIONNAIRE ANSWERS (docs/store-listing.md), derived from
+     the code rather than guessed: what is collected and linked to you, what
+     is collected and not, what is never collected, who processes it, and why
+     simulated gambling is FALSE (drip coin is earned in play, cannot be
+     bought and cannot be cashed out — with a note beside the flag saying
+     that if that changes, the answer changes with it).
+
+WHAT IS NOT DONE, and cannot be from here: enrolling in the Apple Developer
+Program and the Play Console, creating the app in each, screenshots from a
+real build, the age rating, reviewer sign-in notes, and — Apple's rule — Sign
+in with Apple beside Google sign-in, which is real work and not yet in the
+app. The doc says all of it in the order that wastes the least time.
+
 ### v0.445.0 — this week's number, and the news
 
 The gap list called the baked projections "the weakest data point vs the big

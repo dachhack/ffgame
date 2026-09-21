@@ -37,6 +37,20 @@
     }
   },
   "submit": {
-    "production": {}
+    "//": "0330: the store-submission half. Both sides read CREDENTIALS from the environment rather than holding them here — an App Store Connect key and a Play service-account JSON are secrets, and a repo is not where they live. Set them in EAS (`eas secret:create`) or in the shell that runs `eas submit`. The non-secret ids ARE here, because they are facts about the app and belong in a reviewable diff.",
+    "production": {
+      "ios": {
+        "//": "ascAppId is the numeric id App Store Connect gives the app once it exists there — fill it after the first `eas submit`, which can create it. appleTeamId is your developer team. EXPO_APPLE_APP_SPECIFIC_PASSWORD or an ASC API key (EXPO_ASC_KEY_ID / EXPO_ASC_ISSUER_ID / EXPO_ASC_KEY_P8) authenticates the upload.",
+        "ascAppId": "",
+        "appleTeamId": "",
+        "language": "en-US"
+      },
+      "android": {
+        "//": "GOOGLE_SERVICE_ACCOUNT_KEY_PATH points at the Play service-account JSON. `internal` puts a build in front of your own testers without a review; move to `production` when the listing is ready.",
+        "track": "internal",
+        "releaseStatus": "draft",
+        "changesNotSentForReview": false
+      }
+    }
   }
 }

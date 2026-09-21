@@ -131,7 +131,7 @@ The widest gaps relative to the big three.
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA |
+| App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA. **v0.446.0** prepared the half that is code — production build + submit profiles, listing copy, a live privacy policy and support page, and the data-safety answers derived from what the app does (docs/store-listing.md). The accounts, screenshots and forms are human work |
 | Lock-screen Live Activities or watch app | Yahoo, ESPN | Android home widget only |
 | Public read API | Sleeper, Fleaflicker, MFL, Yahoo | **Shipped v0.442.0** — anonymous, read-only, 13 endpoints; open by default with a one-tap opt-out since v0.443.0 (`0326`, `0327`, docs/public-api.md) |
 | Write API | MFL, Yahoo | None |
@@ -165,7 +165,9 @@ Ordered by what blocks a league from migrating next August, then retention.
    v0.440.0 (`0324`): champions, the all-time manager table and the record
    book, on both hosts, and weekly awards and badges in v0.441.0 (`0325`).
 4. **Store distribution** ~~and a read API~~ — the read API shipped in
-   v0.442.0 (`0326`); store listings are still the open half of this row.
+   v0.442.0 (`0326`). Store listings: everything that is code is ready as of
+   v0.446.0; what remains is two developer accounts, screenshots and the
+   store questionnaires (docs/store-listing.md).
 5. **Dues** — Stripe checkout + webhook exist; a SleeperSafe-style pot with a
    veto window reuses most of it.
 6. ~~**Weekly projections and news**~~ — **Done** in v0.445.0 (`0329`): the

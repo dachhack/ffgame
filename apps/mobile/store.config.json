@@ -1,0 +1,25 @@
+{
+  "//": "Store listing copy for `eas metadata:push` (0330). The COPY lives here so a listing change is a reviewable diff rather than a form somebody edited at midnight. Screenshots, the age rating and the data-safety answers stay in the consoles — the stores do not let a file set them — and docs/store-listing.md is the checklist for those.",
+  "configVersion": 0,
+  "apple": {
+    "info": {
+      "en-US": {
+        "title": "Drip Fantasy",
+        "subtitle": "Fantasy football, live",
+        "description": "Fantasy football where the week is a game you watch, not a number you refresh.\n\nAssign each player to a game-time window and pair him with a hidden scoring metric. Your opponent does the same, sealed. When the games kick off the picks reveal and the effects fire live: nukes wipe a slot to zero, catches erase the last ten minutes of your opponent's drip, a hot streak doubles your rate. A slot is won by whoever is ahead when its games end.\n\nOr play it straight. Classic leagues score the way your league always has — your scoring settings, your lineup, your rules — with everything else here anyway.\n\nRUN A REAL LEAGUE\n· Dynasty, keeper and redraft, contracts and a salary cap, auctions, superflex, IDP, best ball, guillotine, and more formats than you will use.\n· Trades with a league vote, offer expiry, counters, FAAB and up to eight teams in one deal.\n· Waivers with FAAB or rolling priority, a minimum bid, free-agency windows, and conditional claims — \"if I miss on him, take the other one\".\n· A commissioner's console that does not run out: co-commissioners, locks, the waiver order, score edits, dues, and the league's own weekly awards and badges.\n· A record book that fills itself — champions, all-time manager lines, the biggest weeks anybody has had.\n\nLIVE\nReal play-by-play, live scoring, a play feed, and notifications when something happens to your team.\n\nImport a league from Sleeper, ESPN, Yahoo, Fleaflicker or MyFantasyLeague, or start a native one here.",
+        "keywords": ["fantasy football", "fantasy", "football", "dynasty", "league", "draft", "commissioner", "waivers", "NFL"],
+        "releaseNotes": "See what shipped at dripfantasy.com/#/changelog.",
+        "promoText": "Hidden picks, live effects, and a commissioner's console that does not run out.",
+        "marketingUrl": "https://dripfantasy.com",
+        "supportUrl": "https://dripfantasy.com/support.html",
+        "privacyPolicyUrl": "https://dripfantasy.com/privacy.html"
+      }
+    },
+    "categories": ["SPORTS", "GAMES"],
+    "advisory": {
+      "//": "Simulated gambling is FALSE deliberately: drip coin is earned in play, buys power-ups, and cannot be cashed out or bought with money. If that ever changes, this answer changes with it.",
+      "gamblingAndContests": false,
+      "unrestrictedWebAccess": false
+    }
+  }
+}
