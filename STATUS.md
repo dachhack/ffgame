@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.5 — every league's week pools refreshed now (a data migration)
+
+Founder, the morning after 0314: "Can we refresh the week 2 pool now?"
+
+0314 taught native_materialize to refresh a live week add-only, but it
+runs when a roster changes, and every native league's live-week pool was
+last written at the week's first kickoff — before Sunday's waiver run.
+0315 runs the refresh once for every native league, so Coleman (and every
+other Sunday pickup, in every league) is in the week-2 pool the boards
+read before the week finalizes. Idempotent and safe by construction:
+scheduled weeks rewritten from the rosters, live weeks only gain what is
+missing, final weeks untouched; a NOTICE per league in the migrate log.
+
 ### v0.434.4 — a mid-week pickup joins the live week, and counts from the game he was owned for
 
 Mooney's Rehab Facility, Kickoff League, Sunday night: "confused on why it
