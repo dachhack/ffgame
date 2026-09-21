@@ -59,6 +59,9 @@ interface Rules {
   holdDays: number; faStart: number | null; faEnd: number | null;
   faMode: FaMode;
   agentWaivers: boolean;
+  /** 0319: the FAAB floor, the days free agency may open (null = every
+   *  day), the trade deadline week (null = none). */
+  minBid: number; faDays: number[] | null; deadline: number | null;
 }
 
 export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'waivers' }: {
@@ -88,6 +91,10 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   // 0287: the window said open-or-hours; the MODE can also say none at all.
   const [faMode, setFaMode] = useState<FaMode>('open');
   const [faEnd, setFaEnd] = useState<number | null>(null);
+  const [minBidDraft, setMinBidDraft] = useState('0');
+  const [faDays, setFaDays] = useState<number[] | null>(null);    // days FA may open; null = every day
+  const [deadline, setDeadline] = useState<number | null>(null);  // trade deadline week; null = none
+  const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [listed, setListed] = useState<boolean | null>(null);      // null = still loading
   const [blurbDraft, setBlurbDraft] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
@@ -118,11 +125,15 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         // applies, spelled once here so the switch can never render the
         // opposite of what the worker will do.
         agentWaivers: r.agent_waivers !== false,
+        minBid: r.faab_min_bid ?? 0,
+        faDays: Array.isArray(r.fa_dow) && r.fa_dow.length ? [...r.fa_dow].sort() : null,
+        deadline: r.trade_deadline_week ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading(a.pick_trading !== false); }).catch(() => {});
       setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
+      setMinBidDraft(String(cur.minBid)); setFaDays(cur.faDays); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
       setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
@@ -135,6 +146,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   }, [visible, leagueId]);
 
   const budget = Math.max(1, parseInt(budgetDraft || '0', 10) || 0);
+  const minBid = Math.max(0, parseInt(minBidDraft || '0', 10) || 0);
 
   const save = async () => {
     if (!init || busy) return;
@@ -144,6 +156,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
       const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
       const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
+      const faDaysChanged = JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? []);
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
@@ -155,10 +168,13 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         dowChanged ? (clearDow ?? []) : null,
         faDowChanged ? (faDow ?? []) : null,
         agentWaivers !== init.agentWaivers ? agentWaivers : null,
-        faMode !== init.faMode ? faMode : null);
+        faMode !== init.faMode ? faMode : null,
+        mode === 'faab' && minBid !== init.minBid ? minBid : null,
+        faDaysChanged ? (faDays ?? []) : null,
+        deadline !== init.deadline ? (deadline ?? -1) : null);
       if (r.ok) {
         commit();
-        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers });
+        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, faDays, deadline });
         setMsg('✓ saved'); onSaved();
       } else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
@@ -213,6 +229,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd
     || agentWaivers !== init.agentWaivers || faMode !== init.faMode
+    || (mode === 'faab' && minBid !== init.minBid) || deadline !== init.deadline
+    || JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? [])
     || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
     || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
 
@@ -284,6 +302,14 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
                 style={{ width: 76, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
             </View>
           )}
+          {mode === 'faab' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <Mono size={9} tone="faint">MINIMUM BID $</Mono>
+              <TextInput value={minBidDraft} keyboardType="number-pad" onChangeText={(v) => setMinBidDraft(v.replace(/\D/g, ''))}
+                style={{ width: 76, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg }} />
+              <Mono size={8.5} tone="faint">{minBid === 0 ? '$0 claims allowed' : 'a claim below this is refused'}</Mono>
+            </View>
+          )}
           {init.mode !== mode || (mode === 'faab' && budget !== init.budget) ? (
             <Mono size={8.5} tone="warn" style={{ marginTop: 6, lineHeight: fs(13) }}>
               Changing the system or the budget hands every team a fresh full balance — season spending so far is forgotten.
@@ -321,8 +347,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">HOLD</Mono>
-            {[1, 2, 3].map((d) => (
-              <Chip key={d} label={`${d} DAY${d > 1 ? 'S' : ''}`} on={holdDays === d} onPress={() => { tap(); setHoldDays(d); }} />
+            {[0, 1, 2, 3].map((d) => (
+              <Chip key={d} label={d === 0 ? 'NONE' : `${d} DAY${d > 1 ? 'S' : ''}`} on={holdDays === d} onPress={() => { tap(); setHoldDays(d); }} />
             ))}
           </View>
           <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
@@ -341,6 +367,26 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           {faMode === 'off' && (
             <Mono size={9.5} tone="warn" style={{ marginTop: 6, lineHeight: 14 }}>
               {`No instant pickups at all. EVERY unowned player — including anyone who went undrafted — has to be won on waivers${mode === 'faab' ? ' with a FAAB bid' : ''}.${mode !== 'faab' ? ' This league runs priority waivers; switch the mode above to FAAB for blind bidding.' : ''}`}
+            </Mono>
+          )}
+          {faMode !== 'off' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
+              <Mono size={9} tone="faint">DAYS</Mono>
+              <Chip label="ALL" on={faDays === null} onPress={() => { tap(); setFaDays(null); }} />
+              {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
+                <Chip key={`fad-${d}`} label={d} on={!!faDays?.includes(i)}
+                  onPress={() => {
+                    tap();
+                    const cur = faDays ?? [];
+                    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
+                    setFaDays(next.length ? next : null);
+                  }} />
+              ))}
+            </View>
+          )}
+          {faMode !== 'off' && faDays !== null && (
+            <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
+              Sleeper's schedule: other days are waivers-only — every unowned player is a claim, clearing at the run or the next free-agency morning, whichever comes first.
             </Mono>
           )}
           {faMode === 'window' && (
@@ -374,6 +420,18 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <Chip label="EXECUTE ON ACCEPT" on={review === 'none'} onPress={() => { tap(); setReview('none'); }} />
             <Chip label="⚑ COMMISH REVIEW" on={review === 'commish'} onPress={() => { tap(); setReview('commish'); }} />
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Mono size={9} tone="faint">DEADLINE</Mono>
+            <Chip label="NONE" on={deadline === null} onPress={() => { tap(); setDeadline(null); }} />
+            <Chip label={deadline === null ? 'THROUGH WEEK…' : `THROUGH WEEK ${deadline}`} on={deadline !== null} onPress={() => { tap(); setDeadline(deadline ?? 11); }} />
+            {deadline !== null && <Chip label="−" on={false} onPress={() => { tap(); setDeadline(Math.max(1, deadline - 1)); }} />}
+            {deadline !== null && <Chip label="＋" on={false} onPress={() => { tap(); setDeadline(Math.min(18, deadline + 1)); }} />}
+          </View>
+          <Mono size={8.5} tone={deadlinePassed && init.deadline === deadline ? 'warn' : 'faint'} style={{ marginTop: 5, lineHeight: 12 }}>
+            {deadline === null ? 'Trades all season.'
+              : deadlinePassed && init.deadline === deadline ? 'Passed — trades are closed for the season.'
+              : `Offers and acceptances go through until week ${deadline} is final.`}
+          </Mono>
 
           {/* THE PICK SWITCH (0190). Saved on the tap rather than with the
               rules button beside it, because turning it ON PROVISIONS this

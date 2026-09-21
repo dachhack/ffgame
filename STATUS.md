@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.435.0 — four Sleeper settings
+
+Founder, holding Sleeper's General Settings against ours: "Do we have these
+all covered?" Four were not: "build all four gaps." 0319, both consoles,
+the worker.
+
+  1. MINIMUM BID. faab_min_bid (default $0). A FAAB claim below it is
+     refused ("the minimum bid is $2"); the seat wire floors its own bids
+     to it before filing, so an open-seat fill priced at $0 becomes a $1
+     claim in a $1-minimum league.
+  2. FREE-AGENCY DAYS. fa_dow (0=Sun…6=Sat ET; absent = every day) —
+     Sleeper's per-day "Waivers" / "Waivers to FA". On a day outside the
+     set every unowned player is a claim; on a day inside it the existing
+     after-waivers gate and window hours apply as before. Midnight ET joins
+     the boundaries fa_opens_at and fa_open_since walk, so a claim filed on
+     a waivers-only day clears at LEAST(the run, the next free-agency
+     morning) (0318's rule) and the wire's first-hour courtesy starts at
+     midnight. The founder's Sleeper shape — waivers Mon–Sat, waivers-to-FA
+     Sunday — is now: run days every day, FA days [Sunday], FA waits for
+     the run on Sunday.
+  3. TRADE DEADLINE. trade_deadline_week ("through week N"). Offers and
+     acceptances go through until week N is final; then both are refused
+     with the reason. A deal accepted in time and waiting on the
+     commissioner may still be ruled on. roster_rules also says whether it
+     has passed, and both consoles show it.
+  4. A HOLD OF NONE. waiver_hold_days may be 0: a dropped player is a free
+     agent at once (or, with free agency shut, a claim clearing at the next
+     run). The web stepper and the mobile chips offer NONE.
+
+Also fixed on the way: add_free_agent's "free agency is closed" answer
+quoted the window's hours, and a league shut by something other than
+hours (the after-waivers gate in an open league; now the days) sent an
+error with no text. It now says when the door next opens.
+
+set_transaction_rules grows three named parameters; the old signature is
+dropped so PostgREST has one candidate. Probes:
+scripts/db/sleeper-parity-probes.sql; door-opens, waiver-holes, fa-off,
+agent-wire, waiver-rules and drop-lock still pass. Web and mobile
+typecheck.
+
 ### v0.434.8 — the door opening clears the claims
 
 Founder: "I set waivers to run at 2pm then opened free agency but the
