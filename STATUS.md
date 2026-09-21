@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.2 — the app's classic board switches matchups from a list
+
+Founder, on the Kickoff League board in the app: "We need switch between
+matchups on the classic matchup view in the app."
+
+The ▸ chip (v0.424.0) stepped the week's ring one pair at a time and said
+only where in it you were — "1/4" — which on a phone reads as a counter,
+not a control, and reaching the third pair meant two taps past the second.
+Now the chip opens THE WEEK'S MATCHUPS as a sheet (the app's Overlay, the
+same one the slate and the vampire use): every pair in the ring order both
+hosts walk (core matchupBrowse.orderMatchups), each with its home-and-away
+names, the score where there is one ("153.5 – 126.9 · LIVE", "FINAL"), and
+MY MATCHUP / VIEWING marked. One tap lands the board on that pair; my own
+pair clears the browse; ↩ MY MATCHUP sits at the foot while browsing. Team
+names for every seat in the week are read once per week (matchupTeams,
+the same read the header uses). The bye screen's chip opens the same sheet.
+The web board keeps its one-tap ring; nothing in core changed.
+
 ### v0.434.1 — the lineup alarm does not page a classic seat
 
 Founder, relaying Farmer Casey in the Kickoff League chat: "why do I keep
