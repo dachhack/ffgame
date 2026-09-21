@@ -14,7 +14,7 @@
 // the same card as everyone's trade list, not in a separate roster-tools
 // panel. Two cards listing the same trades on one phone screen is noise.
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
   counterTrade, castTradeVote, proposeMultiTrade, commishReverseTrade, leagueGameMode,
@@ -104,6 +104,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     }),
   ]).catch(() => {});
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  // WHILE A DEAL IS IN FLIGHT, KEEP UP (v0.456.0) — see the web TradeCenter.
+  const inFlight = trades.some((t) => t.status === 'pending' || t.status === 'review');
+  useEffect(() => {
+    if (!inFlight) return;
+    const id = setInterval(() => { leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }).catch(() => {}); }, 20000);
+    return () => clearInterval(id);
+  }, [leagueId, inFlight]);
 
   const teamName = (rid: number) => teams.find((x) => x.roster_id === rid)?.team ?? `Team ${rid}`;
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
@@ -427,7 +434,10 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           {x.status === 'review' && (() => {
             const tally = voteTally(x.votes);
             const mine = (x.votes ?? []).find((v) => v.roster_id === myRoster);
-            const canVote = myRoster != null && myRoster !== x.from_roster && myRoster !== x.to_roster;
+            // A seat in the deal does not vote on it — and a MULTI-TEAM deal's
+            // row names only two of its seats; the rest are legs (v0.456.0).
+            const canVote = myRoster != null && myRoster !== x.from_roster && myRoster !== x.to_roster
+              && !(x.legs ?? []).some((l) => l.roster_id === myRoster);
             return (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                 <Mono size={8.5} tone="warn">
@@ -474,7 +484,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               {/* 0328: the commissioner's undo, on a completed deal. */}
               {isCommish && x.status === 'executed' && (
                 <Chip label="↩ REVERSE" disabled={busy}
-                  onPress={() => { tap(); void act(() => commishReverseTrade(x.id)); }} />
+                  onPress={() => { tap(); Alert.alert('Reverse this trade?',
+                    'Everything goes back where it was — players, picks, dollars, cap. Every manager in the deal sees it.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Reverse', style: 'destructive', onPress: () => void act(() => commishReverseTrade(x.id)) },
+                    ]); }} />
               )}
               {/* the ruling, on the same card (see header) — and over a vote
                   in progress too, which the commissioner outranks. */}
@@ -578,7 +592,21 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.'
           : tradeReview === 'league' ? `Accepted trades go to the league — ${vetoNeed ?? 2} vetoes in ${reviewHours ?? 24}h kill one.`
           : 'Accepted trades execute immediately.'}
-        onClose={closeSheet}>
+        onClose={closeSheet}
+        footer={
+          // PINNED (v0.456.0): the composer grew a FAAB row, the grade, the
+          // expiry chips and a per-seat builder this round, and a three-way
+          // ran past the sheet's 92% with the send button clipped off the
+          // bottom — a manager could build the deal and never file it.
+          <>
+            {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
+            <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER'
+              : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
+              disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
+              onPress={() => void propose()} />
+          </>
+        }>
+        <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 14 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
         <Mono size={9} tone="faint" track={0.1}>TRADE WITH</Mono>
         {/* A counter answers ONE offer, so its seats are already decided —
             changing them here would quietly make it a different proposal. */}
@@ -761,13 +789,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         <TextInput value={note} maxLength={140} placeholder="Add a note (optional)…" placeholderTextColor={t.faint}
           onChangeText={setNote}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
-        {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
-        <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER'
-            : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
-            disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
-            onPress={() => void propose()} />
-        </View>
+        </ScrollView>
       </Overlay>
     </Card>
   );

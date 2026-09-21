@@ -185,11 +185,13 @@ export function App() {
 
   // The player card's league context (v0.282.0) — set here because `open` IS
   // "which league is on screen", and cleared with it so a card opened from the
-  // leagues list never claims the last league's owner. Native only: the owner
-  // and register panels are native-league facts.
+  // leagues list never claims the last league's owner. EVERY provider
+  // (v0.456.0, as the web does): the owner and register panels are native
+  // facts and stay quiet elsewhere, but the week tile and the headlines
+  // (0329/0330) read the league's pool, which an import has too.
   useEffect(() => {
-    setCardLeague(open?.native ? open.leagueId : null);
-  }, [open?.leagueId, open?.native]);
+    setCardLeague(open?.leagueId ?? null);
+  }, [open?.leagueId]);
 
   useEffect(() => {
     if (!open?.native) { setDraftDone(null); return; }

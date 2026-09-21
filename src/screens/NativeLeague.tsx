@@ -17,7 +17,7 @@ import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
-import { adpValue, ADP_AS_OF } from '@drip/core/data/adp2026';
+import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import {
@@ -54,8 +54,9 @@ import {
   setLeagueFormat, type LeagueFormat,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
-import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, setLiveDyn, setLivePickValues, setLiveProjRate, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
+import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
+import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -612,7 +613,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
   action?: { label: string; run: () => void } | null;
   queued?: boolean; onQueue?: () => void;
 }) {
-  const adp = adpValue(p.slug);
+  const adp = adpFor(p.slug);
   const proj = projFor(p.slug, p.pos);
   const st = p.pos === 'K' || p.pos === 'DEF' ? null : statsForSlug(p.slug, p.pos as Pos);
   const stat = (label: string, v: string | number | null | undefined) => (
@@ -986,16 +987,18 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
     // a stale feed costs freshness rather than the whole column.
+    // 0335: the dynasty market, the pick board and the season rate ride the
+    // same call. Each is format-resolved server-side and says so. Cleared
+    // FIRST (v0.456.0) so a league whose market is slow or errors shows the
+    // bake, never the previous league's board.
+    clearLiveMarket();
+    let alive = true;
     leagueMarket(leagueId).then((r) => {
-      if (!r?.ok) return;
+      if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
-      // 0335: the dynasty market, the pick board and the season rate ride the
-      // same call. Each is format-resolved server-side and says so.
-      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
-      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
-      setLiveProjRate(r.proj ?? null);
+      installLiveMarket(r);
     }).catch(() => {});
+    return () => { alive = false; };
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
@@ -1071,6 +1074,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       // showed projections without installing would quietly render them under
       // whichever league was opened before it.
       setLeagueProjScoring(leagueCatalogOf(g));
+      // …and which of the market's two formats this lineup is (v0.456.0):
+      // the live dynasty board arrives in the league's format and `dynFor`
+      // refuses one it was not told to expect — so the web, which never said,
+      // read the 1QB bake in every superflex league. Mobile always did this.
+      setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb');
       // ALWAYS, not just when a spot filters on tenure (v0.398.0): the ROOKIE
       // chip needs years_exp in every league, and the leagues that want it are
       // precisely the ones with no tenure-filtered spot to trigger the old
@@ -1945,7 +1953,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           </div>
           <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
-              const adp = adpValue(p.slug); const proj = projFor(p.slug, p.pos);
+              const adp = adpFor(p.slug); const proj = projFor(p.slug, p.pos);
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
@@ -2148,7 +2156,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 </button>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
                 {(() => {
-                  const adp = adpValue(slug); const proj = p ? projFor(slug, p.pos) : null;
+                  const adp = adpFor(slug); const proj = p ? projFor(slug, p.pos) : null;
                   return (
                     <>
                       <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>
@@ -2702,16 +2710,18 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
     // a stale feed costs freshness rather than the whole column.
+    // 0335: the dynasty market, the pick board and the season rate ride the
+    // same call. Each is format-resolved server-side and says so. Cleared
+    // FIRST (v0.456.0) so a league whose market is slow or errors shows the
+    // bake, never the previous league's board.
+    clearLiveMarket();
+    let alive = true;
     leagueMarket(leagueId).then((r) => {
-      if (!r?.ok) return;
+      if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
-      // 0335: the dynasty market, the pick board and the season rate ride the
-      // same call. Each is format-resolved server-side and says so.
-      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
-      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
-      setLiveProjRate(r.proj ?? null);
+      installLiveMarket(r);
     }).catch(() => {});
+    return () => { alive = false; };
   }, [leagueId]);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -2828,7 +2838,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     // map empty, which makes every tenure band except ANY come back empty
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); } }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
     keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
@@ -3620,6 +3630,16 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     }),
   ]).catch(() => {});
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  // WHILE A DEAL IS IN FLIGHT, KEEP UP (v0.456.0): other seats' votes, the
+  // sweep settling a window, an offer lapsing — none of it reached this list
+  // until the manager acted or came back. Twenty seconds, and only while
+  // there is something to watch.
+  const inFlight = trades.some((t) => t.status === 'pending' || t.status === 'review');
+  useEffect(() => {
+    if (!inFlight) return;
+    const id = setInterval(() => { leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }).catch(() => {}); }, 20000);
+    return () => clearInterval(id);
+  }, [leagueId, inFlight]);
 
   const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
   const pname = (s: string) => poolBySlug.get(s)?.full_name ?? s;
@@ -3798,7 +3818,10 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       : [t.status.toUpperCase(), 'var(--faint)'];
     return <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid ${color}`, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap' }}>{label}</span>;
   };
-  const shown = trades.slice(0, 8);
+  // Eight, then all of them on a click (v0.456.0): the commissioner's ↩
+  // reverse lives on this list, and a deal nine trades back was unreachable.
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? trades : trades.slice(0, 8);
   // A side's tradeable draft picks (0183), below its player list. Renders
   // nothing until the commissioner provisions rookie rounds.
   const pickAssetList = (rid: number | null, sel: PickAssetRow[], set: (v: PickAssetRow[]) => void) => {
@@ -3917,7 +3940,10 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           {t.status === 'review' && (() => {
             const tally = voteTally(t.votes);
             const mine = (t.votes ?? []).find((v) => v.roster_id === myRoster);
-            const canVote = myRoster != null && myRoster !== t.from_roster && myRoster !== t.to_roster;
+            // A seat in the deal does not vote on it — and a MULTI-TEAM deal's
+            // row names only two of its seats; the rest are legs (v0.456.0).
+            const canVote = myRoster != null && myRoster !== t.from_roster && myRoster !== t.to_roster
+              && !(t.legs ?? []).some((l) => l.roster_id === myRoster);
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 9, color: 'var(--warn)' }}>
@@ -3974,6 +4000,11 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           )}
         </div>
       ))}
+      {trades.length > 8 && (
+        <button onClick={() => setShowAll((v) => !v)} className="mono" style={{ ...linkBtn, marginTop: 6 }}>
+          {showAll ? 'show recent only' : `show all ${trades.length} trades`}
+        </button>
+      )}
 
       {/* THE TRADE BLOCK — standing "I'd listen on this player" flags (0140).
           Every member sees the whole block; the 👀 count shows a shopped

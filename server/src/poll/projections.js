@@ -94,7 +94,7 @@ export function statheadRows(feed, week) {
  *  ratio against its own baked rate and applies it to the LEAGUE-SCORED
  *  number, which is the only way to move the level without throwing the
  *  league's own catalog away. */
-export function seasonRows(feed, week) {
+export function seasonRows(feed, playerIndex = null) {
   const rows = [];
   for (const p of feed?.players ?? []) {
     const sid = p?.sleeper;
@@ -103,6 +103,10 @@ export function seasonRows(feed, week) {
     const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
     rows.push({
       sleeper_id: String(sid),
+      // OUR SLUG (v0.456.0). `league_market` keys the map by it; without it
+      // the board upserted fine and served an empty map to every screen —
+      // the whole projection half of 0335 shipped inert. The audit caught it.
+      slug: playerIndex?.sleeper?.(String(sid))?.slug ?? null,
       ppg: Math.round(ppg * 100) / 100,
       gp: Math.round(gp * 100) / 100,
       per_week: Math.round(((ppg * gp) / 17) * 1000) / 1000,
@@ -258,7 +262,7 @@ export async function pollPlayerNews(log = () => {}) {
 // one-liner.
 const EVERY_MS = Number(process.env.PROJ_POLL_MS || 3600000);
 let last = 0;
-export async function sweepProjections(season, weeks = [], log = () => {}) {
+export async function sweepProjections(season, weeks = [], log = () => {}, playerIndex = null) {
   if (Date.now() - last < EVERY_MS) return { projections: 0, news: 0 };
   last = Date.now();
   let projections = 0;
@@ -271,7 +275,7 @@ export async function sweepProjections(season, weeks = [], log = () => {}) {
   let season_rows = 0;
   try {
     const feed = await statheadFeed(season);
-    const rows = seasonRows(feed);
+    const rows = seasonRows(feed, playerIndex);
     for (let i = 0; i < rows.length; i += 900) {
       const { data, error } = await db().rpc('upsert_proj_board', {
         p_rows: rows.slice(i, i + 900),

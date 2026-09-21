@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { mono, linkBtn, btn, inp, subhead, errMsg } from './adminUi';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
-  rosterRules, commishSetWireLock, commishLockTeam, type AdminMember,
+  rosterRules, leaguePublicApi, commishSetWireLock, commishLockTeam, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
   leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
@@ -284,7 +284,9 @@ export function PublicApiPanel({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = () => rosterRules(leagueId).then((r) => { if (r.ok) setOn(r.public_api === true); })
+  // `league_public_api`, not `roster_rules`: the latter is native-only and
+  // left this switch dead on every imported league (v0.456.0).
+  const load = () => leaguePublicApi(leagueId).then((v) => setOn(v === true))
     .catch((e) => setMsg(errMsg(e, 'could not load')));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId]);
   const base = publicApiUrl(leagueId);
@@ -359,7 +361,7 @@ export function AwardsPanel({ leagueId }: { leagueId: string }) {
       )}
       {awards.map((a) => (
         <div key={a.key} style={{ ...row, flexWrap: 'wrap' }}>
-          <input value={a.icon} onChange={(e) => void run(() => commishSetAward(leagueId, a.key, { icon: e.target.value }))}
+          <input defaultValue={a.icon} onBlur={(e) => { if (e.target.value !== a.icon) void run(() => commishSetAward(leagueId, a.key, { icon: e.target.value })); }}
             style={{ ...inp, width: 40, fontSize: 15, padding: '3px 5px', textAlign: 'center' }} />
           <input defaultValue={a.name} key={`${a.key}-${a.name}`}
             onBlur={(e) => { if (e.target.value.trim() && e.target.value !== a.name) void run(() => commishSetAward(leagueId, a.key, { name: e.target.value })); }}

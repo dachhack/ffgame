@@ -6,6 +6,7 @@ import { clearSyntheticWeeks, clearLivePlays } from '@drip/core/data/realPbp';
 import { clearLiveGameFeeds } from '@drip/core/data/gameFeed';
 import { clearRuntimeHeadshots } from '@drip/core/data/media';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
+import { clearLiveMarket } from '@drip/core/data/poolSort';
 import { setLeagueFlags, clearLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueScoring, clearLeagueScoring, parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import type { League } from '@drip/core/types';
@@ -353,7 +354,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [liveCtx, setLiveCtx] = useState<LiveCtx | null>(null);
   const loadSimLeague = (built: BuiltLeague, youId: string, ctx: LiveCtx | null = null) => {
     track(Ev.leagueOpened, { live: !!ctx, teams: built.league.teams?.length ?? null });
-    clearLivePlays(); clearLiveGameFeeds(); clearLiveInjuries(); // drop any prior league's live overlays
+    clearLivePlays(); clearLiveGameFeeds(); clearLiveInjuries(); clearLiveMarket(); // drop any prior league's live overlays
     setActiveLeague(built);             // swap the engine registry (non-React reads)
     setActiveLeagueState(built.league); // re-render React consumers
     setIsSimLeague(true);
@@ -368,7 +369,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     persist({ coins: DEMO_GRANT, inv: {}, applied: {} });
   };
   const exitSimLeague = () => {
-    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots(); clearLiveInjuries(); clearLeagueFlags(); clearLeagueScoring();
+    resetToDemoLeague(); clearSyntheticWeeks(); clearLivePlays(); clearLiveGameFeeds(); clearRuntimeHeadshots(); clearLiveInjuries(); clearLeagueFlags(); clearLeagueScoring(); clearLiveMarket();
     setActiveLeagueState(LEAGUE); setIsSimLeague(false); setYouTeam(YOU_TEAM_ID); setLiveCtx(null);
   };
   // The live injury report, for a PILOT board only — the demo replays 2025 and is

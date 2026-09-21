@@ -6,7 +6,8 @@
 // 2025 season line, and the ★ favorite (0139, account-scoped so a star set
 // here is lit on the web).
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { tap } from './feedback';
 import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
@@ -91,6 +92,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   useEffect(() => {
     if (!leagueId) { setOwner(undefined); setMoves(null); setMyRoster(null); return; }
     let dead = false;
+    setWkProj(null); setNews(null); // the host reuses one sheet (v0.456.0)
     Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
       .then(async ([rows, team]) => {
         const held = rows.find((r) => r.slug === slug);
@@ -120,7 +122,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .then((r) => { if (!dead) setNews((r.news ?? []).filter((n) => (n.players ?? []).some((x) => x.slug === slug)).slice(0, 3)); })
       .catch(() => {});
     return () => { dead = true; };
-  }, [leagueId, slug]);
+  }, [leagueId, slug, week]);
   // Prefer the live team layer (fresh bake + worker overrides, 0142) over
   // whatever the opening surface happened to know — see the web card.
   const showTeam = displayTeam(slug, team);
@@ -296,10 +298,13 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
               <View style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingBottom: 6, marginBottom: 2 }}>
                 <Mono size={8} tone="faint" weight="700" track={0.12}>📰 LATELY</Mono>
                 {(news ?? []).map((n) => (
-                  <View key={n.id} style={{ marginTop: 4 }}>
+                  <Pressable key={n.id} disabled={!n.url} onPress={() => { if (n.url) { tap(); void Linking.openURL(n.url); } }}
+                    style={({ pressed }) => ({ marginTop: 4, opacity: pressed ? 0.6 : 1 })}>
                     <Text numberOfLines={2} style={{ fontSize: 11, color: t.text, lineHeight: 15 }}>{n.headline}</Text>
-                    <Mono size={8} tone="faint">{new Date(n.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Mono>
-                  </View>
+                    <Mono size={8} tone="faint">
+                      {new Date(n.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{n.url ? ' · espn.com ↗' : ''}
+                    </Mono>
+                  </Pressable>
                 ))}
               </View>
             )}

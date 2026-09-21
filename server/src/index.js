@@ -642,7 +642,7 @@ async function tick() {
   // late is still news. Every active week gets a pass, so a Tuesday poll
   // fills next week while the current one is still being played.
   try {
-    const pr = await sweepProjections(config.season, contexts.map((c) => c.espnWeek + c.offset), log);
+    const pr = await sweepProjections(config.season, contexts.map((c) => c.espnWeek + c.offset), log, playerIndex);
     if (pr.projections || pr.news || pr.season) log('projections:', pr.projections, 'player-weeks,', pr.season, 'season lines,', pr.news, 'news items');
   } catch (e) { log('projection sweep error', e.message); }
 

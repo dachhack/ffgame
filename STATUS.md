@@ -18,6 +18,118 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.456.0 — the round, audited
+
+Six audits of v0.437.0–v0.455.1 ran in parallel — web wiring, mobile parity,
+trades-and-waivers conflicts, the data overlays, the public API with history
+and awards, and seven traced user journeys — plus a set of executed edge
+cases on the scratch database. Forty-odd findings; the ones that were bugs
+are fixed here, the ones that were gaps are listed at the end, and the ones
+that were opinions stayed opinions. Nothing new shipped in this version.
+
+THREE THINGS SHIPPED BROKEN and are the reason the audit was worth running:
+
+  · THE SEASON-RATE OVERLAY WAS DEAD. The worker's season board carried no
+    slug, `league_market` keyed its map by slug, so every screen got `{}`
+    and quietly kept the August level. The whole projection half of 0335
+    was inert, and its probe had planted a hand-written slug. The worker
+    resolves the slug now, the SQL keys by id when there is none, and the
+    probe plants a row with no slug and expects an answer.
+  · HALF A TRADE COULD COMMIT. `execute_trade` re-checked the FAAB wallet
+    after the rosters, picks and cap had moved, and refused with a plain
+    `return` — which in plpgsql rolls nothing back. Players swapped, the
+    proposal still said pending, a second accept said "players moved". The
+    wallet is checked beside the cap check now, above the first move.
+  · A BADGE MULTIPLIED THE RECORD. `league_history` joined the badge grants
+    laterally onto the seat row before summing wins, so two badges made a
+    10-3 manager 20-6 with two titles — on the screen and in the public
+    API. The badges are their own query now.
+
+THE SERVER, otherwise (0336, every function re-emitted whole):
+  · the veto bar for a multi-team trade could exceed its electorate, so the
+    vote settled at the first ballot — a veto included; capped at the room
+    on routing, settling and the screen's `veto_need`;
+  · a raise inside the execute during a league vote (a no-trade flag set
+    mid-vote, a cap that broke) left the trade un-settleable and the sweep
+    retrying it every tick; caught and settled like any refusal;
+  · a commissioner's veto posts to chat, as the league's own does;
+  · a linked waiver group runs on its slowest clock — with 24h rolling
+    holds, a fallback dropped Monday morning came due before the first
+    choice dropped that afternoon, landed, and marked the first choice lost
+    five hours early;
+  · a private season stayed readable through last year's public row, which
+    carried this year's table, champion and managers with it; a non-member
+    now reads only the seasons that are individually public;
+  · `award_week` was callable by any signed-in account against any league
+    (it posts to chat), and a re-run after a score correction paid last
+    week's winner a second time; commissioner-or-worker now, and the wallet
+    credits new winners only;
+  · `award_sweep` would have awarded every final week of every past
+    season's league row on its first pass — one house message per
+    league-week into chats nobody reads — and never handed a mid-season
+    award out for the weeks before it; this season's rows, and any week
+    where an active award is still missing;
+  · `api_trades` dropped a reversed trade and published expired OFFERS;
+    `api_league.scoring` read `{"error":"forbidden"}` for every caller;
+  · three superflex rules (0334's SQL, 0237's SQL, the client's) disagreed
+    on a lone SFLX spot, the 0161 roster counts and a spec-less classic
+    league; `league_is_superflex` is the one rule now, its spec-less branch
+    matched to what the client actually does, and the dynasty format is
+    read from it rather than from the ADP thin-board fallback.
+
+THE CLIENTS:
+  · the four market overlays were installed and never cleared — a slug is
+    the same slug in every league, so a superflex league's board priced the
+    next league's waiver wire until its own call landed, and forever if that
+    call failed; `installLiveMarket`/`clearLiveMarket`, cleared before each
+    fetch and on league close, with an alive flag against a late response;
+  · the web never set the dynasty format, so every superflex league on the
+    web read the 1QB August bake while the app showed the live SF board;
+  · draft rows printed the baked ADP while sorting by the live one — 54
+    adjacent inversions in the first 120 rows, Josh Allen "23" in a room
+    ordered as if he were 3.3; the row prints what it sorts by;
+  · the trade grade counted plain QB spots and missed a lone SFLX;
+  · the public-API switch read `roster_rules`, which is native-only, so it
+    was dead on every imported league — the leagues 0327 says it is for;
+    a provider-agnostic `leaguePublicApi` binding, on both platforms; the
+    mobile AWARDS tab is no longer native-only either;
+  · a seat inside a multi-team trade was offered VETO/ALLOW on its own deal;
+  · the player card reused one modal and never reset, so B's card wore A's
+    week tile and headlines until B's fetch landed; the week was not a dep;
+  · the trade list refreshes every 20s while a deal is pending or in review,
+    and shows all trades on a click so ↩ reverse can reach an older one;
+  · "this offer expired" was passed through the auth message table and told
+    a manager to request a fresh sign-in link;
+  · mobile: ↩ REVERSE, retire-award and delete-badge confirm first; the
+    propose sheet scrolls with its send button pinned (a three-way ran past
+    the sheet and the button was clipped off); the two-way TRADE REVIEW
+    chips in settings, which could not show `league` and saved over it on
+    a tap, are gone; headlines open; the card gets its league context on
+    imported leagues too; the award icon saves on blur, not per keystroke.
+
+EXECUTED EDGE CASES (scratch DB): SQL format detection for null slots /
+SFLX / IDP-only / 0.75 / 0.25 PPR; a league vote in a two-team league
+(executes — no electorate — while the screen still says "1 veto"; a
+labelling nit); history on a fresh and a mock league; `league_market` on an
+empty pool and as a stranger; the week projection with no slate rows; a FAAB
+leg in a rolling-waiver league (refused, plainly); cancelling one claim
+inside a linked group (the group keeps running with a gap in its sequence).
+
+PROBES: `scripts/db/round-audit-probes.sql` — eleven, each written to fail
+on the previous body and pass on this one, and run once without 0336 to
+prove it. Every existing suite still passes bar the three that fail on main.
+
+STILL OPEN, by choice or size: score corrections do not revisit awards;
+`playerNews` and `submitWaiverGroup` are bound and unused (the card pulls
+60 league items and filters); ADP provenance is only in the web draft room;
+the mobile award editor lacks icon/active; the public API URL is not
+copyable on mobile; FAAB in trades and pending bids reserve nothing
+against each other; the rate limiter keys on the first XFF hop; the API
+publishes `display_name` and `avatar_url` per seat, which docs/public-api.md
+should say; the pool RANK is the 1QB PPR bake while the ADP column is the
+league's live format (a superflex room's autopick takes QBs 20–40 picks
+after the column says they go).
+
 ### v0.455.1 — a fresh board answers by silence
 
 Re-running the source audit against v0.455.0 found a bug in v0.455.0, which

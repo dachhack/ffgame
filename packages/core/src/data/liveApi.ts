@@ -56,6 +56,10 @@ export function friendlyError(x: unknown): string {
     return 'Confirm your email first — check your inbox for the link we sent.';
   if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already'))
     return 'An account with that email already exists — sign in instead.';
+  // A trade offer expiring is not a magic link expiring (v0.456.0): the
+  // auth rule below matched every server line with "expired" in it and told
+  // a manager accepting a lapsed offer to request a fresh sign-in link.
+  if (m.includes('offer expired') || m.includes('trade already expired')) return raw;
   if (m.includes('expired') || (m.includes('token') && m.includes('invalid')) || m.includes('otp_expired'))
     return 'That code has expired or was already used. Request a fresh link.';
   if (m.includes('rate limit') || m.includes('only request this after') || m.includes('too many'))
@@ -2300,6 +2304,11 @@ export const playerNews = (espnId: string, limit = 5) =>
 export const publicApiUrl = (leagueId?: string) =>
   `${supabaseUrl().replace(/\/$/, '')}/functions/v1/public-api/v1${leagueId ? `/league/${leagueId}` : ''}`;
 
+/** Is this league's read API open? Provider-agnostic — `roster_rules` refuses
+ *  an imported league, and the switch was inert there (v0.456.0). Null for a
+ *  mock; a caller coalesces. */
+export const leaguePublicApi = (leagueId: string) =>
+  rpc<boolean | null>('league_public_api', { p_league_id: leagueId });
 export const commishSetPublicApi = (leagueId: string, on: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; public_api?: boolean }>('commish_set_public_api',
     { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'public_api' });

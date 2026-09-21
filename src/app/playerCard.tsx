@@ -85,24 +85,28 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   useEffect(() => {
     if (!leagueId) { setOwner(undefined); setMoves(null); setMyRoster(null); return; }
     let dead = false;
+    // THE HOST REUSES ONE MODAL (v0.456.0): opening B from behind A's card
+    // re-runs this effect on the same instance, so the week tile and the
+    // headlines reset here and every landing checks `dead`, or B wears A's
+    // number until his own fetch lands — and keeps A's headlines if it lands
+    // out of order.
+    setWkProj(null); setNews(null);
     if (week != null) {
       // 0330: the row, not the scalar — with a multiplier in hand the card
       // shows the week in THIS league's scoring rather than the source's PPR.
       leagueWeekProjections(leagueId, week)
-        .then((r) => setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
+        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
           ?? (r.projections?.[slug] != null
             ? { pts: r.projections[slug], mult: null, opp: null, home: null, status: null, source: 'espn' }
-            : null))))
-        .catch(() => setWkProj(null));
+            : null))); })
+        .catch(() => { if (!dead) setWkProj(null); });
     }
     // The headlines this league's feed carries ABOUT HIM. Asked through the
     // league rather than by ESPN id, because the league's pool is where the
     // crosswalk lives — the card only ever knows a slug.
     leagueNews(leagueId, 60)
-      .then((r) => setNews((r.news ?? []).filter((n) => (n.players ?? []).some((p) => p.slug === slug)).slice(0, 4)))
-      .catch(() => setNews(null));
-    {
-    }
+      .then((r) => { if (!dead) setNews((r.news ?? []).filter((n) => (n.players ?? []).some((p) => p.slug === slug)).slice(0, 4)); })
+      .catch(() => { if (!dead) setNews(null); });
     Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
       .then(async ([rows, team]) => {
         const held = rows.find((r) => r.slug === slug);
@@ -117,7 +121,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
       .catch(() => {});
     return () => { dead = true; };
-  }, [leagueId, slug]);
+  }, [leagueId, slug, week]);
   // The card is where a stale team is most visible — prefer the live layer
   // (fresh directory bake + worker overrides, 0142) over whatever the opening
   // surface happened to know.

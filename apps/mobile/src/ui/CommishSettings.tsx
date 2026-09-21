@@ -160,7 +160,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
-        review !== init.review ? review : null,
+        null,   // 0321: trade review lives in TRADE FLOOR, which saves on the tap
         clearChanged ? (clearMin ?? -1) : null,
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
@@ -416,10 +416,12 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           </Mono>
 
           {sec('TRADES')}
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <Chip label="EXECUTE ON ACCEPT" on={review === 'none'} onPress={() => { tap(); setReview('none'); }} />
-            <Chip label="⚑ COMMISH REVIEW" on={review === 'commish'} onPress={() => { tap(); setReview('commish'); }} />
-          </View>
+          {/* 0321: review (execute on accept / commissioner / league vote)
+              lives in TRADE FLOOR. The two-way chips that sat here could not
+              show the third value and, once tapped, saved over it (v0.456.0). */}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
+            Who approves a trade — nobody, the commissioner or a league vote — is set in TRADE FLOOR.
+          </Mono>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">DEADLINE</Mono>
             <Chip label="NONE" on={deadline === null} onPress={() => { tap(); setDeadline(null); }} />

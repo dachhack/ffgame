@@ -9,7 +9,7 @@ import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, adminLeagueMembers, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
-  leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl,
+  leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl, leaguePublicApi,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
@@ -194,7 +194,9 @@ export function PublicApiCard({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = () => rosterRules(leagueId).then((r) => { if (r.ok) setOn(r.public_api === true); })
+  // `league_public_api`, not `roster_rules`: the latter is native-only and
+  // left this switch dead on every imported league (v0.456.0).
+  const load = () => leaguePublicApi(leagueId).then((v) => setOn(v === true))
     .catch((e) => setMsg(friendlyError(e)));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
   const toggle = async () => {
@@ -270,9 +272,12 @@ export function AwardsCard({ leagueId }: { leagueId: string }) {
             <TextInput defaultValue={a.name} key={`${a.key}-${a.name}`}
               onEndEditing={(e) => { const v = e.nativeEvent.text.trim(); if (v && v !== a.name) void run(() => commishSetAward(leagueId, a.key, { name: v })); }}
               style={{ ...inputStyle(t, 150), flex: 1 }} />
-            <Chip label={a.direction === 'high' ? 'MOST' : 'LEAST'} on
+            <Chip label={a.direction === 'high' ? 'MOST' : 'LEAST'} on={a.direction === 'high'}
               onPress={() => { tap(); void run(() => commishSetAward(leagueId, a.key, { direction: a.direction === 'high' ? 'low' : 'high' })); }} />
-            <Chip label="✕" onPress={() => { tap(); void run(() => commishDeleteAward(leagueId, a.key), '✓ retired'); }} />
+            <Chip label="✕" disabled={busy} onPress={() => { tap(); Alert.alert(`Retire ${a.name}?`, 'Past wins stay on the record; it stops being handed out.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Retire', style: 'destructive', onPress: () => void run(() => commishDeleteAward(leagueId, a.key), '✓ retired') },
+            ]); }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
             {AW_METRICS.map(([m, label]) => (
@@ -311,7 +316,10 @@ export function AwardsCard({ leagueId }: { leagueId: string }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={{ fontSize: fs(15) }}>{b.icon}</Text>
             <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: t.text }}>{b.name}</Text>
-            <Chip label="✕" onPress={() => { tap(); void run(() => commishDeleteBadge(leagueId, b.key), '✓ deleted'); }} />
+            <Chip label="✕" disabled={busy} onPress={() => { tap(); Alert.alert(`Delete ${b.name}?`, 'Everyone holding it loses it.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete', style: 'destructive', onPress: () => void run(() => commishDeleteBadge(leagueId, b.key), '✓ deleted') },
+            ]); }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
             {teams.map((x) => (

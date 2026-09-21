@@ -167,3 +167,35 @@ export function sortPool<T extends PoolRow>(
 export { setLiveDyn, clearLiveDyn, dynIsLive } from './dyn2026';
 export { setLivePickValues, clearLivePickValues, pickBoardIsLive } from './pickValues2026';
 export { setLiveProjRate, clearLiveProjRate, projIsLive } from '../engine/projScoring';
+import { setLiveDyn as _setDyn, clearLiveDyn as _clearDyn } from './dyn2026';
+import { setLivePickValues as _setPicks, clearLivePickValues as _clearPicks } from './pickValues2026';
+import { setLiveProjRate as _setProj, clearLiveProjRate as _clearProj } from '../engine/projScoring';
+
+/** The shape `league_market` returns, as far as the overlays care. */
+export interface LiveMarketPayload {
+  adp?: Record<string, number> | null;
+  adp_source?: 'sleeper' | 'espn' | null;
+  adp_format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+  adp_as_of?: string | null;
+  dyn?: Record<string, number> | null;
+  dyn_format?: '1qb' | 'sf' | null;
+  picks?: Record<string, number> | null;
+  proj?: Record<string, number> | null;
+}
+/** Install every overlay one `league_market` call carries. ONE call site's
+ *  worth of logic, so the four screens that fetch the market cannot drift. */
+export function installLiveMarket(r: LiveMarketPayload): void {
+  setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+  _setDyn(r.dyn ?? null, r.dyn_format ?? null);
+  _setPicks(r.picks ?? null, r.dyn_format ?? null);
+  _setProj(r.proj ?? null);
+}
+/** Drop every market overlay. THE LEAK THIS CLOSES (v0.456.0): the maps are
+ *  module-level and slug-keyed, and a slug is the same slug in every league —
+ *  so a superflex league's board, left installed, priced the next league's
+ *  waiver wire, draft room and trade grades until ITS market call landed. A
+ *  screen calls this before it asks for its own market, and the store calls
+ *  it when a league is closed, so nothing outlives the league it belongs to. */
+export function clearLiveMarket(): void {
+  clearLiveAdp(); _clearDyn(); _clearPicks(); _clearProj();
+}

@@ -106,7 +106,9 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'ENGAGE', items: [
     // 0325: the league's own weekly awards and badges — nothing here changes
     // a result, it changes the jokes.
-    { id: 'awards', label: 'AWARDS & BADGES', nativeOnly: true },
+    // …and for an IMPORTED league too (v0.456.0, mirroring the web): it
+    // starts private, so its commissioner has to be able to publish it.
+    { id: 'awards', label: 'AWARDS & BADGES' },
     { id: 'kit', label: 'KIT' },
     { id: 'activity', label: 'ACTIVITY' },
     // CLASSIC LEAGUES DON'T PLAY WITH COIN (v0.297.3, founder: "classic
@@ -444,7 +446,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
             {section === 'order' && native && <WaiverOrderCard leagueId={leagueId} />}
             {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
-            {section === 'awards' && native && <><AwardsCard leagueId={leagueId} /><PublicApiCard leagueId={leagueId} /></>}
+            {section === 'awards' && <><AwardsCard leagueId={leagueId} /><PublicApiCard leagueId={leagueId} /></>}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}

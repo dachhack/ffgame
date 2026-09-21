@@ -38,7 +38,7 @@
 // you are getting has a coach who hates him. The copy says "projected points",
 // never "you win".
 import { projectedPoints, leagueCatalogOf } from '../engine/projScoring';
-import { leagueSlotDefs, type ClassicSlotDef } from '../engine/classic';
+import { leagueSlotDefs, leagueSuperflex, type ClassicSlotDef } from '../engine/classic';
 import { dynFor } from './dyn2026';
 import { pickMarketValue, type PickFormat } from './pickValues2026';
 
@@ -240,7 +240,9 @@ export function gradeTrade(opts: {
   // quarterbacks than it has teams is a superflex market, which is the same
   // fact the replacement line above already moves on — no special case, one
   // question asked twice.
-  const qbSpots = slotDefs.filter((s) => ((s.pos ?? []) as string[]).includes('QB')).length;
+  // `leagueSuperflex` is THE rule (v0.456.0) — it also counts a lone SFLX
+  // spot with no plain QB, which a bare "more than one QB spot" missed.
+  const superflex = leagueSuperflex(opts.slots as never);
   const pickCtx: PickCtx = {
     replacementStarter: replStarter,
     board: (opts.pool ?? [])
@@ -249,7 +251,7 @@ export function gradeTrade(opts: {
       .sort((a, b) => b - a),
     curve: marketCurve(opts.pool ?? [], repl),
     teams: Math.max(opts.teams || 10, 2),
-    fmt: qbSpots > 1 ? 'sf' : '1qb',
+    fmt: superflex ? 'sf' : '1qb',
     season: opts.season ?? new Date().getFullYear(),
   };
   const outPicks = (opts.send.picks ?? []).reduce((a, p) => a + pickValue(p, pickCtx), 0);

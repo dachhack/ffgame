@@ -56,7 +56,7 @@ exist, so the API cannot be used to test whether a league id is real.
 | `/v1/league/{id}/matchups?week=N` | Pairings, status, lock time, scores |
 | `/v1/league/{id}/lineups?week=N` | Starters (classic) and **revealed** picks (drip) |
 | `/v1/league/{id}/transactions?after=&limit=` | The register, newest first, cursor-paged |
-| `/v1/league/{id}/trades?limit=` | Completed trades, multi-team legs, the league vote |
+| `/v1/league/{id}/trades?limit=` | Settled trades — executed, vetoed, reversed — with multi-team legs and the league vote; an offer that lapsed unanswered is not a trade and is not here |
 | `/v1/league/{id}/draft` | Draft state and every pick, with auction prices |
 | `/v1/league/{id}/picks` | Tradeable future picks and who owns them |
 | `/v1/league/{id}/players` | The league's pool, with crosswalk ids (`espn_id`, `sleeper_id`, `gsis_id`, `pfr_id`, `yahoo_id`, `sportradar_id`) |
@@ -73,8 +73,11 @@ daily, and a player we cannot place carries no extra ids rather than a
 guessed one — our pool reaches the crosswalk by id (espn first, sleeper
 second) and never by spelling.
 
-These are public identifiers for public athletes. Nothing about a *manager*
-is published anywhere in this API; see below.
+These are public identifiers for public athletes. About a *manager* this API
+publishes what the league's own board shows — the team name, the display
+name the account chose and its avatar, per seat — and never an account id,
+an email or a claim email; the all-time manager line carries an opaque
+handle instead. See below.
 
 ## What is never served
 
