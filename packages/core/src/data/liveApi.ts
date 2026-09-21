@@ -3290,13 +3290,41 @@ export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: s
     Ev.waiverClaimed, { type: 'waiver', drop: !!dropSlug, bid });
 export const cancelWaiverClaim = (claimId: string) =>
   rpc<{ ok: boolean; error?: string }>('cancel_waiver_claim', { p_claim_id: claimId });
+
+/** CONDITIONAL CLAIMS (0323) — "one of these, in this order". Link claims you
+ *  have already filed: pass the ids in preference order and how many of them
+ *  may land (1 by default). The run still orders claims by the league's own
+ *  rules; the group only ever takes the rest off the table once it is full. */
+export const groupWaiverClaims = (claimIds: string[], maxWins = 1) =>
+  tracked(rpc<{ ok: boolean; error?: string; group_id?: string; claims?: number; max_wins?: number }>(
+    'group_waiver_claims', { p_claim_ids: claimIds, p_max_wins: maxWins }),
+    Ev.waiverClaimed, { type: 'group', claims: claimIds.length });
+/** File a whole contingency list in one call, in preference order. ALL OR
+ *  NOTHING: a list whose third claim is refused files none of them. */
+export const submitWaiverGroup = (
+  leagueId: string, rosterId: number,
+  claims: { add: string; drop?: string | null; bid?: number }[], maxWins = 1,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; group_id?: string; claims?: number; failed_on?: string }>(
+    'submit_waiver_group', { p_league_id: leagueId, p_roster_id: rosterId, p_claims: claims, p_max_wins: maxWins }),
+    Ev.waiverClaimed, { type: 'group-file', claims: claims.length });
+/** Break a group up; the claims stand on their own, unchanged otherwise. */
+export const ungroupWaiverClaims = (groupId: string) =>
+  rpc<{ ok: boolean; error?: string; claims?: number }>('ungroup_waiver_claims', { p_group_id: groupId });
+/** Withdraw every pending claim in a group at once. */
+export const cancelWaiverGroup = (groupId: string) =>
+  rpc<{ ok: boolean; error?: string; cancelled?: number }>('cancel_waiver_group', { p_group_id: groupId });
 /** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */
 export const processWaivers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; won?: number; lost?: number }>('process_waivers', { p_league_id: leagueId });
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number;
   /** 0289: when this claim settles — its own clock when free agency could
    *  not reach the player, else the pool hold it is queued behind. */
-  clears_at?: string | null; }
+  clears_at?: string | null;
+  /** 0323: the contingency group this claim is part of — "one of these" —
+   *  with its place in the manager's order and how many of the group may
+   *  land. Null on a claim that stands alone. */
+  group_id?: string | null; group_seq?: number | null; group_max?: number | null; }
 export interface NativeTeamState {
   /** 0320: why the wire is shut for my seat right now (a commissioner's lock, the format's), or null. */
   wire_block?: string | null;

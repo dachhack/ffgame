@@ -31,6 +31,7 @@ import {
   leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
+  groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
   setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
   draftLog, type DraftEvent,
@@ -2708,6 +2709,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
+  // 0323: link mode on the claims list — the ticked ids, in tick order.
+  const [linking, setLinking] = useState<string[] | null>(null);
+  const [linkMax, setLinkMax] = useState(1);
   // FAAB: a waiver claim needs a blind bid — collected in a small modal.
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null);
   const [bidDraft, setBidDraft] = useState('');
@@ -3045,6 +3049,21 @@ export function TeamManage({ leagueId, onDraft, focus }: {
 
   const pendingClaims = team.my_claims.filter((c) => c.status === 'pending');
   const recentClaims = team.my_claims.filter((c) => c.status !== 'pending').slice(0, 5);
+  // 0323: CONDITIONAL CLAIMS. Pending claims are shown grouped — a group's
+  // members in the manager's order, then the loners — and LINK mode ticks
+  // claims IN THE ORDER YOU WANT THEM TRIED, which is the order they are
+  // sent as. `linking` null = not in link mode.
+  const claimGroups = (() => {
+    const out: { id: string | null; max: number; claims: typeof pendingClaims }[] = [];
+    for (const c of pendingClaims) {
+      const key = c.group_id ?? null;
+      const row = key ? out.find((g) => g.id === key) : null;
+      if (row) row.claims.push(c);
+      else out.push({ id: key, max: c.group_max ?? 1, claims: [c] });
+    }
+    for (const g of out) if (g.id) g.claims.sort((x, y) => (x.group_seq ?? 0) - (y.group_seq ?? 0));
+    return out;
+  })();
 
   return (
     <div>
@@ -3199,10 +3218,58 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
         <div style={{ ...card, marginBottom: 12 }}>
-          <div style={hdr}>MY WAIVER CLAIMS</div>
-          {pendingClaims.map((c) => (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={hdr}>MY WAIVER CLAIMS</div>
+            {/* 0323: "I want ONE of these." Tick claims in the order you want
+                them tried; the first that lands takes the rest off the table. */}
+            {pendingClaims.length > 1 && myRoster != null && (
+              <button onClick={() => { setLinking(linking ? null : []); setLinkMax(1); }} className="mono"
+                style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>
+                {linking ? '✕ DONE' : '🔗 LINK CLAIMS'}
+              </button>
+            )}
+          </div>
+          {linking && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: 4 }}>
+              Tick them in the order you want them tried, then say how many may land.
+              {linking.length > 1 && <>
+                {' '}
+                <button onClick={() => setLinkMax((v) => Math.max(1, v - 1))} className="mono" style={{ ...ghostBtn, padding: '1px 7px' }}>−</button>
+                <b style={{ color: 'var(--you)' }}> {linkMax} of {linking.length} </b>
+                <button onClick={() => setLinkMax((v) => Math.min(linking.length - 1, v + 1))} className="mono" style={{ ...ghostBtn, padding: '1px 7px' }}>＋</button>
+                {' '}
+                <button onClick={() => run(async () => {
+                  const r = await groupWaiverClaims(linking, linkMax);
+                  if (r.ok) setLinking(null);
+                  return r;
+                })} disabled={busy} className="mono" style={{ ...btn, padding: '4px 10px', fontSize: 9 }}>LINK THESE</button>
+              </>}
+            </div>
+          )}
+          {claimGroups.map((g) => (
+            <div key={g.id ?? g.claims[0].id}
+              style={g.id ? { borderLeft: '2px solid var(--warn)', paddingLeft: 7, marginTop: 6 } : undefined}>
+              {g.id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+                  <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)' }}>
+                    🔗 ONLY {g.max} OF THESE {g.claims.length}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={() => run(() => ungroupWaiverClaims(g.id as string))} disabled={busy} className="mono" style={linkBtn}>unlink</button>
+                  <button onClick={() => run(() => cancelWaiverGroup(g.id as string))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>cancel all</button>
+                </div>
+              )}
+              {g.claims.map((c, i) => (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
+              {linking && (
+                <button onClick={() => setLinking((v) => (v ?? []).includes(c.id)
+                  ? (v ?? []).filter((x) => x !== c.id) : [...(v ?? []), c.id])}
+                  className="mono" style={{ ...linkBtn, color: linking.includes(c.id) ? 'var(--you)' : 'var(--faint)' }}>
+                  {linking.includes(c.id) ? `${linking.indexOf(c.id) + 1}✓` : '☐'}
+                </button>
+              )}
               <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>
+                {g.id && <span className="mono" style={{ fontSize: 9, color: 'var(--warn)' }}>{ordinal(i + 1)} choice · </span>}
                 ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
                 {c.drop_slug && <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}> · dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</span>}
               </span>
@@ -3215,6 +3282,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               {team.waiver_mode === 'faab' && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>${c.bid ?? 0}</span>}
               <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '2px 5px' }}>PENDING</span>
               <button onClick={() => run(() => cancelWaiverClaim(c.id))} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>cancel</button>
+            </div>
+              ))}
             </div>
           ))}
           {recentClaims.map((c) => (

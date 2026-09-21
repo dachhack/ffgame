@@ -18,6 +18,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.439.0 — one of these, in this order
+
+The gap list's second waiver row, and the Wednesday-morning problem every
+league knows: you want ONE running back, so you file on three and wake up
+holding all three — or you file on one and get nothing. Fleaflicker,
+Fantrax, MFL, Yahoo and FFPC all have contingency groups; every Drip claim
+settled alone. 0323.
+
+  1. THE GROUP. waiver_claim carries group_id, group_seq (the manager's
+     preference order) and group_max (how many of the group may land, 1 by
+     default). group_waiver_claims links claims already filed — ticked in the
+     order you want them tried — and submit_waiver_group files a whole list
+     in one call, ALL OR NOTHING: a list whose third claim is refused files
+     none of them. ungroup_waiver_claims and cancel_waiver_group undo it.
+  2. THE RUN NEEDS NO NEW PASS. Claims are still ordered by the league's own
+     rules — bid, standings, priority — with group_seq as the tiebreaker
+     between two of one seat's OWN claims. When a win fills its group, the
+     rest settle as losses noting "conditional — already landed X", so the
+     waiver report says why a fallback went quiet. A $40 bid on the back you
+     want and a $12 fallback still compete at their own prices, and you
+     cannot end up with both.
+  3. THE GROUP WINS NOTHING BY ITSELF. A member outbid, blocked by a full
+     roster, a position cap or a commissioner's flag still loses, and the
+     fallback then gets its chance — the group only ever takes claims OFF
+     the table.
+  4. THE CURSOR IS A SNAPSHOT. process_waivers now re-reads each claim's
+     status before settling it, because a group can take rows off the table
+     mid-run. One index read per claim, and every future "settle these too"
+     rule is safe by construction.
+
+CONSOLES. Both team screens group the pending claims, print "🔗 ONLY 1 OF
+THESE 3" over them with each member's place in the order, and grew a LINK
+mode that ticks claims in preference order with a stepper for how many may
+land — plus unlink and cancel-all (src/screens/NativeLeague.tsx,
+apps/mobile/src/screens/Team.tsx).
+
+Probes: scripts/db/conditional-claim-probes.sql (wired into the scratch
+runner) — linking's gates, the first choice winning and the rest standing
+down with the reason in the league report, an outbid first choice letting
+the fallback fire, a ceiling of two, the all-or-nothing list, unlinking and
+cancelling. 99 suites pass beside it; the three that do not fail identically
+on main. Web and mobile typecheck.
+
 ### v0.438.0 — the three-team trade
 
 The last open item on the gap list's trade row, and the one every platform

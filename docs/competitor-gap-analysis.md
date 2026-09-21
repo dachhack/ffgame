@@ -7,7 +7,8 @@ Part 2 is a condensed per-platform reference with sources so this doc can be
 reused without re-researching._
 
 _The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
-(`0321`, `0322`), which closed four of its five gaps; every other cell is as
+(`0321`, `0322`), which closed all five of its migration-blocking gaps, and
+the Waivers row's first cell for v0.439.0 (`0323`); every other cell is as
 first written._
 
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
@@ -59,7 +60,7 @@ The most-cited reason a league refuses to move platforms.
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| Conditional / contingency claim groups | Fleaflicker, Fantrax, MFL, Yahoo, FFPC | Each claim settles alone |
+| Conditional / contingency claim groups | Fleaflicker, Fantrax, MFL, Yahoo, FFPC | **Shipped v0.439.0** — ordered claim groups with a ceiling on how many land (`0323`) |
 | Vickrey second-price FAAB | Fantrax | First-price only |
 | Suggested FAAB bid ranges | Sleeper (2025) | None |
 | Weekly and seasonal add limits | Fleaflicker, MFL, Fantrax, Yahoo | Not found in migrations |
@@ -151,8 +152,11 @@ Ordered by what blocks a league from migrating next August, then retention.
    counters, FAAB) and v0.438.0 (`0322`: 3–8-team trades). What is still
    missing from this row: a trade analyzer or grades, trade auctions, and
    reversing a completed trade.
-2. **Conditional waiver claims and a median matchup** — small on top of the
-   existing run and standings code; both come up in every "which host" thread.
+2. ~~**Conditional waiver claims and a median matchup**~~ — **Done**: the
+   median game in v0.436.0 (`0320`), conditional claim groups in v0.439.0
+   (`0323`). Still open on the waivers row: Vickrey second-price FAAB,
+   suggested bid ranges, weekly/seasonal add limits, a can't-cut list, and
+   showing the highest pending bids.
 3. **A history surface** — past champions, records, awards. Rollover data
    exists; this is a screen, not a schema.
 4. **Store distribution and a read API** — the Sleeper ecosystem (KTC,
