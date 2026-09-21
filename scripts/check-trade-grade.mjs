@@ -79,6 +79,37 @@ ok(withPick.inPicks > 0 && /picks estimated/.test(withPick.summary), 'a first co
 const late = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 5 }] });
 ok(late.inPicks < withPick.inPicks, 'and a fifth is worth less than a first');
 
+// 6b. PICKS COME FROM DATA NOW (v0.448.0), not from a constant.
+import { pickMarketValue, PICK_MAX_ROUND } from '../packages/core/src/data/pickValues2026.ts';
+import { dynFor } from '../packages/core/src/data/dyn2026.ts';
+
+ok(pickMarketValue('2027', 1) > pickMarketValue('2027', 2), 'the market pays more for a first than a second');
+ok(pickMarketValue('2027', 2) > pickMarketValue('2027', 3)
+  && pickMarketValue('2027', 3) > pickMarketValue('2027', 4), 'and keeps falling through the fourth');
+ok(pickMarketValue('2027', PICK_MAX_ROUND + 1) === null,
+  'past the board it prices nothing, rather than guessing');
+ok(pickMarketValue('2027', 1, 'sf') !== pickMarketValue('2027', 1, '1qb'),
+  'a superflex market is a different market');
+ok(pickMarketValue('2031', 1) === pickMarketValue('2028', 1),
+  'a pick further out than the board is priced as its furthest year');
+ok(pickMarketValue('2026', 1, '1qb', { slot: 1 }) > pickMarketValue('2026', 1, '1qb', { slot: 12 }),
+  'and where the slot is known, 1.01 beats 1.12');
+
+// The curve the market value is read off has to actually exist in this pool,
+// or every assertion above is quietly testing the fallback.
+ok(pool.filter((p) => dynFor(p.slug)).length > 100,
+  `${pool.filter((p) => dynFor(p.slug)).length} of the pool carry a market value — the curve is live`);
+
+// A STARTUP slot drafts from THIS pool, so it is worth more than a rookie
+// pick in the same round: one takes an established starter, the other takes
+// a player who is not in the league yet.
+const startup1 = grade({ players: [] }, { players: [], picks: [{ season: '2026', round: 1, kind: 'startup' }] });
+const rookie1 = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 1, kind: 'rookie' }] });
+ok(startup1.inPicks > rookie1.inPicks,
+  `a startup 1st (${startup1.inPicks}) outprices a rookie 1st (${rookie1.inPicks})`);
+const startupDeep = grade({ players: [] }, { players: [], picks: [{ season: '2026', round: 25, kind: 'startup' }] });
+ok(startupDeep.inPicks === 0, 'a startup slot deep enough to draft replacement level is worth nothing');
+
 // 7. dollars are reported as dollars, never converted into points
 const money = grade({ players: [], faab: 20 }, { players: [] });
 ok(money.faab === -20 && /\$-?20 FAAB/.test(money.summary), 'FAAB is reported as money, not points');

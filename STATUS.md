@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.448.0 — what a pick is worth, from the market that trades them
+
+The second thing the StatHead audit found, and the smaller of the two only
+in line count. v0.444.0's trade grade priced a draft pick at an invented
+fraction of a replacement starter — `[0, 0.85, 0.45, 0.22, 0.1, 0.05]` —
+with a comment admitting it was blunt. That was the one number in a feature
+built entirely on "you can disagree with the arithmetic" that came from
+nowhere.
+
+  1. TWO KINDS OF PICK, TWO ANSWERS, NEITHER INVENTED. A STARTUP slot (0190)
+     is a pick in a draft of THIS league's players, so it is worth the man
+     still on the board when it comes round — which we can read straight off
+     the pool and its projections. No market and no curve: in a 12-team
+     league a mid-round-1 slot is the sixth-best player left, over
+     replacement, and a slot deep enough to draft replacement level is worth
+     nothing, which is exactly right.
+  2. A ROOKIE PICK is an asset in a draft that has not happened, of players
+     who are not in the pool, so what it is worth is what it TRADES for.
+     `pickValues2026.ts` bakes the dynasty market's pick board — StatHead's
+     `get_dynasty_values` with position RDP, the rows dyn2026 drops — on the
+     same scale as the player values, in both 1QB and superflex.
+  3. FROM A MARKET VALUE TO THIS LEAGUE'S POINTS, through the pool itself:
+     find the players who trade for about the same, and ask what THEY are
+     worth over replacement here. A pick that trades for what the 14th
+     receiver trades for is worth what the 14th receiver is worth. Nine
+     neighbours averaged, because a dynasty value is a long-horizon opinion
+     and this season's projection is not.
+  4. THE LINEUP PICKS THE MARKET. A league that starts more quarterbacks
+     than it has teams reads the superflex board — the same question the
+     replacement line already asks, asked once more, with no special case.
+  5. The old share table survives as the fallback for a league with no
+     dynasty values loaded at all, and the UI still says "estimated": nobody
+     knows where a pick will land.
+
+Nine new assertions in `check:tradegrade`, including one that fails if the
+market curve is NOT live for this pool — otherwise every other pick test
+would be quietly exercising the fallback. A startup 1st now prices at 154
+points over replacement against a rookie 1st's 78.2.
+
 ### v0.447.0 — the week's number, from the model that made the season one
 
 Founder: "review the work for anything we can fill in with fidelity from

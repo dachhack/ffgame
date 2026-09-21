@@ -24,10 +24,12 @@
 //     Giving away a bench body is not a cost; the other side can sign the
 //     same production off the wire.
 //
-// PICKS AND DOLLARS. A future pick is valued as a FRACTION of a replacement
-// starter's season — a first is most of one, a fourth is a rounding error —
-// and the UI says "estimated" beside it, because nobody knows where a pick
-// will land. FAAB and cap dollars are reported as themselves rather than
+// PICKS AND DOLLARS. A pick is valued from data rather than from a constant
+// (v0.448.0): a STARTUP slot by the player who will still be on the board
+// when it comes round, a ROOKIE pick by what the dynasty market pays for it,
+// converted into this league's points through the pool itself. The UI still
+// says "estimated" beside it, because nobody knows where a pick will land.
+// FAAB and cap dollars are reported as themselves rather than
 // converted into points: a dollar is not a point, and pretending otherwise is
 // how a grade starts lying.
 //
@@ -37,6 +39,8 @@
 // never "you win".
 import { projectedPoints, leagueCatalogOf } from '../engine/projScoring';
 import { leagueSlotDefs, type ClassicSlotDef } from '../engine/classic';
+import { dynFor } from './dyn2026';
+import { pickMarketValue, type PickFormat } from './pickValues2026';
 
 // projectedPoints answers PER WEEK (the bake stores a weekly rate). A trade is
 // argued about in season points — "he is worth forty points to me over the
@@ -100,13 +104,98 @@ function replacementByPos(
   return out;
 }
 
-/** A future pick's estimated value, as a fraction of one replacement starter's
- *  season. Deliberately blunt and deliberately labelled: a first is most of a
- *  starter, a late rookie pick is nearly nothing. */
+// ── WHAT A PICK IS WORTH (v0.448.0) ──────────────────────────────────────
+// v0.444.0 priced a pick at an invented fraction of a replacement starter —
+// [0, 0.85, 0.45, 0.22, 0.1, 0.05] — with a comment admitting it was blunt.
+// It was the one number in this file that came from nowhere, inside a
+// feature whose entire argument is "you can disagree with the arithmetic".
+//
+// There are two kinds of pick in this app and they want two different
+// answers, neither of which needs inventing:
+//
+//   A STARTUP SLOT (0190) is a pick in a draft of THESE players. It is worth
+//   the player who will still be there when it comes round — which we can
+//   look up, because the pool and its projections are right here. No market,
+//   no curve, no estimate of an estimate: the 18th-best man left in a
+//   12-team league's second round is a row we can read.
+//
+//   A ROOKIE PICK is an asset in a draft that has not happened, of players
+//   who are not in the pool. What it is worth is what it TRADES for, and
+//   that is a market question with a market answer: the dynasty board
+//   (pickValues2026 — the same board, and the same scale, as dyn2026). We
+//   turn that market value into this league's own points by reading it off
+//   the pool: find the players who trade for about the same, and ask what
+//   THEY are worth over replacement here. A pick that trades for what the
+//   14th receiver trades for is worth what the 14th receiver is worth.
+//
+// The old share table survives as the fallback for a league with no dynasty
+// values loaded at all, which is the only case where neither answer exists.
 const PICK_SHARE = [0, 0.85, 0.45, 0.22, 0.1, 0.05];
-function pickValue(pick: GradePick, replacementStarter: number): number {
-  const share = PICK_SHARE[Math.min(Math.max(pick.round, 1), PICK_SHARE.length - 1)] ?? 0.02;
-  return Math.round(replacementStarter * share * 10) / 10;
+
+/** The market-value ↔ value-over-replacement curve, read off THIS league's
+ *  pool: one point per player the dynasty board prices and the projections
+ *  reach, sorted by market value. */
+function marketCurve(pool: GradePlayer[], repl: Map<string, number>): { v: number; vor: number }[] {
+  const pts: { v: number; vor: number }[] = [];
+  for (const p of pool) {
+    const v = dynFor(p.slug);
+    if (!v || v <= 0) continue;
+    const season = projectedPoints({ id: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeperId }) * WEEKS;
+    if (!Number.isFinite(season) || season <= 0) continue;
+    pts.push({ v, vor: Math.max(0, season - (repl.get(p.pos) ?? 0)) });
+  }
+  return pts.sort((a, b) => b.v - a.v);
+}
+
+/** Read a market value off that curve: the average value-over-replacement of
+ *  the players who trade for about the same. Several neighbours rather than
+ *  the single nearest one, because a dynasty value is a long-horizon opinion
+ *  and this season's projection is not — the players either side of a price
+ *  disagree, and the middle of them is the honest answer. */
+function vorForMarket(curve: { v: number; vor: number }[], v: number, neighbours = 9): number | null {
+  if (curve.length < 5) return null;
+  const near = curve
+    .map((c) => ({ vor: c.vor, d: Math.abs(c.v - v) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, neighbours);
+  return near.reduce((a, c) => a + c.vor, 0) / near.length;
+}
+
+interface PickCtx {
+  replacementStarter: number;
+  /** Every projected player in the pool, best first — a startup slot drafts
+   *  from exactly this. */
+  board: number[];
+  curve: { v: number; vor: number }[];
+  teams: number;
+  fmt: PickFormat;
+  season: number;
+}
+
+/** A pick's value, in this league's projected points over replacement. */
+function pickValue(pick: GradePick, ctx: PickCtx): number {
+  const round = Math.max(1, Math.round(pick.round));
+  // A STARTUP SLOT: the man still sitting there when it comes round. The
+  // middle of the round, because the slot within it is not passed here —
+  // the same "an unknown slot is the middle" rule the market side uses.
+  if (pick.kind === 'startup' && ctx.board.length) {
+    const idx = Math.round((round - 1) * ctx.teams + ctx.teams / 2) - 1;
+    const pts = ctx.board[Math.min(Math.max(idx, 0), ctx.board.length - 1)];
+    // Over replacement, like every other line in this grade. A slot deep
+    // enough to draft a replacement-level player is worth nothing, which is
+    // right: that production is on the wire for free.
+    if (Number.isFinite(pts)) return Math.max(0, Math.round((pts - ctx.replacementStarter) * 10) / 10);
+  }
+  // A ROOKIE PICK: what the market pays, priced in this league's points.
+  const mv = pickMarketValue(pick.season ?? ctx.season, round, ctx.fmt);
+  if (mv != null) {
+    const vor = vorForMarket(ctx.curve, mv);
+    if (vor != null) return Math.round(vor * 10) / 10;
+  }
+  // No board and no curve: the old blunt share, kept so a league with no
+  // dynasty data at all still gets a number rather than a zero.
+  const share = PICK_SHARE[Math.min(round, PICK_SHARE.length - 1)] ?? 0.02;
+  return Math.round(ctx.replacementStarter * share * 10) / 10;
 }
 
 export function gradeTrade(opts: {
@@ -122,6 +211,9 @@ export function gradeTrade(opts: {
   slots?: { roster?: unknown; slots?: unknown } | null;
   /** The league's scoring, so a TE-premium league says so in the numbers. */
   scoring?: unknown;
+  /** The league's season, so a pick for "next year" is priced as next
+   *  year's. Defaults to the calendar year. */
+  season?: number;
 }): GradeResult {
   if (opts.scoring !== undefined) leagueCatalogOf(opts.scoring as never);
   const slotDefs = leagueSlotDefs(opts.slots as never) ?? [];
@@ -142,8 +234,26 @@ export function gradeTrade(opts: {
   };
   const outLines = (opts.send.players ?? []).map(line);
   const inLines = (opts.receive.players ?? []).map(line);
-  const outPicks = (opts.send.picks ?? []).reduce((a, p) => a + pickValue(p, replStarter), 0);
-  const inPicks = (opts.receive.picks ?? []).reduce((a, p) => a + pickValue(p, replStarter), 0);
+  // What the picks are priced against (v0.448.0): the board a startup slot
+  // drafts from, the market curve a rookie pick is read off, and which of
+  // the market's two formats this lineup is. A league that starts more
+  // quarterbacks than it has teams is a superflex market, which is the same
+  // fact the replacement line above already moves on — no special case, one
+  // question asked twice.
+  const qbSpots = slotDefs.filter((s) => ((s.pos ?? []) as string[]).includes('QB')).length;
+  const pickCtx: PickCtx = {
+    replacementStarter: replStarter,
+    board: (opts.pool ?? [])
+      .map((p) => projectedPoints({ id: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeperId }) * WEEKS)
+      .filter((v) => Number.isFinite(v) && v > 0)
+      .sort((a, b) => b - a),
+    curve: marketCurve(opts.pool ?? [], repl),
+    teams: Math.max(opts.teams || 10, 2),
+    fmt: qbSpots > 1 ? 'sf' : '1qb',
+    season: opts.season ?? new Date().getFullYear(),
+  };
+  const outPicks = (opts.send.picks ?? []).reduce((a, p) => a + pickValue(p, pickCtx), 0);
+  const inPicks = (opts.receive.picks ?? []).reduce((a, p) => a + pickValue(p, pickCtx), 0);
   const out = outLines.reduce((a, l) => a + l.value, 0) + outPicks;
   const inV = inLines.reduce((a, l) => a + l.value, 0) + inPicks;
   const delta = Math.round((inV - out) * 10) / 10;
