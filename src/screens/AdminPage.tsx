@@ -46,7 +46,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, ScoresPanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, ScoresPanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -300,7 +300,7 @@ export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
-  | 'activity' | 'buffs' | 'delete';
+  | 'activity' | 'buffs' | 'awards' | 'delete';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -1442,6 +1442,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         // The commissioner's kit (0141/0143/0144) — note, flags, scoring
         // adjustments. Any league kind; the same editors the ⚑ banner opens.
         { id: 'kit', label: '⚑ COMMISH KIT' },
+        // 0325: the league's own weekly awards and badges. ENGAGE, not RUN
+        // THE SEASON — nothing here changes a result, it changes the jokes.
+        { id: 'awards', label: '🏅 AWARDS & BADGES' },
         ...(has('activity') ? [{ id: 'activity', label: '👁 ACTIVITY' } as TabDef<LeagueTab>] : []),
         ...(has('buffs') && !classic ? [{ id: 'buffs', label: '◈ POWER-UPS' } as TabDef<LeagueTab>] : []),
       ],
@@ -1531,6 +1534,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {/* the commissioner's kit — note / player flags / scoring adjustments */}
       {tab === 'kit' && <CommishToolsPanel leagueId={l.league_id} />}
+
+      {tab === 'awards' && <AwardsPanel leagueId={l.league_id} />}
 
       {/* the in-app draft room, embedded (native leagues only) */}
       {tab === 'draft' && l.provider === 'native' && (

@@ -4,12 +4,14 @@
 // order, the median game, a final week's scores, and dues — plus 0321's trade
 // floor. Each card loads its own state and saves on the tap.
 import { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, View, Alert } from 'react-native';
+import { StyleSheet, Text, TextInput, View, Alert } from 'react-native';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, adminLeagueMembers, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
-  type TradeReview,
+  leagueAwards, commishSetAward, commishDeleteAward,
+  commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
+  type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
@@ -179,6 +181,138 @@ export function WaiverOrderCard({ leagueId }: { leagueId: string }) {
       </Row>
       <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
         Every regular-season week each team also plays the league's median score: above it a win, below it a loss. Points are untouched.
+      </Mono>
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── The league's own awards and badges (0325) ────────────────────────────────
+// Three choices make an award — what it measures, which end wins, and whether
+// it only counts a win or a loss. Between them they cover every award a league
+// has ever invented, including "highest score that still lost", which is the
+// one every league writes into its group chat and no platform lets it write
+// down. A league that configures nothing runs four built-ins; the first save
+// writes them down so renaming one does not delete the others.
+const AW_METRICS: [AwardDef['metric'], string][] = [
+  ['points', 'THEIR SCORE'], ['points_against', 'GAVE UP'],
+  ['margin', 'MARGIN'], ['combined', 'GAME TOTAL'],
+];
+const AW_ONLYS: [AwardDef['only_result'], string][] = [['any', 'ANY'], ['win', 'A WIN'], ['loss', 'A LOSS']];
+
+export function AwardsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<LeagueAwards | null>(null);
+  const [teams, setTeams] = useState<{ roster_id: number; team: string | null }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [newAward, setNewAward] = useState({ name: '', icon: '🏅' });
+  const [newBadge, setNewBadge] = useState({ name: '', icon: '🎖' });
+  const [pinOn, setPinOn] = useState<Record<string, number | null>>({});
+  const load = () => Promise.all([
+    leagueAwards(leagueId).then((r) => { if (!r.error) setSt(r); else setMsg(friendlyError(r.error)); }),
+    nativeTeamState(leagueId).then((x) => setTeams((x.waiver_order ?? []).map((w) => ({ roster_id: w.roster_id, team: w.team })))),
+  ]).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const run = async (f: () => Promise<{ ok: boolean; error?: string }>, done = '✓ saved') => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await f(); if (r.ok) { commit(); setMsg(done); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); } }
+    catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const awards = st?.awards ?? [];
+  const badges = st?.badges ?? [];
+  const grants = st?.grants ?? [];
+  const slug = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  return (
+    <Card>
+      <LabelInfo label="WEEKLY AWARDS" info={'Three choices make an award: what it measures, which end of it wins, and whether it only counts a win or a loss. "Highest score that still lost" is THEIR SCORE · MOST · A LOSS. Handed out when every game of a week is final, and announced in chat.'} />
+      {awards.some((a) => a.is_default) && (
+        <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
+          These four are the built-ins. Change any of them and they become yours.
+        </Mono>
+      )}
+      {awards.map((a) => (
+        <View key={a.key} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 6, marginTop: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: fs(15) }}>{a.icon}</Text>
+            <TextInput defaultValue={a.name} key={`${a.key}-${a.name}`}
+              onEndEditing={(e) => { const v = e.nativeEvent.text.trim(); if (v && v !== a.name) void run(() => commishSetAward(leagueId, a.key, { name: v })); }}
+              style={{ ...inputStyle(t, 150), flex: 1 }} />
+            <Chip label={a.direction === 'high' ? 'MOST' : 'LEAST'} on
+              onPress={() => { tap(); void run(() => commishSetAward(leagueId, a.key, { direction: a.direction === 'high' ? 'low' : 'high' })); }} />
+            <Chip label="✕" onPress={() => { tap(); void run(() => commishDeleteAward(leagueId, a.key), '✓ retired'); }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+            {AW_METRICS.map(([m, label]) => (
+              <Chip key={m} label={label} on={a.metric === m}
+                onPress={() => { tap(); void run(() => commishSetAward(leagueId, a.key, { metric: m })); }} />
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+            {AW_ONLYS.map(([o, label]) => (
+              <Chip key={o} label={label} on={a.only_result === o}
+                onPress={() => { tap(); void run(() => commishSetAward(leagueId, a.key, { onlyResult: o })); }} />
+            ))}
+            <Mono size={8.5} tone="faint">PRIZE</Mono>
+            <TextInput defaultValue={String(a.coin ?? 0)} key={`${a.key}-coin-${a.coin}`} keyboardType="number-pad"
+              onEndEditing={(e) => { const n = Number(e.nativeEvent.text.replace(/[^0-9]/g, '')) || 0; if (n !== a.coin) void run(() => commishSetAward(leagueId, a.key, { coin: n })); }}
+              style={inputStyle(t, 60)} />
+          </View>
+        </View>
+      ))}
+      <Row>
+        <TextInput value={newAward.icon} onChangeText={(v) => setNewAward({ ...newAward, icon: v })} placeholder="🏅"
+          placeholderTextColor={t.faint} style={inputStyle(t, 48)} />
+        <TextInput value={newAward.name} onChangeText={(v) => setNewAward({ ...newAward, name: v })} placeholder="The Brown Jug"
+          placeholderTextColor={t.faint} style={{ ...inputStyle(t, 150), flex: 1 }} />
+        <Chip label="＋ ADD" on disabled={busy || !newAward.name.trim()}
+          onPress={() => { tap(); void run(async () => {
+            const r = await commishSetAward(leagueId, slug(newAward.name), { name: newAward.name.trim(), icon: newAward.icon.trim() || '🏅' });
+            if (r.ok) setNewAward({ name: '', icon: '🏅' });
+            return r;
+          }, '✓ added'); }} />
+      </Row>
+
+      <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 16 }}>BADGES</Mono>
+      {badges.map((b) => (
+        <View key={b.key} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 6, marginTop: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: fs(15) }}>{b.icon}</Text>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: t.text }}>{b.name}</Text>
+            <Chip label="✕" onPress={() => { tap(); void run(() => commishDeleteBadge(leagueId, b.key), '✓ deleted'); }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+            {teams.map((x) => (
+              <Chip key={x.roster_id} label={x.team ?? `Team ${x.roster_id}`} on={pinOn[b.key] === x.roster_id}
+                onPress={() => { tap(); setPinOn({ ...pinOn, [b.key]: x.roster_id }); }} />
+            ))}
+            <Chip label="PIN" on disabled={busy || pinOn[b.key] == null}
+              onPress={() => { tap(); const rid = pinOn[b.key]; if (rid != null) void run(() => commishGrantBadge(leagueId, rid, b.key), '✓ pinned'); }} />
+          </View>
+        </View>
+      ))}
+      {grants.map((g) => (
+        <View key={`${g.key}-${g.roster_id}-${g.season}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>{g.icon} {g.name} · {g.team} · {g.season}</Text>
+          <Chip label="take it back" onPress={() => { tap(); void run(() => commishRevokeBadge(leagueId, g.roster_id, g.key, g.season), '✓ taken back'); }} />
+        </View>
+      ))}
+      <Row>
+        <TextInput value={newBadge.icon} onChangeText={(v) => setNewBadge({ ...newBadge, icon: v })} placeholder="🐐"
+          placeholderTextColor={t.faint} style={inputStyle(t, 48)} />
+        <TextInput value={newBadge.name} onChangeText={(v) => setNewBadge({ ...newBadge, name: v })} placeholder="The GOAT"
+          placeholderTextColor={t.faint} style={{ ...inputStyle(t, 150), flex: 1 }} />
+        <Chip label="＋ ADD" on disabled={busy || !newBadge.name.trim()}
+          onPress={() => { tap(); void run(async () => {
+            const r = await commishSetBadge(leagueId, slug(newBadge.name), { name: newBadge.name.trim(), icon: newBadge.icon.trim() || '🎖' });
+            if (r.ok) setNewBadge({ name: '', icon: '🎖' });
+            return r;
+          }, '✓ added'); }} />
+      </Row>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
+        Each badge is stamped with the season it was earned, so the same one can be won again next year. They ride every manager's line in 🏛 League history.
       </Mono>
       <Note msg={msg} />
     </Card>

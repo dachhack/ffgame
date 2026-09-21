@@ -11,7 +11,10 @@
 // weeks for single-week scores, preseason nowhere. This only draws it.
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, Text } from 'react-native';
-import { leagueHistory, type LeagueHistory as History, type HistorySeason } from '@drip/core/data/liveApi';
+import {
+  leagueHistory, leagueAwards,
+  type LeagueHistory as History, type HistorySeason, type LeagueAwards,
+} from '@drip/core/data/liveApi';
 import { useTheme, fs } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
@@ -21,11 +24,15 @@ const pts = (n: number) => Math.round(n * 10) / 10;
 export function LeagueHistoryView({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [h, setH] = useState<History | null>(null);
+  const [aw, setAw] = useState<LeagueAwards | null>(null);
   const [season, setSeason] = useState<string | null>(null);
 
   useEffect(() => {
     let on = true;
     leagueHistory(leagueId).then((r) => { if (on) setH(r); }).catch(() => { if (on) setH({ error: 'could not load' }); });
+    // 0325: the trophy case rides the same screen — the week's awards are the
+    // living end of the same story the champions band tells.
+    leagueAwards(leagueId).then((r) => { if (on) setAw(r); }).catch(() => {});
     return () => { on = false; };
   }, [leagueId]);
 
@@ -82,6 +89,27 @@ export function LeagueHistoryView({ leagueId }: { leagueId: string }) {
         ))}
       </View>
 
+      {/* ── THE WEEK'S AWARDS (0325) ── */}
+      {(aw?.weeks ?? []).length > 0 && (
+        <View>
+          <Mono size={9} tone="faint" track={0.12}>🏅 AWARDS</Mono>
+          {(aw?.weeks ?? []).slice(0, 3).map((w) => (
+            <View key={w.week} style={{ paddingTop: 6 }}>
+              <Mono size={7.5} tone="faint" track={0.1}>WEEK {w.week}</Mono>
+              {(w.wins ?? []).map((x) => (
+                <View key={`${x.key}-${x.roster_id}`} style={row}>
+                  <Text style={{ fontSize: fs(13), width: 22 }}>{x.icon}</Text>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
+                    {x.name} <Text style={{ color: t.faint }}>· {x.team ?? `Team ${x.roster_id}`}</Text>
+                  </Text>
+                  {x.value != null && <Mono size={10.5} tone="you" weight="700">{pts(Number(x.value))}</Mono>}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* ── ALL-TIME ── */}
       {(h.managers ?? []).length > 0 && anyGames && (
         <View>
@@ -94,7 +122,13 @@ export function LeagueHistoryView({ leagueId }: { leagueId: string }) {
           </View>
           {(h.managers ?? []).map((m) => (
             <View key={m.manager} style={row}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>{m.team ?? m.manager}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
+                {m.team ?? m.manager}
+                {/* 0325: the badges this league pinned on them, and the
+                    weekly-award count — the trophy case in one line. */}
+                {(m.badges ?? []).length > 0 ? ` ${(m.badges ?? []).map((bd) => bd.icon).join('')}` : ''}
+                {m.awards ? <Text style={{ color: t.faint }}>{` 🏅${m.awards}`}</Text> : null}
+              </Text>
               <Mono size={10.5} weight="700" style={{ width: 52, textAlign: 'right' }}>{m.w}-{m.l}{m.t ? `-${m.t}` : ''}</Mono>
               <Mono size={10} tone="dim" style={{ width: 52, textAlign: 'right' }}>{pts(m.pf)}</Mono>
               <Mono size={10.5} tone={m.titles > 0 ? 'warn' : 'faint'} weight="700" style={{ width: 40, textAlign: 'right' }}>

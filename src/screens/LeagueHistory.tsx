@@ -11,7 +11,10 @@
 // server decides what counts (regular-season finals for records, playoff
 // weeks for single-week scores, preseason nowhere) — this only draws it.
 import { useEffect, useState } from 'react';
-import { leagueHistory, type LeagueHistory as History, type HistorySeason } from '@drip/core/data/liveApi';
+import {
+  leagueHistory, leagueAwards,
+  type LeagueHistory as History, type HistorySeason, type LeagueAwards,
+} from '@drip/core/data/liveApi';
 
 const card: React.CSSProperties = {
   background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 12, marginBottom: 12,
@@ -25,11 +28,15 @@ const pts = (n: number) => Math.round(n * 10) / 10;
 
 export function LeagueHistory({ leagueId }: { leagueId: string }) {
   const [h, setH] = useState<History | null>(null);
+  const [aw, setAw] = useState<LeagueAwards | null>(null);
   const [season, setSeason] = useState<string | null>(null);
 
   useEffect(() => {
     let on = true;
     leagueHistory(leagueId).then((r) => { if (on) setH(r); }).catch(() => { if (on) setH({ error: 'could not load' }); });
+    // 0325: the trophy case rides the same screen — the week's awards are the
+    // living end of the same story the champions band tells.
+    leagueAwards(leagueId).then((r) => { if (on) setAw(r); }).catch(() => {});
     return () => { on = false; };
   }, [leagueId]);
 
@@ -65,6 +72,37 @@ export function LeagueHistory({ leagueId }: { leagueId: string }) {
         ))}
       </div>
 
+      {/* ── THE WEEK'S AWARDS (0325). Newest week first, and only as many as
+          fit a glance — the whole run is the league's own chat history. ── */}
+      {(aw?.weeks ?? []).length > 0 && (
+        <div style={card}>
+          <div style={hdr}>🏅 AWARDS</div>
+          {(aw?.weeks ?? []).slice(0, 3).map((w) => (
+            <div key={w.week} style={{ paddingTop: 6 }}>
+              <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>WEEK {w.week}</div>
+              {(w.wins ?? []).map((x) => (
+                <div key={`${x.key}-${x.roster_id}`} style={row}>
+                  <span style={{ fontSize: 13, width: 20 }}>{x.icon}</span>
+                  <span style={{ ...cell, fontSize: 11.5 }}>
+                    {x.name} <span style={{ color: 'var(--faint)' }}>· {x.team ?? `Team ${x.roster_id}`}</span>
+                  </span>
+                  {x.value != null && <span className="mono" style={{ ...num, color: 'var(--you)' }}>{pts(Number(x.value))}</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+          {/* The season's trophy count, so "who has the most" is one look. */}
+          {(aw?.counts ?? []).length > 0 && (
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.6 }}>
+              {Object.entries((aw?.counts ?? []).reduce<Record<string, number>>((acc, c) => {
+                const k = c.team ?? `Team ${c.roster_id}`;
+                acc[k] = (acc[k] ?? 0) + c.n; return acc;
+              }, {})).sort((a, b) => b[1] - a[1]).map(([team, n]) => `${team} 🏅${n}`).join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── ALL-TIME. Champions first — that is the argument this table is
           for — then wins, then points. ── */}
       {(h.managers ?? []).length > 0 && anyGames && (
@@ -79,7 +117,17 @@ export function LeagueHistory({ leagueId }: { leagueId: string }) {
           </div>
           {(h.managers ?? []).map((m) => (
             <div key={m.manager} style={row}>
-              <span style={cell}>{m.team ?? m.manager}</span>
+              <span style={cell}>
+                {m.team ?? m.manager}
+                {/* 0325: the badges this league pinned on them, and the
+                    weekly-award count — the trophy case in one line. */}
+                {(m.badges ?? []).length > 0 && (
+                  <span title={(m.badges ?? []).map((b) => `${b.name}${b.season ? ` (${b.season})` : ''}`).join(' · ')}>
+                    {' '}{(m.badges ?? []).map((b) => b.icon).join('')}
+                  </span>
+                )}
+                {!!m.awards && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}> 🏅{m.awards}</span>}
+              </span>
               <span className="mono" style={{ ...num, width: 34, textAlign: 'right', color: 'var(--dim)' }}>{m.seasons}</span>
               <span className="mono" style={{ ...num, width: 58, textAlign: 'right' }}>{m.w}-{m.l}{m.t ? `-${m.t}` : ''}</span>
               <span className="mono" style={{ ...num, width: 62, textAlign: 'right', color: 'var(--dim)' }}>{pts(m.pf)}</span>

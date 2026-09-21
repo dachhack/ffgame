@@ -6,6 +6,7 @@
 //   · WaiverOrderPanel   — the waiver order, set at once (WAIVERS & TRADES)
 //   · MedianGamePanel    — the extra game against the league median (same)
 //   · TradeFloorPanel    — 0321: the review mode, the vote and the offer clock (same)
+//   · AwardsPanel        — 0325: the league's own weekly awards and badges (ENGAGE)
 //   · ScoresPanel        — a final week's scores, edited by hand (MATCHUPS)
 //   · DuesPanel          — dues, and who has paid (SEATS)
 // Every panel loads its own state and saves on the click, the way the pick-
@@ -16,7 +17,9 @@ import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
-  type TradeReview,
+  leagueAwards, commishSetAward, commishDeleteAward,
+  commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
+  type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
@@ -269,6 +272,138 @@ export function TradeFloorPanel({ leagueId }: { leagueId: string }) {
           disabled={busy || faab === null} className="mono" style={btn(faab === true)}>{faab ? 'ON' : 'OFF'}</button>
       </div>
       <div style={{ ...small, marginTop: 6 }}>With the league voting, an accepted trade waits out its window while every team outside it may veto or allow. It dies the moment the vetoes reach the bar, and goes through as soon as they cannot. You can still rule over a vote in progress. FAAB trading applies to FAAB leagues only.</div>
+    </div>
+  );
+}
+
+// ── The league's own awards and badges (0325) ────────────────────────────────
+// Three choices make an award — what it measures, which end of it wins, and
+// whether it only counts a win or a loss — and between them they cover every
+// award a league has ever invented: HIGH SCORE is points/high/any, the sad
+// sack is points/low/any, and "highest score that still lost" is
+// points/high/loss, which is the one every league writes into its group chat
+// and no platform lets it write down.
+//
+// A league that has configured nothing runs four built-ins, marked as such
+// here; the first save writes them down as real rows so renaming one does not
+// delete the others.
+const METRICS: [AwardDef['metric'], string][] = [
+  ['points', 'their score'], ['points_against', 'what they gave up'],
+  ['margin', 'the margin'], ['combined', 'the game total'],
+];
+const ONLYS: [AwardDef['only_result'], string][] = [['any', 'ANY WEEK'], ['win', 'A WIN'], ['loss', 'A LOSS']];
+
+export function AwardsPanel({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<LeagueAwards | null>(null);
+  const [teams, setTeams] = useState<{ roster_id: number; team: string | null }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ key: string; name: string; icon: string }>({ key: '', name: '', icon: '🏅' });
+  const [badge, setBadge] = useState<{ key: string; name: string; icon: string }>({ key: '', name: '', icon: '🎖' });
+  const [grantTo, setGrantTo] = useState<Record<string, number | ''>>({});
+  const load = () => Promise.all([
+    leagueAwards(leagueId).then((r) => { if (!r.error) setSt(r); else setMsg(r.error); }),
+    nativeTeamState(leagueId).then((t) => setTeams((t.waiver_order ?? []).map((w) => ({ roster_id: w.roster_id, team: w.team })))),
+  ]).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const run = async (f: () => Promise<{ ok: boolean; error?: string }>, done = '✓ saved') => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await f(); setMsg(r.ok ? done : r.error ?? 'failed'); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const awards = st?.awards ?? [];
+  const badges = st?.badges ?? [];
+  const grants = st?.grants ?? [];
+  const isDefault = awards.some((a) => a.is_default);
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>WEEKLY AWARDS</div>
+      {isDefault && (
+        <div style={{ ...small, marginTop: 2 }}>These four are the built-ins. Change any of them and they become yours — rename them, repoint them, switch them off, add your own.</div>
+      )}
+      {awards.map((a) => (
+        <div key={a.key} style={{ ...row, flexWrap: 'wrap' }}>
+          <input value={a.icon} onChange={(e) => void run(() => commishSetAward(leagueId, a.key, { icon: e.target.value }))}
+            style={{ ...inp, width: 40, fontSize: 15, padding: '3px 5px', textAlign: 'center' }} />
+          <input defaultValue={a.name} key={`${a.key}-${a.name}`}
+            onBlur={(e) => { if (e.target.value.trim() && e.target.value !== a.name) void run(() => commishSetAward(leagueId, a.key, { name: e.target.value })); }}
+            style={{ ...inp, flex: '1 1 140px', fontSize: 13, padding: '4px 6px' }} />
+          <select value={a.metric} onChange={(e) => void run(() => commishSetAward(leagueId, a.key, { metric: e.target.value as AwardDef['metric'] }))}
+            className="mono" style={{ ...inp, fontSize: 12, padding: '4px 6px' }}>
+            {METRICS.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
+          </select>
+          <button onClick={() => void run(() => commishSetAward(leagueId, a.key, { direction: a.direction === 'high' ? 'low' : 'high' }))}
+            disabled={busy} className="mono" style={btn(a.direction === 'high')}>{a.direction === 'high' ? 'MOST' : 'LEAST'}</button>
+          <select value={a.only_result} onChange={(e) => void run(() => commishSetAward(leagueId, a.key, { onlyResult: e.target.value as AwardDef['only_result'] }))}
+            className="mono" style={{ ...inp, fontSize: 12, padding: '4px 6px' }}>
+            {ONLYS.map(([o, label]) => <option key={o} value={o}>{label}</option>)}
+          </select>
+          <input defaultValue={String(a.coin ?? 0)} key={`${a.key}-coin-${a.coin}`} title="drip coin paid to the winner"
+            onBlur={(e) => { const n = Number(e.target.value.replace(/[^0-9]/g, '')) || 0; if (n !== a.coin) void run(() => commishSetAward(leagueId, a.key, { coin: n })); }}
+            style={{ ...inp, width: 54, fontSize: 12, padding: '4px 6px' }} />
+          <button onClick={() => void run(() => commishSetAward(leagueId, a.key, { active: false }), '✓ switched off')}
+            disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--dim)' }}>off</button>
+          <button onClick={() => { if (window.confirm(`Retire ${a.name}? What it has already handed out is kept.`)) void run(() => commishDeleteAward(leagueId, a.key), '✓ retired'); }}
+            disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        <input value={draft.icon} onChange={(e) => setDraft({ ...draft, icon: e.target.value })} placeholder="🏅"
+          style={{ ...inp, width: 40, fontSize: 15, padding: '3px 5px', textAlign: 'center' }} />
+        <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="The Brown Jug"
+          style={{ ...inp, fontSize: 13, padding: '4px 6px', width: 200 }} />
+        <button onClick={() => void run(async () => {
+          const key = draft.key.trim() || draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+          const r = await commishSetAward(leagueId, key, { name: draft.name.trim(), icon: draft.icon.trim() || '🏅' });
+          if (r.ok) setDraft({ key: '', name: '', icon: '🏅' });
+          return r;
+        }, '✓ added')} disabled={busy || !draft.name.trim()} className="mono" style={btn(true)}>＋ add an award</button>
+        {note(msg)}
+      </div>
+      <div style={{ ...small, marginTop: 6 }}>Handed out when every game of a week is final — the league hears about it in chat. A prize in coin is optional and paid once. Switching an award off or retiring it keeps every trophy it has already given.</div>
+
+      <div style={{ ...subhead, marginTop: 14 }}>BADGES</div>
+      {badges.map((b) => (
+        <div key={b.key} style={{ ...row, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 15, width: 24, textAlign: 'center' }}>{b.icon}</span>
+          <span style={cell}>{b.name}{b.note ? <span style={{ color: 'var(--faint)' }}> · {b.note}</span> : null}</span>
+          <select value={grantTo[b.key] ?? ''} onChange={(e) => setGrantTo({ ...grantTo, [b.key]: e.target.value === '' ? '' : Number(e.target.value) })}
+            className="mono" style={{ ...inp, fontSize: 12, padding: '4px 6px' }}>
+            <option value="">pin on…</option>
+            {teams.map((t) => <option key={t.roster_id} value={t.roster_id}>{t.team ?? `Team ${t.roster_id}`}</option>)}
+          </select>
+          <button onClick={() => { const rid = grantTo[b.key]; if (rid !== '' && rid != null) void run(() => commishGrantBadge(leagueId, rid, b.key), '✓ pinned'); }}
+            disabled={busy || grantTo[b.key] === '' || grantTo[b.key] == null} className="mono" style={btn(true)}>pin</button>
+          <button onClick={() => { if (window.confirm(`Delete ${b.name}? Everyone holding it loses it.`)) void run(() => commishDeleteBadge(leagueId, b.key), '✓ deleted'); }}
+            disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
+        </div>
+      ))}
+      {grants.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          {grants.map((g) => (
+            <div key={`${g.key}-${g.roster_id}-${g.season}`} style={row}>
+              <span style={cell}>{g.icon} {g.name} <span style={{ color: 'var(--faint)' }}>· {g.team} · {g.season}</span></span>
+              <button onClick={() => void run(() => commishRevokeBadge(leagueId, g.roster_id, g.key, g.season), '✓ taken back')}
+                disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>take it back</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        <input value={badge.icon} onChange={(e) => setBadge({ ...badge, icon: e.target.value })} placeholder="🐐"
+          style={{ ...inp, width: 40, fontSize: 15, padding: '3px 5px', textAlign: 'center' }} />
+        <input value={badge.name} onChange={(e) => setBadge({ ...badge, name: e.target.value })} placeholder="The GOAT"
+          style={{ ...inp, fontSize: 13, padding: '4px 6px', width: 200 }} />
+        <button onClick={() => void run(async () => {
+          const key = badge.key.trim() || badge.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+          const r = await commishSetBadge(leagueId, key, { name: badge.name.trim(), icon: badge.icon.trim() || '🎖' });
+          if (r.ok) setBadge({ key: '', name: '', icon: '🎖' });
+          return r;
+        }, '✓ added')} disabled={busy || !badge.name.trim()} className="mono" style={btn(true)}>＋ add a badge</button>
+      </div>
+      <div style={{ ...small, marginTop: 6 }}>Badges are yours to hand out and take back. Each one is stamped with the season it was earned, so the same badge can be won again next year, and they ride every manager's line in 🏛 League history.</div>
     </div>
   );
 }

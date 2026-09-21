@@ -18,6 +18,56 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.441.0 — the league writes its own trophies
+
+The last piece of the history row. Sleeper posts weekly awards to chat,
+Yahoo and ESPN hand out achievement badges — all three with a FIXED set.
+Here the set is the league's, because the joke is the point: a league that
+calls its low-score award THE BROWN JUG and pays it 50 coins is a league
+with an inside joke, and that is the feature. 0325.
+
+  1. THE RULE GRAMMAR. An award is three choices — metric (their score, what
+     they gave up, the margin, the game total) × direction (most, least) ×
+     only (any week, a win, a loss) — and between them they cover every award
+     a league has ever invented. High score is points/most/any. The sad sack
+     is points/least/any. "Highest score that still LOST" is
+     points/most/loss, the one every league writes into its group chat and no
+     platform lets it write down. Ties award everybody tied, because a tie IS
+     the story that week. An award may carry a drip-coin prize, paid once.
+  2. DEFAULTS THAT ARE NOT SETTINGS. A league with nothing configured runs
+     four built-ins (🔥 High Score, 💤 Low Score, 🔨 Biggest Beating, 💔 Tough
+     Luck), so this works the week it ships. The first edit MATERIALIZES them
+     as rows — renaming one does not delete the other three — and deleting
+     them all means no awards, which is a real choice and is honoured.
+  3. BADGES. Commissioner-defined (🐐, 🤡, PAID HIS DUES), pinned on a seat
+     and stamped with the season, so the same badge can be won again next
+     year without erasing this year's. Handed out and taken back by hand,
+     announced in chat, and carried on every manager's line in 🏛 League
+     history beside their weekly-award count.
+  4. WHEN. award_week runs a league-week only once every game in it is
+     final — half a week has no high score — is idempotent, and is
+     RE-RUNNABLE: an award added in week 9 fills in the weeks behind it
+     without disturbing what they already gave. Preseason (101+) hands out
+     nothing. The worker sweeps it (award_sweep, server/src/native.js).
+     A retired award keeps every trophy it gave: the case is a record of what
+     happened, not of what the rules now say.
+
+CONSOLES. 🏅 AWARDS & BADGES under ENGAGE on both — the rule grammar as three
+rows of chips per award, an emoji and a name you can type over, a prize
+field, and the badge maker with a team picker to pin one
+(src/screens/CommishDesk.tsx, apps/mobile/src/ui/CommishDesk.tsx). The
+history screen grew an AWARDS block (the last three weeks, plus the season's
+trophy count) and puts each manager's badges and 🏅count on their all-time
+line.
+
+Probes: scripts/db/award-probes.sql (wired into the scratch runner) — the
+built-in four, each corner of the rule grammar, ties, an unfinished week,
+preseason, idempotency, a late award filling in an old week, the prize paid
+once, the first edit materializing the defaults, a retired award keeping its
+wins, badges granted and revoked, and the trophy case in the history. 101
+suites pass beside it; the three that do not fail identically on main. Web
+and mobile typecheck.
+
 ### v0.440.0 — the record book
 
 The gap list's third priority, and the one it called "a screen, not a

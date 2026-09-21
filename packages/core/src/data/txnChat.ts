@@ -41,6 +41,9 @@ export function txnLook(txn: TxnPayload | null | undefined): TxnLook {
     case 'trade':  return { icon: '🤝', tone: 'warn', label: 'TRADE' };
     // 0321: a trade out for a league vote, and the ruling the floor gave it.
     case 'vote':   return { icon: '🗳', tone: 'warn', label: 'TRADE VOTE' };
+    // 0325: the week's awards, and a badge the commissioner pinned on somebody.
+    case 'award':  return { icon: '🏅', tone: 'you',  label: 'AWARDS' };
+    case 'badge':  return { icon: '🎖', tone: 'you',  label: 'BADGE' };
     default:       return { icon: '·',  tone: 'dim',  label: 'MOVE' };
   }
 }

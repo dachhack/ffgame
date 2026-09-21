@@ -2207,6 +2207,82 @@ export const commishSetTradeRules = (
       p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
     }), Ev.commishAction, { tool: 'trade_rules' });
 
+// ── Weekly awards and badges (0325) ──────────────────────────────────────────
+/** An award DEFINITION: three choices that between them cover everything a
+ *  week's scores can say about a team. `is_default` marks the built-in four a
+ *  league gets until it changes one. */
+export interface AwardDef {
+  key: string; name: string; icon: string;
+  metric: 'points' | 'points_against' | 'margin' | 'combined';
+  direction: 'high' | 'low';
+  /** Count every week, only wins, or only losses — "highest score that still
+   *  lost" is points/high/loss. */
+  only_result: 'any' | 'win' | 'loss';
+  /** An optional drip-coin prize paid to the winner (0 = a trophy only). */
+  coin: number; sort: number; is_default: boolean;
+}
+export interface AwardWin { key: string; name: string; icon: string; roster_id: number; team: string | null; value: number | null; }
+export interface BadgeDef { key: string; name: string; icon: string; note: string | null; sort: number; }
+export interface BadgeGrant { key: string; roster_id: number; season: string; note: string | null; team: string | null; icon: string | null; name: string | null; }
+export interface LeagueAwards {
+  ok?: boolean; error?: string;
+  awards?: AwardDef[];
+  badges?: BadgeDef[];
+  grants?: BadgeGrant[];
+  /** The recent weeks, newest first. */
+  weeks?: { week: number; wins: AwardWin[] }[];
+  /** How many of each award each seat has won this season. */
+  counts?: { roster_id: number; team: string | null; key: string; icon: string; name: string; n: number }[];
+}
+export const leagueAwards = (leagueId: string, weeks = 6) =>
+  rpc<LeagueAwards>('league_awards', { p_league_id: leagueId, p_weeks: weeks });
+/** Commissioner: add or change one award. The key is the identity — an
+ *  existing key edits, a new one adds — and nulls leave a field alone, so a
+ *  console can save one field at a time. The first edit writes the built-in
+ *  four down as real rows, so renaming one does not delete the others. */
+export const commishSetAward = (
+  leagueId: string, key: string,
+  a: { name?: string; icon?: string; metric?: AwardDef['metric']; direction?: AwardDef['direction'];
+       onlyResult?: AwardDef['only_result']; coin?: number; active?: boolean; sort?: number; note?: string } = {},
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; key?: string }>('commish_set_award', {
+    p_league_id: leagueId, p_key: key,
+    p_name: a.name ?? null, p_icon: a.icon ?? null, p_metric: a.metric ?? null,
+    p_direction: a.direction ?? null, p_only_result: a.onlyResult ?? null,
+    p_coin: a.coin ?? null, p_active: a.active ?? null, p_sort: a.sort ?? null, p_note: a.note ?? null,
+  }), Ev.commishAction, { tool: 'award_set' });
+/** Retire an award. What it has already handed out stays — the trophy case is
+ *  a record of what happened, not of what the rules currently say. */
+export const commishDeleteAward = (leagueId: string, key: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; kept_wins?: number }>('commish_delete_award',
+    { p_league_id: leagueId, p_key: key }), Ev.commishAction, { tool: 'award_delete' });
+/** Commissioner: define a badge (🐐, 🤡, PAID HIS DUES — whatever the league
+ *  is like). Granting it is a separate call. */
+export const commishSetBadge = (leagueId: string, key: string, b: { name?: string; icon?: string; note?: string; sort?: number } = {}) =>
+  tracked(rpc<{ ok: boolean; error?: string; key?: string }>('commish_set_badge', {
+    p_league_id: leagueId, p_key: key, p_name: b.name ?? null, p_icon: b.icon ?? null,
+    p_note: b.note ?? null, p_sort: b.sort ?? null,
+  }), Ev.commishAction, { tool: 'badge_set' });
+export const commishDeleteBadge = (leagueId: string, key: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_delete_badge', { p_league_id: leagueId, p_key: key }),
+    Ev.commishAction, { tool: 'badge_delete' });
+/** Pin a badge on a seat, stamped with the season (defaults to the league's),
+ *  so the same badge can be won again next year without erasing this year's. */
+export const commishGrantBadge = (leagueId: string, rosterId: number, key: string, season?: string, note?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; season?: string }>('commish_grant_badge', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_key: key, p_season: season ?? null, p_note: note ?? null,
+  }), Ev.commishAction, { tool: 'badge_grant' });
+export const commishRevokeBadge = (leagueId: string, rosterId: number, key: string, season?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_revoke_badge', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_key: key, p_season: season ?? null,
+  }), Ev.commishAction, { tool: 'badge_revoke' });
+/** Hand out one league-week's awards. Idempotent, and re-runnable: an award
+ *  added in week 9 fills in the weeks behind it without disturbing them. The
+ *  worker sweeps this; a screen may poke it for the week it is showing. */
+export const awardWeek = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; awarded?: number; skipped?: string }>('award_week',
+    { p_league_id: leagueId, p_week: week });
+
 // ── The league's history (0324) ──────────────────────────────────────────────
 /** One season in a league's lineage, as the history screen shows it. */
 export interface HistorySeason {
@@ -2229,6 +2305,9 @@ export interface HistoryManager {
   seasons: number; w: number; l: number; t: number; pf: number;
   /** Titles won, and how many title games they reached. */
   titles: number; finals: number;
+  /** 0325: weekly awards won, and the badges pinned on them. */
+  awards?: number;
+  badges?: { icon: string; name: string; season: string }[];
 }
 export interface LeagueHistory {
   ok?: boolean; error?: string; league_id?: string; seasons_count?: number;

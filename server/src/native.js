@@ -7,6 +7,8 @@
 //                      or AI-controlled (the RPC is idempotent + advisory-locked,
 //                      so racing a browser's own tick is harmless).
 //   • process_waivers — resolves pending claims whose 24h waiver window closed.
+//   • award_sweep    — 0325: hands out the weekly awards for any league-week
+//                      that has gone final and has none yet.
 //   • trade_sweep    — 0321: closes offers whose clock ran out, and settles a
 //                      league vote whose window closed (executing it, or
 //                      vetoing it where the bar was reached). Both are rule
@@ -129,6 +131,18 @@ export async function sweepNative(log = () => {}, weeks = []) {
     if (Number(data?.stuck ?? 0) > 0) log('trade_sweep', `${data.stuck} trade(s) could not settle`);
   } catch (e) { log('trade_sweep', e.message); }
 
+  // THE WEEK'S AWARDS (0325). One statement for every league: the RPC decides
+  // which league-weeks have gone final and hands out only what is missing, so
+  // a sweep with nothing due hands out nothing and a league that added an
+  // award in week 9 gets it filled in for the weeks behind it.
+  let awardWeeks = 0, awardsGiven = 0;
+  try {
+    const { data, error } = await db().rpc('award_sweep');
+    if (error) throw new Error(error.message);
+    awardWeeks = Number(data?.weeks ?? 0);
+    awardsGiven = Number(data?.awards ?? 0);
+  } catch (e) { log('award_sweep', e.message); }
+
   // The weekly allowance, one call per active board week (regular + preseason
   // contexts both pass theirs). Scope and idempotency live server-side.
   for (const w of new Set(weeks.filter((w) => Number.isInteger(w) && w > 0))) {
@@ -142,5 +156,5 @@ export async function sweepNative(log = () => {}, weeks = []) {
   const prog = await sweepProgression(log);
 
   return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started,
-           tradesExpired, tradesExecuted, tradesVetoed, ...prog };
+           tradesExpired, tradesExecuted, tradesVetoed, awardWeeks, awardsGiven, ...prog };
 }

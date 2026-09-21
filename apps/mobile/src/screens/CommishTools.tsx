@@ -68,7 +68,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
-import { CommissionersCard, LocksCard, WaiverOrderCard, TradeFloorCard, ScoresCard, DuesCard } from '../ui/CommishDesk';
+import { CommissionersCard, LocksCard, WaiverOrderCard, TradeFloorCard, AwardsCard, ScoresCard, DuesCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -104,6 +104,9 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
   ] },
   { title: 'ENGAGE', items: [
+    // 0325: the league's own weekly awards and badges — nothing here changes
+    // a result, it changes the jokes.
+    { id: 'awards', label: 'AWARDS & BADGES', nativeOnly: true },
     { id: 'kit', label: 'KIT' },
     { id: 'activity', label: 'ACTIVITY' },
     // CLASSIC LEAGUES DON'T PLAY WITH COIN (v0.297.3, founder: "classic
@@ -441,6 +444,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
             {section === 'order' && native && <WaiverOrderCard leagueId={leagueId} />}
             {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
+            {section === 'awards' && native && <AwardsCard leagueId={leagueId} />}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
