@@ -2262,6 +2262,20 @@ export interface TradeRow {
   /** 0321: the vote so far, and the number of vetoes that would kill it. */
   votes?: { roster_id: number; veto: boolean }[];
   veto_need?: number;
+  /** 0322: a MULTI-TEAM deal's legs — one per seat, each asset naming where
+   *  it goes, and each seat's own acceptance. Null on an ordinary two-seat
+   *  offer, which is how a screen tells the two shapes apart; `give`/`get`
+   *  are empty on a multi-team row. */
+  legs?: TradeLeg[] | null;
+}
+/** One seat's side of a multi-team trade (0322). */
+export interface TradeLeg {
+  roster_id: number;
+  send: { slug: string; to: number }[];
+  send_picks: { season: string; round: number; orig: number; to: number }[];
+  send_faab: { to: number; amount: number }[];
+  send_cap: { to: number; amount: number }[];
+  accepted: boolean;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
@@ -2303,6 +2317,29 @@ export const counterTrade = (
     p_cap_dollars: capDollars ?? null,
     p_faab_dollars: faabDollars ?? 0, p_expires_hours: expiresHours ?? null,
   }), Ev.tradeProposed, { players: give.length + get.length, counter: true });
+
+/** 0322: a THREE-TEAM (or more) trade. Each leg is one seat and what it
+ *  sends, every asset addressed to another seat in the deal — which is what
+ *  makes a carousel work: A's receiver goes to B, B's back to C, C's pick to
+ *  A, and no two seats have a trade between them. The proposer must be in it,
+ *  their leg is accepted on filing, and nothing moves until the last seat
+ *  answers (respond_trade, the same call a two-seat offer takes). Salary
+ *  retention is refused here — it is a two-seat term. */
+export const proposeMultiTrade = (
+  leagueId: string,
+  legs: {
+    roster: number;
+    send?: { slug: string; to: number }[];
+    send_picks?: { season?: string; round: number; orig: number; to: number }[];
+    send_faab?: { to: number; amount: number }[];
+    send_cap?: { to: number; amount: number }[];
+  }[],
+  note?: string, expiresHours?: number,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; teams?: number; expires_at?: string | null }>(
+    'propose_multi_trade', {
+      p_league_id: leagueId, p_legs: legs, p_note: note ?? null, p_expires_hours: expiresHours ?? null,
+    }), Ev.tradeProposed, { teams: legs.length, multi: true });
 
 /** 0321: one uninvolved seat's vote on a trade out for league review. Veto =
  *  against; an allow counts too, because a vote whose outcome is already

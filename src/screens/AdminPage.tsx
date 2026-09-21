@@ -845,8 +845,23 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
         {reviewQueue.map((t) => (
           <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-              <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
-              <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
+              {/* 0322: a multi-team deal has no two sides — one line per seat,
+                  each asset with the team it is addressed to. */}
+              {t.legs ? t.legs.map((l, i) => (
+                <span key={l.roster_id}>
+                  {i > 0 && ' · '}
+                  <b>{t.status === 'pending' ? (l.accepted ? '✓ ' : '· ') : ''}{teamName(l.roster_id)}</b>
+                  {' '}sends {[
+                    ...l.send.map((x) => `${playerName(x.slug)} → ${teamName(x.to)}`),
+                    ...l.send_picks.map((p) => `${p.season} R${p.round} → ${teamName(p.to)}`),
+                    ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
+                    ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+                  ].join(', ') || 'nothing'}
+                </span>
+              )) : (<>
+                <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
+                <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
+              </>)}
               {t.note && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}> “{t.note}”</span>}
             </span>
             <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING'

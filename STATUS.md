@@ -18,6 +18,50 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.438.0 — the three-team trade
+
+The last open item on the gap list's trade row, and the one every platform
+but FFPC has. Drip's trades have been two seats since 0072; 0322 gives them
+LEGS.
+
+  1. THE SHAPE. A multi-team deal is a trade_proposal with one trade_leg per
+     seat, and every asset on a leg names WHERE IT GOES rather than who it is
+     swapped with. That is what makes a carousel work: A's receiver goes to
+     B, B's back goes to C, C's pick goes to A, and no two seats have a trade
+     between them at all. 3–8 teams; players, picks, FAAB and cap dollars all
+     travel, each addressed to a seat in the room.
+  2. ONE ANSWER PER SEAT. The proposer's leg is accepted when it is filed;
+     every other seat answers with the same respond_trade a two-seat offer
+     takes, which now dispatches on the shape. Nothing moves until the LAST
+     yes, and a no from anyone in it kills the whole deal — a three-way minus
+     one team is not a smaller trade, it is no trade.
+  3. EVERYTHING 0321 BUILT APPLIES. The offer clock, the commissioner's
+     ruling, and the league vote, whose electorate is now every seat outside
+     the deal however many that is — a team in a three-way cannot vote on it.
+     One acceptance path (_trade_route_accepted) serves both shapes, so a
+     three-team deal can never take a different route from a two-team one.
+  4. WHAT IS REFUSED, and why: salary retention (its terms name a player and
+     the seat that keeps eating him — a two-seat sentence), and counters (a
+     counter to a three-way is a new three-way). Both say so.
+
+EXECUTION re-validates per seat, not per side: every player still where the
+deal said, every pick still owned and unspent, every ROSTER landing legal
+(trade_cap_error per seat), every wallet still holding what it promised.
+
+CONSOLES. Both trade screens grew "＋ A THIRD TEAM": adding one turns the two
+piles into a per-seat builder where each asset is checked and then pointed at
+whoever receives it (the default is the next team round the ring). A
+multi-team row reads as one line per seat with a ✓ against the seats that
+have said yes, and my seat answers with ACCEPT MY LEG / KILL THE DEAL. The
+commissioner's queue on the web renders the legs too.
+
+Probes: scripts/db/multi-trade-probes.sql (wired into the scratch runner) —
+the shape's gates, a three-way accepted one seat at a time, a seat killing
+it, the league vote over a three-way, picks and FAAB travelling, and a
+player who moved between the offer and the last yes. 98 suites pass beside
+it; the three that do not fail identically on main. Web and mobile
+typecheck.
+
 ### v0.437.0 — the trade floor
 
 docs/competitor-gap-analysis.md, written against nine platforms, put trade

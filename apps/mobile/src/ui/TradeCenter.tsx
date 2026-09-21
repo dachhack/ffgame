@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
-  counterTrade, castTradeVote,
+  counterTrade, castTradeVote, proposeMultiTrade,
   tradeSignals, setTradeSignal, pickAssets, leagueContracts,
   type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
@@ -73,6 +73,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const [faabDir, setFaabDir] = useState<1 | -1>(1);
   const [expiryHours, setExpiryHours] = useState<number | null>(null);
   const [counterOf, setCounterOf] = useState<string | null>(null);
+  // 0322: the seats beyond me and the partner. One of them turns the sheet
+  // into a multi-team builder, where every asset names where it GOES rather
+  // than which of two piles it is in.
+  const [extraTeams, setExtraTeams] = useState<number[]>([]);
+  const [dest, setDest] = useState<Record<string, number>>({});
+  const [pickDest, setPickDest] = useState<Record<string, number>>({});
+  const [faabTarget, setFaabTarget] = useState<number | null>(null);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
@@ -117,6 +124,15 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
    *  right now. */
   const pickAssetLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
     `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+  /** One seat's side of a multi-team deal (0322): every asset with the seat
+   *  it is addressed to, since that is the only thing that says what the
+   *  trade actually is. */
+  const legLine = (l: NonNullable<TradeRow['legs']>[number]) => [
+    ...l.send.map((v) => `${pname(v.slug)} → ${teamName(v.to)}`),
+    ...l.send_picks.map((p) => `${pickAssetLabel(p, l.roster_id)} → ${teamName(p.to)}`),
+    ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
+    ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+  ].join(', ') || 'nothing';
   const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
     const slugs = (side === 'give' ? x.give : x.get)
       .map((s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); });
@@ -169,6 +185,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
     setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
+    setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
   };
   // An offer answered with an offer (0321): the same sheet, filed by a
   // different RPC, with the two seats already decided.
@@ -176,10 +193,38 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     tap();
     setCounterOf(x.id); setPartner(x.from_roster);
     setGive(x.get); setGet(x.give); setGivePicks([]); setGetPicks([]);
+    setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
     setNote(''); setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1);
     setExpiryHours(null); setErr(null); setOpen(true);
   };
+  // 0322: every seat in the deal, the proposer first; ≥3 switches the sheet.
+  const teamsIn = myRoster != null && partner != null ? [myRoster, partner, ...extraTeams] : [];
+  const isMulti = teamsIn.length > 2;
+  const pickKey = (p: { season: string; round: number; orig: number }) => `${p.season}/${p.round}/${p.orig}`;
+  /** The next team round the ring — the carousel most of these deals are. */
+  const nextSeat = (rid: number) => teamsIn[(teamsIn.indexOf(rid) + 1) % teamsIn.length];
+  const holderOf = (slug: string) => rosters.find((r) => r.slug === slug)?.roster_id ?? null;
+  const multiAssets = Object.keys(dest).length + Object.keys(pickDest).length;
+  const proposeMulti = async () => {
+    if (busy || myRoster == null || multiAssets === 0) return;
+    setBusy(true); setErr(null);
+    try {
+      const legs = teamsIn.map((rid) => ({
+        roster: rid,
+        send: Object.entries(dest).filter(([slug]) => holderOf(slug) === rid).map(([slug, to]) => ({ slug, to })),
+        send_picks: assets.filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
+          .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
+        ...(rid === myRoster && (parseInt(faabDraft, 10) || 0) > 0 && faabTarget != null
+          ? { send_faab: [{ to: faabTarget, amount: parseInt(faabDraft, 10) }] } : {}),
+      }));
+      const r = await proposeMultiTrade(leagueId, legs, note.trim() || undefined, expiryHours ?? undefined);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
+      commit(); closeSheet(); await load();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
   const propose = async () => {
+    if (isMulti) return proposeMulti();
     if (busy || myRoster == null || partner == null || nothingOffered) return;
     setBusy(true); setErr(null);
     try {
@@ -298,12 +343,30 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       {shown.map((x) => (
         <View key={x.id} style={{ paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            <Text style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(17) }}>
-              <Text style={{ fontWeight: '700', color: x.from_roster === myRoster ? t.you : t.text }}>{teamName(x.from_roster)}</Text>
-              {' '}sends {tradeLine(x, 'give')}{'\n'}
-              <Text style={{ fontWeight: '700', color: x.to_roster === myRoster ? t.you : t.text }}>{teamName(x.to_roster)}</Text>
-              {' '}sends {tradeLine(x, 'get')}
-            </Text>
+            {/* 0322: a multi-team deal reads as one line per seat — it has no
+                two sides to put either end of a sentence. A tick marks the
+                seats that have already said yes. */}
+            {x.legs ? (
+              <Text style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(17) }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.warn }}>{x.legs.length}-TEAM{'\n'}</Text>
+                {x.legs.map((l, i) => (
+                  <Text key={l.roster_id}>
+                    {i > 0 ? '\n' : ''}
+                    <Text style={{ fontWeight: '700', color: l.roster_id === myRoster ? t.you : t.text }}>
+                      {x.status === 'pending' ? (l.accepted ? '✓ ' : '· ') : ''}{teamName(l.roster_id)}
+                    </Text>
+                    {' '}sends {legLine(l)}
+                  </Text>
+                ))}
+              </Text>
+            ) : (
+              <Text style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(17) }}>
+                <Text style={{ fontWeight: '700', color: x.from_roster === myRoster ? t.you : t.text }}>{teamName(x.from_roster)}</Text>
+                {' '}sends {tradeLine(x, 'give')}{'\n'}
+                <Text style={{ fontWeight: '700', color: x.to_roster === myRoster ? t.you : t.text }}>{teamName(x.to_roster)}</Text>
+                {' '}sends {tradeLine(x, 'get')}
+              </Text>
+            )}
             {statusChip(x)}
           </View>
           {/* salary terms ride the row so the accepting side SEES the money */}
@@ -355,12 +418,24 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           })()}
           {(x.status === 'pending' || x.status === 'accepted' || x.status === 'review') && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              {x.status === 'pending' && x.to_roster === myRoster && (
+              {x.status === 'pending' && !x.legs && x.to_roster === myRoster && (
                 <>
                   <Chip label="✓ ACCEPT" on disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, true)); }} />
                   <Chip label="⇄ COUNTER" disabled={busy} onPress={() => openCounter(x)} />
                   <Chip label="✕ DECLINE" disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, false)); }} />
                 </>
+              )}
+              {/* 0322: my seat answers for itself, and a no from anyone in it
+                  kills the whole deal — which the chip says. */}
+              {x.status === 'pending' && x.legs?.some((l) => l.roster_id === myRoster && !l.accepted) && (
+                <>
+                  <Chip label="✓ ACCEPT MY LEG" on disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, true)); }} />
+                  <Chip label="✕ KILL THE DEAL" disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, false)); }} />
+                </>
+              )}
+              {x.status === 'pending' && x.from_roster !== myRoster
+                && x.legs?.some((l) => l.roster_id === myRoster && l.accepted) && (
+                <Mono size={8.5} tone="faint">waiting on the other seats</Mono>
               )}
               {x.from_roster === myRoster && x.status === 'pending' && (
                 <Chip label="withdraw" disabled={busy} onPress={() => { tap(); void act(() => cancelTrade(x.id)); }} />
@@ -462,7 +537,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       )}
 
       {/* propose: partner → two checklists → note → send */}
-      <Overlay visible={open && myRoster != null} title={counterOf ? 'Counter the offer' : 'Propose a trade'}
+      <Overlay visible={open && myRoster != null}
+        title={counterOf ? 'Counter the offer' : isMulti ? `${teamsIn.length}-team trade` : 'Propose a trade'}
         subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.'
           : tradeReview === 'league' ? `Accepted trades go to the league — ${vetoNeed ?? 2} vetoes in ${reviewHours ?? 24}h kill one.`
           : 'Accepted trades execute immediately.'}
@@ -476,7 +552,20 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               onPress={() => { if (!counterOf) { tap(); setPartner(x.roster_id); setGet([]); } }} />
           ))}
         </View>
-        {partner != null && (
+        {/* A THIRD TEAM (0322). Adding one turns the two piles below into a
+            per-seat builder: in a three-way "you get" means nothing, because
+            every asset names where it goes. A counter stays two-seat. */}
+        {partner != null && !counterOf && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <Mono size={7.5} tone="faint" track={0.1}>＋ A THIRD TEAM</Mono>
+            {teams.filter((x) => x.roster_id !== myRoster && x.roster_id !== partner).map((x) => (
+              <Chip key={x.roster_id} label={x.team ?? `Team ${x.roster_id}`} on={extraTeams.includes(x.roster_id)}
+                onPress={() => { tap(); setExtraTeams((v) => v.includes(x.roster_id)
+                  ? v.filter((y) => y !== x.roster_id) : [...v, x.roster_id]); }} />
+            ))}
+          </View>
+        )}
+        {partner != null && !isMulti && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
             <View style={{ flex: 1 }}>
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU SEND</Mono>
@@ -490,9 +579,75 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             </View>
           </View>
         )}
+        {/* THE MULTI-TEAM BUILDER (0322): one block per seat, each asset
+            tapped and then pointed at whoever receives it. The default is the
+            next team round the ring; one tap moves it anywhere in the room. */}
+        {isMulti && teamsIn.map((rid) => (
+          <View key={`leg-${rid}`} style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 6 }}>
+            <Mono size={8} tone="faint" track={0.1}>{(teamName(rid) ?? '').toUpperCase()} SENDS{rid === myRoster ? ' (YOU)' : ''}</Mono>
+            <ScrollView style={{ maxHeight: 170, marginTop: 4 }} nestedScrollEnabled>
+              {rosters.filter((r) => r.roster_id === rid).map((r) => {
+                const to = dest[r.slug];
+                const p = poolBySlug.get(r.slug);
+                return (
+                  <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingVertical: 3 }}>
+                    <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexGrow: 1, flexBasis: 120 }}
+                      onPress={() => { tap(); setDest((v) => {
+                        const n = { ...v };
+                        if (n[r.slug] != null) delete n[r.slug]; else n[r.slug] = nextSeat(rid);
+                        return n;
+                      }); }}>
+                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: to != null ? t.you : t.text, fontWeight: to != null ? '700' : '400' }}>
+                        {to != null ? '☑' : '☐'} {p?.full_name ?? r.slug}
+                      </Text>
+                    </Pressable>
+                    {to != null && teamsIn.filter((x) => x !== rid).map((x) => (
+                      <Chip key={x} label={`→ ${teams.find((y) => y.roster_id === x)?.team ?? `Team ${x}`}`} on={to === x}
+                        onPress={() => { tap(); setDest((v) => ({ ...v, [r.slug]: x })); }} />
+                    ))}
+                  </View>
+                );
+              })}
+              {pickTradingOn && assets.filter((p) => p.owner === rid).map((p) => {
+                const k = pickKey(p);
+                const to = pickDest[k];
+                return (
+                  <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingVertical: 3 }}>
+                    <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexGrow: 1, flexBasis: 120 }}
+                      onPress={() => { tap(); setPickDest((v) => {
+                        const n = { ...v };
+                        if (n[k] != null) delete n[k]; else n[k] = nextSeat(rid);
+                        return n;
+                      }); }}>
+                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: to != null ? t.warn : t.dim, fontWeight: to != null ? '700' : '400' }}>
+                        {to != null ? '☑' : '☐'} 🎟 {pickAssetLabel(p, rid)}
+                      </Text>
+                    </Pressable>
+                    {to != null && teamsIn.filter((x) => x !== rid).map((x) => (
+                      <Chip key={x} label={`→ ${teams.find((y) => y.roster_id === x)?.team ?? `Team ${x}`}`} on={to === x}
+                        onPress={() => { tap(); setPickDest((v) => ({ ...v, [k]: x })); }} />
+                    ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            {rid === myRoster && faabTrading && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <Mono size={7.5} tone="faint" track={0.1}>💵 FAAB $</Mono>
+                <TextInput value={faabDraft} keyboardType="number-pad" maxLength={5} placeholder="0" placeholderTextColor={t.faint}
+                  onChangeText={(v) => setFaabDraft(v.replace(/[^0-9]/g, ''))}
+                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
+                {(parseInt(faabDraft, 10) || 0) > 0 && teamsIn.filter((x) => x !== myRoster).map((x) => (
+                  <Chip key={x} label={`→ ${teams.find((y) => y.roster_id === x)?.team ?? `Team ${x}`}`} on={faabTarget === x}
+                    onPress={() => { tap(); setFaabTarget(x); }} />
+                ))}
+              </View>
+            )}
+          </View>
+        ))}
         {/* ── SALARY TERMS (0219, contract leagues): retention steppers on the
             traded deals, and raw cap dollars when the commissioner allows. ── */}
-        {contracts?.rules?.retention && [...give, ...get].some((s) => (contracts.deals ?? []).some((d) => d.slug === s && d.salary > 1)) && (
+        {contracts?.rules?.retention && !isMulti && [...give, ...get].some((s) => (contracts.deals ?? []).some((d) => d.slug === s && d.salary > 1)) && (
           <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 6 }}>
             <Mono size={7.5} tone="faint" track={0.1}>💸 RETAINED SALARY — the sender keeps eating this much</Mono>
             {[...give, ...get].map((s) => {
@@ -518,7 +673,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             })}
           </View>
         )}
-        {contracts?.rules?.cap_trading && (
+        {contracts?.rules?.cap_trading && !isMulti && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             <Mono size={7.5} tone="faint" track={0.1}>💵 CAP DOLLARS</Mono>
             <Chip label="I SEND" on={capDir === 1} onPress={() => { tap(); setCapDir(1); }} />
@@ -529,7 +684,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           </View>
         )}
         {/* FAAB DOLLARS (0321) — the cap-room row's FAAB-league sibling. */}
-        {faabTrading && (
+        {faabTrading && !isMulti && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             <Mono size={7.5} tone="faint" track={0.1}>💵 FAAB $</Mono>
             <Chip label="I SEND" on={faabDir === 1} onPress={() => { tap(); setFaabDir(1); }} />
@@ -556,8 +711,9 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
         {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
         <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER' : '⇄ SEND THE OFFER'}
-            disabled={busy || partner == null || nothingOffered}
+          <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER'
+            : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
+            disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
             onPress={() => void propose()} />
         </View>
       </Overlay>

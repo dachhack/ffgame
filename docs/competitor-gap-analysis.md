@@ -6,6 +6,10 @@ Platforms: Fantrax, Fleaflicker, MyFantasyLeague (MFL), Reality Sports Online
 Part 2 is a condensed per-platform reference with sources so this doc can be
 reused without re-researching._
 
+_The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
+(`0321`, `0322`), which closed four of its five gaps; every other cell is as
+first written._
+
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
 was unreachable, so user complaints come from app-store reviews, Trustpilot
@@ -43,10 +47,10 @@ The most-cited reason a league refuses to move platforms.
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| League-vote veto with configurable threshold and window | Sleeper, Yahoo, ESPN, Fleaflicker, MFL, Fantrax, League Tycoon | Commissioner review only (`trade_review` = none \| commish) |
-| Multi-team trades | Sleeper, Fleaflicker (unlimited), MFL, Fantrax, RSO | Two seats only (`trade_proposal.from_roster` / `to_roster`) |
-| Counter-offers and offer expiry | Sleeper (exploding offers), Fleaflicker (1h–14d), MFL | No expiry, no counter flow |
-| Trading FAAB dollars | Sleeper, MFL, Fantrax, FFPC dynasty | Cap dollars trade in contract leagues only (`p_cap_dollars`) |
+| League-vote veto with configurable threshold and window | Sleeper, Yahoo, ESPN, Fleaflicker, MFL, Fantrax, League Tycoon | **Shipped v0.437.0** — `trade_review` = none \| commish \| league, with `trade_review_hours` and `trade_veto_votes` (`0321`) |
+| Multi-team trades | Sleeper, Fleaflicker (unlimited), MFL, Fantrax, RSO | **Shipped v0.438.0** — 3–8 seats as `trade_leg` rows, every asset addressed to a seat in the deal (`0322`) |
+| Counter-offers and offer expiry | Sleeper (exploding offers), Fleaflicker (1h–14d), MFL | **Shipped v0.437.0** — `counter_trade`, and an offer clock per offer or per league (`0321`) |
+| Trading FAAB dollars | Sleeper, MFL, Fantrax, FFPC dynasty | **Shipped v0.437.0** — `faab_dollars` behind the commissioner's `faab_trading` switch (`0321`) |
 | Trade analyzer or grades | ESPN (IBM watsonx), Yahoo Plus Trade Hub | None |
 | Trade auctions with anti-snipe | League Tycoon | None |
 | Reverse a completed trade | Sleeper, Fantrax | Generic undo tools; no trade-specific reversal |
@@ -142,8 +146,11 @@ The widest gaps relative to the big three.
 
 Ordered by what blocks a league from migrating next August, then retention.
 
-1. **Trade parity** — league-vote review, multi-team trades, expiry and
-   counters, FAAB trading. Every platform except FFPC has the first two.
+1. ~~**Trade parity** — league-vote review, multi-team trades, expiry and
+   counters, FAAB trading.~~ **Done** in v0.437.0 (`0321`: the vote, expiry,
+   counters, FAAB) and v0.438.0 (`0322`: 3–8-team trades). What is still
+   missing from this row: a trade analyzer or grades, trade auctions, and
+   reversing a completed trade.
 2. **Conditional waiver claims and a median matchup** — small on top of the
    existing run and standings code; both come up in every "which host" thread.
 3. **A history surface** — past champions, records, awards. Rollover data
