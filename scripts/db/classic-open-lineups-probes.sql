@@ -20,6 +20,8 @@
 --   • DRIP is untouched: its window rule still fires exactly as before.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 
 create or replace function assert_true(b boolean, msg text) returns void language plpgsql as $$
 begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;

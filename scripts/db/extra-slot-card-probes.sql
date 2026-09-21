@@ -18,6 +18,8 @@
 -- plants its own rows and removes them). Every suite shares one database.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 create or replace function xs_true(b boolean, msg text) returns void language plpgsql as $$

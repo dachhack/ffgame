@@ -8,6 +8,8 @@
 -- checked the byed seat.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 create or replace function bw_as(u text) returns void language plpgsql as $$

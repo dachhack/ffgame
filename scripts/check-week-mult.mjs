@@ -88,6 +88,26 @@ const out = weekPointsFor({ slug: real.slug, pos: 'RB' },
 ok(out.pts === 0 && out.scored === true && out.status === 'RES',
   'a multiplier of zero means OUT, and is not mistaken for a missing one');
 
+// 6c. A BACKUP'S NUMBER IS CONDITIONAL (v0.451.0). The source audit put
+// StatHead's week beside ESPN's and found Nick Mullens at 18.5 against ESPN's
+// 0 — the first answers "if he plays", the second "will he play". A screen
+// that ranks on this must be able to tell them apart.
+const bench = weekPointsFor({ slug: real.slug, pos: 'RB' },
+  { pts: 18.5, mult: 1.0, opp: 'ARI', home: true, status: 'backup', source: 'stathead' });
+ok(bench.conditional === true, 'a backup line is flagged conditional, not presented as an expectation');
+ok(scored.conditional === false, 'and a starter is not');
+
+// 6d. THE INJURY REPORT (0333). The database applies it for the week being
+// played and says so; the client passes both facts through.
+const hurt = weekPointsFor({ slug: real.slug, pos: 'RB' },
+  { pts: 0, mult: 0, opp: 'ARI', home: true, status: null, source: 'stathead', inj: 'O', adjusted: true });
+ok(hurt.pts === 0 && hurt.inj === 'O' && hurt.adjusted === true,
+  'a player OUT this week reads zero, with the designation that did it');
+const later = weekPointsFor({ slug: real.slug, pos: 'RB' },
+  { pts: 14, mult: 1, opp: 'ARI', home: true, status: null, source: 'stathead', inj: 'O', adjusted: false });
+ok(later.pts > 0 && later.inj === 'O' && later.adjusted === false,
+  'and a LATER week keeps the flag without the discount — today\'s Out is not week 9\'s');
+
 // 7. an unbaked player cannot be scaled, so he falls back rather than zeroing
 const unknown = weekPointsFor({ slug: 'not-a-real-player', pos: 'RB' },
   { pts: 8.8, mult: 1.2, opp: 'KC', home: true, status: null, source: 'stathead' });
@@ -99,6 +119,16 @@ ok(/p\.source = 'stathead' and p\.player_key = lp\.sleeper_id/.test(sql), 'the S
 ok(/p\.source <> 'stathead' and p\.player_key = lp\.espn_id/.test(sql), 'the ESPN fallback is on the athlete id');
 ok(/order by case when p\.source = 'stathead' then 0 else 1 end/.test(sql), 'and StatHead is preferred per player');
 ok(/'source', source/.test(sql), 'the row tells the client which source answered');
+
+// 9. the injury report is applied ONLY to the week being played (0333)
+const inj = readFileSync(new URL('../supabase/migrations/0333_the_week_knows_he_is_out.sql', import.meta.url), 'utf8');
+ok(/when p_week is distinct from cur or i\.status is null then 1/.test(inj),
+  'a week that is not the current one is served untouched');
+ok(/when i\.status in \('O', 'IR'\) then 0/.test(inj), 'Out and IR go to zero');
+ok(/when i\.status = 'D' then 0\.25/.test(inj), 'Doubtful to a quarter');
+ok(/'adjusted', f <> 1/.test(inj), 'and a number that was changed says so');
+ok(/round\(mult \* f, 4\)/.test(inj),
+  'the multiplier carries the same discount as the points — a client that scales its own season number cannot miss it');
 
 console.log(fails === 0 ? '\nALL WEEK-MULT ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

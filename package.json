@@ -17,6 +17,7 @@
     "validate": "node scripts/espn/validate.mjs",
     "validate:proj": "tsx scripts/check-proj-map.mjs",
     "validate:weekmult": "tsx scripts/check-week-feed.mjs",
+    "audit:sources": "tsx scripts/audit-sources.mjs",
     "check:weekmult": "tsx scripts/check-week-mult.mjs",
     "gen:rulebook": "tsx scripts/gen-rulebook.mjs",
     "check:prices": "tsx scripts/check-powerup-prices.mjs",

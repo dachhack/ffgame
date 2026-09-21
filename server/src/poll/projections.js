@@ -108,15 +108,19 @@ const STAT = {
 
 /** ESPN's kona_player_info, filtered to the top N by ownership — the players
  *  anybody could actually start. The filter goes in a header, which is how
- *  that endpoint has always worked. */
-async function fetchProjections(season, week, limit = 900) {
-  const filter = {
-    players: {
-      limit,
-      sortPercOwned: { sortAsc: false, sortPriority: 1 },
-      filterStatsForTopScoringPeriodIds: { value: 1, additionalValue: [`00${season}`, `10${season}`] },
-    },
-  };
+ *  that endpoint has always worked.
+ *
+ *  NO `filterStatsForTopScoringPeriodIds` (v0.451.0). It was here from the
+ *  first version and it is the reason this poller wrote NOTHING: asking for
+ *  the top scoring periods returns each player's ACTUAL weekly lines plus one
+ *  projected SEASON row, and strips every projected WEEKLY row — the only
+ *  rows weekLineFor is looking for. 200 of 200 players carry a week-3
+ *  projection without it and 0 of 200 with it. The source audit found this by
+ *  comparing ESPN's weekly numbers against StatHead's and getting an empty
+ *  set on one side; `npm run validate:proj` never caught it because its own
+ *  request (correctly) never had the filter. */
+export async function fetchProjections(season, week, limit = 900) {
+  const filter = { players: { limit, sortPercOwned: { sortAsc: false, sortPriority: 1 } } };
   const res = await fetch(
     `${PROJ_HOST}/apis/v3/games/ffl/seasons/${season}/segments/0/leaguedefaults/3?view=kona_player_info`,
     { headers: { 'x-fantasy-filter': JSON.stringify(filter), accept: 'application/json' } },

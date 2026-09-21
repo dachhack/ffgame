@@ -2233,6 +2233,11 @@ export interface WeekProjRow {
   status: string | null;
   /** 'stathead' | 'espn' — a screen that shows a number owes the reader this. */
   source: string;
+  /** Our own injury designation for him — 'O' | 'IR' | 'D' | 'Q' (0333). */
+  inj?: string | null;
+  /** Did that designation change the number? Only ever true for the week
+   *  being played: today's "Out" says nothing about week 9. */
+  adjusted?: boolean;
 }
 export const leagueWeekProjections = (leagueId: string, week: number) =>
   rpc<{ ok?: boolean; error?: string; season?: string; week?: number; as_of?: string | null;

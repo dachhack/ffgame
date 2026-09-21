@@ -9,6 +9,8 @@
 --   • a closed league still serves nothing (0327's opt-out is untouched).
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 create or replace function xr_true(b boolean, msg text) returns void language plpgsql as $$
 begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;
 create or replace function xr_as(u text) returns void language plpgsql as $$
@@ -29,21 +31,21 @@ begin
   r := create_native_league('Crosswalk', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform xr_true((r ->> 'ok')::boolean, 'xr0 league'); lid := (r ->> 'league_id')::uuid;
   insert into league_pool (league_id, slug, full_name, pos, team, rank, espn_id, sleeper_id) values
-    (lid, 'xr-espn',  'By Espn Id',   'RB', 'XRH', 1, '111', null),
-    (lid, 'xr-sleep', 'By Sleeper',   'WR', 'XRH', 2, null,  's222'),
+    (lid, 'xr-espn',  'By Espn Id',   'RB', 'XRH', 1, 'xw111', null),
+    (lid, 'xr-sleep', 'By Sleeper',   'WR', 'XRH', 2, null,  'sxw222'),
     (lid, 'xr-none',  'Unplaceable',  'TE', 'XRH', 3, null,  null);
 
   -- ── xr1. the worker's write ──
   r := upsert_player_xref(jsonb_build_array(
     jsonb_build_object('gsis_id', '00-0000111', 'full_name', 'By Espn Id', 'pos', 'RB',
-      'espn_id', '111', 'sleeper_id', 's111', 'pfr_id', 'EspB00', 'yahoo_id', '9111',
+      'espn_id', 'xw111', 'sleeper_id', 'sxw111', 'pfr_id', 'EspB00', 'yahoo_id', '9111',
       'sportradar_id', 'sr-111', 'latest_season', '2026'),
     jsonb_build_object('gsis_id', '00-0000222', 'full_name', 'By Sleeper', 'pos', 'WR',
-      'sleeper_id', 's222', 'yahoo_id', '9222', 'latest_season', '2026')));
+      'sleeper_id', 'sxw222', 'yahoo_id', '9222', 'latest_season', '2026')));
   perform xr_true((r ->> 'ok')::boolean and (r ->> 'rows')::int = 2, 'xr1 two rows written');
   -- A second pass that has lost a column must not blank what we already knew.
   perform upsert_player_xref(jsonb_build_array(
-    jsonb_build_object('gsis_id', '00-0000111', 'full_name', 'By Espn Id', 'espn_id', '111',
+    jsonb_build_object('gsis_id', '00-0000111', 'full_name', 'By Espn Id', 'espn_id', 'xw111',
       'pfr_id', null, 'latest_season', '2026')));
   perform xr_true((select pfr_id from player_xref where gsis_id = '00-0000111') = 'EspB00',
     'xr1 a missing column does not erase the id we had');
@@ -54,7 +56,7 @@ begin
   r := api_players(lid);
   select jsonb_path_query_first(r -> 'players', '$[*] ? (@.slug == "xr-espn")') into p;
   perform xr_true((p ->> 'gsis_id') = '00-0000111', 'xr2 reached by espn_id');
-  perform xr_true((p ->> 'espn_id') = '111', 'xr2 and espn_id is still exactly where 0326 put it');
+  perform xr_true((p ->> 'espn_id') = 'xw111', 'xr2 and espn_id is still exactly where 0326 put it');
   perform xr_true((p ->> 'pfr_id') = 'EspB00' and (p ->> 'yahoo_id') = '9111'
     and (p ->> 'sportradar_id') = 'sr-111', 'xr2 with the other ids beside it');
   select jsonb_path_query_first(r -> 'players', '$[*] ? (@.slug == "xr-sleep")') into p;
@@ -63,7 +65,7 @@ begin
   -- carrying ids that belong to somebody else. A name join would take it.
   perform upsert_player_xref(jsonb_build_array(
     jsonb_build_object('gsis_id', '00-0000999', 'full_name', 'Unplaceable', 'pos', 'TE',
-      'espn_id', '999', 'sleeper_id', 's999', 'latest_season', '2026')));
+      'espn_id', 'xw999', 'sleeper_id', 'sxw999', 'latest_season', '2026')));
   r := api_players(lid);
   select jsonb_path_query_first(r -> 'players', '$[*] ? (@.slug == "xr-none")') into p;
   perform xr_true(p is not null and (p ->> 'gsis_id') is null,

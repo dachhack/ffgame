@@ -69,5 +69,14 @@ export async function sweepXref(season, log = () => {}) {
     if (error) { log('xref upsert', error.message); return { rows: wrote, error: error.message }; }
     wrote += Number(data?.rows ?? 0);
   }
-  return { rows: wrote, seen: rows.length };
+  // 0333: fill the pool's missing ids from what just landed. Sleeper's
+  // directory carries an espn_id for about a quarter of the players a league
+  // can roster — everything keyed on that id (the ESPN projection, the news
+  // feed, the headshot) was reaching a quarter of each roster until this ran.
+  const { data: filled, error: fillErr } = await db().rpc('backfill_pool_ids');
+  if (fillErr) log('xref backfill', fillErr.message);
+  else if (filled?.espn_filled || filled?.sleeper_filled) {
+    log('xref backfill:', filled.espn_filled, 'espn ids,', filled.sleeper_filled, 'sleeper ids');
+  }
+  return { rows: wrote, seen: rows.length, filled };
 }

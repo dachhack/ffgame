@@ -41,6 +41,15 @@ export interface WeekPoints {
   /** 'OUT' / 'RES' / 'backup' / null, straight from the source. */
   status: string | null;
   source: string;
+  /** THE NUMBER IS CONDITIONAL (v0.451.0). The source's line for a depth-2+
+   *  player is a rate conditional on him PLAYING, not an expectation that he
+   *  will — the source audit found Nick Mullens at 18.5 beside ESPN's 0 for
+   *  the same week, which is two answers to two different questions. A screen
+   *  that ranks on this number must not rank a backup above a starter. */
+  conditional: boolean;
+  /** Our own injury designation, and whether it moved the number (0333). */
+  inj: string | null;
+  adjusted: boolean;
 }
 
 /** The week's number for one player, in this league's scoring where that is
@@ -51,7 +60,11 @@ export function weekPointsFor(
 ): WeekPoints | null {
   if (!row) return null;
   const matchup = row.opp ? `${row.home === false ? '@ ' : ''}${row.opp}` : '';
-  const base = { matchup, status: row.status ?? null, source: row.source ?? 'espn' };
+  const base = {
+    matchup, status: row.status ?? null, source: row.source ?? 'espn',
+    conditional: row.status === 'backup',
+    inj: row.inj ?? null, adjusted: !!row.adjusted,
+  };
   // `null` means the source served no multiplier; ZERO means he is out, and
   // is a real multiplier. Number(null) is 0, which would quietly turn the
   // first case into the second — hence the explicit null check.

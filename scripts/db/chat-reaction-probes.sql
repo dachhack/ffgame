@@ -7,6 +7,8 @@
 -- hold several different reactions but not the same one twice.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 do $$

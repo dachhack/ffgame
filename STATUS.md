@@ -18,6 +18,54 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.451.0 — where two sources answer the same question
+
+Founder: "can we check where we have the same data from sources and do an
+audit of differences." `npm run audit:sources` is the repeatable version and
+`docs/source-audit.md` is this run of it. It joins eight facts across Sleeper,
+StatHead, FantasyCalc, ESPN and our own bakes — on ids, never on names — and
+sorts what it finds into model differences (expected) and FACT differences
+(somebody is wrong). It found three of our own bugs.
+
+  1. THE ESPN POLLER HAD NEVER WRITTEN A ROW. `fetchProjections` sent
+     `filterStatsForTopScoringPeriodIds`, which returns ACTUAL weekly lines
+     and a projected SEASON row and strips every projected WEEKLY row — the
+     only row `weekLineFor` reads. 0 of 200 players with the filter, 200 of
+     200 without. Six versions green, because `validate:proj` built its own
+     request and proved the DECODE rather than the POLL. It now asserts the
+     poller's own request too.
+  2. AND NOTHING COULD BE WRITTEN ANYWAY. 0330's upsert names twelve columns
+     and selects eleven — `updated_at` had no value — so every call raised
+     and not one row landed, from either source. The probe suite reported
+     PASS the whole time: psql without ON_ERROR_STOP carries on after a
+     failed statement and the closing "ALL … PROBES PASS" prints regardless.
+     That is the trap v0.450.0 documented one version earlier, walked into
+     again the same day. `\set ON_ERROR_STOP on` now heads all 117 suites.
+  3. THE WEEK DID NOT KNOW WHO WAS OUT. 73 of 500 players are zero on one
+     side and not the other — Burrow, Purdy, Kittle, Rice, Daniels. ESPN
+     prices this week's injury report; StatHead's strip zeroes only ROSTER
+     status and says a consumer should apply the designations itself. Since
+     v0.447.0 made StatHead primary, that was ours. 0333 applies our own ESPN
+     report — Out/IR to zero, Doubtful to a quarter, Questionable a flag — to
+     the points AND the multiplier, and ONLY for the week being played.
+  4. THE POOL'S ESPN IDS WERE MOSTLY MISSING. Sleeper carries one for 213 of
+     846 rosterable players and 84 of the top 300; Gibbs, Chase and Bijan all
+     come back null. Everything keyed on that id was reaching a quarter of a
+     roster. `backfill_pool_ids()` fills it from 0331's crosswalk, both ways,
+     after each daily sweep.
+  5. AND ONE OF THE IDS WE HELD WAS SOMEBODY ELSE'S. Sleeper's espn_id for
+     Tyler Conklin is RYAN IZZO's. The backfill corrects an id only where the
+     crosswalk positively identifies the one we hold as another player; a
+     mismatch it cannot explain is left alone.
+
+Clean: the 2026 schedule (32/32 team-games agree with ESPN), sportradar,
+fantasy_data and yahoo ids (100%), and FantasyCalc against Sleeper (93/93).
+Explained rather than fixed: depth charts agree 64% because Sleeper orders
+for availability and StatHead for roster depth — both correct, different
+questions. Also flagged for whoever wires the weekly number into a board: a
+StatHead backup line is a rate CONDITIONAL on playing (Nick Mullens 18.5
+against ESPN's 0), now carried as `conditional: true`.
+
 ### v0.450.0 — the history is not the account
 
 A leak, found by running the whole probe suite during the StatHead audit

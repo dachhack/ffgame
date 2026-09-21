@@ -8,7 +8,7 @@
 //
 // NETWORK TEST — `npm run validate:proj`, not part of check:parity, which has
 // to run offline.
-import { weekLineFor } from '../server/src/poll/projections.js';
+import { weekLineFor, fetchProjections } from '../server/src/poll/projections.js';
 
 const SEASON = process.env.PROJ_CHECK_SEASON || '2025';
 const WEEKS = [1, 2, 3, 10];
@@ -47,6 +47,20 @@ for (const e of feed.players ?? []) {
 ok(checked > 50, `${checked} skill-player weeks decoded (and ${kdst} K/DST weeks left as totals, by design)`);
 ok(sum / checked < TOLERANCE, `mean error ${(sum / checked).toFixed(3)} pts is under ${TOLERANCE}`);
 ok(worst < 3, `worst case ${worst.toFixed(2)} pts — ${worstWho || 'none'}`);
+
+// THE REQUEST THE WORKER ACTUALLY SENDS (v0.451.0). Everything above proves
+// the DECODE is right, using this file's own request. That is exactly how the
+// bug it now guards against survived a green validator for six versions: the
+// poller sent a different filter, `filterStatsForTopScoringPeriodIds`, which
+// returns actual weekly lines and a projected SEASON row and strips every
+// projected WEEKLY row — so the poller decoded nothing, perfectly.
+const live = new Date().getFullYear();
+const pollerFeed = await fetchProjections(live, 0, 120);
+let pollerWeeks = 0;
+const soon = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+for (const e of pollerFeed?.players ?? []) for (const wk of soon) if (weekLineFor(e.player, wk)) pollerWeeks++;
+ok(pollerWeeks > 100,
+  `the poller's OWN request returns ${pollerWeeks} projected player-weeks for ${live} — it asks for what it decodes`);
 
 console.log(fails === 0 ? '\nALL PROJECTION-MAP ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);
