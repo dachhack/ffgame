@@ -46,7 +46,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, ScoresPanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, ScoresPanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -300,7 +300,7 @@ export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
-  | 'activity' | 'buffs' | 'delete';
+  | 'activity' | 'buffs' | 'awards' | 'delete';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -541,7 +541,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
-        review !== init.review ? review : null,
+        null,   // 0321: trade review lives in TRADE REVIEW below, which saves on the click
         clearChanged ? (clearMin ?? -1) : null,
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
@@ -612,13 +612,6 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
-        <div>
-          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
-            {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
-          </div>
-        </div>
         <div>
           <div className="mono" title="Trades may be offered and accepted through this week; once it is final, no more." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE DEADLINE</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
@@ -837,8 +830,10 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
     const h = Math.floor(ms / 3600_000);
     return h >= 1 ? `${h}h` : `${Math.max(1, Math.round(ms / 60_000))}m`;
   };
-  const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending');
-  const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)' };
+  // 0321: a trade out for a league vote belongs in the queue too — the
+  // commissioner outranks the floor in both directions while it is open.
+  const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending' || t.status === 'review');
+  const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', review: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)', expired: 'var(--faint)', countered: 'var(--faint)' };
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
@@ -850,12 +845,29 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
         {reviewQueue.map((t) => (
           <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-              <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
-              <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
+              {/* 0322: a multi-team deal has no two sides — one line per seat,
+                  each asset with the team it is addressed to. */}
+              {t.legs ? t.legs.map((l, i) => (
+                <span key={l.roster_id}>
+                  {i > 0 && ' · '}
+                  <b>{t.status === 'pending' ? (l.accepted ? '✓ ' : '· ') : ''}{teamName(l.roster_id)}</b>
+                  {' '}sends {[
+                    ...l.send.map((x) => `${playerName(x.slug)} → ${teamName(x.to)}`),
+                    ...l.send_picks.map((p) => `${p.season} R${p.round} → ${teamName(p.to)}`),
+                    ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
+                    ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+                  ].join(', ') || 'nothing'}
+                </span>
+              )) : (<>
+                <b>{teamName(t.from_roster)}</b> sends {t.give.map(playerName).join(', ') || '—'} ·{' '}
+                <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
+              </>)}
               {t.note && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}> “{t.note}”</span>}
             </span>
-            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING' : 'OFFERED'}</span>
-            {t.status === 'accepted' && (
+            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING'
+              : t.status === 'review' ? `LEAGUE VOTE · ${(t.votes ?? []).filter((v) => v.veto).length} of ${t.veto_need ?? '?'}`
+              : 'OFFERED'}</span>
+            {(t.status === 'accepted' || t.status === 'review') && (
               <button onClick={() => run(() => commishRuleTrade(t.id, true))} disabled={busy} className="mono" style={btn(true)}>✓ approve</button>
             )}
             <button onClick={() => run(() => commishRuleTrade(t.id, false))} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }}>✕ veto</button>
@@ -1430,6 +1442,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         // The commissioner's kit (0141/0143/0144) — note, flags, scoring
         // adjustments. Any league kind; the same editors the ⚑ banner opens.
         { id: 'kit', label: '⚑ COMMISH KIT' },
+        // 0325: the league's own weekly awards and badges. ENGAGE, not RUN
+        // THE SEASON — nothing here changes a result, it changes the jokes.
+        { id: 'awards', label: '🏅 AWARDS & BADGES' },
         ...(has('activity') ? [{ id: 'activity', label: '👁 ACTIVITY' } as TabDef<LeagueTab>] : []),
         ...(has('buffs') && !classic ? [{ id: 'buffs', label: '◈ POWER-UPS' } as TabDef<LeagueTab>] : []),
       ],
@@ -1520,6 +1535,14 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {/* the commissioner's kit — note / player flags / scoring adjustments */}
       {tab === 'kit' && <CommishToolsPanel leagueId={l.league_id} />}
 
+      {tab === 'awards' && <>
+        <AwardsPanel leagueId={l.league_id} />
+        {/* 0327: shown for an IMPORTED league too — it starts private, so its
+            commissioner has to be able to publish it, or "imports are opt-in"
+            would quietly mean "imports can never be read". */}
+        <PublicApiPanel leagueId={l.league_id} />
+      </>}
+
       {/* the in-app draft room, embedded (native leagues only) */}
       {tab === 'draft' && l.provider === 'native' && (
         <div style={{ marginTop: 12 }}>
@@ -1591,6 +1614,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           <TransactionRulesEditor leagueId={l.league_id} />
           <WaiverOrderPanel leagueId={l.league_id} />
           <MedianGamePanel leagueId={l.league_id} />
+          <TradeFloorPanel leagueId={l.league_id} />
         </div>
       )}
 

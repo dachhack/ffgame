@@ -27,7 +27,7 @@
 // not a projection of zero. The pool's rank breaks every tie, so two players
 // the source can't separate stay in the order the league already agreed on.
 
-import { ADP_2026 } from './adp2026';
+import { adpValue } from './adp2026';
 import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
@@ -58,16 +58,41 @@ export { dynFor, setDynFormat };
 // roughly 13 picks apart at the median — so a player the feed doesn't price,
 // or every player when the feed is stale, keeps the consensus number instead of
 // falling off the board. A poll failure should cost freshness, not the column.
+//
+// v0.454.0: the feed is no longer only ESPN's. The worker now refreshes the
+// published Sleeper draft-room board daily (0334), which prices each FORMAT
+// separately — so a superflex league is handed the 2QB market and a half-PPR
+// league its own, neither of which a single baked column can be. The overlay
+// mechanism is unchanged; what arrives in it is better, and `adpMeta` carries
+// which market it is so a screen can say so instead of claiming "consensus".
 let liveAdp: Record<string, number> | null = null;
-export function setLiveAdp(m?: Record<string, number> | null): void {
-  liveAdp = m && Object.keys(m).length ? m : null;
+let liveAdpMeta: AdpMeta | null = null;
+export interface AdpMeta {
+  source?: 'sleeper' | 'espn' | null;
+  format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+  asOf?: string | null;
 }
-export function clearLiveAdp(): void { liveAdp = null; }
+export function setLiveAdp(m?: Record<string, number> | null, meta?: AdpMeta | null): void {
+  liveAdp = m && Object.keys(m).length ? m : null;
+  liveAdpMeta = liveAdp ? meta ?? null : null;
+}
+export function clearLiveAdp(): void { liveAdp = null; liveAdpMeta = null; }
 /** Is the board showing a live market right now? For the label that says so. */
 export const adpIsLive = (): boolean => liveAdp != null;
+/** Which market the ADP column is showing — for the provenance line under a
+ *  player card. Null when the bake is answering. */
+export const adpMeta = (): AdpMeta | null => liveAdpMeta;
+const FORMAT_LABEL: Record<string, string> = { ppr: 'PPR', half: 'half-PPR', std: 'standard', '2qb': 'superflex' };
+/** "Sleeper draft rooms · superflex" / "ESPN draft rooms" / "consensus bake". */
+export function adpLabel(bakedAsOf: string): string {
+  if (!liveAdpMeta?.source) return `consensus ${bakedAsOf}`;
+  const where = liveAdpMeta.source === 'sleeper' ? 'Sleeper draft rooms' : 'ESPN draft rooms';
+  const fmt = liveAdpMeta.format ? FORMAT_LABEL[liveAdpMeta.format] : null;
+  return fmt ? `${where} · ${fmt}` : where;
+}
 
 export const adpFor = (slug: string): number | null =>
-  liveAdp?.[slug] ?? ADP_2026.get(slug) ?? null;
+  liveAdp?.[slug] ?? adpValue(slug);
 // THE PROJECTION IS THE LEAGUE'S, NOT THE BAKE'S (v0.310.0, founder: "so we
 // can apply scoring changes to the projections in waivers, drafts and the
 // matchup board by league and position?"). It could not: v0.308.0 built the
@@ -134,4 +159,43 @@ export function sortPool<T extends PoolRow>(
     const d = key(a) - key(b);
     return d !== 0 ? d : rankOf(a) - rankOf(b);
   });
+}
+
+// The other two live boards travel with the ADP one (0335) and are installed
+// by the same screens, so they are re-exported here rather than making every
+// caller import three modules to fill one payload.
+export { setLiveDyn, clearLiveDyn, dynIsLive } from './dyn2026';
+export { setLivePickValues, clearLivePickValues, pickBoardIsLive } from './pickValues2026';
+export { setLiveProjRate, clearLiveProjRate, projIsLive } from '../engine/projScoring';
+import { setLiveDyn as _setDyn, clearLiveDyn as _clearDyn } from './dyn2026';
+import { setLivePickValues as _setPicks, clearLivePickValues as _clearPicks } from './pickValues2026';
+import { setLiveProjRate as _setProj, clearLiveProjRate as _clearProj } from '../engine/projScoring';
+
+/** The shape `league_market` returns, as far as the overlays care. */
+export interface LiveMarketPayload {
+  adp?: Record<string, number> | null;
+  adp_source?: 'sleeper' | 'espn' | null;
+  adp_format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+  adp_as_of?: string | null;
+  dyn?: Record<string, number> | null;
+  dyn_format?: '1qb' | 'sf' | null;
+  picks?: Record<string, number> | null;
+  proj?: Record<string, number> | null;
+}
+/** Install every overlay one `league_market` call carries. ONE call site's
+ *  worth of logic, so the four screens that fetch the market cannot drift. */
+export function installLiveMarket(r: LiveMarketPayload): void {
+  setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+  _setDyn(r.dyn ?? null, r.dyn_format ?? null);
+  _setPicks(r.picks ?? null, r.dyn_format ?? null);
+  _setProj(r.proj ?? null);
+}
+/** Drop every market overlay. THE LEAK THIS CLOSES (v0.456.0): the maps are
+ *  module-level and slug-keyed, and a slug is the same slug in every league —
+ *  so a superflex league's board, left installed, priced the next league's
+ *  waiver wire, draft room and trade grades until ITS market call landed. A
+ *  screen calls this before it asks for its own market, and the store calls
+ *  it when a league is closed, so nothing outlives the league it belongs to. */
+export function clearLiveMarket(): void {
+  clearLiveAdp(); _clearDyn(); _clearPicks(); _clearProj();
 }

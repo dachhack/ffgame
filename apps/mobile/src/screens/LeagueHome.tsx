@@ -15,6 +15,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { PushPrefs } from '../ui/SettingsModal';
 import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView } from '../ui/LeagueInfo';
+import { LeagueHistoryView } from '../ui/LeagueHistory';
 import { useLeagueScroll } from '../ui/scrollChrome';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
@@ -45,7 +46,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   const [alertsOpen, setAlertsOpen] = useState(false);
   // The league's own reference sheets (v0.274.0, founder's menu list). One
   // piece of state: only ever one sheet is up, and `null` is the menu itself.
-  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit' | 'vampire'>(null);
+  const [sheet, setSheet] = useState<null | 'standings' | 'scoring' | 'roster' | 'register' | 'recruit' | 'vampire' | 'history'>(null);
   // 🧛 (v0.382.1, founder: "I dont see the feeding option in the league tab")
   // — the vampire card was buried inside the Standings sheet. A vampire
   // league gets its own tile; every other format answers `vampire:false` to
@@ -180,6 +181,9 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
         () => { track(Ev.hubTileOpened, { tile: 'vampire' }); setSheet('vampire'); },
         feedingBell(vampSt, rosterId) ? { accent: true, badge: '🩸 time to feed' } : {})}
       {native && tile('📜', 'League register', 'adds · drops · claims · trades', () => { track(Ev.hubTileOpened, { tile: 'register' }); setSheet('register'); })}
+      {/* 🏛 THE LEAGUE'S HISTORY (0324) — champions, the all-time table and the
+          record book, across every season this league has rolled through. */}
+      {tile('🏛', 'League history', 'champions · all-time · records', () => { track(Ev.hubTileOpened, { tile: 'history' }); setSheet('history'); })}
       {tile('⊞', 'Scoring settings', 'catalog · adjustments · scoped bonuses', () => { track(Ev.hubTileOpened, { tile: 'scoring' }); setSheet('scoring'); })}
       {native && tile('🧢', 'Roster settings', 'lineup · limits · waivers · free agency · trades', () => { track(Ev.hubTileOpened, { tile: 'roster_rules' }); setSheet('roster'); })}
       {tile('🔔', 'Alerts', 'chat · trades · waivers · playoffs', () => { track(Ev.hubTileOpened, { tile: 'alerts' }); setAlertsOpen(true); })}
@@ -264,6 +268,10 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
 
       <Overlay visible={sheet === 'register'} title="League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" onClose={() => setSheet(null)}>
         <RegisterView leagueId={leagueId} />
+      </Overlay>
+
+      <Overlay visible={sheet === 'history'} title="🏛 League history" subtitle="CHAMPIONS · ALL-TIME · THE RECORD BOOK" onClose={() => setSheet(null)}>
+        <LeagueHistoryView leagueId={leagueId} />
       </Overlay>
 
       <Overlay visible={sheet === 'scoring'} title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" onClose={() => setSheet(null)}>

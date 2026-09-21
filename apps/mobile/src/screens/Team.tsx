@@ -16,6 +16,7 @@ import {
   friendlyError, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim,
+  groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueContracts, type ContractDeal,
@@ -23,7 +24,7 @@ import {
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
@@ -298,6 +299,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
+  // 0323: link mode on the claims card — the ticked ids, in tick order.
+  const [linking, setLinking] = useState<string[] | null>(null);
+  const [linkMax, setLinkMax] = useState(1);
   // POSITIONS ARE A MULTI-SELECT NOW (v0.302.0). Empty = every position the
   // LEAGUE can roster, which is not the same as every position.
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
@@ -307,11 +311,18 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
     // a stale feed costs freshness rather than the whole column.
+    // 0335: the dynasty market, the pick board and the season rate ride the
+    // same call. Each is format-resolved server-side and says so. Cleared
+    // FIRST (v0.456.0) so a league whose market is slow or errors shows the
+    // bake, never the previous league's board.
+    clearLiveMarket();
+    let alive = true;
     leagueMarket(leagueId).then((r) => {
-      if (!r?.ok) return;
+      if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      installLiveMarket(r);
     }).catch(() => {});
+    return () => { alive = false; };
   }, [leagueId]);
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.
   const [tenure, setTenure] = useState<TenureBand>('any');
@@ -663,6 +674,20 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
 
   const pendingClaims = team.my_claims.filter((c) => c.status === 'pending');
   const recentClaims = team.my_claims.filter((c) => c.status !== 'pending').slice(0, 5);
+  // 0323: CONDITIONAL CLAIMS, the web twin. Pending claims render grouped —
+  // a group's members in the manager's order, then the loners — and LINK mode
+  // ticks claims IN THE ORDER YOU WANT THEM TRIED.
+  const claimGroups = (() => {
+    const out: { id: string | null; max: number; claims: typeof pendingClaims }[] = [];
+    for (const c of pendingClaims) {
+      const key = c.group_id ?? null;
+      const row = key ? out.find((g) => g.id === key) : null;
+      if (row) row.claims.push(c);
+      else out.push({ id: key, max: c.group_max ?? 1, claims: [c] });
+    }
+    for (const g of out) if (g.id) g.claims.sort((x, y) => (x.group_seq ?? 0) - (y.group_seq ?? 0));
+    return out;
+  })();
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
@@ -841,11 +866,55 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {/* pending + recent claims */}
       {(pendingClaims.length > 0 || recentClaims.length > 0) && (
         <Card>
-          <Mono size={9} tone="faint" track={0.12}>MY WAIVER CLAIMS</Mono>
-          {pendingClaims.map((c) => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Mono size={9} tone="faint" track={0.12}>MY WAIVER CLAIMS</Mono>
+            <View style={{ flex: 1 }} />
+            {/* 0323: "I want ONE of these." Tick claims in the order you want
+                them tried; the first that lands takes the rest off the table. */}
+            {pendingClaims.length > 1 && (
+              <Chip label={linking ? '✕ DONE' : '🔗 LINK'} on={!!linking}
+                onPress={() => { tap(); setLinking(linking ? null : []); setLinkMax(1); }} />
+            )}
+          </View>
+          {linking && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              <Mono size={8.5} tone="faint">tick in the order you want them tried</Mono>
+              {linking.length > 1 && (
+                <>
+                  <Chip label="−" onPress={() => { tap(); setLinkMax((v) => Math.max(1, v - 1)); }} />
+                  <Mono size={9.5} tone="you" weight="700">{linkMax} of {linking.length}</Mono>
+                  <Chip label="＋" onPress={() => { tap(); setLinkMax((v) => Math.min(linking.length - 1, v + 1)); }} />
+                  <Chip label="LINK THESE" on onPress={() => { tap(); void run(async () => {
+                    const r = await groupWaiverClaims(linking, linkMax);
+                    if (r.ok) setLinking(null);
+                    return r;
+                  }); }} />
+                </>
+              )}
+            </View>
+          )}
+          {claimGroups.map((g) => (
+            <View key={g.id ?? g.claims[0].id}
+              style={g.id ? { borderLeftWidth: 2, borderLeftColor: t.warn, paddingLeft: 7, marginTop: 6 } : undefined}>
+              {g.id && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+                  <Mono size={8} tone="warn" track={0.06}>🔗 ONLY {g.max} OF THESE {g.claims.length}</Mono>
+                  <View style={{ flex: 1 }} />
+                  <LinkButton label="unlink" onPress={() => void run(() => ungroupWaiverClaims(g.id as string))} />
+                  <LinkButton label="cancel all" tone="opp" onPress={() => void run(() => cancelWaiverGroup(g.id as string))} />
+                </View>
+              )}
+              {g.claims.map((c, i) => (
             <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
+              {linking && (
+                <Chip label={linking.includes(c.id) ? `${linking.indexOf(c.id) + 1}✓` : '☐'} on={linking.includes(c.id)}
+                  onPress={() => { tap(); setLinking((v) => (v ?? []).includes(c.id)
+                    ? (v ?? []).filter((x) => x !== c.id) : [...(v ?? []), c.id]); }} />
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}</Text>
+                <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>
+                  {g.id ? `${i + 1}. ` : ''}＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
+                </Text>
                 {c.drop_slug && <Mono size={9} tone="faint">dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</Mono>}
                 {/* 0289: PENDING UNTIL WHEN — the web twin. A card that says
                     "pending" and stops is the same silence that made a claim
@@ -857,6 +926,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
               {team.waiver_mode === 'faab' && <Mono size={9.5} tone="you" weight="700">${c.bid ?? 0}</Mono>}
               <Mono size={8} tone="warn" track={0.06}>PENDING</Mono>
               <LinkButton label="cancel" tone="opp" onPress={() => void run(() => cancelWaiverClaim(c.id))} />
+            </View>
+              ))}
             </View>
           ))}
           {recentClaims.map((c) => (
@@ -985,6 +1056,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
+        reviewHours={team.trade_review_hours} vetoNeed={team.trade_veto_votes}
+        offerDays={team.trade_offer_days} faabTrading={team.faab_trading} myFaab={team.my_faab}
         isCommish={!!team.is_commish} presetPartner={tradePartner} onChanged={() => void refresh()} />
       )}
 

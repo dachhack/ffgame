@@ -9,6 +9,7 @@ import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
+import { supabaseUrl } from './liveConfig';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
@@ -55,6 +56,10 @@ export function friendlyError(x: unknown): string {
     return 'Confirm your email first — check your inbox for the link we sent.';
   if (m.includes('already registered') || m.includes('already been registered') || m.includes('user already'))
     return 'An account with that email already exists — sign in instead.';
+  // A trade offer expiring is not a magic link expiring (v0.456.0): the
+  // auth rule below matched every server line with "expired" in it and told
+  // a manager accepting a lapsed offer to request a fresh sign-in link.
+  if (m.includes('offer expired') || m.includes('trade already expired')) return raw;
   if (m.includes('expired') || (m.includes('token') && m.includes('invalid')) || m.includes('otp_expired'))
     return 'That code has expired or was already used. Request a fresh link.';
   if (m.includes('rate limit') || m.includes('only request this after') || m.includes('too many'))
@@ -2053,17 +2058,32 @@ export const createNativeLeague = (
  *  which is exactly the list you wanted to sort. */
 export const playerOwnership = (leagueId: string) =>
   rpc<Record<string, number> | { error: string }>('player_ownership', { p_league_id: leagueId });
-/** THE LIVE MARKET (0203): ESPN's average draft position and ownership share,
- *  both from one poll, in one call. Empty maps mean the feed is stale — the
- *  caller keeps the baked consensus ADP rather than blanking the column. */
+/** THE LIVE MARKET (0203, ADP re-sourced 0334): average draft position and
+ *  ownership share in one call. Empty maps mean the feeds are stale — the
+ *  caller keeps the baked consensus ADP rather than blanking the column.
+ *
+ *  The ADP half now answers from the published Sleeper draft-room board where
+ *  it can and from ESPN's where it cannot, per player. `adp_source` says
+ *  which, and `adp_format` says WHICH MARKET this league reads — a superflex
+ *  lineup gets the 2QB board, a half-PPR league gets the half-PPR one, which
+ *  a single baked column could never do. */
 export const leagueMarket = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; fresh?: boolean; as_of?: string | null; source?: string | null;
-        adp?: Record<string, number>; own?: Record<string, number> }>(
+        adp_source?: 'sleeper' | 'espn' | null; adp_format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+        adp_as_of?: string | null;
+        adp?: Record<string, number>; own?: Record<string, number>;
+        /** 0335: the dynasty market and the rookie-pick board, both resolved
+         *  to this league's format, and the source's season rate. `proj` is a
+         *  PPR LEVEL, never a score — the engine applies the league's own
+         *  catalog to it, so it must not be shown as a projection directly. */
+        dyn_format?: '1qb' | 'sf' | null; dyn_as_of?: string | null;
+        dyn?: Record<string, number>; picks?: Record<string, number>;
+        proj_as_of?: string | null; proj?: Record<string, number> }>(
     'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
-        waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: 'none' | 'commish';
+        waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview;
         waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null;
@@ -2074,6 +2094,13 @@ export const rosterRules = (leagueId: string) =>
          *  it has already passed. */
         faab_min_bid?: number; fa_dow?: number[] | null;
         trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
+        /** 0321: the trade floor. trade_veto_votes is the EFFECTIVE bar;
+         *  trade_veto_votes_set is null while it is the majority fallback. */
+        /** 0326: is this league served by the anonymous public read API? */
+        public_api?: boolean;
+        trade_review_hours?: number; trade_veto_votes?: number;
+        trade_veto_votes_set?: number | null;
+        trade_offer_days?: number; faab_trading?: boolean;
         /** 0320, the commissioner's desk: the league-wide wire lock, the
          *  teams locked one by one, the median game, and the dues. */
         wire_lock?: boolean; locked_rosters?: number[]; median_game?: boolean;
@@ -2130,7 +2157,8 @@ export const setOutRules = (leagueId: string, tags: string[]) =>
 export type WaiverMode = 'rolling' | 'standings' | 'faab';
 /** Free agency: always open, only inside the hours, or not at all (0287). */
 export type FaMode = 'open' | 'window' | 'off';
-export type TradeReview = 'none' | 'commish';
+/** 0321: 'league' joins them — an accepted trade goes out for a veto vote. */
+export type TradeReview = 'none' | 'commish' | 'league';
 /** Per-seat FAAB (0173). `faab` is the EFFECTIVE balance — an untouched seat
  *  reads the league default rather than 0 — and `touched` says whether the
  *  seat has its own stored value yet. */
@@ -2185,6 +2213,226 @@ export const setTransactionRules = (
       p_agent_waivers: agentWaivers, p_fa_mode: faMode,
       p_faab_min_bid: faabMinBid, p_fa_dow: faDow, p_trade_deadline_week: tradeDeadlineWeek,
     });
+/** THE TRADE FLOOR (0321), the commissioner's own call rather than another
+ *  argument on set_transaction_rules: the review mode, how long a league vote
+ *  stays open, how many vetoes kill a trade (-1 clears back to a majority of
+ *  the teams outside it), how many days an offer stands by default (0 = until
+ *  it is answered) and whether FAAB may ride a trade. Nulls leave a knob. */
+export const commishSetTradeRules = (
+  leagueId: string, review: TradeReview | null = null, reviewHours: number | null = null,
+  vetoVotes: number | null = null, offerDays: number | null = null, faabTrading: boolean | null = null,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_review?: TradeReview; trade_review_hours?: number;
+                trade_veto_votes?: number; trade_offer_days?: number; faab_trading?: boolean }>(
+    'commish_set_trade_rules', {
+      p_league_id: leagueId, p_review: review, p_review_hours: reviewHours,
+      p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
+    }), Ev.commishAction, { tool: 'trade_rules' });
+
+// ── This week's number, and the news (0329) ──────────────────────────────────
+/** The WEEK's projections for this league's players, keyed by slug. Refreshed
+ *  hourly by the worker from the source that knows about the starter who is
+ *  out, the back-up who has the job and the bye — which the baked season set
+ *  (proj2026.ts) cannot, having been computed in August. A player with no
+ *  crosswalk id, or a week not yet polled, is simply absent: the baked
+ *  projection still answers for him, and a screen shows the season number
+ *  rather than a zero. */
+/** One player's week, as the source served it (0330). `mult` is the half that
+ *  matters in a custom-scoring league: the source splits a player's WHOLE
+ *  projected line by this one number, so THIS league's season rate × mult is
+ *  THIS league's week — see data/weekProj. `pts` is the source's own PPR
+ *  total, right for a stock league and the fallback everywhere else. */
+export interface WeekProjRow {
+  pts: number | null;
+  mult: number | null;
+  /** Opponent team code, and whether he is at home. */
+  opp: string | null;
+  home: boolean | null;
+  /** 'OUT' / 'RES' / 'DEV' / 'backup' — why a number is zero or soft. */
+  status: string | null;
+  /** 'stathead' | 'espn' — a screen that shows a number owes the reader this. */
+  source: string;
+  /** Our own injury designation for him — 'O' | 'IR' | 'D' | 'Q' (0333). */
+  inj?: string | null;
+  /** Did that designation change the number? Only ever true for the week
+   *  being played: today's "Out" says nothing about week 9. */
+  adjusted?: boolean;
+}
+export const leagueWeekProjections = (leagueId: string, week: number) =>
+  rpc<{ ok?: boolean; error?: string; season?: string; week?: number; as_of?: string | null;
+        projections?: Record<string, number>; rows?: Record<string, WeekProjRow> }>(
+    'league_week_projections', { p_league_id: leagueId, p_week: week });
+
+/** Every public id we can resolve for one player (0331). Absent keys mean the
+ *  crosswalk could not place him — never a guess from his name. */
+export interface PlayerIds {
+  espn_id?: string; sleeper_id?: string; gsis_id?: string;
+  pfr_id?: string; yahoo_id?: string; sportradar_id?: string;
+}
+/** This league's pool, slug → ids. The same set the public API publishes,
+ *  for a signed-in client that should not have to ask the public endpoint
+ *  for something it is already entitled to. */
+export const leaguePlayerIds = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string; ids?: Record<string, PlayerIds> }>(
+    'league_player_ids', { p_league_id: leagueId });
+
+export interface NewsItem {
+  id: string; at: string; headline: string; summary: string | null; url: string | null;
+  /** Which of this league's players the story is about. */
+  players?: { slug: string; name: string; pos: string }[] | null;
+}
+/** Headlines about THIS league's players, newest first — the feed a manager
+ *  wants, rather than the league-wide wire. */
+export const leagueNews = (leagueId: string, limit = 30) =>
+  rpc<{ ok?: boolean; error?: string; news?: NewsItem[] }>('league_news',
+    { p_league_id: leagueId, p_limit: limit });
+/** One player's recent headlines, for the card that opens when you tap him. */
+export const playerNews = (espnId: string, limit = 5) =>
+  rpc<NewsItem[]>('player_news_for', { p_espn_id: espnId, p_limit: limit });
+
+// ── The public read API (0326) ───────────────────────────────────────────────
+/** Is this league readable by the anonymous public API? ON by default for
+ *  every league that lives here (0327) — there is no directory, so that means
+ *  "readable by whoever holds the league's id", not "listed anywhere" — and
+ *  OFF by default for leagues imported from another platform, which are a
+ *  mirror of somebody else's system. A league that is off is a 404 to the
+ *  API, indistinguishable from one that does not exist. */
+/** The base URL this deployment's public API answers on. The edge function
+ *  lives under the project host (the same host `auth.dripfantasy.com` already
+ *  points at), so this is the URL that actually works today; a prettier
+ *  `api.dripfantasy.com` is a DNS step, not a code one (docs/public-api.md). */
+export const publicApiUrl = (leagueId?: string) =>
+  `${supabaseUrl().replace(/\/$/, '')}/functions/v1/public-api/v1${leagueId ? `/league/${leagueId}` : ''}`;
+
+/** Is this league's read API open? Provider-agnostic — `roster_rules` refuses
+ *  an imported league, and the switch was inert there (v0.456.0). Null for a
+ *  mock; a caller coalesces. */
+export const leaguePublicApi = (leagueId: string) =>
+  rpc<boolean | null>('league_public_api', { p_league_id: leagueId });
+export const commishSetPublicApi = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; public_api?: boolean }>('commish_set_public_api',
+    { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'public_api' });
+
+// ── Weekly awards and badges (0325) ──────────────────────────────────────────
+/** An award DEFINITION: three choices that between them cover everything a
+ *  week's scores can say about a team. `is_default` marks the built-in four a
+ *  league gets until it changes one. */
+export interface AwardDef {
+  key: string; name: string; icon: string;
+  metric: 'points' | 'points_against' | 'margin' | 'combined';
+  direction: 'high' | 'low';
+  /** Count every week, only wins, or only losses — "highest score that still
+   *  lost" is points/high/loss. */
+  only_result: 'any' | 'win' | 'loss';
+  /** An optional drip-coin prize paid to the winner (0 = a trophy only). */
+  coin: number; sort: number; is_default: boolean;
+}
+export interface AwardWin { key: string; name: string; icon: string; roster_id: number; team: string | null; value: number | null; }
+export interface BadgeDef { key: string; name: string; icon: string; note: string | null; sort: number; }
+export interface BadgeGrant { key: string; roster_id: number; season: string; note: string | null; team: string | null; icon: string | null; name: string | null; }
+export interface LeagueAwards {
+  ok?: boolean; error?: string;
+  awards?: AwardDef[];
+  badges?: BadgeDef[];
+  grants?: BadgeGrant[];
+  /** The recent weeks, newest first. */
+  weeks?: { week: number; wins: AwardWin[] }[];
+  /** How many of each award each seat has won this season. */
+  counts?: { roster_id: number; team: string | null; key: string; icon: string; name: string; n: number }[];
+}
+export const leagueAwards = (leagueId: string, weeks = 6) =>
+  rpc<LeagueAwards>('league_awards', { p_league_id: leagueId, p_weeks: weeks });
+/** Commissioner: add or change one award. The key is the identity — an
+ *  existing key edits, a new one adds — and nulls leave a field alone, so a
+ *  console can save one field at a time. The first edit writes the built-in
+ *  four down as real rows, so renaming one does not delete the others. */
+export const commishSetAward = (
+  leagueId: string, key: string,
+  a: { name?: string; icon?: string; metric?: AwardDef['metric']; direction?: AwardDef['direction'];
+       onlyResult?: AwardDef['only_result']; coin?: number; active?: boolean; sort?: number; note?: string } = {},
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; key?: string }>('commish_set_award', {
+    p_league_id: leagueId, p_key: key,
+    p_name: a.name ?? null, p_icon: a.icon ?? null, p_metric: a.metric ?? null,
+    p_direction: a.direction ?? null, p_only_result: a.onlyResult ?? null,
+    p_coin: a.coin ?? null, p_active: a.active ?? null, p_sort: a.sort ?? null, p_note: a.note ?? null,
+  }), Ev.commishAction, { tool: 'award_set' });
+/** Retire an award. What it has already handed out stays — the trophy case is
+ *  a record of what happened, not of what the rules currently say. */
+export const commishDeleteAward = (leagueId: string, key: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; kept_wins?: number }>('commish_delete_award',
+    { p_league_id: leagueId, p_key: key }), Ev.commishAction, { tool: 'award_delete' });
+/** Commissioner: define a badge (🐐, 🤡, PAID HIS DUES — whatever the league
+ *  is like). Granting it is a separate call. */
+export const commishSetBadge = (leagueId: string, key: string, b: { name?: string; icon?: string; note?: string; sort?: number } = {}) =>
+  tracked(rpc<{ ok: boolean; error?: string; key?: string }>('commish_set_badge', {
+    p_league_id: leagueId, p_key: key, p_name: b.name ?? null, p_icon: b.icon ?? null,
+    p_note: b.note ?? null, p_sort: b.sort ?? null,
+  }), Ev.commishAction, { tool: 'badge_set' });
+export const commishDeleteBadge = (leagueId: string, key: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_delete_badge', { p_league_id: leagueId, p_key: key }),
+    Ev.commishAction, { tool: 'badge_delete' });
+/** Pin a badge on a seat, stamped with the season (defaults to the league's),
+ *  so the same badge can be won again next year without erasing this year's. */
+export const commishGrantBadge = (leagueId: string, rosterId: number, key: string, season?: string, note?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; season?: string }>('commish_grant_badge', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_key: key, p_season: season ?? null, p_note: note ?? null,
+  }), Ev.commishAction, { tool: 'badge_grant' });
+export const commishRevokeBadge = (leagueId: string, rosterId: number, key: string, season?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_revoke_badge', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_key: key, p_season: season ?? null,
+  }), Ev.commishAction, { tool: 'badge_revoke' });
+/** Hand out one league-week's awards. Idempotent, and re-runnable: an award
+ *  added in week 9 fills in the weeks behind it without disturbing them. The
+ *  worker sweeps this; a screen may poke it for the week it is showing. */
+export const awardWeek = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; awarded?: number; skipped?: string }>('award_week',
+    { p_league_id: leagueId, p_week: week });
+
+// ── The league's history (0324) ──────────────────────────────────────────────
+/** One season in a league's lineage, as the history screen shows it. */
+export interface HistorySeason {
+  league_id: string; season: string; name: string | null; current: boolean;
+  champion: { roster_id: number; team: string | null; avatar?: string | null } | null;
+  runner_up: { roster_id: number; team: string | null } | null;
+  /** The regular-season table, best first. */
+  table: { roster_id: number; team: string | null; w: number; l: number; t: number; pf: number; pa: number }[];
+  high_week: { week: number; roster_id: number; team: string | null; points: number } | null;
+}
+export interface HistoryWeekRow {
+  season: string; week: number; playoff?: boolean; points: number;
+  roster_id: number; team: string | null; opp?: string | null; opp_points?: number;
+}
+export interface HistoryGameRow {
+  season: string; week: number; margin: number; winner: string | null; loser: string | null; score: string;
+}
+export interface HistoryManager {
+  manager: string; team: string | null; app_user_id: string | null;
+  seasons: number; w: number; l: number; t: number; pf: number;
+  /** Titles won, and how many title games they reached. */
+  titles: number; finals: number;
+  /** 0325: weekly awards won, and the badges pinned on them. */
+  awards?: number;
+  badges?: { icon: string; name: string; season: string }[];
+}
+export interface LeagueHistory {
+  ok?: boolean; error?: string; league_id?: string; seasons_count?: number;
+  seasons?: HistorySeason[];
+  records?: {
+    top_weeks: HistoryWeekRow[]; low_weeks: HistoryWeekRow[];
+    blowouts: HistoryGameRow[]; nailbiters: HistoryGameRow[];
+    top_seasons: { season: string; pf: number; record: string; roster_id: number; team: string | null }[];
+    best_records: { season: string; record: string; pct: number; pf: number; roster_id: number; team: string | null }[];
+  };
+  managers?: HistoryManager[];
+}
+/** Past champions, the record book and every manager's all-time line, across
+ *  every season this league has rolled through (0324). Any member of ANY of
+ *  those seasons may read all of them — a manager who joined last August
+ *  should see the seasons he missed. */
+export const leagueHistory = (leagueId: string) =>
+  rpc<LeagueHistory>('league_history', { p_league_id: leagueId });
+
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player
  *  came from) and commissioner moves — written by a trigger on native_roster,
@@ -2195,7 +2443,9 @@ export interface RegisterRow {
   /** 0221/0222 grew the vocabulary: eliminations + releases (guillotine),
    *  steals (vampire), and the front office (tag/extension/rfa/retained/cap). */
   kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish'
-      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap';
+      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap'
+      /** 0321: FAAB dollars moved as a trade asset. */
+      | 'faab';
   slug: string;
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
@@ -2225,8 +2475,33 @@ export interface TradeRow {
   /** Contract leagues (0219): retained-salary terms and traded cap dollars. */
   retain?: { slug: string; amount: number; roster: number }[] | null;
   cap_dollars?: number | null;
-  status: 'pending' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'vetoed';
+  /** 0321: FAAB dollars as an asset (positive = the PROPOSER sends them). */
+  faab_dollars?: number | null;
+  status: 'pending' | 'accepted' | 'review' | 'executed' | 'rejected' | 'cancelled'
+        | 'vetoed' | 'expired' | 'countered' | 'reversed';
   note: string | null; created_at: string; resolved_at: string | null;
+  /** 0321: when this offer lapses (null = it stands until answered), when the
+   *  league vote closes, and the offer this one answers. */
+  expires_at?: string | null;
+  review_until?: string | null;
+  counters?: string | null;
+  /** 0321: the vote so far, and the number of vetoes that would kill it. */
+  votes?: { roster_id: number; veto: boolean }[];
+  veto_need?: number;
+  /** 0322: a MULTI-TEAM deal's legs — one per seat, each asset naming where
+   *  it goes, and each seat's own acceptance. Null on an ordinary two-seat
+   *  offer, which is how a screen tells the two shapes apart; `give`/`get`
+   *  are empty on a multi-team row. */
+  legs?: TradeLeg[] | null;
+}
+/** One seat's side of a multi-team trade (0322). */
+export interface TradeLeg {
+  roster_id: number;
+  send: { slug: string; to: number }[];
+  send_picks: { season: string; round: number; orig: number; to: number }[];
+  send_faab: { to: number; amount: number }[];
+  send_cap: { to: number; amount: number }[];
+  accepted: boolean;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
@@ -2238,20 +2513,83 @@ export const proposeTrade = (
    *  traded player ($1..salary−1), and raw cap dollars moved as an asset
    *  (positive = the proposer sends cap room). */
   retain?: { slug: string; amount: number }[], capDollars?: number,
+  /** 0321: FAAB dollars moved with the deal (positive = the proposer sends
+   *  them), and how long the offer stands — hours, -1 for "until it is
+   *  answered", or undefined to take the league's default. */
+  faabDollars?: number, expiresHours?: number,
 ) =>
-  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; expires_at?: string | null }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
     p_give: give, p_get: get, p_note: note ?? null,
     p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
     p_retain: retain && retain.length > 0 ? retain : null,
     p_cap_dollars: capDollars ?? null,
+    p_faab_dollars: faabDollars ?? 0, p_expires_hours: expiresHours ?? null,
   }), Ev.tradeProposed, { players: give.length + get.length, picks: (givePicks?.length ?? 0) + (getPicks?.length ?? 0) });
+
+/** 0321: answer an offer with an offer. The original closes as 'countered' and
+ *  the mirrored proposal is filed from the answering seat in one transaction —
+ *  `give` is what THEY send. Everything a proposal may carry carries here. */
+export const counterTrade = (
+  tradeId: string, give: string[], get: string[], note?: string,
+  givePicks?: { season?: string; round: number; orig: number }[], getPicks?: { season?: string; round: number; orig: number }[],
+  retain?: { slug: string; amount: number }[], capDollars?: number,
+  faabDollars?: number, expiresHours?: number,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; counters?: string }>('counter_trade', {
+    p_trade_id: tradeId, p_give: give, p_get: get, p_note: note ?? null,
+    p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
+    p_retain: retain && retain.length > 0 ? retain : null,
+    p_cap_dollars: capDollars ?? null,
+    p_faab_dollars: faabDollars ?? 0, p_expires_hours: expiresHours ?? null,
+  }), Ev.tradeProposed, { players: give.length + get.length, counter: true });
+
+/** 0322: a THREE-TEAM (or more) trade. Each leg is one seat and what it
+ *  sends, every asset addressed to another seat in the deal — which is what
+ *  makes a carousel work: A's receiver goes to B, B's back to C, C's pick to
+ *  A, and no two seats have a trade between them. The proposer must be in it,
+ *  their leg is accepted on filing, and nothing moves until the last seat
+ *  answers (respond_trade, the same call a two-seat offer takes). Salary
+ *  retention is refused here — it is a two-seat term. */
+export const proposeMultiTrade = (
+  leagueId: string,
+  legs: {
+    roster: number;
+    send?: { slug: string; to: number }[];
+    send_picks?: { season?: string; round: number; orig: number; to: number }[];
+    send_faab?: { to: number; amount: number }[];
+    send_cap?: { to: number; amount: number }[];
+  }[],
+  note?: string, expiresHours?: number,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; teams?: number; expires_at?: string | null }>(
+    'propose_multi_trade', {
+      p_league_id: leagueId, p_legs: legs, p_note: note ?? null, p_expires_hours: expiresHours ?? null,
+    }), Ev.tradeProposed, { teams: legs.length, multi: true });
+
+/** 0321: one uninvolved seat's vote on a trade out for league review. Veto =
+ *  against; an allow counts too, because a vote whose outcome is already
+ *  arithmetic settles at once instead of sitting out its window. */
+export const castTradeVote = (tradeId: string, veto: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; status?: string; vetoes?: number; need?: number }>(
+    'cast_trade_vote', { p_trade_id: tradeId, p_veto: veto }),
+    Ev.tradeResponded, { action: veto ? 'veto' : 'allow' });
 export const respondTrade = (tradeId: string, accept: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept }),
     Ev.tradeResponded, { action: accept ? 'accept' : 'reject' });
 export const cancelTrade = (tradeId: string) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId }),
     Ev.tradeResponded, { action: 'cancel' });
+/** 0328: the commissioner's last resort — reverse a COMPLETED trade. Every
+ *  leg run backwards in one transaction: players home, picks home, FAAB and
+ *  cap home, retained salary un-retained. Refuses (rather than half-undoing)
+ *  when a piece has moved on, when the undo would leave a roster illegal, or
+ *  when the FAAB has already been spent. The trade is stamped 'reversed'
+ *  rather than deleted — it happened. */
+export const commishReverseTrade = (tradeId: string, note?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; status?: string; teams?: number }>('commish_reverse_trade',
+    { p_trade_id: tradeId, p_note: note ?? null }), Ev.commishAction, { tool: 'trade_reverse' });
+
 export const commishRuleTrade = (tradeId: string, approve: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve }),
     Ev.commishAction, { tool: approve ? 'trade_approve' : 'trade_veto' });
@@ -3188,13 +3526,41 @@ export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: s
     Ev.waiverClaimed, { type: 'waiver', drop: !!dropSlug, bid });
 export const cancelWaiverClaim = (claimId: string) =>
   rpc<{ ok: boolean; error?: string }>('cancel_waiver_claim', { p_claim_id: claimId });
+
+/** CONDITIONAL CLAIMS (0323) — "one of these, in this order". Link claims you
+ *  have already filed: pass the ids in preference order and how many of them
+ *  may land (1 by default). The run still orders claims by the league's own
+ *  rules; the group only ever takes the rest off the table once it is full. */
+export const groupWaiverClaims = (claimIds: string[], maxWins = 1) =>
+  tracked(rpc<{ ok: boolean; error?: string; group_id?: string; claims?: number; max_wins?: number }>(
+    'group_waiver_claims', { p_claim_ids: claimIds, p_max_wins: maxWins }),
+    Ev.waiverClaimed, { type: 'group', claims: claimIds.length });
+/** File a whole contingency list in one call, in preference order. ALL OR
+ *  NOTHING: a list whose third claim is refused files none of them. */
+export const submitWaiverGroup = (
+  leagueId: string, rosterId: number,
+  claims: { add: string; drop?: string | null; bid?: number }[], maxWins = 1,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; group_id?: string; claims?: number; failed_on?: string }>(
+    'submit_waiver_group', { p_league_id: leagueId, p_roster_id: rosterId, p_claims: claims, p_max_wins: maxWins }),
+    Ev.waiverClaimed, { type: 'group-file', claims: claims.length });
+/** Break a group up; the claims stand on their own, unchanged otherwise. */
+export const ungroupWaiverClaims = (groupId: string) =>
+  rpc<{ ok: boolean; error?: string; claims?: number }>('ungroup_waiver_claims', { p_group_id: groupId });
+/** Withdraw every pending claim in a group at once. */
+export const cancelWaiverGroup = (groupId: string) =>
+  rpc<{ ok: boolean; error?: string; cancelled?: number }>('cancel_waiver_group', { p_group_id: groupId });
 /** Resolve every due claim in waiver-priority order. Idempotent — safe to call on load. */
 export const processWaivers = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; won?: number; lost?: number }>('process_waivers', { p_league_id: leagueId });
 export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: string | null; status: string; note: string | null; created_at: string; bid?: number;
   /** 0289: when this claim settles — its own clock when free agency could
    *  not reach the player, else the pool hold it is queued behind. */
-  clears_at?: string | null; }
+  clears_at?: string | null;
+  /** 0323: the contingency group this claim is part of — "one of these" —
+   *  with its place in the manager's order and how many of the group may
+   *  land. Null on a claim that stands alone. */
+  group_id?: string | null; group_seq?: number | null; group_max?: number | null; }
 export interface NativeTeamState {
   /** 0320: why the wire is shut for my seat right now (a commissioner's lock, the format's), or null. */
   wire_block?: string | null;
@@ -3211,6 +3577,14 @@ export interface NativeTeamState {
   /** Waiver system: rolling priority (default) or FAAB blind bids. */
   waiver_mode?: WaiverMode;
   trade_review?: TradeReview;
+  /** 0321: the trade floor, as the offer screen needs it — how long a league
+   *  vote runs, how many vetoes kill a deal, how many days an offer stands by
+   *  default (0 = until answered) and whether FAAB may ride one (false in a
+   *  league that is not on FAAB at all). */
+  trade_review_hours?: number;
+  trade_veto_votes?: number;
+  trade_offer_days?: number;
+  faab_trading?: boolean;
   /** My remaining FAAB budget (FAAB leagues only). */
   my_faab?: number | null;
   /** Why my roster is illegal (over size / position limits) — locked out of

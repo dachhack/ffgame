@@ -376,6 +376,35 @@ export function scoreIdpLine(line: ProjIdpLine, sc: ClassicScoring): number {
 let catalog: ClassicScoring | null = null;
 const cat = (): ClassicScoring => catalog ?? DEFAULT_CLASSIC_SCORING;
 
+// ── THE LIVE SEASON RATE (v0.455.0) ────────────────────────────────────────
+// `proj2026.ts` is a rate frozen in August. The source rebuilds it every two
+// hours and the worker now stores it (0335), keyed by slug where our index
+// could place the sleeper id it carries. This is the same overlay pattern as
+// the live ADP and dynasty boards: a module map behind a synchronous getter,
+// installed by the screen that fetched it, cleared on the way out.
+//
+// IT IS A LEVEL, NOT A SCORE. What lands here is the source's PPR per-week
+// rate — the same shape PROJ_2026 stores — and it is substituted for that
+// number BEFORE the league's own catalog ratio is applied. A league that pays
+// 6 for a passing touchdown still gets its own number; it is simply computed
+// off this week's opinion of the player instead of August's.
+let liveProj: Record<string, number> | null = null;
+export function setLiveProjRate(m?: Record<string, number> | null): void {
+  liveProj = m && Object.keys(m).length ? m : null;
+}
+export function clearLiveProjRate(): void { liveProj = null; }
+/** Is the projected column running on a live season rate? */
+export const projIsLive = (): boolean => liveProj != null;
+function liveProjRate(slug: string, sid?: string | null): number | undefined {
+  if (!liveProj) return undefined;
+  const v = liveProj[slug];
+  if (v != null && v > 0) return v;
+  // The board is keyed by OUR slug where the worker could place it; the id
+  // fallback is here for the same reason PROJ_2026_SID is (v0.432.4).
+  const byId = sid ? liveProj[sid] : undefined;
+  return byId != null && byId > 0 ? byId : undefined;
+}
+
 export function setLeagueProjScoring(sc?: number | Partial<ClassicScoring> | null): void {
   catalog = normalizeClassicScoring(sc);
 }
@@ -524,7 +553,18 @@ export function projectedPoints(
   // scratch. PROJ_2026_SID has always carried the same number under the
   // stable id; every pool row has carried that id since 0205; the worker now
   // hands it in (SpotPlayer.sleeperId) and the boards install it.
-  const base = PROJ_2026.get(player.id) ?? (sid ? PROJ_2026_SID.get(sid) : undefined) ?? kdstBase(player.id, sid);
+  // THE LEVEL CAN BE LIVE; THE RULES ARE ALWAYS THE LEAGUE'S (v0.455.0).
+  // The worker refreshes the source's season rate daily (0335) out of the
+  // same file the weekly numbers come from. It is a PPR scalar, so it cannot
+  // replace this function — but it can replace its BASE, which is the one
+  // thing this function does not compute: `leagueProjRatio` below is the
+  // league's catalog divided by the standard one, and that ratio is
+  // independent of the level it multiplies. Swap the level, keep the rules.
+  //
+  // A player the live board does not carry keeps the bake, which is why this
+  // degrades rather than blanks.
+  const base = liveProjRate(player.id, sid)
+    ?? PROJ_2026.get(player.id) ?? (sid ? PROJ_2026_SID.get(sid) : undefined) ?? kdstBase(player.id, sid);
   if (!base) return 0;
   const scaled = base * leagueProjRatio(player.id, player.pos, undefined, sid);
   const adj = scopedAdjustFor(player, { slot });

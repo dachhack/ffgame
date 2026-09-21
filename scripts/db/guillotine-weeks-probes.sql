@@ -7,6 +7,8 @@
 -- what lets an 18-team guillotine reach one survivor at all.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 create or replace function gw_as(u text) returns void language plpgsql as $$

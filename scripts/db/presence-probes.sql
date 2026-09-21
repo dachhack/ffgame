@@ -10,6 +10,8 @@
 --   • presence is per LEAGUE — being in one room is not being in another.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 
 create or replace function pz_ok(r jsonb, msg text) returns void language plpgsql as $$
 begin

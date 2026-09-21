@@ -518,7 +518,47 @@ for (const line of DYN_CSV.split('\n')) {
 export const DYN_2026: Map<string, [number, number]> = byName;
 export const DYN_BY_SID: Map<string, [number, number]> = bySid;
 
+// THE LIVE BOARD OVERLAY (v0.455.0). The worker now rebuilds this market
+// weekly (0335) by running the upstream's own rescale over the published KTC
+// board, so the bake below is the fallback rather than the answer. Same shape
+// as every other overlay here: a module map behind the same getter, installed
+// by the screen that loaded it, and a player the live board does not carry
+// keeps his baked value instead of falling off the list.
+//
+// THE MAP IS FORMAT-RESOLVED — the server hands a league its own column, 1QB
+// or superflex — so it carries which, and a screen reading the other format
+// falls through to the bake rather than being handed the wrong market. Josh
+// Allen is 5,735 in one and 10,729 in the other; this is not a rounding
+// difference.
+let liveDyn: Record<string, number> | null = null;
+let liveDynFmt: DynFormat | null = null;
+export function setLiveDyn(m?: Record<string, number> | null, fmt?: DynFormat | null): void {
+  liveDyn = m && Object.keys(m).length ? m : null;
+  liveDynFmt = liveDyn ? fmt ?? null : null;
+}
+export function clearLiveDyn(): void { liveDyn = null; liveDynFmt = null; }
+/** Is the dynasty column a live market right now, or the August bake? */
+export const dynIsLive = (): boolean => liveDyn != null;
+
 export const dynFor = (slug: string): number | null => {
+  // A FRESH LIVE BOARD ANSWERS FOR EVERYONE, INCLUDING BY SILENCE (v0.455.1).
+  //
+  // The obvious overlay — live value, else the baked one — puts TWO SCALES in
+  // one column, and the source audit measured exactly where: our rescale of
+  // the live board tracks the bake to within 2–4% through the top 200, drifts
+  // to ~0.9 by 300, and runs 1.6× (individually up to 20×) in the deep tail,
+  // where the baked values fall to 18 and a few points of absolute difference
+  // is a huge ratio. The live board is ~416 players and the bake ~500, so the
+  // players who would fall through to the bake are precisely the ones whose
+  // scales disagree most — a DYN column sorting a live 413 against a baked 18
+  // for two comparable players.
+  //
+  // So a fresh board's SILENCE is an answer, and it is the one this file's
+  // own header already gives: "board depth is the market source's top ~500; a
+  // player absent from the board is a market judgment (valued below the top
+  // 500), not missing data." The bake answers only when no live board is
+  // installed at all.
+  if (liveDyn && liveDynFmt === dynFormat) return liveDyn[slug] ?? null;
   // ID first: the pool's slug→sleeper-id map is authoritative where a screen
   // has installed it; the name join both backfills the id-less rows and keeps
   // every screen working when no pool ids are loaded.

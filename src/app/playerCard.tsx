@@ -19,7 +19,8 @@ import { statsForName, NO_SEASON } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
+import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
@@ -66,6 +67,11 @@ export function PlayerCardHost() {
 
 function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
   const { slug, name, pos, team, week, userId, leagueId } = req;
+  // 0329: THIS WEEK'S number and the headlines. Both are absent for a player
+  // the crosswalk cannot place, and the card simply shows the season
+  // projection it always did rather than a zero.
+  const [wkProj, setWkProj] = useState<WeekPoints | null>(null);
+  const [news, setNews] = useState<NewsItem[] | null>(null);
   // SUMMARY | HISTORY. No GAME LOG or TEAM tab, deliberately: a per-week NFL
   // stat table and a depth chart are data this app does not hold, and an empty
   // tab is worse than no tab.
@@ -79,6 +85,28 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   useEffect(() => {
     if (!leagueId) { setOwner(undefined); setMoves(null); setMyRoster(null); return; }
     let dead = false;
+    // THE HOST REUSES ONE MODAL (v0.456.0): opening B from behind A's card
+    // re-runs this effect on the same instance, so the week tile and the
+    // headlines reset here and every landing checks `dead`, or B wears A's
+    // number until his own fetch lands — and keeps A's headlines if it lands
+    // out of order.
+    setWkProj(null); setNews(null);
+    if (week != null) {
+      // 0330: the row, not the scalar — with a multiplier in hand the card
+      // shows the week in THIS league's scoring rather than the source's PPR.
+      leagueWeekProjections(leagueId, week)
+        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
+          ?? (r.projections?.[slug] != null
+            ? { pts: r.projections[slug], mult: null, opp: null, home: null, status: null, source: 'espn' }
+            : null))); })
+        .catch(() => { if (!dead) setWkProj(null); });
+    }
+    // The headlines this league's feed carries ABOUT HIM. Asked through the
+    // league rather than by ESPN id, because the league's pool is where the
+    // crosswalk lives — the card only ever knows a slug.
+    leagueNews(leagueId, 60)
+      .then((r) => { if (!dead) setNews((r.news ?? []).filter((n) => (n.players ?? []).some((p) => p.slug === slug)).slice(0, 4)); })
+      .catch(() => { if (!dead) setNews(null); });
     Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
       .then(async ([rows, team]) => {
         const held = rows.find((r) => r.slug === slug);
@@ -93,7 +121,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
       .catch(() => {});
     return () => { dead = true; };
-  }, [leagueId, slug]);
+  }, [leagueId, slug, week]);
   // The card is where a stale team is most visible — prefer the live layer
   // (fresh directory bake + worker overrides, 0142) over whatever the opening
   // surface happened to know.
@@ -230,6 +258,13 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             ['EXP', bio?.exp != null ? (bio.exp === 0 ? 'ROOK' : `${bio.exp} yr`) : '—'],
             ['NO.', bio?.num != null ? `#${bio.num}` : '—'],
             ['PROJ', projFor(slug, pos) != null ? (projFor(slug, pos) as number).toFixed(1) : '—'],
+            // 0329: the WEEK's number, from a source that refreshes hourly —
+            // it knows about the injury, the bye and the depth chart, which
+            // the August bake beside it cannot. 0330 puts the OPPONENT under
+            // it, because a weekly projection without the matchup it came
+            // from is half an answer.
+            [week != null ? `WK ${week}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
+              wkProj != null ? wkProj.pts.toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ flex: 1, textAlign: 'center' }}>
               <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>{k}</div>
@@ -253,6 +288,24 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
 
         {tab === 'summary' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {/* 0329: what has been said about him lately. Absent rather than
+                empty when the feed has nothing — a card that says "no news"
+                is noise on a card that is mostly numbers. */}
+            {(news ?? []).length > 0 && (
+              <div style={{ borderBottom: '1px solid var(--bd)', paddingBottom: 6, marginBottom: 2 }}>
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>📰 LATELY</div>
+                {(news ?? []).map((n) => (
+                  <a key={n.id} href={n.url ?? '#'} target="_blank" rel="noreferrer"
+                    style={{ display: 'block', fontSize: 11, color: 'var(--text)', textDecoration: 'none', marginTop: 4, lineHeight: 1.4 }}>
+                    {n.headline}
+                    <span className="mono" style={{ display: 'block', fontSize: 8.5, color: 'var(--faint)' }}>
+                      {new Date(n.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      {n.url ? ' · espn.com' : ''}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            )}
             {(() => {
               if (week == null || !showTeam) return null;
               const g = nflGameForTeam(week, showTeam);

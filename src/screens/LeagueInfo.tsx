@@ -344,7 +344,13 @@ export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: 
       {!!rr.fa_after_waivers_dow?.length && <Row k="ADDS WAIT FOR WAIVERS" v={rr.fa_after_waivers_dow.map((d) => DOW[d]).join(' · ')} />}
 
       <Head>TRADES</Head>
-      <Row k="REVIEW" v={rr.trade_review === 'commish' ? 'commissioner approves' : 'process immediately'} />
+      {/* 0321: the floor's rules, as the rulebook page states every other
+          setting — the review mode, and the vote's numbers where it is one. */}
+      <Row k="REVIEW" v={rr.trade_review === 'commish' ? 'commissioner approves'
+        : rr.trade_review === 'league' ? `the league votes — ${rr.trade_veto_votes ?? 2} veto${(rr.trade_veto_votes ?? 2) === 1 ? '' : 'es'} in ${rr.trade_review_hours ?? 24}h kill a trade`
+        : 'process immediately'} />
+      <Row k="AN OFFER STANDS" v={rr.trade_offer_days ? `${rr.trade_offer_days} day${rr.trade_offer_days === 1 ? '' : 's'}` : 'until it is answered'} />
+      {rr.waiver_mode === 'faab' && <Row k="FAAB TRADING" v={rr.faab_trading === false ? 'off' : 'on'} />}
     </div>
   );
 }
@@ -364,6 +370,7 @@ const KIND: Record<RegisterRow['kind'], { icon: string; verb: string }> = {
   rfa: { icon: '🪧', verb: 'answered the RFA on' },
   retained: { icon: '💸', verb: 'retains salary on' },
   cap: { icon: '💵', verb: 'received cap room' },
+  faab: { icon: '💵', verb: 'received FAAB' },   // 0321: dollars traded like a pick
 };
 const when = (iso: string): string => {
   const d = new Date(iso);

@@ -9,6 +9,8 @@
 -- victim, p_favor opens (and its absence closes) the vampire's steal window.
 \set QUIET on
 \pset pager off
+-- A suite that dies mid-way must not print its closing PASS line (v0.451.0).
+\set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 create or replace function sw_as(u text) returns void language plpgsql as $$

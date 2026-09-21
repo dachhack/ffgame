@@ -192,3 +192,16 @@ $RUN -f scripts/db/week-audit-probes.sql | grep -E "PROBE FAIL|ALL WEEK-AUDIT PR
 $RUN -f scripts/db/extra-slot-card-probes.sql | grep -E "PROBE FAIL|ALL EXTRA-SLOT-CARD PROBES" || { echo "EXTRA-SLOT-CARD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/browse-as-team-probes.sql | grep -E "PROBE FAIL|ALL BROWSE-AS-TEAM PROBES" || { echo "BROWSE-AS-TEAM PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/out-spot-probes.sql | grep -E "PROBE FAIL|ALL OUT-SPOT PROBES" || { echo "OUT-SPOT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/trade-floor-probes.sql | grep -E "PROBE FAIL|ALL TRADE-FLOOR PROBES" || { echo "TRADE-FLOOR PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/multi-trade-probes.sql | grep -E "PROBE FAIL|ALL MULTI-TRADE PROBES" || { echo "MULTI-TRADE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/conditional-claim-probes.sql | grep -E "PROBE FAIL|ALL CONDITIONAL-CLAIM PROBES" || { echo "CONDITIONAL-CLAIM PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/history-probes.sql | grep -E "PROBE FAIL|ALL HISTORY PROBES" || { echo "HISTORY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/award-probes.sql | grep -E "PROBE FAIL|ALL AWARD PROBES" || { echo "AWARD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/public-api-probes.sql | grep -E "PROBE FAIL|ALL PUBLIC-API PROBES" || { echo "PUBLIC-API PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/trade-undo-probes.sql | grep -E "PROBE FAIL|ALL TRADE-UNDO PROBES" || { echo "TRADE-UNDO PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/week-proj-probes.sql | grep -E "PROBE FAIL|ALL WEEK-PROJ PROBES" || { echo "WEEK-PROJ PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/matchup-mult-probes.sql | grep -E "PROBE FAIL|ALL MATCHUP-MULT PROBES" || { echo "MATCHUP-MULT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/xref-probes.sql | grep -E "PROBE FAIL|ALL XREF PROBES" || { echo "XREF PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/adp-board-probes.sql | grep -E "PROBE FAIL|ALL ADP-BOARD PROBES" || { echo "ADP-BOARD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/board-refresh-probes.sql | grep -E "PROBE FAIL|ALL BOARD-REFRESH PROBES" || { echo "BOARD-REFRESH PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/round-audit-probes.sql | grep -E "PROBE FAIL|ALL ROUND-AUDIT PROBES" || { echo "ROUND-AUDIT PROBES FAILED"; exit 1; }

@@ -6,6 +6,14 @@ Platforms: Fantrax, Fleaflicker, MyFantasyLeague (MFL), Reality Sports Online
 Part 2 is a condensed per-platform reference with sources so this doc can be
 reused without re-researching._
 
+_The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
+(`0321`, `0322`), which closed all five of its migration-blocking gaps, and
+the Waivers row's first cell for v0.439.0 (`0323`), the league-history row
+for v0.440.0 (`0324`), the awards row for v0.441.0 (`0325`), the read-API row for v0.442.0–v0.443.0
+(`0326`, `0327`), the trade-grade and trade-reversal rows for v0.444.0
+(`0328`) and the projections row for v0.445.0 (`0329`); every other cell is
+as first written._
+
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
 was unreachable, so user complaints come from app-store reviews, Trustpilot
@@ -43,19 +51,19 @@ The most-cited reason a league refuses to move platforms.
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| League-vote veto with configurable threshold and window | Sleeper, Yahoo, ESPN, Fleaflicker, MFL, Fantrax, League Tycoon | Commissioner review only (`trade_review` = none \| commish) |
-| Multi-team trades | Sleeper, Fleaflicker (unlimited), MFL, Fantrax, RSO | Two seats only (`trade_proposal.from_roster` / `to_roster`) |
-| Counter-offers and offer expiry | Sleeper (exploding offers), Fleaflicker (1h–14d), MFL | No expiry, no counter flow |
-| Trading FAAB dollars | Sleeper, MFL, Fantrax, FFPC dynasty | Cap dollars trade in contract leagues only (`p_cap_dollars`) |
-| Trade analyzer or grades | ESPN (IBM watsonx), Yahoo Plus Trade Hub | None |
+| League-vote veto with configurable threshold and window | Sleeper, Yahoo, ESPN, Fleaflicker, MFL, Fantrax, League Tycoon | **Shipped v0.437.0** — `trade_review` = none \| commish \| league, with `trade_review_hours` and `trade_veto_votes` (`0321`) |
+| Multi-team trades | Sleeper, Fleaflicker (unlimited), MFL, Fantrax, RSO | **Shipped v0.438.0** — 3–8 seats as `trade_leg` rows, every asset addressed to a seat in the deal (`0322`) |
+| Counter-offers and offer expiry | Sleeper (exploding offers), Fleaflicker (1h–14d), MFL | **Shipped v0.437.0** — `counter_trade`, and an offer clock per offer or per league (`0321`) |
+| Trading FAAB dollars | Sleeper, MFL, Fantrax, FFPC dynasty | **Shipped v0.437.0** — `faab_dollars` behind the commissioner's `faab_trading` switch (`0321`) |
+| Trade analyzer or grades | ESPN (IBM watsonx), Yahoo Plus Trade Hub | **Shipped v0.444.0** — projected points over replacement in the league's own scoring, per player, shown live as the offer is built (`tradeGrade.ts`). Theirs is a letter; ours is arithmetic you can argue with |
 | Trade auctions with anti-snipe | League Tycoon | None |
-| Reverse a completed trade | Sleeper, Fantrax | Generic undo tools; no trade-specific reversal |
+| Reverse a completed trade | Sleeper, Fantrax | **Shipped v0.444.0** — `commish_reverse_trade` runs every leg backwards in one transaction, and refuses rather than half-undoing (`0328`) |
 
 ### Waivers
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| Conditional / contingency claim groups | Fleaflicker, Fantrax, MFL, Yahoo, FFPC | Each claim settles alone |
+| Conditional / contingency claim groups | Fleaflicker, Fantrax, MFL, Yahoo, FFPC | **Shipped v0.439.0** — ordered claim groups with a ceiling on how many land (`0323`) |
 | Vickrey second-price FAAB | Fantrax | First-price only |
 | Suggested FAAB bid ranges | Sleeper (2025) | None |
 | Weekly and seasonal add limits | Fleaflicker, MFL, Fantrax, Yahoo | Not found in migrations |
@@ -107,8 +115,8 @@ Ahead of everyone except the two specialists. What RSO and League Tycoon add:
 | Feature | Who has it | Drip today |
 |---|---|---|
 | Dues collection and payouts with escrow | Sleeper (SleeperSafe), Fantrax (Treasurer), MFL accounting, Yahoo, League Tycoon | Free-text dues field (`0223`); Stripe only for premium |
-| League history, record book, hall of fame, past champions | Sleeper, Yahoo (2026 Record Book), League Tycoon, MFL (back to 1980) | `league_continuity` + `playoff_champion` stamp, no surface |
-| Weekly awards, achievements, badges | Sleeper, Yahoo, ESPN (2026) | Weekly report in chat (`0275`) |
+| League history, record book, hall of fame, past champions | Sleeper, Yahoo (2026 Record Book), League Tycoon, MFL (back to 1980) | **Shipped v0.440.0** — champions, all-time manager table and a record book across every rolled-over season (`0324`) |
+| Weekly awards, achievements, badges | Sleeper, Yahoo, ESPN (2026) | **Shipped v0.441.0** — league-defined awards (metric × direction × win/loss filter, optional coin prize) and commissioner badges (`0325`). Ahead of all three: theirs are a fixed set |
 | GIFs and stickers in chat | Sleeper, Yahoo, ESPN | Six fixed reactions (`0210`) |
 | Group chats, matchup chat, player chat rooms | Sleeper, ESPN | League chat + DMs |
 | Email notifications and digests | Fleaflicker, MFL, RSO | Invites only |
@@ -123,13 +131,13 @@ The widest gaps relative to the big three.
 
 | Feature | Who has it | Drip today |
 |---|---|---|
-| App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA |
+| App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA. **v0.446.0** prepared the half that is code — production build + submit profiles, listing copy, a live privacy policy and support page, and the data-safety answers derived from what the app does (docs/store-listing.md). The accounts, screenshots and forms are human work |
 | Lock-screen Live Activities or watch app | Yahoo, ESPN | Android home widget only |
-| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | None |
+| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | **Shipped v0.442.0** — anonymous, read-only, 13 endpoints; open by default with a one-tap opt-out since v0.443.0 (`0326`, `0327`, docs/public-api.md) |
 | Write API | MFL, Yahoo | None |
 | Data export | Fantrax (CSV), MFL | None |
 | Win probability | MFL, ESPN | None |
-| Weekly-refreshed consensus projections and player news | Yahoo (FTN etc.), ESPN, Sleeper, MFL partners | Baked preseason sets (`proj*2026.ts`), injuries, depth charts |
+| Weekly-refreshed consensus projections and player news | Yahoo (FTN etc.), ESPN, Sleeper, MFL partners | **Shipped v0.445.0** — hourly weekly projections (with the raw stat line, decoded and checked against the source) and player-tagged headlines, keyed on the ESPN crosswalk (`0329`) |
 | AI insights, lineup optimizer, start-sit | ESPN watsonx, Yahoo Assistant GM / Research Assistant, RSO roadmap | None |
 | AutoSubs / late-scratch auto-substitution | Sleeper, Fantrax, Yahoo | None |
 | Per-stat push alerts | Fantrax (2025) | Event-level push |
@@ -142,18 +150,29 @@ The widest gaps relative to the big three.
 
 Ordered by what blocks a league from migrating next August, then retention.
 
-1. **Trade parity** — league-vote review, multi-team trades, expiry and
-   counters, FAAB trading. Every platform except FFPC has the first two.
-2. **Conditional waiver claims and a median matchup** — small on top of the
-   existing run and standings code; both come up in every "which host" thread.
-3. **A history surface** — past champions, records, awards. Rollover data
-   exists; this is a screen, not a schema.
-4. **Store distribution and a read API** — the Sleeper ecosystem (KTC,
-   DynastyProcess, ffscrapr) exists because of its free read API.
+1. ~~**Trade parity** — league-vote review, multi-team trades, expiry and
+   counters, FAAB trading.~~ **Done** in v0.437.0 (`0321`: the vote, expiry,
+   counters, FAAB) and v0.438.0 (`0322`: 3–8-team trades). What is still
+   missing from this row: trade auctions with anti-snipe (League Tycoon's,
+   and the only one of these nobody else has either). Grades and reversal
+   shipped in v0.444.0 (`0328`).
+2. ~~**Conditional waiver claims and a median matchup**~~ — **Done**: the
+   median game in v0.436.0 (`0320`), conditional claim groups in v0.439.0
+   (`0323`). Still open on the waivers row: Vickrey second-price FAAB,
+   suggested bid ranges, weekly/seasonal add limits, a can't-cut list, and
+   showing the highest pending bids.
+3. ~~**A history surface** — past champions, records, awards.~~ **Done** in
+   v0.440.0 (`0324`): champions, the all-time manager table and the record
+   book, on both hosts, and weekly awards and badges in v0.441.0 (`0325`).
+4. **Store distribution** ~~and a read API~~ — the read API shipped in
+   v0.442.0 (`0326`). Store listings: everything that is code is ready as of
+   v0.446.0; what remains is two developer accounts, screenshots and the
+   store questionnaires (docs/store-listing.md).
 5. **Dues** — Stripe checkout + webhook exist; a SleeperSafe-style pot with a
    veto window reuses most of it.
-6. **Weekly projections and news** — the baked sets are the weakest data
-   point vs the big three.
+6. ~~**Weekly projections and news**~~ — **Done** in v0.445.0 (`0329`): the
+   week's number and the headlines, refreshed hourly. The baked season set
+   stays as the fallback and the draft-room ranking.
 
 ---
 

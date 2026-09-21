@@ -28,10 +28,9 @@ import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, league
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
-import { ADP_2026 } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, adpFor, installLiveMarket, clearLiveMarket, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -123,11 +122,18 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
     // a stale feed costs freshness rather than the whole column.
+    // 0335: the dynasty market, the pick board and the season rate ride the
+    // same call. Each is format-resolved server-side and says so. Cleared
+    // FIRST (v0.456.0) so a league whose market is slow or errors shows the
+    // bake, never the previous league's board.
+    clearLiveMarket();
+    let alive = true;
     leagueMarket(leagueId).then((r) => {
-      if (!r?.ok) return;
+      if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      installLiveMarket(r);
     }).catch(() => {});
+    return () => { alive = false; };
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [starMode, setStarMode] = useState<StarMode>('off');
@@ -999,7 +1005,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
             </Notice>
           )}
           {avail.slice(0, 60).map((p) => {
-            const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
+            const adp = adpFor(p.slug); const proj = projFor(p.slug, p.pos);
             const dyn = dynasty ? dynFor(p.slug) : null;
             const inQ = queue.includes(p.slug);
             const capped = atCap(p.pos);
@@ -1271,7 +1277,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     {favs.has(slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p?.full_name ?? slug}
                   </Text>
                   {p && (() => {
-                    const adp = ADP_2026.get(slug); const proj = projFor(slug, p.pos);
+                    const adp = adpFor(slug); const proj = projFor(slug, p.pos);
                     const dyn = dynasty ? dynFor(slug) : null;
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>

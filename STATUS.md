@@ -18,6 +18,981 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.456.0 — the round, audited
+
+Six audits of v0.437.0–v0.455.1 ran in parallel — web wiring, mobile parity,
+trades-and-waivers conflicts, the data overlays, the public API with history
+and awards, and seven traced user journeys — plus a set of executed edge
+cases on the scratch database. Forty-odd findings; the ones that were bugs
+are fixed here, the ones that were gaps are listed at the end, and the ones
+that were opinions stayed opinions. Nothing new shipped in this version.
+
+THREE THINGS SHIPPED BROKEN and are the reason the audit was worth running:
+
+  · THE SEASON-RATE OVERLAY WAS DEAD. The worker's season board carried no
+    slug, `league_market` keyed its map by slug, so every screen got `{}`
+    and quietly kept the August level. The whole projection half of 0335
+    was inert, and its probe had planted a hand-written slug. The worker
+    resolves the slug now, the SQL keys by id when there is none, and the
+    probe plants a row with no slug and expects an answer.
+  · HALF A TRADE COULD COMMIT. `execute_trade` re-checked the FAAB wallet
+    after the rosters, picks and cap had moved, and refused with a plain
+    `return` — which in plpgsql rolls nothing back. Players swapped, the
+    proposal still said pending, a second accept said "players moved". The
+    wallet is checked beside the cap check now, above the first move.
+  · A BADGE MULTIPLIED THE RECORD. `league_history` joined the badge grants
+    laterally onto the seat row before summing wins, so two badges made a
+    10-3 manager 20-6 with two titles — on the screen and in the public
+    API. The badges are their own query now.
+
+THE SERVER, otherwise (0336, every function re-emitted whole):
+  · the veto bar for a multi-team trade could exceed its electorate, so the
+    vote settled at the first ballot — a veto included; capped at the room
+    on routing, settling and the screen's `veto_need`;
+  · a raise inside the execute during a league vote (a no-trade flag set
+    mid-vote, a cap that broke) left the trade un-settleable and the sweep
+    retrying it every tick; caught and settled like any refusal;
+  · a commissioner's veto posts to chat, as the league's own does;
+  · a linked waiver group runs on its slowest clock — with 24h rolling
+    holds, a fallback dropped Monday morning came due before the first
+    choice dropped that afternoon, landed, and marked the first choice lost
+    five hours early;
+  · a private season stayed readable through last year's public row, which
+    carried this year's table, champion and managers with it; a non-member
+    now reads only the seasons that are individually public;
+  · `award_week` was callable by any signed-in account against any league
+    (it posts to chat), and a re-run after a score correction paid last
+    week's winner a second time; commissioner-or-worker now, and the wallet
+    credits new winners only;
+  · `award_sweep` would have awarded every final week of every past
+    season's league row on its first pass — one house message per
+    league-week into chats nobody reads — and never handed a mid-season
+    award out for the weeks before it; this season's rows, and any week
+    where an active award is still missing;
+  · `api_trades` dropped a reversed trade and published expired OFFERS;
+    `api_league.scoring` read `{"error":"forbidden"}` for every caller;
+  · three superflex rules (0334's SQL, 0237's SQL, the client's) disagreed
+    on a lone SFLX spot, the 0161 roster counts and a spec-less classic
+    league; `league_is_superflex` is the one rule now, its spec-less branch
+    matched to what the client actually does, and the dynasty format is
+    read from it rather than from the ADP thin-board fallback.
+
+THE CLIENTS:
+  · the four market overlays were installed and never cleared — a slug is
+    the same slug in every league, so a superflex league's board priced the
+    next league's waiver wire until its own call landed, and forever if that
+    call failed; `installLiveMarket`/`clearLiveMarket`, cleared before each
+    fetch and on league close, with an alive flag against a late response;
+  · the web never set the dynasty format, so every superflex league on the
+    web read the 1QB August bake while the app showed the live SF board;
+  · draft rows printed the baked ADP while sorting by the live one — 54
+    adjacent inversions in the first 120 rows, Josh Allen "23" in a room
+    ordered as if he were 3.3; the row prints what it sorts by;
+  · the trade grade counted plain QB spots and missed a lone SFLX;
+  · the public-API switch read `roster_rules`, which is native-only, so it
+    was dead on every imported league — the leagues 0327 says it is for;
+    a provider-agnostic `leaguePublicApi` binding, on both platforms; the
+    mobile AWARDS tab is no longer native-only either;
+  · a seat inside a multi-team trade was offered VETO/ALLOW on its own deal;
+  · the player card reused one modal and never reset, so B's card wore A's
+    week tile and headlines until B's fetch landed; the week was not a dep;
+  · the trade list refreshes every 20s while a deal is pending or in review,
+    and shows all trades on a click so ↩ reverse can reach an older one;
+  · "this offer expired" was passed through the auth message table and told
+    a manager to request a fresh sign-in link;
+  · mobile: ↩ REVERSE, retire-award and delete-badge confirm first; the
+    propose sheet scrolls with its send button pinned (a three-way ran past
+    the sheet and the button was clipped off); the two-way TRADE REVIEW
+    chips in settings, which could not show `league` and saved over it on
+    a tap, are gone; headlines open; the card gets its league context on
+    imported leagues too; the award icon saves on blur, not per keystroke.
+
+EXECUTED EDGE CASES (scratch DB): SQL format detection for null slots /
+SFLX / IDP-only / 0.75 / 0.25 PPR; a league vote in a two-team league
+(executes — no electorate — while the screen still says "1 veto"; a
+labelling nit); history on a fresh and a mock league; `league_market` on an
+empty pool and as a stranger; the week projection with no slate rows; a FAAB
+leg in a rolling-waiver league (refused, plainly); cancelling one claim
+inside a linked group (the group keeps running with a gap in its sequence).
+
+PROBES: `scripts/db/round-audit-probes.sql` — eleven, each written to fail
+on the previous body and pass on this one, and run once without 0336 to
+prove it. Every existing suite still passes bar the three that fail on main.
+
+STILL OPEN, by choice or size: score corrections do not revisit awards;
+`playerNews` and `submitWaiverGroup` are bound and unused (the card pulls
+60 league items and filters); ADP provenance is only in the web draft room;
+the mobile award editor lacks icon/active; the public API URL is not
+copyable on mobile; FAAB in trades and pending bids reserve nothing
+against each other; the rate limiter keys on the first XFF hop; the API
+publishes `display_name` and `avatar_url` per seat, which docs/public-api.md
+should say; the pool RANK is the 1QB PPR bake while the ADP column is the
+league's live format (a superflex room's autopick takes QBs 20–40 picks
+after the column says they go).
+
+### v0.455.1 — a fresh board answers by silence
+
+Re-running the source audit against v0.455.0 found a bug in v0.455.0, which
+is the point of having one.
+
+THE OBVIOUS OVERLAY WAS WRONG. "Live dynasty value, else the baked one" puts
+two scales in one column, and the audit measured exactly where: our rescale
+of the live board tracks the bake to a median ratio of 0.97 through the top
+200, 0.88 by 300, and diverges in the deep tail where baked values fall to 18
+and a handful of points is a 20× ratio. The live board is ~416 players and
+the bake ~500 — so the players who would fall through are precisely the ones
+whose scales disagree most. A DYN column could sort a live 413 against a
+baked 18 for two comparable players.
+
+So a fresh board's SILENCE is now an answer, and it is the one dyn2026's own
+header already gave: "board depth is the market source's top ~500; a player
+absent from the board is a market judgment, not missing data." The bake
+answers only when no live board is installed at all.
+
+THE AUDIT ITSELF HAD DRIFTED, too, and is corrected in the same commit:
+  · its dynasty section said a value-to-value diff would be "comparing two
+    scales" — true until v0.455.0 taught the worker to run the rescale, so it
+    now runs that arithmetic and diffs BY ID;
+  · it reported a mean absolute move of 56%, which was the METRIC failing
+    rather than the data (tail denominators of 18). Median ratio by rank band
+    replaces it, and the top-200 mean — 12.2%, a month of market — is what
+    the headline number should have been;
+  · its season section was still titled "our August bake vs the live board",
+    which stopped being what the app shows the moment the live board became
+    the level the engine scores off. It now says it is measuring the
+    fallback's error, not the app's.
+
+### v0.455.0 — the other two bakes refresh themselves
+
+"Now automate the dynasty and projection rebakes too." Same question as
+v0.454.0 — what can the worker actually fetch, keyed by an id — and this time
+the two answers are different, which is the whole design.
+
+  1. DYNASTY IS REPRODUCIBLE, SO WE REPRODUCE IT. The value dyn2026.ts holds
+     is not a black box: it is KTC's board rescaled onto FantasyCalc's scale
+     by a per-player ratio, with a positional median below a value floor of
+     500. Both halves are published (`ktc_rankings_1qb.json` — 416 players AND
+     the 84 rookie-pick rows — and `dynasty-fc-rescale.json`), and the rule is
+     written down in the client StatHead publishes. `server/src/poll/dynasty.js`
+     runs it verbatim, including the clause that matters most: UNSUPPORTED
+     POSITIONS KEEP THEIR RAW VALUE, which is how the picks come through
+     unrescaled. That is running their model, not approximating it.
+     `validate:boards` proves it lands on the same scale as the MCP-baked
+     board — top value 11,336 against the bake's 11,106, 50th 3,319 against
+     3,449, which is a month of market and not a formula error.
+  2. AND IT FIXED pickValues2026 FOR FREE: the picks ride in the same file,
+     keyed by the market's own label ("2027 Early 1st"), so the trade grade's
+     pick prices now refresh with everything else.
+  3. THE PROJECTION IS NOT REPRODUCIBLE, so it gets the multiplier trick
+     instead. `projectedPoints` scores a BAKED COMPONENT LINE under each
+     league's 64-field catalog, and those components are not published —
+     dropping a live PPR scalar on top would throw away every league's
+     scoring, the exact bug v0.308.0 existed to kill. So the live number
+     replaces the LEVEL that ratio multiplies, never the ratio: one line, at
+     `const base =`. A TE-premium league still scores its tight end as a
+     TE-premium league; it is simply computed off this week's opinion of the
+     player rather than August's.
+  4. IT COSTS NO NEW FETCH. The weekly feed the worker already pulls daily
+     carries `ppg` and `gp` with a sleeper id on every row — the season line
+     was in our hands the whole time. 837 lines, 489 joining the bake by id,
+     currently a mean 1.00 pts/week away from it.
+  5. RESOLUTION IS THE HARD PART, and it is where a name join would have
+     undone four versions of work: KTC publishes no cross-id, and a bare name
+     match drops Kenneth/Kenny Gainwell (3,487), Travis Hunter (3,116) and
+     Chig Okonkwo (2,925) — all top-200 assets. The crosswalk's ALIASES
+     resolve 413 of 416; the player index takes most of the rest; anything
+     left keeps its value under the source's own id with a null slug, and the
+     bake answers for it.
+  6. EVERY OVERLAY IS FORMAT-RESOLVED AND SAYS SO. The server hands a league
+     one dynasty column, 1QB or superflex, chosen by the same rule as the ADP
+     format — and a screen reading the other format falls through to the bake
+     rather than being handed the wrong market. Josh Allen is 5,735 in one and
+     10,729 in the other; that is not a rounding difference.
+
+`board-refresh-probes.sql` (5 groups), `check:boards` (23 offline assertions,
+including that a TE-premium league's number still doubles when the live level
+doubles) and `validate:boards`.
+
+### v0.454.0 — the market refreshes itself
+
+Founder: "automate the weekly ADP refresh in the worker." Done, with one
+honest boundary and one thing that turned out better than freshness.
+
+  1. WHAT THE WORKER CANNOT HAVE. The consensus blend `adp2026.ts` holds is
+     computed inside StatHead's MCP tool and published nowhere — no worker can
+     fetch it, and re-implementing somebody else's model to approximate it
+     would mean quietly disagreeing with the bake it replaced. Checked, not
+     assumed: the repo's published data directory carries the blend's INPUTS
+     and no blend.
+  2. WHAT IT CAN. One of those inputs is published daily, keyed by sleeper id,
+     and is the closest market to this app's own pool:
+     `sleeper-adp-<season>.json`, Sleeper's own draft rooms. 2,877 players,
+     plain HTTPS, no key. `server/src/poll/adp.js` pulls it daily — daily, not
+     weekly, because the source rebuilds daily and a weekly poll would ship a
+     number staler than the one available.
+  3. AND IT PRICES EACH FORMAT SEPARATELY, which is the part worth more than
+     the freshness. A bake has ONE column, so until today a superflex league
+     read 1QB prices off it and a half-PPR league read full PPR. 0334's
+     `_league_adp_format` reads the league's own slot spec — a lineup starting
+     more than one quarterback IS a superflex market, the same question the
+     trade grade asks of the same spec — and hands it the right board. Josh
+     Allen is pick 23 in 1QB and pick 4 in superflex; 1,108 players are priced
+     differently between the two.
+  4. A FORMAT THE MARKET BARELY PRICES IS NOT A MARKET. The live feed prices
+     ~2,260 players in PPR and ~240 in standard. Serving those 240 and letting
+     everyone else fall through to ESPN would put two scales in one column,
+     ordered against each other — so a format that cannot fill a 300-pick
+     draft board falls back to PPR, and `adp_format` reports what actually
+     answered rather than naming a market nobody read.
+  5. THE LADDER, per player, the same shape as the weekly projections: the
+     published board, then ESPN's rooms for whoever it does not price, then
+     the bake client-side. A feed that stops costs freshness, never the
+     column. The card's provenance line now says which market is showing
+     instead of claiming "consensus" whatever is underneath.
+
+`adp-board-probes.sql` (6 groups, including the superflex and thin-format
+cases), `check:adpboard` (18 offline assertions) and `validate:adp` (the live
+feed: measured within 96h, every format populated, and the 2QB column proved
+to be its own market rather than a copy of PPR).
+
+### v0.453.0 — one week of football, priced
+
+The first ADP rebake since 26 August, and the first one v0.452.0's id column
+paid for: the before/after was diffed BY SLEEPER ID, so a player who changed
+team or spelling between boards is one row that MOVED rather than one row
+dropped beside one added. (Exactly one row did: Kayshon Boutte, NE → HOU.)
+
+  0. WHAT THIS BOARD ACTUALLY KNOWS. Four weeks of CALENDAR, one week of
+     FOOTBALL: the feed has 324 players with a week-1 stat line and none with
+     a week-2 one — week 1 is final, week 2 was being played while the board
+     was drawn (FantasyPros 18 Sep, Sleeper and FFC 21 Sep). Worth stating
+     because the moves below read like form and are not: the two furthest
+     falls have no week-1 line at all.
+  1. WHAT MOVED. 214 players priced on both boards — 95 up, 119 down — with a
+     median absolute move of 9.1 picks and a mean of 13.8. The mean is twice
+     the median because the tails are AVAILABILITY, not performance: Isiah
+     Pacheco 164.8 → 249 is on IR (status RES), Josh Jacobs 35.9 → 115.7 is
+     commissioner-exempt (EXE), and the furthest riser, MarShawn Lloyd 183.2
+     → 136.7, is the back who inherited Jacobs's job — depth 1 in Green Bay.
+  2. WHAT CHANGED SHAPE. 234 rows, up from 221: 20 new (Cade Otton, Michael
+     Penix Jr., Ricky Pearsall and the rest of the September waiver-wire
+     market) and 7 gone (James Conner, Keon Coleman, Jaydon Blue…). A player
+     who leaves the board is not removed from a Drip pool — he loses his
+     market price and is ranked by production instead, which is what that
+     fallback in the pool builder has always been for.
+  3. EVERY ROW IS VALIDATED ON THE WAY IN: a sleeper id, a team, a number, and
+     a Sleeper directory row that is active and plays that position. 0
+     problems across 234 rows. The 2026 board's tail — retired names and
+     unsigned free agents the source carries with no id at all — is dropped
+     rather than baked, which is why 300 rows pulled become 234 baked.
+  4. WHO SEES IT. This board seeds a NEW pool's rank; leagues that already
+     drafted keep the rank stored in their own pool rows. So the change lands
+     on leagues created from today, on the live ADP column, and on the draft
+     board's sort — not on anybody's existing roster order.
+
+The chart of the whole diff (dumbbell of the movers, the 214-point scatter
+against the no-change diagonal, and both tables) is published as an artifact.
+
+### v0.452.0 — the last name join
+
+Founder: "I'd like to fix the ADP name join with sleeper ids. What's the risk
+there?" The risk turned out to be worth measuring before answering, and the
+measurement is the reason this version is small and boring on purpose.
+
+  1. THE NAME JOIN COSTS NOTHING TODAY. Of 221 rows: 221 mint a distinct
+     engine slug, 0 collide with each other, and 221 match a slug a live
+     Sleeper-built pool also mints. The one row with no baked counterpart is
+     Kenny Gainwell, and that is a bake-to-bake spelling difference
+     (`kenneth-` vs `kenny-`), not an ADP failure. So this is INSURANCE, not
+     repair — and the real risk was never the join, it was bundling a value
+     refresh with it.
+  2. SO NO VALUE MOVED. The ids were attached to the EXISTING August board
+     from StatHead's public crosswalk by name + position, with every attach
+     verified against the Sleeper directory's own position and team. The only
+     two that did not line up were team moves the August board predates
+     (Boutte NE→HOU, Blue DAL→PHI), not wrong players. `check:adpjoin`
+     rebuilds the name map from the CSV and fails if a single slug's number
+     differs.
+  3. THE SHAPE IS dyn2026's, EXACTLY. One parse mints `ADP_2026` (slug, byte
+     for byte what it was) and `ADP_BY_SID` (sleeper id); `adpValue()` reads
+     the id first through the pool's slug→id overlay and falls back to the
+     name. Away from a pool no overlay exists and it IS the old lookup, which
+     is the invariant that makes it safe to ship mid-season.
+  4. AND THE ONE PLACE THAT CANNOT USE THE OVERLAY USES THE ID DIRECTLY. The
+     pool builder runs before a pool exists, so it reads the sleeper id off
+     the directory row it is already holding — which matters more than the
+     rest put together, because that number becomes the pool's RANK, and the
+     rank is what autopick drafts by.
+  5. The audit's own ADP comparison now joins by id too: 41 rows against
+     FFC's live board, up from 34 by name.
+
+A refresh of the VALUES is a separate decision and deliberately not taken
+here: ADP has moved a mean 8.7 picks since 26 August (Josh Jacobs 35.9 →
+109.4), which is a different question from which player a row is about.
+
+### v0.451.0 — where two sources answer the same question
+
+Founder: "can we check where we have the same data from sources and do an
+audit of differences." `npm run audit:sources` is the repeatable version and
+`docs/source-audit.md` is this run of it. It joins eight facts across Sleeper,
+StatHead, FantasyCalc, ESPN and our own bakes — on ids, never on names — and
+sorts what it finds into model differences (expected) and FACT differences
+(somebody is wrong). It found three of our own bugs.
+
+  1. THE ESPN POLLER HAD NEVER WRITTEN A ROW. `fetchProjections` sent
+     `filterStatsForTopScoringPeriodIds`, which returns ACTUAL weekly lines
+     and a projected SEASON row and strips every projected WEEKLY row — the
+     only row `weekLineFor` reads. 0 of 200 players with the filter, 200 of
+     200 without. Six versions green, because `validate:proj` built its own
+     request and proved the DECODE rather than the POLL. It now asserts the
+     poller's own request too.
+  2. AND NOTHING COULD BE WRITTEN ANYWAY. 0330's upsert names twelve columns
+     and selects eleven — `updated_at` had no value — so every call raised
+     and not one row landed, from either source. The probe suite reported
+     PASS the whole time: psql without ON_ERROR_STOP carries on after a
+     failed statement and the closing "ALL … PROBES PASS" prints regardless.
+     That is the trap v0.450.0 documented one version earlier, walked into
+     again the same day. `\set ON_ERROR_STOP on` now heads all 117 suites.
+  3. THE WEEK DID NOT KNOW WHO WAS OUT. 73 of 500 players are zero on one
+     side and not the other — Burrow, Purdy, Kittle, Rice, Daniels. ESPN
+     prices this week's injury report; StatHead's strip zeroes only ROSTER
+     status and says a consumer should apply the designations itself. Since
+     v0.447.0 made StatHead primary, that was ours. 0333 applies our own ESPN
+     report — Out/IR to zero, Doubtful to a quarter, Questionable a flag — to
+     the points AND the multiplier, and ONLY for the week being played.
+  4. THE POOL'S ESPN IDS WERE MOSTLY MISSING. Sleeper carries one for 213 of
+     846 rosterable players and 84 of the top 300; Gibbs, Chase and Bijan all
+     come back null. Everything keyed on that id was reaching a quarter of a
+     roster. `backfill_pool_ids()` fills it from 0331's crosswalk, both ways,
+     after each daily sweep.
+  5. AND ONE OF THE IDS WE HELD WAS SOMEBODY ELSE'S. Sleeper's espn_id for
+     Tyler Conklin is RYAN IZZO's. The backfill corrects an id only where the
+     crosswalk positively identifies the one we hold as another player; a
+     mismatch it cannot explain is left alone.
+
+Clean: the 2026 schedule (32/32 team-games agree with ESPN), sportradar,
+fantasy_data and yahoo ids (100%), and FantasyCalc against Sleeper (93/93).
+Explained rather than fixed: depth charts agree 64% because Sleeper orders
+for availability and StatHead for roster depth — both correct, different
+questions. Also flagged for whoever wires the weekly number into a board: a
+StatHead backup line is a rate CONDITIONAL on playing (Nick Mullens 18.5
+against ESPN's 0), now carried as `conditional: true`.
+
+### v0.450.0 — the history is not the account
+
+A leak, found by running the whole probe suite during the StatHead audit
+rather than by anything the audit was looking for.
+
+0324 keyed the record book on `app_user_id`, so a seat that changed hands
+keeps two honest manager lines, and gated the surface on membership. 0326
+needed that gate to admit an anonymous caller — the public API's whole
+audience — so `_may_read_history` grew "or the league is public", and 0327
+made a native league public by default. `api_history` was careful to strip
+the account ids on the way out. **`league_history` is granted to
+`authenticated`**, so any signed-in account could call it directly against
+any public league and be handed that league's managers' account ids. The
+API's redaction was a wrapper around a door that was already open.
+
+  1. THE REDACTION MOVES INTO `league_history` (0332), which is the only
+     place that can guarantee it. A member, a commissioner of any season in
+     the lineage, or an admin reads the history whole. Anybody else reading
+     a public league gets the same document with `app_user_id` dropped, the
+     manager key replaced by a stable opaque handle, and `redacted: true`
+     saying so. A league that opted out is refused outright, as always.
+  2. 0324'S OWN PROBE SAID SO and had been failing since 0326 — "h3 a
+     stranger reads nothing". It was missed because a psql suite prints its
+     final PASS line whether or not the block above it threw, and a
+     by-hand `| tail -4` shows only that line. The harness itself catches it
+     (`ON_ERROR_STOP` + `pipefail`); three older suites were failing ahead
+     of it and the run never got that far.
+  3. THE PROBE IS REWRITTEN to the contract we actually want, which is not
+     the one it was written for: a public league's record book IS readable
+     by whoever holds its id — that is the point of 0327 — and what must
+     never leave is the accounts behind the seats.
+
+Full suite after this: 106 pass, 3 fail — the same three that fail on `main`
+(`classic-open-lineups`, `dropped-pick`, `draft-midseason`), still
+pre-existing and still not this work's.
+
+### v0.449.0 — one player, every id
+
+The audit's third finding, and the one that was a promise we were not
+keeping. v0.442.0 shipped a public read API whose stated point is "readable
+by anything", and handed a consumer exactly ONE identifier to join on:
+`espn_id`. Everything else they had to recover by matching a name.
+
+This repo has been bitten by that twice and written it down both times —
+dyn2026 silently dropped Kenneth/Kenny Gainwell, and still carries a hand-
+edit because one board spells a man "Chigoziem Okonkwo" and our index says
+"Chig Okonkwo". We went id-first everywhere for ourselves in 0200 and 0205.
+Publishing one id and leaving the internet to name-match the rest was handing
+our own solved bug to every consumer.
+
+  1. `player_xref` (0331), filled daily by the worker from StatHead's public
+     player crosswalk — the same file the Python client reads, 12,264 rows
+     trimmed to the ~3,000 that a fantasy roster can still reach.
+  2. `api_players` now carries `sleeper_id`, `gsis_id` (the nflverse key, and
+     the one in play-by-play), `pfr_id`, `yahoo_id` and `sportradar_id`.
+     `espn_id` stays exactly where 0326 put it, so no existing consumer sees
+     anything but new keys.
+  3. THE JOIN IS BY ID AND ONLY BY ID: espn first, sleeper second, never a
+     name. A probe plants a crosswalk row spelled EXACTLY as an unplaceable
+     pool player and asserts it is not taken.
+  4. `league_player_ids` gives a signed-in client the same set, so the app
+     never has to ask the public endpoint for something it is entitled to.
+  5. Nothing about a manager is published, and `check:publicapi` now scans
+     EVERY migration from 0326 on rather than 0326 alone — a re-emission is
+     exactly how the never-list would have been quietly reintroduced.
+
+Also in this version: `docs/stathead-fidelity.md`, the written audit the
+founder asked for — every feature of v0.437.0…v0.446.0 against what StatHead
+publishes, what was filled in, what was deliberately left with ESPN
+(injuries, because ours is the live report; news, because StatHead has none),
+and the one-line answer to MCP vs Python vs asking their dev team: the model
+outputs are public JSON, so the worker just fetches them.
+
+### v0.448.0 — what a pick is worth, from the market that trades them
+
+The second thing the StatHead audit found, and the smaller of the two only
+in line count. v0.444.0's trade grade priced a draft pick at an invented
+fraction of a replacement starter — `[0, 0.85, 0.45, 0.22, 0.1, 0.05]` —
+with a comment admitting it was blunt. That was the one number in a feature
+built entirely on "you can disagree with the arithmetic" that came from
+nowhere.
+
+  1. TWO KINDS OF PICK, TWO ANSWERS, NEITHER INVENTED. A STARTUP slot (0190)
+     is a pick in a draft of THIS league's players, so it is worth the man
+     still on the board when it comes round — which we can read straight off
+     the pool and its projections. No market and no curve: in a 12-team
+     league a mid-round-1 slot is the sixth-best player left, over
+     replacement, and a slot deep enough to draft replacement level is worth
+     nothing, which is exactly right.
+  2. A ROOKIE PICK is an asset in a draft that has not happened, of players
+     who are not in the pool, so what it is worth is what it TRADES for.
+     `pickValues2026.ts` bakes the dynasty market's pick board — StatHead's
+     `get_dynasty_values` with position RDP, the rows dyn2026 drops — on the
+     same scale as the player values, in both 1QB and superflex.
+  3. FROM A MARKET VALUE TO THIS LEAGUE'S POINTS, through the pool itself:
+     find the players who trade for about the same, and ask what THEY are
+     worth over replacement here. A pick that trades for what the 14th
+     receiver trades for is worth what the 14th receiver is worth. Nine
+     neighbours averaged, because a dynasty value is a long-horizon opinion
+     and this season's projection is not.
+  4. THE LINEUP PICKS THE MARKET. A league that starts more quarterbacks
+     than it has teams reads the superflex board — the same question the
+     replacement line already asks, asked once more, with no special case.
+  5. The old share table survives as the fallback for a league with no
+     dynasty values loaded at all, and the UI still says "estimated": nobody
+     knows where a pick will land.
+
+Nine new assertions in `check:tradegrade`, including one that fails if the
+market curve is NOT live for this pool — otherwise every other pick test
+would be quietly exercising the fallback. A startup 1st now prices at 154
+points over replacement against a rookie 1st's 78.2.
+
+### v0.447.0 — the week's number, from the model that made the season one
+
+Founder: "review the work for anything we can fill in with fidelity from
+StatHead instead." The audit is in `docs/stathead-fidelity.md`; this is the
+biggest thing it found, and it was one version old.
+
+  1. THE BUG THE AUDIT FOUND. v0.445.0 shipped a weekly projection and took
+     it from ESPN, because ESPN was the only weekly feed we could reach. But
+     `appliedTotal` is a SCALAR IN ESPN'S SCORING. A Drip league paying 6 for
+     a passing touchdown or 1.5 per TE reception read a number computed under
+     somebody else's rules — the exact bug v0.308.0 spent a version killing
+     on the SEASON projection, quietly reintroduced one week at a time.
+  2. THE SOURCE WAS ALREADY OURS. StatHead — whose season projections this
+     app already ranks, drafts and grades trades with — publishes the same
+     model split across the schedule, as one public JSON rebuilt about every
+     two hours. No key, no SDK, no API to ask anyone for: the worker fetches
+     it over plain HTTPS. It also covers K, team DST and IDP, which ESPN's
+     weekly feed could only ever hand us as an undecodable total.
+  3. WHAT WE STORE IS THE MULTIPLIER, and that is the whole idea. The weekly
+     split scales a player's WHOLE line by one number (the feed is explicit
+     that receptions scale with it too). Scoring is linear in the line, so
+     **this league's season rate × mult IS this league's week** — not an
+     approximation of re-scoring the weekly line, but the same arithmetic.
+     `npm run validate:weekmult` proves the premise against the live file:
+     the 17 weeks average back to the season line within 0.14%, and the
+     ratio is shared by every player on a team at a position to within
+     0.0025 (rounding), which is what makes it a MATCHUP term rather than a
+     per-player opinion.
+  4. TWO SOURCES, ONE TABLE, PER-PLAYER FALLBACK. 0330 re-keys
+     `nfl_week_proj` on (season, week, SOURCE, key): StatHead rows by sleeper
+     id, ESPN rows by athlete id. The reader prefers StatHead for each player
+     and falls back to ESPN for the men it has no line for, so an outage on
+     either side degrades instead of blanking. The row now carries the
+     opponent, the home flag, the roster/injury status and which source
+     answered — a screen that shows a number owes the reader that.
+  5. THE CARDS. Web and mobile both show the week in the league's own
+     scoring, with the opponent in the label (`WK 5 @ ARI`), and a man on IR
+     comes back as a zero WITH the reason rather than as missing data.
+
+`scripts/db/matchup-mult-probes.sql` (5 groups) and `npm run check:weekmult`
+(20 assertions, offline) pin the plumbing; the one real bug they caught was
+mine — `Number(null)` is 0, so "no multiplier served" was one character away
+from silently becoming "projected to score nothing".
+
+### v0.446.0 — ready for the stores, as far as code goes
+
+The last row on the gap list that was still open, and the only one where the
+work splits cleanly into "what a repo can do" and "what needs a person with
+an account". This is the first half, done properly, and an honest checklist
+for the second.
+
+  1. TWO REAL PAGES, live with the site rather than promised: /privacy.html
+     and /support.html. Both stores REQUIRE a reachable privacy URL, and
+     most apps satisfy it with boilerplate that does not describe the app.
+     This one describes what the code actually does — the email, the league
+     content, the push token, the analytics where a build has a key, Stripe
+     for purchases — plus the thing no template would know to say: that a
+     league created here is readable through the public API by whoever holds
+     its link, that there is no directory, that a commissioner can shut it
+     in one tap, and that hidden picks, pending bids, live offers, emails
+     and chat are never served to anybody either way. Static HTML, no JS, so
+     a reviewer's browser and a crawler both just get the page.
+  2. THE SUBMISSION CONFIG. eas.json grew a real submit.production for both
+     platforms, reading every credential from the environment — an App Store
+     Connect key and a Play service-account JSON are secrets and a repo is
+     not where they live — while the non-secret ids stay in the file, where
+     a change to them is a reviewable diff.
+  3. THE LISTING COPY, in apps/mobile/store.config.json for
+     `eas metadata:push`: title, subtitle, the long description, keywords and
+     the three URLs. In the repo for the same reason: a listing change should
+     be a diff, not a form somebody edited at midnight.
+  4. THE HONEST QUESTIONNAIRE ANSWERS (docs/store-listing.md), derived from
+     the code rather than guessed: what is collected and linked to you, what
+     is collected and not, what is never collected, who processes it, and why
+     simulated gambling is FALSE (drip coin is earned in play, cannot be
+     bought and cannot be cashed out — with a note beside the flag saying
+     that if that changes, the answer changes with it).
+
+WHAT IS NOT DONE, and cannot be from here: enrolling in the Apple Developer
+Program and the Play Console, creating the app in each, screenshots from a
+real build, the age rating, reviewer sign-in notes, and — Apple's rule — Sign
+in with Apple beside Google sign-in, which is real work and not yet in the
+app. The doc says all of it in the order that wastes the least time.
+
+### v0.445.0 — this week's number, and the news
+
+The gap list called the baked projections "the weakest data point vs the big
+three", and it was right for a reason that has nothing to do with the model:
+proj2026.ts is a SEASON rate, frozen before week 1. It cannot know that a
+starter is out, that a back-up has the job, that a bye is this week or that
+a man was traded on Tuesday. 0329 plus server/src/poll/projections.js.
+
+  1. THE WEEK'S NUMBER. nfl_week_proj carries one row per player per week
+     with BOTH the source's own scored total AND the raw projected stat
+     line. The line is the useful half: it can be re-scored in a league's
+     own catalog later, rather than leaving a TE-premium league reading
+     somebody else's PPR. Keyed on the ESPN athlete id, which
+     league_pool.espn_id already holds — no name matching anywhere, because
+     names drift between sources and ids do not.
+  2. THE DECODE IS CHECKED, NOT ASSUMED. ESPN's stat ids are undocumented,
+     so scripts/check-proj-map.mjs (npm run validate:proj, a NETWORK test —
+     check:parity stays offline) scores our decoded line under PPR and
+     compares it to the total ESPN scored from the same row: 209
+     skill-player weeks, mean error 0.007 points, worst case 0.08. Kickers
+     and defenses carry the TOTAL and no line, deliberately — their ids are
+     a second decoding job for two positions whose number the source
+     already scores correctly, and a wrong line is worse than none.
+  3. THE NEWS. player_news keeps the headline feed where a story is TAGGED
+     with the athletes it is about; an untagged story is about the league,
+     not about somebody's flex spot. league_news filters to the players a
+     league actually holds, so one story naming two of them appears once
+     with both.
+  4. THE BAKED SET IS NOT REPLACED. It is the fallback and the draft-room
+     ranking and it stays. A player the crosswalk cannot place has no weekly
+     number and the season projection still answers for him — absent, never
+     zero.
+
+CONSOLES. Both player cards grew a WK n column beside PROJ and a 📰 LATELY
+block in the summary tab, which renders nothing at all when the feed has
+nothing to say about him. The worker sweeps hourly (sweepProjections, gated
+inside itself) over every active week, so Tuesday's poll fills next week
+while this one is still being played.
+
+Probes: scripts/db/week-proj-probes.sql (wired into the scratch runner) —
+idempotent upserts that update in place, a league reading the week keyed by
+ITS slugs through the crosswalk, a player without one absent rather than
+zero, the news filtered to this league's players, a corrected headline
+replacing itself, and the public-API door deciding who else may read both.
+104 suites pass beside it; the three that do not fail identically on main.
+
+### v0.444.0 — what it's worth, and taking it back
+
+Two more of the gap list's trade row, and the last two that are ours to
+build: a trade analyzer, and the commissioner's undo.
+
+  1. WHAT IT'S WORTH (packages/core/src/data/tradeGrade.ts). ESPN grades a
+     trade with watsonx and Yahoo with its Trade Hub, and both hand back a
+     letter from a model you cannot inspect — the wrong shape for the
+     argument it lands in the middle of. A manager told "B−" learns nothing.
+     So: VALUE OVER REPLACEMENT, in this league's own scoring. A player is
+     worth his projected season points minus the projection of the best
+     player who would still be in the pool at his position once every team
+     filled its starting spots — which is why a QB is worth little in a
+     1-QB league and a great deal in a superflex one, with no special case
+     anywhere in the code: the league's own lineup spec moves the
+     replacement line. Below replacement is worth ZERO, not negative:
+     giving away a bench body is not a cost. Picks are a fraction of a
+     replacement starter and say "estimated"; FAAB and cap are reported as
+     money, because a dollar is not a point. "Even" is a BAND (12 season
+     points, about two thirds of a point a week) rather than a point,
+     because a projection is not precise to a point. Shown live in both
+     propose sheets as the piles change, with every player's number beside
+     it and a line saying what it does not know.
+  2. TAKING IT BACK (0328). Sleeper and Fantrax both let a commissioner
+     reverse a COMPLETED trade; Drip had a veto and a league vote, which
+     both happen before the deal lands. What leagues actually hit is the
+     Monday-morning case — a compromised account, a misread deal, a
+     collusion complaint — and the only tool was moving players back one at
+     a time, losing the picks, the dollars and the record.
+     commish_reverse_trade runs every leg backwards in one transaction:
+     players home, picks home (the running draft's copy too), FAAB home,
+     cap home, retained salary un-retained. It REFUSES rather than
+     half-undoing when a piece has moved on, when the undo would leave a
+     roster illegal, or when the FAAB has already been spent — each with
+     the reason. The trade is stamped 'reversed', not deleted: it happened.
+     The league hears about it the way it heard about the trade.
+
+CONSOLES. ⚖ WHAT IT'S WORTH in both propose sheets; ↩ reverse on a completed
+trade for the commissioner, behind a confirm because it moves other people's
+rosters.
+
+Pinned: scripts/check-trade-grade.mjs (in check:parity) — the same player
+both ways is dead even, a clearly better player leans the right way, a
+below-replacement body costs nothing, a QB prices differently in superflex
+with no special case, the band holds, picks count and say so, dollars stay
+dollars, and an unprojected player is named rather than silently zeroed.
+Probes: scripts/db/trade-undo-probes.sql. 103 suites pass beside it; the
+three that do not fail identically on main.
+
+### v0.443.0 — open by default
+
+0326 shipped the read API opt-in. Founder: "let's actually do the opposite.
+Open by default with an opt out." That is the Sleeper bargain, and the reason
+the gap list put this row on the board in the first place: an ecosystem does
+not grow on the leagues whose commissioner went looking for a switch. 0327
+changes ONE thing — what the ABSENCE of settings_json.public_api means.
+
+  · ABSENT now means OPEN for a league that lives here (provider = native),
+    and still means CLOSED for one imported from Sleeper, ESPN or Yahoo. An
+    import is a mirror of somebody else's system, pulled in with that
+    manager's own credentials; publishing our leagues is our decision to
+    make, republishing theirs is not.
+  · AN EXPLICIT FALSE IS UNTOUCHED. The whole risk of flipping a default is
+    quietly re-publishing a league that chose to be private, so the opt-out
+    is written down rather than inferred, and the probe pins it.
+  · A MOCK IS STILL NEVER SERVED.
+
+WHAT MAKES IT DEFENSIBLE, none of which changed: the never-list (sealed picks
+before they reveal, pending waiver bids, offers in flight, emails, invite
+codes, chat) is the same either way — flipping a default cannot leak what no
+endpoint returns; there is NO DIRECTORY endpoint and never will be, so a
+league is readable only by whoever holds its v4 UUID, which is "if you have
+the link", not indexed or enumerable; and the opt-out is one tap that takes
+effect on the next request.
+
+check:parity now pins the default itself (scripts/check-public-api.mjs): an
+explicit choice wins either way, absent means open for a native league, a
+mock is never served, and no route lists leagues. Both consoles read as an
+opt-out ("tap to make this league private") and say plainly that there is no
+directory. docs/public-api.md rewritten to match.
+
+Probes: public-api-probes.sql — open by default, the commissioner shutting it
+and opening it again, an imported league staying shut, an explicit opt-out
+written down and surviving, and every endpoint silent while private. 102
+suites pass beside it; the three that do not fail identically on main.
+
+### v0.442.0 — the league, readable by anything
+
+The gap list's fourth priority, and the reason it is on it: the Sleeper
+ecosystem — KTC, DynastyProcess, ffscrapr — exists because anyone can read a
+Sleeper league without logging in. Nobody builds a valuation tool, a Discord
+bot or a spreadsheet against a platform they have to authenticate with
+first. 0326 plus supabase/functions/public-api.
+
+  1. THE SHAPE. Thirteen endpoints, each assembled by ONE SQL function
+     (api_*), with the edge function as a router and nothing else. That split
+     is the point: what the API exposes is a contract written in one file
+     rather than an accident of which columns a query happened to select.
+     GET only, no key, CORS open, `/v1/openapi.json` describes itself.
+     League · teams · rosters · standings · matchups · lineups ·
+     transactions · trades · draft · picks · players · history · awards.
+  2. OPT-IN, PER LEAGUE. settings_json.public_api, one switch on the
+     commissioner's desk. Off for a full league until its commissioner turns
+     it on; ON by default for the public formats (pods, weekly showdowns,
+     DFS), which anyone with the link can already open. A league that has not
+     opted in is a 404 — byte-identical to one that does not exist, so the
+     API cannot be used to test whether a league id is real.
+  3. WHAT IS NEVER IN IT, enforced where the data is:
+     · SEALED PICKS before their window reveals. api_lineups asks
+       window_revealed() — the same question the app asks before it shows an
+       opponent's pick. An endpoint that served them early would be an
+       exploit with a URL.
+     · PENDING waiver claims and bids: blind bidding stops being blind the
+       moment an outsider can poll it. Settled claims only, with the winning
+       bid the league already heard in chat.
+     · TRADE OFFERS in flight: members see negotiations, the internet does
+       not. Executed, vetoed and expired only.
+     · Emails, claim emails, invite codes, chat, dues. The all-time manager
+       line carries an opaque handle rather than the account id 0324 keys on.
+  4. MANNERS. A token bucket per IP in the database (600/min, burst 120) so
+     every instance shares one meter; weak ETags and Cache-Control per
+     endpoint, so a poller that sends If-None-Match gets a 304 and no body;
+     cursor paging on the register; {error:{code,message}} with real status
+     codes.
+
+PINNED. scripts/check-public-api.mjs (in check:parity) asserts every route
+the router names exists in 0326, that no api_ function touches a forbidden
+column, and specifically that api_lineups still asks window_revealed and
+api_trades still serves settled deals only — the two regressions that would
+matter and that nothing else would catch.
+
+CONSOLE. PUBLIC READ API under 🏅 AWARDS & BADGES on both hosts: the switch,
+the exact base URL for this deployment, and a plain-English list of what is
+and is not served. docs/public-api.md is the written version; the deploy
+workflow grew a public-api target (--no-verify-jwt, by design).
+
+Probes: scripts/db/public-api-probes.sql (wired into the scratch runner) —
+the switch both ways, every endpoint answered ANONYMOUSLY, closed and
+nonexistent being the same answer, an unrevealed pick and a pending bid and
+a live offer all absent, no email or invite code anywhere in any payload,
+and the meter emptying and refilling. 102 suites pass beside it; the three
+that do not fail identically on main. Web and mobile typecheck.
+
+### v0.441.0 — the league writes its own trophies
+
+The last piece of the history row. Sleeper posts weekly awards to chat,
+Yahoo and ESPN hand out achievement badges — all three with a FIXED set.
+Here the set is the league's, because the joke is the point: a league that
+calls its low-score award THE BROWN JUG and pays it 50 coins is a league
+with an inside joke, and that is the feature. 0325.
+
+  1. THE RULE GRAMMAR. An award is three choices — metric (their score, what
+     they gave up, the margin, the game total) × direction (most, least) ×
+     only (any week, a win, a loss) — and between them they cover every award
+     a league has ever invented. High score is points/most/any. The sad sack
+     is points/least/any. "Highest score that still LOST" is
+     points/most/loss, the one every league writes into its group chat and no
+     platform lets it write down. Ties award everybody tied, because a tie IS
+     the story that week. An award may carry a drip-coin prize, paid once.
+  2. DEFAULTS THAT ARE NOT SETTINGS. A league with nothing configured runs
+     four built-ins (🔥 High Score, 💤 Low Score, 🔨 Biggest Beating, 💔 Tough
+     Luck), so this works the week it ships. The first edit MATERIALIZES them
+     as rows — renaming one does not delete the other three — and deleting
+     them all means no awards, which is a real choice and is honoured.
+  3. BADGES. Commissioner-defined (🐐, 🤡, PAID HIS DUES), pinned on a seat
+     and stamped with the season, so the same badge can be won again next
+     year without erasing this year's. Handed out and taken back by hand,
+     announced in chat, and carried on every manager's line in 🏛 League
+     history beside their weekly-award count.
+  4. WHEN. award_week runs a league-week only once every game in it is
+     final — half a week has no high score — is idempotent, and is
+     RE-RUNNABLE: an award added in week 9 fills in the weeks behind it
+     without disturbing what they already gave. Preseason (101+) hands out
+     nothing. The worker sweeps it (award_sweep, server/src/native.js).
+     A retired award keeps every trophy it gave: the case is a record of what
+     happened, not of what the rules now say.
+
+CONSOLES. 🏅 AWARDS & BADGES under ENGAGE on both — the rule grammar as three
+rows of chips per award, an emoji and a name you can type over, a prize
+field, and the badge maker with a team picker to pin one
+(src/screens/CommishDesk.tsx, apps/mobile/src/ui/CommishDesk.tsx). The
+history screen grew an AWARDS block (the last three weeks, plus the season's
+trophy count) and puts each manager's badges and 🏅count on their all-time
+line.
+
+Probes: scripts/db/award-probes.sql (wired into the scratch runner) — the
+built-in four, each corner of the rule grammar, ties, an unfinished week,
+preseason, idempotency, a late award filling in an old week, the prize paid
+once, the first edit materializing the defaults, a retired award keeping its
+wins, badges granted and revoked, and the trophy case in the history. 101
+suites pass beside it; the three that do not fail identically on main. Web
+and mobile typecheck.
+
+### v0.440.0 — the record book
+
+The gap list's third priority, and the one it called "a screen, not a
+schema": Sleeper, Yahoo, League Tycoon and MFL (back to 1980) all show a
+league its own past. Drip has stamped a champion since 0073 and rolled
+leagues into their next season since 0182, and never showed either. 0324
+reads it back.
+
+  1. THE LINEAGE. A native league's seasons share one sleeper_league_id,
+     which is how _rollover_target already finds next season — so the
+     lineage is every native league row with that key, oldest first, and a
+     league that has never rolled over is a lineage of one (with a short
+     record book, not no record book). An imported league stands alone and
+     still gets its records.
+  2. WHAT COUNTS. Regular-season finals decide the tables, the records and
+     the manager lines. Playoff finals ride the single-week rows — a
+     semi-final is a real 180-point week — but never a W-L. The median game
+     (0320) is a standings display, not a game. Preseason weeks (101+) are
+     practice and count nowhere.
+  3. WHO A MANAGER IS. app_user_id where the seat is claimed, else the seat
+     itself — a league whose seats changed hands keeps two honest lines
+     rather than one wrong one, and the name shown is the one from that
+     manager's latest season.
+  4. WHO MAY READ IT. Any member of ANY season in the lineage reads all of
+     them: a manager who joined last August should see the seasons he
+     missed. A stranger reads nothing.
+
+league_history returns it in one call: the seasons (champion, runner-up from
+the title game, the final table, that season's high week), the record book
+(biggest weeks, biggest beatings, closest calls, best seasons by points,
+best records, quietest weeks) and the all-time manager table ordered
+champions-first.
+
+CONSOLES. A 🏛 LEAGUE HISTORY tile on both league menus opens the same four
+blocks in the same order — champions, all-time, the record book, then a
+season picker (src/screens/LeagueHistory.tsx,
+apps/mobile/src/ui/LeagueHistory.tsx). Shown for imported leagues too, where
+the champions band is empty and the records are not.
+
+Probes: scripts/db/history-probes.sql (wired into the scratch runner) — a
+lineage of one and of two, the champion and the runner-up, preseason
+excluded and playoff weeks included, the manager lines across a seat that
+changed hands, and who may read it. 100 suites pass beside it; the three
+that do not fail identically on main. Web and mobile typecheck.
+
+### v0.439.0 — one of these, in this order
+
+The gap list's second waiver row, and the Wednesday-morning problem every
+league knows: you want ONE running back, so you file on three and wake up
+holding all three — or you file on one and get nothing. Fleaflicker,
+Fantrax, MFL, Yahoo and FFPC all have contingency groups; every Drip claim
+settled alone. 0323.
+
+  1. THE GROUP. waiver_claim carries group_id, group_seq (the manager's
+     preference order) and group_max (how many of the group may land, 1 by
+     default). group_waiver_claims links claims already filed — ticked in the
+     order you want them tried — and submit_waiver_group files a whole list
+     in one call, ALL OR NOTHING: a list whose third claim is refused files
+     none of them. ungroup_waiver_claims and cancel_waiver_group undo it.
+  2. THE RUN NEEDS NO NEW PASS. Claims are still ordered by the league's own
+     rules — bid, standings, priority — with group_seq as the tiebreaker
+     between two of one seat's OWN claims. When a win fills its group, the
+     rest settle as losses noting "conditional — already landed X", so the
+     waiver report says why a fallback went quiet. A $40 bid on the back you
+     want and a $12 fallback still compete at their own prices, and you
+     cannot end up with both.
+  3. THE GROUP WINS NOTHING BY ITSELF. A member outbid, blocked by a full
+     roster, a position cap or a commissioner's flag still loses, and the
+     fallback then gets its chance — the group only ever takes claims OFF
+     the table.
+  4. THE CURSOR IS A SNAPSHOT. process_waivers now re-reads each claim's
+     status before settling it, because a group can take rows off the table
+     mid-run. One index read per claim, and every future "settle these too"
+     rule is safe by construction.
+
+CONSOLES. Both team screens group the pending claims, print "🔗 ONLY 1 OF
+THESE 3" over them with each member's place in the order, and grew a LINK
+mode that ticks claims in preference order with a stepper for how many may
+land — plus unlink and cancel-all (src/screens/NativeLeague.tsx,
+apps/mobile/src/screens/Team.tsx).
+
+Probes: scripts/db/conditional-claim-probes.sql (wired into the scratch
+runner) — linking's gates, the first choice winning and the rest standing
+down with the reason in the league report, an outbid first choice letting
+the fallback fire, a ceiling of two, the all-or-nothing list, unlinking and
+cancelling. 99 suites pass beside it; the three that do not fail identically
+on main. Web and mobile typecheck.
+
+### v0.438.0 — the three-team trade
+
+The last open item on the gap list's trade row, and the one every platform
+but FFPC has. Drip's trades have been two seats since 0072; 0322 gives them
+LEGS.
+
+  1. THE SHAPE. A multi-team deal is a trade_proposal with one trade_leg per
+     seat, and every asset on a leg names WHERE IT GOES rather than who it is
+     swapped with. That is what makes a carousel work: A's receiver goes to
+     B, B's back goes to C, C's pick goes to A, and no two seats have a trade
+     between them at all. 3–8 teams; players, picks, FAAB and cap dollars all
+     travel, each addressed to a seat in the room.
+  2. ONE ANSWER PER SEAT. The proposer's leg is accepted when it is filed;
+     every other seat answers with the same respond_trade a two-seat offer
+     takes, which now dispatches on the shape. Nothing moves until the LAST
+     yes, and a no from anyone in it kills the whole deal — a three-way minus
+     one team is not a smaller trade, it is no trade.
+  3. EVERYTHING 0321 BUILT APPLIES. The offer clock, the commissioner's
+     ruling, and the league vote, whose electorate is now every seat outside
+     the deal however many that is — a team in a three-way cannot vote on it.
+     One acceptance path (_trade_route_accepted) serves both shapes, so a
+     three-team deal can never take a different route from a two-team one.
+  4. WHAT IS REFUSED, and why: salary retention (its terms name a player and
+     the seat that keeps eating him — a two-seat sentence), and counters (a
+     counter to a three-way is a new three-way). Both say so.
+
+EXECUTION re-validates per seat, not per side: every player still where the
+deal said, every pick still owned and unspent, every ROSTER landing legal
+(trade_cap_error per seat), every wallet still holding what it promised.
+
+CONSOLES. Both trade screens grew "＋ A THIRD TEAM": adding one turns the two
+piles into a per-seat builder where each asset is checked and then pointed at
+whoever receives it (the default is the next team round the ring). A
+multi-team row reads as one line per seat with a ✓ against the seats that
+have said yes, and my seat answers with ACCEPT MY LEG / KILL THE DEAL. The
+commissioner's queue on the web renders the legs too.
+
+Probes: scripts/db/multi-trade-probes.sql (wired into the scratch runner) —
+the shape's gates, a three-way accepted one seat at a time, a seat killing
+it, the league vote over a three-way, picks and FAAB travelling, and a
+player who moved between the offer and the last yes. 98 suites pass beside
+it; the three that do not fail identically on main. Web and mobile
+typecheck.
+
+### v0.437.0 — the trade floor
+
+docs/competitor-gap-analysis.md, written against nine platforms, put trade
+parity first: "Every platform except FFPC has the first two." Four of that
+list in 0321, both consoles, the worker. Multi-team trades are the fifth and
+a round of their own.
+
+  1. THE LEAGUE VOTE. trade_review takes a third word, 'league'. An accepted
+     trade goes to 'review' for trade_review_hours (24 by default) and every
+     UNINVOLVED seat may veto or allow it. It dies the moment the vetoes
+     reach trade_veto_votes — unset, that is a majority of the seats outside
+     the trade, so it stays right when the league grows — and goes through
+     the moment the bar cannot be reached, rather than sitting out a window
+     whose outcome is already arithmetic. Chat is told twice: when the deal
+     goes to the floor, and how the floor ruled. The commissioner still
+     outranks it in both directions while the vote is open.
+  2. EXPIRY. An offer may carry its own clock (6h / 24h / 72h, or the
+     league's trade_offer_days default; -1 stands until answered). An
+     expired offer refuses the acceptance that finds it and says so, and
+     the sweep closes the ones nobody touched.
+  3. COUNTERS. counter_trade answers an offer with an offer: the original
+     closes as 'countered' and the mirrored proposal is filed from the other
+     seat in one transaction, carrying `counters` back to what it answers.
+     A counter is a real proposal — propose_trade re-validates every piece,
+     so nothing can be smuggled through the reply.
+  4. FAAB AS AN ASSET. faab_dollars rides a proposal the way cap dollars
+     have since 0219 (+ = the proposer sends). FAAB leagues only, behind the
+     commissioner's faab_trading switch, and the wallet is checked at the
+     offer AND at execution — a review window is a day long and a waiver run
+     inside it can spend the money first.
+
+CONSOLES. Web: TRADE REVIEW under WAIVERS & TRADES (the old two-way toggle
+moved there whole, so one panel owns the mode and the vote's numbers);
+the trade card grew the vote tally with VETO / ALLOW, an offer's countdown,
+⇄ COUNTER, and a FAAB row in the propose modal (src/screens/CommishDesk.tsx,
+src/screens/NativeLeague.tsx). Mobile: TRADE FLOOR under RUN THE SEASON, and
+the same vote / counter / FAAB / clock controls on the trade card
+(apps/mobile/src/ui/CommishDesk.tsx, apps/mobile/src/ui/TradeCenter.tsx).
+The commissioner's queue on both hosts now lists a trade out for a vote.
+
+WORKER. sweepNative calls trade_sweep() each pass: offers whose clock ran
+out, and votes whose window closed. Idempotent, one statement per sweep.
+
+Probes: scripts/db/trade-floor-probes.sql (wired into the scratch runner).
+97 suites pass beside it; the three that do not (classic-open-lineups,
+dropped-pick, draft-midseason) fail identically on main. Web and mobile
+typecheck; server tests and check:parity pass.
+
 ### v0.436.0 — the commissioner's desk
 
 Founder, holding Sleeper's Commish tab against ours: "build the gaps in
