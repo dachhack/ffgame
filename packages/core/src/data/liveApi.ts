@@ -2210,6 +2210,33 @@ export const commishSetTradeRules = (
       p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
     }), Ev.commishAction, { tool: 'trade_rules' });
 
+// ── This week's number, and the news (0329) ──────────────────────────────────
+/** The WEEK's projections for this league's players, keyed by slug. Refreshed
+ *  hourly by the worker from the source that knows about the starter who is
+ *  out, the back-up who has the job and the bye — which the baked season set
+ *  (proj2026.ts) cannot, having been computed in August. A player with no
+ *  crosswalk id, or a week not yet polled, is simply absent: the baked
+ *  projection still answers for him, and a screen shows the season number
+ *  rather than a zero. */
+export const leagueWeekProjections = (leagueId: string, week: number) =>
+  rpc<{ ok?: boolean; error?: string; season?: string; week?: number; as_of?: string | null;
+        projections?: Record<string, number> }>('league_week_projections',
+    { p_league_id: leagueId, p_week: week });
+
+export interface NewsItem {
+  id: string; at: string; headline: string; summary: string | null; url: string | null;
+  /** Which of this league's players the story is about. */
+  players?: { slug: string; name: string; pos: string }[] | null;
+}
+/** Headlines about THIS league's players, newest first — the feed a manager
+ *  wants, rather than the league-wide wire. */
+export const leagueNews = (leagueId: string, limit = 30) =>
+  rpc<{ ok?: boolean; error?: string; news?: NewsItem[] }>('league_news',
+    { p_league_id: leagueId, p_limit: limit });
+/** One player's recent headlines, for the card that opens when you tap him. */
+export const playerNews = (espnId: string, limit = 5) =>
+  rpc<NewsItem[]>('player_news_for', { p_espn_id: espnId, p_limit: limit });
+
 // ── The public read API (0326) ───────────────────────────────────────────────
 /** Is this league readable by the anonymous public API? ON by default for
  *  every league that lives here (0327) — there is no directory, so that means

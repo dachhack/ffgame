@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "validate": "node scripts/espn/validate.mjs",
+    "validate:proj": "tsx scripts/check-proj-map.mjs",
     "gen:rulebook": "tsx scripts/gen-rulebook.mjs",
     "check:prices": "tsx scripts/check-powerup-prices.mjs",
     "check:cardcontrast": "tsx scripts/check-card-contrast.mjs",

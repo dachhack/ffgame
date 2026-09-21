@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.445.0 — this week's number, and the news
+
+The gap list called the baked projections "the weakest data point vs the big
+three", and it was right for a reason that has nothing to do with the model:
+proj2026.ts is a SEASON rate, frozen before week 1. It cannot know that a
+starter is out, that a back-up has the job, that a bye is this week or that
+a man was traded on Tuesday. 0329 plus server/src/poll/projections.js.
+
+  1. THE WEEK'S NUMBER. nfl_week_proj carries one row per player per week
+     with BOTH the source's own scored total AND the raw projected stat
+     line. The line is the useful half: it can be re-scored in a league's
+     own catalog later, rather than leaving a TE-premium league reading
+     somebody else's PPR. Keyed on the ESPN athlete id, which
+     league_pool.espn_id already holds — no name matching anywhere, because
+     names drift between sources and ids do not.
+  2. THE DECODE IS CHECKED, NOT ASSUMED. ESPN's stat ids are undocumented,
+     so scripts/check-proj-map.mjs (npm run validate:proj, a NETWORK test —
+     check:parity stays offline) scores our decoded line under PPR and
+     compares it to the total ESPN scored from the same row: 209
+     skill-player weeks, mean error 0.007 points, worst case 0.08. Kickers
+     and defenses carry the TOTAL and no line, deliberately — their ids are
+     a second decoding job for two positions whose number the source
+     already scores correctly, and a wrong line is worse than none.
+  3. THE NEWS. player_news keeps the headline feed where a story is TAGGED
+     with the athletes it is about; an untagged story is about the league,
+     not about somebody's flex spot. league_news filters to the players a
+     league actually holds, so one story naming two of them appears once
+     with both.
+  4. THE BAKED SET IS NOT REPLACED. It is the fallback and the draft-room
+     ranking and it stays. A player the crosswalk cannot place has no weekly
+     number and the season projection still answers for him — absent, never
+     zero.
+
+CONSOLES. Both player cards grew a WK n column beside PROJ and a 📰 LATELY
+block in the summary tab, which renders nothing at all when the feed has
+nothing to say about him. The worker sweeps hourly (sweepProjections, gated
+inside itself) over every active week, so Tuesday's poll fills next week
+while this one is still being played.
+
+Probes: scripts/db/week-proj-probes.sql (wired into the scratch runner) —
+idempotent upserts that update in place, a league reading the week keyed by
+ITS slugs through the crosswalk, a player without one absent rather than
+zero, the news filtered to this league's players, a corrected headline
+replacing itself, and the public-API door deciding who else may read both.
+104 suites pass beside it; the three that do not fail identically on main.
+
 ### v0.444.0 — what it's worth, and taking it back
 
 Two more of the gap list's trade row, and the last two that are ours to

@@ -16,7 +16,7 @@ import { statsForName, NO_SEASON } from '@drip/core/data/players';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
@@ -70,6 +70,11 @@ export function PlayerCardHost() {
 function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => void }) {
   const t = useTheme();
   const { slug, name, pos, team, week, userId, leagueId } = req;
+  // 0329: THIS WEEK'S number and the headlines — the web card's twin. Both
+  // absent for a player the crosswalk cannot place, and the season projection
+  // beside them still answers.
+  const [wkProj, setWkProj] = useState<number | null>(null);
+  const [news, setNews] = useState<NewsItem[] | null>(null);
   // SUMMARY | HISTORY. There is no GAME LOG or TEAM tab, deliberately: a
   // per-week NFL stat table and a depth chart are data this app does not hold
   // (the baked pbp is fetched a week at a time for the board, and nothing here
@@ -97,6 +102,16 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .catch(() => { if (!dead) setOwner(undefined); });
     leagueRegister(leagueId, 200)
       .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
+      .catch(() => {});
+    if (week != null) {
+      leagueWeekProjections(leagueId, week)
+        .then((r) => { if (!dead) setWkProj(r.projections?.[slug] ?? null); })
+        .catch(() => { if (!dead) setWkProj(null); });
+    }
+    // Asked through the league rather than by ESPN id: the league's pool is
+    // where the crosswalk lives, and a card only ever knows a slug.
+    leagueNews(leagueId, 60)
+      .then((r) => { if (!dead) setNews((r.news ?? []).filter((n) => (n.players ?? []).some((x) => x.slug === slug)).slice(0, 3)); })
       .catch(() => {});
     return () => { dead = true; };
   }, [leagueId, slug]);
@@ -242,6 +257,9 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             ['EXP', bio?.exp != null ? (bio.exp === 0 ? 'ROOK' : `${bio.exp} yr`) : '—'],
             ['NO.', bio?.num != null ? `#${bio.num}` : '—'],
             ['PROJ', projFor(slug, pos) != null ? (projFor(slug, pos) as number).toFixed(1) : '—'],
+            // 0329: the WEEK's number, refreshed hourly — it knows about the
+            // injury, the bye and the depth chart; the August bake cannot.
+            [week != null ? `WK ${week}` : 'WK', wkProj != null ? wkProj.toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <View key={k} style={{ flex: 1, alignItems: 'center' }}>
               <Mono size={8} tone="faint" weight="700" track={0.12}>{k}</Mono>
@@ -264,6 +282,19 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
 
         {tab === 'summary' && (
           <View style={{ gap: 7 }}>
+            {/* 0329: what has been said about him lately. Absent rather than
+                empty when the feed has nothing. */}
+            {(news ?? []).length > 0 && (
+              <View style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingBottom: 6, marginBottom: 2 }}>
+                <Mono size={8} tone="faint" weight="700" track={0.12}>📰 LATELY</Mono>
+                {(news ?? []).map((n) => (
+                  <View key={n.id} style={{ marginTop: 4 }}>
+                    <Text numberOfLines={2} style={{ fontSize: 11, color: t.text, lineHeight: 15 }}>{n.headline}</Text>
+                    <Mono size={8} tone="faint">{new Date(n.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Mono>
+                  </View>
+                ))}
+              </View>
+            )}
             {/* UPCOMING GAME — the top panel of Sleeper's summary, from the
                 slate this app already carries. Silent out of season, when the
                 bye is on, or before the slate for that week is loaded. */}

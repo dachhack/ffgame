@@ -199,3 +199,4 @@ $RUN -f scripts/db/history-probes.sql | grep -E "PROBE FAIL|ALL HISTORY PROBES" 
 $RUN -f scripts/db/award-probes.sql | grep -E "PROBE FAIL|ALL AWARD PROBES" || { echo "AWARD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/public-api-probes.sql | grep -E "PROBE FAIL|ALL PUBLIC-API PROBES" || { echo "PUBLIC-API PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/trade-undo-probes.sql | grep -E "PROBE FAIL|ALL TRADE-UNDO PROBES" || { echo "TRADE-UNDO PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/week-proj-probes.sql | grep -E "PROBE FAIL|ALL WEEK-PROJ PROBES" || { echo "WEEK-PROJ PROBES FAILED"; exit 1; }

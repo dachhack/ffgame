@@ -9,9 +9,10 @@ reused without re-researching._
 _The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
 (`0321`, `0322`), which closed all five of its migration-blocking gaps, and
 the Waivers row's first cell for v0.439.0 (`0323`), the league-history row
-for v0.440.0 (`0324`), the awards row for v0.441.0 (`0325`) and the read-API
-row for v0.442.0–v0.443.0 (`0326`, `0327`); every other cell is as first
-written._
+for v0.440.0 (`0324`), the awards row for v0.441.0 (`0325`), the read-API row for v0.442.0–v0.443.0
+(`0326`, `0327`), the trade-grade and trade-reversal rows for v0.444.0
+(`0328`) and the projections row for v0.445.0 (`0329`); every other cell is
+as first written._
 
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
@@ -136,7 +137,7 @@ The widest gaps relative to the big three.
 | Write API | MFL, Yahoo | None |
 | Data export | Fantrax (CSV), MFL | None |
 | Win probability | MFL, ESPN | None |
-| Weekly-refreshed consensus projections and player news | Yahoo (FTN etc.), ESPN, Sleeper, MFL partners | Baked preseason sets (`proj*2026.ts`), injuries, depth charts |
+| Weekly-refreshed consensus projections and player news | Yahoo (FTN etc.), ESPN, Sleeper, MFL partners | **Shipped v0.445.0** — hourly weekly projections (with the raw stat line, decoded and checked against the source) and player-tagged headlines, keyed on the ESPN crosswalk (`0329`) |
 | AI insights, lineup optimizer, start-sit | ESPN watsonx, Yahoo Assistant GM / Research Assistant, RSO roadmap | None |
 | AutoSubs / late-scratch auto-substitution | Sleeper, Fantrax, Yahoo | None |
 | Per-stat push alerts | Fantrax (2025) | Event-level push |
@@ -167,8 +168,9 @@ Ordered by what blocks a league from migrating next August, then retention.
    v0.442.0 (`0326`); store listings are still the open half of this row.
 5. **Dues** — Stripe checkout + webhook exist; a SleeperSafe-style pot with a
    veto window reuses most of it.
-6. **Weekly projections and news** — the baked sets are the weakest data
-   point vs the big three.
+6. ~~**Weekly projections and news**~~ — **Done** in v0.445.0 (`0329`): the
+   week's number and the headlines, refreshed hourly. The baked season set
+   stays as the fallback and the draft-room ranking.
 
 ---
 

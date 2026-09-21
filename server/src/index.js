@@ -18,6 +18,7 @@ import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
+import { sweepProjections } from './poll/projections.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
@@ -624,6 +625,15 @@ async function tick() {
       log(`market: ${r.rows} rows (${r.priced} with ADP) from ${r.seen} listed (${r.unresolved} unresolved)`);
     } catch (e) { log('market poll error', e.message); }
   }
+
+  // THE WEEK'S NUMBER AND THE NEWS (0329). Hourly, gated inside the sweep:
+  // a projection an hour stale is still this week's, and a headline an hour
+  // late is still news. Every active week gets a pass, so a Tuesday poll
+  // fills next week while the current one is still being played.
+  try {
+    const pr = await sweepProjections(config.season, contexts.map((c) => c.espnWeek + c.offset), log);
+    if (pr.projections || pr.news) log('projections:', pr.projections, 'player-weeks,', pr.news, 'news items');
+  } catch (e) { log('projection sweep error', e.message); }
 
   // Native leagues: advance live draft clocks, clear due waiver claims, and
   // drop each active week's coin allowance (idempotent — see native.js).
