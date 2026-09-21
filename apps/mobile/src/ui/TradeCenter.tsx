@@ -17,11 +17,13 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
-  counterTrade, castTradeVote, proposeMultiTrade,
+  counterTrade, castTradeVote, proposeMultiTrade, commishReverseTrade, leagueGameMode,
+  type GameModeInfo,
   tradeSignals, setTradeSignal, pickAssets, leagueContracts,
   type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
+import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
@@ -80,11 +82,15 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const [dest, setDest] = useState<Record<string, number>>({});
   const [pickDest, setPickDest] = useState<Record<string, number>>({});
   const [faabTarget, setFaabTarget] = useState<number | null>(null);
+  // 0328: the league's lineup spec and scoring — what the trade grade reads
+  // the replacement line off.
+  const [mode, setMode] = useState<GameModeInfo | null>(null);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
+    leagueGameMode(leagueId).then((m) => { if (m.ok) setMode(m); }).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -205,6 +211,29 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const nextSeat = (rid: number) => teamsIn[(teamsIn.indexOf(rid) + 1) % teamsIn.length];
   const holderOf = (slug: string) => rosters.find((r) => r.slug === slug)?.roster_id ?? null;
   const multiAssets = Object.keys(dest).length + Object.keys(pickDest).length;
+  // 0328: WHAT IS THIS WORTH — computed here rather than fetched, because the
+  // projections and the league's scoring both live in core and the answer has
+  // to move as the piles do. Two-seat offers only: a three-way has no "your
+  // side" to grade.
+  const grade: GradeResult | null = (!isMulti && myRoster != null && partner != null
+    && give.length + get.length + givePicks.length + getPicks.length > 0)
+    ? gradeTrade({
+      send: {
+        players: give.map((sl) => ({ slug: sl, pos: poolBySlug.get(sl)?.pos ?? 'RB', team: poolBySlug.get(sl)?.team, sleeperId: poolBySlug.get(sl)?.sleeper_id })),
+        picks: givePicks.map((p) => ({ season: p.season, round: p.round, kind: p.kind })),
+        faab: faabDollars > 0 ? faabDollars : 0, cap: capDollars > 0 ? capDollars : 0,
+      },
+      receive: {
+        players: get.map((sl) => ({ slug: sl, pos: poolBySlug.get(sl)?.pos ?? 'RB', team: poolBySlug.get(sl)?.team, sleeperId: poolBySlug.get(sl)?.sleeper_id })),
+        picks: getPicks.map((p) => ({ season: p.season, round: p.round, kind: p.kind })),
+        faab: faabDollars < 0 ? -faabDollars : 0, cap: capDollars < 0 ? -capDollars : 0,
+      },
+      pool: [...poolBySlug.values()].map((p) => ({ slug: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id })),
+      teams: teams.length || 10,
+      slots: mode ? { roster: mode.roster, slots: mode.slots } : null,
+      scoring: mode?.scoring,
+    })
+    : null;
   const proposeMulti = async () => {
     if (busy || myRoster == null || multiAssets === 0) return;
     setBusy(true); setErr(null);
@@ -255,6 +284,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       : x.status === 'vetoed' ? ['VETOED', t.opp]
       : x.status === 'expired' ? ['EXPIRED', t.faint]
       : x.status === 'countered' ? ['COUNTERED', t.faint]
+      : x.status === 'reversed' ? ['REVERSED', t.opp]
       : [x.status.toUpperCase(), t.faint];
     return (
       <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: color, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
@@ -416,7 +446,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               </View>
             );
           })()}
-          {(x.status === 'pending' || x.status === 'accepted' || x.status === 'review') && (
+          {(x.status === 'pending' || x.status === 'accepted' || x.status === 'review'
+            || (isCommish && x.status === 'executed')) && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               {x.status === 'pending' && !x.legs && x.to_roster === myRoster && (
                 <>
@@ -439,6 +470,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               )}
               {x.from_roster === myRoster && x.status === 'pending' && (
                 <Chip label="withdraw" disabled={busy} onPress={() => { tap(); void act(() => cancelTrade(x.id)); }} />
+              )}
+              {/* 0328: the commissioner's undo, on a completed deal. */}
+              {isCommish && x.status === 'executed' && (
+                <Chip label="↩ REVERSE" disabled={busy}
+                  onPress={() => { tap(); void act(() => commishReverseTrade(x.id)); }} />
               )}
               {/* the ruling, on the same card (see header) — and over a vote
                   in progress too, which the commissioner outranks. */}
@@ -693,6 +729,22 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               onChangeText={(v) => setFaabDraft(v.replace(/[^0-9]/g, ''))}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
             {myFaab != null && <Mono size={8.5} tone="faint">you have ${myFaab}</Mono>}
+          </View>
+        )}
+        {/* WHAT IS IT WORTH (0328) — the two sides' projected points over
+            replacement rather than a letter, so it can be argued with. */}
+        {grade && (
+          <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 7 }}>
+            <Mono size={7.5} tone="faint" track={0.1}>⚖ WHAT IT'S WORTH</Mono>
+            <Mono size={10} weight="700" tone={grade.verdict === 'for' ? 'you' : grade.verdict === 'against' ? 'opp' : 'warn'}
+              style={{ marginTop: 3, lineHeight: fs(14) }}>{grade.summary}</Mono>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 3 }}>
+              you send {grade.out} · you get {grade.in}
+              {grade.missing.length > 0 ? ` · ${grade.missing.length} unprojected` : ''}
+            </Mono>
+            <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
+              Projected season points above the best player left in the pool at that spot, in this league's scoring. It does not know your record or your plans.
+            </Mono>
           </View>
         )}
         {/* HOW LONG IT STANDS (0321). */}

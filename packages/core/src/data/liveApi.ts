@@ -2393,7 +2393,7 @@ export interface TradeRow {
   /** 0321: FAAB dollars as an asset (positive = the PROPOSER sends them). */
   faab_dollars?: number | null;
   status: 'pending' | 'accepted' | 'review' | 'executed' | 'rejected' | 'cancelled'
-        | 'vetoed' | 'expired' | 'countered';
+        | 'vetoed' | 'expired' | 'countered' | 'reversed';
   note: string | null; created_at: string; resolved_at: string | null;
   /** 0321: when this offer lapses (null = it stands until answered), when the
    *  league vote closes, and the offer this one answers. */
@@ -2495,6 +2495,16 @@ export const respondTrade = (tradeId: string, accept: boolean) =>
 export const cancelTrade = (tradeId: string) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('cancel_trade', { p_trade_id: tradeId }),
     Ev.tradeResponded, { action: 'cancel' });
+/** 0328: the commissioner's last resort — reverse a COMPLETED trade. Every
+ *  leg run backwards in one transaction: players home, picks home, FAAB and
+ *  cap home, retained salary un-retained. Refuses (rather than half-undoing)
+ *  when a piece has moved on, when the undo would leave a roster illegal, or
+ *  when the FAAB has already been spent. The trade is stamped 'reversed'
+ *  rather than deleted — it happened. */
+export const commishReverseTrade = (tradeId: string, note?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; status?: string; teams?: number }>('commish_reverse_trade',
+    { p_trade_id: tradeId, p_note: note ?? null }), Ev.commishAction, { tool: 'trade_reverse' });
+
 export const commishRuleTrade = (tradeId: string, approve: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('commish_rule_trade', { p_trade_id: tradeId, p_approve: approve }),
     Ev.commishAction, { tool: approve ? 'trade_approve' : 'trade_veto' });

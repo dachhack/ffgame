@@ -16,6 +16,7 @@ import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
+import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
 import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -42,7 +43,7 @@ import {
   pushTest, myPushLog, pushLogStatus, type PushLogRow,
   nominate, placeBid, setLotProxy,
   leagueTrades, proposeTrade, respondTrade, cancelTrade, counterTrade, castTradeVote,
-  proposeMultiTrade,
+  proposeMultiTrade, commishReverseTrade,
   leagueContracts, type LeagueContracts,
   setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
@@ -3433,7 +3434,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
           reviewHours={team.trade_review_hours} vetoNeed={team.trade_veto_votes}
           offerDays={team.trade_offer_days} faabTrading={team.faab_trading} myFaab={team.my_faab}
-          onChanged={refresh} />
+          isCommish={!!team.is_commish} onChanged={refresh} />
       )}
 
       {pickers}
@@ -3540,7 +3541,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
 // with the players.
 // ─────────────────────────────────────────────────────────────────────────────
 function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview,
-                      reviewHours, vetoNeed, offerDays, faabTrading, myFaab, onChanged }: {
+                      reviewHours, vetoNeed, offerDays, faabTrading, myFaab, isCommish, onChanged }: {
   leagueId: string; myRoster: number | null;
   teams: { roster_id: number; team: string | null }[];
   rosters: { roster_id: number; slug: string }[];
@@ -3550,6 +3551,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
    *  offer, whether FAAB may ride one, and this seat's wallet. */
   reviewHours?: number; vetoNeed?: number; offerDays?: number;
   faabTrading?: boolean; myFaab?: number | null;
+  /** 0328: the commissioner may undo a completed trade. */
+  isCommish?: boolean;
   onChanged: () => void;
 }) {
   const [trades, setTrades] = useState<TradeRow[]>([]);
@@ -3585,11 +3588,15 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const [dest, setDest] = useState<Record<string, number>>({});        // slug → destination seat
   const [pickDest, setPickDest] = useState<Record<string, number>>({}); // "season/round/orig" → seat
   const [faabTarget, setFaabTarget] = useState<number | null>(null);   // who my FAAB goes to in a multi
+  // 0328: the league's lineup spec and scoring — what the trade grade reads
+  // the replacement line off. Loaded once beside everything else.
+  const [mode, setMode] = useState<GameModeInfo | null>(null);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
+    leagueGameMode(leagueId).then((m) => { if (m.ok) setMode(m); }).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -3701,6 +3708,29 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const nextSeat = (rid: number) => teamsIn[(teamsIn.indexOf(rid) + 1) % teamsIn.length];
   const holderOf = (slug: string) => rosters.find((r) => r.slug === slug)?.roster_id ?? null;
   const multiAssets = Object.keys(dest).length + Object.keys(pickDest).length;
+  // 0328's other half: WHAT IS THIS WORTH, computed here rather than fetched,
+  // because the projections and the league's scoring both live in core and
+  // the answer has to move as the piles do. Two-seat offers only — a
+  // three-way has no "your side" to grade.
+  const grade: GradeResult | null = (!isMulti && myRoster != null && partner != null
+    && give.length + get.length + givePicks.length + getPicks.length > 0)
+    ? gradeTrade({
+      send: {
+        players: give.map((sl) => ({ slug: sl, pos: poolBySlug.get(sl)?.pos ?? 'RB', team: poolBySlug.get(sl)?.team, sleeperId: poolBySlug.get(sl)?.sleeper_id })),
+        picks: givePicks.map((p) => ({ season: p.season, round: p.round, kind: p.kind })),
+        faab: faabDollars > 0 ? faabDollars : 0, cap: capDollars > 0 ? capDollars : 0,
+      },
+      receive: {
+        players: get.map((sl) => ({ slug: sl, pos: poolBySlug.get(sl)?.pos ?? 'RB', team: poolBySlug.get(sl)?.team, sleeperId: poolBySlug.get(sl)?.sleeper_id })),
+        picks: getPicks.map((p) => ({ season: p.season, round: p.round, kind: p.kind })),
+        faab: faabDollars < 0 ? -faabDollars : 0, cap: capDollars < 0 ? -capDollars : 0,
+      },
+      pool: [...poolBySlug.values()].map((p) => ({ slug: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id })),
+      teams: teams.length || 10,
+      slots: mode ? { roster: mode.roster, slots: mode.slots } : null,
+      scoring: mode?.scoring,
+    })
+    : null;
   const proposeMulti = async () => {
     if (busy || myRoster == null || multiAssets === 0) return;
     setBusy(true); setErr(null);
@@ -3754,6 +3784,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       : t.status === 'vetoed' ? ['VETOED', 'var(--opp)']
       : t.status === 'expired' ? ['EXPIRED', 'var(--faint)']
       : t.status === 'countered' ? ['COUNTERED', 'var(--faint)']
+      : t.status === 'reversed' ? ['REVERSED', 'var(--opp)']
       : [t.status.toUpperCase(), 'var(--faint)'];
     return <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color, border: `1px solid ${color}`, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap' }}>{label}</span>;
   };
@@ -3897,13 +3928,23 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
               </div>
             );
           })()}
-          {(t.status === 'pending' || t.status === 'accepted') && (
+          {(t.status === 'pending' || t.status === 'accepted'
+            || (isCommish && t.status === 'executed')) && (
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               {t.status === 'pending' && !t.legs && t.to_roster === myRoster && <>
                 <button onClick={() => act(() => respondTrade(t.id, true))} disabled={busy} className="mono" style={{ ...btn, padding: '6px 12px', fontSize: 9.5 }}>✓ ACCEPT</button>
                 <button onClick={() => openCounter(t)} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 12px', fontSize: 9.5 }}>⇄ COUNTER</button>
                 <button onClick={() => act(() => respondTrade(t.id, false))} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '6px 12px', fontSize: 9.5, color: 'var(--opp)' }}>✕ DECLINE</button>
               </>}
+              {/* 0328: the commissioner's undo, on a completed deal. Behind a
+                  confirm because it moves other people's rosters. */}
+              {isCommish && t.status === 'executed' && (
+                <button onClick={() => {
+                  const why = window.prompt('Reverse this trade? Everything goes back where it was. Say why (optional):');
+                  if (why === null) return;
+                  act(() => commishReverseTrade(t.id, why || undefined));
+                }} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>↩ reverse</button>
+              )}
               {/* 0322: my seat answers for itself, and a no from anyone in it
                   kills the whole deal — which the button says. */}
               {t.status === 'pending' && t.legs?.some((l) => l.roster_id === myRoster && !l.accepted) && <>
@@ -4177,6 +4218,27 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                   onChange={(e) => setFaabDraft(e.target.value.replace(/[^0-9]/g, ''))}
                   style={{ ...input, width: 64, marginTop: 0 }} />
                 {myFaab != null && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>you have ${myFaab}</span>}
+              </div>
+            )}
+            {/* WHAT IS IT WORTH (0328). Shown as the two sides' projected
+                points over replacement rather than a letter, so a manager can
+                disagree with the arithmetic instead of with a black box. */}
+            {grade && (
+              <div style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', fontWeight: 700 }}>
+                  ⚖ WHAT IT'S WORTH
+                </div>
+                <div className="mono" style={{ fontSize: 10.5, marginTop: 4, lineHeight: 1.5,
+                  color: grade.verdict === 'for' ? 'var(--you)' : grade.verdict === 'against' ? 'var(--opp)' : 'var(--warn)' }}>
+                  {grade.summary}
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+                  you send {grade.out} · you get {grade.in}
+                  {grade.missing.length > 0 && ` · ${grade.missing.length} player${grade.missing.length === 1 ? '' : 's'} unprojected, not counted`}
+                </div>
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+                  Projected season points above the best player left in the pool at that spot, in this league's scoring. It does not know your record, your bye weeks or your plans.
+                </div>
               </div>
             )}
             {/* HOW LONG IT STANDS (0321). "League default" is what the

@@ -54,9 +54,9 @@ The most-cited reason a league refuses to move platforms.
 | Multi-team trades | Sleeper, Fleaflicker (unlimited), MFL, Fantrax, RSO | **Shipped v0.438.0** — 3–8 seats as `trade_leg` rows, every asset addressed to a seat in the deal (`0322`) |
 | Counter-offers and offer expiry | Sleeper (exploding offers), Fleaflicker (1h–14d), MFL | **Shipped v0.437.0** — `counter_trade`, and an offer clock per offer or per league (`0321`) |
 | Trading FAAB dollars | Sleeper, MFL, Fantrax, FFPC dynasty | **Shipped v0.437.0** — `faab_dollars` behind the commissioner's `faab_trading` switch (`0321`) |
-| Trade analyzer or grades | ESPN (IBM watsonx), Yahoo Plus Trade Hub | None |
+| Trade analyzer or grades | ESPN (IBM watsonx), Yahoo Plus Trade Hub | **Shipped v0.444.0** — projected points over replacement in the league's own scoring, per player, shown live as the offer is built (`tradeGrade.ts`). Theirs is a letter; ours is arithmetic you can argue with |
 | Trade auctions with anti-snipe | League Tycoon | None |
-| Reverse a completed trade | Sleeper, Fantrax | Generic undo tools; no trade-specific reversal |
+| Reverse a completed trade | Sleeper, Fantrax | **Shipped v0.444.0** — `commish_reverse_trade` runs every leg backwards in one transaction, and refuses rather than half-undoing (`0328`) |
 
 ### Waivers
 
@@ -152,8 +152,9 @@ Ordered by what blocks a league from migrating next August, then retention.
 1. ~~**Trade parity** — league-vote review, multi-team trades, expiry and
    counters, FAAB trading.~~ **Done** in v0.437.0 (`0321`: the vote, expiry,
    counters, FAAB) and v0.438.0 (`0322`: 3–8-team trades). What is still
-   missing from this row: a trade analyzer or grades, trade auctions, and
-   reversing a completed trade.
+   missing from this row: trade auctions with anti-snipe (League Tycoon's,
+   and the only one of these nobody else has either). Grades and reversal
+   shipped in v0.444.0 (`0328`).
 2. ~~**Conditional waiver claims and a median matchup**~~ — **Done**: the
    median game in v0.436.0 (`0320`), conditional claim groups in v0.439.0
    (`0323`). Still open on the waivers row: Vickrey second-price FAAB,

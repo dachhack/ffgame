@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.444.0 — what it's worth, and taking it back
+
+Two more of the gap list's trade row, and the last two that are ours to
+build: a trade analyzer, and the commissioner's undo.
+
+  1. WHAT IT'S WORTH (packages/core/src/data/tradeGrade.ts). ESPN grades a
+     trade with watsonx and Yahoo with its Trade Hub, and both hand back a
+     letter from a model you cannot inspect — the wrong shape for the
+     argument it lands in the middle of. A manager told "B−" learns nothing.
+     So: VALUE OVER REPLACEMENT, in this league's own scoring. A player is
+     worth his projected season points minus the projection of the best
+     player who would still be in the pool at his position once every team
+     filled its starting spots — which is why a QB is worth little in a
+     1-QB league and a great deal in a superflex one, with no special case
+     anywhere in the code: the league's own lineup spec moves the
+     replacement line. Below replacement is worth ZERO, not negative:
+     giving away a bench body is not a cost. Picks are a fraction of a
+     replacement starter and say "estimated"; FAAB and cap are reported as
+     money, because a dollar is not a point. "Even" is a BAND (12 season
+     points, about two thirds of a point a week) rather than a point,
+     because a projection is not precise to a point. Shown live in both
+     propose sheets as the piles change, with every player's number beside
+     it and a line saying what it does not know.
+  2. TAKING IT BACK (0328). Sleeper and Fantrax both let a commissioner
+     reverse a COMPLETED trade; Drip had a veto and a league vote, which
+     both happen before the deal lands. What leagues actually hit is the
+     Monday-morning case — a compromised account, a misread deal, a
+     collusion complaint — and the only tool was moving players back one at
+     a time, losing the picks, the dollars and the record.
+     commish_reverse_trade runs every leg backwards in one transaction:
+     players home, picks home (the running draft's copy too), FAAB home,
+     cap home, retained salary un-retained. It REFUSES rather than
+     half-undoing when a piece has moved on, when the undo would leave a
+     roster illegal, or when the FAAB has already been spent — each with
+     the reason. The trade is stamped 'reversed', not deleted: it happened.
+     The league hears about it the way it heard about the trade.
+
+CONSOLES. ⚖ WHAT IT'S WORTH in both propose sheets; ↩ reverse on a completed
+trade for the commissioner, behind a confirm because it moves other people's
+rosters.
+
+Pinned: scripts/check-trade-grade.mjs (in check:parity) — the same player
+both ways is dead even, a clearly better player leans the right way, a
+below-replacement body costs nothing, a QB prices differently in superflex
+with no special case, the band holds, picks count and say so, dollars stay
+dollars, and an unprojected player is named rather than silently zeroed.
+Probes: scripts/db/trade-undo-probes.sql. 103 suites pass beside it; the
+three that do not fail identically on main.
+
 ### v0.443.0 — open by default
 
 0326 shipped the read API opt-in. Founder: "let's actually do the opposite.
