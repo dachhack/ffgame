@@ -3,9 +3,12 @@
 // Port of the web TradeCenter (src/screens/NativeLeague.tsx), same 0072
 // contract: propose_trade holds the offer, respond_trade accepts or declines,
 // accepted trades execute instantly unless the league routes them through the
-// commissioner (trade_review = 'commish'), and commish_rule_trade is that
-// ruling. The server owns every check that matters — roster caps, position
-// limits, player ownership (trade_cap_error) — so this screen only asks.
+// commissioner (trade_review = 'commish') or, since 0321, out to the league
+// for a veto vote ('league'), and commish_rule_trade is that ruling. 0321 also
+// brought the offer clock, the counter, and FAAB dollars as an asset. The
+// server owns every check that matters — roster caps, position limits, player
+// ownership (trade_cap_error), the vote's arithmetic — so this screen only
+// asks.
 //
 // One deliberate merge vs the web: the commissioner's APPROVE/VETO lives on
 // the same card as everyone's trade list, not in a separate roster-tools
@@ -14,21 +17,29 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   cancelTrade, commishRuleTrade, friendlyError, leagueTrades, proposeTrade, respondTrade,
+  counterTrade, castTradeVote,
   tradeSignals, setTradeSignal, pickAssets, leagueContracts,
   type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
+import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 
-export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview, isCommish, presetPartner, onChanged }: {
+export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview,
+                              reviewHours, vetoNeed, offerDays, faabTrading, myFaab,
+                              isCommish, presetPartner, onChanged }: {
   leagueId: string; myRoster: number | null;
   teams: { roster_id: number; team: string | null }[];
   rosters: { roster_id: number; slug: string }[];
   poolBySlug: Map<string, LeaguePoolPlayer>;
-  tradeReview?: 'none' | 'commish';
+  tradeReview?: 'none' | 'commish' | 'league';
+  /** 0321, the trade floor: the vote's window and bar, the default life of an
+   *  offer, whether FAAB may ride one, and this seat's wallet. */
+  reviewHours?: number; vetoNeed?: number; offerDays?: number;
+  faabTrading?: boolean; myFaab?: number | null;
   isCommish: boolean;
   /** Deep link (v0.356.3): open the propose sheet pointed at this seat. */
   presetPartner?: number | null;
@@ -56,6 +67,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const [retain, setRetain] = useState<Record<string, number>>({});
   const [capDraft, setCapDraft] = useState('');
   const [capDir, setCapDir] = useState<1 | -1>(1);
+  // 0321: FAAB as an asset, the offer's own clock, and the offer this one
+  // answers (set = the sheet is composing a counter, not a fresh proposal).
+  const [faabDraft, setFaabDraft] = useState('');
+  const [faabDir, setFaabDir] = useState<1 | -1>(1);
+  const [expiryHours, setExpiryHours] = useState<number | null>(null);
+  const [counterOf, setCounterOf] = useState<string | null>(null);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
@@ -145,22 +162,40 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   };
 
   const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
+  const faabDollars = (parseInt(faabDraft, 10) || 0) * faabDir;
+  const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
+    + Math.abs(capDollars) + Math.abs(faabDollars) === 0;
+  const closeSheet = () => {
+    setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
+    setGivePicks([]); setGetPicks([]); setNote('');
+    setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
+  };
+  // An offer answered with an offer (0321): the same sheet, filed by a
+  // different RPC, with the two seats already decided.
+  const openCounter = (x: TradeRow) => {
+    tap();
+    setCounterOf(x.id); setPartner(x.from_roster);
+    setGive(x.get); setGet(x.give); setGivePicks([]); setGetPicks([]);
+    setNote(''); setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1);
+    setExpiryHours(null); setErr(null); setOpen(true);
+  };
   const propose = async () => {
-    if (busy || myRoster == null || partner == null
-        || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0) return;
+    if (busy || myRoster == null || partner == null || nothingOffered) return;
     setBusy(true); setErr(null);
     try {
       const retainTerms = [...give, ...get]
         .filter((s) => (retain[s] ?? 0) > 0)
         .map((s) => ({ slug: s, amount: retain[s] }));
-      const r = await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined,
-        givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
-        getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig })),
-        retainTerms, capDollars || undefined);
+      const gp = givePicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig }));
+      const tp = getPicks.map((p) => ({ season: p.season, round: p.round, orig: p.orig }));
+      const r = counterOf
+        ? await counterTrade(counterOf, give, get, note.trim() || undefined, gp, tp,
+            retainTerms, capDollars || undefined, faabDollars || undefined, expiryHours ?? undefined)
+        : await proposeTrade(leagueId, myRoster, partner, give, get, note.trim() || undefined, gp, tp,
+            retainTerms, capDollars || undefined, faabDollars || undefined, expiryHours ?? undefined);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       commit();
-      setOpen(false); setPartner(null); setGive([]); setGet([]); setGivePicks([]); setGetPicks([]); setNote('');
-      setRetain({}); setCapDraft(''); setCapDir(1);
+      closeSheet();
       await load();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -170,8 +205,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     const [label, color] =
       x.status === 'pending' ? ['OFFERED', t.warn]
       : x.status === 'accepted' ? ['AWAITING COMMISH', t.warn]
+      : x.status === 'review' ? ['LEAGUE VOTE', t.warn]
       : x.status === 'executed' ? ['EXECUTED', t.you]
       : x.status === 'vetoed' ? ['VETOED', t.opp]
+      : x.status === 'expired' ? ['EXPIRED', t.faint]
+      : x.status === 'countered' ? ['COUNTERED', t.faint]
       : [x.status.toUpperCase(), t.faint];
     return (
       <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: color, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
@@ -246,7 +284,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Mono size={9} tone="faint" track={0.12}>⇄ TRADES{tradeReview === 'commish' ? ' · COMMISH REVIEWS' : ''}</Mono>
+        <Mono size={9} tone="faint" track={0.12}>⇄ TRADES{tradeReview === 'commish' ? ' · COMMISH REVIEWS'
+          : tradeReview === 'league' ? ` · LEAGUE VOTES (${vetoNeed ?? 2}, ${reviewHours ?? 24}H)` : ''}</Mono>
         <View style={{ flex: 1 }} />
         {myRoster != null && <Chip label="＋ PROPOSE" on onPress={() => { tap(); setOpen(true); setErr(null); }} />}
       </View>
@@ -278,20 +317,57 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               💵 {teamName(x.cap_dollars > 0 ? x.from_roster : x.to_roster)} sends ${Math.abs(x.cap_dollars)} of cap room
             </Mono>
           )}
+          {/* 0321: FAAB rides the row for the same reason the salary terms do —
+              the side being asked has to SEE the money before it agrees. */}
+          {!!x.faab_dollars && (
+            <Mono size={8.5} tone="warn" style={{ marginTop: 3 }}>
+              💵 {teamName(x.faab_dollars > 0 ? x.from_roster : x.to_roster)} sends ${Math.abs(x.faab_dollars)} of FAAB
+            </Mono>
+          )}
           {!!x.note && <Mono size={8.5} tone="faint" style={{ marginTop: 3 }}>“{x.note}”</Mono>}
-          {(x.status === 'pending' || x.status === 'accepted') && (
+          {x.status === 'pending' && !!fmtTimeLeft(x.expires_at) && (
+            <Mono size={8.5} tone="faint" style={{ marginTop: 3 }}>⏳ offer {fmtTimeLeft(x.expires_at)}</Mono>
+          )}
+          {/* THE FLOOR (0321). Everyone sees the tally; only a seat outside the
+              deal may move it. An allow is a real vote — it is what closes a
+              window early once a veto is out of reach. */}
+          {x.status === 'review' && (() => {
+            const tally = voteTally(x.votes);
+            const mine = (x.votes ?? []).find((v) => v.roster_id === myRoster);
+            const canVote = myRoster != null && myRoster !== x.from_roster && myRoster !== x.to_roster;
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                <Mono size={8.5} tone="warn">
+                  🗳 {tally.vetoes} of {x.veto_need ?? vetoNeed ?? 2} vetoes
+                  {tally.allows > 0 ? ` · ${tally.allows} allowed` : ''}
+                  {fmtTimeLeft(x.review_until) ? ` · vote ${fmtTimeLeft(x.review_until)}` : ''}
+                </Mono>
+                {canVote && (
+                  <>
+                    <Chip label={mine?.veto ? '✓ VETOED' : '🚫 VETO'} on={mine?.veto === true} disabled={busy}
+                      onPress={() => { tap(); void act(() => castTradeVote(x.id, true)); }} />
+                    <Chip label={mine && !mine.veto ? '✓ ALLOWED' : '👍 ALLOW'} on={mine?.veto === false} disabled={busy}
+                      onPress={() => { tap(); void act(() => castTradeVote(x.id, false)); }} />
+                  </>
+                )}
+              </View>
+            );
+          })()}
+          {(x.status === 'pending' || x.status === 'accepted' || x.status === 'review') && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               {x.status === 'pending' && x.to_roster === myRoster && (
                 <>
                   <Chip label="✓ ACCEPT" on disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, true)); }} />
+                  <Chip label="⇄ COUNTER" disabled={busy} onPress={() => openCounter(x)} />
                   <Chip label="✕ DECLINE" disabled={busy} onPress={() => { tap(); void act(() => respondTrade(x.id, false)); }} />
                 </>
               )}
-              {x.from_roster === myRoster && (
+              {x.from_roster === myRoster && x.status === 'pending' && (
                 <Chip label="withdraw" disabled={busy} onPress={() => { tap(); void act(() => cancelTrade(x.id)); }} />
               )}
-              {/* the ruling, on the same card (see header) */}
-              {isCommish && x.status === 'accepted' && (
+              {/* the ruling, on the same card (see header) — and over a vote
+                  in progress too, which the commissioner outranks. */}
+              {isCommish && (x.status === 'accepted' || x.status === 'review') && (
                 <>
                   <View style={{ flex: 1 }} />
                   <Chip label="⚑ APPROVE" on disabled={busy} onPress={() => { tap(); void act(() => commishRuleTrade(x.id, true)); }} />
@@ -386,14 +462,18 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       )}
 
       {/* propose: partner → two checklists → note → send */}
-      <Overlay visible={open && myRoster != null} title="Propose a trade"
-        subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.' : 'Accepted trades execute immediately.'}
-        onClose={() => setOpen(false)}>
+      <Overlay visible={open && myRoster != null} title={counterOf ? 'Counter the offer' : 'Propose a trade'}
+        subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.'
+          : tradeReview === 'league' ? `Accepted trades go to the league — ${vetoNeed ?? 2} vetoes in ${reviewHours ?? 24}h kill one.`
+          : 'Accepted trades execute immediately.'}
+        onClose={closeSheet}>
         <Mono size={9} tone="faint" track={0.1}>TRADE WITH</Mono>
+        {/* A counter answers ONE offer, so its seats are already decided —
+            changing them here would quietly make it a different proposal. */}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           {teams.filter((x) => x.roster_id !== myRoster).map((x) => (
             <Chip key={x.roster_id} label={x.team ?? `Team ${x.roster_id}`} on={partner === x.roster_id}
-              onPress={() => { tap(); setPartner(x.roster_id); setGet([]); }} />
+              onPress={() => { if (!counterOf) { tap(); setPartner(x.roster_id); setGet([]); } }} />
           ))}
         </View>
         {partner != null && (
@@ -448,13 +528,36 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
           </View>
         )}
+        {/* FAAB DOLLARS (0321) — the cap-room row's FAAB-league sibling. */}
+        {faabTrading && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <Mono size={7.5} tone="faint" track={0.1}>💵 FAAB $</Mono>
+            <Chip label="I SEND" on={faabDir === 1} onPress={() => { tap(); setFaabDir(1); }} />
+            <Chip label="I ASK" on={faabDir === -1} onPress={() => { tap(); setFaabDir(-1); }} />
+            <TextInput value={faabDraft} keyboardType="number-pad" maxLength={5} placeholder="0" placeholderTextColor={t.faint}
+              onChangeText={(v) => setFaabDraft(v.replace(/[^0-9]/g, ''))}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
+            {myFaab != null && <Mono size={8.5} tone="faint">you have ${myFaab}</Mono>}
+          </View>
+        )}
+        {/* HOW LONG IT STANDS (0321). */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+          <Mono size={7.5} tone="faint" track={0.1}>⏳ STANDS FOR</Mono>
+          <Chip label={offerDays ? `${offerDays}D (LEAGUE)` : 'UNTIL ANSWERED'} on={expiryHours === null}
+            onPress={() => { tap(); setExpiryHours(null); }} />
+          {[6, 24, 72].map((h) => (
+            <Chip key={h} label={h < 24 ? `${h}H` : `${h / 24}D`} on={expiryHours === h}
+              onPress={() => { tap(); setExpiryHours(h); }} />
+          ))}
+          {!!offerDays && <Chip label="NO LIMIT" on={expiryHours === -1} onPress={() => { tap(); setExpiryHours(-1); }} />}
+        </View>
         <TextInput value={note} maxLength={140} placeholder="Add a note (optional)…" placeholderTextColor={t.faint}
           onChangeText={setNote}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg, marginTop: 10 }} />
         {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 6 }}>{err}</Mono>}
         <View style={{ marginTop: 10 }}>
-          <PrimaryButton label={busy ? '…' : '⇄ SEND THE OFFER'}
-            disabled={busy || partner == null || give.length + get.length + givePicks.length + getPicks.length + Math.abs(capDollars) === 0}
+          <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER' : '⇄ SEND THE OFFER'}
+            disabled={busy || partner == null || nothingOffered}
             onPress={() => void propose()} />
         </View>
       </Overlay>

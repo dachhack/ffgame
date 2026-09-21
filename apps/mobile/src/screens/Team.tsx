@@ -985,6 +985,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
+        reviewHours={team.trade_review_hours} vetoNeed={team.trade_veto_votes}
+        offerDays={team.trade_offer_days} faabTrading={team.faab_trading} myFaab={team.my_faab}
         isCommish={!!team.is_commish} presetPartner={tradePartner} onChanged={() => void refresh()} />
       )}
 

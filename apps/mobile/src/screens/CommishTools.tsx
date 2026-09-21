@@ -68,7 +68,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
-import { CommissionersCard, LocksCard, WaiverOrderCard, ScoresCard, DuesCard } from '../ui/CommishDesk';
+import { CommissionersCard, LocksCard, WaiverOrderCard, TradeFloorCard, ScoresCard, DuesCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -96,6 +96,8 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'commish', label: 'COMMISSIONERS' },
     { id: 'locks', label: 'LOCKS', nativeOnly: true },
     { id: 'order', label: 'WAIVER ORDER', nativeOnly: true },
+    // 0321: the trade floor — review mode, the league vote, offer expiry, FAAB.
+    { id: 'tradefloor', label: 'TRADE FLOOR', nativeOnly: true },
     { id: 'scores', label: 'EDIT SCORES', nativeOnly: true },
     { id: 'players', label: 'PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
@@ -438,6 +440,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
             {section === 'order' && native && <WaiverOrderCard leagueId={leagueId} />}
+            {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}

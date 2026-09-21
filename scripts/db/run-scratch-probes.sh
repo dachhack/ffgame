@@ -192,3 +192,4 @@ $RUN -f scripts/db/week-audit-probes.sql | grep -E "PROBE FAIL|ALL WEEK-AUDIT PR
 $RUN -f scripts/db/extra-slot-card-probes.sql | grep -E "PROBE FAIL|ALL EXTRA-SLOT-CARD PROBES" || { echo "EXTRA-SLOT-CARD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/browse-as-team-probes.sql | grep -E "PROBE FAIL|ALL BROWSE-AS-TEAM PROBES" || { echo "BROWSE-AS-TEAM PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/out-spot-probes.sql | grep -E "PROBE FAIL|ALL OUT-SPOT PROBES" || { echo "OUT-SPOT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/trade-floor-probes.sql | grep -E "PROBE FAIL|ALL TRADE-FLOOR PROBES" || { echo "TRADE-FLOOR PROBES FAILED"; exit 1; }

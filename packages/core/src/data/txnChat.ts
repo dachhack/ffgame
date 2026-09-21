@@ -39,6 +39,8 @@ export function txnLook(txn: TxnPayload | null | undefined): TxnLook {
     case 'drop':   return { icon: '🔻', tone: 'dim',  label: 'DROP' };
     case 'waiver': return { icon: '📋', tone: 'warn', label: 'WAIVERS' };
     case 'trade':  return { icon: '🤝', tone: 'warn', label: 'TRADE' };
+    // 0321: a trade out for a league vote, and the ruling the floor gave it.
+    case 'vote':   return { icon: '🗳', tone: 'warn', label: 'TRADE VOTE' };
     default:       return { icon: '·',  tone: 'dim',  label: 'MOVE' };
   }
 }

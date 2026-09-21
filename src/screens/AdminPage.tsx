@@ -46,7 +46,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, ScoresPanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, ScoresPanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -541,7 +541,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
-        review !== init.review ? review : null,
+        null,   // 0321: trade review lives in TRADE REVIEW below, which saves on the click
         clearChanged ? (clearMin ?? -1) : null,
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
@@ -612,13 +612,6 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
-        <div>
-          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE REVIEW</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-            {toggle(review === 'none', 'AUTO-ACCEPT', () => setReview('none'))}
-            {toggle(review === 'commish', '⚑ COMMISH APPROVES', () => setReview('commish'))}
-          </div>
-        </div>
         <div>
           <div className="mono" title="Trades may be offered and accepted through this week; once it is final, no more." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>TRADE DEADLINE</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
@@ -837,8 +830,10 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
     const h = Math.floor(ms / 3600_000);
     return h >= 1 ? `${h}h` : `${Math.max(1, Math.round(ms / 60_000))}m`;
   };
-  const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending');
-  const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)' };
+  // 0321: a trade out for a league vote belongs in the queue too — the
+  // commissioner outranks the floor in both directions while it is open.
+  const reviewQueue = trades.filter((t) => t.status === 'accepted' || t.status === 'pending' || t.status === 'review');
+  const statusColor: Record<string, string> = { executed: 'var(--you)', accepted: 'var(--warn)', review: 'var(--warn)', pending: 'var(--dim)', vetoed: 'var(--opp)', rejected: 'var(--faint)', cancelled: 'var(--faint)', expired: 'var(--faint)', countered: 'var(--faint)' };
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</div>}
@@ -854,8 +849,10 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
               <b>{teamName(t.to_roster)}</b> sends {t.get.map(playerName).join(', ') || '—'}
               {t.note && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}> “{t.note}”</span>}
             </span>
-            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING' : 'OFFERED'}</span>
-            {t.status === 'accepted' && (
+            <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: statusColor[t.status] ?? 'var(--dim)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 6px' }}>{t.status === 'accepted' ? 'AWAITING RULING'
+              : t.status === 'review' ? `LEAGUE VOTE · ${(t.votes ?? []).filter((v) => v.veto).length} of ${t.veto_need ?? '?'}`
+              : 'OFFERED'}</span>
+            {(t.status === 'accepted' || t.status === 'review') && (
               <button onClick={() => run(() => commishRuleTrade(t.id, true))} disabled={busy} className="mono" style={btn(true)}>✓ approve</button>
             )}
             <button onClick={() => run(() => commishRuleTrade(t.id, false))} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }}>✕ veto</button>
@@ -1591,6 +1588,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           <TransactionRulesEditor leagueId={l.league_id} />
           <WaiverOrderPanel leagueId={l.league_id} />
           <MedianGamePanel leagueId={l.league_id} />
+          <TradeFloorPanel leagueId={l.league_id} />
         </div>
       )}
 

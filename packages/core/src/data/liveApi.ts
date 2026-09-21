@@ -2063,7 +2063,7 @@ export const leagueMarket = (leagueId: string) =>
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; rounds?: number; draft_status?: string; pos_caps?: PosCaps;
-        waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: 'none' | 'commish';
+        waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview;
         waiver_clear_min?: number | null; waiver_clear_dow?: number[] | null;
         fa_after_waivers_dow?: number[] | null; waiver_hold_days?: number;
         fa_start_min?: number | null; fa_end_min?: number | null;
@@ -2074,6 +2074,11 @@ export const rosterRules = (leagueId: string) =>
          *  it has already passed. */
         faab_min_bid?: number; fa_dow?: number[] | null;
         trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
+        /** 0321: the trade floor. trade_veto_votes is the EFFECTIVE bar;
+         *  trade_veto_votes_set is null while it is the majority fallback. */
+        trade_review_hours?: number; trade_veto_votes?: number;
+        trade_veto_votes_set?: number | null;
+        trade_offer_days?: number; faab_trading?: boolean;
         /** 0320, the commissioner's desk: the league-wide wire lock, the
          *  teams locked one by one, the median game, and the dues. */
         wire_lock?: boolean; locked_rosters?: number[]; median_game?: boolean;
@@ -2130,7 +2135,8 @@ export const setOutRules = (leagueId: string, tags: string[]) =>
 export type WaiverMode = 'rolling' | 'standings' | 'faab';
 /** Free agency: always open, only inside the hours, or not at all (0287). */
 export type FaMode = 'open' | 'window' | 'off';
-export type TradeReview = 'none' | 'commish';
+/** 0321: 'league' joins them — an accepted trade goes out for a veto vote. */
+export type TradeReview = 'none' | 'commish' | 'league';
 /** Per-seat FAAB (0173). `faab` is the EFFECTIVE balance — an untouched seat
  *  reads the league default rather than 0 — and `touched` says whether the
  *  seat has its own stored value yet. */
@@ -2185,6 +2191,22 @@ export const setTransactionRules = (
       p_agent_waivers: agentWaivers, p_fa_mode: faMode,
       p_faab_min_bid: faabMinBid, p_fa_dow: faDow, p_trade_deadline_week: tradeDeadlineWeek,
     });
+/** THE TRADE FLOOR (0321), the commissioner's own call rather than another
+ *  argument on set_transaction_rules: the review mode, how long a league vote
+ *  stays open, how many vetoes kill a trade (-1 clears back to a majority of
+ *  the teams outside it), how many days an offer stands by default (0 = until
+ *  it is answered) and whether FAAB may ride a trade. Nulls leave a knob. */
+export const commishSetTradeRules = (
+  leagueId: string, review: TradeReview | null = null, reviewHours: number | null = null,
+  vetoVotes: number | null = null, offerDays: number | null = null, faabTrading: boolean | null = null,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_review?: TradeReview; trade_review_hours?: number;
+                trade_veto_votes?: number; trade_offer_days?: number; faab_trading?: boolean }>(
+    'commish_set_trade_rules', {
+      p_league_id: leagueId, p_review: review, p_review_hours: reviewHours,
+      p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
+    }), Ev.commishAction, { tool: 'trade_rules' });
+
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player
  *  came from) and commissioner moves — written by a trigger on native_roster,
@@ -2195,7 +2217,9 @@ export interface RegisterRow {
   /** 0221/0222 grew the vocabulary: eliminations + releases (guillotine),
    *  steals (vampire), and the front office (tag/extension/rfa/retained/cap). */
   kind: 'add' | 'drop' | 'waiver' | 'trade' | 'commish'
-      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap';
+      | 'elimination' | 'release' | 'steal' | 'tag' | 'extension' | 'rfa' | 'retained' | 'cap'
+      /** 0321: FAAB dollars moved as a trade asset. */
+      | 'faab';
   slug: string;
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
@@ -2225,8 +2249,19 @@ export interface TradeRow {
   /** Contract leagues (0219): retained-salary terms and traded cap dollars. */
   retain?: { slug: string; amount: number; roster: number }[] | null;
   cap_dollars?: number | null;
-  status: 'pending' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'vetoed';
+  /** 0321: FAAB dollars as an asset (positive = the PROPOSER sends them). */
+  faab_dollars?: number | null;
+  status: 'pending' | 'accepted' | 'review' | 'executed' | 'rejected' | 'cancelled'
+        | 'vetoed' | 'expired' | 'countered';
   note: string | null; created_at: string; resolved_at: string | null;
+  /** 0321: when this offer lapses (null = it stands until answered), when the
+   *  league vote closes, and the offer this one answers. */
+  expires_at?: string | null;
+  review_until?: string | null;
+  counters?: string | null;
+  /** 0321: the vote so far, and the number of vetoes that would kill it. */
+  votes?: { roster_id: number; veto: boolean }[];
+  veto_need?: number;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
   rpc<TradeRow[] | { error: string }>('league_trades', { p_league_id: leagueId, p_limit: limit });
@@ -2238,14 +2273,44 @@ export const proposeTrade = (
    *  traded player ($1..salary−1), and raw cap dollars moved as an asset
    *  (positive = the proposer sends cap room). */
   retain?: { slug: string; amount: number }[], capDollars?: number,
+  /** 0321: FAAB dollars moved with the deal (positive = the proposer sends
+   *  them), and how long the offer stands — hours, -1 for "until it is
+   *  answered", or undefined to take the league's default. */
+  faabDollars?: number, expiresHours?: number,
 ) =>
-  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string }>('propose_trade', {
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; expires_at?: string | null }>('propose_trade', {
     p_league_id: leagueId, p_from_roster: fromRoster, p_to_roster: toRoster,
     p_give: give, p_get: get, p_note: note ?? null,
     p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
     p_retain: retain && retain.length > 0 ? retain : null,
     p_cap_dollars: capDollars ?? null,
+    p_faab_dollars: faabDollars ?? 0, p_expires_hours: expiresHours ?? null,
   }), Ev.tradeProposed, { players: give.length + get.length, picks: (givePicks?.length ?? 0) + (getPicks?.length ?? 0) });
+
+/** 0321: answer an offer with an offer. The original closes as 'countered' and
+ *  the mirrored proposal is filed from the answering seat in one transaction —
+ *  `give` is what THEY send. Everything a proposal may carry carries here. */
+export const counterTrade = (
+  tradeId: string, give: string[], get: string[], note?: string,
+  givePicks?: { season?: string; round: number; orig: number }[], getPicks?: { season?: string; round: number; orig: number }[],
+  retain?: { slug: string; amount: number }[], capDollars?: number,
+  faabDollars?: number, expiresHours?: number,
+) =>
+  tracked(rpc<{ ok: boolean; error?: string; trade_id?: string; counters?: string }>('counter_trade', {
+    p_trade_id: tradeId, p_give: give, p_get: get, p_note: note ?? null,
+    p_give_picks: givePicks ?? null, p_get_picks: getPicks ?? null,
+    p_retain: retain && retain.length > 0 ? retain : null,
+    p_cap_dollars: capDollars ?? null,
+    p_faab_dollars: faabDollars ?? 0, p_expires_hours: expiresHours ?? null,
+  }), Ev.tradeProposed, { players: give.length + get.length, counter: true });
+
+/** 0321: one uninvolved seat's vote on a trade out for league review. Veto =
+ *  against; an allow counts too, because a vote whose outcome is already
+ *  arithmetic settles at once instead of sitting out its window. */
+export const castTradeVote = (tradeId: string, veto: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; status?: string; vetoes?: number; need?: number }>(
+    'cast_trade_vote', { p_trade_id: tradeId, p_veto: veto }),
+    Ev.tradeResponded, { action: veto ? 'veto' : 'allow' });
 export const respondTrade = (tradeId: string, accept: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; status?: string }>('respond_trade', { p_trade_id: tradeId, p_accept: accept }),
     Ev.tradeResponded, { action: accept ? 'accept' : 'reject' });
@@ -3211,6 +3276,14 @@ export interface NativeTeamState {
   /** Waiver system: rolling priority (default) or FAAB blind bids. */
   waiver_mode?: WaiverMode;
   trade_review?: TradeReview;
+  /** 0321: the trade floor, as the offer screen needs it — how long a league
+   *  vote runs, how many vetoes kill a deal, how many days an offer stands by
+   *  default (0 = until answered) and whether FAAB may ride one (false in a
+   *  league that is not on FAAB at all). */
+  trade_review_hours?: number;
+  trade_veto_votes?: number;
+  trade_offer_days?: number;
+  faab_trading?: boolean;
   /** My remaining FAAB budget (FAAB leagues only). */
   my_faab?: number | null;
   /** Why my roster is illegal (over size / position limits) — locked out of

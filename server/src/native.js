@@ -7,6 +7,10 @@
 //                      or AI-controlled (the RPC is idempotent + advisory-locked,
 //                      so racing a browser's own tick is harmless).
 //   • process_waivers — resolves pending claims whose 24h waiver window closed.
+//   • trade_sweep    — 0321: closes offers whose clock ran out, and settles a
+//                      league vote whose window closed (executing it, or
+//                      vetoing it where the bar was reached). Both are rule
+//                      decisions with nobody in the room.
 //   • auto_weekly_budget — credits each active week's coin allowance to every
 //                      league that set one (0132). Same ledger idem_key as the
 //                      commissioner's manual GRANT, so however many ticks — or
@@ -110,6 +114,21 @@ export async function sweepNative(log = () => {}, weeks = []) {
     } catch (e) { log('process_waivers', leagueId, e.message); }
   }
 
+  // THE TRADE FLOOR (0321). One statement for every league: the RPC decides
+  // what is due, so there is no clock arithmetic out here, and a sweep with
+  // nothing due settles nothing. Same {data, error} shape as the calls above —
+  // a trade stuck mid-settle is exactly the thing nobody notices, so it is
+  // logged rather than swallowed.
+  let tradesExpired = 0, tradesExecuted = 0, tradesVetoed = 0;
+  try {
+    const { data, error } = await db().rpc('trade_sweep');
+    if (error) throw new Error(error.message);
+    tradesExpired = Number(data?.expired ?? 0);
+    tradesExecuted = Number(data?.executed ?? 0);
+    tradesVetoed = Number(data?.vetoed ?? 0);
+    if (Number(data?.stuck ?? 0) > 0) log('trade_sweep', `${data.stuck} trade(s) could not settle`);
+  } catch (e) { log('trade_sweep', e.message); }
+
   // The weekly allowance, one call per active board week (regular + preseason
   // contexts both pass theirs). Scope and idempotency live server-side.
   for (const w of new Set(weeks.filter((w) => Number.isInteger(w) && w > 0))) {
@@ -122,5 +141,6 @@ export async function sweepNative(log = () => {}, weeks = []) {
   // The endgame — hourly-gated internally, so calling it every sweep is cheap.
   const prog = await sweepProgression(log);
 
-  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started, ...prog };
+  return { autopicks: drafts, claimsWon: won, claimsLost: lost, allowance, drafted: started,
+           tradesExpired, tradesExecuted, tradesVetoed, ...prog };
 }

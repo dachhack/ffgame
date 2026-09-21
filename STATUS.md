@@ -18,6 +18,54 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.437.0 — the trade floor
+
+docs/competitor-gap-analysis.md, written against nine platforms, put trade
+parity first: "Every platform except FFPC has the first two." Four of that
+list in 0321, both consoles, the worker. Multi-team trades are the fifth and
+a round of their own.
+
+  1. THE LEAGUE VOTE. trade_review takes a third word, 'league'. An accepted
+     trade goes to 'review' for trade_review_hours (24 by default) and every
+     UNINVOLVED seat may veto or allow it. It dies the moment the vetoes
+     reach trade_veto_votes — unset, that is a majority of the seats outside
+     the trade, so it stays right when the league grows — and goes through
+     the moment the bar cannot be reached, rather than sitting out a window
+     whose outcome is already arithmetic. Chat is told twice: when the deal
+     goes to the floor, and how the floor ruled. The commissioner still
+     outranks it in both directions while the vote is open.
+  2. EXPIRY. An offer may carry its own clock (6h / 24h / 72h, or the
+     league's trade_offer_days default; -1 stands until answered). An
+     expired offer refuses the acceptance that finds it and says so, and
+     the sweep closes the ones nobody touched.
+  3. COUNTERS. counter_trade answers an offer with an offer: the original
+     closes as 'countered' and the mirrored proposal is filed from the other
+     seat in one transaction, carrying `counters` back to what it answers.
+     A counter is a real proposal — propose_trade re-validates every piece,
+     so nothing can be smuggled through the reply.
+  4. FAAB AS AN ASSET. faab_dollars rides a proposal the way cap dollars
+     have since 0219 (+ = the proposer sends). FAAB leagues only, behind the
+     commissioner's faab_trading switch, and the wallet is checked at the
+     offer AND at execution — a review window is a day long and a waiver run
+     inside it can spend the money first.
+
+CONSOLES. Web: TRADE REVIEW under WAIVERS & TRADES (the old two-way toggle
+moved there whole, so one panel owns the mode and the vote's numbers);
+the trade card grew the vote tally with VETO / ALLOW, an offer's countdown,
+⇄ COUNTER, and a FAAB row in the propose modal (src/screens/CommishDesk.tsx,
+src/screens/NativeLeague.tsx). Mobile: TRADE FLOOR under RUN THE SEASON, and
+the same vote / counter / FAAB / clock controls on the trade card
+(apps/mobile/src/ui/CommishDesk.tsx, apps/mobile/src/ui/TradeCenter.tsx).
+The commissioner's queue on both hosts now lists a trade out for a vote.
+
+WORKER. sweepNative calls trade_sweep() each pass: offers whose clock ran
+out, and votes whose window closed. Idempotent, one statement per sweep.
+
+Probes: scripts/db/trade-floor-probes.sql (wired into the scratch runner).
+97 suites pass beside it; the three that do not (classic-open-lineups,
+dropped-pick, draft-midseason) fail identically on main. Web and mobile
+typecheck; server tests and check:parity pass.
+
 ### v0.436.0 — the commissioner's desk
 
 Founder, holding Sleeper's Commish tab against ours: "build the gaps in
