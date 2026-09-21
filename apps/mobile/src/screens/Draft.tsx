@@ -28,7 +28,7 @@ import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, league
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
-import { ADP_2026 } from '@drip/core/data/adp2026';
+import { adpValue } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
 import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
@@ -999,7 +999,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
             </Notice>
           )}
           {avail.slice(0, 60).map((p) => {
-            const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
+            const adp = adpValue(p.slug); const proj = projFor(p.slug, p.pos);
             const dyn = dynasty ? dynFor(p.slug) : null;
             const inQ = queue.includes(p.slug);
             const capped = atCap(p.pos);
@@ -1271,7 +1271,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     {favs.has(slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p?.full_name ?? slug}
                   </Text>
                   {p && (() => {
-                    const adp = ADP_2026.get(slug); const proj = projFor(slug, p.pos);
+                    const adp = adpValue(slug); const proj = projFor(slug, p.pos);
                     const dyn = dynasty ? dynFor(slug) : null;
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>

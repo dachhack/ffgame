@@ -27,7 +27,7 @@
 // not a projection of zero. The pool's rank breaks every tie, so two players
 // the source can't separate stay in the order the league already agreed on.
 
-import { ADP_2026 } from './adp2026';
+import { adpValue } from './adp2026';
 import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
@@ -67,7 +67,7 @@ export function clearLiveAdp(): void { liveAdp = null; }
 export const adpIsLive = (): boolean => liveAdp != null;
 
 export const adpFor = (slug: string): number | null =>
-  liveAdp?.[slug] ?? ADP_2026.get(slug) ?? null;
+  liveAdp?.[slug] ?? adpValue(slug);
 // THE PROJECTION IS THE LEAGUE'S, NOT THE BAKE'S (v0.310.0, founder: "so we
 // can apply scoring changes to the projections in waivers, drafts and the
 // matchup board by league and position?"). It could not: v0.308.0 built the

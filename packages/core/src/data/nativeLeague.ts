@@ -19,7 +19,7 @@
 import { BAKED_SLUGS } from './bakedSlugs';
 import { STAT_PLAYERS, normName } from './players';
 import { NFL_CODES } from './kdst';
-import { ADP_2026 } from './adp2026';
+import { ADP_2026, ADP_BY_SID, adpValue } from './adp2026';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 
@@ -77,7 +77,7 @@ function bakedPool2025(): DraftPoolEntry[] {
     const st = ppr.get(slug);
     rows.push({
       slug, full: titleFromSlug(slug), pos: meta.pos, team: teamFor(slug) ?? meta.team,
-      score: ADP_2026.get(slug) ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : BENCH_BASE),
+      score: adpValue(slug) ?? (st != null ? VET_BASE + Math.max(0, 350 - st) : BENCH_BASE),
     });
   }
   rows.push(...kdstEntries());
@@ -179,7 +179,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
     if (!slug) continue;
     if (teams && (!p.team || !teams.has(p.team.toUpperCase()))) continue;
     if (!tenureOk(p.exp)) continue;
-    const adp = ADP_2026.get(slug);
+    const adp = ADP_BY_SID.get(p.id) ?? ADP_2026.get(slug);
     // No NFL team (unsigned FA / retired) → only keep if the draft market
     // prices them anyway (a July FA like an unsigned star will sign; a re-seed
     // before the draft picks up the team).

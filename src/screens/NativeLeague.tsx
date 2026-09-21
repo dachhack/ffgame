@@ -17,7 +17,7 @@ import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
-import { ADP_2026, ADP_AS_OF } from '@drip/core/data/adp2026';
+import { adpValue, ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import {
@@ -612,7 +612,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
   action?: { label: string; run: () => void } | null;
   queued?: boolean; onQueue?: () => void;
 }) {
-  const adp = ADP_2026.get(p.slug);
+  const adp = adpValue(p.slug);
   const proj = projFor(p.slug, p.pos);
   const st = p.pos === 'K' || p.pos === 'DEF' ? null : statsForSlug(p.slug, p.pos as Pos);
   const stat = (label: string, v: string | number | null | undefined) => (
@@ -1940,7 +1940,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           </div>
           <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {avail.slice(0, 120).map((p) => {
-              const adp = ADP_2026.get(p.slug); const proj = projFor(p.slug, p.pos);
+              const adp = adpValue(p.slug); const proj = projFor(p.slug, p.pos);
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
@@ -2143,7 +2143,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 </button>
                 {gone && <span className="mono" style={{ fontSize: 8.5, color: 'var(--opp)' }}>TAKEN</span>}
                 {(() => {
-                  const adp = ADP_2026.get(slug); const proj = p ? projFor(slug, p.pos) : null;
+                  const adp = adpValue(slug); const proj = p ? projFor(slug, p.pos) : null;
                   return (
                     <>
                       <span className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{adp != null ? adp.toFixed(0) : '—'}</span>

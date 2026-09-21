@@ -193,10 +193,14 @@ all read this file.
 
 ### The market: ADP
 
-Mean absolute move **9.3 picks** since the 2026-08-26 bake over the 34 names
-that join (the bake keys on slugs, so that join is a **name** join — the one
-place in this audit that cannot be done by id). Josh Jacobs 35.9 → 109.4 is
-the same injury as above.
+Mean absolute move **8.7 picks** since the 2026-08-26 bake, over the 41 rows
+that join. Josh Jacobs 35.9 → 109.4 is the same injury as above.
+
+> **Updated in v0.452.0.** This was the one comparison in the audit that had
+> to be done by name, because `adp2026` was the last name-only bake. It now
+> carries a sleeper id, so the join is by id (41 rows, up from 34) and the
+> only name matching left is resolving FFC's own names *once*, inside this
+> script, where a miss is printed rather than silent.
 
 ---
 
@@ -204,9 +208,12 @@ the same injury as above.
 
 * **Michael Carter's team** — one player, no tie-breaker available.
 * **A rebake** of `proj2026` / `adp2026` / `dyn2026` before the deadline.
-* **ADP joins by name.** The bake stores slugs and FFC stores display names.
-  Baking the Sleeper id alongside the ADP would close the last name join in
-  the data layer.
+* ~~**ADP joins by name.**~~ Closed in v0.452.0: `adp2026` carries a sleeper
+  id per row, minted into an `ADP_BY_SID` map beside the slug one, and the
+  pool builder joins on the directory id first. Measured before the change —
+  221 of 221 rows mint a distinct slug that a live pool also mints, 0
+  collisions — so this was insurance rather than repair, and the check that
+  guards it asserts **no existing value moved**.
 * **Three probe suites fail** (`classic-open-lineups`, `dropped-pick`,
   `draft-midseason`) exactly as they do on `main` — pre-existing, and now
   provably so under a harness that can no longer print a pass it did not earn.

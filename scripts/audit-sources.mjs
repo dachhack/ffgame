@@ -25,7 +25,7 @@
 // so in the output, because a name join is the thing this repo keeps
 // getting bitten by.
 import { PROJ_2026, PROJ_2026_SID } from '../packages/core/src/data/proj2026.ts';
-import { ADP_2026, ADP_AS_OF } from '../packages/core/src/data/adp2026.ts';
+import { ADP_BY_SID, ADP_AS_OF } from '../packages/core/src/data/adp2026.ts';
 import { DYN_AS_OF } from '../packages/core/src/data/dyn2026.ts';
 import { statheadFeed } from '../server/src/poll/projections.js';
 
@@ -305,18 +305,33 @@ await section('This season — our August bake vs the live board', async () => {
 // ── 7. THE MARKET ────────────────────────────────────────────────────────
 await section('The market — our ADP and dynasty bakes vs the live ones', async () => {
   const ffc = await getJson(shFile(`ffc_adp_ppr_${SEASON}.json`), 'ffc adp');
-  const live = new Map();
-  for (const p of ffc.players ?? []) live.set(`${p.name}`.toLowerCase(), Number(p.adp));
+  // v0.452.0: our bake carries a sleeper id now, so the comparison goes
+  // through it. FFC publishes its own player_id and no sleeper id, so the
+  // crosswalk resolves FFC's NAME once — a name join done in the audit,
+  // where a miss is printed, rather than in the app, where it is silent.
+  const xById = new Map();
+  for (const x of xwalk.players) {
+    if (!x.sleeper_id) continue;
+    for (const n of x.all_names ?? [x.display_name]) {
+      const k = `${n.toLowerCase()}|${x.position}`;
+      if (!xById.has(k)) xById.set(k, String(x.sleeper_id));
+    }
+  }
+  const live = new Map(); let unmapped = 0;
+  for (const p of ffc.players ?? []) {
+    const sid = xById.get(`${String(p.name).toLowerCase()}|${p.position}`);
+    if (!sid) { unmapped++; continue; }
+    live.set(sid, Number(p.adp));
+  }
   let both = 0; const moves = [];
-  for (const [slug, adp] of ADP_2026 ?? []) {
-    const name = String(slug).replace(/-/g, ' ');
-    const l = live.get(name);
+  for (const [sid, adp] of ADP_BY_SID ?? []) {
+    const l = live.get(sid);
     if (l == null) continue;
     both++;
-    moves.push({ name, baked: Number(adp), live: l });
+    moves.push({ name: xBySleeper.get(sid)?.display_name ?? `sleeper ${sid}`, baked: Number(adp), live: l });
   }
   say(`  ADP bake as of ${ADP_AS_OF}; FFC's live board has ${ffc.players?.length ?? 0} players,`
-    + ` ${both} joined by name (the bake keys on slugs, so this join is a NAME join)`);
+    + ` ${both} joined BY SLEEPER ID (${unmapped} FFC rows the crosswalk could not place)`);
   if (both) {
     const d = moves.map((m) => Math.abs(m.live - m.baked));
     say(`  mean absolute move ${(d.reduce((a, b) => a + b, 0) / d.length).toFixed(1)} picks`);

@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.452.0 — the last name join
+
+Founder: "I'd like to fix the ADP name join with sleeper ids. What's the risk
+there?" The risk turned out to be worth measuring before answering, and the
+measurement is the reason this version is small and boring on purpose.
+
+  1. THE NAME JOIN COSTS NOTHING TODAY. Of 221 rows: 221 mint a distinct
+     engine slug, 0 collide with each other, and 221 match a slug a live
+     Sleeper-built pool also mints. The one row with no baked counterpart is
+     Kenny Gainwell, and that is a bake-to-bake spelling difference
+     (`kenneth-` vs `kenny-`), not an ADP failure. So this is INSURANCE, not
+     repair — and the real risk was never the join, it was bundling a value
+     refresh with it.
+  2. SO NO VALUE MOVED. The ids were attached to the EXISTING August board
+     from StatHead's public crosswalk by name + position, with every attach
+     verified against the Sleeper directory's own position and team. The only
+     two that did not line up were team moves the August board predates
+     (Boutte NE→HOU, Blue DAL→PHI), not wrong players. `check:adpjoin`
+     rebuilds the name map from the CSV and fails if a single slug's number
+     differs.
+  3. THE SHAPE IS dyn2026's, EXACTLY. One parse mints `ADP_2026` (slug, byte
+     for byte what it was) and `ADP_BY_SID` (sleeper id); `adpValue()` reads
+     the id first through the pool's slug→id overlay and falls back to the
+     name. Away from a pool no overlay exists and it IS the old lookup, which
+     is the invariant that makes it safe to ship mid-season.
+  4. AND THE ONE PLACE THAT CANNOT USE THE OVERLAY USES THE ID DIRECTLY. The
+     pool builder runs before a pool exists, so it reads the sleeper id off
+     the directory row it is already holding — which matters more than the
+     rest put together, because that number becomes the pool's RANK, and the
+     rank is what autopick drafts by.
+  5. The audit's own ADP comparison now joins by id too: 41 rows against
+     FFC's live board, up from 34 by name.
+
+A refresh of the VALUES is a separate decision and deliberately not taken
+here: ADP has moved a mean 8.7 picks since 26 August (Josh Jacobs 35.9 →
+109.4), which is a different question from which player a row is about.
+
 ### v0.451.0 — where two sources answer the same question
 
 Founder: "can we check where we have the same data from sources and do an
