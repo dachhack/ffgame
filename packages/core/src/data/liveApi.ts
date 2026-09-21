@@ -2218,10 +2218,26 @@ export const commishSetTradeRules = (
  *  crosswalk id, or a week not yet polled, is simply absent: the baked
  *  projection still answers for him, and a screen shows the season number
  *  rather than a zero. */
+/** One player's week, as the source served it (0330). `mult` is the half that
+ *  matters in a custom-scoring league: the source splits a player's WHOLE
+ *  projected line by this one number, so THIS league's season rate × mult is
+ *  THIS league's week — see data/weekProj. `pts` is the source's own PPR
+ *  total, right for a stock league and the fallback everywhere else. */
+export interface WeekProjRow {
+  pts: number | null;
+  mult: number | null;
+  /** Opponent team code, and whether he is at home. */
+  opp: string | null;
+  home: boolean | null;
+  /** 'OUT' / 'RES' / 'DEV' / 'backup' — why a number is zero or soft. */
+  status: string | null;
+  /** 'stathead' | 'espn' — a screen that shows a number owes the reader this. */
+  source: string;
+}
 export const leagueWeekProjections = (leagueId: string, week: number) =>
   rpc<{ ok?: boolean; error?: string; season?: string; week?: number; as_of?: string | null;
-        projections?: Record<string, number> }>('league_week_projections',
-    { p_league_id: leagueId, p_week: week });
+        projections?: Record<string, number>; rows?: Record<string, WeekProjRow> }>(
+    'league_week_projections', { p_league_id: leagueId, p_week: week });
 
 export interface NewsItem {
   id: string; at: string; headline: string; summary: string | null; url: string | null;

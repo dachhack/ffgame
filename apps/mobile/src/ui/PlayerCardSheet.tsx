@@ -17,6 +17,7 @@ import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
+import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
@@ -73,7 +74,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // 0329: THIS WEEK'S number and the headlines — the web card's twin. Both
   // absent for a player the crosswalk cannot place, and the season projection
   // beside them still answers.
-  const [wkProj, setWkProj] = useState<number | null>(null);
+  const [wkProj, setWkProj] = useState<WeekPoints | null>(null);
   const [news, setNews] = useState<NewsItem[] | null>(null);
   // SUMMARY | HISTORY. There is no GAME LOG or TEAM tab, deliberately: a
   // per-week NFL stat table and a depth chart are data this app does not hold
@@ -104,8 +105,13 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .then((r) => { if (!dead && r.ok) setMoves((r.rows ?? []).filter((x) => x.slug === slug)); })
       .catch(() => {});
     if (week != null) {
+      // 0330: the row, not the scalar — with a multiplier in hand the sheet
+      // shows the week in THIS league's scoring rather than the source's PPR.
       leagueWeekProjections(leagueId, week)
-        .then((r) => { if (!dead) setWkProj(r.projections?.[slug] ?? null); })
+        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
+          ?? (r.projections?.[slug] != null
+            ? { pts: r.projections[slug], mult: null, opp: null, home: null, status: null, source: 'espn' }
+            : null))); })
         .catch(() => { if (!dead) setWkProj(null); });
     }
     // Asked through the league rather than by ESPN id: the league's pool is
@@ -259,7 +265,9 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             ['PROJ', projFor(slug, pos) != null ? (projFor(slug, pos) as number).toFixed(1) : '—'],
             // 0329: the WEEK's number, refreshed hourly — it knows about the
             // injury, the bye and the depth chart; the August bake cannot.
-            [week != null ? `WK ${week}` : 'WK', wkProj != null ? wkProj.toFixed(1) : '—'],
+            // 0330 puts the OPPONENT in the label beside it.
+            [week != null ? `WK ${week}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
+              wkProj != null ? wkProj.pts.toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <View key={k} style={{ flex: 1, alignItems: 'center' }}>
               <Mono size={8} tone="faint" weight="700" track={0.12}>{k}</Mono>

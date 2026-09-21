@@ -1,25 +1,89 @@
-// THE WEEK'S NUMBER, AND THE NEWS (0329).
+// THE WEEK'S NUMBER, AND THE NEWS (0329, re-sourced 0330).
 //
-// Two polls, both from ESPN, both idempotent, both writing through one RPC:
+// Two polls, both idempotent, both writing through one RPC — but they no
+// longer come from the same place, because the two questions do not have the
+// same best answer.
 //
-//   pollWeekProjections — the fantasy game's own weekly projections
-//     (statSourceId 1 = projected, statSplitTypeId 1 = weekly), which is the
-//     number every ESPN league sees and the one that MOVES: it knows about
-//     the starter who is out, the back-up who has the job, the bye, and the
-//     trade on Tuesday. Our baked set (proj2026.ts) knows none of that,
-//     because it was computed in August. The raw projected stat line is
-//     stored beside the total so a league's own scoring can be applied to it
-//     later; the total is what a screen shows today.
+//   pollWeekProjections — StatHead's per-week split of the SAME season model
+//     this app already ranks, drafts and grades with (proj2026.ts). The feed
+//     is that season projection spread across the schedule: season PPG ×
+//     the opponent's defense-vs-position multiplier × a home/away nudge (or
+//     an implied team total where the market has posted one), normalized so
+//     the weeks sum back to the season line. We store the MULTIPLIER rather
+//     than trusting the points, because the multiplier scales the player's
+//     whole stat line — so a league's own season number × mult is that
+//     league's own week number, exactly, under any scoring catalog. 0330.
+//
+//     ESPN IS STILL HERE, as the fallback. It answers for a player StatHead
+//     has no line for, and for a day the feed cannot be reached, keyed by
+//     athlete id under source 'espn'; the reader prefers StatHead per
+//     player and falls back per player.
 //
 //   pollPlayerNews — the NFL headline feed, kept only where a story is
 //     TAGGED with the athletes it is about. An untagged story is a story
 //     about the league, not about somebody's flex spot, and this feed exists
-//     to answer "why is he questionable".
+//     to answer "why is he questionable". StatHead publishes no news feed,
+//     so this half stays ESPN's and is unchanged.
 //
-// KEYED ON THE ESPN ATHLETE ID, which is what league_pool.espn_id holds. No
-// name matching anywhere in this file: names drift between sources, ids do
-// not, and the one thing worse than no projection is somebody else's.
+// NO NAME MATCHING ANYWHERE IN THIS FILE. StatHead rows are keyed by the
+// sleeper id the feed carries (league_pool.sleeper_id, 0205), ESPN rows by
+// the athlete id (league_pool.espn_id, 0066). Names drift between sources,
+// ids do not, and the one thing worse than no projection is somebody else's.
 import { db } from '../supabase.js';
+
+// ── StatHead: one public JSON, rebuilt about every two hours ─────────────
+// The same file the `stathead` Python client reads (public/data/weekly-
+// projections-<season>.json). Plain HTTPS, no key, no vendor SDK in the
+// worker — which is why this could replace ESPN without asking anybody for
+// an API. Both halves of the URL are env-overridable so a pinned ref can be
+// used for a reproducible run.
+const SH_BASE = process.env.STATHEAD_RAW || 'https://raw.githubusercontent.com/dachhack/stathead';
+const SH_REF = process.env.STATHEAD_REF || 'claude/nfl-fantasy-workbench-6D1yd';
+const shUrl = (season) => `${SH_BASE}/${SH_REF}/public/data/weekly-projections-${season}.json`;
+
+// One fetch serves every week in a sweep (and the next sweep inside the TTL):
+// the file carries all 18 weeks for all ~845 players, so pulling it per week
+// would be the same 350 KB three times over for no new information.
+const SH_TTL_MS = Number(process.env.STATHEAD_TTL_MS || 1800000);
+let shCache = { season: null, at: 0, feed: null };
+export async function statheadFeed(season) {
+  if (shCache.feed && shCache.season === String(season) && Date.now() - shCache.at < SH_TTL_MS) return shCache.feed;
+  const res = await fetch(shUrl(season), { headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`stathead weekly ${res.status}`);
+  const feed = await res.json();
+  shCache = { season: String(season), at: Date.now(), feed };
+  return feed;
+}
+
+/** The feed's rows for one week, in the shape upsert_week_projections wants.
+ *  `mult` is week ÷ season rate — the scoring-independent half, and the only
+ *  number a custom-scoring league should use. A null week is a bye and is
+ *  simply absent; a player the feed has zeroed (IR, practice squad, cut)
+ *  comes through at 0 WITH a status, because "he is out" is the answer and
+ *  not missing data. */
+export function statheadRows(feed, week) {
+  const sched = feed?.teamWeeks ?? {};
+  const rows = [];
+  for (const p of feed?.players ?? []) {
+    const sid = p?.sleeper;
+    if (!sid) continue;                       // no crosswalk id, no honest join
+    const pts = (p.wk ?? [])[Number(week) - 1];
+    if (pts == null) continue;                // bye week
+    const ppg = Number(p.ppg);
+    const game = (sched[p.team] ?? []).find((g) => Number(g.w) === Number(week)) ?? null;
+    rows.push({
+      key: String(sid), source: 'stathead',
+      pts: Math.round(Number(pts) * 100) / 100,
+      // A season rate of zero cannot be scaled; such a row carries points
+      // only, and a client with its own catalog falls back to them.
+      mult: Number.isFinite(ppg) && ppg > 0 ? Math.round((Number(pts) / ppg) * 10000) / 10000 : null,
+      opp: game?.opp ?? null,
+      home: game?.home ?? null,
+      status: p.active === false ? String(p.status || 'OUT') : p.backup ? 'backup' : null,
+    });
+  }
+  return rows;
+}
 
 const PROJ_HOST = 'https://lm-api-reads.fantasy.espn.com';
 const NEWS_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50';
@@ -82,26 +146,46 @@ export function weekLineFor(player, week) {
   return { pts: Number(row.appliedTotal ?? 0), line };
 }
 
-/** Pull one week and write it. Returns how many players were stored. */
-export async function pollWeekProjections(season, week, log = () => {}) {
-  if (!season || !week || week >= 100) return { rows: 0, skipped: 'no week' };
-  let feed;
-  try { feed = await fetchProjections(season, week); }
-  catch (e) { log('projections', e.message); return { rows: 0, error: e.message }; }
-  const rows = [];
-  for (const entry of feed?.players ?? []) {
-    const p = entry?.player;
-    if (!p?.id) continue;
-    const got = weekLineFor(p, week);
-    if (!got || !Number.isFinite(got.pts)) continue;
-    rows.push({ espn_id: String(p.id), pts: got.pts, line: got.line, source: 'espn' });
-  }
+/** Write a batch of rows for one week. */
+async function writeWeek(season, week, rows, log) {
   if (!rows.length) return { rows: 0, skipped: 'nothing projected' };
   const { data, error } = await db().rpc('upsert_week_projections', {
     p_season: String(season), p_week: Number(week), p_rows: rows,
   });
   if (error) { log('projections upsert', error.message); return { rows: 0, error: error.message }; }
   return { rows: Number(data?.rows ?? rows.length) };
+}
+
+/** Pull one week and write it. Returns how many players were stored, and
+ *  from where. BOTH sources are written when both answer: they are keyed
+ *  apart (0330) and the reader picks per player, so ESPN keeps covering the
+ *  men StatHead has no line for instead of being switched off wholesale. A
+ *  failure on either side is logged and the other still lands. */
+export async function pollWeekProjections(season, week, log = () => {}) {
+  if (!season || !week || week >= 100) return { rows: 0, skipped: 'no week' };
+  let stathead = 0;
+  try {
+    const feed = await statheadFeed(season);
+    const rows = statheadRows(feed, week);
+    stathead = Number((await writeWeek(season, week, rows, log)).rows ?? 0);
+  } catch (e) { log('projections stathead', e.message); }
+
+  let espn = 0; let espnErr = null;
+  try {
+    const feed = await fetchProjections(season, week);
+    const rows = [];
+    for (const entry of feed?.players ?? []) {
+      const p = entry?.player;
+      if (!p?.id) continue;
+      const got = weekLineFor(p, week);
+      if (!got || !Number.isFinite(got.pts)) continue;
+      rows.push({ key: String(p.id), espn_id: String(p.id), pts: got.pts, line: got.line, source: 'espn' });
+    }
+    espn = Number((await writeWeek(season, week, rows, log)).rows ?? 0);
+  } catch (e) { espnErr = e.message; log('projections espn', e.message); }
+
+  if (!stathead && !espn) return { rows: 0, error: espnErr ?? undefined, skipped: espnErr ? undefined : 'nothing projected' };
+  return { rows: stathead + espn, stathead, espn };
 }
 
 /** The headline feed, kept where it names players. */

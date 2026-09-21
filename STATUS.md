@@ -18,6 +18,50 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.447.0 — the week's number, from the model that made the season one
+
+Founder: "review the work for anything we can fill in with fidelity from
+StatHead instead." The audit is in `docs/stathead-fidelity.md`; this is the
+biggest thing it found, and it was one version old.
+
+  1. THE BUG THE AUDIT FOUND. v0.445.0 shipped a weekly projection and took
+     it from ESPN, because ESPN was the only weekly feed we could reach. But
+     `appliedTotal` is a SCALAR IN ESPN'S SCORING. A Drip league paying 6 for
+     a passing touchdown or 1.5 per TE reception read a number computed under
+     somebody else's rules — the exact bug v0.308.0 spent a version killing
+     on the SEASON projection, quietly reintroduced one week at a time.
+  2. THE SOURCE WAS ALREADY OURS. StatHead — whose season projections this
+     app already ranks, drafts and grades trades with — publishes the same
+     model split across the schedule, as one public JSON rebuilt about every
+     two hours. No key, no SDK, no API to ask anyone for: the worker fetches
+     it over plain HTTPS. It also covers K, team DST and IDP, which ESPN's
+     weekly feed could only ever hand us as an undecodable total.
+  3. WHAT WE STORE IS THE MULTIPLIER, and that is the whole idea. The weekly
+     split scales a player's WHOLE line by one number (the feed is explicit
+     that receptions scale with it too). Scoring is linear in the line, so
+     **this league's season rate × mult IS this league's week** — not an
+     approximation of re-scoring the weekly line, but the same arithmetic.
+     `npm run validate:weekmult` proves the premise against the live file:
+     the 17 weeks average back to the season line within 0.14%, and the
+     ratio is shared by every player on a team at a position to within
+     0.0025 (rounding), which is what makes it a MATCHUP term rather than a
+     per-player opinion.
+  4. TWO SOURCES, ONE TABLE, PER-PLAYER FALLBACK. 0330 re-keys
+     `nfl_week_proj` on (season, week, SOURCE, key): StatHead rows by sleeper
+     id, ESPN rows by athlete id. The reader prefers StatHead for each player
+     and falls back to ESPN for the men it has no line for, so an outage on
+     either side degrades instead of blanking. The row now carries the
+     opponent, the home flag, the roster/injury status and which source
+     answered — a screen that shows a number owes the reader that.
+  5. THE CARDS. Web and mobile both show the week in the league's own
+     scoring, with the opponent in the label (`WK 5 @ ARI`), and a man on IR
+     comes back as a zero WITH the reason rather than as missing data.
+
+`scripts/db/matchup-mult-probes.sql` (5 groups) and `npm run check:weekmult`
+(20 assertions, offline) pin the plumbing; the one real bug they caught was
+mine — `Number(null)` is 0, so "no multiplier served" was one character away
+from silently becoming "projected to score nothing".
+
 ### v0.446.0 — ready for the stores, as far as code goes
 
 The last row on the gap list that was still open, and the only one where the

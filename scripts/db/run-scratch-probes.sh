@@ -200,3 +200,4 @@ $RUN -f scripts/db/award-probes.sql | grep -E "PROBE FAIL|ALL AWARD PROBES" || {
 $RUN -f scripts/db/public-api-probes.sql | grep -E "PROBE FAIL|ALL PUBLIC-API PROBES" || { echo "PUBLIC-API PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/trade-undo-probes.sql | grep -E "PROBE FAIL|ALL TRADE-UNDO PROBES" || { echo "TRADE-UNDO PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/week-proj-probes.sql | grep -E "PROBE FAIL|ALL WEEK-PROJ PROBES" || { echo "WEEK-PROJ PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/matchup-mult-probes.sql | grep -E "PROBE FAIL|ALL MATCHUP-MULT PROBES" || { echo "MATCHUP-MULT PROBES FAILED"; exit 1; }
