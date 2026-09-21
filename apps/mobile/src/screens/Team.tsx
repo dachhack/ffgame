@@ -24,7 +24,7 @@ import {
   type LeaguePoolPlayer, type NativeTeamState,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, setLiveAdp, setLiveDyn, setLivePickValues, setLiveProjRate, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
@@ -315,6 +315,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
       setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+      // 0335: the dynasty market, the pick board and the season rate ride the
+      // same call. Each is format-resolved server-side and says so.
+      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
+      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
+      setLiveProjRate(r.proj ?? null);
     }).catch(() => {});
   }, [leagueId]);
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.

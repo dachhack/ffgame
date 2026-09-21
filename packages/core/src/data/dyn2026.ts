@@ -518,7 +518,33 @@ for (const line of DYN_CSV.split('\n')) {
 export const DYN_2026: Map<string, [number, number]> = byName;
 export const DYN_BY_SID: Map<string, [number, number]> = bySid;
 
+// THE LIVE BOARD OVERLAY (v0.455.0). The worker now rebuilds this market
+// weekly (0335) by running the upstream's own rescale over the published KTC
+// board, so the bake below is the fallback rather than the answer. Same shape
+// as every other overlay here: a module map behind the same getter, installed
+// by the screen that loaded it, and a player the live board does not carry
+// keeps his baked value instead of falling off the list.
+//
+// THE MAP IS FORMAT-RESOLVED — the server hands a league its own column, 1QB
+// or superflex — so it carries which, and a screen reading the other format
+// falls through to the bake rather than being handed the wrong market. Josh
+// Allen is 5,735 in one and 10,729 in the other; this is not a rounding
+// difference.
+let liveDyn: Record<string, number> | null = null;
+let liveDynFmt: DynFormat | null = null;
+export function setLiveDyn(m?: Record<string, number> | null, fmt?: DynFormat | null): void {
+  liveDyn = m && Object.keys(m).length ? m : null;
+  liveDynFmt = liveDyn ? fmt ?? null : null;
+}
+export function clearLiveDyn(): void { liveDyn = null; liveDynFmt = null; }
+/** Is the dynasty column a live market right now, or the August bake? */
+export const dynIsLive = (): boolean => liveDyn != null;
+
 export const dynFor = (slug: string): number | null => {
+  if (liveDyn && liveDynFmt === dynFormat) {
+    const live = liveDyn[slug];
+    if (live != null) return live;
+  }
   // ID first: the pool's slug→sleeper-id map is authoritative where a screen
   // has installed it; the name join both backfills the id-less rows and keeps
   // every screen working when no pool ids are loaded.

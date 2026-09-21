@@ -85,6 +85,35 @@ export function statheadRows(feed, week) {
   return rows;
 }
 
+/** THE SEASON LINE, out of the same file (0335).
+ *
+ *  The weekly feed carries every player's season projection beside his weekly
+ *  strip — `ppg`, the games he is projected to play, and the rest-of-season
+ *  pair — each with a sleeper id. `proj2026.ts` stores a PER-WEEK rate
+ *  (ppg × games ÷ 17), so that is the shape stored here: the client takes the
+ *  ratio against its own baked rate and applies it to the LEAGUE-SCORED
+ *  number, which is the only way to move the level without throwing the
+ *  league's own catalog away. */
+export function seasonRows(feed, week) {
+  const rows = [];
+  for (const p of feed?.players ?? []) {
+    const sid = p?.sleeper;
+    const ppg = Number(p?.ppg);
+    if (!sid || !Number.isFinite(ppg) || ppg <= 0) continue;
+    const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
+    rows.push({
+      sleeper_id: String(sid),
+      ppg: Math.round(ppg * 100) / 100,
+      gp: Math.round(gp * 100) / 100,
+      per_week: Math.round(((ppg * gp) / 17) * 1000) / 1000,
+      ros_ppg: Number.isFinite(Number(p.rosPPG)) ? Math.round(Number(p.rosPPG) * 100) / 100 : null,
+      games_left: Number.isFinite(Number(p.gamesRemaining)) ? Number(p.gamesRemaining) : null,
+      source: 'stathead',
+    });
+  }
+  return rows;
+}
+
 const PROJ_HOST = 'https://lm-api-reads.fantasy.espn.com';
 const NEWS_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50';
 
@@ -237,6 +266,23 @@ export async function sweepProjections(season, weeks = [], log = () => {}) {
     const r = await pollWeekProjections(season, w, log);
     projections += Number(r.rows ?? 0);
   }
+  // THE SEASON BOARD (0335), out of the file the weeks just came from — so
+  // this costs a parse, not a fetch. `statheadFeed` is cached for the sweep.
+  let season_rows = 0;
+  try {
+    const feed = await statheadFeed(season);
+    const rows = seasonRows(feed);
+    for (let i = 0; i < rows.length; i += 900) {
+      const { data, error } = await db().rpc('upsert_proj_board', {
+        p_rows: rows.slice(i, i + 900),
+        p_fetched_at: feed?.baseGeneratedAt ?? feed?.generatedAt ?? null,
+        p_prune: i + 900 >= rows.length,
+      });
+      if (error) { log('season board', error.message); break; }
+      season_rows += Number(data?.rows ?? 0);
+    }
+  } catch (e) { log('season board', e.message); }
+
   const n = await pollPlayerNews(log);
-  return { projections, news: Number(n.rows ?? 0) };
+  return { projections, season: season_rows, news: Number(n.rows ?? 0) };
 }

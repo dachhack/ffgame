@@ -203,3 +203,4 @@ $RUN -f scripts/db/week-proj-probes.sql | grep -E "PROBE FAIL|ALL WEEK-PROJ PROB
 $RUN -f scripts/db/matchup-mult-probes.sql | grep -E "PROBE FAIL|ALL MATCHUP-MULT PROBES" || { echo "MATCHUP-MULT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/xref-probes.sql | grep -E "PROBE FAIL|ALL XREF PROBES" || { echo "XREF PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/adp-board-probes.sql | grep -E "PROBE FAIL|ALL ADP-BOARD PROBES" || { echo "ADP-BOARD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/board-refresh-probes.sql | grep -E "PROBE FAIL|ALL BOARD-REFRESH PROBES" || { echo "BOARD-REFRESH PROBES FAILED"; exit 1; }

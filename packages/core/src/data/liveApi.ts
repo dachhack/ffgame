@@ -2067,7 +2067,14 @@ export const leagueMarket = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; fresh?: boolean; as_of?: string | null; source?: string | null;
         adp_source?: 'sleeper' | 'espn' | null; adp_format?: 'ppr' | 'half' | 'std' | '2qb' | null;
         adp_as_of?: string | null;
-        adp?: Record<string, number>; own?: Record<string, number> }>(
+        adp?: Record<string, number>; own?: Record<string, number>;
+        /** 0335: the dynasty market and the rookie-pick board, both resolved
+         *  to this league's format, and the source's season rate. `proj` is a
+         *  PPR LEVEL, never a score — the engine applies the league's own
+         *  catalog to it, so it must not be shown as a projection directly. */
+        dyn_format?: '1qb' | 'sf' | null; dyn_as_of?: string | null;
+        dyn?: Record<string, number>; picks?: Record<string, number>;
+        proj_as_of?: string | null; proj?: Record<string, number> }>(
     'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>

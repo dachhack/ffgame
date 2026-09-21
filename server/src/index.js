@@ -21,6 +21,7 @@ import { pollMarket } from './poll/market.js';
 import { sweepAdp } from './poll/adp.js';
 import { sweepProjections } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
+import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
@@ -642,7 +643,7 @@ async function tick() {
   // fills next week while the current one is still being played.
   try {
     const pr = await sweepProjections(config.season, contexts.map((c) => c.espnWeek + c.offset), log);
-    if (pr.projections || pr.news) log('projections:', pr.projections, 'player-weeks,', pr.news, 'news items');
+    if (pr.projections || pr.news || pr.season) log('projections:', pr.projections, 'player-weeks,', pr.season, 'season lines,', pr.news, 'news items');
   } catch (e) { log('projection sweep error', e.message); }
 
   // THE CROSSWALK (0331). Daily, gated inside the sweep: an id is assigned
@@ -652,6 +653,13 @@ async function tick() {
     const xr = await sweepXref(config.season, log);
     if (xr.rows) log('crosswalk:', xr.rows, 'players');
   } catch (e) { log('crosswalk sweep error', e.message); }
+
+  // THE DYNASTY BOARD (0335). Weekly, gated inside the sweep: a dynasty value
+  // is a long-horizon opinion of a career and does not move on a Tuesday.
+  try {
+    const d = await sweepDynasty(playerIndex, log);
+    if (d.rows) log(`dynasty: ${d.players} players (${d.placed} placed), ${d.picks} picks, stamp ${d.stamp ?? 'none'}`);
+  } catch (e) { log('dynasty sweep error', e.message); }
 
   // Native leagues: advance live draft clocks, clear due waiver claims, and
   // drop each active week's coin allowance (idempotent — see native.js).

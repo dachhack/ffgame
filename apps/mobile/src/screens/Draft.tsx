@@ -31,7 +31,7 @@ import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { adpValue } from '@drip/core/data/adp2026';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, projFor, setLiveAdp, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, setLiveAdp, setLiveDyn, setLivePickValues, setLiveProjRate, dynFor, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -127,6 +127,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
       setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+      // 0335: the dynasty market, the pick board and the season rate ride the
+      // same call. Each is format-resolved server-side and says so.
+      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
+      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
+      setLiveProjRate(r.proj ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());

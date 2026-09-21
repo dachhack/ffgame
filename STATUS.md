@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.455.0 — the other two bakes refresh themselves
+
+"Now automate the dynasty and projection rebakes too." Same question as
+v0.454.0 — what can the worker actually fetch, keyed by an id — and this time
+the two answers are different, which is the whole design.
+
+  1. DYNASTY IS REPRODUCIBLE, SO WE REPRODUCE IT. The value dyn2026.ts holds
+     is not a black box: it is KTC's board rescaled onto FantasyCalc's scale
+     by a per-player ratio, with a positional median below a value floor of
+     500. Both halves are published (`ktc_rankings_1qb.json` — 416 players AND
+     the 84 rookie-pick rows — and `dynasty-fc-rescale.json`), and the rule is
+     written down in the client StatHead publishes. `server/src/poll/dynasty.js`
+     runs it verbatim, including the clause that matters most: UNSUPPORTED
+     POSITIONS KEEP THEIR RAW VALUE, which is how the picks come through
+     unrescaled. That is running their model, not approximating it.
+     `validate:boards` proves it lands on the same scale as the MCP-baked
+     board — top value 11,336 against the bake's 11,106, 50th 3,319 against
+     3,449, which is a month of market and not a formula error.
+  2. AND IT FIXED pickValues2026 FOR FREE: the picks ride in the same file,
+     keyed by the market's own label ("2027 Early 1st"), so the trade grade's
+     pick prices now refresh with everything else.
+  3. THE PROJECTION IS NOT REPRODUCIBLE, so it gets the multiplier trick
+     instead. `projectedPoints` scores a BAKED COMPONENT LINE under each
+     league's 64-field catalog, and those components are not published —
+     dropping a live PPR scalar on top would throw away every league's
+     scoring, the exact bug v0.308.0 existed to kill. So the live number
+     replaces the LEVEL that ratio multiplies, never the ratio: one line, at
+     `const base =`. A TE-premium league still scores its tight end as a
+     TE-premium league; it is simply computed off this week's opinion of the
+     player rather than August's.
+  4. IT COSTS NO NEW FETCH. The weekly feed the worker already pulls daily
+     carries `ppg` and `gp` with a sleeper id on every row — the season line
+     was in our hands the whole time. 837 lines, 489 joining the bake by id,
+     currently a mean 1.00 pts/week away from it.
+  5. RESOLUTION IS THE HARD PART, and it is where a name join would have
+     undone four versions of work: KTC publishes no cross-id, and a bare name
+     match drops Kenneth/Kenny Gainwell (3,487), Travis Hunter (3,116) and
+     Chig Okonkwo (2,925) — all top-200 assets. The crosswalk's ALIASES
+     resolve 413 of 416; the player index takes most of the rest; anything
+     left keeps its value under the source's own id with a null slug, and the
+     bake answers for it.
+  6. EVERY OVERLAY IS FORMAT-RESOLVED AND SAYS SO. The server hands a league
+     one dynasty column, 1QB or superflex, chosen by the same rule as the ADP
+     format — and a screen reading the other format falls through to the bake
+     rather than being handed the wrong market. Josh Allen is 5,735 in one and
+     10,729 in the other; that is not a rounding difference.
+
+`board-refresh-probes.sql` (5 groups), `check:boards` (23 offline assertions,
+including that a TE-premium league's number still doubles when the live level
+doubles) and `validate:boards`.
+
 ### v0.454.0 — the market refreshes itself
 
 Founder: "automate the weekly ADP refresh in the worker." Done, with one

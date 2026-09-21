@@ -151,6 +151,34 @@ const val = (r: PickRow, fmt: PickFormat) => (fmt === 'sf' ? r.vsf : r.v1);
  *  is known; a rookie pick's is not until the standings say so). Without it
  *  the MID tier answers, which is what an unknown pick is worth: the middle
  *  of the round. */
+// THE LIVE PICK BOARD (v0.455.0). The picks ride in the same published KTC
+// file as the player values, keyed by the market's own label ("2027 Early
+// 1st"), so the worker refreshes both together (0335). The baked rows below
+// answer for a label the live board has dropped, and for every screen that
+// has not installed one.
+//
+// THE MAP IS FORMAT-RESOLVED, so it carries the format it was resolved FOR.
+// The server hands a league one column — 1QB or superflex — and a caller
+// asking for the other one must fall through to the bake rather than be
+// handed a superflex price wearing a 1QB label.
+let livePicks: Record<string, number> | null = null;
+let livePickFmt: PickFormat | null = null;
+export function setLivePickValues(m?: Record<string, number> | null, fmt?: PickFormat | null): void {
+  livePicks = m && Object.keys(m).length ? m : null;
+  livePickFmt = livePicks ? fmt ?? null : null;
+}
+export function clearLivePickValues(): void { livePicks = null; livePickFmt = null; }
+export const pickBoardIsLive = (): boolean => livePicks != null;
+
+/** The market's own label for a row, which is how the live board keys it. */
+function labelFor(year: number, round: number, tier: PickTier, slot?: number): string[] {
+  const ord = ORD[round - 1] ?? `${round}th`;
+  const tierWord = tier === 'early' ? 'Early' : tier === 'late' ? 'Late' : 'Mid';
+  const out = [`${year} ${tierWord} ${ord}`];
+  if (slot != null) out.unshift(`${year} Pick ${round}.${String(slot).padStart(2, '0')}`);
+  return out;
+}
+
 export function pickMarketValue(
   season: number | string, round: number, fmt: PickFormat = '1qb',
   opts?: { tier?: PickTier; slot?: number },
@@ -158,6 +186,14 @@ export function pickMarketValue(
   const rd = Math.round(Number(round));
   if (!Number.isFinite(rd) || rd < 1 || rd > PICK_MAX_ROUND) return null;
   const y = Math.min(Math.max(Number(season) || YEARS[0], YEARS[0]), YEARS[YEARS.length - 1]);
+  // The live board first, by the market's own label — the exact slot where
+  // one is known, else the tier.
+  if (livePicks && livePickFmt === fmt) {
+    for (const label of labelFor(y, rd, opts?.tier ?? 'mid', opts?.slot)) {
+      const v = livePicks[label];
+      if (v != null) return v;
+    }
+  }
   if (opts?.slot != null) {
     const exact = ROWS.find((r) => r.year === y && r.round === rd && r.slot === opts.slot);
     if (exact) return val(exact, fmt);

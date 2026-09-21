@@ -55,7 +55,7 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, setLiveDyn, setLivePickValues, setLiveProjRate, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -990,6 +990,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       if (!r?.ok) return;
       setOwn(r.own ?? {});
       setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+      // 0335: the dynasty market, the pick board and the season rate ride the
+      // same call. Each is format-resolved server-side and says so.
+      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
+      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
+      setLiveProjRate(r.proj ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -2701,6 +2706,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
       setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
+      // 0335: the dynasty market, the pick board and the season rate ride the
+      // same call. Each is format-resolved server-side and says so.
+      setLiveDyn(r.dyn ?? null, r.dyn_format ?? null);
+      setLivePickValues(r.picks ?? null, r.dyn_format ?? null);
+      setLiveProjRate(r.proj ?? null);
     }).catch(() => {});
   }, [leagueId]);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug

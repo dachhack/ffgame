@@ -160,3 +160,10 @@ export function sortPool<T extends PoolRow>(
     return d !== 0 ? d : rankOf(a) - rankOf(b);
   });
 }
+
+// The other two live boards travel with the ADP one (0335) and are installed
+// by the same screens, so they are re-exported here rather than making every
+// caller import three modules to fill one payload.
+export { setLiveDyn, clearLiveDyn, dynIsLive } from './dyn2026';
+export { setLivePickValues, clearLivePickValues, pickBoardIsLive } from './pickValues2026';
+export { setLiveProjRate, clearLiveProjRate, projIsLive } from '../engine/projScoring';
