@@ -1199,7 +1199,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; /** 0320: false for a co-commissioner (who cannot add, remove or hand over commissioners, or delete the league). */ primary?: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 /** `drifted` (0117): this seat's occupant is no longer the roster's Sleeper owner
  *  — they left the league, it changed hands, or they unlinked. Sleeper leagues
@@ -2074,6 +2074,10 @@ export const rosterRules = (leagueId: string) =>
          *  it has already passed. */
         faab_min_bid?: number; fa_dow?: number[] | null;
         trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
+        /** 0320, the commissioner's desk: the league-wide wire lock, the
+         *  teams locked one by one, the median game, and the dues. */
+        wire_lock?: boolean; locked_rosters?: number[]; median_game?: boolean;
+        dues_amount?: number | null; dues_note?: string | null;
         /** The taxi squad's rules (0196): the tenure ceiling (null = anyone),
          *  whether the squad shuts at the season's first kickoff, whether it is
          *  shut RIGHT NOW, and when that kickoff is. */
@@ -2436,7 +2440,7 @@ export const leagueScoringSet = (leagueId: string, tdBonus: number, ydMult: numb
   }), Ev.commishAction, { tool: 'scoring', scoped: scoped.length });
 
 // ── Playoffs (0073): the endgame for native leagues ───────────────────────────
-export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; /** This seat is a vampire (0269) — badge it wherever the row renders. */ vampire?: boolean; /** The week the guillotine took this seat (0272); null while it lives. */ eliminated?: number | null; }
+export interface StandingsRow { roster_id: number; team: string | null; wins: number; losses: number; ties: number; pf: number; pa: number; /** The median game's share of the record (0320); 0 when it is off. */ median_w?: number; median_l?: number; /** The seat's division label (0215); null until the commissioner draws the map. */ division?: string | null; /** This seat is a vampire (0269) — badge it wherever the row renders. */ vampire?: boolean; /** The week the guillotine took this seat (0272); null while it lives. */ eliminated?: number | null; }
 export interface PlayoffMatchup {
   id: string; week: number; round: number; pos: number; label: string | null; status: string;
   /** Consolation-ladder game (never blocks bracket advancement). */
@@ -3192,6 +3196,8 @@ export interface WaiverClaimRow { id: string; add_slug: string; drop_slug: strin
    *  not reach the player, else the pool hold it is queued behind. */
   clears_at?: string | null; }
 export interface NativeTeamState {
+  /** 0320: why the wire is shut for my seat right now (a commissioner's lock, the format's), or null. */
+  wire_block?: string | null;
   error?: string; my_roster_id: number | null; draft_status: string; roster_cap: number | null; server_now: string;
   /** THE BLADE (0272): the week the guillotine took THIS seat, null while it
    *  lives. The team desk says so, and closes the wire with a reason. */
@@ -3336,6 +3342,41 @@ export async function teamManagers(leagueId: string): Promise<TeamManagerRow[]> 
   if (!Array.isArray(r)) throw new Error((r as { error?: string })?.error ?? 'could not load managers');
   return r;
 }
+// ── The commissioner's desk (0320) ───────────────────────────────────────────
+export interface CommissionerRow { app_user_id: string; email: string | null; name: string | null; since?: string }
+export const leagueCommissioners = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; primary?: CommissionerRow | null; you_are_primary?: boolean; co?: CommissionerRow[] }>('league_commissioners', { p_league_id: leagueId });
+export const addCommissioner = (leagueId: string, email: string) =>
+  rpc<{ ok: boolean; error?: string }>('add_commissioner', { p_league_id: leagueId, p_email: email });
+export const removeCommissioner = (leagueId: string, appUserId: string) =>
+  rpc<{ ok: boolean; error?: string }>('remove_commissioner', { p_league_id: leagueId, p_app_user_id: appUserId });
+export const transferCommissioner = (leagueId: string, appUserId: string) =>
+  rpc<{ ok: boolean; error?: string }>('transfer_commissioner', { p_league_id: leagueId, p_app_user_id: appUserId });
+/** Every free-agent and waiver move in the league, shut or open. */
+export const commishSetWireLock = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; wire_lock?: boolean }>('commish_set_wire_lock', { p_league_id: leagueId, p_on: on });
+/** One team's roster transactions (adds, drops, claims, trades), shut or open. */
+export const commishLockTeam = (leagueId: string, rosterId: number, locked: boolean) =>
+  rpc<{ ok: boolean; error?: string }>('commish_lock_team', { p_league_id: leagueId, p_roster_id: rosterId, p_locked: locked });
+/** The whole waiver order at once: every roster id, first pick first. */
+export const commishSetWaiverPriority = (leagueId: string, order: number[]) =>
+  rpc<{ ok: boolean; error?: string }>('commish_set_waiver_priority', { p_league_id: leagueId, p_order: order });
+export const commishSetMedianGame = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string }>('commish_set_median_game', { p_league_id: leagueId, p_on: on });
+export interface WeekScoreRow { matchup_id: string; status: string; is_playoff: boolean; home_roster_id: number; home: string | null; home_final: number | null; away_roster_id: number; away: string | null; away_final: number | null }
+export const commishWeekScores = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; week?: number; matchups?: WeekScoreRow[]; weeks?: number[] }>('commish_week_scores', { p_league_id: leagueId, p_week: week });
+/** A final matchup's score, set by hand; standings follow at once. */
+export const commishSetMatchupScore = (matchupId: string, home: number, away: number) =>
+  rpc<{ ok: boolean; error?: string }>('commish_set_matchup_score', { p_matchup_id: matchupId, p_home: home, p_away: away });
+export interface DuesRow { roster_id: number; team: string | null; enrolled: boolean; paid: boolean; paid_at: string | null; note: string | null }
+export const leagueDues = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; amount?: number | null; note?: string | null; teams?: DuesRow[] }>('league_dues', { p_league_id: leagueId });
+export const setLeagueDues = (leagueId: string, amount: number | null, note: string | null = null) =>
+  rpc<{ ok: boolean; error?: string }>('set_league_dues', { p_league_id: leagueId, p_amount: amount, p_note: note });
+export const commishSetDuesPaid = (leagueId: string, rosterId: number, paid: boolean) =>
+  rpc<{ ok: boolean; error?: string }>('commish_set_dues_paid', { p_league_id: leagueId, p_roster_id: rosterId, p_paid: paid });
+
 export interface WaitlistRow { league_id: string; name: string; season: string; avatar_url: string | null; joined_at: string; }
 /** Leagues the caller has joined but holds no seat in yet — full-league joins
  *  land here (native_join v3) until the commissioner deals them in. */

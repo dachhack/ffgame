@@ -68,6 +68,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
+import { CommissionersCard, LocksCard, WaiverOrderCard, ScoresCard, DuesCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -90,6 +91,12 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   ] },
   { title: 'RUN THE SEASON', items: [
     { id: 'seats', label: 'SEATS' },
+    // THE COMMISSIONER'S DESK (0320): Sleeper's commish tab, the parts we
+    // lacked — co-commissioners, the locks, the waiver order, score edits.
+    { id: 'commish', label: 'COMMISSIONERS' },
+    { id: 'locks', label: 'LOCKS', nativeOnly: true },
+    { id: 'order', label: 'WAIVER ORDER', nativeOnly: true },
+    { id: 'scores', label: 'EDIT SCORES', nativeOnly: true },
     { id: 'players', label: 'PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
@@ -110,6 +117,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
   { title: 'MONEY', items: [
     { id: 'coin', label: 'DRIP COIN', dripOnly: true },
     { id: 'faab', label: 'FAAB', nativeOnly: true },
+    { id: 'dues', label: 'DUES', nativeOnly: true },
     // CONTRACTS, NOT MERELY NATIVE (founder: "there's salary in the commish
     // menu in a non-contract league"). nativeOnly was the wrong gate: every
     // native league is native, and only a contract one has a cap to run. The
@@ -427,6 +435,11 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'format' && native && <FormatCard leagueId={leagueId} />}
             {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
+            {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
+            {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
+            {section === 'order' && native && <WaiverOrderCard leagueId={leagueId} />}
+            {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
+            {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
           </ScrollView>
         </Overlay>
