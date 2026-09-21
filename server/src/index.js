@@ -534,6 +534,10 @@ async function tickContext(ctx, season) {
     // Teams whose game ESPN marks completed — their players' cards cool off
     // (resolve.js gameOver; v0.388.13). Same fixTeam/normTeam the index uses.
     const doneTeams = new Set((games ?? []).filter((g) => g.completed).flatMap((g) => [g.home, g.away]).filter(Boolean).map((t) => normTeam(fixTeam(t))));
+    // Each team's kickoff this week (v0.434.4): the resolver keeps a player
+    // added AFTER his kickoff out of the fills — a pickup counts from the
+    // game he was owned for.
+    const teamKicks = teamKickoffs(slate);
     const lockedWins = wk ? new Set(Object.keys(wk).filter((w) => wk[w] - LOCK_LEAD_MS <= nowMs)) : null;
     // Fill-only auto-lineups (0170.8): later windows of an ALREADY-live week
     // come due long after the scheduled→live pass ran, so empty slots (a
@@ -544,7 +548,7 @@ async function tickContext(ctx, season) {
     let done = 0;
     for (let i = 0; i < live.length; i += 20) {
       await Promise.all(live.slice(i, i + 20).map((m) =>
-        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx: rctx, startedWins, doneTeams }).then(() => { done++; }).catch((e) => log(`[${ctx.tag}] resolve`, m.id, e.message))));
+        resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx: rctx, startedWins, doneTeams, teamKicks }).then(() => { done++; }).catch((e) => log(`[${ctx.tag}] resolve`, m.id, e.message))));
     }
     log(`[${ctx.tag}] resolved`, done, '/', live.length, 'matchups');
   }
