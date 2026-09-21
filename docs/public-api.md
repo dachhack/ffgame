@@ -59,9 +59,22 @@ exist, so the API cannot be used to test whether a league id is real.
 | `/v1/league/{id}/trades?limit=` | Completed trades, multi-team legs, the league vote |
 | `/v1/league/{id}/draft` | Draft state and every pick, with auction prices |
 | `/v1/league/{id}/picks` | Tradeable future picks and who owns them |
-| `/v1/league/{id}/players` | The league's pool, with crosswalk ids (`espn_id`) |
+| `/v1/league/{id}/players` | The league's pool, with crosswalk ids (`espn_id`, `sleeper_id`, `gsis_id`, `pfr_id`, `yahoo_id`, `sportradar_id`) |
 | `/v1/league/{id}/history` | Champions, the record book, all-time manager lines |
 | `/v1/league/{id}/awards` | Award definitions, weekly winners, badges |
+
+## Joining a league to anything else
+
+`/players` carries every public id we can resolve for a player, so nothing
+downstream has to match on a name: `gsis_id` (nflverse, and the key in
+play-by-play), `sleeper_id`, `espn_id`, `pfr_id`, `yahoo_id` and
+`sportradar_id`. They come from StatHead's public player crosswalk, refreshed
+daily, and a player we cannot place carries no extra ids rather than a
+guessed one — our pool reaches the crosswalk by id (espn first, sleeper
+second) and never by spelling.
+
+These are public identifiers for public athletes. Nothing about a *manager*
+is published anywhere in this API; see below.
 
 ## What is never served
 

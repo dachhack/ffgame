@@ -7,13 +7,22 @@
 //   2. No api_* function body mentions a column from the never-list. This is
 //      the leak that a later "just add the manager's email" would cause, and
 //      the one thing worth failing a build over.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const router = readFileSync(resolve(root, 'supabase/functions/public-api/index.ts'), 'utf8');
-const sql = readFileSync(resolve(root, 'supabase/migrations/0326_the_public_api.sql'), 'utf8');
+// 0326 DEFINED the API; later migrations RE-EMIT parts of it (0331 added the
+// crosswalk ids to api_players). Reading only 0326 would mean a re-emission
+// could quietly reintroduce exactly the leak assertion 2 exists to stop, so
+// every migration from 0326 on is scanned.
+const migrations = resolve(root, 'supabase/migrations');
+const sql = readdirSync(migrations)
+  .filter((f) => f.endsWith('.sql') && Number(f.slice(0, 4)) >= 326)
+  .sort()
+  .map((f) => readFileSync(resolve(migrations, f), 'utf8'))
+  .join('\n');
 // 0327 flipped the default to open-with-an-opt-out. That is a product
 // decision, not an implementation detail, so it is pinned here too.
 const dflt = readFileSync(resolve(root, 'supabase/migrations/0327_open_by_default.sql'), 'utf8');
@@ -25,7 +34,7 @@ const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if 
 const routed = [...router.matchAll(/'(api_[a-z_]+)'/g)].map((m) => m[1]);
 ok(routed.length >= 13, `the router names ${routed.length} api functions`);
 for (const fn of new Set(routed)) {
-  ok(new RegExp(`create or replace function ${fn}\\s*\\(`).test(sql), `${fn} is defined in 0326`);
+  ok(new RegExp(`create or replace function ${fn}\\s*\\(`).test(sql), `${fn} is defined by the API migrations`);
 }
 
 // 2. nothing personal in any api_ function
@@ -58,6 +67,17 @@ ok(/provider = 'native'/.test(dflt), 'absent means open for a league that lives 
 ok(/not coalesce\(is_mock, false\)/.test(dflt), 'a mock is never served');
 ok(!/list.*public.*league|api_leagues|api_directory/i.test(router),
    'there is no directory endpoint — a league is readable only by whoever holds its id');
+
+// 4. THE CROSSWALK (0331). Public sports ids, joined by id and never by name
+// — the whole point of publishing them is to spare a consumer the name match
+// this repo has twice been bitten by.
+const players = bodies.filter((b) => b.includes('function api_players')).slice(-1)[0];
+ok(!!players && /'gsis_id', x\.gsis_id/.test(players), 'api_players publishes the nflverse gsis id');
+ok(!!players && /'espn_id', lp\.espn_id/.test(players), 'and still publishes espn_id exactly where 0326 put it');
+ok(!!players && /_xref_for\(lp\.espn_id, lp\.sleeper_id\)/.test(players),
+   'the crosswalk is reached by id, never by name');
+ok(!/full_name|display_name/.test(String(sql.match(/create or replace function _xref_for[\s\S]*?\$\$;/)?.[0] ?? '')),
+   '_xref_for cannot match on a name even if asked to');
 
 console.log(fails === 0 ? '\nALL PUBLIC-API ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

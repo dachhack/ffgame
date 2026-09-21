@@ -2239,6 +2239,19 @@ export const leagueWeekProjections = (leagueId: string, week: number) =>
         projections?: Record<string, number>; rows?: Record<string, WeekProjRow> }>(
     'league_week_projections', { p_league_id: leagueId, p_week: week });
 
+/** Every public id we can resolve for one player (0331). Absent keys mean the
+ *  crosswalk could not place him — never a guess from his name. */
+export interface PlayerIds {
+  espn_id?: string; sleeper_id?: string; gsis_id?: string;
+  pfr_id?: string; yahoo_id?: string; sportradar_id?: string;
+}
+/** This league's pool, slug → ids. The same set the public API publishes,
+ *  for a signed-in client that should not have to ask the public endpoint
+ *  for something it is already entitled to. */
+export const leaguePlayerIds = (leagueId: string) =>
+  rpc<{ ok?: boolean; error?: string; ids?: Record<string, PlayerIds> }>(
+    'league_player_ids', { p_league_id: leagueId });
+
 export interface NewsItem {
   id: string; at: string; headline: string; summary: string | null; url: string | null;
   /** Which of this league's players the story is about. */

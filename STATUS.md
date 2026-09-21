@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.449.0 — one player, every id
+
+The audit's third finding, and the one that was a promise we were not
+keeping. v0.442.0 shipped a public read API whose stated point is "readable
+by anything", and handed a consumer exactly ONE identifier to join on:
+`espn_id`. Everything else they had to recover by matching a name.
+
+This repo has been bitten by that twice and written it down both times —
+dyn2026 silently dropped Kenneth/Kenny Gainwell, and still carries a hand-
+edit because one board spells a man "Chigoziem Okonkwo" and our index says
+"Chig Okonkwo". We went id-first everywhere for ourselves in 0200 and 0205.
+Publishing one id and leaving the internet to name-match the rest was handing
+our own solved bug to every consumer.
+
+  1. `player_xref` (0331), filled daily by the worker from StatHead's public
+     player crosswalk — the same file the Python client reads, 12,264 rows
+     trimmed to the ~3,000 that a fantasy roster can still reach.
+  2. `api_players` now carries `sleeper_id`, `gsis_id` (the nflverse key, and
+     the one in play-by-play), `pfr_id`, `yahoo_id` and `sportradar_id`.
+     `espn_id` stays exactly where 0326 put it, so no existing consumer sees
+     anything but new keys.
+  3. THE JOIN IS BY ID AND ONLY BY ID: espn first, sleeper second, never a
+     name. A probe plants a crosswalk row spelled EXACTLY as an unplaceable
+     pool player and asserts it is not taken.
+  4. `league_player_ids` gives a signed-in client the same set, so the app
+     never has to ask the public endpoint for something it is entitled to.
+  5. Nothing about a manager is published, and `check:publicapi` now scans
+     EVERY migration from 0326 on rather than 0326 alone — a re-emission is
+     exactly how the never-list would have been quietly reintroduced.
+
+Also in this version: `docs/stathead-fidelity.md`, the written audit the
+founder asked for — every feature of v0.437.0…v0.446.0 against what StatHead
+publishes, what was filled in, what was deliberately left with ESPN
+(injuries, because ours is the live report; news, because StatHead has none),
+and the one-line answer to MCP vs Python vs asking their dev team: the model
+outputs are public JSON, so the worker just fetches them.
+
 ### v0.448.0 — what a pick is worth, from the market that trades them
 
 The second thing the StatHead audit found, and the smaller of the two only
