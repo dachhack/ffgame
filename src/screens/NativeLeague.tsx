@@ -55,7 +55,7 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, setLiveAdp, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -652,7 +652,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
           </div>
         )}
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8 }}>
-          ADP: consensus {ADP_AS_OF} · projections: StatHead {PROJ_AS_OF} · 2025 line: real season totals
+          ADP: {adpLabel(ADP_AS_OF)} · projections: StatHead {PROJ_AS_OF} · 2025 line: real season totals
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {onQueue && <button onClick={onQueue} className="mono" style={{ ...ghostBtn, flex: 1 }}>{queued ? 'Q · QUEUED — REMOVE' : 'Q · ADD TO QUEUE'}</button>}
@@ -989,7 +989,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     leagueMarket(leagueId).then((r) => {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -2700,7 +2700,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     leagueMarket(leagueId).then((r) => {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
     }).catch(() => {});
   }, [leagueId]);
   const [expMap, setExpMap] = useState<Record<string, number>>({});   // years_exp by slug

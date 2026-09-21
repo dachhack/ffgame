@@ -2054,11 +2054,19 @@ export const createNativeLeague = (
  *  which is exactly the list you wanted to sort. */
 export const playerOwnership = (leagueId: string) =>
   rpc<Record<string, number> | { error: string }>('player_ownership', { p_league_id: leagueId });
-/** THE LIVE MARKET (0203): ESPN's average draft position and ownership share,
- *  both from one poll, in one call. Empty maps mean the feed is stale — the
- *  caller keeps the baked consensus ADP rather than blanking the column. */
+/** THE LIVE MARKET (0203, ADP re-sourced 0334): average draft position and
+ *  ownership share in one call. Empty maps mean the feeds are stale — the
+ *  caller keeps the baked consensus ADP rather than blanking the column.
+ *
+ *  The ADP half now answers from the published Sleeper draft-room board where
+ *  it can and from ESPN's where it cannot, per player. `adp_source` says
+ *  which, and `adp_format` says WHICH MARKET this league reads — a superflex
+ *  lineup gets the 2QB board, a half-PPR league gets the half-PPR one, which
+ *  a single baked column could never do. */
 export const leagueMarket = (leagueId: string) =>
   rpc<{ ok?: boolean; error?: string; fresh?: boolean; as_of?: string | null; source?: string | null;
+        adp_source?: 'sleeper' | 'espn' | null; adp_format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+        adp_as_of?: string | null;
         adp?: Record<string, number>; own?: Record<string, number> }>(
     'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */

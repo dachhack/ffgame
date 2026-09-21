@@ -314,7 +314,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     leagueMarket(leagueId).then((r) => {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
     }).catch(() => {});
   }, [leagueId]);
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.

@@ -58,13 +58,38 @@ export { dynFor, setDynFormat };
 // roughly 13 picks apart at the median — so a player the feed doesn't price,
 // or every player when the feed is stale, keeps the consensus number instead of
 // falling off the board. A poll failure should cost freshness, not the column.
+//
+// v0.454.0: the feed is no longer only ESPN's. The worker now refreshes the
+// published Sleeper draft-room board daily (0334), which prices each FORMAT
+// separately — so a superflex league is handed the 2QB market and a half-PPR
+// league its own, neither of which a single baked column can be. The overlay
+// mechanism is unchanged; what arrives in it is better, and `adpMeta` carries
+// which market it is so a screen can say so instead of claiming "consensus".
 let liveAdp: Record<string, number> | null = null;
-export function setLiveAdp(m?: Record<string, number> | null): void {
-  liveAdp = m && Object.keys(m).length ? m : null;
+let liveAdpMeta: AdpMeta | null = null;
+export interface AdpMeta {
+  source?: 'sleeper' | 'espn' | null;
+  format?: 'ppr' | 'half' | 'std' | '2qb' | null;
+  asOf?: string | null;
 }
-export function clearLiveAdp(): void { liveAdp = null; }
+export function setLiveAdp(m?: Record<string, number> | null, meta?: AdpMeta | null): void {
+  liveAdp = m && Object.keys(m).length ? m : null;
+  liveAdpMeta = liveAdp ? meta ?? null : null;
+}
+export function clearLiveAdp(): void { liveAdp = null; liveAdpMeta = null; }
 /** Is the board showing a live market right now? For the label that says so. */
 export const adpIsLive = (): boolean => liveAdp != null;
+/** Which market the ADP column is showing — for the provenance line under a
+ *  player card. Null when the bake is answering. */
+export const adpMeta = (): AdpMeta | null => liveAdpMeta;
+const FORMAT_LABEL: Record<string, string> = { ppr: 'PPR', half: 'half-PPR', std: 'standard', '2qb': 'superflex' };
+/** "Sleeper draft rooms · superflex" / "ESPN draft rooms" / "consensus bake". */
+export function adpLabel(bakedAsOf: string): string {
+  if (!liveAdpMeta?.source) return `consensus ${bakedAsOf}`;
+  const where = liveAdpMeta.source === 'sleeper' ? 'Sleeper draft rooms' : 'ESPN draft rooms';
+  const fmt = liveAdpMeta.format ? FORMAT_LABEL[liveAdpMeta.format] : null;
+  return fmt ? `${where} · ${fmt}` : where;
+}
 
 export const adpFor = (slug: string): number | null =>
   liveAdp?.[slug] ?? adpValue(slug);

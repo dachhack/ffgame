@@ -18,6 +18,7 @@ import { syncTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
+import { sweepAdp } from './poll/adp.js';
 import { sweepProjections } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
@@ -626,6 +627,14 @@ async function tick() {
       log(`market: ${r.rows} rows (${r.priced} with ADP) from ${r.seen} listed (${r.unresolved} unresolved)`);
     } catch (e) { log('market poll error', e.message); }
   }
+
+  // THE ADP BOARD (0334). Daily, gated inside the sweep: the published
+  // Sleeper draft-room market, priced per format, so the draft board stops
+  // depending on somebody remembering to rebake adp2026.ts.
+  try {
+    const a = await sweepAdp(config.season, playerIndex, log);
+    if (a.rows) log(`adp board: ${a.rows} rows, ${a.placed}/${a.priced} placed on a slug (source stamp ${a.fetchedAt ?? 'none'})`);
+  } catch (e) { log('adp sweep error', e.message); }
 
   // THE WEEK'S NUMBER AND THE NEWS (0329). Hourly, gated inside the sweep:
   // a projection an hour stale is still this week's, and a headline an hour

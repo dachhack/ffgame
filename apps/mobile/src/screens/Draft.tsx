@@ -126,7 +126,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     leagueMarket(leagueId).then((r) => {
       if (!r?.ok) return;
       setOwn(r.own ?? {});
-      setLiveAdp(r.adp ?? null);
+      setLiveAdp(r.adp ?? null, { source: r.adp_source ?? null, format: r.adp_format ?? null, asOf: r.adp_as_of ?? null });
     }).catch(() => {});
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());

@@ -18,6 +18,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.454.0 — the market refreshes itself
+
+Founder: "automate the weekly ADP refresh in the worker." Done, with one
+honest boundary and one thing that turned out better than freshness.
+
+  1. WHAT THE WORKER CANNOT HAVE. The consensus blend `adp2026.ts` holds is
+     computed inside StatHead's MCP tool and published nowhere — no worker can
+     fetch it, and re-implementing somebody else's model to approximate it
+     would mean quietly disagreeing with the bake it replaced. Checked, not
+     assumed: the repo's published data directory carries the blend's INPUTS
+     and no blend.
+  2. WHAT IT CAN. One of those inputs is published daily, keyed by sleeper id,
+     and is the closest market to this app's own pool:
+     `sleeper-adp-<season>.json`, Sleeper's own draft rooms. 2,877 players,
+     plain HTTPS, no key. `server/src/poll/adp.js` pulls it daily — daily, not
+     weekly, because the source rebuilds daily and a weekly poll would ship a
+     number staler than the one available.
+  3. AND IT PRICES EACH FORMAT SEPARATELY, which is the part worth more than
+     the freshness. A bake has ONE column, so until today a superflex league
+     read 1QB prices off it and a half-PPR league read full PPR. 0334's
+     `_league_adp_format` reads the league's own slot spec — a lineup starting
+     more than one quarterback IS a superflex market, the same question the
+     trade grade asks of the same spec — and hands it the right board. Josh
+     Allen is pick 23 in 1QB and pick 4 in superflex; 1,108 players are priced
+     differently between the two.
+  4. A FORMAT THE MARKET BARELY PRICES IS NOT A MARKET. The live feed prices
+     ~2,260 players in PPR and ~240 in standard. Serving those 240 and letting
+     everyone else fall through to ESPN would put two scales in one column,
+     ordered against each other — so a format that cannot fill a 300-pick
+     draft board falls back to PPR, and `adp_format` reports what actually
+     answered rather than naming a market nobody read.
+  5. THE LADDER, per player, the same shape as the weekly projections: the
+     published board, then ESPN's rooms for whoever it does not price, then
+     the bake client-side. A feed that stops costs freshness, never the
+     column. The card's provenance line now says which market is showing
+     instead of claiming "consensus" whatever is underneath.
+
+`adp-board-probes.sql` (6 groups, including the superflex and thin-format
+cases), `check:adpboard` (18 offline assertions) and `validate:adp` (the live
+feed: measured within 96h, every format populated, and the 2QB column proved
+to be its own market rather than a copy of PPR).
+
 ### v0.453.0 — one week of football, priced
 
 The first ADP rebake since 26 August, and the first one v0.452.0's id column
