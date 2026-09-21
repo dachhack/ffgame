@@ -37,12 +37,19 @@
 // moved, not one row dropped and one added. 214 players in both, 20 new, 7
 // gone; mean absolute move 13.8 picks, median 9.1.
 //
-// A MID-SEASON ADP IS A DIFFERENT ANIMAL from an August one. It prices what
-// has already happened — Isiah Pacheco 164.8 → 249 and Josh Jacobs 35.9 →
-// 115.7 are injuries, MarShawn Lloyd 183.2 → 136.7 is a job. That is the
-// right board for a league drafting TODAY, which is what this file is for:
-// it seeds a new pool's rank, and a pool is built the day its league is.
-// Leagues that already drafted keep the rank stored in their own pool rows.
+// FOUR WEEKS OF CALENDAR, ONE WEEK OF FOOTBALL. Worth being exact about what
+// this board knows, because the moves read like form and are not: week 1 is
+// final and week 2 was being played while it was pulled (FantasyPros 18 Sep,
+// Sleeper and FFC 21 Sep). The tails are AVAILABILITY — Isiah Pacheco 164.8
+// → 249 is on IR and has no week-1 line at all, Josh Jacobs 35.9 → 115.7 is
+// commissioner-exempt, and the furthest riser is the back who inherited that
+// job (MarShawn Lloyd 183.2 → 136.7, now Green Bay's depth 1).
+//
+// It is still the right board for a league drafting TODAY, which is what this
+// file is for: it seeds a new pool's rank, and a pool is built the day its
+// league is. Leagues that already drafted keep the rank stored in their own
+// pool rows. Refresh it weekly while the season runs — after week 1 the
+// market moves on news, and news is what this column is.
 //
 // Every row is validated on the way in (see the refresh note above): a
 // sleeper id, a team, a number, and a Sleeper directory row that is active

@@ -18,19 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.453.0 — four weeks of football, priced
+### v0.453.0 — one week of football, priced
 
 The first ADP rebake since 26 August, and the first one v0.452.0's id column
 paid for: the before/after was diffed BY SLEEPER ID, so a player who changed
 team or spelling between boards is one row that MOVED rather than one row
 dropped beside one added. (Exactly one row did: Kayshon Boutte, NE → HOU.)
 
+  0. WHAT THIS BOARD ACTUALLY KNOWS. Four weeks of CALENDAR, one week of
+     FOOTBALL: the feed has 324 players with a week-1 stat line and none with
+     a week-2 one — week 1 is final, week 2 was being played while the board
+     was drawn (FantasyPros 18 Sep, Sleeper and FFC 21 Sep). Worth stating
+     because the moves below read like form and are not: the two furthest
+     falls have no week-1 line at all.
   1. WHAT MOVED. 214 players priced on both boards — 95 up, 119 down — with a
      median absolute move of 9.1 picks and a mean of 13.8. The mean is twice
-     the median because the tails are injuries and job changes, not drift:
-     Isiah Pacheco 164.8 → 249, Josh Jacobs 35.9 → 115.7, Tank Dell 178.1 →
-     242.1 falling; MarShawn Lloyd 183.2 → 136.7 and Pat Freiermuth 235.2 →
-     194.3 rising.
+     the median because the tails are AVAILABILITY, not performance: Isiah
+     Pacheco 164.8 → 249 is on IR (status RES), Josh Jacobs 35.9 → 115.7 is
+     commissioner-exempt (EXE), and the furthest riser, MarShawn Lloyd 183.2
+     → 136.7, is the back who inherited Jacobs's job — depth 1 in Green Bay.
   2. WHAT CHANGED SHAPE. 234 rows, up from 221: 20 new (Cade Otton, Michael
      Penix Jr., Ricky Pearsall and the rest of the September waiver-wire
      market) and 7 gone (James Conner, Keon Coleman, Jaydon Blue…). A player
