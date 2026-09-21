@@ -19,7 +19,7 @@ import { seasonRows } from '../server/src/poll/projections.js';
 import { setLiveProjRate, clearLiveProjRate, projectedPoints, setLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
-import { setLiveDyn, clearLiveDyn, dynFor, setDynFormat } from '../packages/core/src/data/dyn2026.ts';
+import { setLiveDyn, clearLiveDyn, dynFor, setDynFormat, DYN_2026 } from '../packages/core/src/data/dyn2026.ts';
 import { setLivePickValues, clearLivePickValues, pickMarketValue } from '../packages/core/src/data/pickValues2026.ts';
 
 let fails = 0;
@@ -109,7 +109,18 @@ ok(dynFor('some-slug') === 12345, 'the live dynasty value answers in its own for
 setDynFormat('sf');
 ok(dynFor('some-slug') !== 12345,
   'and a screen reading the OTHER format falls through to the bake rather than taking a 1QB price');
+// A FRESH BOARD ANSWERS BY SILENCE TOO (v0.455.1) — the two-scale bug the
+// source audit measured: the live board is ~416 deep and the bake ~500, and
+// the players in between are where the scales disagree by up to 20×.
+setDynFormat('1qb');
+clearLiveDyn();
+const bakedSlug = [...DYN_2026.keys()][0];
+ok(dynFor(bakedSlug) != null, 'with no live board, the bake answers');
+setLiveDyn({ 'some-slug': 12345 }, '1qb');
+ok(dynFor(bakedSlug) === null,
+  'with a live board installed, a player it does not price reads null — the board\'s depth IS the market\'s opinion');
 setDynFormat('1qb'); clearLiveDyn();
+ok(dynFor(bakedSlug) != null, 'and clearing it hands the column back to the bake');
 setLivePickValues({ '2027 Mid 1st': 4242 }, '1qb');
 ok(pickMarketValue('2027', 1, '1qb') === 4242, 'the live pick board answers by the market\'s label');
 ok(pickMarketValue('2027', 1, 'sf') !== 4242, 'and never hands a 1QB price to a superflex question');

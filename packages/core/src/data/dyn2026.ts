@@ -541,10 +541,24 @@ export function clearLiveDyn(): void { liveDyn = null; liveDynFmt = null; }
 export const dynIsLive = (): boolean => liveDyn != null;
 
 export const dynFor = (slug: string): number | null => {
-  if (liveDyn && liveDynFmt === dynFormat) {
-    const live = liveDyn[slug];
-    if (live != null) return live;
-  }
+  // A FRESH LIVE BOARD ANSWERS FOR EVERYONE, INCLUDING BY SILENCE (v0.455.1).
+  //
+  // The obvious overlay — live value, else the baked one — puts TWO SCALES in
+  // one column, and the source audit measured exactly where: our rescale of
+  // the live board tracks the bake to within 2–4% through the top 200, drifts
+  // to ~0.9 by 300, and runs 1.6× (individually up to 20×) in the deep tail,
+  // where the baked values fall to 18 and a few points of absolute difference
+  // is a huge ratio. The live board is ~416 players and the bake ~500, so the
+  // players who would fall through to the bake are precisely the ones whose
+  // scales disagree most — a DYN column sorting a live 413 against a baked 18
+  // for two comparable players.
+  //
+  // So a fresh board's SILENCE is an answer, and it is the one this file's
+  // own header already gives: "board depth is the market source's top ~500; a
+  // player absent from the board is a market judgment (valued below the top
+  // 500), not missing data." The bake answers only when no live board is
+  // installed at all.
+  if (liveDyn && liveDynFmt === dynFormat) return liveDyn[slug] ?? null;
   // ID first: the pool's slug→sleeper-id map is authoritative where a screen
   // has installed it; the name join both backfills the id-less rows and keeps
   // every screen working when no pool ids are loaded.

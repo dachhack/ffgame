@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.455.1 — a fresh board answers by silence
+
+Re-running the source audit against v0.455.0 found a bug in v0.455.0, which
+is the point of having one.
+
+THE OBVIOUS OVERLAY WAS WRONG. "Live dynasty value, else the baked one" puts
+two scales in one column, and the audit measured exactly where: our rescale
+of the live board tracks the bake to a median ratio of 0.97 through the top
+200, 0.88 by 300, and diverges in the deep tail where baked values fall to 18
+and a handful of points is a 20× ratio. The live board is ~416 players and
+the bake ~500 — so the players who would fall through are precisely the ones
+whose scales disagree most. A DYN column could sort a live 413 against a
+baked 18 for two comparable players.
+
+So a fresh board's SILENCE is now an answer, and it is the one dyn2026's own
+header already gave: "board depth is the market source's top ~500; a player
+absent from the board is a market judgment, not missing data." The bake
+answers only when no live board is installed at all.
+
+THE AUDIT ITSELF HAD DRIFTED, too, and is corrected in the same commit:
+  · its dynasty section said a value-to-value diff would be "comparing two
+    scales" — true until v0.455.0 taught the worker to run the rescale, so it
+    now runs that arithmetic and diffs BY ID;
+  · it reported a mean absolute move of 56%, which was the METRIC failing
+    rather than the data (tail denominators of 18). Median ratio by rank band
+    replaces it, and the top-200 mean — 12.2%, a month of market — is what
+    the headline number should have been;
+  · its season section was still titled "our August bake vs the live board",
+    which stopped being what the app shows the moment the live board became
+    the level the engine scores off. It now says it is measuring the
+    fallback's error, not the app's.
+
 ### v0.455.0 — the other two bakes refresh themselves
 
 "Now automate the dynasty and projection rebakes too." Same question as

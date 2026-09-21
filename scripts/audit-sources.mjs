@@ -26,7 +26,7 @@
 // getting bitten by.
 import { PROJ_2026, PROJ_2026_SID } from '../packages/core/src/data/proj2026.ts';
 import { ADP_BY_SID, ADP_AS_OF } from '../packages/core/src/data/adp2026.ts';
-import { DYN_AS_OF } from '../packages/core/src/data/dyn2026.ts';
+import { DYN_AS_OF, DYN_BY_SID } from '../packages/core/src/data/dyn2026.ts';
 import { statheadFeed } from '../server/src/poll/projections.js';
 
 const SEASON = Number(process.env.SEASON || 2026);
@@ -282,7 +282,13 @@ await section(`This week's projection — ESPN vs StatHead (week ${WEEK})`, asyn
 });
 
 // ── 6. THIS SEASON'S PROJECTION ──────────────────────────────────────────
-await section('This season — our August bake vs the live board', async () => {
+// v0.455.0 CHANGED WHAT THIS MEASURES. The worker now stores the live season
+// rate and `projectedPoints` uses it as the LEVEL its league-scoring ratio
+// multiplies, so the live board is what a screen shows and the bake is the
+// fallback underneath it. This section is therefore no longer "how stale is
+// the number a user sees" — it is "how far has the fallback drifted", which
+// is the honest question about a fallback and still worth asking.
+await section('This season — the live board against the bake beneath it', async () => {
   // The weekly feed carries the season line (ppg × gp) with ids, which is
   // exactly what proj2026 stores as a per-week rate.
   const pairs = [];
@@ -296,7 +302,9 @@ await section('This season — our August bake vs the live board', async () => {
   const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
   say(`  ${pairs.length} players in both, joined by sleeper id`);
   say(`  mean drift ${mean(diffs).toFixed(2)} pts/week, mean absolute ${mean(diffs.map(Math.abs)).toFixed(2)}`);
-  say(`  (the bake is a season rate frozen in August; the live board blends what has actually happened)`);
+  say('  (the bake is a season rate frozen in August; the live board blends what has');
+  say('   actually happened, and since v0.455.0 it is the level the app scores off —');
+  say('   so this is the size of the fallback\'s error, not of the app\'s)');
   const moved = [...pairs].sort((a, b) => Math.abs(b.live - b.baked) - Math.abs(a.live - a.baked));
   say('  moved most since the bake:');
   for (const x of moved.slice(0, 12)) say(`       ${x.name} (${x.pos}): ${x.baked.toFixed(1)} → ${x.live.toFixed(1)} per week`);
@@ -339,8 +347,51 @@ await section('The market — our ADP and dynasty bakes vs the live ones', async
       say(`       ${m.name}: ${m.baked} → ${m.live}`);
     }
   }
-  say(`  dynasty bake as of ${DYN_AS_OF} — the live board is rescaled server-side, so a`);
-  say('  value-to-value diff would be comparing two scales; the rebake note in dyn2026 stands.');
+  // THE DYNASTY BOARD CAN BE COMPARED NOW (v0.455.0). This used to say a
+  // value-to-value diff would be comparing two scales, because the blend was
+  // computed inside a tool we could not call. The worker runs that rescale
+  // itself now — the upstream's own rule over the published KTC board — so
+  // the same arithmetic can be run here and diffed against the bake BY ID.
+  const [ktc, snap] = await Promise.all([
+    getJson(shFile('ktc_rankings_1qb.json'), 'ktc'),
+    getJson(shFile('dynasty-fc-rescale.json'), 'rescale'),
+  ]);
+  const { dynRows } = await import('../server/src/poll/dynasty.js');
+  const dynLive = dynRows(ktc, snap, xwalk, { sleeper: () => null, slugForName: () => null });
+  const dmoves = [];
+  for (const r of dynLive) {
+    if (r.kind !== 'player' || !r.sleeper_id) continue;
+    const baked = DYN_BY_SID.get(r.sleeper_id);
+    if (!baked || r.v1qb == null) continue;
+    dmoves.push({ name: xBySleeper.get(r.sleeper_id)?.display_name ?? r.sleeper_id, baked: baked[0], live: r.v1qb });
+  }
+  say(`\n  dynasty bake as of ${DYN_AS_OF}; the live rescale prices ${dynLive.length} rows,`
+    + ` ${dmoves.length} joined BY SLEEPER ID`);
+  // BY RANK BAND, NOT BY MEAN PERCENT. The first version of this measured a
+  // mean absolute percentage and reported 56%, which was the metric failing
+  // rather than the data: the deep tail's baked values fall to 18, where a
+  // few points of absolute difference is a 20× ratio. The median ratio inside
+  // a band says what is actually true — the two agree where the values mean
+  // anything, and diverge where neither is really pricing a player.
+  dmoves.sort((a, b) => b.baked - a.baked);
+  const bandRatio = (lo, hi) => {
+    const s = dmoves.slice(lo, hi).map((m) => m.live / m.baked).sort((a, b) => a - b);
+    return s.length ? s[Math.floor(s.length / 2)] : null;
+  };
+  for (const [lo, hi] of [[0, 100], [100, 200], [200, 300], [300, dmoves.length]]) {
+    const r = bandRatio(lo, hi);
+    if (r != null) {
+      say(`  baked rank ${String(lo + 1).padStart(3)}–${String(Math.min(hi, dmoves.length)).padStart(3)}:`
+        + ` median live/baked ${r.toFixed(2)}`);
+    }
+  }
+  const top = dmoves.slice(0, 200).map((m) => Math.abs(m.live - m.baked) / m.baked);
+  if (top.length) {
+    say(`  over the top 200, mean absolute move ${((top.reduce((a, b) => a + b, 0) / top.length) * 100).toFixed(1)}%`
+      + ' — a month of market, not a formula error');
+  }
+  say('  (the worker rebakes this weekly now; the tail divergence is why a fresh');
+  say('   live board answers by SILENCE rather than falling through — v0.455.1)');
 });
 
 // ── 8. THE SCHEDULE ──────────────────────────────────────────────────────
