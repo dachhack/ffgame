@@ -518,7 +518,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const bestball = leagueBestball(gameMode);
     const slotDefs = leagueSlotDefs(gameMode);
     {
-      const { data: ros } = await db().from('native_roster').select('roster_id,slug')
+      const { data: ros } = await db().from('native_roster').select('roster_id,slug,added_at')
         .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
         .in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
       // The pool row rides along: years_exp for the per-slot tenure filters
@@ -531,10 +531,25 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
           .eq('league_id', matchup.league_id).range(0, 1999);
         for (const r of lp ?? []) poolBySlug.set(r.slug, r);
       }
+      // A PICKUP COUNTS FROM THE GAME HE WAS OWNED FOR (v0.434.4). A player
+      // added after his team's kickoff this week does not enter the fills:
+      // with free agency open, an add after the box score is in would let a
+      // best-ball spot bank points nobody owned when they were scored. The
+      // tick hands the week's kickoffs (opts.teamKicks, team → ms); a player
+      // added before his kickoff — Sunday's 2pm waiver win for a 4:05 game —
+      // is on the roster like anyone drafted. Without kickoffs (the sim, a
+      // week with no slate) nothing is excluded.
+      const kicks = opts.teamKicks ?? null;
       for (const row of ros ?? []) {
         if (!rosters.has(row.roster_id)) rosters.set(row.roster_id, []);
         const lp = poolBySlug.get(row.slug);
-        rosters.get(row.roster_id).push({ ...player(row.slug), exp: lp?.exp ?? null, sleeperId: lp?.sleeper_id ?? null });
+        const p = { ...player(row.slug), exp: lp?.exp ?? null, sleeperId: lp?.sleeper_id ?? null };
+        if (kicks && row.added_at) {
+          const kick = kicks[normTeam(p.team ?? '')] ?? kicks[String(p.team ?? '').toUpperCase()];
+          const added = Date.parse(row.added_at);
+          if (Number.isFinite(kick) && Number.isFinite(added) && added > kick) continue;
+        }
+        rosters.get(row.roster_id).push(p);
       }
     }
     const sideOf = (picks, rosterId) => ({

@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.4 — a mid-week pickup joins the live week, and counts from the game he was owned for
+
+Mooney's Rehab Facility, Kickoff League, Sunday night: "confused on why it
+doesn't look like Coleman counted for my rookie best ball spot. App is
+showing me it counted Chris Bell who had 0 today … waivers look like they
+processed at 2 pm so I guess he didn't count on my roster before he
+played." Founder: "That's unintended."
+
+TWO READERS, TWO ANSWERS. The boards read the week's pool
+(sleeper_lineup.starters_json), which native_materialize (0064) rewrites
+from the rosters only for weeks whose every matchup is still 'scheduled'
+— so from the first kickoff a Sunday waiver win never reaches the week's
+pool, the picker cannot offer him, and the boards' best-ball preview
+cannot see him: the app showed Bell. The resolver reads native_roster
+directly (active spots, with league_pool.exp for the rookie-only spot's
+tenure filter), so the SCORE may already have counted Coleman; the
+screens said otherwise. scripts/db/rookie-spot-pickup-diag.sql reads
+both — the claim, the roster row, both pool rows (exp: a null is refused
+by a tenure-filtered spot), the week pool, the scored slot rows, and the
+kickoffs.
+
+THE POOL (0314). native_materialize refreshes a LIVE week ADD-ONLY: every
+active player missing from a seat's week row is appended (marked
+`added`), nothing already there is removed — a dropped man who already
+played stays on a board that holds his sealed pick — and a stashed
+pickup is not added. Scheduled weeks are rewritten as before; final weeks
+never touched. scripts/db/pickup-live-week-probes.sql pins all of it.
+
+THE RULE (resolver). A pickup counts from the game he was owned for: the
+tick hands the resolver the week's kickoffs (opts.teamKicks) and a player
+whose native_roster.added_at is after his team's kickoff this week stays
+out of the fills. With free agency open, an add after the box score is in
+must not let a best-ball spot bank points nobody owned when they were
+scored; a 2pm waiver win for a 4:05 game is on the roster like anyone
+drafted. Without kickoffs (the sim, a week with no slate) nothing is
+excluded. The week's matchups are still live until Monday night, so the
+next resolve pass after deploy scores Mooney's week with Coleman where he
+belongs.
+
 ### v0.434.3 — the field knows halftime, and the play-by-play carries the stoppages
 
 Founder, at halftime of IND–KC with the field frozen on "Q2 00:35": "It's
