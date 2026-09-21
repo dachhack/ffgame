@@ -30,6 +30,24 @@ export interface GamePlay {
   hs: number;       // home score after the play
   as: number;       // away score after the play
 }
+/** THE GAME'S STATUS (v0.434.3, 0313) — what ESPN's header says the clock is
+ *  doing, which the plays alone cannot say: halftime, the end of a quarter, a
+ *  delay, the live clock between snaps. Live rows only; the simulator and the
+ *  baked replays carry none, and readers fall back to the last play's clock. */
+export interface GameStatus {
+  /** ESPN's id: STATUS_IN_PROGRESS, STATUS_HALFTIME, STATUS_END_PERIOD, STATUS_FINAL, STATUS_DELAYED, … */
+  name?: string | null;
+  /** ESPN's words: "Halftime", "End of 2nd Quarter", "2:35 - 3rd". */
+  detail?: string | null;
+  short?: string | null;
+  period?: number | null;
+  /** The live display clock, "12:04". */
+  clock?: string | null;
+}
+/** A CLOCK STOPPAGE on the play-by-play (v0.434.3): a timeout, the two-minute
+ *  warning, the end of a period, of the half, of the game, the coin toss —
+ *  the rows the field adapter skips because they have no field situation. */
+export interface GameEvent { c: number; ty: string; txt: string; tm?: string }
 export interface WeekGameFeed {
   games: Record<string, GamePlay[]>; // "AWAY@HOME" -> plays
   teams: Record<string, string>;     // team abbr -> "AWAY@HOME"
@@ -37,12 +55,17 @@ export interface WeekGameFeed {
   gids?: Record<string, string>;     // "AWAY@HOME" -> source game id (live_play's
                                      // game_id vocabulary) — the box score's exact
                                      // membership key (v0.369.0); live rows only
+  statuses?: Record<string, GameStatus>; // "AWAY@HOME" -> the header's status (v0.434.3), live rows only
+  events?: Record<string, GameEvent[]>;  // "AWAY@HOME" -> the stoppages (v0.434.3), live rows only
 }
 export interface TeamGameFeed { key: string; away: string; home: string; plays: GamePlay[]; st?: string | null; gid?: string | null;
   /** Kickoff, ISO, when the caller handed us the week's schedule (v0.413.0).
    *  A game seeded from the SLATE has no plays and nothing else to say, so the
    *  time is the whole card. */
-  kickoff?: string | null; }
+  kickoff?: string | null;
+  /** The header's status and the stoppages (v0.434.3), when the row carries them. */
+  status?: GameStatus | null;
+  events?: GameEvent[]; }
 /** A scheduled game, as the slate knows it — enough to draw a card for a game
  *  that has not kicked off. */
 export interface ScheduledGame { away: string; home: string; kickoff?: string | null }
@@ -72,18 +95,22 @@ function widenTeams(wk: WeekGameFeed): WeekGameFeed {
 }
 
 /** game_feed DB rows → a week's {games, teams} (mirrors the baker's shape). */
-export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null; game_id?: string | null }[]): WeekGameFeed {
+export function feedRowsToWeek(rows: { key: string; away: string; home: string; plays: GamePlay[]; state?: string | null; game_id?: string | null; status?: GameStatus | null; events?: GameEvent[] | null }[]): WeekGameFeed {
   const games: Record<string, GamePlay[]> = {};
   const teams: Record<string, string> = {};
   const states: Record<string, string> = {};
   const gids: Record<string, string> = {};
+  const statuses: Record<string, GameStatus> = {};
+  const events: Record<string, GameEvent[]> = {};
   for (const r of rows) {
     games[r.key] = r.plays ?? [];
     teams[r.away] = r.key; teams[r.home] = r.key;
     if (r.state) states[r.key] = r.state;
     if (r.game_id) gids[r.key] = r.game_id;
+    if (r.status && typeof r.status === 'object') statuses[r.key] = r.status;
+    if (Array.isArray(r.events) && r.events.length) events[r.key] = r.events;
   }
-  return widenTeams({ games, teams, states, gids });
+  return widenTeams({ games, teams, states, gids, statuses, events });
 }
 /** Install the week's live game feeds; makes that week resolve live-only. */
 export function setLiveGameFeed(week: number, feed: WeekGameFeed): void { liveFeeds.set(week, widenTeams(feed)); }
@@ -148,7 +175,7 @@ export function allGameFeeds(week: number): TeamGameFeed[] {
   if (!wk) return [];
   return Object.entries(wk.games).map(([key, plays]) => {
     const [away, home] = key.split('@');
-    return { key, away, home, plays: plays ?? [], st: wk.states?.[key] ?? null, gid: wk.gids?.[key] ?? null };
+    return { key, away, home, plays: plays ?? [], st: wk.states?.[key] ?? null, gid: wk.gids?.[key] ?? null, status: wk.statuses?.[key] ?? null, events: wk.events?.[key] ?? [] };
   });
 }
 
@@ -368,5 +395,5 @@ export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | 
   const plays = key ? wk?.games[key] : undefined;
   if (!key || !plays) return null;
   const [away, home] = key.split('@');
-  return { key, away, home, plays, st: wk?.states?.[key] ?? null, gid: wk?.gids?.[key] ?? null };
+  return { key, away, home, plays, st: wk?.states?.[key] ?? null, gid: wk?.gids?.[key] ?? null, status: wk?.statuses?.[key] ?? null, events: wk?.events?.[key] ?? [] };
 }

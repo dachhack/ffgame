@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.3 — the field knows halftime, and the play-by-play carries the stoppages
+
+Founder, at halftime of IND–KC with the field frozen on "Q2 00:35": "It's
+halftime for this game. Is half time and other clock stoppage events
+something we can tell and show on the field and play by play?"
+
+WE COULD TELL AND DID NOT KEEP IT. ESPN's summary header carries the
+game's STATUS — STATUS_HALFTIME, STATUS_END_PERIOD, STATUS_DELAYED, the
+live period and display clock — and its drives carry the clock-management
+plays (timeouts, the two-minute warning, End Period, End of Half, End of
+Game, the coin toss) that the field adapter skips because they have no
+field situation. 0103 kept one word of the status (pre|in|post) so
+halftime would not read as FINAL; the rest was dropped at the poller, and
+every clock on screen was the LAST PLAY's snap time.
+
+THE FEED (0313). game_feed gains `status` {name, detail, short, period,
+clock} and `events` [{c, ty, txt, tm?}]; the poller writes both from the
+adapter's new gameStatus / gameEvents; the client read carries them to
+TeamGameFeed. Both are optional: the simulator and the baked replays write
+neither and every reader falls back to the last play's clock, as before.
+
+THE WORDS (core gameView). `stoppageLabel` — HALFTIME, END OF Q1 (the end
+of the 2nd quarter IS halftime), DELAYED, FINAL; `liveClockLabel` — the
+live display clock as "Q3 12:04" while in progress (period 5 is OT);
+`clockLabelFor` — the strip's one call: FINAL, a stoppage, the live clock,
+or the last play's clock; `shortClockLabel` — the chip's word (HALF, END
+Q1, DELAY, Q3); `eventLabel` — TWO-MINUTE WARNING, TIMEOUT · KC, END OF
+Q1, HALFTIME, FINAL, COIN TOSS; `gameLog` — plays and stoppages in clock
+order, a stoppage AFTER the play at its clock. check:gamestatus pins all
+of it (in check:parity).
+
+THE SCREENS (both hosts). The score strip and the game header say
+HALFTIME / END OF Q3 / DELAYED, or the live clock between snaps; the
+field's situation chip says the stoppage; the LAST PLAY line reads
+"● HALFTIME · LAST PLAY"; the all-fields strip chips say HALF / END Q1 /
+Q3; and the play-by-play carries the stoppages as dividers at their clock
+("— HALFTIME · Q2 00:00 —", "— TIMEOUT · KC · Q2 01:40 —", with ESPN's
+sentence under a timeout). The field itself is untouched: a stoppage has
+no play to draw.
+
 ### v0.434.2 — the app's classic board switches matchups from a list
 
 Founder, on the Kickoff League board in the app: "We need switch between
