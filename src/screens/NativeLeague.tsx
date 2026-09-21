@@ -3236,6 +3236,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               Leading with a padlock and an hour he cannot use reads as "shut",
               even standing in front of a board of live BID buttons. Say what
               works now; the hour is the footnote, not the headline. */}
+          {team.wire_block ? ` · 🔒 ${team.wire_block}` : ''}
           {team.fa_open === false
             ? (team.fa_start_min != null
                 ? ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — free agency opens ${fmtEtMin(team.fa_start_min)} ET`

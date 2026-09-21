@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.436.0 — the commissioner's desk
+
+Founder, holding Sleeper's Commish tab against ours: "build the gaps in
+that order." Six, in his order, in 0320, both consoles and the API.
+
+  1. CO-COMMISSIONERS. league_commish; is_league_commish and
+     is_matchup_commish read it, so every commissioner RPC in the schema
+     admits a co-commissioner at once (the probe has one change the rules
+     and force-move a player). Adding, removing and handing over stay with
+     the PRIMARY commissioner, as does deleting the league; a co may step
+     down. A hand-over keeps the old primary on as co. commish_overview
+     lists a co-commissioner's leagues, flagged not primary.
+  2. TWO LOCKS. settings_json.wire_lock shuts every free-agent and waiver
+     move in the league (adds, drops, claims — the worker's too);
+     league_membership.wire_locked shuts one team's (adds, drops, claims,
+     and offering or accepting a trade). Both answered by wire_block_reason,
+     which every wire RPC asks — drop_player now asks it too. The
+     commissioner's own force-moves are not on the wire and still work. The
+     team screen says why the wire is shut (native_team_state.wire_block).
+  3. THE WAIVER ORDER, set at once (commish_set_waiver_priority — every
+     roster exactly once, first pick first). LINEUPS: a commissioner may
+     write a CLASSIC team's lineup (sealed_pick policies, same kickoff
+     lock as the manager); classic only — a drip league's picks are hidden
+     and that is the game. The permission is in; the screens do not yet
+     offer "edit as commissioner" (a co-manager-style acting seat is the
+     path, and a round of its own).
+  4. THE MEDIAN GAME. settings_json.median_game: every regular-season week
+     each team also plays the league median — above it a win, below a
+     loss, on it a tie. Wins and losses only; points for/against stay
+     real. Standings carry median_w / median_l beside the record.
+  5. SCORE EDITS. commish_set_matchup_score on a FINAL matchup; standings
+     read the finals, so records follow at once; the chat is told. A
+     playoff round already drawn is not re-drawn. commish_week_scores
+     reads a week for the editor.
+  6. DUES. settings_json.dues_amount / dues_note and league_dues (paid per
+     seat, when); the whole league may read the tracker.
+
+CONSOLES. Web: COMMISSIONERS, LOCKS and DUES under SEATS; WAIVER ORDER and
+the MEDIAN GAME under WAIVERS & TRADES; EDIT SCORES under MATCHUPS
+(src/screens/CommishDesk.tsx). Mobile: COMMISSIONERS, LOCKS, WAIVER ORDER
+and EDIT SCORES under RUN THE SEASON, DUES under MONEY
+(apps/mobile/src/ui/CommishDesk.tsx).
+
+Probes: scripts/db/commish-desk-probes.sql; sleeper-parity, door-opens,
+waiver-holes, fa-off, agent-wire, waiver-rules, drop-lock and
+team-manager still pass beside it. Web and mobile typecheck.
+
 ### v0.435.0 — four Sleeper settings
 
 Founder, holding Sleeper's General Settings against ours: "Do we have these

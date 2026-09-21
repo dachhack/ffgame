@@ -46,6 +46,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, ScoresPanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -1588,6 +1589,8 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         <div style={{ marginTop: 12 }}>
           <div style={subhead}>WAIVERS &amp; TRADES</div>
           <TransactionRulesEditor leagueId={l.league_id} />
+          <WaiverOrderPanel leagueId={l.league_id} />
+          <MedianGamePanel leagueId={l.league_id} />
         </div>
       )}
 
@@ -1823,6 +1826,11 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             </div>
           ))}
           <CoManagerPanel leagueId={l.league_id} members={members} />
+          {/* THE COMMISSIONER'S DESK (0320): who else holds the keys, which
+              teams (or the whole wire) are locked, and who has paid. */}
+          <CommissionersPanel leagueId={l.league_id} />
+          {l.provider === 'native' && <LocksPanel leagueId={l.league_id} members={members} />}
+          {l.provider === 'native' && <DuesPanel leagueId={l.league_id} />}
         </div>
       )}
       {/* K/DST fill (v0.216.2) — a setup decision about what the league
@@ -1883,6 +1891,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
       {tab === 'matchups' && !matchups && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
+      {tab === 'matchups' && l.provider === 'native' && <ScoresPanel leagueId={l.league_id} />}
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 12 }}>
           <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>
