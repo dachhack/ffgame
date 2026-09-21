@@ -18,6 +18,58 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.8 — the door opening clears the claims
+
+Founder: "I set waivers to run at 2pm then opened free agency but the
+waivers still ran at 2pm. Can we sweep for conflicts and changes like that?"
+
+WHAT HAPPENED. With free agency off every add is a claim, stamped with the
+league's next run (0291) — 2pm. Opening free agency changed nothing about
+those claims: their stamp still said 2pm and the run reads the stamp.
+Meanwhile the players they named had become free agents, so until 2pm
+anyone could add one outright and the claim behind him — filed first —
+would lose 'player taken' at the run. The setting and the pending state
+disagreed, and the pending state won. 0318.
+
+THE SWEEP — every commissioner setting that touches the wire, against the
+state it leaves behind:
+  • run time / run days — 0292 re-dates holds and claims. fine.
+  • hold days — same. fine.
+  • FREE AGENCY off→open, off→window, window hours, after-waivers days —
+    nothing re-dated, nothing settled. FIXED.
+  • agent waivers off — the worker stopped filing but its pending claims
+    still won at the run. FIXED: they are cancelled with the reason.
+  • waiver mode / budget — bids re-checked against the new budget at the
+    run. fine. (A budget change resets spending by design; both consoles
+    send it only when edited.)
+  • roster / position limits — re-checked per claim at the run. fine.
+  • vampire lock (0316), guillotine chop (0221), trades moving a claim's
+    drop or add (0316 / 'player taken') — fine.
+
+THE RULE, in three places so no path can miss it:
+  1. process_waivers: a claim on an UNHELD player is due whenever the add
+     market is open, whatever its stamp says. Fixes the founder's league
+     for any way the door gets opened — console, data migration, a window
+     arriving. Held players are untouched: the door cannot reach them until
+     the hold ends, and the hold is on the run's schedule (0292).
+  2. submit_waiver_claim and _restamp_waiver_clocks stamp the forecast —
+     LEAST(the run, the door) for an unheld player — so the claim screen
+     tells the truth. 0291's point stands where it was made: a door later
+     than the run never delays the run.
+  3. set_transaction_rules settles what its own change made due, in the
+     same transaction, and cancels the worker's pending claims when agent
+     waivers are switched off. add_free_agent's pre-add sweep now settles
+     ANY pending claim on the player, not only the due-by-stamp ones.
+
+ON DEPLOY: any claim sitting in a league whose free agency is open settles
+on the next sweep (within 25s) — the ones that waited for 2pm.
+
+Probes: scripts/db/door-opens-probes.sql (console opens the door; a data
+fix opens it; an add settles the claim first; a held player untouched; a
+window arriving; agents off; a rolling league). fa-off-probes fo24 re-read
+for the new rule (door before run → door; door after run → run; no door →
+run); waiver-holes, agent-wire, waiver-rules and drop-lock still pass.
+
 ### v0.434.7 — no drops after kickoff
 
 Founder, on the audit's open question: "block drops after kickoff too."

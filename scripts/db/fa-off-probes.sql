@@ -349,7 +349,8 @@ end $$;
 -- still says they clear at 4am." 0289 pinned a claim to the free-agency door,
 -- which made the one setting labelled "waivers clear at…" inert. The league's
 -- own run is the deadline; the door is only the fallback for a rolling league
--- that has no run.
+-- that has no run. (0318 refined it for an UNHELD player: the run, or the
+-- door if the door comes first — at the door anyone could add him outright.)
 do $$
 declare lid uuid := current_setting('probe.fo_lid')::uuid; seat int; free_slug text; drop_slug text;
         r jsonb; et_now int; want int; ran timestamptz;
@@ -396,10 +397,28 @@ begin
   select slug into drop_slug from native_roster where league_id = lid and roster_id = seat limit 1;
   r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 3);
   perform fo_ok(r, 'fo24 a claim is accepted');
+  -- 0318 re-read this: he is UNHELD, and the moment the door opens anyone
+  -- may add him outright — a claim still waiting for a later run would be
+  -- sniped at the door. So the stamp is whichever comes first, the run or
+  -- the door; here the door. 0291's point stands where it was made: a door
+  -- LATER than the run never delays the run (fo24c), and no door at all
+  -- leaves the run alone (fo24d).
+  perform fo_true((r ->> 'clears_at')::timestamptz = fa_opens_at(lid)
+    and (r ->> 'clears_at')::timestamptz < next_waiver_run(lid),
+    'fo24a and clears at the DOOR, which opens before the run');
+  perform fo_ok(cancel_waiver_claim((r ->> 'claim_id')::uuid), 'fo24b (withdrawn)');
+  perform fo_ok(set_transaction_rules(lid, p_fa_start_min => (et_now + 300) % 1440, p_fa_end_min => (et_now + 301) % 1440),
+    'fo24c the window moved to AFTER the run');
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 3);
+  perform fo_ok(r, 'fo24c a claim is accepted');
   perform fo_true((r ->> 'clears_at')::timestamptz = next_waiver_run(lid),
-    'fo24a and clears at the RUN — the setting the commissioner actually set');
-  perform fo_true((r ->> 'clears_at')::timestamptz <> fa_opens_at(lid),
-    'fo24b not at the free-agency door, which is 0289s bug');
+    'fo24c and clears at the RUN — the door does not delay it');
+  perform fo_ok(cancel_waiver_claim((r ->> 'claim_id')::uuid), 'fo24c (withdrawn)');
+  perform fo_ok(set_transaction_rules(lid, p_fa_mode => 'off'), 'fo24d no free agency at all');
+  r := submit_waiver_claim(lid, seat, free_slug, drop_slug, 3);
+  perform fo_ok(r, 'fo24d a claim is accepted');
+  perform fo_true((r ->> 'clears_at')::timestamptz = next_waiver_run(lid),
+    'fo24d and clears at the RUN — the only clock that mode has');
 
   -- MOVING THE TIME MOVES THE CLAIM. This is the "still says 4am" half.
   want := (et_now + 600) % 1440;
