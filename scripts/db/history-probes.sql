@@ -113,11 +113,33 @@ begin
   -- read from EITHER season
   perform h_true((league_history(lid2) ->> 'seasons_count')::int = 2, 'h2 the same history from either end');
 
-  -- ── h3. who may read it ──
+  -- ── h3. who may read it, and how much of it ──
+  -- REWRITTEN FOR 0332. This suite was written before the public API existed
+  -- and asserted that a stranger read NOTHING. 0326/0327 deliberately opened
+  -- a native league's history to whoever holds its id — a league's record
+  -- book is one of the two things it most wants to show off — and the
+  -- assertion that matters now is that opening the door did not hand out the
+  -- ACCOUNTS behind the seats. 0324 keyed managers on app_user_id; that id is
+  -- ours, not the internet's.
   perform h_as('03');
-  perform h_true(league_history(lid) ->> 'error' = 'forbidden', 'h3 a stranger reads nothing');
+  h := league_history(lid);
+  perform h_true((h ->> 'ok')::boolean and (h ->> 'redacted')::boolean,
+    'h3 a stranger reads a public league''s history, and is told it is redacted');
+  perform h_true(not (h::text like '%app_user_id%'),
+    'h3 and it carries no account id anywhere in it');
+  perform h_true((h ->> 'seasons_count')::int = (league_history(lid) ->> 'seasons_count')::int,
+    'h3 the same document otherwise — one key dropped, not a second surface');
+  perform h_as('01');
+  perform h_true((commish_set_public_api(lid, false) ->> 'ok')::boolean, 'h3 the commissioner opts out');
+  perform h_as('03');
+  perform h_true(league_history(lid) ->> 'error' = 'forbidden',
+    'h3 and a closed league refuses a stranger outright, as it always did');
+  perform h_as('01');
+  perform h_true((commish_set_public_api(lid, true) ->> 'ok')::boolean, 'h3 back open');
   perform h_as('02');
-  perform h_true((league_history(lid) ->> 'ok')::boolean, 'h3 a member reads it');
+  h := league_history(lid);
+  perform h_true((h ->> 'ok')::boolean and not (h ? 'redacted'), 'h3 a member reads it whole');
+  perform h_true(h::text like '%app_user_id%', 'h3 with the account ids the app''s own screens key on');
   -- a manager who only ever joined the NEW season still sees the old ones
   perform h_as('01');
   update league_membership set app_user_id = '00000000-0000-0000-0000-000000001504', team_name = 'H-NEWCOMER'

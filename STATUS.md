@@ -18,6 +18,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.450.0 — the history is not the account
+
+A leak, found by running the whole probe suite during the StatHead audit
+rather than by anything the audit was looking for.
+
+0324 keyed the record book on `app_user_id`, so a seat that changed hands
+keeps two honest manager lines, and gated the surface on membership. 0326
+needed that gate to admit an anonymous caller — the public API's whole
+audience — so `_may_read_history` grew "or the league is public", and 0327
+made a native league public by default. `api_history` was careful to strip
+the account ids on the way out. **`league_history` is granted to
+`authenticated`**, so any signed-in account could call it directly against
+any public league and be handed that league's managers' account ids. The
+API's redaction was a wrapper around a door that was already open.
+
+  1. THE REDACTION MOVES INTO `league_history` (0332), which is the only
+     place that can guarantee it. A member, a commissioner of any season in
+     the lineage, or an admin reads the history whole. Anybody else reading
+     a public league gets the same document with `app_user_id` dropped, the
+     manager key replaced by a stable opaque handle, and `redacted: true`
+     saying so. A league that opted out is refused outright, as always.
+  2. 0324'S OWN PROBE SAID SO and had been failing since 0326 — "h3 a
+     stranger reads nothing". It was missed because a psql suite prints its
+     final PASS line whether or not the block above it threw, and a
+     by-hand `| tail -4` shows only that line. The harness itself catches it
+     (`ON_ERROR_STOP` + `pipefail`); three older suites were failing ahead
+     of it and the run never got that far.
+  3. THE PROBE IS REWRITTEN to the contract we actually want, which is not
+     the one it was written for: a public league's record book IS readable
+     by whoever holds its id — that is the point of 0327 — and what must
+     never leave is the accounts behind the seats.
+
+Full suite after this: 106 pass, 3 fail — the same three that fail on `main`
+(`classic-open-lineups`, `dropped-pick`, `draft-midseason`), still
+pre-existing and still not this work's.
+
 ### v0.449.0 — one player, every id
 
 The audit's third finding, and the one that was a promise we were not
