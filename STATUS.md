@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.7 — no drops after kickoff
+
+Founder, on the audit's open question: "block drops after kickoff too."
+A manager could drop a player whose game had already started — in a drip
+league outright (0179's kickoff lock is classic-only), and in a classic
+league through the waiver run and the agent wire, which act as the server
+and pass the trigger. Nothing was won by it (the sealed pick still scored,
+the pickup could not play this week), but it is the rule every other
+platform has. 0317.
+
+THE RULE, one function: drop_lock_reason(league, slug) — his game in the
+league's live week has kicked off and the week is not yet final. Built on
+0179's league_pool → nfl_slate join and league_live_week, so he unlocks
+the moment the week goes final, exactly when 0179's lock lets go.
+
+ASKED at every manager-facing drop, as an answer, not a raise:
+  • drop_player — refused;
+  • add_free_agent — refused when the drop has kicked off (adding a started
+    player is still fine; his windows are simply locked);
+  • submit_waiver_claim — a started player cannot be NAMED as the drop, even
+    for a claim that clears after the week (Sleeper's rule: he is locked);
+  • process_waivers — a claim filed before he kicked off and settled after:
+    he stays, and the claim goes through only where the seat had room
+    without him (0316's drop-as-means shape), else loses with the reason.
+The classic trigger is untouched, and NOT widened to drip: guillotine_tick
+runs from the team screen with a manager's uid, and a raise there would jam
+the blade.
+
+Probes: scripts/db/drop-lock-probes.sql (drip: drop, add-with-drop, claim
+naming, the run into an open seat and a full one, the week going final;
+classic: the worker's agent seat refused). waiver-holes, fa-off,
+agent-wire and waiver-rules suites still pass alongside it.
+
 ### v0.434.6 — the waiver run's holes
 
 Founder: "So let's check the waiver system for holes." The run read end to
