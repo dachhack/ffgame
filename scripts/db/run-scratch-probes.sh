@@ -197,3 +197,4 @@ $RUN -f scripts/db/multi-trade-probes.sql | grep -E "PROBE FAIL|ALL MULTI-TRADE 
 $RUN -f scripts/db/conditional-claim-probes.sql | grep -E "PROBE FAIL|ALL CONDITIONAL-CLAIM PROBES" || { echo "CONDITIONAL-CLAIM PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/history-probes.sql | grep -E "PROBE FAIL|ALL HISTORY PROBES" || { echo "HISTORY PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/award-probes.sql | grep -E "PROBE FAIL|ALL AWARD PROBES" || { echo "AWARD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/public-api-probes.sql | grep -E "PROBE FAIL|ALL PUBLIC-API PROBES" || { echo "PUBLIC-API PROBES FAILED"; exit 1; }

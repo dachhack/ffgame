@@ -9,7 +9,7 @@ import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, adminLeagueMembers, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
-  leagueAwards, commishSetAward, commishDeleteAward,
+  leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
@@ -182,6 +182,36 @@ export function WaiverOrderCard({ leagueId }: { leagueId: string }) {
       <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
         Every regular-season week each team also plays the league's median score: above it a win, below it a loss. Points are untouched.
       </Mono>
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── The public read API (0326) ───────────────────────────────────────────────
+// One switch. Off means 404 — the API cannot even be used to confirm the
+// league exists.
+export function PublicApiCard({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => rosterRules(leagueId).then((r) => { if (r.ok) setOn(r.public_api === true); })
+    .catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const toggle = async () => {
+    if (busy || on === null) return;
+    setBusy(true); setMsg(null);
+    try { const r = await commishSetPublicApi(leagueId, !on); if (r.ok) { commit(); setMsg('✓ saved'); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); } }
+    catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  return (
+    <Card>
+      <LabelInfo label="PUBLIC READ API" info={'Published means anyone can read this league — settings, rosters, standings, scores, the register, completed trades, the draft, history and awards — with no login, from anything that can make a web request. Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, emails, invite codes and chat.'} />
+      <Row>
+        <Chip label={on ? 'PUBLISHED' : 'PRIVATE'} on={on === true} disabled={busy || on === null}
+          onPress={() => { tap(); void toggle(); }} />
+      </Row>
+      {on && <Mono size={8.5} tone="you" style={{ marginTop: 6 }}>{publicApiUrl(leagueId)}</Mono>}
       <Note msg={msg} />
     </Card>
   );

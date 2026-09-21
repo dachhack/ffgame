@@ -7,6 +7,7 @@
 //   · MedianGamePanel    — the extra game against the league median (same)
 //   · TradeFloorPanel    — 0321: the review mode, the vote and the offer clock (same)
 //   · AwardsPanel        — 0325: the league's own weekly awards and badges (ENGAGE)
+//   · PublicApiPanel     — 0326: publish this league to the anonymous read API (same)
 //   · ScoresPanel        — a final week's scores, edited by hand (MATCHUPS)
 //   · DuesPanel          — dues, and who has paid (SEATS)
 // Every panel loads its own state and saves on the click, the way the pick-
@@ -17,7 +18,7 @@ import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
-  leagueAwards, commishSetAward, commishDeleteAward,
+  leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
@@ -272,6 +273,38 @@ export function TradeFloorPanel({ leagueId }: { leagueId: string }) {
           disabled={busy || faab === null} className="mono" style={btn(faab === true)}>{faab ? 'ON' : 'OFF'}</button>
       </div>
       <div style={{ ...small, marginTop: 6 }}>With the league voting, an accepted trade waits out its window while every team outside it may veto or allow. It dies the moment the vetoes reach the bar, and goes through as soon as they cannot. You can still rule over a vote in progress. FAAB trading applies to FAAB leagues only.</div>
+    </div>
+  );
+}
+
+// ── The public read API (0326) ───────────────────────────────────────────────
+// One switch, and the URL it turns on. Off means 404 — the API cannot even be
+// used to confirm the league exists.
+export function PublicApiPanel({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => rosterRules(leagueId).then((r) => { if (r.ok) setOn(r.public_api === true); })
+    .catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const base = publicApiUrl(leagueId);
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>PUBLIC READ API</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={() => { if (busy || on === null) return; setBusy(true); setMsg(null);
+          commishSetPublicApi(leagueId, !on).then((r) => setMsg(r.ok ? '✓ saved' : r.error ?? 'failed'))
+            .catch((e) => setMsg(errMsg(e, 'failed')))
+            .finally(() => { setBusy(false); load(); }); }}
+          disabled={busy || on === null} className="mono" style={btn(on === true)}>{on ? 'PUBLISHED' : 'PRIVATE'}</button>
+        {note(msg)}
+      </div>
+      {on && (
+        <div className="mono" style={{ ...small, marginTop: 6, wordBreak: 'break-all', color: 'var(--you)' }}>{base}</div>
+      )}
+      <div style={{ ...small, marginTop: 6 }}>
+        Published means anyone can read this league — settings, rosters, standings, scores, the register, completed trades, the draft, history and awards — with no login, from anything that can make a web request. It is how rankings sites, spreadsheets and Discord bots plug in. Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, email addresses, invite codes and chat. Private is the default for a full league, and a private league is a 404 — the API cannot be used to check that it exists.
+      </div>
     </div>
   );
 }

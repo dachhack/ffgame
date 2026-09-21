@@ -18,6 +18,63 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.442.0 — the league, readable by anything
+
+The gap list's fourth priority, and the reason it is on it: the Sleeper
+ecosystem — KTC, DynastyProcess, ffscrapr — exists because anyone can read a
+Sleeper league without logging in. Nobody builds a valuation tool, a Discord
+bot or a spreadsheet against a platform they have to authenticate with
+first. 0326 plus supabase/functions/public-api.
+
+  1. THE SHAPE. Thirteen endpoints, each assembled by ONE SQL function
+     (api_*), with the edge function as a router and nothing else. That split
+     is the point: what the API exposes is a contract written in one file
+     rather than an accident of which columns a query happened to select.
+     GET only, no key, CORS open, `/v1/openapi.json` describes itself.
+     League · teams · rosters · standings · matchups · lineups ·
+     transactions · trades · draft · picks · players · history · awards.
+  2. OPT-IN, PER LEAGUE. settings_json.public_api, one switch on the
+     commissioner's desk. Off for a full league until its commissioner turns
+     it on; ON by default for the public formats (pods, weekly showdowns,
+     DFS), which anyone with the link can already open. A league that has not
+     opted in is a 404 — byte-identical to one that does not exist, so the
+     API cannot be used to test whether a league id is real.
+  3. WHAT IS NEVER IN IT, enforced where the data is:
+     · SEALED PICKS before their window reveals. api_lineups asks
+       window_revealed() — the same question the app asks before it shows an
+       opponent's pick. An endpoint that served them early would be an
+       exploit with a URL.
+     · PENDING waiver claims and bids: blind bidding stops being blind the
+       moment an outsider can poll it. Settled claims only, with the winning
+       bid the league already heard in chat.
+     · TRADE OFFERS in flight: members see negotiations, the internet does
+       not. Executed, vetoed and expired only.
+     · Emails, claim emails, invite codes, chat, dues. The all-time manager
+       line carries an opaque handle rather than the account id 0324 keys on.
+  4. MANNERS. A token bucket per IP in the database (600/min, burst 120) so
+     every instance shares one meter; weak ETags and Cache-Control per
+     endpoint, so a poller that sends If-None-Match gets a 304 and no body;
+     cursor paging on the register; {error:{code,message}} with real status
+     codes.
+
+PINNED. scripts/check-public-api.mjs (in check:parity) asserts every route
+the router names exists in 0326, that no api_ function touches a forbidden
+column, and specifically that api_lineups still asks window_revealed and
+api_trades still serves settled deals only — the two regressions that would
+matter and that nothing else would catch.
+
+CONSOLE. PUBLIC READ API under 🏅 AWARDS & BADGES on both hosts: the switch,
+the exact base URL for this deployment, and a plain-English list of what is
+and is not served. docs/public-api.md is the written version; the deploy
+workflow grew a public-api target (--no-verify-jwt, by design).
+
+Probes: scripts/db/public-api-probes.sql (wired into the scratch runner) —
+the switch both ways, every endpoint answered ANONYMOUSLY, closed and
+nonexistent being the same answer, an unrevealed pick and a pending bid and
+a live offer all absent, no email or invite code anywhere in any payload,
+and the meter emptying and refilling. 102 suites pass beside it; the three
+that do not fail identically on main. Web and mobile typecheck.
+
 ### v0.441.0 — the league writes its own trophies
 
 The last piece of the history row. Sleeper posts weekly awards to chat,

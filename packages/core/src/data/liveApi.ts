@@ -9,6 +9,7 @@ import { setLiveInjuries, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
+import { supabaseUrl } from './liveConfig';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
@@ -2076,6 +2077,8 @@ export const rosterRules = (leagueId: string) =>
         trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
         /** 0321: the trade floor. trade_veto_votes is the EFFECTIVE bar;
          *  trade_veto_votes_set is null while it is the majority fallback. */
+        /** 0326: is this league served by the anonymous public read API? */
+        public_api?: boolean;
         trade_review_hours?: number; trade_veto_votes?: number;
         trade_veto_votes_set?: number | null;
         trade_offer_days?: number; faab_trading?: boolean;
@@ -2206,6 +2209,23 @@ export const commishSetTradeRules = (
       p_league_id: leagueId, p_review: review, p_review_hours: reviewHours,
       p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
     }), Ev.commishAction, { tool: 'trade_rules' });
+
+// ── The public read API (0326) ───────────────────────────────────────────────
+/** Is this league readable by the anonymous public API? Off for a private
+ *  league until its commissioner turns it on; on by default for the public
+ *  formats (pods, weekly showdowns), which are already open to anyone with
+ *  the link. A league that is off is a 404 to the API — indistinguishable
+ *  from one that does not exist. */
+/** The base URL this deployment's public API answers on. The edge function
+ *  lives under the project host (the same host `auth.dripfantasy.com` already
+ *  points at), so this is the URL that actually works today; a prettier
+ *  `api.dripfantasy.com` is a DNS step, not a code one (docs/public-api.md). */
+export const publicApiUrl = (leagueId?: string) =>
+  `${supabaseUrl().replace(/\/$/, '')}/functions/v1/public-api/v1${leagueId ? `/league/${leagueId}` : ''}`;
+
+export const commishSetPublicApi = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; public_api?: boolean }>('commish_set_public_api',
+    { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'public_api' });
 
 // ── Weekly awards and badges (0325) ──────────────────────────────────────────
 /** An award DEFINITION: three choices that between them cover everything a

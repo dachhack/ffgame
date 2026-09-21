@@ -9,8 +9,8 @@ reused without re-researching._
 _The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
 (`0321`, `0322`), which closed all five of its migration-blocking gaps, and
 the Waivers row's first cell for v0.439.0 (`0323`), the league-history row
-for v0.440.0 (`0324`) and the awards row for v0.441.0 (`0325`); every other
-cell is as first written._
+for v0.440.0 (`0324`), the awards row for v0.441.0 (`0325`) and the read-API
+row for v0.442.0 (`0326`); every other cell is as first written._
 
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
@@ -131,7 +131,7 @@ The widest gaps relative to the big three.
 |---|---|---|
 | App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA |
 | Lock-screen Live Activities or watch app | Yahoo, ESPN | Android home widget only |
-| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | None |
+| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | **Shipped v0.442.0** — anonymous, read-only, opt-in per league; 13 endpoints (`0326`, docs/public-api.md) |
 | Write API | MFL, Yahoo | None |
 | Data export | Fantrax (CSV), MFL | None |
 | Win probability | MFL, ESPN | None |
@@ -161,8 +161,8 @@ Ordered by what blocks a league from migrating next August, then retention.
 3. ~~**A history surface** — past champions, records, awards.~~ **Done** in
    v0.440.0 (`0324`): champions, the all-time manager table and the record
    book, on both hosts, and weekly awards and badges in v0.441.0 (`0325`).
-4. **Store distribution and a read API** — the Sleeper ecosystem (KTC,
-   DynastyProcess, ffscrapr) exists because of its free read API.
+4. **Store distribution** ~~and a read API~~ — the read API shipped in
+   v0.442.0 (`0326`); store listings are still the open half of this row.
 5. **Dues** — Stripe checkout + webhook exist; a SleeperSafe-style pot with a
    veto window reuses most of it.
 6. **Weekly projections and news** — the baked sets are the weakest data

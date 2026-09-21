@@ -19,6 +19,13 @@ name: Deploy Edge Functions
 #                   trigger (migration 0091). Same Gmail secrets as send-invite
 #                   (+ optional LEAD_ALERT_TO recipient override). Anonymous
 #                   invocation (the poke is a no-op without unnotified rows).
+#   public-api    — The anonymous read API (0326). Deployed WITHOUT JWT
+#                   verification, which is the point: no key, no login. It
+#                   calls the api_* SQL functions with the service role, and
+#                   those functions decide for themselves what an anonymous
+#                   caller may see — a league that has not opted in is a 404.
+#                   No secrets of its own beyond the project's own URL and
+#                   service key, which Supabase injects.
 #
 # The demo proxies deploy with --no-verify-jwt so anonymous visitors can invoke
 # them; send-invite keeps JWT verification on. See the per-function logic below.
@@ -38,11 +45,13 @@ on:
         options:
           - 'espn-league fantasy-proxy'
           - 'espn-league fantasy-proxy yahoo-oauth'
+          - 'espn-league fantasy-proxy public-api'
           - 'espn-league'
           - 'fantasy-proxy'
           - 'yahoo-oauth'
           - 'send-invite'
           - 'lead-alert'
+          - 'public-api'
 
 concurrency: supabase-functions-deploy
 
