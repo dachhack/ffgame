@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.443.0 — open by default
+
+0326 shipped the read API opt-in. Founder: "let's actually do the opposite.
+Open by default with an opt out." That is the Sleeper bargain, and the reason
+the gap list put this row on the board in the first place: an ecosystem does
+not grow on the leagues whose commissioner went looking for a switch. 0327
+changes ONE thing — what the ABSENCE of settings_json.public_api means.
+
+  · ABSENT now means OPEN for a league that lives here (provider = native),
+    and still means CLOSED for one imported from Sleeper, ESPN or Yahoo. An
+    import is a mirror of somebody else's system, pulled in with that
+    manager's own credentials; publishing our leagues is our decision to
+    make, republishing theirs is not.
+  · AN EXPLICIT FALSE IS UNTOUCHED. The whole risk of flipping a default is
+    quietly re-publishing a league that chose to be private, so the opt-out
+    is written down rather than inferred, and the probe pins it.
+  · A MOCK IS STILL NEVER SERVED.
+
+WHAT MAKES IT DEFENSIBLE, none of which changed: the never-list (sealed picks
+before they reveal, pending waiver bids, offers in flight, emails, invite
+codes, chat) is the same either way — flipping a default cannot leak what no
+endpoint returns; there is NO DIRECTORY endpoint and never will be, so a
+league is readable only by whoever holds its v4 UUID, which is "if you have
+the link", not indexed or enumerable; and the opt-out is one tap that takes
+effect on the next request.
+
+check:parity now pins the default itself (scripts/check-public-api.mjs): an
+explicit choice wins either way, absent means open for a native league, a
+mock is never served, and no route lists leagues. Both consoles read as an
+opt-out ("tap to make this league private") and say plainly that there is no
+directory. docs/public-api.md rewritten to match.
+
+Probes: public-api-probes.sql — open by default, the commissioner shutting it
+and opening it again, an imported league staying shut, an explicit opt-out
+written down and surviving, and every endpoint silent while private. 102
+suites pass beside it; the three that do not fail identically on main.
+
 ### v0.442.0 — the league, readable by anything
 
 The gap list's fourth priority, and the reason it is on it: the Sleeper

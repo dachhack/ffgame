@@ -1537,7 +1537,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {tab === 'awards' && <>
         <AwardsPanel leagueId={l.league_id} />
-        {l.provider === 'native' && <PublicApiPanel leagueId={l.league_id} />}
+        {/* 0327: shown for an IMPORTED league too — it starts private, so its
+            commissioner has to be able to publish it, or "imports are opt-in"
+            would quietly mean "imports can never be read". */}
+        <PublicApiPanel leagueId={l.league_id} />
       </>}
 
       {/* the in-app draft room, embedded (native leagues only) */}

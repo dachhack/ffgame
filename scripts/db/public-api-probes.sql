@@ -1,7 +1,8 @@
 -- 0326 probes: THE PUBLIC READ API.
---   • the switch: a full league is 404 until its commissioner opens it, a
---     pod is open by default, and "closed" and "no such league" are the
---     same answer;
+--   • the switch (0327): a league that lives here is open by default, its
+--     commissioner can shut it, an explicit opt-out survives, an IMPORTED
+--     league stays shut until somebody says otherwise, and "closed" and "no
+--     such league" are the same answer;
 --   • every endpoint answers for an open league and nothing for a closed
 --     one — asked ANONYMOUSLY, which is the only way this API is ever used;
 --   • the secrets hold: a sealed pick whose window has not revealed is not
@@ -29,7 +30,7 @@ update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": tr
  where id in ('00000000-0000-0000-0000-000000001701', '00000000-0000-0000-0000-000000001702');
 
 do $$
-declare r jsonb; lid uuid; code text; a int; b int; mid uuid; js text; wk int;
+declare r jsonb; lid uuid; imported uuid; code text; a int; b int; mid uuid; js text; wk int;
 begin
   perform pa_as('01');
   r := create_native_league('PublicAPI', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
@@ -46,19 +47,29 @@ begin
   insert into native_roster (league_id, roster_id, slug, acquired) values
     (lid, a, 'pa-1', 'draft'), (lid, b, 'pa-2', 'draft');
 
-  -- ── pa1. the switch ──
+  -- ── pa1. the switch (0327: open by default, with an opt-out) ──
   perform pa_anon();
-  perform pa_true(api_league(lid) is null, 'pa1 a private league is nothing to the API');
+  perform pa_true(api_league(lid) is not null, 'pa1 a league that lives here is open by default');
+  perform pa_true(api_league(gen_random_uuid()) is null, 'pa1 a league that does not exist is nothing');
+  -- An import is a mirror of somebody else's system: it stays shut.
+  insert into league (sleeper_league_id, season, name, provider, kind)
+    values ('sleeper-pa-import', '2026', 'Imported', 'sleeper', 'league') returning id into imported;
+  perform pa_true(league_public_api(imported) is not true, 'pa1 an imported league is not published by us');
+  perform pa_true(api_league(imported) is null, 'pa1 and the API says nothing about it');
+  -- The opt-out, and that it is the commissioner's alone.
+  perform pa_as('02');
+  perform pa_true((commish_set_public_api(lid, false) ->> 'ok')::boolean is not true, 'pa1 a manager cannot shut it');
+  perform pa_as('01');
+  perform pa_true((commish_set_public_api(lid, false) ->> 'public_api')::boolean is not true, 'pa1 the commissioner shuts it');
+  perform pa_anon();
+  perform pa_true(api_league(lid) is null, 'pa1 and it goes dark');
   perform pa_true(api_teams(lid) is null and api_rosters(lid) is null and api_standings(lid) is null
     and api_matchups(lid) is null and api_transactions(lid) is null and api_trades(lid) is null
     and api_draft(lid) is null and api_picks(lid) is null and api_players(lid) is null
     and api_history(lid) is null and api_awards(lid) is null and api_lineups(lid, 1) is null,
     'pa1 every endpoint is silent');
-  perform pa_true(api_league(gen_random_uuid()) is null, 'pa1 and a league that does not exist looks the same');
-  perform pa_as('02');
-  perform pa_true((commish_set_public_api(lid, true) ->> 'ok')::boolean is not true, 'pa1 a manager cannot open it');
   perform pa_as('01');
-  perform pa_true((commish_set_public_api(lid, true) ->> 'public_api')::boolean, 'pa1 the commissioner opens it');
+  perform pa_true((commish_set_public_api(lid, true) ->> 'public_api')::boolean, 'pa1 and can be opened again');
 
   -- ── pa2. the endpoints, anonymously ──
   perform pa_anon();
@@ -127,11 +138,15 @@ begin
   perform pa_true(api_take_token('5.6.7.8', 10, 3) = 2, 'pa5 and one caller does not drain another');
   perform pa_true(api_take_token('', 10, 3) = 3, 'pa5 an unknown caller is let through');
 
-  -- ── pa6. shutting it again ──
+  -- ── pa6. an opt-out survives the default ──
+  -- The whole risk of flipping a default is quietly re-publishing a league
+  -- that chose to be private. An explicit false is not an absent setting.
   perform pa_as('01');
-  perform pa_true((commish_set_public_api(lid, false) ->> 'public_api')::boolean is not true, 'pa6 closed again');
+  perform pa_true((commish_set_public_api(lid, false) ->> 'public_api')::boolean is not true, 'pa6 opted out');
+  perform pa_true((select settings_json ->> 'public_api' from league where id = lid) = 'false',
+    'pa6 and the choice is written down, not merely absent');
   perform pa_anon();
-  perform pa_true(api_league(lid) is null and api_history(lid) is null, 'pa6 and the door is shut');
+  perform pa_true(api_league(lid) is null and api_history(lid) is null, 'pa6 the door stays shut');
 end $$;
 
 select 'ALL PUBLIC-API PROBES PASS' as result;

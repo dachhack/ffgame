@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const router = readFileSync(resolve(root, 'supabase/functions/public-api/index.ts'), 'utf8');
 const sql = readFileSync(resolve(root, 'supabase/migrations/0326_the_public_api.sql'), 'utf8');
+// 0327 flipped the default to open-with-an-opt-out. That is a product
+// decision, not an implementation detail, so it is pinned here too.
+const dflt = readFileSync(resolve(root, 'supabase/migrations/0327_open_by_default.sql'), 'utf8');
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -47,6 +50,14 @@ ok(!!lineups && lineups.includes('window_revealed'), 'api_lineups asks window_re
 ok(!!lineups && lineups.includes('sp.locked'), 'api_lineups serves only locked picks');
 const trades = bodies.find((b) => b.includes('function api_trades'));
 ok(!!trades && /status in \('executed', 'vetoed', 'expired'\)/.test(trades), 'api_trades serves settled deals only');
+
+// 3. the default, and the one thing that makes open-by-default defensible
+ok(/create or replace function league_public_api/.test(dflt), '0327 redefines the default');
+ok(/\(settings_json ->> 'public_api'\)::boolean/.test(dflt), 'an explicit choice still wins in either direction');
+ok(/provider = 'native'/.test(dflt), 'absent means open for a league that lives here');
+ok(/not coalesce\(is_mock, false\)/.test(dflt), 'a mock is never served');
+ok(!/list.*public.*league|api_leagues|api_directory/i.test(router),
+   'there is no directory endpoint — a league is readable only by whoever holds its id');
 
 console.log(fails === 0 ? '\nALL PUBLIC-API ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

@@ -187,9 +187,9 @@ export function WaiverOrderCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-// ── The public read API (0326) ───────────────────────────────────────────────
-// One switch. Off means 404 — the API cannot even be used to confirm the
-// league exists.
+// ── The public read API (0326, opened by default in 0327) ────────────────────
+// One switch, and what it turns OFF. Off means 404 — the API cannot even be
+// used to confirm the league exists.
 export function PublicApiCard({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -206,7 +206,7 @@ export function PublicApiCard({ leagueId }: { leagueId: string }) {
   };
   return (
     <Card>
-      <LabelInfo label="PUBLIC READ API" info={'Published means anyone can read this league — settings, rosters, standings, scores, the register, completed trades, the draft, history and awards — with no login, from anything that can make a web request. Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, emails, invite codes and chat.'} />
+      <LabelInfo label="PUBLIC READ API" info={'Published — the default — means anyone holding this league\'s link can read it: settings, rosters, standings, scores, the register, completed trades, the draft, history and awards, with no login. There is no directory, so this means "if you have the link", not "listed anywhere". Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, emails, invite codes and chat. Make it private and every endpoint returns a 404. Imported leagues start private.'} />
       <Row>
         <Chip label={on ? 'PUBLISHED' : 'PRIVATE'} on={on === true} disabled={busy || on === null}
           onPress={() => { tap(); void toggle(); }} />

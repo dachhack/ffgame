@@ -277,8 +277,8 @@ export function TradeFloorPanel({ leagueId }: { leagueId: string }) {
   );
 }
 
-// ── The public read API (0326) ───────────────────────────────────────────────
-// One switch, and the URL it turns on. Off means 404 — the API cannot even be
+// ── The public read API (0326, opened by default in 0327) ────────────────────
+// One switch, and the URL it turns off. Off means 404 — the API cannot even be
 // used to confirm the league exists.
 export function PublicApiPanel({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
@@ -297,13 +297,14 @@ export function PublicApiPanel({ leagueId }: { leagueId: string }) {
             .catch((e) => setMsg(errMsg(e, 'failed')))
             .finally(() => { setBusy(false); load(); }); }}
           disabled={busy || on === null} className="mono" style={btn(on === true)}>{on ? 'PUBLISHED' : 'PRIVATE'}</button>
+        {on && <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>tap to make this league private</span>}
         {note(msg)}
       </div>
       {on && (
         <div className="mono" style={{ ...small, marginTop: 6, wordBreak: 'break-all', color: 'var(--you)' }}>{base}</div>
       )}
       <div style={{ ...small, marginTop: 6 }}>
-        Published means anyone can read this league — settings, rosters, standings, scores, the register, completed trades, the draft, history and awards — with no login, from anything that can make a web request. It is how rankings sites, spreadsheets and Discord bots plug in. Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, email addresses, invite codes and chat. Private is the default for a full league, and a private league is a 404 — the API cannot be used to check that it exists.
+        Published — the default — means anyone holding this league's link can read it: settings, rosters, standings, scores, the register, completed trades, the draft, history and awards, with no login, from anything that can make a web request. It is how rankings sites, spreadsheets and Discord bots plug in. There is no directory: a league is readable only by whoever has its id, so this means "if you have the link", not "listed anywhere". Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, email addresses, invite codes and chat. Make it private and every endpoint returns a 404 identical to a league that does not exist. Leagues imported from Sleeper, ESPN or Yahoo start private — they are a mirror of somebody else's system, not ours to publish.
       </div>
     </div>
   );

@@ -2211,11 +2211,12 @@ export const commishSetTradeRules = (
     }), Ev.commishAction, { tool: 'trade_rules' });
 
 // ── The public read API (0326) ───────────────────────────────────────────────
-/** Is this league readable by the anonymous public API? Off for a private
- *  league until its commissioner turns it on; on by default for the public
- *  formats (pods, weekly showdowns), which are already open to anyone with
- *  the link. A league that is off is a 404 to the API — indistinguishable
- *  from one that does not exist. */
+/** Is this league readable by the anonymous public API? ON by default for
+ *  every league that lives here (0327) — there is no directory, so that means
+ *  "readable by whoever holds the league's id", not "listed anywhere" — and
+ *  OFF by default for leagues imported from another platform, which are a
+ *  mirror of somebody else's system. A league that is off is a 404 to the
+ *  API, indistinguishable from one that does not exist. */
 /** The base URL this deployment's public API answers on. The edge function
  *  lives under the project host (the same host `auth.dripfantasy.com` already
  *  points at), so this is the URL that actually works today; a prettier

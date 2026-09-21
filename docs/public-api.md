@@ -15,15 +15,33 @@ project already has a Supabase custom domain for `auth.dripfantasy.com`
 (docs/domain-runbook.md §4), and a second CNAME to the same target serves
 these routes unchanged.
 
-## Turning it on
+## Who is readable
 
-Off for a full league until its commissioner flips **PUBLIC READ API** in the
-commissioner's console (⚑ Manage league → 🏅 AWARDS & BADGES on the web,
-ENGAGE → AWARDS & BADGES in the app). On by default for the public formats —
-pods, weekly showdowns, DFS — which anyone with the link can already open.
+**Every league that lives here is readable by default.** That is the bargain
+that makes an ecosystem possible: a tool author can build against what is
+reliably there, not against the minority of leagues whose commissioner went
+looking for a switch.
 
-A league that has not opted in returns **404**, byte-identical to one that does
-not exist, so the API cannot be used to test whether a league id is real.
+Three things keep that defensible:
+
+- **There is no directory.** No endpoint lists public leagues, and there never
+  will be. A league is readable only by whoever holds its id — a v4 UUID,
+  unguessable, and shared exactly as far as its members share it. "Open by
+  default" means *if you have the link*, not indexed, enumerable or
+  searchable.
+- **The never-list below is the same either way.** Flipping a default cannot
+  leak what no endpoint returns.
+- **The opt-out is one tap**, in the commissioner's console (⚑ Manage league →
+  🏅 AWARDS & BADGES on the web, ENGAGE → AWARDS & BADGES in the app), and
+  takes effect on the next request.
+
+**Imported leagues start private.** A league mirrored from Sleeper, ESPN or
+Yahoo was pulled in with that manager's own credentials; publishing our own
+leagues is a decision we get to make, republishing somebody else's system is
+not.
+
+A league that is private returns **404**, byte-identical to one that does not
+exist, so the API cannot be used to test whether a league id is real.
 
 ## Endpoints
 

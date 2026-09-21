@@ -10,7 +10,8 @@ _The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
 (`0321`, `0322`), which closed all five of its migration-blocking gaps, and
 the Waivers row's first cell for v0.439.0 (`0323`), the league-history row
 for v0.440.0 (`0324`), the awards row for v0.441.0 (`0325`) and the read-API
-row for v0.442.0 (`0326`); every other cell is as first written._
+row for v0.442.0–v0.443.0 (`0326`, `0327`); every other cell is as first
+written._
 
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
@@ -131,7 +132,7 @@ The widest gaps relative to the big three.
 |---|---|---|
 | App Store and Play Store listings | All nine | Sideloaded Android APK, web PWA |
 | Lock-screen Live Activities or watch app | Yahoo, ESPN | Android home widget only |
-| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | **Shipped v0.442.0** — anonymous, read-only, opt-in per league; 13 endpoints (`0326`, docs/public-api.md) |
+| Public read API | Sleeper, Fleaflicker, MFL, Yahoo | **Shipped v0.442.0** — anonymous, read-only, 13 endpoints; open by default with a one-tap opt-out since v0.443.0 (`0326`, `0327`, docs/public-api.md) |
 | Write API | MFL, Yahoo | None |
 | Data export | Fantrax (CSV), MFL | None |
 | Win probability | MFL, ESPN | None |
