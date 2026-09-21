@@ -18,6 +18,82 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.3 — the field knows halftime, and the play-by-play carries the stoppages
+
+Founder, at halftime of IND–KC with the field frozen on "Q2 00:35": "It's
+halftime for this game. Is half time and other clock stoppage events
+something we can tell and show on the field and play by play?"
+
+WE COULD TELL AND DID NOT KEEP IT. ESPN's summary header carries the
+game's STATUS — STATUS_HALFTIME, STATUS_END_PERIOD, STATUS_DELAYED, the
+live period and display clock — and its drives carry the clock-management
+plays (timeouts, the two-minute warning, End Period, End of Half, End of
+Game, the coin toss) that the field adapter skips because they have no
+field situation. 0103 kept one word of the status (pre|in|post) so
+halftime would not read as FINAL; the rest was dropped at the poller, and
+every clock on screen was the LAST PLAY's snap time.
+
+THE FEED (0313). game_feed gains `status` {name, detail, short, period,
+clock} and `events` [{c, ty, txt, tm?}]; the poller writes both from the
+adapter's new gameStatus / gameEvents; the client read carries them to
+TeamGameFeed. Both are optional: the simulator and the baked replays write
+neither and every reader falls back to the last play's clock, as before.
+
+THE WORDS (core gameView). `stoppageLabel` — HALFTIME, END OF Q1 (the end
+of the 2nd quarter IS halftime), DELAYED, FINAL; `liveClockLabel` — the
+live display clock as "Q3 12:04" while in progress (period 5 is OT);
+`clockLabelFor` — the strip's one call: FINAL, a stoppage, the live clock,
+or the last play's clock; `shortClockLabel` — the chip's word (HALF, END
+Q1, DELAY, Q3); `eventLabel` — TWO-MINUTE WARNING, TIMEOUT · KC, END OF
+Q1, HALFTIME, FINAL, COIN TOSS; `gameLog` — plays and stoppages in clock
+order, a stoppage AFTER the play at its clock. check:gamestatus pins all
+of it (in check:parity).
+
+THE SCREENS (both hosts). The score strip and the game header say
+HALFTIME / END OF Q3 / DELAYED, or the live clock between snaps; the
+field's situation chip says the stoppage; the LAST PLAY line reads
+"● HALFTIME · LAST PLAY"; the all-fields strip chips say HALF / END Q1 /
+Q3; and the play-by-play carries the stoppages as dividers at their clock
+("— HALFTIME · Q2 00:00 —", "— TIMEOUT · KC · Q2 01:40 —", with ESPN's
+sentence under a timeout). The field itself is untouched: a stoppage has
+no play to draw.
+
+### v0.434.2 — the app's classic board switches matchups from a list
+
+Founder, on the Kickoff League board in the app: "We need switch between
+matchups on the classic matchup view in the app."
+
+The ▸ chip (v0.424.0) stepped the week's ring one pair at a time and said
+only where in it you were — "1/4" — which on a phone reads as a counter,
+not a control, and reaching the third pair meant two taps past the second.
+Now the chip opens THE WEEK'S MATCHUPS as a sheet (the app's Overlay, the
+same one the slate and the vampire use): every pair in the ring order both
+hosts walk (core matchupBrowse.orderMatchups), each with its home-and-away
+names, the score where there is one ("153.5 – 126.9 · LIVE", "FINAL"), and
+MY MATCHUP / VIEWING marked. One tap lands the board on that pair; my own
+pair clears the browse; ↩ MY MATCHUP sits at the foot while browsing. Team
+names for every seat in the week are read once per week (matchupTeams,
+the same read the header uses). The bye screen's chip opens the same sheet.
+The web board keeps its one-tap ring; nothing in core changed.
+
+### v0.434.1 — the lineup alarm does not page a classic seat
+
+Founder, relaying Farmer Casey in the Kickoff League chat: "why do I keep
+getting a message that says I have 2 empty roster spots? But it looks like
+I am full." He was full.
+
+The lineup push (server/src/push.js detectLineup, 0150) is a DRIP alarm:
+55–65 minutes before a slate window locks it counts a manager's sealed
+rows in THAT window against the window's slot count and pages the
+difference. It scanned every matchup of the week, classic leagues
+included — and a classic seat stores one weekly lineup under the 'wk'
+window, never a row per slate window, so the count for 'early' or 'late'
+was always zero and every window lock paged "N empty slots" to a full
+roster. The detector now reads the league's game mode with the matchup
+and skips classic leagues. A classic lineup has no window slots to be
+empty; its open spots are the board's and the widget's business
+(v0.433.2), and the lock-time fill closes them.
+
 ### v0.434.0 — a backup needs a whole empty window, and an empty window reveals an hour before it locks
 
 Founder: "We should have players sub only if every opposing slot in their

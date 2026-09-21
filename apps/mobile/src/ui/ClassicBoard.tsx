@@ -43,7 +43,7 @@ import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
 import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
-import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
+import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
  *  Founder: "the middle of the top is super empty. Maybe have the week's game
@@ -407,6 +407,25 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const browsing = seat !== rosterId;
   const [seatUser, setSeatUser] = useState<string | null>(userId);
   const [weekList, setWeekList] = useState<MatchupResult[]>([]);
+  // THE MATCHUP SWITCHER (v0.434.2). Founder: "We need switch between
+  // matchups on the classic matchup view in the app." The ▸ chip stepped
+  // the ring one pair at a time; now it opens the week as a list — every
+  // pair, its score, MINE and VIEWING marked — and one tap lands on any of
+  // them. Team names for every seat in the week are read once per week.
+  const [ringOpen, setRingOpen] = useState(false);
+  const [ringNames, setRingNames] = useState<Record<number, TeamInfo>>({});
+  useEffect(() => {
+    const ids = [...new Set(weekList.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
+    if (!ids.length) { setRingNames({}); return; }
+    let alive = true;
+    matchupTeams(leagueId, ids).then((tm) => { if (alive) setRingNames(tm); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, weekList]);
+  const ringGo = (m: MatchupResult) => {
+    const mine = m.home_roster_id === rosterId || m.away_roster_id === rosterId;
+    setViewRid(mine ? null : m.home_roster_id);
+    setRingOpen(false);
+  };
   useEffect(() => { setViewRid(null); }, [leagueId, rosterId]);
   // 🧪 LIVE TEST — non-null marks a sandbox; the rehearsal feed then drives
   // per-player state (see simTeams below).
@@ -1122,7 +1141,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         <Chip label={`WK ${byeWeek + 1} ›`} disabled={!canGo(1)} onPress={() => goWeek(1)} />
         {weekList.length > 0 && (
           <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} a11y="the week's matchups"
-            onPress={() => { const n = nextMatchupSeat(weekList, seat); if (n != null) setViewRid(n === rosterId ? null : n); }} />
+            onPress={() => setRingOpen(true)} />
         )}
       </View>
     </NoGame>
@@ -1160,8 +1179,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             ring — every pair in the league, mine included — and the chip says
             where in it you are. Lit while the pair on screen isn't yours. */}
         {matchup && weekList.length > 1 && (
-          <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} on={browsing} a11y="next matchup this week"
-            onPress={() => { const n = nextMatchupSeat(weekList, seat); if (n != null) setViewRid(n === rosterId ? null : n); }} />
+          <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} on={browsing} a11y="the week's matchups"
+            onPress={() => setRingOpen(true)} />
         )}
         {/* ▦ FIELDS (founder) — the same all-fields idea the drip board has,
             fed by classic's starters. Only offered once feeds exist: a chip
@@ -1323,6 +1342,48 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       {/* 🧛 tap-to-feed (v0.382.1): the same steal card the LEAGUE tab holds,
           opened from the bell. Closing re-probes so a done bite clears the
           bell now, not on the next 20s tick. */}
+      {/* ── THE WEEK'S MATCHUPS, AS A SHEET (v0.434.2) ─────────────────────
+          Every pair in the ring order both hosts walk (core matchupBrowse),
+          with the score where there is one, MINE and VIEWING marked. A tap
+          lands the board on that pair; my own pair clears the browse. */}
+      <Overlay
+        visible={ringOpen}
+        title="THE WEEK'S MATCHUPS"
+        subtitle={`WEEK ${matchup?.week ?? byeWeek ?? ''} · ${weekList.length} ${weekList.length === 1 ? 'PAIR' : 'PAIRS'} · TAP ONE TO VIEW`}
+        onClose={() => setRingOpen(false)}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 8 }}>
+          {orderMatchups(weekList).map((m, i) => {
+            const mine = m.home_roster_id === rosterId || m.away_roster_id === rosterId;
+            const viewing = m.home_roster_id === seat || m.away_roster_id === seat;
+            const hn = ringNames[m.home_roster_id]?.team_name || `Seat ${m.home_roster_id}`;
+            const an = ringNames[m.away_roster_id]?.team_name || `Seat ${m.away_roster_id}`;
+            const scored = m.home_final != null || m.away_final != null;
+            const line = scored
+              ? `${Number(m.home_final ?? 0).toFixed(1)} – ${Number(m.away_final ?? 0).toFixed(1)}${m.status === 'final' ? ' · FINAL' : m.status === 'live' ? ' · LIVE' : ''}`
+              : m.status === 'live' ? 'LIVE' : 'not yet';
+            return (
+              <Pressable key={m.id} onPress={() => { tap(); ringGo(m); }} accessibilityRole="button"
+                style={{ borderWidth: 1, borderColor: viewing ? t.you : t.bd, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, gap: 4, backgroundColor: viewing ? `${t.you}14` : t.surface }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Mono size={8.5} tone="faint" track={0.1}>{i + 1}/{weekList.length}{mine ? ' · MY MATCHUP' : ''}{viewing && !mine ? ' · VIEWING' : viewing ? ' · ON SCREEN' : ''}</Mono>
+                  <Mono size={8.5} tone={m.status === 'live' ? 'you' : 'faint'} track={0.08}>{line}</Mono>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mono size={11} tone={mine ? 'you' : 'text'} weight="700" style={{ flex: 1 }} numberOfLines={1}>{hn}</Mono>
+                  <Mono size={9} tone="faint">vs</Mono>
+                  <Mono size={11} tone={mine ? 'you' : 'text'} weight="700" style={{ flex: 1, textAlign: 'right' }} numberOfLines={1}>{an}</Mono>
+                </View>
+              </Pressable>
+            );
+          })}
+          {browsing && (
+            <Pressable onPress={() => { tap(); setViewRid(null); setRingOpen(false); }} accessibilityRole="button" style={{ alignItems: 'center', paddingVertical: 8 }}>
+              <Mono size={9} tone="you" weight="700" track={0.1}>↩ MY MATCHUP</Mono>
+            </Pressable>
+          )}
+        </ScrollView>
+      </Overlay>
+
       <Overlay
         visible={feedOpen}
         title="🧛 The vampire"

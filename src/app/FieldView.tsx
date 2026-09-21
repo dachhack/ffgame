@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
@@ -404,9 +404,10 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const carryY = (overlaps ? midY + CARRY_DY : midY) + sideDy;
 
   const situation = over ? 'FINAL'
-    : !cur ? 'AWAITING KICKOFF'
+    : (stoppageLabel(feed) ?? (
+    !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
-    : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''));
+    : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''))));
   // Down & distance the CURRENT play was snapped on (dn/dist are pre-snap; the
   // situation chip above shows the RESULTING next snap). Goal-to-go when the
   // sticks reach the goal line. dn 0 = kickoff/PAT — no down to show.
@@ -438,7 +439,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
         {/* the LAST PLAY's clock, not the playback clock — the live window clock
             can overshoot the real game (slot bookkeeping past regulation), which
             read a Q4 game as "OT" during the first live-fire. */}
-        <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : fmtQClock(cur ? cur.c : clock)}</span>
+        <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</span>
         <span style={{ color: 'var(--text)' }}>{score.h}</span>
         {stripTeam(home, homeLogo, ballTm === home)}
         {/* mirror the field to match your TV broadcast (remembered per game) */}
@@ -801,7 +802,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 110 }}>
             <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text)' }}>
               {live && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--opp)' }} />}
-              {over ? 'FINAL' : last ? qClock(last.c) : 'UPCOMING'}
+              {over ? 'FINAL' : clockLabelFor(feed, last, 'UPCOMING')}
             </span>
             {sit && !over && <span className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{sit}</span>}
           </div>
@@ -810,7 +811,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
       </div>
       {last && !over && (
         <div style={{ margin: '6px 4px 0', borderLeft: '2px solid var(--opp)', paddingLeft: 8 }}>
-          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>{live ? '● LIVE · ' : ''}LAST PLAY{sit ? ` · ${sit}` : ''}</div>
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)' }}>{live ? `● ${stoppageLabel(feed) ?? 'LIVE'} · ` : ''}LAST PLAY{sit ? ` · ${sit}` : ''}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.35, marginTop: 2 }}>{last.txt}</div>
         </div>
       )}
@@ -823,7 +824,21 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
       {tab === 'live' && (
         <div style={{ maxHeight: 420, overflowY: 'auto' }}>
           {plays.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: 16 }}>— no plays yet —</div>}
-          {[...plays].reverse().map((p, i) => {
+          {/* THE STOPPAGES ARE IN THE LOG (v0.434.3): timeouts, the two-minute
+              warning, the end of a quarter, halftime, the final — dividers at
+              their clock between the plays. */}
+          {[...gameLog(feed)].reverse().map((row, i) => {
+            if (row.kind === 'event') {
+              return (
+                <div key={`ev-${row.c}-${i}`} className="mono" style={{ padding: '8px 4px', textAlign: 'center', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)', fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--dim)' }}>
+                  — {eventLabel(row.e)} · {qClock(row.c)} —
+                  {!!row.e.txt && !/^(end (of )?(period|quarter|half|game)|two-minute warning)/i.test(row.e.txt) && (
+                    <div style={{ fontWeight: 400, letterSpacing: 0, color: 'var(--faint)', marginTop: 2 }}>{row.e.txt}</div>
+                  )}
+                </div>
+              );
+            }
+            const p = row.p;
             const names = playNames(p.txt).map((a) => personOf(a)).filter((x): x is GamePerson => !!x);
             const s2 = situationLabel(p, home, away);
             return (

@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay } from '@drip/core/data/gameFeed';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
@@ -102,7 +102,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                 <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.as : ''}</Text>
                 {g.state === 'live' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: g.state === 'live' ? t.opp : t.faint }}>
-                  {g.state === 'final' ? 'FINAL' : g.state === 'live' ? (l ? qClock(l.c).split(' ')[0] : 'LIVE') : g.kickoff ? kickoffLabel(g.kickoff) : 'SOON'}
+                  {g.state === 'final' ? 'FINAL' : g.state === 'live' ? shortClockLabel(g.feed, l) : g.kickoff ? kickoffLabel(g.kickoff) : 'SOON'}
                 </Text>
                 <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.hs : ''}</Text>
                 {!!teamLogo(g.home) && <Image source={{ uri: teamLogo(g.home)! }} style={{ width: 16, height: 16 }} />}
@@ -126,7 +126,8 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     {live && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
                     <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: t.text }}>
-                      {over ? 'FINAL' : last ? qClock(last.c) : game.kickoff ? kickoffLabel(game.kickoff) : 'UPCOMING'}
+                      {/* HALFTIME / END OF Q1 / the live clock (v0.434.3), else the last play's clock as before. */}
+                      {over ? 'FINAL' : clockLabelFor(feed, last, game.kickoff ? kickoffLabel(game.kickoff) : 'UPCOMING')}
                     </Text>
                   </View>
                   {!!sit && !over && <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.dim, marginTop: 2 }}>{sit}</Text>}
@@ -139,7 +140,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
             {last && !over && (
               <View style={{ marginHorizontal: 12, marginTop: 6, borderLeftWidth: 2, borderLeftColor: t.opp, paddingLeft: 8 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.8, color: t.dim }}>
-                  {live ? '● LIVE · ' : ''}LAST PLAY{sit ? ` · ${sit}` : ''}
+                  {live ? `● ${stoppageLabel(feed) ?? 'LIVE'} · ` : ''}LAST PLAY{sit ? ` · ${sit}` : ''}
                 </Text>
                 <Text style={{ fontSize: fs(12.5), color: t.text, lineHeight: fs(12.5) * 1.35, marginTop: 2 }}>{last.txt}</Text>
               </View>
@@ -174,7 +175,21 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
             {tab === 'live' && (
               <View style={{ paddingHorizontal: 12 }}>
                 {plays.length === 0 && <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.faint, textAlign: 'center', padding: 16 }}>— no plays yet —</Text>}
-                {[...plays].reverse().map((p, i) => {
+                {/* THE STOPPAGES ARE IN THE LOG (v0.434.3): a timeout, the
+                    two-minute warning, the end of a quarter, halftime, the
+                    final — each a divider at its clock between the plays. */}
+                {[...gameLog(feed ?? { plays })].reverse().map((row, i) => {
+                  if (row.kind === 'event') {
+                    return (
+                      <View key={`ev-${row.c}-${i}`} style={{ paddingVertical: 8, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: alpha(t.bd, 0.6) }}>
+                        <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '800', letterSpacing: 1.2, color: t.dim }}>— {eventLabel(row.e)} · {qClock(row.c)} —</Text>
+                        {!!row.e.txt && !/^(end (of )?(period|quarter|half|game)|two-minute warning)/i.test(row.e.txt) && (
+                          <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint, marginTop: 2 }}>{row.e.txt}</Text>
+                        )}
+                      </View>
+                    );
+                  }
+                  const p = row.p;
                   const names = playNames(p.txt).map((a) => personOf(a)).filter((x): x is GamePerson => !!x);
                   const s2 = situationLabel(p, home, away);
                   return (

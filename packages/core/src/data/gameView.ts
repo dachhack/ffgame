@@ -37,6 +37,100 @@ export function qClock(c: number): string {
   return `Q${q} ${mmss(Math.max(0, q * 900 - c))}`;
 }
 
+// ── THE CLOCK'S OWN WORDS (v0.434.3) ────────────────────────────────────────
+// Founder, at halftime of IND–KC with the field frozen on "Q2 00:35": "Is half
+// time and other clock stoppage events something we can tell and show on the
+// field and play by play?" The header's status (gameFeed.GameStatus) says what
+// the clock is doing between snaps; the stoppage rows (GameEvent) are the
+// play-by-play's entries for it. Three readers, so every host says the same:
+//   stoppageLabel — HALFTIME / END OF Q2 / DELAYED, else null;
+//   liveClockLabel — the live display clock as "Q3 12:04" while in progress,
+//                    else null (a feed without a status falls back to the
+//                    last play's clock, as before);
+//   eventLabel — a stoppage row's headline for the log.
+/** "0:35" / "12:04" → "00:35" / "12:04", the log's own mm:ss. */
+const mmss = (clock: string): string => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(clock.trim());
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : clock.trim();
+};
+const periodWord = (period: number | null | undefined): string => (period == null ? '' : period > 4 ? (period === 5 ? 'OT' : `OT${period - 4}`) : `Q${period}`);
+
+export function stoppageLabel(feed: { st?: string | null; status?: { name?: string | null; detail?: string | null; period?: number | null } | null } | null | undefined): string | null {
+  if (!feed) return null;
+  if (feed.st === 'post') return 'FINAL';
+  const st = feed.status;
+  if (!st) return null;
+  const name = String(st.name ?? '').toUpperCase();
+  const detail = String(st.detail ?? '').toLowerCase();
+  if (name === 'STATUS_FINAL') return 'FINAL';
+  if (name === 'STATUS_HALFTIME' || /halftime/.test(detail)) return 'HALFTIME';
+  if (name === 'STATUS_END_PERIOD' || /^end of /.test(detail)) {
+    const p = st.period ?? (/(\d)(st|nd|rd|th)/.exec(detail)?.[1] ? Number(/(\d)(st|nd|rd|th)/.exec(detail)![1]) : null);
+    return p === 2 ? 'HALFTIME' : p ? `END OF ${periodWord(p)}` : 'END OF PERIOD';
+  }
+  if (/DELAY|SUSPENDED|POSTPONED/.test(name) || /delay|suspend|postpone/.test(detail)) return 'DELAYED';
+  return null;
+}
+
+export function liveClockLabel(feed: { st?: string | null; status?: { name?: string | null; period?: number | null; clock?: string | null } | null } | null | undefined): string | null {
+  const st = feed?.status;
+  if (!st || feed?.st === 'post') return null;
+  if (String(st.name ?? '').toUpperCase() !== 'STATUS_IN_PROGRESS') return null;
+  if (st.period == null || !st.clock) return null;
+  return `${periodWord(st.period)} ${mmss(String(st.clock))}`;
+}
+
+/** The score strip's clock, in one call: FINAL, a stoppage, the live clock,
+ *  or the last play's clock when the row carries no status. */
+export function clockLabelFor(feed: { st?: string | null; status?: GameStatusLike | null } | null | undefined, last: { c: number } | null | undefined, fallback: string): string {
+  return stoppageLabel(feed) ?? liveClockLabel(feed) ?? (last ? qClock(last.c) : fallback);
+}
+type GameStatusLike = { name?: string | null; detail?: string | null; period?: number | null; clock?: string | null };
+
+/** The strip chip's word: HALF, END Q1, DELAY, the live quarter (Q3, OT), or
+ *  the last play's quarter, else LIVE. */
+export function shortClockLabel(feed: { st?: string | null; status?: GameStatusLike | null } | null | undefined, last: { c: number } | null | undefined): string {
+  const stop = stoppageLabel(feed);
+  if (stop === 'HALFTIME') return 'HALF';
+  if (stop === 'DELAYED') return 'DELAY';
+  if (stop === 'FINAL') return 'FINAL';
+  if (stop && stop.startsWith('END OF ')) return `END ${stop.slice(7)}`;
+  const live = liveClockLabel(feed);
+  if (live) return live.split(' ')[0];
+  return last ? qClock(last.c).split(' ')[0] : 'LIVE';
+}
+
+/** A stoppage row's headline for the log: TWO-MINUTE WARNING, TIMEOUT · KC,
+ *  END OF Q1, HALFTIME, FINAL, COIN TOSS. */
+export function eventLabel(e: { ty: string; txt?: string; tm?: string; c: number }): string {
+  const ty = e.ty.toLowerCase();
+  if (/two-minute|two minute/.test(ty)) return 'TWO-MINUTE WARNING';
+  if (/official timeout/.test(ty)) return 'OFFICIAL TIMEOUT';
+  if (/timeout/.test(ty)) return `TIMEOUT${e.tm ? ` · ${e.tm}` : ''}`;
+  if (/end of half/.test(ty)) return 'HALFTIME';
+  if (/end of game/.test(ty)) return 'FINAL';
+  if (/end period|end of period|end quarter/.test(ty)) {
+    const q = e.c >= 3600 ? 'OT' : `Q${Math.min(4, Math.floor((e.c - 1) / 900) + 1)}`;
+    return q === 'Q2' ? 'HALFTIME' : `END OF ${q}`;
+  }
+  if (/coin toss/.test(ty)) return 'COIN TOSS';
+  return e.ty.toUpperCase();
+}
+
+export type LogRow = { kind: 'play'; c: number; p: GamePlay } | { kind: 'event'; c: number; e: { c: number; ty: string; txt: string; tm?: string } };
+/** The play-by-play with the stoppages in it, in game-clock order (ascending;
+ *  a host reverses for newest-first). At the same clock a play comes before
+ *  the stoppage that followed it — "End of Q1" sits after the quarter's last
+ *  snap, not before it. */
+export function gameLog(feed: { plays: GamePlay[]; events?: { c: number; ty: string; txt: string; tm?: string }[] | null } | null | undefined): LogRow[] {
+  if (!feed) return [];
+  const rows: LogRow[] = feed.plays.map((p) => ({ kind: 'play' as const, c: Number(p.c) || 0, p }));
+  for (const e of feed.events ?? []) rows.push({ kind: 'event', c: Number(e.c) || 0, e });
+  // Stable: plays keep their feed order among themselves; an event at a play's
+  // clock lands after it.
+  return rows.map((r, i) => ({ r, i })).sort((a, b) => a.r.c - b.r.c || (a.r.kind === b.r.kind ? a.i - b.i : a.r.kind === 'play' ? -1 : 1)).map((x) => x.r);
+}
+
 /** The ball spot the way a broadcast says it: yards-to-goal from the
  *  possession team's view → "KC 20" (own side), "50", "DEN 35" (their side). */
 export function spotLabel(tm: string, yl: number, home: string, away: string): string {

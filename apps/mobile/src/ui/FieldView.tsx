@@ -20,6 +20,7 @@
 // on the JS thread (useNativeDriver: false). They are short and small, and the
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
+import { stoppageLabel, liveClockLabel } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
@@ -173,9 +174,10 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   const carryY = (overlaps ? MID + CARRY_DY : MID) + sideDy;
 
   const situation = over ? 'FINAL'
-    : !cur ? 'AWAITING KICKOFF'
+    : (stoppageLabel(feed) ?? (
+    !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
-    : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''));
+    : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''))));
   // Down & distance the CURRENT play was snapped on (the chip above shows the
   // resulting next snap). Goal-to-go when the sticks reach the goal line; dn 0
   // = kickoff/PAT, nothing to show. Ported from the web FieldView.
@@ -229,7 +231,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.text }}>{score.a}</Text>
         {/* The LAST PLAY's clock, not the playback clock — a window clock can
             overshoot the real game and read a Q4 game as OT. */}
-        <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{over ? 'FINAL' : fmtQClock(cur ? cur.c : clock)}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
         <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.text }}>{score.h}</Text>
         {strip(home, ballTm === home)}
         <Pressable
@@ -529,7 +531,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
         <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.home}</Text>
         {!!teamLogo(cur.home) && <Image source={{ uri: teamLogo(cur.home)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: cur.state === 'live' ? t.opp : t.faint }}>
-          {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
+          {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (stoppageLabel(cur.feed) ?? liveClockLabel(cur.feed) ?? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE')) : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
         </Text>
       </View>
       {/* The tab bar stays put; only the list scrolls. Before kickoff there is

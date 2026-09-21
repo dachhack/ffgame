@@ -489,6 +489,56 @@ function yteOf(sit, abbrs) {
   return abbrs.has(m[1]) ? 100 - n : n;
 }
 
+/** THE GAME'S STATUS (v0.434.3) — what ESPN says the clock is doing, which
+ *  the plays alone cannot: halftime, the end of a quarter, a delay, the live
+ *  clock between snaps. Founder, at halftime of IND–KC: "Is half time and
+ *  other clock stoppage events something we can tell and show?" This is the
+ *  half the summary header carries; gameEvents below is the half the drives
+ *  carry. `name` is ESPN's STATUS_* id, `detail`/`short` its words
+ *  ("Halftime", "End of 2nd Quarter", "2:35 - 3rd"), `period` and `clock`
+ *  the live scoreboard clock. Null when the header has no status. */
+export function gameStatus(summary) {
+  const st = summary?.header?.competitions?.[0]?.status;
+  if (!st) return null;
+  const period = Number(st?.period);
+  return {
+    name: st?.type?.name ?? null,
+    detail: st?.type?.detail ?? null,
+    short: st?.type?.shortDetail ?? null,
+    period: Number.isFinite(period) && period > 0 ? period : null,
+    clock: st?.displayClock ?? null,
+  };
+}
+
+/** THE CLOCK-MANAGEMENT ROWS (v0.434.3) — the plays gameToFeed skips because
+ *  they carry no field situation: timeouts, the two-minute warning, the end
+ *  of a period, of the half, of the game, the coin toss. They are events on
+ *  the play-by-play, not plays on the field, so they ride beside the plays
+ *  as their own list: game-elapsed seconds, ESPN's type text, its sentence,
+ *  and the team when ESPN names one (a timeout's). */
+export function gameEvents(summary) {
+  const comp = summary?.header?.competitions?.[0];
+  const byId = new Map();
+  for (const c of comp?.competitors ?? []) byId.set(String(c?.id ?? c?.team?.id), fixTeam(c?.team?.abbreviation ?? ''));
+  const drives = [...(summary?.drives?.previous ?? [])];
+  if (summary?.drives?.current?.plays) drives.push(summary.drives.current);
+  const out = [];
+  const seen = new Set();
+  for (const d of drives) for (const p of d?.plays ?? []) {
+    const ty = p?.type?.text ?? '';
+    if (!SKIP_TYPES.has(ty)) continue;
+    const c = clockOf(Number(p?.period?.number ?? 1), p?.clock?.displayValue ?? '15:00');
+    const txt = p?.text ?? '';
+    const k = `${c}|${ty}|${txt}`;
+    if (seen.has(k)) continue;   // ESPN re-lists plays across restructured drives
+    seen.add(k);
+    const tm = byId.get(String(p?.start?.team?.id ?? ''));
+    out.push({ c, ty, txt, ...(tm ? { tm } : {}) });
+  }
+  out.sort((a, b) => a.c - b.c);
+  return out;
+}
+
 /** One ESPN summary → [gameKey, [away, home], GamePlay[]] (null if no drives yet). */
 export function gameToFeed(summary) {
   const comp = summary?.header?.competitions?.[0];

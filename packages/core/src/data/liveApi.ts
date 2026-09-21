@@ -1176,10 +1176,12 @@ export async function weekLivePlays(week: number): Promise<LivePlayRow[]> {
 
 /** The week's per-game field-visual feeds (game_feed, readable by any authed
  *  user) — drives FieldView/FieldBoard on the live board. */
-export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; state?: string | null; game_id?: string | null; }
+export interface GameFeedRow { key: string; away: string; home: string; plays: import('./gameFeed').GamePlay[]; state?: string | null; game_id?: string | null;
+  /** The header's status and the stoppages (0313, v0.434.3). */
+  status?: import('./gameFeed').GameStatus | null; events?: import('./gameFeed').GameEvent[] | null; }
 export async function weekGameFeeds(week: number): Promise<GameFeedRow[]> {
   const { data } = await (await client()).from('game_feed')
-    .select('key, away, home, plays, state, game_id').eq('week', week);
+    .select('key, away, home, plays, state, game_id, status, events').eq('week', week);
   return (data ?? []) as GameFeedRow[];
 }
 

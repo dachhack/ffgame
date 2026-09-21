@@ -2,7 +2,7 @@
 // Reuses the validated adapter (scripts/espn/espnAdapter.mjs); only the persistence
 // is new here. Slug resolution uses the Sleeper player index (espn_id bridge +
 // name fallback), so plays key on the SAME slug as picks and lineups.
-import { gameToRealPlays, gameToFeed } from '../../../scripts/espn/espnAdapter.mjs';
+import { gameToRealPlays, gameToFeed, gameStatus, gameEvents } from '../../../scripts/espn/espnAdapter.mjs';
 import { db } from '../supabase.js';
 
 const SUM = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`;
@@ -85,8 +85,14 @@ export async function pollGame(eventId, week, playerIndex) {
     // Real game state (pre|in|post) so clients never have to infer FINAL from
     // "no next play yet" — which reads halftime as game over (0103).
     const state = sum?.header?.competitions?.[0]?.status?.type?.state ?? null;
+    // THE STATUS AND THE STOPPAGES (v0.434.3, 0313): halftime, the end of a
+    // quarter, a delay, the live clock between snaps — and the timeouts,
+    // two-minute warnings and period ends the play list skips. Both hosts
+    // draw them in the score strip and the play-by-play.
+    const status = gameStatus(sum);
+    const events = gameEvents(sum);
     const { error: feedErr } = await db().from('game_feed').upsert(
-      { week, game_id: String(eventId), key, away, home, plays, state, updated_at: new Date().toISOString() },
+      { week, game_id: String(eventId), key, away, home, plays, state, status, events, updated_at: new Date().toISOString() },
       { onConflict: 'week,game_id' },
     );
     if (feedErr) console.error(`[plays] game_feed upsert ${eventId}:`, feedErr.message);
