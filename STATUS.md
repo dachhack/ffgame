@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.453.0 — four weeks of football, priced
+
+The first ADP rebake since 26 August, and the first one v0.452.0's id column
+paid for: the before/after was diffed BY SLEEPER ID, so a player who changed
+team or spelling between boards is one row that MOVED rather than one row
+dropped beside one added. (Exactly one row did: Kayshon Boutte, NE → HOU.)
+
+  1. WHAT MOVED. 214 players priced on both boards — 95 up, 119 down — with a
+     median absolute move of 9.1 picks and a mean of 13.8. The mean is twice
+     the median because the tails are injuries and job changes, not drift:
+     Isiah Pacheco 164.8 → 249, Josh Jacobs 35.9 → 115.7, Tank Dell 178.1 →
+     242.1 falling; MarShawn Lloyd 183.2 → 136.7 and Pat Freiermuth 235.2 →
+     194.3 rising.
+  2. WHAT CHANGED SHAPE. 234 rows, up from 221: 20 new (Cade Otton, Michael
+     Penix Jr., Ricky Pearsall and the rest of the September waiver-wire
+     market) and 7 gone (James Conner, Keon Coleman, Jaydon Blue…). A player
+     who leaves the board is not removed from a Drip pool — he loses his
+     market price and is ranked by production instead, which is what that
+     fallback in the pool builder has always been for.
+  3. EVERY ROW IS VALIDATED ON THE WAY IN: a sleeper id, a team, a number, and
+     a Sleeper directory row that is active and plays that position. 0
+     problems across 234 rows. The 2026 board's tail — retired names and
+     unsigned free agents the source carries with no id at all — is dropped
+     rather than baked, which is why 300 rows pulled become 234 baked.
+  4. WHO SEES IT. This board seeds a NEW pool's rank; leagues that already
+     drafted keep the rank stored in their own pool rows. So the change lands
+     on leagues created from today, on the live ADP column, and on the draft
+     board's sort — not on anybody's existing roster order.
+
+The chart of the whole diff (dumbbell of the movers, the 214-point scatter
+against the no-change diagonal, and both tables) is published as an artifact.
+
 ### v0.452.0 — the last name join
 
 Founder: "I'd like to fix the ADP name join with sleeper ids. What's the risk
