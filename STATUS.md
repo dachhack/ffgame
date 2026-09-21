@@ -18,6 +18,60 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.434.6 — the waiver run's holes
+
+Founder: "So let's check the waiver system for holes." The run read end to
+end — submit_waiver_claim, process_waivers, add_free_agent, the clocks
+(claim_clears_at, waiver_hold_until, fa_opens_at), the budget, the
+priority order, the format guards, the worker's cadence (the tick, every
+25s, plus the team screen every 15s). Four holes; three closed in 0316,
+the fourth left as the founder's call.
+
+CLOSED.
+  1. A SEAT THE FORMAT SHUT OUT ABORTED THE RUN. The native_roster seat
+     guard RAISES for a seat under the vampire's wire lock (0268). A claim
+     filed before the commissioner flipped the lock hit it inside
+     process_waivers, and a raise there rolls back the whole run — every
+     sweep, until somebody cancelled that one claim. The run now asks
+     wire_block_reason per claim and settles it as a loss with the reason;
+     the coven's own claims win in the same run. (The guillotine already
+     marked a chopped seat's claims lost at the chop.)
+  2. TIMING BEAT MONEY in a league with no run time and no free agency:
+     each claim cleared on its own 24-hour hold, so the first claim on a
+     player settled alone before a later, higher bid was even due. A claim
+     on a player with a pending claim now shares the earliest clock, so
+     every claim on him competes in one run. A league with a run time
+     already shared it; nothing changes there.
+  3. A CLAIM WHOSE DROP HAD ALREADY LEFT THE ROSTER LOST even with a place
+     open — an earlier claim of the same seat had spent him. It now goes
+     through without the drop when the seat has room, and loses only when
+     it would need the drop to make room; the row and the report say which.
+  Also: "outbid" only when a claim in this run took the player; one signed
+  off free agency while the claim sat is "player taken".
+
+LEFT AS IS, WRITTEN UP.
+  4. A PLAYER WHOSE GAME HAS STARTED CAN BE DROPPED. drop_player,
+     add_free_agent and a claim's drop have no kickoff check; his sealed
+     pick stays and scores for the dropper (0278's rule), and the pickup
+     that replaces him cannot play this week (v0.434.4). So no points move:
+     the only gain is a roster place a run earlier than waiting for the
+     week to end. Sleeper forbids the drop outright until the week is over.
+     Adding that rule would also make a Sunday 2pm run refuse every claim
+     whose drop played at 1pm, which is most of them in a league run at
+     2pm — so it is a rule the founder chooses, not a bug to fix quietly.
+  Not holes, noted: a window league whose run is later than its window
+  lets a first-come add during the window beat a blind claim not yet due
+  (the FA-after-waivers day gate exists for exactly this, and was lifted
+  for Kickoff Sundays on request); FAAB ties break by rolling priority
+  then filing time (set at the draft, rotating on wins); a human seat has
+  no cap on pending claims (each settles or loses on its own, harmlessly).
+
+PROVED. scripts/db/waiver-holes-probes.sql pins the shared clock and the
+one-run settlement (the higher bid wins, the lower is outbid), "player
+taken", the drop-as-means both with room and without, and the vampire
+lock losing a claim without aborting the run. fa-off and agent-wire
+probes unchanged and green.
+
 ### v0.434.5 — every league's week pools refreshed now (a data migration)
 
 Founder, the morning after 0314: "Can we refresh the week 2 pool now?"
