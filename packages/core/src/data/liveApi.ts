@@ -2207,6 +2207,47 @@ export const commishSetTradeRules = (
       p_veto_votes: vetoVotes, p_offer_days: offerDays, p_faab_trading: faabTrading,
     }), Ev.commishAction, { tool: 'trade_rules' });
 
+// ── The league's history (0324) ──────────────────────────────────────────────
+/** One season in a league's lineage, as the history screen shows it. */
+export interface HistorySeason {
+  league_id: string; season: string; name: string | null; current: boolean;
+  champion: { roster_id: number; team: string | null; avatar?: string | null } | null;
+  runner_up: { roster_id: number; team: string | null } | null;
+  /** The regular-season table, best first. */
+  table: { roster_id: number; team: string | null; w: number; l: number; t: number; pf: number; pa: number }[];
+  high_week: { week: number; roster_id: number; team: string | null; points: number } | null;
+}
+export interface HistoryWeekRow {
+  season: string; week: number; playoff?: boolean; points: number;
+  roster_id: number; team: string | null; opp?: string | null; opp_points?: number;
+}
+export interface HistoryGameRow {
+  season: string; week: number; margin: number; winner: string | null; loser: string | null; score: string;
+}
+export interface HistoryManager {
+  manager: string; team: string | null; app_user_id: string | null;
+  seasons: number; w: number; l: number; t: number; pf: number;
+  /** Titles won, and how many title games they reached. */
+  titles: number; finals: number;
+}
+export interface LeagueHistory {
+  ok?: boolean; error?: string; league_id?: string; seasons_count?: number;
+  seasons?: HistorySeason[];
+  records?: {
+    top_weeks: HistoryWeekRow[]; low_weeks: HistoryWeekRow[];
+    blowouts: HistoryGameRow[]; nailbiters: HistoryGameRow[];
+    top_seasons: { season: string; pf: number; record: string; roster_id: number; team: string | null }[];
+    best_records: { season: string; record: string; pct: number; pf: number; roster_id: number; team: string | null }[];
+  };
+  managers?: HistoryManager[];
+}
+/** Past champions, the record book and every manager's all-time line, across
+ *  every season this league has rolled through (0324). Any member of ANY of
+ *  those seasons may read all of them — a manager who joined last August
+ *  should see the seasons he missed. */
+export const leagueHistory = (leagueId: string) =>
+  rpc<LeagueHistory>('league_history', { p_league_id: leagueId });
+
 /** THE LEAGUE REGISTER (0186): every in-season roster movement, newest first.
  *  Adds, drops, waiver wins (with the bid), trades (with the seat each player
  *  came from) and commissioner moves — written by a trigger on native_roster,

@@ -18,6 +18,51 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.440.0 — the record book
+
+The gap list's third priority, and the one it called "a screen, not a
+schema": Sleeper, Yahoo, League Tycoon and MFL (back to 1980) all show a
+league its own past. Drip has stamped a champion since 0073 and rolled
+leagues into their next season since 0182, and never showed either. 0324
+reads it back.
+
+  1. THE LINEAGE. A native league's seasons share one sleeper_league_id,
+     which is how _rollover_target already finds next season — so the
+     lineage is every native league row with that key, oldest first, and a
+     league that has never rolled over is a lineage of one (with a short
+     record book, not no record book). An imported league stands alone and
+     still gets its records.
+  2. WHAT COUNTS. Regular-season finals decide the tables, the records and
+     the manager lines. Playoff finals ride the single-week rows — a
+     semi-final is a real 180-point week — but never a W-L. The median game
+     (0320) is a standings display, not a game. Preseason weeks (101+) are
+     practice and count nowhere.
+  3. WHO A MANAGER IS. app_user_id where the seat is claimed, else the seat
+     itself — a league whose seats changed hands keeps two honest lines
+     rather than one wrong one, and the name shown is the one from that
+     manager's latest season.
+  4. WHO MAY READ IT. Any member of ANY season in the lineage reads all of
+     them: a manager who joined last August should see the seasons he
+     missed. A stranger reads nothing.
+
+league_history returns it in one call: the seasons (champion, runner-up from
+the title game, the final table, that season's high week), the record book
+(biggest weeks, biggest beatings, closest calls, best seasons by points,
+best records, quietest weeks) and the all-time manager table ordered
+champions-first.
+
+CONSOLES. A 🏛 LEAGUE HISTORY tile on both league menus opens the same four
+blocks in the same order — champions, all-time, the record book, then a
+season picker (src/screens/LeagueHistory.tsx,
+apps/mobile/src/ui/LeagueHistory.tsx). Shown for imported leagues too, where
+the champions band is empty and the records are not.
+
+Probes: scripts/db/history-probes.sql (wired into the scratch runner) — a
+lineage of one and of two, the champion and the runner-up, preseason
+excluded and playoff weeks included, the manager lines across a seat that
+changed hands, and who may read it. 100 suites pass beside it; the three
+that do not fail identically on main. Web and mobile typecheck.
+
 ### v0.439.0 — one of these, in this order
 
 The gap list's second waiver row, and the Wednesday-morning problem every

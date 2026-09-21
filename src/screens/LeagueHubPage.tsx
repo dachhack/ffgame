@@ -24,6 +24,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { VampirePanel } from './VampirePanel';
 import { GuillotinePanel } from './GuillotinePanel';
+import { LeagueHistory } from './LeagueHistory';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
@@ -181,7 +182,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // reason a second click on the open tile closes it. 'alerts' joined in
   // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
-  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire' | 'guillotine';
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire' | 'guillotine' | 'history';
   const [info, setInfo] = useState<null | InfoPanel>(null);
   // 🧛 (v0.383.0, app v0.382.1's twin): a vampire league gets its own tile —
   // every other format answers `vampire:false` to this one probe and never
@@ -373,6 +374,10 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             rules it runs on. Read-only for everyone; the commissioner edits the
             same facts behind ⚑ Manage league. */}
         {native && <Tile icon="📜" title="League register" sub="adds · drops · claims · trades" onClick={() => toggleInfo('register')} />}
+        {/* 🏛 THE LEAGUE'S HISTORY (0324) — champions, the all-time table and
+            the record book. Every league has one from its first Sunday; a
+            league with seasons behind it has the whole lineage. */}
+        <Tile icon="🏛" title="League history" sub="champions · all-time · records" onClick={() => toggleInfo('history')} />
         <Tile icon="⊞" title="Scoring settings" sub="catalog · adjustments · scoped bonuses" onClick={() => toggleInfo('scoring')} />
         {native && <Tile icon="🧢" title="Roster settings" sub="lineup · limits · waivers · free agency · trades" onClick={() => toggleInfo('roster')} />}
         <Tile icon="🔔" title="Alerts" sub="chat · trades · waivers · playoffs" onClick={() => toggleInfo('alerts')} />
@@ -405,6 +410,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         <Sheet title="🧛 The vampire" subtitle="THE STEAL WINDOW · THE FEEDING LOG" max={620}
           onClose={() => { setInfo(null); void probeVamp(); /* feeding clears the tile's badge */ }}>
           <VampirePanel leagueId={e.league_id} myRoster={e.sleeper_roster_id} commish={commish} />
+        </Sheet>
+      )}
+      {info === 'history' && (
+        <Sheet title="🏛 League history" subtitle="CHAMPIONS · ALL-TIME · THE RECORD BOOK" max={620} onClose={() => setInfo(null)}>
+          <LeagueHistory leagueId={e.league_id} />
         </Sheet>
       )}
       {info === 'register' && (

@@ -195,3 +195,4 @@ $RUN -f scripts/db/out-spot-probes.sql | grep -E "PROBE FAIL|ALL OUT-SPOT PROBES
 $RUN -f scripts/db/trade-floor-probes.sql | grep -E "PROBE FAIL|ALL TRADE-FLOOR PROBES" || { echo "TRADE-FLOOR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/multi-trade-probes.sql | grep -E "PROBE FAIL|ALL MULTI-TRADE PROBES" || { echo "MULTI-TRADE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/conditional-claim-probes.sql | grep -E "PROBE FAIL|ALL CONDITIONAL-CLAIM PROBES" || { echo "CONDITIONAL-CLAIM PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/history-probes.sql | grep -E "PROBE FAIL|ALL HISTORY PROBES" || { echo "HISTORY PROBES FAILED"; exit 1; }

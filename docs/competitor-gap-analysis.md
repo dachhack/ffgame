@@ -8,8 +8,8 @@ reused without re-researching._
 
 _The Trades row's "Drip today" cells were updated for v0.437.0–v0.438.0
 (`0321`, `0322`), which closed all five of its migration-blocking gaps, and
-the Waivers row's first cell for v0.439.0 (`0323`); every other cell is as
-first written._
+the Waivers row's first cell for v0.439.0 (`0323`) and the league-history
+row for v0.440.0 (`0324`); every other cell is as first written._
 
 Sourcing caveats: Fantrax's site is a blank SPA to fetchers, so its feature
 copy was pulled from its JS bundles and FantraxHQ's official guides. Reddit
@@ -112,7 +112,7 @@ Ahead of everyone except the two specialists. What RSO and League Tycoon add:
 | Feature | Who has it | Drip today |
 |---|---|---|
 | Dues collection and payouts with escrow | Sleeper (SleeperSafe), Fantrax (Treasurer), MFL accounting, Yahoo, League Tycoon | Free-text dues field (`0223`); Stripe only for premium |
-| League history, record book, hall of fame, past champions | Sleeper, Yahoo (2026 Record Book), League Tycoon, MFL (back to 1980) | `league_continuity` + `playoff_champion` stamp, no surface |
+| League history, record book, hall of fame, past champions | Sleeper, Yahoo (2026 Record Book), League Tycoon, MFL (back to 1980) | **Shipped v0.440.0** — champions, all-time manager table and a record book across every rolled-over season (`0324`) |
 | Weekly awards, achievements, badges | Sleeper, Yahoo, ESPN (2026) | Weekly report in chat (`0275`) |
 | GIFs and stickers in chat | Sleeper, Yahoo, ESPN | Six fixed reactions (`0210`) |
 | Group chats, matchup chat, player chat rooms | Sleeper, ESPN | League chat + DMs |
@@ -157,8 +157,9 @@ Ordered by what blocks a league from migrating next August, then retention.
    (`0323`). Still open on the waivers row: Vickrey second-price FAAB,
    suggested bid ranges, weekly/seasonal add limits, a can't-cut list, and
    showing the highest pending bids.
-3. **A history surface** — past champions, records, awards. Rollover data
-   exists; this is a screen, not a schema.
+3. ~~**A history surface** — past champions, records, awards.~~ **Done** in
+   v0.440.0 (`0324`): champions, the all-time manager table and the record
+   book, on both hosts. Weekly awards and badges are the part still missing.
 4. **Store distribution and a read API** — the Sleeper ecosystem (KTC,
    DynastyProcess, ffscrapr) exists because of its free read API.
 5. **Dues** — Stripe checkout + webhook exist; a SleeperSafe-style pot with a
