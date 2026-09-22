@@ -458,6 +458,46 @@ async function main() {
       }
       break;
     }
+    case 'ops-run': {
+      // ▶ RUN ONE COMMITTED REQUEST (v0.477.0) — the ops-run workflow's entry.
+      //   node src/cli.js ops-run <ops/run/NNN-name.json>
+      //
+      // Translates a request file into EXACTLY the argv the Re-stamp form
+      // produces, and runs it as a child of the same CLI — so a request cannot
+      // reach a code path the form cannot, and the form's gates hold: restamp
+      // still wants its RESTAMP, drip still wants include_drip. A non-zero exit
+      // from the child fails this one, which stops the workflow's loop.
+      const { readFileSync } = await import('node:fs');
+      const { spawnSync } = await import('node:child_process');
+      const file = args[0];
+      if (!file) { console.error('usage: ops-run <request.json>'); process.exitCode = 1; break; }
+      const req = JSON.parse(readFileSync(file, 'utf8'));
+      const argv = [];
+      const need = (k) => { if (req[k] == null || req[k] === '') throw new Error(`${req.mode} needs "${k}"`); return String(req[k]); };
+      if (req.mode === 'diff') {
+        argv.push('diff-week', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.league) argv.push(`--league=${req.league}`);
+        if (req.seat) argv.push(`--seat=${req.seat}`);
+      } else if (req.mode === 'restamp') {
+        if (req.confirm !== 'RESTAMP') throw new Error('restamp needs "confirm": "RESTAMP" — this rewrites stored results');
+        argv.push('restamp', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.league) argv.push(`--league=${req.league}`);
+        if (req.report === false) argv.push('--no-report');
+        if (req.include_drip === true) argv.push('--include-drip');
+      } else if (req.mode === 'restore') {
+        // Paths in a request are repo-relative, like everywhere else in the
+        // repo; the CLI runs from server/, so they are resolved one level up.
+        argv.push('restore-week', `../${need('file')}`);
+      } else {
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore`);
+      }
+      console.log(`ops-run: ${argv.join(' ')}`);
+      const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
+      if (r.status !== 0) { console.error(`ops-run: ${argv[0]} exited ${r.status}`); process.exitCode = r.status || 1; }
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);

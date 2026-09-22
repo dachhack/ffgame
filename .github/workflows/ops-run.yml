@@ -1,0 +1,73 @@
+name: Run committed ops requests
+
+# THE REQUEST IS THE COMMIT (v0.477.0). Founder, after a day of copying inputs
+# into the Re-stamp form by hand: "Just add a trigger and run these please."
+#
+# The integration that writes this repo cannot dispatch a workflow — every
+# `workflow_dispatch` call returns 403 — but it can merge, and a merge is a
+# push. So an ops errand is a small JSON file under ops/run/, reviewed in the
+# PR like any other change, and run once when it lands on main.
+#
+# That is a better record than a form, not just a faster one: the inputs sit
+# in the repo next to the code that ran them, the PR says why, and the log is
+# one click from the commit.
+#
+# ONLY NEWLY-ADDED FILES RUN (the migrate.yml rule, `--diff-filter=A`). Editing
+# or re-pushing an old request never re-runs it, so a restore cannot fire twice
+# and a re-stamp cannot quietly repeat. To run something again, add a new file.
+#
+# Files run in NAME order, one at a time, and the first failure stops the rest —
+# a restore that refused a row should not be followed by a diff that pretends
+# the restore landed. Name them 001-…, 002-… when order matters.
+#
+# A request is { "mode": "diff" | "restamp" | "restore", …the Re-stamp inputs }:
+#   diff    { "week": 1, "league"?: uuid, "seat"?: n, "season"?: "2026" }
+#   restamp { "week": 1, "confirm": "RESTAMP", "league"?, "report"?, "include_drip"? }
+#   restore { "file": "scripts/db/restore/….json" }
+# `restamp` still demands its confirm string — in the file, where a reviewer
+# reads it — because the gate is about intent, and intent is what a file is.
+#
+# Secrets required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (the worker's).
+on:
+  push:
+    branches: [main]
+    paths: ['ops/run/**']
+
+# Shared with Re-stamp / Sync / Simulate: two writers on the same league-week
+# from two runners is the one thing this group exists to prevent.
+concurrency: live-sim
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the push's "before" SHA has to be present
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Run the new requests
+        working-directory: server
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+            echo "::error::SUPABASE_URL secret is missing or not an https:// URL."; exit 1
+          fi
+          files=$(cd .. && git diff --no-renames --name-only --diff-filter=A "$BEFORE" "$AFTER" -- 'ops/run/*.json' | sort)
+          if [ -z "$files" ]; then echo "No new ops requests."; exit 0; fi
+          for f in $files; do
+            echo ""
+            echo "════════ $f ════════"
+            cat "../$f"
+            echo ""
+            npm run --silent cli -- ops-run "../$f"
+          done
+          echo ""
+          echo "all requests done."

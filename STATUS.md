@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.477.0 — the request is the commit
+
+Founder, after a day of copying inputs into the Re-stamp form by hand: "Just
+add a trigger and run these please."
+
+The integration that writes this repo cannot dispatch a workflow — every
+`workflow_dispatch` call returns 403 — but it can merge, and a merge is a push.
+So an ops errand is now a small JSON file under `ops/run/`, reviewed in the PR
+like any other change, and run once when it lands on main by the new
+`ops-run.yml`. `cli ops-run` turns the file into exactly the argv the Re-stamp
+form would have produced and runs it as a child of the same CLI, so a request
+cannot reach a path the form cannot, and the form's gates hold: a restamp still
+needs `"confirm": "RESTAMP"` — in the file, where a reviewer reads it — and
+drip still needs `include_drip: true`, strictly.
+
+ONLY NEWLY-ADDED FILES RUN, the migrate.yml rule (`--diff-filter=A`), so an
+edited or re-pushed request never fires twice. Files run in name order and the
+first failure stops the rest: a restore that refused a row must not be followed
+by a diff that pretends it landed. Push-to-main only — a pull_request trigger
+would hand the service-role secret to a branch.
+
+The first two ride this merge: 001 puts Kickoff League's week 1 back to the
+0-0 ties it was (it drafted after week 1) and removes the report the re-stamp
+posted for it; 002 is the read-only week-1 diff that says whether installing
+the 2026 slate closes the drip gap.
+
+check:dryrun gains seven assertions. No migration.
+
 ### v0.476.0 — a calendar from the wrong year
 
 Founder, on the two loose ends: Kickoff League's week 1 "should be all ties" —

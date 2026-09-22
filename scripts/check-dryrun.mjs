@@ -93,6 +93,23 @@ ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${
   ok(dw.includes('window-battle bonus'), 'diff-week names a drip side\'s window-battle bonus instead of flagging it');
 }
 
+// ── a committed request runs once, and only on main (v0.477.0) ──
+{
+  const wf = readFileSync(new URL('../.github/workflows/ops-run.yml', import.meta.url), 'utf8');
+  ok(/push:\s*\n\s*branches: \[main\]/.test(wf), 'ops-run triggers on a push to main — never on a PR, which would hand its secrets to a branch');
+  ok(!/pull_request/.test(wf), '…and has no pull_request trigger at all');
+  ok(wf.includes('--diff-filter=A'), 'only NEWLY-ADDED request files run — an edited or re-pushed one never fires twice');
+  ok(/set -euo pipefail/.test(wf), 'the first failing request stops the rest');
+  ok(wf.includes('concurrency: live-sim'), 'it shares the write lock with Re-stamp / Sync / Simulate');
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  const op = cli.slice(cli.indexOf("case 'ops-run'"), cli.indexOf("case 'seed-test-users'"));
+  ok(op.includes("req.confirm !== 'RESTAMP'"), 'a restamp request still needs its RESTAMP, in the file');
+  // Strict `=== true`: a string "false" or a stray 1 in a hand-written file
+  // must not be read as consent to re-resolve a drip week.
+  ok(/if \(req\.include_drip === true\) argv\.push\('--include-drip'\)/.test(op),
+    'a restamp request reaches drip only when it says include_drip: true, exactly');
+}
+
 // And the caller that hands the dry run to a person must actually ask for it.
 //
 // The slice ENDS AT restore-week, not at the next case that happened to follow
