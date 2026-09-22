@@ -1,0 +1,6 @@
+{
+  "mode": "diff",
+  "week": 1,
+  "legacy_teamunits": true,
+  "why": "READ-ONLY. Hypothesis: the remaining drip gaps are the K/DST bug in drip form. Before v0.474.0 every team-unit slug resolved as a WR, and every earn/suppress/marshal/banker effect is keyed on pos DEF or K, so live drip DSTs and banker Ks did nothing. Re-resolving week 1 with that OLD rule should reproduce the stored drip finals exactly. Where it does, the gap is the fix itself; where it doesn't (Gridiron 9v10 home?), there is a second cause."
+}

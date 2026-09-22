@@ -37,8 +37,13 @@ ok(slugMeta('nobody-at-all').pos === 'WR',
 
 // ── and the resolver now asks it ──
 const src = readFileSync(new URL('../server/src/resolve.js', import.meta.url), 'utf8');
-ok(/const meta = \(slug\) => playerIndex\?\.metaForSlug\(slug\) \?\? \(slug \? slugMeta\(slug\) : null\)/.test(src),
+ok(/const meta = \(slug\) => playerIndex\?\.metaForSlug\(slug\) \?\? \(slug && !\(opts\.legacyTeamUnits && opts\.dryRun\) \? slugMeta\(slug\) : null\)/.test(src),
   'resolveMatchup falls back to slugMeta when the index has no entry');
+// The diagnostic switch that turns the fallback off (v0.479.0) must be unable
+// to reach a write: it is gated on dryRun inside the same expression, not by
+// convention at the call site.
+ok(/opts\.legacyTeamUnits && opts\.dryRun/.test(src),
+  '…and the legacy WR rule can only ever apply to a dry run, never to a write');
 ok(/import \{ slugMeta, normTeam \}/.test(src),
   '…using the import it already had');
 // The landmine itself, named so nobody re-arms it by accident.

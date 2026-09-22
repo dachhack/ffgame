@@ -312,7 +312,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   //
   // Core's `slugMeta` has always derived team units from the suffix; the
   // server just never asked it. It is a pure lookup and already imported.
-  const meta = (slug) => playerIndex?.metaForSlug(slug) ?? (slug ? slugMeta(slug) : null);
+  // `opts.legacyTeamUnits` (v0.479.0, DIAGNOSTIC, dry runs only): resolve with
+  // the PRE-v0.474.0 rule — index or nothing, so a team unit falls to
+  // makePlayer's 'WR' — to ask whether a drip week's stored finals are exactly
+  // what that rule produced. Never passed on a writing path.
+  const meta = (slug) => playerIndex?.metaForSlug(slug) ?? (slug && !(opts.legacyTeamUnits && opts.dryRun) ? slugMeta(slug) : null);
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
   const ctx = opts.ctx;
