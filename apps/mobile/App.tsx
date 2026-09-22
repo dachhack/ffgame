@@ -402,9 +402,20 @@ export function App() {
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 18, fontWeight: '700', color: theme.text }}>
               {open.name}
             </Text>
-            <Pressable hitSlop={8} onPress={() => { tap(); openLeagueSettings(); }}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: theme.dim }}>⚙</Text>
+            {/* LABELLED, AND IT HAS TO WIN (founder: "League settings/info chip
+                needs to be more prominent. Let's make it labeled as well").
+                A bare ⚙ in a hairline pill lost twice over: there is ALREADY a
+                gear in the bar above this one — the app's own — so an unlabelled
+                second gear asks you to guess which is which, and a grey
+                hairline against a grey header is not a control, it is a
+                decoration. It carries the accent and its own word now. */}
+            <Pressable hitSlop={10} onPress={() => { tap(); openLeagueSettings(); }}
+              accessibilityRole="button" accessibilityLabel="League settings and info"
+              style={{
+                borderWidth: 1, borderColor: theme.you, borderRadius: 999,
+                backgroundColor: alpha(theme.you, 14), paddingHorizontal: 12, paddingVertical: 6,
+              }}>
+              <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, color: theme.you }}>⚙ SETTINGS</Text>
             </Pressable>
           </View>
         )}

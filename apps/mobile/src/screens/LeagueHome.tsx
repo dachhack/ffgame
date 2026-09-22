@@ -348,7 +348,14 @@ function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onSho
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
+    // `flexShrink: 1`, NOT `flex: 1` — the sheet's card has `maxHeight: '92%'`
+    // and no fixed height, so it sizes to its children. A `flex: 1` child of an
+    // auto-height parent resolves to ZERO, which is why the first cut of this
+    // opened as a header and nothing else (founder: "It didn't actually pop up
+    // when I hit it. Just a tiny peek at the bottom"). Every other Overlay in
+    // the app passes flexShrink; this one kept `flex: 1` from the days it was
+    // the whole screen.
+    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
       {!!champion && (
         <View style={{ backgroundColor: alpha(t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '800', color: t.text }}>🏆 {champion}</Text>

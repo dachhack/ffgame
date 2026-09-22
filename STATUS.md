@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.465.1 — the sheet that would not open
+
+Founder, an hour after v0.465.0 shipped: "League settings/info chip needs to
+be more prominent. Let's make it labeled as well. It didn't actually pop up
+when I hit it. Just a tiny peek at the bottom."
+
+THE SHEET WAS OPENING TO NOTHING. `Overlay`'s card is `maxHeight: '92%'` with
+no fixed height — it sizes to its children — and the menu kept `flex: 1` on
+its ScrollView from the days it WAS the whole screen. A `flex: 1` child of an
+auto-height parent resolves to zero, so the card was exactly as tall as its
+header: the peek. Every other Overlay in the app passes `flexShrink: 1`, which
+is what this one needed and now has.
+
+Worth naming, because the mistake is invisible in a diff: moving a component
+from being a screen to being sheet CONTENT changes what its root flex means,
+and nothing type-checks that.
+
+AND THE CHIP LOST TWICE OVER. A bare ⚙ in a hairline pill, in a header that
+ALREADY has a gear one row up — the app's own — so an unlabelled second gear
+asks you to guess which is which, and grey hairline on grey reads as
+decoration rather than a control. It carries the accent and its own word now:
+⚙ SETTINGS.
+
 ### v0.465.0 — the web hub, the wire, and words on the rail
 
 Three founder asks in one pass: mirror 0341's league page on the web, build
