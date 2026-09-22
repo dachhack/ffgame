@@ -18,6 +18,80 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.477.0 — the request is the commit
+
+Founder, after a day of copying inputs into the Re-stamp form by hand: "Just
+add a trigger and run these please."
+
+The integration that writes this repo cannot dispatch a workflow — every
+`workflow_dispatch` call returns 403 — but it can merge, and a merge is a push.
+So an ops errand is now a small JSON file under `ops/run/`, reviewed in the PR
+like any other change, and run once when it lands on main by the new
+`ops-run.yml`. `cli ops-run` turns the file into exactly the argv the Re-stamp
+form would have produced and runs it as a child of the same CLI, so a request
+cannot reach a path the form cannot, and the form's gates hold: a restamp still
+needs `"confirm": "RESTAMP"` — in the file, where a reviewer reads it — and
+drip still needs `include_drip: true`, strictly.
+
+ONLY NEWLY-ADDED FILES RUN, the migrate.yml rule (`--diff-filter=A`), so an
+edited or re-pushed request never fires twice. Files run in name order and the
+first failure stops the rest: a restore that refused a row must not be followed
+by a diff that pretends it landed. Push-to-main only — a pull_request trigger
+would hand the service-role secret to a branch.
+
+The first two ride this merge: 001 puts Kickoff League's week 1 back to the
+0-0 ties it was (it drafted after week 1) and removes the report the re-stamp
+posted for it; 002 is the read-only week-1 diff that says whether installing
+the 2026 slate closes the drip gap.
+
+check:dryrun gains seven assertions. No migration.
+
+### v0.476.0 — a calendar from the wrong year
+
+Founder, on the two loose ends: Kickoff League's week 1 "should be all ties" —
+the league drafted after week 1 and never played it — "let's check into the
+drip difference."
+
+THE TIES FIRST, BECAUSE THEY ARE A CORRECTION. The v0.474.0 week-1 re-stamp
+found 0-0 on all four Kickoff matchups, re-resolved them against whatever the
+rosters held, and wrote 15-to-48-point "results" for a week nobody played. A
+second restore file puts the zeros back, and `restore-week` gains
+`clear_report`, which drops the write-up and chat line that run posted — a
+report on a week that was not played is not a report.
+
+THE DRIP DIFFERENCE HAS TWO PARTS, AND ONE OF THEM WAS NEVER A BUG. The
+"slots sum 5.00 and 10.00 short of their own side totals" in the week-2 diff is
+the WINDOW BATTLE: a flat WINDOW_WIN_BONUS (5) to the side that wins each
+contested window, baked into the window's state and never into a slot row.
+One window won, +5; two, +10. diff-week now names it instead of flagging it,
+and skips a `scheduled` matchup outright — it has no sealed rows, resolves to
+an auto-lineup, and the week-2 run printed exactly that as if it were a
+finding.
+
+THE OTHER PART IS THE DROP, AND IT IS A CALENDAR. `closeWeek` calls
+`setRuntimeSlate` from the ESPN scoreboard before it stamps anything. The CLI
+never did. Without a runtime slate, nflSlate.ts falls back — by design, for
+the demo — to the BAKED 2025 SCHEDULE, so `windowForTeam`, `windowKickoffMs`
+and `windowsForWeek` all answered from last year. Classic never asks about
+windows (one weekly lineup), which is why every classic re-stamp landed on the
+board's number to the decimal. Drip asks for every pick: which window a game
+is in, when it locks, whether a buff armed in time, whether a slot is
+unopposed. A 2026 week resolved against 2025's windows is a different week,
+and -69.1 is what a different week looks like. Both `restamp` and `diff-week`
+install the week's slate from the nfl_slate table first now, and refuse when
+there is none to install.
+
+NOT YET PROVEN TO BE THE WHOLE OF IT. `ruledOutSlugs` reads injury_status as it
+stands today — the table has no history — so every auto-fill benches whoever is
+OUT or IR now, whatever he did that week; a manual sealed pick is unaffected.
+And applied_state, seat reassignment and buff arm-stamps are all "as they stand
+now" too. So drip stays off the re-stamp by default. The measurement that ends
+it is cheap and read-only: `diff` on week 1 for a drip league — stored equal to
+re-resolved means the slate was the whole story; a remaining gap names the
+next thing.
+
+check:dryrun gains eight assertions. No migration.
+
 ### v0.475.0 — a drip week does not come back
 
 WEEK 2 WAS A CLEAN REPAIR. Eight matchups moved and every one landed on the

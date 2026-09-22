@@ -789,7 +789,15 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
  *  `classicLineup` off its roster AS IT STANDS NOW, not as it stood that
  *  Sunday. A managed seat's sealed rows are the week's own and nothing moves;
  *  an abandoned seat re-stamped months later can be fielded by a player it did
- *  not own at kickoff. Re-stamp the week that is wrong, and do it soon. */
+ *  not own at kickoff. Re-stamp the week that is wrong, and do it soon.
+ *
+ *  A SECOND CAVEAT OF THE SAME KIND (v0.476.0): `ruledOutSlugs` reads
+ *  injury_status AS IT STANDS NOW — the table has no history. A re-stamp
+ *  values a player who is OUT or IR today at zero in every AUTO-FILL (the
+ *  unmanaged seat's computed lineup, a best-ball spot's ranking), whatever he
+ *  did in the week being re-stamped. A manual sealed pick still scores what
+ *  he scored. Both caveats say the same thing: the further from the week, the
+ *  less the world the resolver sees is the world the week was played in. */
 export async function stampFinals(week, playerIndex, opts = {}) {
   // `opts.restamp` re-resolves finals that are ALREADY stamped (v0.457.0).
   // Without it this selects `home_final is null` and so stamps a matchup

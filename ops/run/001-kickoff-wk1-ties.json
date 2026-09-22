@@ -1,0 +1,5 @@
+{
+  "mode": "restore",
+  "file": "scripts/db/restore/2026-wk1-kickoff-ties.json",
+  "why": "Kickoff League drafted after week 1 and never played it; the v0.474.0 re-stamp wrote 15-48 point results into a week that should be 0-0 ties. Puts the zeros back and removes the week-1 report it posted."
+}

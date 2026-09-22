@@ -70,6 +70,46 @@ ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${
   ok(rw.includes("!== 1"), 'restore-week refuses a row that does not match exactly one matchup');
 }
 
+// ── the CLI resolves in the tick's world, not the bake's (v0.476.0) ──
+// Without a runtime slate every window lookup answers from the baked 2025
+// schedule. The tick installs one from ESPN before it stamps; the CLI has to
+// install one from nfl_slate, and has to do it BEFORE it resolves anything.
+{
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  ok(cli.includes('async function installWeekSlate('), 'the CLI has a DB-backed slate install');
+  ok(cli.includes("from('nfl_slate')") && cli.includes('setRuntimeSlate(week, games)'),
+    '…that reads nfl_slate and hands setRuntimeSlate the tick\'s shape');
+  for (const name of ['restamp', 'diff-week']) {
+    const start = cli.indexOf(`case '${name}'`);
+    const body = cli.slice(start, cli.indexOf('\n    case ', start + 10));
+    const at = body.indexOf('await installWeekSlate(');
+    const resolveAt = Math.min(...['stampFinals(', 'resolveMatchup(', 'injectWeekPlays('].map((k) => body.indexOf(k)).filter((i) => i > 0));
+    ok(at > 0 && at < resolveAt, `${name} installs the week's slate before it resolves anything`);
+    ok(/if \(!slateN\) break;|not meaningful/.test(body), `${name} says so, or refuses, when there is no slate to install`);
+  }
+  const dw = cli.slice(cli.indexOf("case 'diff-week'"), cli.indexOf("case 'restore-week'"));
+  ok(dw.includes("m.status === 'scheduled'") && dw.includes('continue;'),
+    'diff-week skips a scheduled matchup rather than printing an auto-lineup as a finding');
+  ok(dw.includes('window-battle bonus'), 'diff-week names a drip side\'s window-battle bonus instead of flagging it');
+}
+
+// ── a committed request runs once, and only on main (v0.477.0) ──
+{
+  const wf = readFileSync(new URL('../.github/workflows/ops-run.yml', import.meta.url), 'utf8');
+  ok(/push:\s*\n\s*branches: \[main\]/.test(wf), 'ops-run triggers on a push to main — never on a PR, which would hand its secrets to a branch');
+  ok(!/pull_request/.test(wf), '…and has no pull_request trigger at all');
+  ok(wf.includes('--diff-filter=A'), 'only NEWLY-ADDED request files run — an edited or re-pushed one never fires twice');
+  ok(/set -euo pipefail/.test(wf), 'the first failing request stops the rest');
+  ok(wf.includes('concurrency: live-sim'), 'it shares the write lock with Re-stamp / Sync / Simulate');
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  const op = cli.slice(cli.indexOf("case 'ops-run'"), cli.indexOf("case 'seed-test-users'"));
+  ok(op.includes("req.confirm !== 'RESTAMP'"), 'a restamp request still needs its RESTAMP, in the file');
+  // Strict `=== true`: a string "false" or a stray 1 in a hand-written file
+  // must not be read as consent to re-resolve a drip week.
+  ok(/if \(req\.include_drip === true\) argv\.push\('--include-drip'\)/.test(op),
+    'a restamp request reaches drip only when it says include_drip: true, exactly');
+}
+
 // And the caller that hands the dry run to a person must actually ask for it.
 //
 // The slice ENDS AT restore-week, not at the next case that happened to follow
