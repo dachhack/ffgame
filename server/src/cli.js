@@ -416,6 +416,7 @@ async function main() {
           refused += (lg.matchups ?? []).length; continue;
         }
         const lid = hit[0].id;
+        const refusedAtStart = refused;
         console.log(`  ${lg.league_id_prefix} · ${lg.matchups.length} matchup(s)`);
         // `clear_report` (v0.476.0): a week put back to 0-0 because it was
         // never played has no business keeping the write-up a mistaken
@@ -448,7 +449,45 @@ async function main() {
           const { error } = await db().from('matchup')
             .update({ home_final: m.home, away_final: m.away }).eq('id', cur.id);
           if (error) { console.log(`        FAILED — ${error.message}`); refused++; continue; }
+          // `reset_state` (v0.478.0): replace the matchup's per-window rows
+          // with ONE totals-only row. For when the breakdown behind a final
+          // was overwritten by a pass that should not have run and the real
+          // one survives nowhere: the totals are known, the breakdown is not,
+          // and a record that says only what is known beats one that sums to
+          // a different number. 'ALL' is the resolver's own no-windows
+          // sentinel, so every reader already understands the shape.
+          if (lg.reset_state === true) {
+            const { error: dErr } = await db().from('matchup_state').delete().eq('matchup_id', cur.id);
+            const { error: iErr } = dErr ? { error: dErr } : await db().from('matchup_state').insert({
+              matchup_id: cur.id, game_window: 'ALL', home_score: m.home, away_score: m.away,
+              slot_scores: [], events_json: [], updated_at: new Date().toISOString(),
+            });
+            if (iErr) { console.log(`        final written, but state reset FAILED — ${iErr.message}`); refused++; continue; }
+            console.log('        window rows replaced with one totals-only row');
+          }
           done++;
+        }
+        // `rebuild_report` (v0.478.0): rebuild and force-post this league-week's
+        // report from the finals as they now stand — what ↻ REPOST does, run
+        // after the numbers are right rather than before. Skipped when any row
+        // for the league was refused: a report over half-restored numbers is
+        // the thing this errand exists to undo.
+        if (lg.rebuild_report === true && !dry && refused > refusedAtStart) {
+          console.log(`      report NOT rebuilt — ${refused - refusedAtStart} row(s) in this league were refused`);
+        } else if (lg.rebuild_report === true && !dry) {
+          const { buildLeagueReport, postReport } = await import('./report.js');
+          const [{ data: ls }, { data: rows }] = await Promise.all([
+            db().from('league').select('id, name, season, settings_json').eq('id', lid),
+            db().from('matchup').select('id, league_id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+              .eq('league_id', lid).eq('week', week),
+          ]);
+          try {
+            const report = await buildLeagueReport(ls[0], week, rows);
+            await postReport(ls[0], week, report, { force: true });
+            console.log(`      report rebuilt — ${report.headline}${report.mvp ? '' : ' (no MVP: no slot breakdown)'}`);
+          } catch (e) { console.log(`      report rebuild FAILED — ${e.message}`); refused++; }
+        } else if (lg.rebuild_report === true) {
+          console.log(`      would rebuild and repost the week ${week} report`);
         }
       }
       console.log(`\nrestore-week: ${done} matchup(s) ${dry ? 'would be restored' : 'restored'}, ${refused} refused.`);

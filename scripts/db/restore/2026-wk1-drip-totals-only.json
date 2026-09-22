@@ -1,0 +1,89 @@
+{
+  "note": "WEEK 1, TOTALS ONLY, for the two drip leagues the v0.474.0 re-stamp (run #3) wrongly re-resolved. restore-week already put their FINALS back (run #5); this replaces the per-window/per-slot rows run #3 also overwrote. The live breakdown survives in no log, so each matchup gets one 'ALL' row carrying the true totals and no slot rows: the record says what is known and nothing it is not. Then each league's week-1 report is rebuilt from those finals - the headline and results are right, and there is no MVP line because there is no honest breakdown to take one from. Finals are the same values as 2026-wk1-drip.json; rewriting them is a no-op.",
+  "season": "2026",
+  "week": 1,
+  "leagues": [
+    {
+      "league_id_prefix": "29bb2fba",
+      "name": "Turf Warriors",
+      "matchups": [
+        {
+          "home_roster_id": 1,
+          "away_roster_id": 4,
+          "home": 136.1,
+          "away": 47.4
+        },
+        {
+          "home_roster_id": 2,
+          "away_roster_id": 5,
+          "home": 61.6,
+          "away": 208.1
+        },
+        {
+          "home_roster_id": 3,
+          "away_roster_id": 12,
+          "home": 49.7,
+          "away": 90.3
+        },
+        {
+          "home_roster_id": 7,
+          "away_roster_id": 8,
+          "home": 85.6,
+          "away": 64.0
+        },
+        {
+          "home_roster_id": 9,
+          "away_roster_id": 10,
+          "home": 78.9,
+          "away": 42.7
+        }
+      ],
+      "reset_state": true,
+      "rebuild_report": true
+    },
+    {
+      "league_id_prefix": "798acff0",
+      "name": "Gridiron Gang",
+      "matchups": [
+        {
+          "home_roster_id": 1,
+          "away_roster_id": 12,
+          "home": 64.1,
+          "away": 71.2
+        },
+        {
+          "home_roster_id": 2,
+          "away_roster_id": 5,
+          "home": 89.3,
+          "away": 42.2
+        },
+        {
+          "home_roster_id": 3,
+          "away_roster_id": 6,
+          "home": 94.3,
+          "away": 101.6
+        },
+        {
+          "home_roster_id": 4,
+          "away_roster_id": 7,
+          "home": 102.4,
+          "away": 74.5
+        },
+        {
+          "home_roster_id": 8,
+          "away_roster_id": 11,
+          "home": 110.1,
+          "away": 97.5
+        },
+        {
+          "home_roster_id": 9,
+          "away_roster_id": 10,
+          "home": 166.9,
+          "away": 98.2
+        }
+      ],
+      "reset_state": true,
+      "rebuild_report": true
+    }
+  ]
+}

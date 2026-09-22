@@ -1,0 +1,5 @@
+{
+  "mode": "restore",
+  "file": "scripts/db/restore/2026-wk1-drip-totals-only.json",
+  "why": "Option 2: Gridiron Gang and Turf Warriors week 1 keep their restored finals; the re-stamp's per-slot breakdown (which no longer sums to them) is replaced with one totals-only row per matchup, and both week-1 reports are rebuilt from the true finals, without an MVP line."
+}

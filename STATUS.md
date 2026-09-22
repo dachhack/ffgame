@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.478.0 — what is known, and nothing it is not
+
+The week-1 diff with the 2026 slate installed matched 6 of the 12 drip
+matchups to the decimal — including the worst of them (Turf 1v4 was -43.4
+under the 2025 calendar and is exact now) — so the slate was most of the
+drip drop. Not all: several remaining deltas are exactly ±5, a window battle
+flipped by a smaller change; the QB `fg` (Field General) and K `banker` slots,
+both cross-window, are where the rest sits; and Gridiron 9v10 home re-resolves
+72.2 short with only 7 of 9 slots producing a row. Drip stays off the re-stamp.
+
+AND A CONSEQUENCE OF THE BAD RUN THAT THE RESTORE DID NOT REACH. Run #3 also
+overwrote `matchup_state` — the per-window and per-slot rows — for the 11 drip
+matchups, and the live breakdown was printed nowhere. The restored finals no
+longer summed to their own rows, the console called them drifted, and a repost
+would have named an MVP from the wrong breakdown. Founder chose option 2: each
+of those matchups gets ONE 'ALL' row carrying the true totals and no slot rows,
+and both week-1 reports are rebuilt from the true finals, without an MVP line.
+The record says what is known and nothing it is not.
+
+`restore-week` gains `reset_state` and `rebuild_report`. The rebuild is skipped
+for any league that had a row refused — a report over half-restored numbers is
+the thing the errand exists to undo — and the final is always written before
+the breakdown is touched. Run by ops/run/003 on merge.
+
+check:dryrun gains three assertions. No migration.
+
 ### v0.477.0 — the request is the commit
 
 Founder, after a day of copying inputs into the Re-stamp form by hand: "Just

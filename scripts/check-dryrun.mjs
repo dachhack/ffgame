@@ -110,6 +110,18 @@ ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${
     'a restamp request reaches drip only when it says include_drip: true, exactly');
 }
 
+// ── restore-week's two follow-throughs (v0.478.0) ──
+{
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  const rw = cli.slice(cli.indexOf("case 'restore-week'"), cli.indexOf("case 'ops-run'"));
+  ok(rw.includes("lg.reset_state === true") && rw.includes("game_window: 'ALL'") && rw.includes('slot_scores: []'),
+    'reset_state writes ONE totals-only row with no slot breakdown — it states only what is known');
+  const del = rw.indexOf("from('matchup_state').delete()"), fin = rw.indexOf("update({ home_final: m.home");
+  ok(fin > 0 && del > fin, 'the final is written before the breakdown is touched');
+  ok(/refused > refusedAtStart/.test(rw) && rw.indexOf('const refusedAtStart = refused') > 0,
+    'a league with any refused row does not get its report rebuilt over half-restored numbers');
+}
+
 // And the caller that hands the dry run to a person must actually ask for it.
 //
 // The slice ENDS AT restore-week, not at the next case that happened to follow
