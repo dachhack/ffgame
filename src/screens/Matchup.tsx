@@ -21,7 +21,7 @@ import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
-import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt, srvSidePicks } from '@drip/core/engine/liveScore';
+import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt, fgBoostTotal, srvSidePicks } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { openPlayerCard } from '../app/playerCard';
 import { ScoreDiffPanel } from '../app/scoreDiff';
@@ -3193,7 +3193,7 @@ function WindowSectionInner(props: {
 
       {phase !== 'setup' && (
         <WindowBattleBar rw={rw} week={week} clock={clock} wallClock={wallClock} done={done}
-          srvYou={props.srvYou} srvThem={props.srvThem}
+          srvYou={props.srvYou} srvThem={props.srvThem} twin={twinLinked.size >= 2}
           // Founder (v0.388.8): "it should always show 0 to 0 until kick off."
           // The worker publishes 0–0 for an un-kicked window now; this is the
           // board's own copy of the rule, for the moment before its row lands.
@@ -3233,7 +3233,7 @@ function WindowSectionInner(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} cards={cards} kicked={kicked} />;
+          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} twinWindow={twinLinked.size >= 2} cards={cards} kicked={kicked} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -3357,9 +3357,13 @@ function WindowGameLog({ week, win }: { week: number; win: WindowId }) {
 // aggregate (who's winning the window) as a battle meter; at FINAL it locks to
 // the settled result — WON/LOST, the +bonus points, and the window MVP (the
 // single top-scoring slot, which earns a drip-coin bounty).
-function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYou, srvThem, kicked = true }: {
+function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYou, srvThem, kicked = true, twin = false }: {
   rw: ReturnType<typeof buildMatchup>['windows'][number]; week: number; clock: number; wallClock: boolean; done: boolean;
   potMatchupId?: string | null;
+  /** Twin Generals live in THIS window — the buff is armed and two of your
+   *  Field General QBs are in it, so the two multipliers stack. Labels the
+   *  line below; the pairing itself is decided by `twinGeneralKeys` upstairs. */
+  twin?: boolean;
   /** The RESOLVER's totals for THIS window, already read as you/them. Numbers
    *  rather than the row so `WindowSection`'s memo comparator keeps working —
    *  a fresh object from `.find()` is never `Object.is`-equal and would
@@ -3382,12 +3386,27 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
     : potWin?.state === 'split' || potWin?.state === 'void' ? 'var(--dim)' : 'var(--opp)';
   // Live aggregate at the current window clock — sum each slot's running bank.
   let liveYou = 0, liveTheir = 0;
+  // …and, in the same pass, what the Field Generals put INTO those banks. Each
+  // receiving slot only: a general's own card banks none of his multiplier.
+  const fgYou: { events: typeof rw.slots[number]['events']; clock: number }[] = [];
+  const fgTheir: { events: typeof rw.slots[number]['events']; clock: number }[] = [];
   for (const s of rw.slots) {
     const yc = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
     const tc = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
     if (s.you) liveYou += banksAtClock(s.events, yc).you;
     if (s.their) liveTheir += banksAtClock(s.events, tc).their;
+    const srcYou = s.you && s.you.player.pos === 'QB' && s.you.metricId === 'fg';
+    const srcTheir = s.their && s.their.player.pos === 'QB' && s.their.metricId === 'fg';
+    if (s.youFgMult && !srcYou) fgYou.push({ events: s.events, clock: yc });
+    if (s.theirFgMult && !srcTheir) fgTheir.push({ events: s.events, clock: tc });
   }
+  // THE WINDOW'S SHARE (v0.459.0). Founder: "I'd love to see on the card or
+  // somewhere how much of the score for each player came from field generals."
+  // The card carries its own slice (ScoreCard's ⚡ chip); this is the somewhere
+  // — the window's whole take, so the answer is one number instead of six chips
+  // added up on a phone. Un-kicked windows read 0 like everything else here.
+  const fgYouTot = kicked ? fgBoostTotal(fgYou, 'you') : 0;
+  const fgTheirTot = kicked ? fgBoostTotal(fgTheir, 'their') : 0;
   // THE SERVER'S NUMBER WINS ON THE LIVE BOARD (v0.339.3).
   //
   // This bar used to render `liveYou`/`liveTheir` — a local re-simulation at
@@ -3431,6 +3450,16 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
         </div>
         <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--opp)', minWidth: 38 }}>{tTot.toFixed(1)}</span>
       </div>
+      {(fgYouTot > 0 || fgTheirTot > 0) && (
+        <div className="mono" title="Points in this window that exist only because a Field General was multiplying his teammates. Counted inside the totals above — not a bonus on top."
+          style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--warn)', marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <span>⚡{twin ? '🎖️' : ''} FIELD GENERALS</span>
+          <span style={{ color: fgYouTot > 0 ? 'var(--you)' : 'var(--faint)' }}>you +{fgYouTot.toFixed(1)}</span>
+          <span style={{ color: 'var(--faint)' }}>·</span>
+          <span style={{ color: fgTheirTot > 0 ? 'var(--opp)' : 'var(--faint)' }}>them +{fgTheirTot.toFixed(1)}</span>
+          {twin && <span style={{ color: 'var(--faint)' }}>· twin stacked</span>}
+        </div>
+      )}
       {done && mvp && (
         <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: mvp.side === 'you' ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>
           ⭐ WINDOW MVP · {mvp.name} {mvp.score.toFixed(1)} <span style={{ color: 'var(--warn)' }}>◈{mvp.coin}</span>
@@ -3494,7 +3523,7 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, cards, kicked = true }: {
+function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, twinWindow, cards, kicked = true }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number;
   /** The RESOLVER's score for this slot, per side — what the app's card shows
@@ -3504,7 +3533,10 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
   backups: Record<string, string>; slotName: Record<string, string>;
-  realClock: boolean; kickoffSec: number; youTwin?: boolean; cards?: boolean;
+  realClock: boolean; kickoffSec: number; youTwin?: boolean;
+  /** Your Field Generals are TWIN-STACKED in this window — so every slot they
+   *  boosted carried the doubled multiplier, not just the two QBs. */
+  twinWindow?: boolean; cards?: boolean;
   /** This window has kicked off — card theme keeps the opponent sealed until then. */
   kicked?: boolean;
 }) {
@@ -3769,7 +3801,11 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   // Parkinson stood at 0 rec yd, so the card read 6.9 over no catches with
   // nothing to say why. Once the server has published this slot (srv row
   // present) and the pipeline says a sub lands here, say so.
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  // The TWIN badge used to sit only on the two generals; a boosted card said
+  // nothing about which multiplier it was carrying (founder: "the twin
+  // generals bonus doesn't show in the olave card"). `youTwin` is the slot's
+  // own badge; `twinWindow` is the window's stack, which is what boosted this.
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin || (twinWindow && youBoost > 0)} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} fgBoost={theirBoost} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
@@ -3980,10 +4016,18 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
   const fgLive = fgMult != null && fgMult > 1.005;
   const boosted = (fgBoost ?? 0) >= 0.05;
   const fgStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--fx-mult)', border: '1px solid color-mix(in srgb, var(--fx-mult) 55%, transparent)', background: 'color-mix(in srgb, var(--fx-mult) 14%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' };
+  // THE NUMBER IS THE POINT (v0.459.0). This chip ellipsises at the card's
+  // width, and on a phone the word BOOSTED ate the whole budget: the founder's
+  // Olave card read "⚡ FG BOOSTED +" with the amount clipped off the end —
+  // the one part that answers "how much of this came from my general". So the
+  // prose shortens on a narrow screen and the value never does, and the twin
+  // marker rides along, because a doubled multiplier is worth knowing on the
+  // card it doubled rather than only on the two QBs that made it.
+  const twinMark = twin ? '🎖️' : '';
   const fgEl = fgLive ? (
-    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult!.toFixed(2)} right now${boosted ? ` — +${fgBoost!.toFixed(1)} of this bank is the boost so far` : ''}`} style={fgStyle}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} ×{fgMult!.toFixed(2)}{boosted ? ` · +${fgBoost!.toFixed(1)}` : ''}</span>
+    <span className="mono" title={`A Field General QB in this window is multiplying this slot's scoring ×${fgMult!.toFixed(2)} right now${twin ? ' (Twin Generals — two of your generals stacked)' : ''}${boosted ? ` — +${fgBoost!.toFixed(1)} of this bank is the boost so far` : ''}`} style={fgStyle}>⚡{twinMark} {isMobile ? 'FG' : 'FIELD GEN'} ×{fgMult!.toFixed(2)}{boosted ? ` +${fgBoost!.toFixed(1)}` : ''}</span>
   ) : boosted ? (
-    <span className="mono" title={`A Field General multiplied this slot's scoring: +${fgBoost!.toFixed(1)} of its bank is the boost. The multiplier resets when regulation ends (Overtime carries it), and what it banked stays banked.`} style={{ ...fgStyle, opacity: 0.85 }}>⚡ {isMobile ? 'FG' : 'FIELD GEN'} BOOSTED +{fgBoost!.toFixed(1)}</span>
+    <span className="mono" title={`A Field General multiplied this slot's scoring: +${fgBoost!.toFixed(1)} of its bank is the boost${twin ? ', with Twin Generals stacking two of them' : ''}. The multiplier resets when regulation ends (Overtime carries it), and what it banked stays banked.`} style={{ ...fgStyle, opacity: 0.85 }}>⚡{twinMark} {isMobile ? 'FG' : 'FIELD GEN BOOSTED'} +{fgBoost!.toFixed(1)}</span>
   ) : null;
 
   if (isMobile && cards) {

@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.459.0 — what the generals were worth
+
+Founder, looking at C. Olave's card on the phone: "the twin generals bonus
+doesn't show in the olave card? I'd love to see on the card or somewhere how
+much of the score for each player came from field generals."
+
+Two things were wrong and only one of them was the number.
+
+THE CARD WAS PRINTING IT AND CUTTING IT OFF. The boosted chip read `FIELD GEN
+BOOSTED +6.2`, and the chip is a one-liner with `text-overflow: ellipsis` at
+card width — so the phone rendered `⚡ FG BOOSTED +` and ate the value, which is
+the only part of that chip anybody reads. The label now shortens to `FG` on a
+narrow screen so the digits always survive: `⚡ FG +6.2` boosted, `⚡ FG ×2.00
++6.2` while the multiplier is still live.
+
+TWIN NEVER MARKED THE CARD IT PAID. The 🎖️ TWIN badge rode the two Field
+General QBs — the slots that OWN the buff — and never the receiver whose bank
+the second general actually grew. Olave's card was the one carrying Twin
+Generals points and was the one card not saying so. A boosted slot in a window
+with two linked generals now wears the mark too.
+
+AND THE SOMEWHERE. Per card is a chip; the window bar now carries the whole
+window's take — `⚡ FIELD GENERALS · you +12.4 · them +3.1`, with `twin
+stacked` when the buff is live — so the answer is one line under the battle
+meter instead of six chips added up by hand. Counted INSIDE the totals above
+it, not a bonus on top, and the tooltip says so: these are points that exist
+only because a general was multiplying, `delta − delta/mult` per banked event,
+which is the same arithmetic the card has used since v0.388.11.
+
+`fgBoostTotal` (packages/core) carries the sum, and takes a clock PER SLOT
+rather than one for the window: a 1pm game that kicked and a 1pm game still on
+the anthem are both in the early window, and one shared clock would credit a
+boost from a game that has not started.
+
 ### v0.458.0 — one waiver schedule, Sleeper's
 
 Founder, holding Sleeper's settings screen up next to ours: "I think we've got
