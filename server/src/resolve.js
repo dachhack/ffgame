@@ -722,8 +722,16 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
  *  rewrite the same values. `opts.playsInjected` lets a caller that already
  *  injected the week's plays (a test, mainly) skip the live_play refetch. */
 export async function stampFinals(week, playerIndex, opts = {}) {
-  const { data } = await db().from('matchup').select('*')
-    .eq('week', week).eq('status', 'final').is('home_final', null);
+  // `opts.restamp` re-resolves finals that are ALREADY stamped (v0.457.0).
+  // Without it this selects `home_final is null` and so stamps a matchup
+  // exactly once, from whatever plays existed at that instant — a number the
+  // standings, the report and the seeding then read forever. The tick asks
+  // for a re-stamp only between the last whistle and the week's 4 AM release,
+  // which bounds the work to a few passes and puts the correction where it
+  // belongs: before the league is told.
+  let q = db().from('matchup').select('*').eq('week', week).eq('status', 'final');
+  if (!opts.restamp) q = q.is('home_final', null);
+  const { data } = await q;
   const rows = data ?? [];
   if (!rows.length) return 0;
   if (!opts.playsInjected) await injectWeekPlays(week);

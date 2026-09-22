@@ -4,7 +4,8 @@
 // worker builds it from plain rows and both hosts render its sections; this
 // pins the reading of a small week so a refactor can't quietly change what
 // the league is told. Run: npx tsx scripts/check-week-report.mjs
-import { buildWeekReport, reportBody, reportSections, slugPretty, headlineOf, reportHasScores } from '../packages/core/src/data/weekReport.ts';
+import { buildWeekReport, reportBody, reportSections, slugPretty, headlineOf, reportHasScores,
+  nextReportRelease, weekReportRelease, GAME_RUN_MS, REPORT_HOUR_ET } from '../packages/core/src/data/weekReport.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -86,6 +87,47 @@ eq(slugPretty('bal-dst'), 'BAL D/ST', 'a defence slug');
 eq(slugPretty('bal-k'), 'BAL K', 'a kicker unit slug');
 eq(slugPretty('josh-johnson-qb'), 'Josh Johnson', 'a tagged slug drops its tag');
 eq(slugPretty('aj-brown'), 'Aj Brown', 'a plain slug title-cases');
+
+// ── THE MORNING AFTER (v0.457.0) ────────────────────────────────────────────
+// Founder, on a week-2 report posted while the Monday game was still on: "the
+// reports shouldn't go out until early AM on the day after the week closes
+// (Tuesday like 4AM EST)." The rule is the next 4 AM EASTERN after the last
+// game could have ended — by timezone NAME, because "4AM EST" is 09:00Z in
+// January and 08:00Z in September, and the season is played in the half where
+// hard-coding the other one puts the report an hour wrong.
+{
+  const iso = (ms) => new Date(ms).toISOString();
+  // The week that started this: Monday 2026-09-21, 8:15pm ET kickoff (EDT).
+  const mnf = Date.parse('2026-09-22T00:15:00Z');
+  ok(iso(weekReportRelease(mnf)) === '2026-09-22T08:00:00.000Z',
+    `a Monday-night week reports Tuesday 4 AM ET = 08:00Z in September (got ${iso(weekReportRelease(mnf))})`);
+  // Mid-game is still held: the very moment the founder's report went out.
+  ok(weekReportRelease(mnf) > Date.parse('2026-09-22T03:22:00Z'),
+    'and the instant the bad report actually posted is BEFORE that release');
+  // November, EST: the same 4 AM is an hour later in UTC.
+  const nov = Date.parse('2026-11-24T01:15:00Z');   // Mon Nov 23, 8:15pm EST
+  ok(iso(weekReportRelease(nov)) === '2026-11-24T09:00:00.000Z',
+    `in EST the same rule lands at 09:00Z (got ${iso(weekReportRelease(nov))})`);
+  // A Saturday-ending week reports Sunday morning — one rule, no calendar cases.
+  const sat = Date.parse('2026-12-27T01:00:00Z');   // Sat Dec 26, 8pm EST
+  ok(iso(weekReportRelease(sat)) === '2026-12-27T09:00:00.000Z',
+    `a Saturday-ending week reports the next morning, not "Tuesday" (got ${iso(weekReportRelease(sat))})`);
+  // Strictly after: a game ending at 3 AM ET reports at 4 AM the SAME morning;
+  // one ending at 4:01 waits a full day rather than releasing into the past.
+  ok(iso(nextReportRelease(Date.parse('2026-09-22T07:00:00Z'))) === '2026-09-22T08:00:00.000Z',
+    'an hour before the boundary releases on it');
+  ok(iso(nextReportRelease(Date.parse('2026-09-22T08:00:00.001Z'))) === '2026-09-23T08:00:00.000Z',
+    'a millisecond after it waits for tomorrow — the boundary is strict');
+  // Spring forward: 2 AM ET does not exist on 2027-03-14, 4 AM does.
+  ok(iso(nextReportRelease(Date.parse('2027-03-14T05:00:00Z'))) === '2027-03-14T08:00:00.000Z',
+    `the DST-shortened night still has a 4 AM (got ${iso(nextReportRelease(Date.parse('2027-03-14T05:00:00Z')))})`);
+  // NO SLATE, NO GATE. Holding a report forever on a missing row would be a
+  // worse failure than posting one early.
+  ok(weekReportRelease(null) === 0 && weekReportRelease(undefined) === 0 && weekReportRelease(NaN) === 0,
+    'an unknown slate reports 0 — the caller reads that as "no gate"');
+  ok(GAME_RUN_MS === 4 * 60 * 60 * 1000 && REPORT_HOUR_ET === 4,
+    'the pad is four hours and the hour is 4 AM');
+}
 
 console.log(fails ? `\n${fails} WEEK-REPORT PROBE(S) FAILED` : '\nALL WEEK-REPORT PROBES PASSED');
 process.exit(fails ? 1 : 0);
