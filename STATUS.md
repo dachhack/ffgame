@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.483.0 — a played week stays played
+
+GRIDIRON 3v6 CORRECTED. ops/run/009 wrote 94.3–101.6 → 106.3–96.6 and rebuilt
+the Gridiron week-1 report ("Croski22 beat Joeggernaut 71.2–64.1" headline
+unchanged; 3v6 now a home win). 0 refused.
+
+WHY DRIP WEEK 2 WAS UNFLIPPABLE: IT WAS NOT FINAL ANY MORE. ops/run/010 printed
+all twelve drip week-2 matchups (Turf Warriors, Gridiron Gang — both Sleeper
+leagues) as status 'scheduled' WITH their finals stamped. The cause is
+syncWeek: Sleeper's state week keeps naming the week just played until its
+midweek rollover, and every sync pass in between re-mirrored that week with an
+upsert carrying `status: 'scheduled'` and a fresh lock_at. The finals survived
+(they are not in the payload) but everything that reads `status = 'final'` —
+the standings, the weekly report's post gate, the record book, awards, the
+commish desk — dropped the week. Native leagues schedule through pods.js and
+were never touched, which is why classic week 2 was final.
+
+FIX: syncWeek reads the week's existing rows first and upserts only the ones
+still 'scheduled'; a matchup past that has nothing left for Sleeper to say.
+REPAIR: `refinalize-week <week>` flips back exactly the rows with status
+'scheduled', BOTH finals stamped and lock_at past — no genuine upcoming game has
+finals — and writes no score. ops/run/011 runs it DRY; the real flip follows
+once this worker is deployed, since the old one would re-schedule them on its
+next pass. check:dryrun asserts both halves (negative-tested against the old
+sync).
+
+No migration.
+
 ### v0.482.0 — the one it flipped
 
 Founder: "Let's correct it." Of the twelve drip week-1 results, the K/DST

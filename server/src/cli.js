@@ -628,12 +628,68 @@ async function main() {
         // Paths in a request are repo-relative, like everywhere else in the
         // repo; the CLI runs from server/, so they are resolved one level up.
         argv.push('restore-week', `../${need('file')}`);
+      } else if (req.mode === 'refinalize') {
+        argv.push('refinalize-week', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.league) argv.push(`--league=${req.league}`);
+        if (req.dry === true) argv.push('--dry');
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
       if (r.status !== 0) { console.error(`ops-run: ${argv[0]} exited ${r.status}`); process.exitCode = r.status || 1; }
+      break;
+    }
+    case 'refinalize-week': {
+      // ↩ PUT A PLAYED WEEK BACK TO FINAL (v0.483.0).
+      //   node src/cli.js refinalize-week <week> [season] [--league=<uuid>] [--dry]
+      //
+      // Until v0.483.0 the Sleeper sync re-mirrored the week just played with
+      // `status: 'scheduled'` for as long as Sleeper's state week still named
+      // it, so a finished week's matchups could be left 'scheduled' with their
+      // finals stamped — and everything that reads `status = 'final'`
+      // (standings, report, record book, commish desk) dropped the week.
+      //
+      // This flips exactly those rows back and nothing else: status
+      // 'scheduled', BOTH finals stamped, lock_at already past. A matchup that
+      // is genuinely still to be played has no finals — every path that
+      // re-opens one (admin reset, the simulator) clears them — so the three
+      // conditions together cannot catch a real upcoming game. It resolves
+      // nothing and writes no score: the finals stay exactly as stamped.
+      const { db } = await import('./supabase.js');
+      const pos = args.filter((a) => !a.startsWith('--'));
+      const week = Number(pos[0]);
+      if (!Number.isFinite(week)) { console.error('usage: refinalize-week <week> [season] [--league=<uuid>] [--dry]'); process.exitCode = 1; break; }
+      const season = pos[1] ?? config.season;
+      const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const dry = args.includes('--dry');
+      const nowIso = new Date().toISOString();
+      let q = db().from('matchup').select('id, league_id, week, home_roster_id, away_roster_id, status, home_final, away_final, lock_at')
+        .eq('week', week).eq('status', 'scheduled')
+        .not('home_final', 'is', null).not('away_final', 'is', null)
+        .not('lock_at', 'is', null).lte('lock_at', nowIso);
+      if (leagueId) q = q.eq('league_id', leagueId);
+      const { data: cand, error } = await q;
+      if (error) { console.error(`refinalize-week: ${error.message}`); process.exitCode = 1; break; }
+      const { data: lgs } = await db().from('league').select('id, season')
+        .in('id', [...new Set((cand ?? []).map((m) => m.league_id))]);
+      const seasonOf = new Map((lgs ?? []).map((l) => [l.id, String(l.season)]));
+      const rows = (cand ?? []).filter((m) => seasonOf.get(m.league_id) === String(season))
+        .sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id);
+      console.log(`refinalize-week: week ${week} (${season}) — ${rows.length} played matchup(s) left 'scheduled'${dry ? ', DRY RUN' : ''}`);
+      let n = 0;
+      for (const m of rows) {
+        console.log(`  ${m.league_id.slice(0, 8)} seat ${m.home_roster_id} vs ${m.away_roster_id}   ${Number(m.home_final).toFixed(2)}–${Number(m.away_final).toFixed(2)}   scheduled → final`);
+        if (dry) continue;
+        // Re-checked in the write itself, so a row that moved since the read
+        // (a lock tick, a sync) is left to whoever moved it.
+        const { data: up, error: e2 } = await db().from('matchup').update({ status: 'final' })
+          .eq('id', m.id).eq('status', 'scheduled').not('home_final', 'is', null).select('id');
+        if (e2) { console.error(`    FAILED — ${e2.message}`); process.exitCode = 1; continue; }
+        if (up?.length) n++; else console.log('    skipped — it moved since the read');
+      }
+      console.log(`refinalize-week: ${dry ? 'nothing written' : `${n} matchup(s) set final`}. Scores untouched.`);
       break;
     }
     case 'seed-test-users': {

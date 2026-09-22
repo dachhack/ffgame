@@ -1,0 +1,6 @@
+{
+  "mode": "refinalize",
+  "week": 2,
+  "dry": true,
+  "why": "READ-ONLY (dry). Lists every week-2 matchup the Sleeper sync left 'scheduled' with its finals stamped. The real flip goes in a follow-up request once the v0.483.0 worker is deployed; before that, the old worker's next sync pass would only re-schedule them."
+}
