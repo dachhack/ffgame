@@ -18,6 +18,178 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.465.0 — the web hub, the wire, and words on the rail
+
+Three founder asks in one pass: mirror 0341's league page on the web, build
+the players screen he photographed, and "ditch the navigation icons at the
+bottom in favor of just large text".
+
+THE WEB HUB IS THE APP'S TWIN NOW. Same three sections in the same order —
+Matchups, Standings, Activity — off the same `league_week_scoreboard`, with
+the twelve tiles behind a ⚙ SETTINGS chip beside the league name. The table
+went INLINE: it used to be a tile that opened the results page, which is one
+click to learn where you sit in your own league; that page is still behind
+"every pairing →". A tile that opens its own sheet closes the menu first,
+because two stacked sheets is a place to get lost.
+
+THE WIRE SAYS WHEN, WHO, AND WHAT THE REST OF FOOTBALL IS DOING.
+
+· THE DAY, NOT A COUNTDOWN. Founder: "Waivers in sleeper have the date the
+  player clears." Ours printed `⏳ 6h 12m`, which is a worse answer to the
+  same question in every way that matters: it has to be read and converted
+  before it means anything, it is wrong the moment the screen sleeps, and past
+  a day it stops being a duration anybody can picture. `W · Wed` is the answer
+  already converted, and it stays true while you look at it. Core's `clearsOn`
+  compares CALENDAR days in the viewer's zone rather than elapsed hours —
+  a 3am hold read at 11:30pm is still TOMORROW, which an hours reading calls
+  today. Today and tomorrow are named rather than dated, because that is how
+  the answer gets used.
+
+· WHO HOLDS HIM. "the option to see owned players and if they belong to you
+  other teams (button right there to trade)." This needed no server work at
+  all: `nativeRosters` is league-wide and both wires already had it — they
+  were throwing the answer away with `!rostered.has(slug)`. A SHOW OWNED chip
+  lets them through, tagged `→ Team PadreF3`, and an owned row's button is the
+  move actually available: ⇄ TRADE, which opens the trade centre on that seat.
+  Your own player says "yours" rather than growing a dead button. Off by
+  default — the wire's first job is still who you can HAVE.
+
+· AND THE TREND, from 0340's board: `↗1.5M`, drawn only where there is a
+  count, because a zero is not news and a column of them is noise.
+
+WORDS ON THE RAIL. The bottom bar ran a 23px glyph over a 9px caption — an
+icon explained by a label, two marks saying one thing, and the label was the
+one being read. The glyph goes and the label takes the whole rail at 13.5px,
+the size it could never be as a footnote to a picture. The rail's own height
+is unchanged. The chat dot survives, because it says something no word on the
+rail does, and rides the label now. The art stays on disk: deleting binaries
+is a separate decision from changing a layout.
+
+Nine new assertions in `check:waiverdays` for `clearsOn`.
+
+### v0.464.0 — the league tab reads like a league
+
+Founder, with Sleeper's LEAGUE tab open beside ours: "Let's follow the sleeper
+convention for my league. Matchups summary, rankings, then activity. Put all
+the league settings and info that is there now in a chip up by the league
+name. Hit the chip, open the settings."
+
+Ours was a MENU: twelve tiles, each a door to a sheet. Sleeper's is a PAGE —
+this week's games, the table, what the league just did — with the settings
+behind one gear. The second reads as a league; the first reads as a filing
+cabinet, and you have to open a drawer before anything tells you what is
+happening.
+
+The app's LEAGUE tab is now three sections in the order a person asks about
+them: MATCHUPS (this week's games, either side's total, a week pager that
+knows its own ends), STANDINGS (the table inline — it used to be a tile
+opening a sheet, which is one tap to learn where you are in your own league),
+and ACTIVITY (the register, with the full sheet a tap away).
+
+THE GEAR SITS BESIDE THE NAME, which App renders — so the sheet is a
+module-level bus, the same shape as `openPlayerCard`: App draws the chip and
+calls `openLeagueSettings`, a host mounted once presents it, and every tile
+stays exactly where it already lived. Nothing was deleted; the filing cabinet
+is fine as long as it is not the first thing you see. The context is cleared
+when the league closes, so the chip can never open a league you have left.
+
+AND THE NUMBER THE PAGE NEEDED. `leagueResults` reads
+`matchup.home_final/away_final`, and those are null until a week is stamped —
+so a league-wide board showed dashes all Sunday, which is the one day anybody
+looks at it. Migration 0341's `league_week_scoreboard` serves the stamped
+final where there is one and the sum of the worker's published window rows
+where there is not. They are the same number at the whistle, so the board does
+not jump when a week closes; it stops moving. A matchup with nothing published
+reads null rather than a manufactured 0–0.
+
+NOTHING SEALED LEAKS, and it is v0.456.1's argument again: the worker writes a
+window's row only once that window has KICKED OFF, which is the same moment
+the sealed_select RLS opens the opponent's real picks. It returns TOTALS ONLY
+— never `slot_scores` — so it says what the score is, never who is in the
+lineup, and a probe asserts a planted slug never leaves the function. The
+public API already publishes the same pair of numbers to anonymous callers for
+an opted-in league; this serves them to a member, live, which is narrower.
+
+Six probe groups in league-tab-probes.sql. The web hub is NOT yet mirrored —
+it is the next piece, and the two hosts are deliberately divergent until then.
+
+### v0.463.0 — what the wire is doing
+
+Founder, holding Sleeper's PLAYERS tab up next to ours: "We can pull trending
+from sleeper. That's not one espn or stathead has."
+
+Right on both halves. Sleeper publishes, anonymously and with no key, how many
+of its leagues added or dropped each player over a rolling window
+(`/v1/players/nfl/trending/add?lookback_hours=24`). It is millions of real
+managers acting rather than anybody's model, and it is the one signal neither
+of our other sources carries: ESPN gives ownership PERCENT, which is a level,
+and StatHead's bakes are weekly. A level says who is owned. This says who is
+being grabbed this morning, which is what a waiver wire is actually for.
+
+This is the data layer — the board, the worker and the door. The screen that
+draws it is next.
+
+TWO ENDPOINTS, ONE ROW. Adds and drops are served separately and a player can
+be high in both. That is churn, not a signal, and a column showing only adds
+would read it as a recommendation — so they are merged and the board carries
+both directions.
+
+A DEFENSE TRENDS UNDER ITS TEAM. Sleeper keys team defenses by abbreviation
+('TB'), not a numeric id; ours are `<team>-dst`, so those place themselves
+without troubling the player index. Everything else is id-first like every
+other board: a row the index cannot place is stored with a null slug rather
+than guessed at by name, and a later pull can claim it — while a pull that has
+no slug for a row never erases one already learned.
+
+FRESHNESS IS A DAY, and a stale board serves an empty map rather than
+yesterday's "trending now" — the whole claim of the column is that it is
+current — while still reporting `trend_as_of`, so a screen can explain the
+empty column instead of just showing nothing.
+
+Migration 0340 (`trend_board`, `trend_board_is_fresh`, `upsert_trend_board`
+service-role only, `league_market` re-emitted with `trend`), a worker poll on
+the hour (`server/src/poll/trending.js`), eleven assertions in
+`check:trending` and six probe groups in `trend-board-probes.sql` — including
+that a signed-in member cannot write what the whole platform reads as a market
+signal, and that every key `league_market` served before 0340 still is.
+
+### v0.462.0 — the league id, copyable
+
+Founder: "Where in the app and web UI can I find and easy copy the league Id?"
+Nowhere, was the honest answer, and on the phone it was worse than nowhere.
+
+It appeared in exactly one place: inside the public API URL on the
+commissioner's own panel, as plain text, and only while the league was
+PUBLISHED. The league route is `#/live` with no id in it — deliberately, so a
+reload lands on the leagues list — so the address bar did not have it either.
+A member had no way to reach it at all. Anyone pointing a spreadsheet, a
+Discord bot or a rankings site at their league was reading 36 hex characters
+off a screen.
+
+Now: a LEAGUE ID line with click-to-copy on the commissioner's panel — NOT
+gated on the publish switch, because a private league has an id too and a
+commissioner about to publish needs it before the URL exists — and the same
+line in the rulebook, where any member can reach it, under THIS LEAGUE, with a
+sentence saying what it is: not a secret and not a password. It identifies the
+league, it does not unlock it, and the API serves only what that page already
+shows.
+
+THE APP HAS A CLIPBOARD NOW. `expo-clipboard` is a dependency. It had been
+declined on purpose — LeagueInfo's invite link is `selectable` with a note
+saying a copy button "would mean pulling in a native module for a button the
+platform ships" — and for a LINK that was right: the OS share sheet copies,
+and ⇪ SEND was already there. A league id is not a link. It is 36 characters
+that nothing shares and nothing opens. Since the module is in, the invite link
+gets its copy button too, and both copy paths stay `selectable` so a long
+press still works when a clipboard is refused.
+
+AND A LINE THAT WAS LYING. Both rulebooks printed "HOLD AFTER A DROP: 3 days"
+straight off the stored number. Hold days count RUNS (0338), so a rolling
+league's stored 3 is a flat 24 hours — the rulebook described a league that
+does something else, which is the exact mismatch 0337 and 0338 exist to stop.
+It reads core's `holdLine` now, the same sentence the settings sheet prints,
+and its unset default is 1 rather than the 2 it had invented.
+
 ### v0.461.0 — the commissioner reposts a week
 
 Founder: "Maybe have an option for commish to regen any weekly report and post

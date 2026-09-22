@@ -14,6 +14,7 @@ import { AvatarPicker } from '../app/AvatarPicker';
 import type { Pos } from '@drip/core/types';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
+import { clearsOn } from '@drip/core/data/waiverDays';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
@@ -2706,6 +2707,20 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const [nflTeam, setNflTeam] = useState('ALL');
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
+  // 0341: WHAT THE WIRE IS DOING — Sleeper's trending adds, per slug, and
+  // whether the board is fresh enough to say so (0340). An empty map means the
+  // column simply is not drawn; a stale "trending now" is worse than none.
+  const [trend, setTrend] = useState<Record<string, { a: number; d: number }>>({});
+  // …and whether OWNED players are in the list. Founder, over Sleeper's
+  // players tab: "Also has the option to see owned players and if they belong
+  // to you other teams (button right there to trade)." Off by default, because
+  // the wire's first job is still who you can HAVE.
+  const [showOwned, setShowOwned] = useState(false);
+  /** 0341: the ⇄ TRADE button on an owned row. It switches to the trades tab
+   *  with that seat already chosen — the point of putting the button in the
+   *  row is that you do not then have to go and find the person. */
+  const [tradeSeed, setTradeSeed] = useState<number | null>(null);
+  const openTradeWith = (rid: number) => { setTradeSeed(rid); setTab('trades'); };
   useEffect(() => {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
@@ -2719,6 +2734,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     leagueMarket(leagueId).then((r) => {
       if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
+      setTrend(r.trend ?? {});
       installLiveMarket(r);
     }).catch(() => {});
     return () => { alive = false; };
@@ -2931,9 +2947,24 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const posChips = useMemo(
     () => POS_FILTERS.filter((p) => p !== 'ALL' && (!eligiblePos || eligiblePos.has(p))),
     [eligiblePos]);
+  /** WHO HOLDS HIM (0341). `nativeRosters` is league-wide and this screen
+   *  already had it — the wire was throwing the answer away with
+   *  `!rostered.has(slug)`. Roster id by slug, and the seat's name from the
+   *  waiver order, which carries both. */
+  const ownerOf = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rosters) m.set(r.slug, r.roster_id);
+    return m;
+  }, [rosters]);
+  const seatName = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const w of team?.waiver_order ?? []) m.set(w.roster_id, w.team || `Roster ${w.roster_id}`);
+    return m;
+  }, [team?.waiver_order]);
+
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => !rostered.has(p.slug)
+    const base = pool.filter((p) => (showOwned || !rostered.has(p.slug))
       // No selection = every position the LEAGUE can roster, not every
       // position there is. Picking chips narrows within that.
       && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
@@ -2943,7 +2974,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
   /** The teams actually IN this pool, so the picker never offers an empty
    *  filter — a league whose pool is one conference should not list 32. */
   const poolTeams = useMemo(
@@ -3367,6 +3398,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             <option value="ALL">ALL NFL TEAMS</option>
             {poolTeams.map((tm) => <option key={tm} value={tm}>{tm}</option>)}
           </select>
+          {/* 0341 — founder: "the option to see owned players and if they
+              belong to you other teams (button right there to trade)." Off by
+              default: the wire's first job is still who you can HAVE. */}
+          <Chip on={showOwned} onClick={() => setShowOwned(!showOwned)}>{showOwned ? 'OWNED ✓' : 'SHOW OWNED'}</Chip>
           {(tenure !== 'any' || nflTeam !== 'ALL') && (
             <button onClick={() => { setTenure('any'); setNflTeam('ALL'); }} className="mono"
               style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)' }}>✕ CLEAR</button>
@@ -3375,6 +3410,15 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
           {free.slice(0, 100).map((p) => {
             const left = waivedFor(p);
+            // 0341: THE DAY HE CLEARS, not a countdown. `⏳ 6h 12m` has to be
+            // read and converted before it means anything, it is wrong the
+            // moment the screen sleeps, and past a day it stops being a
+            // duration anybody can picture. `W (Wed)` is the answer already
+            // converted, and it stays true while you look at it.
+            const clears = clearsOn(p.waived_until, Date.now() + skew.current);
+            const ownRid = ownerOf.get(p.slug);
+            const isMine = ownRid != null && ownRid === myRoster;
+            const adds = trend[p.slug]?.a ?? 0;
             return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
                 {/* The leading number is whatever the list is SORTED BY, so
@@ -3386,9 +3430,44 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>
                 <FlagChip slug={p.slug} />
-                {left != null && <span className="mono" style={{ fontSize: 8.5, color: 'var(--warn)' }} title="on waivers">⏳ {fmtLeft(left)}</span>}
+                {clears && (
+                  <span className="mono" title={`On waivers — clears ${clears.day}${left != null ? ` (in ${fmtLeft(left)})` : ''}`}
+                    style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 999, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                    W · {clears.short}
+                  </span>
+                )}
+                {/* WHO HOLDS HIM. Only drawn when the list is showing owned
+                    players, so the free-agent wire does not grow a column of
+                    blanks. */}
+                {showOwned && ownRid != null && (
+                  <span className="mono" title={isMine ? 'on your roster' : `rostered by ${seatName.get(ownRid) ?? 'another team'}`}
+                    style={{ fontSize: 8.5, fontWeight: 700, color: isMine ? 'var(--you)' : 'var(--dim)', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    → {isMine ? 'you' : (seatName.get(ownRid) ?? `Roster ${ownRid}`)}
+                  </span>
+                )}
+                {/* 0340: what the rest of fantasy football did with him in the
+                    last day. Only shown where the board actually has a count —
+                    a zero is not news and a column of them is noise. */}
+                {adds > 0 && (
+                  <span className="mono" title={`${adds.toLocaleString()} leagues added him in the last 24h (Sleeper)`}
+                    style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', whiteSpace: 'nowrap' }}>
+                    ↗{adds >= 1_000_000 ? `${(adds / 1_000_000).toFixed(1)}M` : adds >= 1000 ? `${Math.round(adds / 1000)}K` : adds}
+                  </span>
+                )}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
-                {(() => {
+                {ownRid != null ? (
+                  // AN OWNED PLAYER IS NOT AN ADD. The button in his row is the
+                  // move that is actually available — an offer to whoever holds
+                  // him — and on your own player there is no move to offer, so
+                  // the row says so rather than growing a dead button.
+                  isMine ? (
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', padding: '6px 10px' }}>yours</span>
+                  ) : (
+                    <button onClick={() => openTradeWith(ownRid)} disabled={myRoster == null} className="mono"
+                      title={`Open a trade with ${seatName.get(ownRid) ?? 'them'}`}
+                      style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: myRoster == null ? 0.4 : 1 }}>⇄ TRADE</button>
+                  )
+                ) : (() => {
                   // OVER-LIMIT ROSTERS ARE THE ONLY LOCK-OUT LEFT (v0.403.0).
                   // A shut FA window used to disable this button for anyone
                   // without a waiver hold — which is most of the pool, since
@@ -3450,7 +3529,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       </>)}
 
       {tab === 'trades' && (
-        <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
+        <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order} initialPartner={tradeSeed}
           rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
           reviewHours={team.trade_review_hours} vetoNeed={team.trade_veto_votes}
           offerDays={team.trade_offer_days} faabTrading={team.faab_trading} myFaab={team.my_faab}
@@ -3561,8 +3640,13 @@ export function TeamManage({ leagueId, onDraft, focus }: {
 // with the players.
 // ─────────────────────────────────────────────────────────────────────────────
 function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview,
-                      reviewHours, vetoNeed, offerDays, faabTrading, myFaab, isCommish, onChanged }: {
+                      reviewHours, vetoNeed, offerDays, faabTrading, myFaab, isCommish, onChanged,
+                      initialPartner }: {
   leagueId: string; myRoster: number | null;
+  /** 0341: arrived here from ⇄ TRADE on an owned player's row — open with that
+   *  seat already chosen, so the button saves the trip rather than just
+   *  changing tabs. */
+  initialPartner?: number | null;
   teams: { roster_id: number; team: string | null }[];
   rosters: { roster_id: number; slug: string }[];
   poolBySlug: Map<string, LeaguePoolPlayer>;
@@ -3581,7 +3665,10 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const [pickTradingOn, setPickTradingOn] = useState(true);          // the commissioner's switch (0190)
   const [blockEdit, setBlockEdit] = useState(false);
   const [open, setOpen] = useState(false);
-  const [partner, setPartner] = useState<number | null>(null);
+  const [partner, setPartner] = useState<number | null>(initialPartner ?? null);
+  // Re-seeded on each arrival, so tapping ⇄ TRADE on a SECOND player's row
+  // repoints the composer rather than leaving the first seat selected.
+  useEffect(() => { if (initialPartner != null) setPartner(initialPartner); }, [initialPartner]);
   const [give, setGive] = useState<string[]>([]);
   const [get, setGet] = useState<string[]>([]);
   const [givePicks, setGivePicks] = useState<PickAssetRow[]>([]);

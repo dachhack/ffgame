@@ -7,7 +7,8 @@
 //   · MedianGamePanel    — the extra game against the league median (same)
 //   · TradeFloorPanel    — 0321: the review mode, the vote and the offer clock (same)
 //   · AwardsPanel        — 0325: the league's own weekly awards and badges (ENGAGE)
-//   · PublicApiPanel     — 0326: publish this league to the anonymous read API (same)
+//   · PublicApiPanel     — 0326: publish this league to the anonymous read API,
+//                          and 0462: the league id itself, click to copy (same)
 //   · ScoresPanel        — a final week's scores, edited by hand (MATCHUPS)
 //   · WeeklyReportPanel  — 0339: repost any week's report into chat (same)
 //   · DuesPanel          — dues, and who has paid (SEATS)
@@ -282,6 +283,38 @@ export function TradeFloorPanel({ leagueId }: { leagueId: string }) {
 // ── The public read API (0326, opened by default in 0327) ────────────────────
 // One switch, and the URL it turns off. Off means 404 — the API cannot even be
 // used to confirm the league exists.
+/** THE LEAGUE ID, COPYABLE (v0.462.0).
+ *
+ *  Founder: "Where in the app and web UI can I find and easy copy the league
+ *  Id?" Nowhere, was the answer. It appeared in exactly one place — inside the
+ *  public API URL below — as plain text, only while the league was PUBLISHED,
+ *  and the league route is `#/live` with no id in it, so the address bar did
+ *  not have it either. Anyone pointing a spreadsheet, a Discord bot or a
+ *  rankings site at their league was reading 36 characters off a screen.
+ *
+ *  Not gated on the switch: a private league has an id too, and a commissioner
+ *  who is about to publish needs it before the URL exists. */
+export function CopyId({ leagueId }: { leagueId: string }) {
+  const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(leagueId); setDone(true); setFailed(false); setTimeout(() => setDone(false), 1400); }
+    // No clipboard (an insecure origin, a locked-down browser): say so rather
+    // than flashing "copied ✓" over nothing. The id is on screen either way.
+    catch { setFailed(true); setTimeout(() => setFailed(false), 2600); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span className="mono" style={{ ...mono, fontSize: 10, letterSpacing: '0.1em', color: 'var(--dim)' }}>LEAGUE ID</span>
+      <span className="mono" onClick={() => void copy()} title="click to copy"
+        style={{ ...mono, fontSize: 11.5, fontWeight: 700, color: 'var(--you)', cursor: 'pointer', wordBreak: 'break-all' }}>{leagueId}</span>
+      <button onClick={() => void copy()} className="mono" style={{ ...btn(false), padding: '2px 8px', fontSize: 10.5 }}>
+        {done ? '✓ copied' : failed ? '⚠ select it by hand' : '⧉ copy'}
+      </button>
+    </div>
+  );
+}
+
 export function PublicApiPanel({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -295,6 +328,7 @@ export function PublicApiPanel({ leagueId }: { leagueId: string }) {
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
       <div style={subhead}>PUBLIC READ API</div>
+      <div style={{ marginBottom: 8 }}><CopyId leagueId={leagueId} /></div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => { if (busy || on === null) return; setBusy(true); setMsg(null);
           commishSetPublicApi(leagueId, !on).then((r) => setMsg(r.ok ? '✓ saved' : r.error ?? 'failed'))

@@ -20,6 +20,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
+import { copyText } from './copy';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { LabelInfo } from './InfoChip';
 
@@ -192,6 +193,36 @@ export function WaiverOrderCard({ leagueId }: { leagueId: string }) {
 // ── The public read API (0326, opened by default in 0327) ────────────────────
 // One switch, and what it turns OFF. Off means 404 — the API cannot even be
 // used to confirm the league exists.
+/** THE LEAGUE ID, COPYABLE (v0.462.0) — the web CopyId's twin.
+ *
+ *  Founder: "Where in the app and web UI can I find and easy copy the league
+ *  Id?" On the phone it was worse than nowhere: the id showed only inside the
+ *  public API URL, only while the league was PUBLISHED, as text the app had no
+ *  clipboard to copy. Retyping 36 hex characters off a screen is not a
+ *  feature. `selectable` as well as the button, so a long-press still works if
+ *  the clipboard is refused. */
+export function CopyIdRow({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const go = async () => {
+    const ok = await copyText(leagueId);
+    if (ok) { setDone(true); setTimeout(() => setDone(false), 1400); }
+    else { setFailed(true); setTimeout(() => setFailed(false), 2600); }
+  };
+  return (
+    <View style={{ marginTop: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Mono size={9} tone="faint" track={0.1}>LEAGUE ID</Mono>
+        <View style={{ flex: 1 }} />
+        <Chip label={done ? '✓ COPIED' : failed ? '⚠ LONG-PRESS IT' : '⧉ COPY'} on={done}
+          onPress={() => { tap(); void go(); }} />
+      </View>
+      <Text selectable style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.you, marginTop: 4, lineHeight: 14 }}>{leagueId}</Text>
+    </View>
+  );
+}
+
 export function PublicApiCard({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -215,6 +246,9 @@ export function PublicApiCard({ leagueId }: { leagueId: string }) {
         <Chip label={on ? 'PUBLISHED' : 'PRIVATE'} on={on === true} disabled={busy || on === null}
           onPress={() => { tap(); void toggle(); }} />
       </Row>
+      {/* Not gated on the switch: a private league has an id too, and a
+          commissioner about to publish needs it before the URL exists. */}
+      <CopyIdRow leagueId={leagueId} />
       {on && <Mono size={8.5} tone="you" style={{ marginTop: 6 }}>{publicApiUrl(leagueId)}</Mono>}
       <Note msg={msg} />
     </Card>

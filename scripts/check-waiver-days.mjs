@@ -11,7 +11,7 @@
 import {
   WAIVER_DAY_MODES, WAIVER_MODE_LABEL, WAIVER_MODE_HINT, DEFAULT_WAIVER_DAYS,
   waiverDaysOf, nextWaiverMode, etTime, waiverScheduleLine,
-  waiverDayModesFor, normalizeWaiverDays, effectiveGameHoldDow, holdLine, waiverConflicts,
+  waiverDayModesFor, normalizeWaiverDays, effectiveGameHoldDow, holdLine, waiverConflicts, clearsOn,
 } from '../packages/core/src/data/waiverDays.ts';
 
 let fails = 0;
@@ -135,6 +135,30 @@ ok(etTime(180) === '3:00am' && etTime(0) === '12:00am' && etTime(720) === '12:00
   const rolled = waiverScheduleLine(['waivers_to_fa', 'waivers', 'waivers', 'fa', 'waivers', 'waivers', 'waivers'], 180, 3);
   ok(rolled.includes('until Thursday 3:00am'),
     `and it names the morning the after-games hold really ends on (${rolled})`);
+}
+
+// ── 0341: WHEN HE CLEARS, AS A DAY ─────────────────────────────────────────
+// The wire printed a countdown. A weekday is the same fact already converted,
+// and it stays true while you read it.
+{
+  // Tuesday 2026-09-22, 9:52pm local — the founder's own screenshot.
+  const now = new Date(2026, 8, 22, 21, 52).getTime();
+  const at = (y, m, d, h) => new Date(y, m, d, h).toISOString();
+  ok(clearsOn(null, now) === null && clearsOn(undefined, now) === null,
+    'a player with no hold gets no badge at all, rather than a badge saying nothing');
+  ok(clearsOn(at(2026, 8, 22, 10), now) === null, 'a hold that has already passed is not a hold');
+  ok(clearsOn(at(2026, 8, 22, 23), now)?.day === 'today', 'later tonight is "today"');
+  ok(clearsOn(at(2026, 8, 23, 3), now)?.day === 'tomorrow', 'and 3am tomorrow is "tomorrow", not "Wed"');
+  // THE CALENDAR-DAY RULE. Five hours out is tomorrow here; an elapsed-hours
+  // reading would call it today, which is the bug a countdown cannot avoid.
+  ok(clearsOn(at(2026, 8, 24, 3), now)?.day === 'Thursday', 'Thursday 3am reads as Thursday');
+  ok(clearsOn(at(2026, 8, 24, 3), now)?.short === 'Thu', '…and short as Thu, the shape of badge Sleeper prints');
+  ok(clearsOn(at(2026, 8, 26, 3), now)?.short === 'Sat', 'a Saturday run reads Sat');
+  // Read at 11pm, the same hold must still say tomorrow rather than today.
+  const late = new Date(2026, 8, 22, 23, 30).getTime();
+  ok(clearsOn(at(2026, 8, 23, 3), late)?.day === 'tomorrow',
+    'a 3am hold read at 11:30pm is still TOMORROW — calendar days, not elapsed hours');
+  ok(clearsOn('not a date', now) === null, 'and junk is no badge rather than a thrown screen');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL WAIVER-SCHEDULE ASSERTIONS PASSED');

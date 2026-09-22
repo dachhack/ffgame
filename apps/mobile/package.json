@@ -23,6 +23,7 @@
     "@formatjs/intl-locale": "^5.3.10",
     "@react-native-google-signin/google-signin": "^16.1.4",
     "expo": "^57.0.12",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.10",
     "expo-haptics": "^57.0.1",
     "expo-linking": "~57.0.5",

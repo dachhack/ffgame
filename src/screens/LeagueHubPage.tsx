@@ -20,7 +20,8 @@ import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
   leaveLeague, friendlyError, leagueTypeLine, vampireState, feedingBell, guillotineState,
-  type Enrollment, type LiveMatchup, type TeamInfo, type VampireState,
+  leagueWeekScoreboard, leagueStandings,
+  type Enrollment, type LiveMatchup, type TeamInfo, type VampireState, type StandingsRow,
 } from '@drip/core/data/liveApi';
 import { VampirePanel } from './VampirePanel';
 import { GuillotinePanel } from './GuillotinePanel';
@@ -29,6 +30,141 @@ import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
 import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel } from './LeagueInfo';
+
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
+
+// ── THE WEEK'S GAMES (0341) ─────────────────────────────────────────────────
+// The app's twin (apps/mobile/src/screens/LeagueHome.tsx), same RPC and the
+// same rule: the stamped final where there is one, the sum of the worker's
+// published windows where there is not, and a dash where nothing has been
+// published rather than a manufactured 0–0.
+function HubMatchups({ leagueId, myRoster, wide }: { leagueId: string; myRoster: number | null; wide: boolean }) {
+  const [sb, setSb] = useState<Awaited<ReturnType<typeof leagueWeekScoreboard>> | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
+  useEffect(() => {
+    let alive = true;
+    const load = () => leagueWeekScoreboard(leagueId, week).then((r) => {
+      if (!alive || !r?.ok) return;
+      setSb(r);
+      if (week == null && r.week != null) setWeek(r.week);
+      const ids = [...new Set((r.games ?? []).flatMap((g) => [g.home.roster_id, g.away.roster_id]))];
+      if (ids.length) matchupTeams(leagueId, ids).then((t) => { if (alive) setTeams(t); }).catch(() => {});
+    }).catch(() => {});
+    void load();
+    const id = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(id); };
+  }, [leagueId, week]);
+  const weeks = sb?.weeks ?? [];
+  const at = weeks.indexOf(week ?? -1);
+  const step = (d: number) => { const n = weeks[at + d]; if (n != null) setWeek(n); };
+  const nameOf = (rid: number, fallback: string | null) => teams[rid]?.team_name || fallback || `Roster ${rid}`;
+  const num = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(2));
+  const arrow: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700, padding: '0 4px' };
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Matchups</div>
+        <div style={{ flex: 1 }} />
+        {weeks.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => step(-1)} disabled={at <= 0} className="mono" style={{ ...arrow, color: at <= 0 ? 'var(--faint)' : 'var(--you)' }}>‹</button>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>WEEK {week ?? '—'}</span>
+            <button onClick={() => step(1)} disabled={at < 0 || at >= weeks.length - 1} className="mono" style={{ ...arrow, color: at < 0 || at >= weeks.length - 1 ? 'var(--faint)' : 'var(--you)' }}>›</button>
+          </div>
+        )}
+      </div>
+      {sb && (sb.games ?? []).length === 0 && (
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No games scheduled for this week yet.</div>
+      )}
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: wide ? '1fr 1fr' : '1fr' }}>
+        {(sb?.games ?? []).map((g) => {
+          const hp = g.home.points, ap = g.away.points;
+          const hw = hp != null && ap != null && hp > ap;
+          const aw = hp != null && ap != null && ap > hp;
+          const mine = myRoster != null && (g.home.roster_id === myRoster || g.away.roster_id === myRoster);
+          const side = (sd: typeof g.home, won: boolean) => (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="grotesk" style={{ fontSize: 13, fontWeight: won ? 700 : 600, color: won ? 'var(--text)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {nameOf(sd.roster_id, sd.team)}
+              </div>
+              <div className="mono" style={{ fontSize: 14.5, fontWeight: 700, color: won ? 'var(--you)' : 'var(--text)', marginTop: 2 }}>
+                {num(sd.points)}{sd.live && <span style={{ fontSize: 8.5, color: 'var(--warn)' }}> LIVE</span>}
+              </div>
+            </div>
+          );
+          return (
+            <div key={g.matchup_id} style={{
+              border: `1px solid ${mine ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 8, padding: '10px 12px',
+              background: mine ? 'color-mix(in srgb, var(--you) 8%, transparent)' : 'transparent',
+            }}>
+              {(g.playoff || g.label) && (
+                <div className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 4 }}>
+                  {g.label || (g.consolation ? 'CONSOLATION' : 'PLAYOFF')}
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {side(g.home, hw)}
+                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>vs</span>
+                {side(g.away, aw)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── THE TABLE, INLINE (0341) ────────────────────────────────────────────────
+// It used to be a tile that opened the results PAGE — one click to learn where
+// you sit in your own league. The page is still there behind "every pairing".
+function HubStandings({ leagueId, myRoster, onFull }: { leagueId: string; myRoster: number | null; onFull: () => void }) {
+  const [rows, setRows] = useState<StandingsRow[] | null>(null);
+  useEffect(() => {
+    leagueStandings(leagueId).then((r) => setRows(Array.isArray(r) ? r : [])).catch(() => setRows([]));
+  }, [leagueId]);
+  const cell: React.CSSProperties = { fontSize: 11, color: 'var(--dim)', textAlign: 'right', padding: '5px 0' };
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Standings</div>
+        <div style={{ flex: 1 }} />
+        <button onClick={onFull} className="mono" style={{ ...linkBtn, fontSize: 10, fontWeight: 700 }}>every pairing →</button>
+      </div>
+      {rows == null && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>loading…</div>}
+      {rows?.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No standings yet — the season has not started.</div>}
+      {!!rows?.length && (
+        <table className="mono" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...cell, textAlign: 'left', fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>TEAM</th>
+              <th style={{ ...cell, fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>W-L</th>
+              <th style={{ ...cell, fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>PF</th>
+              <th style={{ ...cell, fontSize: 9, letterSpacing: '0.1em', color: 'var(--faint)' }}>PA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const mine = myRoster != null && r.roster_id === myRoster;
+              return (
+                <tr key={r.roster_id} style={{ borderTop: '1px solid var(--bd)', background: mine ? 'color-mix(in srgb, var(--you) 8%, transparent)' : undefined }}>
+                  <td style={{ ...cell, textAlign: 'left', color: mine ? 'var(--you)' : 'var(--text)', fontWeight: mine ? 700 : 400 }}>
+                    <span style={{ color: 'var(--faint)', marginRight: 8 }}>{i + 1}</span>
+                    {r.vampire ? '🧛 ' : ''}{r.eliminated != null ? '🔪 ' : ''}{r.team ?? `Roster ${r.roster_id}`}
+                  </td>
+                  <td style={cell}>{r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}</td>
+                  <td style={cell}>{Number(r.pf ?? 0).toFixed(1)}</td>
+                  <td style={cell}>{Number(r.pa ?? 0).toFixed(1)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
 
 /** A titled band of tiles — the app's league menu splits at "THE LEAGUE" and
  *  this is that heading (v0.287.0). Without it the hub reads as one
@@ -125,7 +261,6 @@ const tile: React.CSSProperties = {
 };
 const tileTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' };
 const tileSub: React.CSSProperties = { fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginTop: 2 };
-const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 
 /** NO ICONS (v0.293.1, founder: "get rid of icons on the league home"). A stack
  *  of emoji — a scroll, a cap, a bell, a megaphone — were as many art styles as
@@ -175,6 +310,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // commissioner's queue is what is left to badge.
   const [sig, setSig] = useState<{ commish: { waiting: number; review: number } | null }>({ commish: null });
   const [rostersOpen, setRostersOpen] = useState(false);
+  // 0341: THE MENU IS BEHIND THE GEAR NOW. The page in front of it is the
+  // league — this week's games, the table, what just happened — and every tile
+  // it ever had is one click away in the same order, which is where a person
+  // looks for settings anyway.
+  const [menuOpen, setMenuOpen] = useState(false);
   // The league's reference panels (v0.274.0, founder's menu list). One piece
   // of state — only ever one is open, and they expand in place like the
   // rosters tile above rather than stealing the page.
@@ -208,7 +348,9 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
     } catch (x) { setLeaveErr(friendlyError(x)); setLeaveArmed(false); }
     finally { setLeaving(false); }
   };
-  const toggleInfo = (k: InfoPanel) => setInfo((cur) => (cur === k ? null : k));
+  // 0341: a tile opening its own sheet closes the menu first — two stacked
+  // sheets is a place to get lost, and the app does the same.
+  const toggleInfo = (k: InfoPanel) => { setMenuOpen(false); setInfo((cur) => (cur === k ? null : k)); };
   const [champion, setChampion] = useState<string | null>(null);
   // Classic leagues (0157) have no power-ups, so no shop tile (v0.273.0,
   // founder). Defaults false — drip is the common case, and a tile popping in
@@ -286,6 +428,14 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         {commish && (
           <span className="mono" style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 5, padding: '4px 8px' }}>COMMISH</span>
         )}
+        {/* THE GEAR (0341, founder: "Put all the league settings and info that
+            is there now in a chip up by the league name. Hit the chip, open
+            the settings."). Beside the name, because that is where it was
+            asked for and where every other product puts it. */}
+        <button onClick={() => setMenuOpen(true)} className="mono" title="League settings & info"
+          style={{ flex: 'none', fontSize: 11, fontWeight: 700, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 12px', cursor: 'pointer' }}>
+          ⚙ SETTINGS
+        </button>
       </div>
 
       {/* the commissioner's standing note — the board banner's message, here too */}
@@ -325,13 +475,39 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           them for that reason ("a menu that repeats the strip is a menu you
           have to read twice") and keeps only the shop, which has no chip
           anywhere and spends coin that is yours rather than the league's. */}
-      {!classic && (
-        <Band wide={wide}>
-          <Tile icon="◈" title="Power-up shop" sub="spend drip coin — opens on your board"
-            onClick={guard(() => void play('shop'))} disabled={building || pending} />
-        </Band>
+      {/* ── THE LEAGUE, IN THE ORDER A PERSON ASKS ABOUT IT (0341) ─────────
+          Matchups, rankings, activity — the app's twin, and Sleeper's
+          convention. What was here was the menu below, which meant the hub
+          opened on a list of doors rather than on the league. */}
+      <HubMatchups leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} wide={wide} />
+      <HubStandings leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} onFull={onResults} />
+      {native && (
+        <div style={{ marginTop: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Activity</div>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => toggleInfo('register')} className="mono" style={{ ...linkBtn, fontSize: 10, fontWeight: 700 }}>View all →</button>
+          </div>
+          <div style={{ maxHeight: 460, overflow: 'hidden' }}>
+            <RegisterPanel leagueId={e.league_id} bare />
+          </div>
+        </div>
       )}
       {buildErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', lineHeight: 1.4, marginTop: 8 }}>{buildErr}</div>}
+
+      {/* ── AND THE MENU, BEHIND THE GEAR ──────────────────────────────────
+          Item for item what it always was, in the same order, with the same
+          sheets behind the same tiles. A tile that opens one of those sheets
+          closes this one first — two stacked sheets is a place to get lost. */}
+      {menuOpen && (
+      <Sheet title="⚙ League settings & info" subtitle="TEAMS · RULES · HISTORY · ALERTS" max={720} onClose={() => setMenuOpen(false)}>
+      <>
+      {!classic && (
+        <Band wide={false}>
+          <Tile icon="◈" title="Power-up shop" sub="spend drip coin — opens on your board"
+            onClick={guard(() => { setMenuOpen(false); void play('shop'); })} disabled={building || pending} />
+        </Band>
+      )}
 
       {/* SELECTIONS ARRIVE AS POPUPS (v0.296.3, founder: "stick with the pop
           up for all the items where we have that in the app"). These panels
@@ -345,12 +521,12 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           <Tile icon="👥" title="Teams & rosters" sub="teams · rosters · owners"
             onClick={() => setRostersOpen((v) => !v)} />
         )}
-        {native && <Tile icon="" title="Draft room" sub="players · board · teams · queue" onClick={guard(onDraft)} />}
+        {native && <Tile icon="" title="Draft room" sub="players · board · teams · queue" onClick={guard(() => { setMenuOpen(false); onDraft(); })} />}
 
         {/* The app's wording, plus the half the app's sheet cannot hold: the
             web opens the full results page, which is the table AND every
             pairing of every week. */}
-        <Tile icon="🏆" title="Standings" sub="table · bracket · every pairing" onClick={onResults} />
+        <Tile icon="🏆" title="Standings" sub="table · bracket · every pairing" onClick={() => { setMenuOpen(false); onResults(); }} />
 
         {/* 🔪 the guillotine's own door (v0.383.1) — the block, the frenzy,
             and the season's record of the chopped, in a sheet. */}
@@ -387,12 +563,15 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         <Tile icon="📣" title="Recruit" sub={commish ? 'invite link · board listing' : 'invite link'}
           onClick={() => toggleInfo('recruit')} />
         {commish && (
-          <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={onManage} accent
+          <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={() => { setMenuOpen(false); onManage(); }} accent
             badge={sig.commish && sig.commish.waiting + sig.commish.review > 0
               ? <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--on-accent)', background: 'var(--warn)', borderRadius: 999, padding: '2px 7px' }}>{sig.commish.waiting + sig.commish.review} waiting</span>
               : undefined} />
         )}
       </Band>
+      </>
+      </Sheet>
+      )}
 
       {/* The sheets — one at a time, the app's rule, with the app's titles and
           subtitles so the same room is announced the same way on both. */}

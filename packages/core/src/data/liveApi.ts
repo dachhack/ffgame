@@ -856,6 +856,28 @@ export async function defaultOpenWeek(leagueId: string, season?: string, preseas
   return openWeekFrom(weeks, kicks, Date.now(), finals) ?? (pre ? 101 : 1);
 }
 
+/** ── THE WEEK'S SCOREBOARD, FOR ANYBODY IN THE LEAGUE (0341) ────────────────
+ *  Founder: "Matchups summary, rankings, then activity." `leagueResults`
+ *  reads `matchup.home_final/away_final`, and those are null until the week is
+ *  stamped — so a league-wide board showed dashes all Sunday. This serves the
+ *  stamped final where there is one and the sum of the worker's published
+ *  window rows where there is not, which are the same number at the whistle.
+ *
+ *  TOTALS ONLY. Never `slot_scores`: it says what the score is, never who is
+ *  in the lineup, and a window nobody has played has no row to sum. */
+export interface ScoreboardSide { roster_id: number; team: string | null; points: number | null; live: boolean }
+export interface ScoreboardGame {
+  matchup_id: string; status: string;
+  playoff?: boolean | null; consolation?: boolean | null; label?: string | null;
+  home: ScoreboardSide; away: ScoreboardSide;
+}
+/** `week` null asks for the one the league is PLAYING — the lowest unfinished,
+ *  else the last there is. A board that opens on week 1 in November is a board
+ *  nobody reads. */
+export const leagueWeekScoreboard = (leagueId: string, week?: number | null) =>
+  rpc<{ ok?: boolean; error?: string; week?: number | null; weeks?: number[]; games?: ScoreboardGame[] }>(
+    'league_week_scoreboard', { p_league_id: leagueId, p_week: week ?? null });
+
 export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
 /** Every matchup in a league (all weeks) with its final totals — the scoreboard/
  *  results feed. Readable by any league member (finals live on the matchup row). */
@@ -2101,7 +2123,16 @@ export const leagueMarket = (leagueId: string) =>
          *  catalog to it, so it must not be shown as a projection directly. */
         dyn_format?: '1qb' | 'sf' | null; dyn_as_of?: string | null;
         dyn?: Record<string, number>; picks?: Record<string, number>;
-        proj_as_of?: string | null; proj?: Record<string, number> }>(
+        proj_as_of?: string | null; proj?: Record<string, number>;
+        /** 0340: WHAT THE WIRE IS DOING — Sleeper's own trending adds and
+         *  drops over `trend_hours`, per slug. `a` is how many leagues added
+         *  him, `d` how many dropped him; a player high in BOTH is churn
+         *  rather than a signal, which is why the drops ride along rather
+         *  than being thrown away. Empty when the board is over a day old:
+         *  a stale "trending now" is worse than no column, so the caller
+         *  hides it rather than painting yesterday as today. */
+        trend_as_of?: string | null; trend_hours?: number | null;
+        trend?: Record<string, { a: number; d: number }> }>(
     'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
