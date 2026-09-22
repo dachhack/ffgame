@@ -1,0 +1,6 @@
+{
+  "mode": "refinalize",
+  "week": 2,
+  "dry": true,
+  "why": "READ-ONLY verification: after the new worker's sync passes, expect 0 week-2 matchups left 'scheduled'."
+}
