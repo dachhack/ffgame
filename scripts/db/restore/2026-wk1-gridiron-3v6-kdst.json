@@ -1,0 +1,21 @@
+{
+  "note": "WEEK 1 K/DST CORRECTION for Gridiron Gang seat 3 v 6 — the one drip result the pre-v0.474.0 bug decided. Live, the server called den-dst a wide receiver, so its `earn` scored 0 and one contested window went the other way. The v0.481.0 `diff-week --flips` run (ops/run/006) re-resolved this matchup under both rules; the old rule reproduced the stored 94.3–101.6 exactly (every side has sealed rows), and the fixed rule gives 106.3–96.6 — home +12.0 (7.0 earn + one 5-point window battle), away −5.0 (that battle). Recorded before-values, to undo: home 94.3, away 101.6. The breakdown is totals-only like the rest of Gridiron week 1 (ops/run/003), and the week-1 report is rebuilt so its results and headline follow the corrected final.",
+  "season": "2026",
+  "week": 1,
+  "leagues": [
+    {
+      "league_id_prefix": "798acff0",
+      "name": "Gridiron Gang",
+      "matchups": [
+        {
+          "home_roster_id": 3,
+          "away_roster_id": 6,
+          "home": 106.3,
+          "away": 96.6
+        }
+      ],
+      "reset_state": true,
+      "rebuild_report": true
+    }
+  ]
+}

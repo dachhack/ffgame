@@ -350,7 +350,10 @@ async function main() {
         for (const m of rows.sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id)) {
           if (!isDrip.get(m.league_id)) continue;
           const tag = `${m.league_id.slice(0, 8)} wk${m.week} ${m.home_roster_id}v${m.away_roster_id}`;
-          if (m.status === 'scheduled' || m.home_final == null || m.away_final == null) { console.log(`${tag}  not final — skipped`); continue; }
+          if (m.status === 'scheduled' || m.home_final == null || m.away_final == null) {
+            console.log(`${tag}  not final — skipped (status ${m.status}, finals ${m.home_final == null ? 'unset' : m.home_final}–${m.away_final == null ? 'unset' : m.away_final})`);
+            continue;
+          }
           // A 0–0 final is a week the league did not play (Kickoff, drafted
           // after week 1) — there is no score for a correction to adjust.
           if (Number(m.home_final) === 0 && Number(m.away_final) === 0) { console.log(`${tag}  0–0, not played — skipped`); continue; }

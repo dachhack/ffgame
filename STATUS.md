@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.482.0 — the one it flipped
+
+Founder: "Let's correct it." Of the twelve drip week-1 results, the K/DST
+flip list (ops/run/006) found exactly one whose WINNER the bug decided:
+Gridiron Gang 3v6. Every seat there has sealed rows and the old rule
+reproduces the stored 94.3–101.6 to the point, so the fixed rule's 106.3–96.6
+is not an estimate — it is the week that was played, scored correctly: den-dst
+`earn` 7.0 plus the contested window it then wins (+12 home, −5 away).
+ops/run/009 writes it (restore-week, totals-only breakdown like the rest of
+Gridiron week 1) and rebuilds the week-1 report; the before-values are in the
+file, so it is one restore to undo. The four that move without changing hands
+are left as played. Coins are not re-banked: `credit_wallet` is idempotent per
+matchup and restore-week resolves nothing.
+
+WEEK 2 SKIPPED ALL TWELVE WITHOUT SAYING WHY. The --flips skip line now prints
+the status and stored finals; ops/run/010 re-runs week 2 read-only to show
+them.
+
+No migration.
+
 ### v0.481.0 — what would change hands
 
 THE TWO THAT REMAINED HAD NO LINEUP. The v0.480.0 sealed accounting settles

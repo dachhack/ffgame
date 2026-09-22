@@ -1,0 +1,5 @@
+{
+  "mode": "restore",
+  "file": "scripts/db/restore/2026-wk1-gridiron-3v6-kdst.json",
+  "why": "Founder: \"Let's correct it.\" Gridiron Gang week 1 seat 3 v 6 is the only drip result the K/DST bug flipped: 94.3–101.6 (away) becomes 106.3–96.6 (home), exactly what the fixed rule produces for the sealed lineups that played. Report rebuilt."
+}
