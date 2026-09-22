@@ -47,12 +47,48 @@ for (const w of WRITES) {
 // rather than pass vacuously by finding nothing to check.
 ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${found} found)`);
 
+// ── the restamp's blast radius is bounded by default (v0.475.0) ──
+// A drip week was scored live against power-ups, buffs and window state no
+// later pass can rebuild, so re-resolving one invents a different week. The
+// guard is off-by-default-safe: you have to ASK for drip.
+{
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  const rs = cli.slice(cli.indexOf("case 'restamp'"), cli.indexOf("case 'diff-week'"));
+  ok(rs.length > 0, 'restamp is in the CLI');
+  ok(rs.includes("!args.includes('--include-drip')"),
+    'restamp skips non-classic leagues unless --include-drip is passed');
+  ok(/!== 'classic'/.test(rs), '…deciding by game_mode, not by guessing from the name');
+  ok(rs.includes('skipLeagues'), '…and hands the set to stampFinals rather than filtering after the fact');
+  const res = readFileSync(new URL('../server/src/resolve.js', import.meta.url), 'utf8');
+  ok(/if \(opts\.skipLeagues\?\.size\) rows = rows\.filter/.test(res),
+    'stampFinals drops skipped leagues BEFORE resolving, not after');
+  // A restore must never resolve: it writes recorded numbers, full stop.
+  const rw = cli.slice(cli.indexOf("case 'restore-week'"), cli.indexOf("case 'seed-test-users'"));
+  ok(rw.length > 0, 'restore-week is in the CLI');
+  ok(!/resolveMatchup|stampFinals/.test(rw),
+    'restore-week resolves nothing — it only writes what the file records');
+  ok(rw.includes("!== 1"), 'restore-week refuses a row that does not match exactly one matchup');
+}
+
 // And the caller that hands the dry run to a person must actually ask for it.
+//
+// The slice ENDS AT restore-week, not at the next case that happened to follow
+// when this was written: restore-week writes on purpose, and once it landed
+// between the two markers this scan was reading its updates as diff-week's.
+// It still passed — the write regex does not span the newline restore-week
+// happens to wrap on — which is a check passing by luck, and a check that can
+// pass by luck is not one.
 const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
-const diff = cli.slice(cli.indexOf("case 'diff-week'"), cli.indexOf("case 'seed-test-users'"));
+const diffStart = cli.indexOf("case 'diff-week'");
+const diffEnd = cli.indexOf("case 'restore-week'");
+ok(diffStart > 0 && diffEnd > diffStart,
+  'diff-week and restore-week are both present, in that order — the slice below is honest');
+const diff = cli.slice(diffStart, diffEnd);
 ok(diff.length > 0, 'diff-week is in the CLI');
 ok(diff.includes('dryRun: true'), 'diff-week resolves with dryRun: true');
-ok(!/db\(\)\.from\([^)]*\)\.(upsert|update|insert|delete)/.test(diff),
+// `[\s\S]*?` rather than `[^)]*`: a write broken across lines is still a write,
+// and the old pattern could be slipped by a line break.
+ok(!/db\(\)\.from\([\s\S]*?\)[\s\S]{0,40}?\.(upsert|update|insert|delete)\(/.test(diff),
   'diff-week does no writing of its own either');
 
 console.log(fails ? `\n${fails} DRY-RUN ASSERTION(S) FAILED` : '\nALL DRY-RUN ASSERTIONS PASSED');
