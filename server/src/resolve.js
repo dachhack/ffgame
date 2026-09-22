@@ -276,7 +276,15 @@ export async function prefetchTick(live, week) {
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
  *  `override` (sim only): { home, away } pick arrays [{win,slot,slug,metric}] that
- *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics. */
+ *  bypass enrollment/sealed-pick gathering so both sides resolve with full metrics.
+ *
+ *  `opts.dryRun` (v0.472.0) RESOLVES AND WRITES NOTHING — no matchup_state, no
+ *  finals, no coin — and hands back the per-slot detail as `slots`. It exists
+ *  because the only way to compare the board's arithmetic with the server's is
+ *  to see the server's, slot by slot, and the founder could not be asked to run
+ *  a scorer that rewrites the season in order to look at it. The resolve above
+ *  it is the SAME code down to the last install, because a read-only twin that
+ *  scored differently would answer a question nobody asked. */
 export async function resolveMatchup(matchup, playerIndex, override, opts = {}) {
   // Plays are global per week. The tick injects them once (injectWeekPlays) and
   // passes playsInjected, so we skip the whole-week re-fetch per matchup. Standalone
@@ -673,6 +681,18 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       ...(hot && !gameOver(slug) ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
     }));
 
+  // THE READ-ONLY EXIT (v0.472.0). Everything above is computation; everything
+  // below writes. One return between them, so "dry run" cannot mean "wrote
+  // slightly less" — there is no path from here to a write.
+  if (opts.dryRun) {
+    return {
+      home: round(homeTotal), away: round(awayTotal), coin, dry: true,
+      states: states.map((s) => ({ ...s })),
+      slots: slotRows.map(({ side, slot, slug, metric, score, win }) => ({
+        side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0), win,
+      })),
+    };
+  }
   const now = new Date().toISOString();
   await db().from('matchup_state').upsert(
     states.map((s) => ({ matchup_id: matchup.id, ...s, slot_scores: slotsFor(s.game_window), events_json: [], updated_at: now })),

@@ -1,27 +1,37 @@
 name: Re-stamp a week's finals
 
-# ⚠ REWRITES STORED RESULTS. Run this only to repair a week whose finals were
-# frozen wrong — and know which week, and why, before you press it.
+# Two modes, and only one of them touches anything (input `mode`):
 #
-# WHAT IS BROKEN WHEN YOU NEED THIS. Three surfaces read ONE pair of columns,
+#   • diff    — READ-ONLY. Prints the server's per-slot scoring for a week: every
+#               starter, the slot it filled, what the engine paid it, and whether
+#               the side's slots add up to the side's total. Hold it beside the
+#               matchup board on a phone and a disagreement between the two stops
+#               being a mystery — either a player is missing from one side, or one
+#               of them is worth a different number. Writes nothing, so it is safe
+#               on live data mid-season, which is the only time anybody wants it.
+#               Needs no confirmation.
+#
+#   • restamp — ⚠ REWRITES STORED RESULTS. Re-resolves the week against the plays
+#               that exist now and writes the totals that come out.
+#
+# WHAT IS BROKEN WHEN YOU NEED `restamp`. Three surfaces read ONE pair of columns,
 # `matchup.home_final` / `away_final`: the weekly report, the league page's
 # matchups + standings, and playoff seeding. The live matchup board reads the
-# engine instead. When those columns are stamped a moment too early — the
-# week-2 stamp that went out with the Monday game still on — every one of those
-# three says the same wrong thing, the board says the right one, and they can
-# never agree again on their own: `stampFinals` writes a final exactly once and
-# after the week's 4 AM release it never revisits it. That freeze is what a
-# final is FOR; it is also why a bad one needs a person.
+# engine instead. When those columns are stamped a moment too early — the week-2
+# stamp that went out with the Monday game still on — every one of those three
+# says the same wrong thing, the board says the right one, and they can never
+# agree again on their own: `stampFinals` writes a final exactly once and after
+# the week's 4 AM release it never revisits it. That freeze is what a final is
+# FOR; it is also why a bad one needs a person.
 #
-# WHAT THIS DOES. Re-resolves the week against the plays that exist now, writes
-# the totals that come out, prints every matchup it moved (before → after, by
-# seat), and rebuilds + re-posts the weekly report for each league whose numbers
-# actually changed. A league that did not move is not touched and its chat is
-# not pinged. Running it twice is harmless: the second pass moves nothing.
+# RUN `diff` FIRST. A re-stamp that moves nothing tells you the stored finals
+# agree with the resolver — which is not the same as agreeing with the football,
+# because re-running a scorer reproduces its own bugs faithfully. `diff` is what
+# tells you which of the two numbers to believe before you rewrite anything.
 #
-# WHAT IT CANNOT DO. A seat that stored no lineup is fielded from its roster AS
-# IT STANDS NOW. For a managed seat the sealed picks are the week's own and
-# nothing shifts; for an abandoned seat, a re-stamp months later can field a
+# WHAT `restamp` CANNOT DO. A seat that stored no lineup is fielded from its
+# roster AS IT STANDS NOW. For a managed seat the sealed picks are the week's own
+# and nothing shifts; for an abandoned seat, a re-stamp months later can field a
 # player that seat did not own at kickoff. Repair the week that is wrong, soon.
 #
 # Secrets required (Settings → Secrets and variables → Actions):
@@ -29,12 +39,21 @@ name: Re-stamp a week's finals
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'diff (read-only) | restamp (rewrites results)'
+        type: choice
+        options: [diff, restamp]
+        default: diff
       week:
-        description: 'week to re-stamp (e.g. 2)'
+        description: 'week (e.g. 2)'
         required: true
         default: ''
       league:
         description: 'league UUID to scope to — BLANK MEANS EVERY LEAGUE'
+        required: false
+        default: ''
+      seat:
+        description: 'diff only: one roster/seat number, to print a single matchup'
         required: false
         default: ''
       season:
@@ -42,16 +61,17 @@ on:
         required: false
         default: ''
       report:
-        description: 'also rebuild + re-post that week’s report'
+        description: 'restamp only: also rebuild + re-post that week’s report'
         type: boolean
         default: true
       confirm:
-        description: 'type RESTAMP to confirm you are rewriting stored results'
-        required: true
+        description: 'restamp only: type RESTAMP to confirm you are rewriting stored results'
+        required: false
         default: ''
 
 # Shared with Sync/Simulate: a re-stamp and a sim must never write the same
-# league-week from two runners.
+# league-week from two runners. `diff` joins the group too — it is cheap, and a
+# read taken while a sim is mid-write would print a week that never existed.
 concurrency: live-sim
 
 jobs:
@@ -64,11 +84,13 @@ jobs:
       - name: Install worker deps
         working-directory: server
         run: npm ci
-      - name: Re-stamp week ${{ inputs.week }}
+      - name: ${{ inputs.mode }} week ${{ inputs.week }}
         working-directory: server
         env:
+          MODE: ${{ inputs.mode }}
           WEEK: ${{ inputs.week }}
           LEAGUE: ${{ inputs.league }}
+          SEAT: ${{ inputs.seat }}
           PILOT_SEASON: ${{ inputs.season }}
           WANT_REPORT: ${{ inputs.report }}
           CONFIRM: ${{ inputs.confirm }}
@@ -76,11 +98,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -uo pipefail
-          # The confirm box is the whole safety rail: every other input has a
-          # harmless default, and this one cannot be pressed by accident.
-          if [ "$CONFIRM" != "RESTAMP" ]; then
-            echo "::error::type RESTAMP in the confirm box — this rewrites stored results"; exit 1
-          fi
           if [ -z "$WEEK" ]; then echo "::error::a week is required"; exit 1; fi
           if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
             echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
@@ -88,6 +105,22 @@ jobs:
           args="$WEEK"
           if [ -n "${PILOT_SEASON:-}" ]; then args="$args $PILOT_SEASON"; fi
           if [ -n "$LEAGUE" ]; then args="$args --league=$LEAGUE"; fi
-          if [ "$WANT_REPORT" != "true" ]; then args="$args --no-report"; fi
-          # shellcheck disable=SC2086
-          npm run --silent cli -- restamp $args
+          case "$MODE" in
+            diff)
+              # No confirm box: it writes nothing, and a gate on a read is a gate
+              # people learn to type through on the one that matters.
+              if [ -n "$SEAT" ]; then args="$args --seat=$SEAT"; fi
+              # shellcheck disable=SC2086
+              npm run --silent cli -- diff-week $args ;;
+            restamp)
+              # The confirm box is the whole safety rail: every other input has a
+              # harmless default, and this one cannot be pressed by accident.
+              if [ "$CONFIRM" != "RESTAMP" ]; then
+                echo "::error::type RESTAMP in the confirm box — this rewrites stored results"; exit 1
+              fi
+              if [ "$WANT_REPORT" != "true" ]; then args="$args --no-report"; fi
+              # shellcheck disable=SC2086
+              npm run --silent cli -- restamp $args ;;
+            *)
+              echo "::error::unknown mode $MODE"; exit 1 ;;
+          esac
