@@ -1,0 +1,5 @@
+{
+  "mode": "refinalize",
+  "week": 2,
+  "why": "Founder: \"merge it and run the repair.\" Runs after the v0.483.0 worker (which no longer re-schedules a played matchup) is deployed. Flips every week-2 matchup left 'scheduled' with both finals stamped and lock_at past back to 'final', so standings, the week-2 report, the record book and the commish desk count it again. Writes no score."
+}
