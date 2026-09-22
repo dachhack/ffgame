@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.479.0 — asking the old rule
+
+Founder: "dig into the Field General and banker gaps."
+
+FIELD GENERAL IS PROBABLY NOT THE GAP. A QB on `fg` scores 0 by design — its
+value is a clock-driven multiplier on its own side's other slots in that
+window — and the matchups whose FG QBs scored non-zero (4v7, 8v11) match their
+stored finals exactly. FG behaves the same live and now.
+
+THE LEAD IS THE K/DST BUG AGAIN, IN DRIP FORM. Every DST and K effect in the
+drip engine is keyed on position: `earn`/`suppress` scoring and the earn drip
+rate on `pos === 'DEF'`, the Marshal shield likewise, banker XP on
+`pos === 'K'`. Before v0.474.0 the server gave every team-unit slug the
+position WR, so in LIVE drip resolution a DST on earn scored nothing and a
+banker K granted no XP bonus. The re-resolve positions them correctly, so it
+disagrees with the stored finals — not because it cannot reproduce the week,
+but because it is no longer making the week's mistake. Gridiron 3v6 fits to
+the point: den-dst earn 7.00 plus one window battle changing hands is +12 on
+one side and -5 on the other, exactly the diff.
+
+SO THIS ASKS THE OLD RULE rather than arguing from reading. `diff-week
+--legacy-teamunits` re-resolves with the pre-v0.474.0 lookup — index or
+nothing, a team unit falls to WR. It is gated on dryRun inside the same
+expression as the lookup, so it cannot reach a write. Run by ops/run/004 on
+merge. Stored == legacy re-resolve means the gap is the fix; anything left
+(Gridiron 9v10 home, 72.2 short with 7 of 9 slots) is a second cause.
+
+check:teamunit gains one assertion. No migration.
+
 ### v0.478.0 — what is known, and nothing it is not
 
 The week-1 diff with the 2026 slate installed matched 6 of the 12 drip

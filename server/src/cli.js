@@ -301,6 +301,11 @@ async function main() {
       const season = pos[1] ?? config.season;
       const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
       const seat = Number((args.find((a) => a.startsWith('--seat=')) ?? '').slice(7)) || null;
+      // --legacy-teamunits: score K/DST (and any slug the index does not know)
+      // the way the server did BEFORE v0.474.0 — as a WR. Diagnostic only: it
+      // asks "is this stored final exactly what the old rule produced?"
+      const legacyTeamUnits = args.includes('--legacy-teamunits');
+      if (legacyTeamUnits) console.log('diff-week: LEGACY TEAM-UNIT RULE — K/DST resolve as WR, the pre-v0.474.0 behaviour');
       let q = db().from('matchup').select('*').eq('week', week);
       if (leagueId) q = q.eq('league_id', leagueId);
       const { data: all } = await q;
@@ -336,7 +341,7 @@ async function main() {
           continue;
         }
         let r;
-        try { r = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true }); }
+        try { r = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true, legacyTeamUnits }); }
         catch (e) { console.log(`  ${m.league_id.slice(0, 8)} seat ${m.home_roster_id} vs ${m.away_roster_id}: FAILED — ${e.message}\n`); continue; }
         // Seats and player slugs only — this runs in a PUBLIC workflow log, so
         // no team names and nothing that identifies an account.
@@ -518,6 +523,7 @@ async function main() {
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.seat) argv.push(`--seat=${req.seat}`);
+        if (req.legacy_teamunits === true) argv.push('--legacy-teamunits');
       } else if (req.mode === 'restamp') {
         if (req.confirm !== 'RESTAMP') throw new Error('restamp needs "confirm": "RESTAMP" — this rewrites stored results');
         argv.push('restamp', need('week'));
