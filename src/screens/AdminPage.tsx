@@ -49,7 +49,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, ScoresPanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, ScoresPanel, WeeklyReportPanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -1961,6 +1961,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       )}
       {tab === 'matchups' && !matchups && <div style={{ marginTop: 12 }}><Muted text="Loading…" /></div>}
       {tab === 'matchups' && l.provider === 'native' && <ScoresPanel leagueId={l.league_id} />}
+      {tab === 'matchups' && l.provider === 'native' && <WeeklyReportPanel leagueId={l.league_id} />}
       {tab === 'matchups' && matchups && (
         <div style={{ marginTop: 12 }}>
           <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '7px 9px', marginBottom: 8 }}>

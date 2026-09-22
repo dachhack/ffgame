@@ -1522,6 +1522,29 @@ export const adminWeekReportState = (leagueId: string, week?: number | null) =>
   rpc<WeekReportState>('admin_week_report_state', { p_league_id: leagueId, p_week: week ?? null });
 export const adminRequestWeekReport = (leagueId: string, week: number) =>
   rpc<{ ok: boolean; error?: string; queued?: boolean; note?: string; id?: number }>('admin_request_week_report', { p_league_id: leagueId, p_week: week });
+/** ── THE COMMISSIONER'S OWN REPORT CONTROL (0339) ────────────────────────────
+ *  Founder: "Maybe have an option for commish to regen any weekly report and
+ *  post in chat." The queue, the worker and the chat-line REPLACEMENT are
+ *  0277's and unchanged — this is the commissioner's door onto them, with the
+ *  one guard the admin door does not have: a week still being played is
+ *  refused, because a report built mid-game is the v0.457.0 bug and a button
+ *  is a faster way to reach it than the bug was. */
+export interface ReportWeek {
+  week: number; matchups: number; final: number; stamped: number;
+  /** Stored finals that no longer match their own window rows — a stamp taken
+   *  early, OR a score the commissioner edited by hand, which the database
+   *  cannot tell apart and so does not try to. */
+  drifted: number;
+  report: boolean; posted_at: string | null;
+  week_state: { season: string | null; slate: number; feed: number; live: number; complete: boolean };
+  request: { requested_at: string; done_at: string | null; error: string | null } | null;
+}
+export const leagueReportWeeks = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; season?: string; weeks?: ReportWeek[] }>('league_report_weeks', { p_league_id: leagueId });
+export const commishRequestWeekReport = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; queued?: boolean; note?: string; id?: number; week_state?: ReportWeek['week_state'] }>(
+    'commish_request_week_report', { p_league_id: leagueId, p_week: week });
+
 export const adminStampWeek = (leagueId: string, week?: number | null, favor?: number | null, doom?: number | null) =>
   rpc<{ ok: boolean; error?: string; week?: number; stamped?: number; eliminated?: number; vampire_won?: boolean }>(
     'admin_stamp_week', { p_league_id: leagueId, p_week: week ?? null, p_favor: favor ?? null, p_doom: doom ?? null });

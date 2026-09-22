@@ -206,3 +206,4 @@ $RUN -f scripts/db/adp-board-probes.sql | grep -E "PROBE FAIL|ALL ADP-BOARD PROB
 $RUN -f scripts/db/board-refresh-probes.sql | grep -E "PROBE FAIL|ALL BOARD-REFRESH PROBES" || { echo "BOARD-REFRESH PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/round-audit-probes.sql | grep -E "PROBE FAIL|ALL ROUND-AUDIT PROBES" || { echo "ROUND-AUDIT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/waiver-schedule-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-SCHEDULE PROBES" || { echo "WAIVER-SCHEDULE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/report-regen-probes.sql | grep -E "PROBE FAIL|ALL REPORT-REGEN PROBES" || { echo "REPORT-REGEN PROBES FAILED"; exit 1; }
