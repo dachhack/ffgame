@@ -138,9 +138,11 @@ ok(diffStart > 0 && diffEnd > diffStart,
 const diff = cli.slice(diffStart, diffEnd);
 ok(diff.length > 0, 'diff-week is in the CLI');
 ok(diff.includes('dryRun: true'), 'diff-week resolves with dryRun: true');
-// `[\s\S]*?` rather than `[^)]*`: a write broken across lines is still a write,
-// and the old pattern could be slipped by a line break.
-ok(!/db\(\)\.from\([\s\S]*?\)[\s\S]{0,40}?\.(upsert|update|insert|delete)\(/.test(diff),
+// `[^;]` rather than `[^)]` or `[\s\S]`: a write broken across lines is
+// still a write (the `[^)]` pattern could be slipped by a line break), but the
+// match must stay inside ONE statement — `[\s\S]` ran on across statements and
+// read `createHash('sha256').update(…)`, a hash, as a database write.
+ok(!/db\(\)\.from\([^;]*?\)[^;]{0,40}?\.(upsert|update|insert|delete)\(/.test(diff),
   'diff-week does no writing of its own either');
 
 console.log(fails ? `\n${fails} DRY-RUN ASSERTION(S) FAILED` : '\nALL DRY-RUN ASSERTIONS PASSED');

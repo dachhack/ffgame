@@ -347,6 +347,46 @@ async function main() {
         // no team names and nothing that identifies an account.
         const f = (n) => (n == null ? '   —  ' : Number(n).toFixed(2).padStart(7));
         console.log(`── ${m.league_id.slice(0, 8)} · week ${m.week} · seat ${m.home_roster_id} vs seat ${m.away_roster_id} (${m.status})`);
+        // WHERE A MISSING SLOT WENT (v0.480.0). Every sealed row on the
+        // matchup, by author: how many, how many locked, how many with no
+        // player, and whether the author is one of the two seats at all. Set
+        // beside the slot rows below it splits "the pick is gone from the
+        // database" from "the pick is there and the resolve dropped it" — two
+        // different bugs with the same symptom. Authors are 6-char hashes:
+        // this prints in a PUBLIC log.
+        {
+          const { createHash } = await import('node:crypto');
+          const h = (u) => (u ? createHash('sha256').update(String(u)).digest('hex').slice(0, 6) : '——————');
+          const [{ data: sp }, { data: mem }, { data: ap }] = await Promise.all([
+            db().from('sealed_pick').select('app_user_id, locked, player_slug').eq('matchup_id', m.id),
+            db().from('league_membership').select('sleeper_roster_id, app_user_id').eq('league_id', m.league_id)
+              .in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]),
+            db().from('applied_state').select('app_user_id, payload_json').eq('matchup_id', m.id),
+          ]);
+          const seatOf = new Map((mem ?? []).map((x) => [x.app_user_id, x.sleeper_roster_id === m.home_roster_id ? 'home' : 'away']));
+          const by = new Map();
+          for (const r of sp ?? []) {
+            const k = r.app_user_id ?? null;
+            const c = by.get(k) ?? { n: 0, locked: 0, noSlug: 0 };
+            c.n++; if (r.locked) c.locked++; if (!r.player_slug) c.noSlug++;
+            by.set(k, c);
+          }
+          const parts = [...by].map(([u, c]) => `${seatOf.get(u) ?? 'ORPHAN'} ${h(u)}: ${c.n} rows, ${c.locked} locked${c.noSlug ? `, ${c.noSlug} no-player` : ''}`);
+          console.log(`   sealed   ${parts.length ? parts.join(' · ') : 'NO ROWS'}`);
+          // What the side had armed — keys and counts only, never values.
+          const lo = (ap ?? []).map((r) => {
+            const pl = r.payload_json ?? {};
+            const bits = [];
+            if (Array.isArray(pl.buffs) && pl.buffs.length) bits.push(`${pl.buffs.length} buff(s)`);
+            if (pl.targeted && typeof pl.targeted === 'object') {
+              const ks = Object.keys(pl.targeted).filter((k) => pl.targeted[k] != null && (typeof pl.targeted[k] !== 'object' || Object.keys(pl.targeted[k]).length));
+              if (ks.length) bits.push(`targeted: ${ks.join(',')}`);
+            }
+            if (Array.isArray(pl.unlocks) && pl.unlocks.length) bits.push(`${pl.unlocks.length} unlock(s)`);
+            return `${seatOf.get(r.app_user_id) ?? 'ORPHAN'} ${h(r.app_user_id)}: ${bits.join(' · ') || 'nothing armed'}`;
+          });
+          if (lo.length) console.log(`   loadout  ${lo.join('  |  ')}`);
+        }
         console.log(`   stored final   home ${f(m.home_final)}   away ${f(m.away_final)}`);
         console.log(`   resolves to    home ${f(r.home)}   away ${f(r.away)}`
           + (Math.abs((m.home_final ?? r.home) - r.home) > 0.005 || Math.abs((m.away_final ?? r.away) - r.away) > 0.005 ? '   ⚠ DIFFERS' : ''));
@@ -496,9 +536,13 @@ async function main() {
         }
       }
       console.log(`\nrestore-week: ${done} matchup(s) ${dry ? 'would be restored' : 'restored'}, ${refused} refused.`);
-      if (!dry && done) {
-        console.log('restore-week: the weekly reports still hold the re-stamped numbers — rebuild them from');
-        console.log('              the commissioner console (WEEKLY REPORT → ↻ REPOST) for each league.');
+      // Only the leagues this run did NOT rebuild or clear still carry a stale
+      // report; the reminder used to print after every restore, including the
+      // ones that had just rebuilt every report it named.
+      const stale = (doc.leagues ?? []).filter((l) => l.rebuild_report !== true && l.clear_report !== true);
+      if (!dry && done && stale.length) {
+        console.log(`restore-week: ${stale.map((l) => l.name ?? l.league_id_prefix).join(', ')} — the weekly report still holds the old numbers;`);
+        console.log('              rebuild it from the commissioner console (WEEKLY REPORT → ↻ REPOST).');
       }
       break;
     }

@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.480.0 — ten of twelve
+
+THE OLD RULE REPRODUCES TEN OF THE TWELVE. Re-resolved with the pre-v0.474.0
+lookup (K and D/ST positioned as WR), all six Turf Warriors week-1 matchups
+match their stored finals exactly, and four of Gridiron Gang's — 1v12 within
+0.1. So the Field General / banker "gap" was the K/DST position bug in drip
+form: in the live drip resolution a DST on `earn` scored nothing and a banker
+K granted no XP bonus, because every one of those effects is keyed on
+`pos === 'DEF'` or `pos === 'K'` and the server called them wide receivers.
+Field General itself was never the problem.
+
+TWO REMAIN, AND THEY ARE SOMETHING ELSE. Gridiron 2v5 (89.3/42.2 stored,
+99.7/24.9 re-resolved) and 9v10 (166.9 home stored, 94.7 re-resolved) do not
+move under the old rule either, and both resolve with FEWER slots than the
+league fields — 9v10 home 7 of 9, 2v5 away 6. diff-week now prints, per
+matchup, every sealed row by author (count, locked, no-player, whether the
+author is either seat) and what each side had armed in applied_state (counts
+and keys only; authors as 6-char hashes, since the log is public). That
+splits "the pick is gone from the database" from "the pick is there and the
+resolve dropped it". Run by ops/run/005.
+
+A false positive, fixed: check:dryrun's write detector read
+`createHash('sha256').update(…)` as a database write, because its pattern ran
+on across statements. It stays within one statement now and was re-proven
+against a planted multi-line write. And restore-week's "reports still hold
+the old numbers" reminder prints only for leagues it did not rebuild or clear.
+
+No migration.
+
 ### v0.479.0 — asking the old rule
 
 Founder: "dig into the Field General and banker gaps."
