@@ -2770,6 +2770,9 @@ export interface ChatPoll { options: { text: string; votes: number }[]; total: n
 export interface ChatMessage {
   id: number; body: string; at: string; author: string; author_id: string | null; mine: boolean;
   kind: 'text' | 'poll' | 'report' | 'txn'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  /** What the poster wrote under a picture (0350). Null on everything else,
+   *  and on every message posted before captions existed. */
+  caption?: string | null;
   /** A weekly report line (0275): the house posted it; the link opens the week. */
   report?: { week: number };
   /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
@@ -2778,10 +2781,13 @@ export interface ChatMessage {
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
 export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
-export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
-export const chatPost = (leagueId: string, body: string, mentions: string[] = []) =>
-  tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body, p_mentions: mentions }),
-    Ev.chatPosted, { kind: postKind(body), dm: false, mentions: mentions.length });
+export interface DmMessage { id: number; body: string; at: string; mine: boolean; caption?: string | null; }
+/** `caption` (0350) rides beside the body rather than inside it: the body of an
+ *  image message stays the bare URL every client already renders inline. */
+export const chatPost = (leagueId: string, body: string, mentions: string[] = [], caption?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', {
+    p_league_id: leagueId, p_body: body, p_mentions: mentions, p_caption: caption ?? null,
+  }), Ev.chatPosted, { kind: postKind(body), dm: false, mentions: mentions.length, captioned: !!caption });
 export const chatPostPoll = (leagueId: string, question: string, options: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post_poll', { p_league_id: leagueId, p_question: question, p_options: options }),
     Ev.chatPosted, { kind: 'poll', dm: false, options: options.length });
@@ -2808,10 +2814,10 @@ export const chatReact = (leagueId: string, messageId: number, emoji: string) =>
     Ev.chatReacted, { emoji });
 export const chatDelete = (leagueId: string, id: number) =>
   rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
-export const dmSend = (leagueId: string, to: string, body: string) =>
+export const dmSend = (leagueId: string, to: string, body: string, caption?: string | null) =>
   tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
-    p_league_id: leagueId, p_to: to, p_body: body,
-  }), Ev.chatPosted, { kind: postKind(body), dm: true, mentions: 0 });
+    p_league_id: leagueId, p_to: to, p_body: body, p_caption: caption ?? null,
+  }), Ev.chatPosted, { kind: postKind(body), dm: true, mentions: 0, captioned: !!caption });
 // ── League presence (0151): touch on open, commish reads last-seen ──────────
 export const leagueTouch = (leagueId: string) =>
   rpc<{ ok: boolean; seen?: boolean }>('league_touch', { p_league_id: leagueId });

@@ -18,6 +18,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.486.0 — a picture with something to say
+
+Founder, an hour after 0349 shipped: "it posts instantly after picking. Allow
+the user to caption the image so they can QC and add any text."
+
+PICKING NOW OPENS A DRAFT, not a message: the picture at a size you can
+actually check, a caption box, SEND or ✕ DISCARD. All three ways in on web (the
+📷, a paste, a drop) and the phone's picker land in the same draft, in the
+league channel and in DMs alike.
+
+AND NOTHING UPLOADS UNTIL SEND. The bytes sit in the browser or on the phone
+while the draft is open, so a picture you changed your mind about never reaches
+the bucket at all — which is also why discarding costs nothing and needs no
+cleanup. The QC half of the ask is the reason, but it makes the bucket cleaner
+than 0349 was.
+
+THE CAPTION GOT A COLUMN, NOT A LINE IN THE BODY (0350). Posting
+"<url>\n<caption>" needs no migration and is what 0349 would have predicted —
+and it is the one option that breaks every client already installed, the
+APK from an hour ago included: inline rendering keys on the body being a bare
+image URL (0148), so a second line turns the picture into a link. So the body
+stays exactly the URL it has always been, and the words ride beside it.
+
+The honest cost, said out loud: on a build older than this one, a captioned
+picture arrives without its caption. The picture is the post and the words are
+the annotation, so losing the annotation for a build or two beats losing the
+picture. chat_post and dm_send take p_caption as a DEFAULTED argument, which is
+what keeps those older builds posting at all — PostgREST resolves an RPC by the
+argument names it is given.
+
+Two things came free with a real column. @mentions work in a caption, because
+the clients read it for names alongside the body and the server filters them to
+real members as always. And a DM thread now previews the caption instead of 80
+characters of storage URL — which said nothing even before captions existed.
+
+check:chatimage holds the caption cap against the SQL, the defaulted arguments
+that keep old builds sending, the preview rule, and the property the whole
+decision rests on: an image body is still a bare URL a 0148 client renders
+inline.
+
+Migration 0350.
+
 ### v0.485.0 — the picture posts from the phone too
 
 Founder, on v0.484.0's web-only note: "Let's do it."

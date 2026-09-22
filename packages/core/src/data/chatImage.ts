@@ -29,6 +29,11 @@ import { supabaseUrl } from './liveConfig';
 export const CHAT_IMAGE_BUCKET = 'chat-image';
 /** The bucket's own ceiling (0349). The host should land well under it. */
 export const CHAT_IMAGE_MAX_BYTES = 6 * 1024 * 1024;
+/** What a caption may run to (0350) — its own limit, separate from the body's
+ *  500, because a body full of storage URL should not shrink what somebody is
+ *  allowed to say about the picture. Mirrored from _chat_clean_caption; the
+ *  check script holds the two together. */
+export const CHAT_IMAGE_CAPTION_MAX = 300;
 /** The bucket's allowed_mime_types, mirrored so a host can reject earlier and
  *  with a sentence rather than a 400. */
 export const CHAT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
