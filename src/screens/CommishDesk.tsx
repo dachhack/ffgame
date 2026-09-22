@@ -9,6 +9,7 @@
 //   · AwardsPanel        — 0325: the league's own weekly awards and badges (ENGAGE)
 //   · PublicApiPanel     — 0326: publish this league to the anonymous read API (same)
 //   · ScoresPanel        — a final week's scores, edited by hand (MATCHUPS)
+//   · WeeklyReportPanel  — 0339: repost any week's report into chat (same)
 //   · DuesPanel          — dues, and who has paid (SEATS)
 // Every panel loads its own state and saves on the click, the way the pick-
 // trading switch does: none of these are drafts of a change.
@@ -22,6 +23,7 @@ import {
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
+  leagueReportWeeks, commishRequestWeekReport, type ReportWeek,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
 
@@ -440,6 +442,102 @@ export function AwardsPanel({ leagueId }: { leagueId: string }) {
         }, '✓ added')} disabled={busy || !badge.name.trim()} className="mono" style={btn(true)}>＋ add a badge</button>
       </div>
       <div style={{ ...small, marginTop: 6 }}>Badges are yours to hand out and take back. Each one is stamped with the season it was earned, so the same badge can be won again next year, and they ride every manager's line in 🏛 League history.</div>
+    </div>
+  );
+}
+
+// ── The weekly report, reposted (0339) ───────────────────────────────────────
+// Founder: "Maybe have an option for commish to regen any weekly report and
+// post in chat."
+//
+// The worker already posts a week's report on its own once every matchup is
+// final and stamped, and 0277 already had a force-it queue — locked to
+// super-admins. This is the commissioner's door onto the same queue, so a
+// league that never got its report (a week the worker skipped, a report that
+// went out wrong) is not an errand for somebody else.
+//
+// Every line is a WEEK, because "which week?" is the only question, and it
+// answers itself: whether the report has been posted, when, and if it has not,
+// what is standing in the way. Asking twice REPLACES the chat line rather than
+// adding one — the worker deletes the old message before posting the new — so
+// the button is safe to press again, and the copy says so.
+export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
+  const [weeks, setWeeks] = useState<ReportWeek[] | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueReportWeeks(leagueId).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setWeeks(r.weeks ?? []);
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  // While a request is open the worker is a minute away; poll so the line
+  // flips to posted in front of whoever pressed it, rather than leaving them
+  // wondering whether it took.
+  const pending = (weeks ?? []).some((w) => w.request && !w.request.done_at);
+  useEffect(() => {
+    if (!pending) return;
+    const id = setInterval(() => void load(), 5000);
+    return () => clearInterval(id);
+  }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
+  const post = async (w: ReportWeek) => {
+    if (busy != null) return;
+    setBusy(w.week); setMsg(null);
+    const r = await commishRequestWeekReport(leagueId, w.week).catch(() => null);
+    setBusy(null);
+    if (!r?.ok) { setMsg(r?.error ?? 'could not post'); return; }
+    setMsg(`✓ week ${w.week}: ${r.note ?? 'queued'}`);
+    void load();
+  };
+  // WHY a week cannot be posted, in the order a commissioner would ask. Null
+  // means it can — the button is live and the reason line is the state.
+  const blocker = (w: ReportWeek): string | null => {
+    if (w.stamped === 0) return 'no finals stamped yet — nothing to report';
+    if (!w.week_state.complete) {
+      return w.week_state.live > 0
+        ? `${w.week_state.live} game${w.week_state.live === 1 ? '' : 's'} still being played`
+        : `the feed holds ${w.week_state.feed} of ${w.week_state.slate} games`;
+    }
+    return null;
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="mono" style={subhead}>📋 WEEKLY REPORT</div>
+      <div style={{ ...small, marginBottom: 4 }}>
+        Build a week's report from the finals as they stand and post it into league chat. Posting a week again
+        REPLACES its chat line rather than adding a second one, so this is safe to press twice. A week still being
+        played is refused — a report built mid-game freezes those scores, which is how a week went out wrong once.
+      </div>
+      {weeks == null && <div style={small}>loading…</div>}
+      {weeks?.length === 0 && <div style={small}>No weeks with matchups yet.</div>}
+      {weeks?.map((w) => {
+        const block = blocker(w);
+        const open = !!w.request && !w.request.done_at;
+        return (
+          <div key={w.week} style={row}>
+            <span className="mono" style={{ ...mono, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', width: 64 }}>WEEK {w.week}</span>
+            <span style={{ ...cell, fontSize: 11.5, color: 'var(--faint)' }}>
+              {w.stamped}/{w.matchups} stamped
+              {w.posted_at
+                ? ` · posted ${new Date(w.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                : ' · never posted'}
+              {block ? ` · ${block}` : ''}
+              {w.request?.error ? ` · ⚠ last try: ${w.request.error}` : ''}
+            </span>
+            {w.drifted > 0 && (
+              <span className="mono" title="These matchups' stored finals do not match the sum of their own window rows — either the stamp was taken early, or you edited the score by hand. The report repeats whatever is stored."
+                style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', whiteSpace: 'nowrap' }}>
+                ⚠ {w.drifted} edited or stale
+              </span>
+            )}
+            <button onClick={() => void post(w)} disabled={busy != null || !!block || open} className="mono"
+              title={block ?? (w.posted_at ? 'Rebuild and replace this week\u2019s chat line' : 'Build and post this week\u2019s report into chat')}
+              style={{ ...btn(!block && !open), opacity: block || open ? 0.45 : 1, whiteSpace: 'nowrap' }}>
+              {busy === w.week ? '…' : open ? '⏳ queued' : w.posted_at ? '↻ repost' : '📋 post'}
+            </button>
+          </div>
+        );
+      })}
+      {note(msg)}
     </div>
   );
 }

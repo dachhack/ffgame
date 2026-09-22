@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.461.0 — the commissioner reposts a week
+
+Founder: "Maybe have an option for commish to regen any weekly report and post
+in chat."
+
+Nearly all of this already existed and was locked to super-admins. 0277 gave
+`report_request` a queue, `admin_request_week_report` a way to file one, and
+the worker's `sweepRequests` the other end — which builds from whatever finals
+are stamped, replaces the stored payload, and REPLACES the chat line rather
+than adding a second one. So this is the commissioner's own door onto that,
+plus the one guard the admin door deliberately does not have.
+
+THE GUARD IS v0.457.0's LESSON. That week's report read 127.5–143.5 while the
+board read 162.50–160.50 with a game still on, because the week was finalised
+mid-game and a stamped final never revisits itself. A one-tap "post the
+report" button handed to every commissioner is exactly how that gets recreated
+on purpose, every Sunday afternoon. So the commissioner's door refuses while
+the week is still being played — and says which of the two things is wrong,
+because they are different: games still running, or a SHORT feed, which is the
+bug's real shape (`games.every(completed)` is vacuously true over a list that
+does not contain the game still being played). The super-admin door stays
+unguarded: an override that asks permission is not one.
+
+Both consoles render one line per week — stamped count, when it was posted,
+and if it cannot be posted, what is standing in the way — with the button live
+only when the week can honestly go out. Posting again replaces the chat line,
+and the copy says so, because a commissioner who is not sure it took will
+press it twice.
+
+NOT A RE-STAMP. If a week's stored finals have drifted from the live scoring,
+rebuilding the report faithfully repeats them, so the line counts those
+matchups rather than quietly reposting wrong numbers. `drifted`, not `stale`:
+a stored final can differ because the stamp was taken early OR because the
+commissioner edited that score by hand in SCORES, which is a supported thing
+to do. The database cannot tell those apart, so both consoles name both
+possibilities instead of accusing anybody of a bug. Re-stamping stays an admin
+errand, since it rewrites results.
+
+That drift check also fixes a hole the republish script's own expression has:
+a matchup the resolver never published window rows for sums to nothing, and
+reading that nothing as 0.0 called every such week stale. It never showed
+because that script only ever walked resolved weeks.
+
+Migration 0339 (`nfl_week_complete`, `league_report_weeks`,
+`commish_request_week_report`), report-regen-probes.sql with seven groups in
+the harness.
+
 ### v0.460.0 — the controls around the schedule
 
 Founder, back on the waivers sheet the day after 0337 shipped: "looks like the

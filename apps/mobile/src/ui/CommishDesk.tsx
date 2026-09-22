@@ -2,7 +2,8 @@
 // console grew in src/screens/CommishDesk.tsx, as bottom-sheet cards on the
 // commissioner map: commissioners and a hand-over, the two locks, the waiver
 // order, the median game, a final week's scores, and dues — plus 0321's trade
-// floor. Each card loads its own state and saves on the tap.
+// floor and 0339's weekly report. Each card loads its own state and saves on
+// the tap.
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, Alert } from 'react-native';
 import {
@@ -13,6 +14,7 @@ import {
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
+  leagueReportWeeks, commishRequestWeekReport, type ReportWeek,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -473,6 +475,86 @@ export function ScoresCard({ leagueId }: { leagueId: string }) {
               <TextInput value={d.a} editable={final} keyboardType="decimal-pad" onChangeText={(v) => setDraft({ ...draft, [m.matchup_id]: { ...d, a: v } })} style={{ ...inputStyle(t, 80) }} />
               {final && <Chip label="SAVE" on={dirty} disabled={busy || !dirty} onPress={() => { tap(); void save(m); }} />}
             </Row>
+          </View>
+        );
+      })}
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── The weekly report, reposted (0339) ───────────────────────────────────────
+// The web panel's twin (src/screens/CommishDesk.tsx WeeklyReportPanel), same
+// two RPCs and the same rule: one line per week, the button live only when
+// that week can honestly be posted, and posting again REPLACES the chat line
+// rather than adding a second one.
+export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [weeks, setWeeks] = useState<ReportWeek[] | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueReportWeeks(leagueId).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    setWeeks(r.weeks ?? []);
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  // A queued request is a minute from posting; poll so the line flips in front
+  // of whoever tapped it rather than leaving them unsure it took.
+  const pending = (weeks ?? []).some((w) => w.request && !w.request.done_at);
+  useEffect(() => {
+    if (!pending) return;
+    const id = setInterval(() => void load(), 5000);
+    return () => clearInterval(id);
+  }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
+  const post = async (w: ReportWeek) => {
+    if (busy != null) return;
+    setBusy(w.week); setMsg(null);
+    try {
+      const r = await commishRequestWeekReport(leagueId, w.week);
+      if (r.ok) { commit(); setMsg(`✓ week ${w.week}: ${r.note ?? 'queued'}`); }
+      else { warn(); setMsg(friendlyError(r.error ?? 'could not post')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(null); void load(); }
+  };
+  const blocker = (w: ReportWeek): string | null => {
+    if (w.stamped === 0) return 'no finals stamped yet';
+    if (!w.week_state.complete) {
+      return w.week_state.live > 0
+        ? `${w.week_state.live} game${w.week_state.live === 1 ? '' : 's'} still on`
+        : `feed holds ${w.week_state.feed} of ${w.week_state.slate} games`;
+    }
+    return null;
+  };
+  return (
+    <Card>
+      <LabelInfo label="WEEKLY REPORT" info={'Build a week\u2019s report from the finals as they stand and post it into league chat. Posting a week again REPLACES its chat line rather than adding a second one, so it is safe to tap twice. A week still being played is refused \u2014 a report built mid-game freezes those scores, which is how a week went out wrong once.'} />
+      {weeks == null && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>}
+      {weeks?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No weeks with matchups yet.</Mono>}
+      {weeks?.map((w) => {
+        const block = blocker(w);
+        const open = !!w.request && !w.request.done_at;
+        return (
+          <View key={w.week} style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Mono size={10} weight="700">WEEK {w.week}</Mono>
+              <View style={{ flex: 1 }} />
+              <Chip label={busy === w.week ? '…' : open ? '⏳ QUEUED' : w.posted_at ? '↻ REPOST' : '📋 POST'}
+                on={!block && !open} disabled={busy != null || !!block || open}
+                onPress={() => { tap(); void post(w); }} />
+            </View>
+            <Mono size={8.5} tone="faint" style={{ marginTop: 3, lineHeight: fs(12) }}>
+              {w.stamped}/{w.matchups} stamped
+              {w.posted_at
+                ? ` · posted ${new Date(w.posted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                : ' · never posted'}
+              {block ? ` · ${block}` : ''}
+            </Mono>
+            {w.drifted > 0 && (
+              <Mono size={8.5} tone="warn" style={{ marginTop: 2, lineHeight: fs(12) }}>
+                ⚠ {w.drifted} stored final{w.drifted === 1 ? '' : 's'} differ from the live scoring — a stamp taken early, or a score you edited by hand. The report repeats what is stored.
+              </Mono>
+            )}
+            {w.request?.error ? <Mono size={8.5} tone="opp" style={{ marginTop: 2 }}>⚠ last try: {w.request.error}</Mono> : null}
           </View>
         );
       })}
