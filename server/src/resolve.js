@@ -807,7 +807,13 @@ export async function stampFinals(week, playerIndex, opts = {}) {
   // radius than the bug.
   if (opts.leagueId) q = q.eq('league_id', opts.leagueId);
   const { data } = await q;
-  const rows = data ?? [];
+  let rows = data ?? [];
+  // `opts.skipLeagues` (v0.475.0): leagues whose weeks must not be re-resolved
+  // because a re-resolve would not reproduce them — drip, where the week was
+  // scored live against power-ups, armed buffs and window state that no later
+  // pass can rebuild. The caller decides which; this just honours it, BEFORE
+  // any resolve runs rather than by discarding results afterwards.
+  if (opts.skipLeagues?.size) rows = rows.filter((m) => !opts.skipLeagues.has(m.league_id));
   if (!rows.length) return 0;
   if (!opts.playsInjected) await injectWeekPlays(week);
   const ctx = await prefetchTick(rows, week);

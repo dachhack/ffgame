@@ -1,6 +1,6 @@
 name: Re-stamp a week's finals
 
-# Two modes, and only one of them touches anything (input `mode`):
+# Three modes, and only two of them touch anything (input `mode`):
 #
 #   • diff    — READ-ONLY. Prints the server's per-slot scoring for a week: every
 #               starter, the slot it filled, what the engine paid it, and whether
@@ -12,7 +12,20 @@ name: Re-stamp a week's finals
 #               Needs no confirmation.
 #
 #   • restamp — ⚠ REWRITES STORED RESULTS. Re-resolves the week against the plays
-#               that exist now and writes the totals that come out.
+#               that exist now and writes the totals that come out. CLASSIC
+#               LEAGUES ONLY by default: a drip week was scored live against
+#               power-ups, armed buffs, window state and premium gating that no
+#               later pass can rebuild, so re-resolving one invents a different
+#               week rather than recomputing it. The week-1 run of 2026-09-22
+#               proved that on live data, moving two drip leagues by -69.1 and
+#               +105.4 points on a fix that had nothing to do with them.
+#
+#   • restore — ⚠ WRITES RECORDED FINALS BACK from a committed file. It resolves
+#               nothing; the file is the intent, and it is reviewable in the
+#               repo. This is how the above gets undone — the numbers survive
+#               because `restamp` prints before AND after for everything it
+#               moves, which is the argument for printing an audit trail even
+#               when nobody is reading it.
 #
 # WHAT IS BROKEN WHEN YOU NEED `restamp`. Three surfaces read ONE pair of columns,
 # `matchup.home_final` / `away_final`: the weekly report, the league page's
@@ -40,13 +53,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'diff (read-only) | restamp (rewrites results)'
+        description: 'diff (read-only) | restamp (rewrites results) | restore (writes a recorded file back)'
         type: choice
-        options: [diff, restamp]
+        options: [diff, restamp, restore]
         default: diff
       week:
-        description: 'week (e.g. 2)'
-        required: true
+        description: 'week (e.g. 2) — required for diff and restamp; restore reads it from the file'
+        required: false
         default: ''
       league:
         description: 'league UUID to scope to — BLANK MEANS EVERY LEAGUE'
@@ -64,6 +77,14 @@ on:
         description: 'restamp only: also rebuild + re-post that week’s report'
         type: boolean
         default: true
+      include_drip:
+        description: 'restamp only: ALSO re-stamp drip leagues (a drip week does not re-resolve faithfully — leave off)'
+        type: boolean
+        default: false
+      file:
+        description: 'restore only: path to the recorded file, e.g. scripts/db/restore/2026-wk1-drip.json'
+        required: false
+        default: ''
       confirm:
         description: 'restamp only: type RESTAMP to confirm you are rewriting stored results'
         required: false
@@ -89,6 +110,8 @@ jobs:
         env:
           MODE: ${{ inputs.mode }}
           WEEK: ${{ inputs.week }}
+          INCLUDE_DRIP: ${{ inputs.include_drip }}
+          FILE: ${{ inputs.file }}
           LEAGUE: ${{ inputs.league }}
           SEAT: ${{ inputs.seat }}
           PILOT_SEASON: ${{ inputs.season }}
@@ -98,7 +121,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -uo pipefail
-          if [ -z "$WEEK" ]; then echo "::error::a week is required"; exit 1; fi
+          if [ "$MODE" != "restore" ] && [ -z "$WEEK" ]; then echo "::error::a week is required"; exit 1; fi
           if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
             echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
           fi
@@ -119,8 +142,20 @@ jobs:
                 echo "::error::type RESTAMP in the confirm box — this rewrites stored results"; exit 1
               fi
               if [ "$WANT_REPORT" != "true" ]; then args="$args --no-report"; fi
+              # A drip week was scored live against power-ups, armed buffs and
+              # window state that no later pass can rebuild, so re-resolving
+              # one invents a different week rather than recomputing it. Off by
+              # default; the flag exists so the override is deliberate.
+              if [ "$INCLUDE_DRIP" = "true" ]; then args="$args --include-drip"; fi
               # shellcheck disable=SC2086
               npm run --silent cli -- restamp $args ;;
+            restore)
+              # Writes recorded finals back. It resolves nothing, so there is
+              # no week to pass and no confirm box: the file IS the intent, and
+              # it is committed and reviewable.
+              if [ -z "$FILE" ]; then echo "::error::restore needs a file (input: file)"; exit 1; fi
+              if [ ! -f "../$FILE" ]; then echo "::error::no such file: $FILE"; exit 1; fi
+              npm run --silent cli -- restore-week "../$FILE" ;;
             *)
               echo "::error::unknown mode $MODE"; exit 1 ;;
           esac

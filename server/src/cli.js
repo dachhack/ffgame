@@ -179,12 +179,33 @@ async function main() {
       if (!Number.isFinite(week)) { console.error('usage: restamp <week> [season] [--league=<uuid>] [--no-report]'); break; }
       const season = args.filter((a) => !a.startsWith('--'))[1] ?? config.season;
       const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      // ── CLASSIC ONLY, UNLESS SOMEBODY INSISTS (v0.475.0) ──────────────────
+      // A DRIP week is not reproducible after the fact. It was resolved live
+      // against power-ups that were bought and spent at the time, buffs armed
+      // in-slot, per-window state and premium gating — none of which survives
+      // in a form a later re-resolve can rebuild. So re-running one does not
+      // recompute the week; it invents a different one. The week-1 run of
+      // 2026-09-22 proved it on live data: two drip leagues moved by -69.1 and
+      // +105.4 points on a fix that had nothing to do with them.
+      //
+      // Classic weeks ARE reproducible — sealed picks, a play store and a
+      // scoring catalog — which is the entire reason the errand exists. So the
+      // errand does classic, and says plainly what it skipped.
+      const { db: dbOf } = await import('./supabase.js');
+      const skip = new Set();
+      if (!args.includes('--include-drip')) {
+        const { data: lgs } = await dbOf().from('league').select('id, settings_json');
+        for (const l of lgs ?? []) {
+          if ((l.settings_json?.game_mode ?? 'drip') !== 'classic') skip.add(l.id);
+        }
+      }
       const idx = await buildPlayerIndex();
       let moved = [];
-      const n = await stampFinals(week, idx, { restamp: true, leagueId, report: (m) => { moved = m; } });
+      const n = await stampFinals(week, idx, { restamp: true, leagueId, skipLeagues: skip, report: (m) => { moved = m; } });
       // Seats, not team names: this runs in a PUBLIC workflow log.
       const shift = (a, b) => (a == null || b == null ? '  (was unstamped)' : `  ${(b - a) >= 0 ? '+' : ''}${(b - a).toFixed(2)}`);
       console.log(`restamp: week ${week} (${season})${leagueId ? ` · league ${leagueId.slice(0, 8)}` : ' · every league'} — re-resolved ${n} matchup(s)`);
+      if (skip.size) console.log(`restamp: skipped ${skip.size} non-classic league(s) — a drip week cannot be re-resolved faithfully (--include-drip to override)`);
       let changed = 0;
       for (const m of moved.sort((x, y) => String(x.league_id).localeCompare(String(y.league_id)) || x.home_roster_id - y.home_roster_id)) {
         const same = m.was.home != null && m.was.away != null
@@ -294,6 +315,73 @@ async function main() {
       console.log('diff-week: nothing was written.');
       break;
     }
+    case 'restore-week': {
+      // ↩ PUT BACK WHAT A RE-STAMP SHOULD NOT HAVE TOUCHED (v0.475.0). Writes
+      // stored finals from a recorded file — it does not resolve anything.
+      //   node src/cli.js restore-week <file.json> [--dry]
+      //
+      // The week-1 run of 2026-09-22 re-stamped two DRIP leagues along with
+      // the classic ones it was aimed at, and a drip week does not re-resolve
+      // faithfully: it was scored live against power-ups, armed buffs, window
+      // state and premium gating that no later pass can rebuild. Those leagues
+      // moved by -69.1 and +105.4 points on a fix that had nothing to do with
+      // them.
+      //
+      // The numbers survived because the re-stamp prints before AND after for
+      // every matchup it moves. That audit trail is what makes this possible,
+      // and is the argument for printing it even when nobody is reading.
+      //
+      // Matchups are addressed by (league, week, home seat, away seat) rather
+      // than by id, so the file is readable and checkable by a person — and a
+      // row that does not match exactly one matchup is REFUSED rather than
+      // guessed at.
+      const { readFileSync } = await import('node:fs');
+      const { db } = await import('./supabase.js');
+      const file = args.find((a) => !a.startsWith('--'));
+      if (!file) { console.error('usage: restore-week <file.json> [--dry]'); break; }
+      const dry = args.includes('--dry');
+      const doc = JSON.parse(readFileSync(file, 'utf8'));
+      const week = Number(doc.week);
+      console.log(`restore-week: ${file} — week ${week} (${doc.season ?? '?'})${dry ? '  [DRY RUN, writes nothing]' : ''}`);
+      if (doc.note) console.log(`  note: ${doc.note}\n`);
+      let done = 0, refused = 0;
+      for (const lg of doc.leagues ?? []) {
+        // The file carries an id PREFIX, not a full uuid: it is meant to be
+        // read by a person, and the prefix is what the audit log printed.
+        const { data: cand } = await db().from('league').select('id, name');
+        const hit = (cand ?? []).filter((l) => l.id.startsWith(lg.league_id_prefix));
+        if (hit.length !== 1) {
+          console.log(`  ${lg.league_id_prefix} (${lg.name ?? '?'}): ${hit.length} leagues match that prefix — REFUSED`);
+          refused += (lg.matchups ?? []).length; continue;
+        }
+        const lid = hit[0].id;
+        console.log(`  ${lg.league_id_prefix} · ${lg.matchups.length} matchup(s)`);
+        for (const m of lg.matchups ?? []) {
+          const { data: rows } = await db().from('matchup')
+            .select('id, home_final, away_final')
+            .eq('league_id', lid).eq('week', week)
+            .eq('home_roster_id', m.home_roster_id).eq('away_roster_id', m.away_roster_id);
+          if ((rows ?? []).length !== 1) {
+            console.log(`      seat ${m.home_roster_id} vs ${m.away_roster_id}: ${(rows ?? []).length} matches — REFUSED`);
+            refused++; continue;
+          }
+          const cur = rows[0];
+          const f = (n) => (n == null ? '   —  ' : Number(n).toFixed(2).padStart(7));
+          console.log(`      seat ${m.home_roster_id} vs ${m.away_roster_id}   home ${f(cur.home_final)} → ${f(m.home)}   away ${f(cur.away_final)} → ${f(m.away)}`);
+          if (dry) { done++; continue; }
+          const { error } = await db().from('matchup')
+            .update({ home_final: m.home, away_final: m.away }).eq('id', cur.id);
+          if (error) { console.log(`        FAILED — ${error.message}`); refused++; continue; }
+          done++;
+        }
+      }
+      console.log(`\nrestore-week: ${done} matchup(s) ${dry ? 'would be restored' : 'restored'}, ${refused} refused.`);
+      if (!dry && done) {
+        console.log('restore-week: the weekly reports still hold the re-stamped numbers — rebuild them from');
+        console.log('              the commissioner console (WEEKLY REPORT → ↻ REPOST) for each league.');
+      }
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
@@ -301,7 +389,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json] | restamp <wk> [season] [--league=<uuid>] | diff-week <wk> [season] [--league=<uuid>] [--seat=<n>]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json] | restamp <wk> [season] [--league=<uuid>] | diff-week <wk> [season] [--league=<uuid>] [--seat=<n>] | restore-week <file.json> [--dry]');
   }
 }
 

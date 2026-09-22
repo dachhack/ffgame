@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.475.0 — a drip week does not come back
+
+WEEK 2 WAS A CLEAN REPAIR. Eight matchups moved and every one landed on the
+number the board had been showing all along: 160.40, 127.70, 123.00, 193.10,
+232.10, 137.50, 162.50, 160.50. Hewy13 edged Team 2 by 2.0, which is the result
+he actually played. Vamp T gained the same way. The K/DST fix did exactly what
+it said.
+
+WEEK 1 DID DAMAGE, AND THE INSTRUCTION TO LEAVE THE LEAGUE FIELD BLANK IS WHAT
+DID IT. The classic leagues were repaired — Kickoff League's week 1 had never
+been stamped at all and went from 0-0 across the board to real scores; Vamp T
+gained +1 to +28. But the same pass also re-stamped two DRIP leagues, and a
+drip week does not re-resolve faithfully. It was scored live against power-ups
+bought and spent at the time, buffs armed in-slot, per-window state and premium
+gating, none of which survives in a form a later pass can rebuild. So it did
+not recompute those weeks; it invented different ones. Gridiron Gang moved by
+-69.1, -47.1, -41.8, -26.3. Turf Warriors moved a seat by +105.4.
+
+THE SIGN WAS ALREADY THERE and went unread: the week-2 diff had printed a drip
+matchup whose stored finals were 92.70 / 104.20 and which re-resolved to 48.80
+/ 81.40, plus slot rows summing 5.00 and 10.00 short of their own side totals.
+That is a league saying out loud that it cannot be re-derived. It was noted as
+"a separate, smaller anomaly" and not acted on.
+
+SO THE ERRAND IS CLASSIC-ONLY NOW, and says what it skipped. A classic week is
+reproducible — sealed picks, a play store, a scoring catalog — which is the
+entire reason the tool exists; a drip week is not, and `--include-drip` exists
+so that overriding is a decision rather than a default.
+
+AND THE DAMAGE IS UNDOABLE, because `restamp` prints before AND after for
+everything it moves. That audit trail — added on the general principle that a
+tool rewriting results owes one — is the only reason the original numbers still
+exist. They are committed at scripts/db/restore/2026-wk1-drip.json, and
+`restore-week` writes them back: it resolves nothing, addresses matchups by
+league and seat so a person can check the file, and refuses any row that does
+not match exactly one matchup.
+
+A check that passed by luck, found while adding to it: check:dryrun scanned
+from `case 'diff-week'` to `case 'seed-test-users'`, and restore-week landed
+between them — so its deliberate writes were being read as diff-week's. It
+passed only because the write regex could not span the line break restore-week
+happens to wrap on. The slice now ends at restore-week and the pattern spans
+newlines; both were negative-tested by planting a write.
+
+check:dryrun gains nine assertions. No migration.
+
 ### v0.474.0 — the kicker that was a wide receiver
 
 THE DIFF FOUND IT. Kickoff League, week 2: the resolver fields NINE slots per
