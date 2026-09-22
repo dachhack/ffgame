@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.467.0 — the gear outlives the tab
+
+Founder: "Need a way to go back to the settings. The settings chip only works
+on the league tab."
+
+It did, and for a reason that is obvious once said. The ⚙ SETTINGS chip is
+rendered in App, beside the league's name, for as long as a league is open —
+but the CONTEXT it opens was installed by `LeagueHome` and torn down on its
+unmount. So the moment you moved to MATCHUP, MY TEAM or CHAT, the chip was
+still drawn and did nothing.
+
+That is worse than not drawing it. An absent control is a missing feature; a
+control that does nothing when pressed is a broken app, and you press it twice
+before you believe it.
+
+The chip lives as long as the league does, so its context has to as well. App
+installs it now — it already holds everything the sheet needs, and it was
+passing all of it to LeagueHome one line away — and clears it when the league
+closes, so the gear can never open a league you have left. `classic` came out
+of the payload on the way past: the menu has always worked that out for
+itself, and it was only ever in there because the installer happened to know
+it.
+
+THE WEB IS NOT THE SAME BUG. Its chip is inside the hub page rather than in
+persistent chrome, so away from the hub it is absent rather than inert —
+honest, if less convenient. Left alone deliberately; a chip that is simply not
+there does not lie about what it does.
+
 ### v0.466.0 — the board turns with the run
 
 Founder, asked whether "Weds AM" meant midnight or the waiver run: "We want it
