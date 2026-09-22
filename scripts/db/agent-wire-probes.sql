@@ -74,6 +74,10 @@ begin
   -- ══ A CLASSIC LEAGUE WITH ONE HUMAN SEAT AND ONE EMPTY ═══════════════════
   r := create_native_league('AgentWire', '2024', 3, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform assert_ok(r, 'aw0 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  -- 0337: this suite is about the WORKER working the wire, not about the
+  -- weekly schedule, whose default is now Sleeper's. It opens the wire.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform probe_as('b'); perform assert_ok(native_join(code, 'AW-B'), 'aw0a B takes a seat'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'aw0b three starting spots');
@@ -256,6 +260,10 @@ begin
 
   r := create_native_league('AgentWireAI', '2024', 4, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform assert_ok(r, 'aw9 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  -- 0337: this suite is about the WORKER working the wire, not about the
+  -- weekly schedule, whose default is now Sleeper's. It opens the wire.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform probe_as('d'); perform assert_ok(native_join(code, 'AW-D'), 'aw9a D takes a seat'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'aw9b three starting spots');
@@ -351,6 +359,10 @@ begin
   perform probe_as('a');
   r := create_native_league('AgentWireIR', '2024', 3, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform assert_ok(r, 'aw10 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  -- 0337: this suite is about the WORKER working the wire, not about the
+  -- weekly schedule, whose default is now Sleeper's. It opens the wire.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform probe_as('d'); perform assert_ok(native_join(code, 'AW-D2'), 'aw10a D takes a seat'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'aw10b three starting spots');
@@ -405,6 +417,10 @@ begin
   perform probe_as('a');
   r := create_native_league('AW11Clock', '2024', 4, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform assert_ok(r, 'aw11 classic league'); lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite is about the WORKER working the wire, not about the
+  -- weekly schedule, whose default is now Sleeper's. It opens the wire.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   nowmin := et_minutes(now());
 
   -- 'open', no gate: open the whole time.
@@ -441,9 +457,13 @@ begin
 
   -- 'open' with the after-waivers gate on today: the door opened at the
   -- clear time. Clear time set to five minutes ago, gate on every day.
+  -- 0337: "open, but not before the run" is one setting now — a
+  -- WAIVERS TO FA day. The three pickers that used to say it between them
+  -- could disagree; this cannot.
   perform assert_ok(set_transaction_rules(lid, p_fa_mode => 'open',
     p_waiver_clear_min => (nowmin - 5 + 1440) % 1440,
-    p_fa_after_waivers_dow => '[0,1,2,3,4,5,6]'::jsonb), 'aw11m open, but not before the run');
+    p_waiver_days => '["waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa"]'::jsonb),
+    'aw11m open, but not before the run');
   perform assert_true(fa_window_open(lid), 'aw11n the run has spoken, the door is open');
   since := fa_open_since(lid);
   perform assert_true(now() - since between interval '4 minutes' and interval '7 minutes',

@@ -59,6 +59,11 @@ begin
   -- ══ 1 · THE VAMPIRE DOESN'T DRAFT ═════════════════════════════════════════
   r := create_native_league('No Fangs In The Room', '2026', 4, 5, 60, 'snake');
   perform vc_ok(r, 'vc0 league'); lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform vc_ok(set_league_format(lid, 'vampire'), 'vc0a format');
   perform vc_ok(set_vampires(lid, '[4]'::jsonb), 'vc0b seat 4 is the vampire, pre-draft');
   for i in 1..24 loop
@@ -101,6 +106,11 @@ begin
   pool := '[]'::jsonb;
   r := create_native_league('Double Coven', '2026', 4, 5, 60, 'snake');
   perform vc_ok(r, 'vc7 league'); lid2 := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid2;
   perform vc_ok(set_league_format(lid2, 'vampire'), 'vc7a format');
   for i in 1..28 loop
     pool := pool || jsonb_build_object('slug', 'dc-' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T');

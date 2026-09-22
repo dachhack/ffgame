@@ -56,6 +56,11 @@ begin
   -- ══ A SHAPED CLASSIC LEAGUE: 3 starters + 2 bench + 2 taxi + 1 IR = 8 ════
   r := create_native_league('Seats', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform assert_ok(r, 'sc0 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform probe_as('b'); perform assert_ok(native_join(code, 'SC-B'), 'sc0a join'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'sc0b three starting spots');
@@ -137,6 +142,11 @@ begin
   perform probe_as('a');
   r := create_native_league('No Shape', '2024', 2, 6, 60);
   perform assert_ok(r, 'sc8 a drip league, no roster shape'); dlid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = dlid;
   perform assert_true(league_active_seats(dlid) = (select rounds from draft where league_id = dlid),
     'sc8a its whole roster IS its active seats');
   select sleeper_roster_id into a_seat from league_membership

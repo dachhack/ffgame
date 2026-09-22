@@ -46,6 +46,11 @@ begin
   r := create_native_league('Cap City', '2026', 2, 5, 60, 'auction', 20);
   perform assert_ok(r, 'ct0 create auction (budget 20)');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Signs'), 'ct0b B joins');
@@ -176,6 +181,11 @@ begin
   r := create_native_league('Scale Model', '2026', 2, 5, 60, 'linear');
   perform assert_ok(r, 'ct9a create linear');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Scales'), 'ct9b B joins');
@@ -205,6 +215,11 @@ begin
   r := create_native_league('Deal Flow', '2026', 2, 5, 60, 'snake', 25, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct10a create with continuity=contract');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_true((r ->> 'contracts')::boolean and not (r ->> 'dynasty')::boolean, 'ct10b says contracts on, not dynasty');
   perform assert_true((select mode from draft where league_id = lid) = 'auction',
     'ct10c THE PRESET: snake was asked for, the contract type dealt an auction');
@@ -224,6 +239,11 @@ begin
   r := create_native_league('Deal Horizon', '2026', 2, 6, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract_dynasty', 2);
   perform assert_ok(r, 'ct10k create with continuity=contract_dynasty');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_true((r ->> 'contracts')::boolean and (r ->> 'dynasty')::boolean, 'ct10l both flags fly');
   perform assert_true((select mode from draft where league_id = lid) = 'auction', 'ct10m auction preset here too');
   perform assert_true(contracts_on(lid) and league_salary_cap(lid) = 30, 'ct10n cap at the budget');
@@ -246,6 +266,11 @@ begin
   r := create_native_league('Salary Lab', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 's11a create contract league (cap $30)');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Retains'), 's11b B joins');
@@ -353,6 +378,11 @@ begin
   r := create_native_league('Carry On', '2026', 2, 5, 60, 'snake', 25, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 's13a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Carries'), 's13b B joins');
@@ -429,6 +459,11 @@ begin
   r := rollover_league(lid, 14, false);
   perform assert_ok(r, 's13j rollover runs (admin bypasses the Super Bowl gate)');
   nlid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = nlid;
   perform assert_true((select (roster_id, salary, years) = (1, 8, 2) from contract
       where league_id = nlid and slug = 'co-p1'),
     's13k THE KEYSTONE: the 3-year deal carries at years−1');
@@ -474,6 +509,11 @@ begin
   r := create_native_league('Bid To Sign', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct15a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_true((select settings_json ->> 'waiver_mode' from league where id = lid) = 'faab',
     'ct15b the contract preset lands FAAB waivers');
   perform assert_true((select (settings_json ->> 'faab_budget')::int from league where id = lid) = 40,
@@ -483,6 +523,11 @@ begin
   r := create_native_league('Chose Rolling', '2026', 2, 5, 60, 'auction', 40);
   perform assert_ok(r, 'ct15d create plain league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_ok(set_transaction_rules(lid, 'rolling', null, null), 'ct15e commish picks rolling waivers');
   perform assert_ok(set_league_continuity(lid, 'contract'), 'ct15f switch to contract');
   perform assert_true((select settings_json ->> 'waiver_mode' from league where id = lid) = 'rolling',
@@ -504,6 +549,11 @@ begin
   r := create_native_league('Scorched Earth', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct16a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Rebuilds'), 'ct16b B joins');
@@ -562,6 +612,11 @@ begin
   r := create_native_league('Pen Or Padlock', '2026', 2, 5, 60, 'snake', 30, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct17a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Dawdles'), 'ct17b B joins');
@@ -628,6 +683,11 @@ begin
   r := create_native_league('Fair Price', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct18a create ($40 cap)');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   for i in 1..220 loop pool := pool || jsonb_build_object('slug', 'fp-p' || i, 'full', 'P ' || i, 'pos', 'RB', 'team', 'T'); end loop;
   perform assert_ok(seed_league_pool(lid, pool), 'ct18b seed 220 ranks');
   perform assert_true(player_market_value(lid, 'fp-p1') between 12 and 14,
@@ -727,6 +787,11 @@ begin
   r := create_native_league('Term Limits', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct19a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Scouts'), 'ct19b B joins');
@@ -788,6 +853,11 @@ begin
   r := create_native_league('Auction Only', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct20a create contract league (asked for snake)');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_true((select mode from draft where league_id = lid) = 'auction',
     'ct20b creation already forced the auction (0218)');
   perform assert_err(set_draft_setup(lid, null, 'snake'), 'drafts by auction',
@@ -803,6 +873,11 @@ begin
   r := create_native_league('Free To Snake', '2026', 2, 5, 60, 'auction', 40);
   perform assert_ok(r, 'ct20h create plain auction league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform assert_ok(set_draft_setup(lid, null, 'snake'), 'ct20i a plain league still switches to snake');
   perform assert_true((select mode from draft where league_id = lid) = 'snake', 'ct20j stored');
 end $$;
@@ -819,6 +894,11 @@ begin
   r := create_native_league('Wire Scouts', '2026', 2, 5, 60, 'snake', 40, 15, 1, null, null, null, 'drip', 'contract', null);
   perform assert_ok(r, 'ct21a create contract league');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Streets'), 'ct21b B joins');
@@ -874,6 +954,11 @@ begin
   r := create_native_league('Seat Map', '2026', 2, 5, 60, 'snake', 40);
   perform assert_ok(r, 'ct23a create');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Owns'), 'ct23b B joins');
@@ -895,6 +980,11 @@ begin
   r := create_native_league('Dusty Trophy', '2026', 2, 5, 60, 'snake', 40);
   perform assert_ok(r, 'ct24a create');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
   perform probe_as('b');
   perform assert_ok(native_join(code, 'B Shelves'), 'ct24b B joins');
@@ -923,6 +1013,11 @@ begin
   row_ := create_native_league('Quiet Shelf', '2026', 2, 5, 60, 'snake', 40);
   perform assert_ok(row_, 'ct25a create');
   lid := (row_ ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
 
   select x into row_ from jsonb_array_elements(my_teams()) x where (x ->> 'league_id')::uuid = lid;
   perform assert_true(row_ -> 'league' ->> 'draft_status' = 'pending',
@@ -953,6 +1048,11 @@ declare lid uuid; code text; stamp timestamptz;
 begin
   perform probe_as('a');
   lid := (create_native_league('Loud Room', '2026', 3, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   select invite_code into code from league where id = lid;
 
   -- Unclaimed seats are not joins: no occupant, no stamp.
@@ -995,6 +1095,11 @@ declare lid uuid; lg jsonb;
 begin
   perform probe_as('a');
   lid := (create_native_league('Which Game', '2026', 2, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
 
   select x -> 'league' into lg from jsonb_array_elements(my_teams()) x
     where (x ->> 'league_id')::uuid = lid;
@@ -1031,6 +1136,11 @@ declare lid uuid; r jsonb;
 begin
   perform probe_as('a');
   lid := (create_native_league('Slow Hands', '2026', 2, 5, 60, 'snake', 40) ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
 
   r := league_invite(lid);
   perform assert_ok(r, 'ct28a the panel loads');
