@@ -19,8 +19,9 @@ import {
   setPickTrading as setPickTradingRpc, pickAssets,
   type PosCaps, type TradeReview, type WaiverMode, type FaMode,
 } from '@drip/core/data/liveApi';
-import { DAY_LABEL, SLEEPER_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
-  nextWaiverMode, waiverDaysOf, type WaiverDayMode } from '@drip/core/data/waiverDays';
+import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
+  nextWaiverMode, waiverDaysOf, normalizeWaiverDays, effectiveGameHoldDow,
+  holdLine, waiverConflicts, etTime, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Chip, LinkButton, Mono, Notice, PrimaryButton } from './prims';
@@ -87,8 +88,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   // 0337: ONE SCHEDULE. The run's days, free agency's days and the days adds
   // waited for the run were three pickers answering one question; this is that
-  // question, once per day, in Sleeper's four words.
-  const [days, setDays] = useState<WaiverDayMode[]>([...SLEEPER_WAIVER_DAYS]);
+  // question, once per day, in four words.
+  const [days, setDays] = useState<WaiverDayMode[]>([...DEFAULT_WAIVER_DAYS]);
   const [gameHold, setGameHold] = useState<number | null>(3);      // after-games morning; null = none
   const [holdDays, setHoldDays] = useState(1);
   const [agentWaivers, setAgentWaivers] = useState(true);
@@ -110,6 +111,16 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [rounds, setRounds] = useState<number | null>(null);
   const [roundsInit, setRoundsInit] = useState<number | null>(null);
   const [preDraft, setPreDraft] = useState(false);
+
+  // ── THE WAIVER SHEET, READ AS THIS LEAGUE IS CONFIGURED (0338) ────────────
+  // Founder: "looks like the three waiver selections can conflict with the
+  // daily schedule?" They could. The three readings below are core's, shared
+  // with the web console and the rulebook and pinned by check:waiverdays, so
+  // this sheet cannot describe the league differently from the database that
+  // runs it — which is the complaint, one storey up from 0337's.
+  const shownDays = normalizeWaiverDays(days, clearMin);
+  const effGameHold = effectiveGameHoldDow(shownDays, gameHold);
+  const conflicts = waiverConflicts({ days, clearMin, holdDays, gameHoldDow: gameHold, faMode, faStart, faEnd });
 
   useEffect(() => {
     if (!visible) return;
@@ -295,7 +306,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           </View>
           <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
             {mode === 'rolling' ? 'A queue: winning a claim sends you to the back.'
-              : mode === 'standings' ? "Sleeper's default: priority is the reverse of the live standings at every clear — winning a claim costs nothing, only winning games does."
+              : mode === 'standings' ? 'The common default: priority is the reverse of the live standings at every clear — winning a claim costs nothing, only winning games does.'
               : 'Blind bids from a season budget; highest bid wins, only the winner pays.'}
           </Mono>
           {mode === 'faab' && (
@@ -330,33 +341,42 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               <TimeStep label="CLEAR" value={clearMin} onChange={setClearMin} />
             </View>
           )}
-          {/* 0337: THE WEEKLY SCHEDULE — Sleeper's own list, one mode a day.
-              Tapping a day rings through the four; the hint under it is
-              Sleeper's own sentence for whichever it now reads, so a
-              commissioner comparing the two screens is comparing words, not
-              translating ours. */}
+          {/* 0337: THE WEEKLY SCHEDULE — one mode a day. Tapping a day rings
+              through the modes THIS league can say (0338: three when there is
+              no run to clear at, four when there is), and the hint under it is
+              the sentence for whichever it now reads. Rows render NORMALIZED —
+              a stored WAIVERS TO FA in a rolling league shows as the WAIVERS
+              the database reads it as — while the raw value stays stored, so
+              switching back to a daily run gives the commissioner his Sunday
+              back instead of having quietly eaten it. */}
           <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, padding: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Mono size={9} tone="faint" track={0.1}>WEEKLY SCHEDULE</Mono>
               <View style={{ flex: 1 }} />
-              <Chip label="SLEEPER DEFAULT" on={days.join(',') === SLEEPER_WAIVER_DAYS.join(',')}
-                onPress={() => { tap(); setDays([...SLEEPER_WAIVER_DAYS]); }} />
+              <Chip label="DEFAULT" on={days.join(',') === DEFAULT_WAIVER_DAYS.join(',')}
+                onPress={() => { tap(); setDays([...DEFAULT_WAIVER_DAYS]); }} />
             </View>
-            {days.map((m, i) => (
+            {shownDays.map((m, i) => (
               <View key={DAY_LABEL[i]} style={{ marginTop: 7 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Mono size={10} weight="700" style={{ width: 92 }}>{DAY_LABEL[i]}</Mono>
                   <View style={{ flex: 1 }} />
                   <Chip label={WAIVER_MODE_LABEL[m]} on
-                    onPress={() => { tap(); setDays(days.map((x, j) => (j === i ? nextWaiverMode(x) : x))); }} />
+                    onPress={() => { tap(); setDays(days.map((x, j) => (j === i ? nextWaiverMode(m, clearMin) : x))); }} />
                 </View>
-                <Mono size={8} tone="faint" style={{ marginTop: 2, lineHeight: fs(12) }}>{WAIVER_MODE_HINT[m]}</Mono>
+                <Mono size={8} tone={faMode === 'off' && (m === 'fa' || m === 'waivers_to_fa') ? 'warn' : 'faint'} style={{ marginTop: 2, lineHeight: fs(12) }}>
+                  {faMode === 'off' && (m === 'fa' || m === 'waivers_to_fa')
+                    ? 'Overruled by NONE — WAIVERS ONLY: no door opens today.'
+                    : WAIVER_MODE_HINT[m]}
+                </Mono>
               </View>
             ))}
           </View>
-          {/* Sleeper's AFTER GAMES WAIVERS CLEAR: a player dropped once the
-              week's games have started is not a free agent until this
-              morning's run, whatever his own hold says. */}
+          {/* AFTER GAMES, WAIVERS CLEAR: a player dropped once the week's games
+              have started is not a free agent until this morning's run,
+              whatever his own hold says. 0338 names the morning it really
+              lands on — the chosen day rolled forward to one the run visits —
+              and the time, which a rolling league is otherwise never shown. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">AFTER GAMES, CLEAR</Mono>
             <Chip label="NONE" on={gameHold === null} onPress={() => { tap(); setGameHold(null); }} />
@@ -365,17 +385,29 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
                 onPress={() => { tap(); setGameHold(d); }} />
             ))}
           </View>
+          {gameHold !== null && (
+            <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
+              {effGameHold === null
+                ? 'No day on the schedule holds a run, so this cannot apply.'
+                : `Dropped after the week's first kickoff → held until ${DAY_LABEL[effGameHold][0] + DAY_LABEL[effGameHold].slice(1).toLowerCase()} ${etTime(clearMin ?? 180)} ET.`}
+            </Mono>
+          )}
+          {/* HOLD counts RUNS. A rolling league has none, so it gets the two
+              settings it can actually honour rather than four that read the
+              same (0338) — and the stored day count is left alone underneath,
+              so a league that goes back to a daily run keeps its 3. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">HOLD</Mono>
-            {[0, 1, 2, 3].map((d) => (
+            {clearMin === null ? (
+              <>
+                <Chip label="NONE" on={holdDays === 0} onPress={() => { tap(); setHoldDays(0); }} />
+                <Chip label="24H" on={holdDays > 0} onPress={() => { tap(); if (holdDays === 0) setHoldDays(1); }} />
+              </>
+            ) : [0, 1, 2, 3].map((d) => (
               <Chip key={d} label={d === 0 ? 'NONE' : `${d} DAY${d > 1 ? 'S' : ''}`} on={holdDays === d} onPress={() => { tap(); setHoldDays(d); }} />
             ))}
           </View>
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
-            {clearMin === null
-              ? 'Rolling: each dropped player clears exactly 24h × hold after the drop.'
-              : 'Daily: claims resolve at the set time once the hold has passed.'}
-          </Mono>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>{holdLine(clearMin, holdDays)}</Mono>
 
           {sec('FREE AGENCY')}
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
@@ -403,6 +435,21 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
           <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
             A day that should open only once the run has spoken is WAIVERS TO FA on the schedule — one setting, so the door can never open on a run that never happened.
           </Mono>
+
+          {/* WHAT THIS COMBINATION DOES (0338). Every setting here has a
+              defined reading, so none of this blocks a save — it says which
+              reading, out loud, where the old screen let a control look
+              effective while the schedule quietly overruled it. */}
+          {conflicts.length > 0 && (
+            <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, padding: 8, gap: 6 }}>
+              <Mono size={9} tone="faint" track={0.1}>HOW THESE READ TOGETHER</Mono>
+              {conflicts.map((c, i) => (
+                <Mono key={i} size={8.5} tone={c.level === 'warn' ? 'warn' : 'faint'} style={{ lineHeight: fs(13) }}>
+                  {c.level === 'warn' ? '⚠ ' : '· '}{c.text}
+                </Mono>
+              ))}
+            </View>
+          )}
 
           {sec('TRADES')}
           {/* 0321: review (execute on accept / commissioner / league vote)

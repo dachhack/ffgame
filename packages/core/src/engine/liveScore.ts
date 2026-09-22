@@ -95,6 +95,32 @@ export function srvSlotRow<T extends SrvSlotScore>(rows: T[] | null | undefined,
   return slug ? rows.find((r) => r.side === side && r.slug === slug) : undefined;
 }
 
+/** THE WINDOW'S SHARE (v0.459.0). What a side's Field Generals added across a
+ *  whole window: the sum of every slot's banked boost.
+ *
+ *  Founder: "I'd love to see on the card or somewhere how much of the score
+ *  for each player came from field generals." Per card that is `fgBoostAt`;
+ *  this is the somewhere — one number under the window bar, so the answer is
+ *  there without reading six chips and adding them up.
+ *
+ *  The general's OWN slot is the caller's to leave out: his metric is the
+ *  multiplier, he banks none of it himself, and his events carry no `mult`
+ *  anyway — but a caller that filters says what it means.
+ *
+ *  EACH SLOT CARRIES ITS OWN CLOCK. On the live board a window is not one
+ *  clock: a 1pm game that kicked and a 1pm game still on the anthem are both
+ *  in the early window, and `clockAtRealTime` gives each card the position its
+ *  own game is actually at. Summing them at a single shared clock would credit
+ *  a boost from a game that has not started. */
+export function fgBoostTotal(
+  slots: ReadonlyArray<{ events: ReadonlyArray<{ clock: number; side: string; delta: number; mult?: number }>; clock: number }>,
+  side: 'you' | 'their',
+): number {
+  let n = 0;
+  for (const s of slots) n += fgBoostAt(s.events, side, s.clock);
+  return Math.round(n * 10) / 10;
+}
+
 /** ── THE LINEUP THE RESOLVER COMPOSED (v0.456.1) ────────────────────────────
  *
  *  A seat's cards come from `sealed_pick`. Not every fielded lineup is in
