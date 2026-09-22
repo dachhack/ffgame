@@ -18,6 +18,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.469.0 — the waiver run opens up
+
+Founder: "can we have the daily waiver report be clickable in chat and open a
+detailed report?"
+
+0290 posts one line when the run settles, and that line is
+`left(btrim(body), 500)`. A quiet Tuesday fits. A busy FAAB Wednesday does
+not — and it truncates at exactly the wrong end, because the losers and their
+reasons are LAST in the sentence, and "why didn't I get him" is the only
+question a waiver report exists to answer.
+
+So the line stays a line and gains a door. Behind it: every claim the run
+settled, who won what and for how much, who did not and WHY — outbid, roster
+full, no budget, a linked group that could not complete — and the wire as it
+stands afterwards, priority or budget left per seat. A linked group (0316) is
+marked, because a loser whose partner failed is not the same story as one who
+was outbid.
+
+NO CHANGE TO `process_waivers`, deliberately. The run's instant was already
+recoverable: every claim it settles is stamped `processed_at = now()`, the
+chat line is inserted in the SAME transaction, and `now()` is fixed for a
+transaction — so the message's `created_at` IS the run's `processed_at`.
+Re-emitting a function that big to add a key it does not need would have been
+the riskier change, not the safer one.
+
+MATCHED ON THE NEAREST INSTANT, not on equality. The two timestamps agree to
+the microsecond in the database, but they travel out through PostgREST as text
+and back as a parameter, and a rule that depends on that round trip being
+byte-exact is one that fails silently into an empty sheet. ±5 seconds, nearest
+wins; two runs of one league cannot be five seconds apart.
+
+A bid is a number in a FAAB league and NULL everywhere else, where a 0 would
+read as "bid nothing" rather than "this league has no bids". An instant with
+no run answers `found: false` rather than drawing an empty sheet that looks
+like a run nobody won.
+
+Only the waiver kind gets the button. Every other txn line is the whole story
+already, and a button on one would promise a sheet that never arrives.
+
+Migration 0344, waiver-run-probes.sql with five groups, both chats.
+
 ### v0.468.0 — words on the web's rail too
 
 Founder, on the web build: "Still have the icons in the rail on web."

@@ -17,12 +17,12 @@ import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount
 import { useEffect, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin, chatReact, leagueReport,
+  chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
-import { txnLook, txnBody } from '@drip/core/data/txnChat';
+import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } from '@drip/core/data/txnChat';
 import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 
@@ -118,16 +118,97 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // bubble read alike; this gives it a rail and a colour, so the league's own
 // conversation still reads as the conversation and the moves read as the
 // record rather than as somebody talking.
-function TxnLine({ m }: { m: ChatMessage }) {
+function TxnLine({ m, onOpenRun }: { m: ChatMessage; onOpenRun?: () => void }) {
   const look = txnLook(m.txn);
   const rail = look.tone === 'you' ? 'var(--you)' : look.tone === 'warn' ? 'var(--warn)' : 'var(--bd)';
+  // 0344: a WAIVER RUN has a report behind it; every other txn kind is the
+  // whole story already, and a button on one would promise a sheet that never
+  // arrives.
+  const openable = isWaiverRun(m.txn) && !!onOpenRun;
+  const n = (m.txn?.won ?? 0) + (m.txn?.lost ?? 0);
   return (
     <div style={{ borderLeft: `3px solid ${rail}`, padding: '3px 8px', borderRadius: 4,
                   background: 'color-mix(in srgb, var(--dim) 7%, transparent)' }}>
       <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', overflowWrap: 'anywhere' }}>
         <span style={{ marginRight: 5 }}>{look.icon}</span>{txnBody(m.body, look)}
       </div>
+      {openable && (
+        <button onClick={onOpenRun} className="mono"
+          style={{ marginTop: 4, marginBottom: 2, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)' }}>
+          📋 OPEN THE RUN{n > 0 ? ` · ${n} CLAIM${n === 1 ? '' : 'S'}` : ''} ▸
+        </button>
+      )}
     </div>
+  );
+}
+
+// ── THE RUN, IN FULL (0344) ─────────────────────────────────────────────────
+// Founder: "can we have the daily waiver report be clickable in chat and open
+// a detailed report?" The chat line is capped at 500 characters server-side,
+// and it truncates at exactly the wrong end: the losers and their reasons are
+// last in the sentence, and "why didn't I get him" is the only question a
+// waiver report exists to answer. This is that end, uncut.
+export function WaiverRunSheet({ leagueId, at, onClose }: { leagueId: string; at: string; onClose: () => void }) {
+  const [rep, setRep] = useState<WaiverRunReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    leagueWaiverRun(leagueId, at)
+      .then((r) => { if (!live) return; if (r?.ok) setRep(r); else setErr(friendlyError(r?.error ?? 'could not load the run')); })
+      .catch((e) => { if (live) setErr(friendlyError(e)); });
+    return () => { live = false; };
+  }, [leagueId, at]);
+  const mode = rep?.mode;
+  const when = rep?.at ? new Date(rep.at) : new Date(at);
+  const Group = ({ title, rows, tone }: { title: string; rows: WaiverRunReport['won']; tone: string }) => (
+    <div style={{ marginTop: 12 }}>
+      <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>{title}</div>
+      {(rows ?? []).length === 0
+        ? <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>none</div>
+        : (rows ?? []).map((e, i) => (
+          <div key={`${e.roster_id}-${e.add_slug}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+            <span className="mono" style={{ fontSize: 11.5, color: tone, flex: 1, lineHeight: 1.5 }}>{waiverRunLine(e, mode)}</span>
+            {/* A LINKED GROUP (0316) stands or falls together — a loser whose
+                partner failed is not the same story as one who was outbid. */}
+            {e.group_id && (
+              <span className="mono" title="part of a linked group — these claims stand or fall together"
+                style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>
+                ⛓ {e.group_seq ?? '?'}/{e.group_max ?? '?'}
+              </span>
+            )}
+          </div>
+        ))}
+    </div>
+  );
+  return (
+    <Sheet title="📋 The waiver run" subtitle={`${when.toLocaleString()}${mode ? ` · ${mode === 'faab' ? 'FAAB' : mode === 'standings' ? 'REVERSE STANDINGS' : 'ROLLING PRIORITY'}` : ''}`}
+      max={620} zIndex={80} onClose={onClose}>
+      {err && <div className="mono" style={{ fontSize: 11, color: 'var(--opp)' }}>{err}</div>}
+      {!rep && !err && <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>loading…</div>}
+      {rep?.found === false && (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', lineHeight: 1.6 }}>
+          No claims are on file for this run any more. The line above is still what happened; the detail behind it has been cleaned up.
+        </div>
+      )}
+      {rep?.found && (<>
+        <Group title="WON" rows={rep.won} tone="var(--you)" />
+        <Group title="DID NOT GO THROUGH" rows={rep.lost} tone="var(--dim)" />
+        {!!rep.order?.length && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+            <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>
+              THE WIRE NOW{mode === 'faab' ? ' · BUDGET LEFT' : ' · PRIORITY'}
+            </div>
+            {rep.order.map((o, i) => (
+              <div key={o.roster_id} style={{ display: 'flex', gap: 8, padding: '3px 0', borderTop: i ? '1px solid var(--bd)' : 'none' }}>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', width: 18 }}>{o.priority ?? i + 1}</span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text)', flex: 1 }}>{o.team ?? `Roster ${o.roster_id}`}</span>
+                {o.faab != null && <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>${o.faab}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </>)}
+    </Sheet>
   );
 }
 
@@ -386,6 +467,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [busy, setBusy] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [reportWeek, setReportWeek] = useState<number | null>(null);
+  // 0344: which waiver run's sheet is up, keyed by the message's own timestamp
+  // — which IS the run's, since the claims and the line share a transaction.
+  const [runAt, setRunAt] = useState<string | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const load = () => chatMessages(leagueId)
     .then((r) => {
@@ -482,7 +566,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               )}
             </div>
             {m.kind === 'txn'
-              ? <TxnLine m={m} />
+              ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
               : m.kind === 'poll'
@@ -499,6 +583,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       </MessageScroll>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
+      {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
         {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
