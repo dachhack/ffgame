@@ -18,6 +18,58 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.474.0 — the kicker that was a wide receiver
+
+THE DIFF FOUND IT. Kickoff League, week 2: the resolver fields NINE slots per
+side and the board fields eleven. Not zero for the missing two — ABSENT. The
+nine that resolve sum to exactly the stored final, so the report and the
+standings were faithfully repeating a number that was two players short.
+
+The league's lineup has eleven spots, and the last three fill themselves: K,
+D/ST and a rookie-only best-ball spot. The rookie spot filled. K and D/ST never
+did.
+
+WHY. The worker's player index is built from Sleeper's directory of real
+people. K and D/ST ride synthetic TEAM-UNIT slugs — `bal-k`, `car-dst` — and
+the index has never held an entry for one, so `metaForSlug` answered null. And
+`makePlayer` defaults a missing position to 'WR'. **Every kicker and every
+defense on a native roster was a wide receiver to the resolver.**
+
+Which broke exactly one thing and broke it silently. A MANUAL K or D/ST pick
+still scored, because it arrives as a sealed pick and classicPoints reads the
+slug — so every league with ordinary K and DEF spots looked perfect, and one of
+them is in this same diff, resolving nine-for-nine with `car-dst` and `bal-k`
+in it. But a best-ball K spot accepts only K and a best-ball D/ST spot only
+DEF, and `bestballFill` judges eligibility by that position. With every
+candidate mislabelled WR, those two spots could not find anybody. They stayed
+empty and scored nothing — in the stored final, the weekly report, the
+standings and the playoff seeding, every week, all season.
+
+AND IT EXPLAINS THE ONE CLUE THAT NEVER FIT. All eight of week 2's deltas were
+whole numbers — 12, 12, 13, 16, 17, 22, 24, 35 — against scores carrying
+tenths. No scoring rate does that. A kicker and a defense do: field goals are
+3/4/5, extra points 1, the points-allowed ladder 10/7/4/1/0/-1/-4, sacks 1,
+picks 2, touchdowns 6. Every point a K or a DST scores is an integer. The gap
+was never arithmetic; it was two whole players.
+
+Core's `slugMeta` has derived team units from the suffix since it was written.
+The server simply never asked it. One fallback, in the helper that was already
+importing it.
+
+THE BOARD WAS RIGHT THE WHOLE TIME. Every version this session that treated the
+stored finals as the truth and the board as the thing to explain had it exactly
+backwards — including the re-stamp, which faithfully reproduced the bug and
+reported "0 moved" as if that settled something. It did not; a scorer re-run
+against its own defect agrees with itself. The diff is what asked a question
+the resolver could not answer by agreeing with itself.
+
+Weeks 1 and 2 need a re-stamp now, which is what the errand is for. NOT week 3
+— `stampFinals` only ever touches a matchup whose status is already 'final',
+and week 3 has not kicked off, so there is no stored number there to be wrong
+yet. A week is repaired after it closes, not before.
+
+check:teamunit, nine assertions. No migration.
+
 ### v0.473.0 — whose rules are loaded
 
 Founder, reading the new league summaries: "Are we applying all of the league

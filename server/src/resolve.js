@@ -290,7 +290,29 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // passes playsInjected, so we skip the whole-week re-fetch per matchup. Standalone
   // callers (sim / single-matchup CLI) omit it and self-fetch as before.
   if (!opts.playsInjected) injectWeek(matchup.week, rowsToPbp(await weekPlayRows(matchup.week)));
-  const meta = (slug) => playerIndex?.metaForSlug(slug) ?? null;
+  // WHAT THE INDEX DOES NOT KNOW, THE SLUG STILL SAYS (v0.474.0).
+  //
+  // The player index is built from Sleeper's directory, so it holds real
+  // people. K and D/ST ride synthetic TEAM-UNIT slugs instead — `bal-k`,
+  // `car-dst` — and the index has never had an entry for one. `metaForSlug`
+  // answered null, and `makePlayer` defaults a missing position to 'WR'. So
+  // every kicker and every defense on a native roster was a WIDE RECEIVER to
+  // this function.
+  //
+  // WHICH BROKE EXACTLY ONE THING, SILENTLY. A manual K or D/ST pick still
+  // scored — it arrives as a sealed pick and classicPoints reads the slug —
+  // so most leagues looked fine. But a BEST-BALL K spot accepts only K, and a
+  // best-ball D/ST spot only DEF, and bestballFill judges eligibility by this
+  // `pos`. With every candidate mislabelled WR, those two spots could never
+  // find anybody: they stayed empty, scored 0, and did so in the stored final,
+  // the weekly report, the standings and the playoff seeding. Founder, over a
+  // board reading 123.00 against a report reading 101.00 — that gap was his
+  // kicker and his defense, every week, all season. Every one of the eight
+  // deltas was a whole number because K and DST points are whole numbers.
+  //
+  // Core's `slugMeta` has always derived team units from the suffix; the
+  // server just never asked it. It is a pure lookup and already imported.
+  const meta = (slug) => playerIndex?.metaForSlug(slug) ?? (slug ? slugMeta(slug) : null);
   const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
 
   const ctx = opts.ctx;
