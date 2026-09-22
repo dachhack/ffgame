@@ -36,7 +36,7 @@ import { setLiveInjuries, clearLiveInjuries } from '../packages/core/src/data/in
 import { setDepthChart, clearDepthChart } from '../packages/core/src/data/playerDepth';
 import { twinGeneralKeys, buffAppliesToSpot } from '../packages/core/src/data/powerups';
 import { LIVE_SEASON } from '../packages/core/src/data/realPbp';
-import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS } from '../packages/core/src/data/openWeek';
+import { openWeekFrom, weekClosesAt, etWeekday, GAME_MS, DEFAULT_TURNOVER } from '../packages/core/src/data/openWeek';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -921,36 +921,65 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // jumped to week 2 here. Tuesday is for reading what happened.
   ok('Tuesday still shows the week just played',
     openWeekFrom(weeks, kicks, ET('2026-09-15T18:00:00Z')) === 1);
-  ok('…right up to Tuesday 23:59 ET',
-    openWeekFrom(weeks, kicks, ET('2026-09-16T03:59:00Z')) === 1);
-  // Wednesday 00:00 ET = 04:00Z in September (EDT, UTC−4).
-  ok('Wednesday 00:00 ET turns the page',
-    openWeekFrom(weeks, kicks, ET('2026-09-16T04:00:00Z')) === 2);
+  // THE RUN IS THE BOUNDARY (v0.466.0). Founder: "We want it synced with the
+  // waiver run so that when you see the week matchup, you see the impacts of
+  // new rosters from the waiver run." Wednesday 00:00 ET was the right day
+  // three hours early — it showed next week's matchup against last week's
+  // rosters, which is the one thing the page must not do.
+  ok('…right up to Wednesday 2:59am ET, before the run',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T06:59:00Z')) === 1);
+  // Wednesday 3:00am ET = 07:00Z in September (EDT, UTC−4).
+  ok('the Wednesday 3am run turns the page',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T07:00:00Z')) === 2);
+  ok('…and midnight, which used to turn it, no longer does',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T04:00:00Z')) === 1);
   ok('…and it stays turned on Thursday',
     openWeekFrom(weeks, kicks, ET('2026-09-17T18:00:00Z')) === 2);
 
-  // The close instant itself is a Wednesday midnight ET, not a Tuesday one.
-  ok('a week closes on a Wednesday, at hour 0 ET', etWeekday(weekClosesAt(wk1.last)) === 3);
+  // The close instant is the league's own run: its day, its time.
+  ok('a week closes on a Wednesday', etWeekday(weekClosesAt(wk1.last)) === 3);
   ok('…and that is strictly after the games are done', weekClosesAt(wk1.last) > wk1.last + GAME_MS);
+  ok('the default boundary is the default run — Wednesday, 3:00am ET',
+    DEFAULT_TURNOVER.dow === 3 && DEFAULT_TURNOVER.minute === 180);
+
+  // A LEAGUE THAT MOVED ITS RUN moves its board with it. This is the whole
+  // point of passing the pair rather than assuming one: a league clearing
+  // Tuesday at 5am sees next week from Tuesday at 5am, and its board and its
+  // wire never disagree about what week it is.
+  ok('a Tuesday 5am league has already turned over on Tuesday morning',
+    openWeekFrom(weeks, kicks, ET('2026-09-15T09:30:00Z'), {}, { dow: 2, minute: 300 }) === 2);
+  ok('…and had not an hour before it',
+    openWeekFrom(weeks, kicks, ET('2026-09-15T08:30:00Z'), {}, { dow: 2, minute: 300 }) === 1);
+  // A run at a half hour, which the minute walk has to land on exactly.
+  ok('a 3:30am run turns at 3:30, not 3:00',
+    openWeekFrom(weeks, kicks, ET('2026-09-16T07:15:00Z'), {}, { dow: 3, minute: 210 }) === 1
+    && openWeekFrom(weeks, kicks, ET('2026-09-16T07:30:00Z'), {}, { dow: 3, minute: 210 }) === 2);
+  // A SAME-DAY RUN THAT HAS ALREADY PASSED belongs to next week's occurrence.
+  // Week 1's games are done 04:15Z Tuesday; a Tuesday 00:00 run that day is
+  // behind them, so the week runs to the FOLLOWING Tuesday rather than closing
+  // in the past.
+  ok('a run earlier on the day the games finish waits a week rather than closing behind them',
+    weekClosesAt(wk1.last, { dow: 2, minute: 0 }) > wk1.last + GAME_MS);
 
   // A week with no Monday game still waits for Wednesday rather than closing
   // on Sunday night — the rule is the calendar, not the last whistle.
   const sunOnly = { 5: { first: ET('2026-10-11T17:00:00Z'), last: ET('2026-10-11T20:25:00Z') } };
-  ok('a Sunday-only week still runs to Wednesday',
+  ok('a Sunday-only week still runs to the Wednesday run',
     openWeekFrom([5, 6], { ...sunOnly, 6: { first: ET('2026-10-18T17:00:00Z'), last: ET('2026-10-18T20:25:00Z') } },
       ET('2026-10-13T18:00:00Z')) === 5);
 
-  // NOVEMBER, after the DST change: Wednesday 00:00 ET is 05:00Z, not 04:00Z.
+  // NOVEMBER, after the DST change: Wednesday 3:00am ET is 08:00Z, not 07:00Z.
   // A fixed −4 offset would turn the page an hour early here, every week for
   // the half of the season that decides seeding.
   const nov = {
     10: { first: ET('2026-11-12T20:20:00Z'), last: ET('2026-11-17T01:15:00Z') },
     11: { first: ET('2026-11-19T20:20:00Z'), last: ET('2026-11-24T01:15:00Z') },
   };
-  ok('past the DST change, 23:59 ET Tuesday is still last week',
-    openWeekFrom([10, 11], nov, ET('2026-11-18T04:59:00Z')) === 10);
-  ok('…and 00:00 ET Wednesday is the next one',
-    openWeekFrom([10, 11], nov, ET('2026-11-18T05:00:00Z')) === 11);
+  // (After the change the run is 08:00Z, not 07:00Z.)
+  ok('past the DST change, 2:59am ET Wednesday is still last week',
+    openWeekFrom([10, 11], nov, ET('2026-11-18T07:59:00Z')) === 10);
+  ok('…and the 3am run is the next one',
+    openWeekFrom([10, 11], nov, ET('2026-11-18T08:00:00Z')) === 11);
 
   // The shapes that must not throw or guess.
   ok('no weeks at all answers null', openWeekFrom([], {}, Date.now()) === null);
@@ -985,10 +1014,10 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     openWeekFrom([1, 2], {}, now, { 1: true, 2: true }) === 2);
   // The slate, where there is one, still decides — a week can go final on
   // Monday night and the founder's rule holds it until Wednesday.
-  ok('a final week WITH a slate is still held until Wednesday',
+  ok('a final week WITH a slate is still held until the run',
     openWeekFrom([1, 2], kicks, ET('2026-09-15T18:00:00Z'), { 1: true }) === 1);
-  ok('and released once Wednesday comes',
-    openWeekFrom([1, 2], kicks, ET('2026-09-16T05:00:00Z'), { 1: true }) === 2);
+  ok('and released once the Wednesday 3am run comes',
+    openWeekFrom([1, 2], kicks, ET('2026-09-16T07:00:00Z'), { 1: true }) === 2);
   // Mixed: week 1 played with no slate, week 2 scheduled.
   ok('a finished slate-less week hands over to the next scheduled one',
     openWeekFrom([1, 2], { 2: wk2 }, ET('2026-09-15T18:00:00Z'), { 1: true }) === 2);

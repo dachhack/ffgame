@@ -7,9 +7,11 @@
 --   • lt5 …and a window nobody has played contributes nothing, so a matchup
 --         with no published rows reads null rather than 0–0;
 --   • lt6 TOTALS ONLY — slot_scores never leaves the function;
---   • lt7 (0342) THE BOARD TURNS ON WEDNESDAY — a finished week is still the
---         default on Tuesday night and is not on Wednesday morning, which is
---         core's openWeekFrom rule asked in SQL.
+--   • lt7 (0342/0343) THE BOARD TURNS WITH THE RUN — a finished week is still
+--         the default before the league's waiver run and is not after it,
+--         which is core's openWeekFrom rule asked in SQL;
+--   • lt8 (0343) …and the pair it turns on is the LEAGUE'S, so a league that
+--         moves its run moves its board.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -119,26 +121,79 @@ begin
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final)
     values (lid, 96, 1, 2, 'final', 147.4, 111.7), (lid, 97, 1, 2, 'scheduled', null, null);
 
-  perform lt_true(nfl_week_closes_at(96, seas) = '2026-09-23 00:00:00-04'::timestamptz,
-    'lt7 a week whose last game kicks Monday night closes Wednesday midnight ET (got '
+  -- 0343: the default pair is the DEFAULT RUN — Wednesday, 3:00am ET — not
+  -- midnight. Founder: "We want it synced with the waiver run so that when you
+  -- see the week matchup, you see the impacts of new rosters from the waiver
+  -- run." Turning at midnight showed next week's matchup against last week's
+  -- rosters, which is the one thing that page must not do.
+  perform lt_true(nfl_week_closes_at(96, seas) = '2026-09-23 03:00:00-04'::timestamptz,
+    'lt7 a week whose last game kicks Monday night closes at Wednesday''s 3am run (got '
       || coalesce(nfl_week_closes_at(96, seas)::text, 'null') || ')');
   -- The two sides of the boundary. A finished week is STILL the answer on
   -- Tuesday — that is the whole point of the rule, and it is exactly the state
   -- the founder photographed.
-  perform lt_true(nfl_week_closes_at(96, seas) > '2026-09-22 23:59:00-04'::timestamptz,
-    'lt7 …so Tuesday 23:59 is still inside week 96''s window');
-  perform lt_true(nfl_week_closes_at(96, seas) <= '2026-09-23 00:01:00-04'::timestamptz,
-    'lt7 …and Wednesday 00:01 is outside it');
-  -- A week that finishes ON a Wednesday morning does not close the same hour:
-  -- the step is strictly forward, or the board would turn over during the run.
+  perform lt_true(nfl_week_closes_at(96, seas) > '2026-09-23 02:59:00-04'::timestamptz,
+    'lt7 …so Wednesday 2:59am, before the run, is still inside week 96''s window');
+  perform lt_true(nfl_week_closes_at(96, seas) <= '2026-09-23 03:01:00-04'::timestamptz,
+    'lt7 …and a minute after the run is outside it');
+  perform lt_true(nfl_week_closes_at(96, seas) > '2026-09-23 00:00:00-04'::timestamptz,
+    'lt7 …and midnight, which 0342 turned on, no longer does');
+  -- A week that finishes AFTER the run on its own turnover day does not close
+  -- that morning: the step is strictly forward, or the board would turn over
+  -- behind the games it is still showing.
   delete from nfl_slate where season = seas and week = 95;
   insert into nfl_slate (season, week, home, away, win, kickoff)
-    values (seas, 95, 'KC', 'LV', 'late', '2026-09-23 01:00:00-04');   -- Wed 1am ET
-  perform lt_true(nfl_week_closes_at(95, seas) = '2026-09-30 00:00:00-04'::timestamptz,
-    'lt7 a week finishing Wednesday morning runs to the NEXT Wednesday, not the one it is in (got '
+    values (seas, 95, 'KC', 'LV', 'late', '2026-09-23 01:00:00-04');   -- Wed 1am ET, done 5am
+  perform lt_true(nfl_week_closes_at(95, seas) = '2026-09-30 03:00:00-04'::timestamptz,
+    'lt7 a week still being played at its own run time runs to the NEXT one (got '
       || coalesce(nfl_week_closes_at(95, seas)::text, 'null') || ')');
   perform lt_true(nfl_week_closes_at(94, seas) is null,
     'lt7 a week with no slate is unmeasurable, and says so rather than guessing');
+
+  -- ── lt8 (0343). THE PAIR IS THE LEAGUE'S ──
+  -- Not a new rule: `waiver_game_hold_dow_effective` (0338) picks the day and
+  -- `league_waiver_clear_min` (0337) the time, and this reads them.
+  perform lt_true((league_week_turnover(lid) ->> 'dow')::int = 3
+              and (league_week_turnover(lid) ->> 'minute')::int = 180
+              and league_week_turnover(lid) ->> 'source' = 'run',
+    'lt8 an unconfigured league turns over at its own default run: ' || league_week_turnover(lid)::text);
+  -- Move the run and the board moves with it.
+  perform lt_true((set_transaction_rules(lid, p_waiver_clear_min => 300,
+      p_waiver_game_hold_dow => 2,
+      p_waiver_days => '["waivers","waivers","waivers","waivers","waivers","waivers","waivers"]'::jsonb)
+      ->> 'ok')::boolean, 'lt8 move the run to Tuesday 5am');
+  perform lt_true((league_week_turnover(lid) ->> 'dow')::int = 2
+              and (league_week_turnover(lid) ->> 'minute')::int = 300,
+    'lt8 …and the turnover follows it: ' || league_week_turnover(lid)::text);
+  -- Week 96's games are done Tuesday 00:15 ET, and a Tuesday 5am run is after
+  -- that — so this league turns over the very morning after Monday night,
+  -- three days before the default league does. That is the point: the board
+  -- follows the rosters, whenever this league changes them.
+  perform lt_true(nfl_week_closes_at(96, seas, 2, 300) = '2026-09-22 05:00:00-04'::timestamptz,
+    'lt7/8 a Tuesday 5am league turns over Tuesday morning, right after its own run (got '
+      || coalesce(nfl_week_closes_at(96, seas, 2, 300)::text, 'null') || ')');
+  -- …and a run EARLIER than the finish waits a week rather than closing behind
+  -- the games it is still showing.
+  perform lt_true(nfl_week_closes_at(96, seas, 2, 0) = '2026-09-29 00:00:00-04'::timestamptz,
+    'lt7/8 a Tuesday midnight run, already past when the games ended, waits for the next one (got '
+      || coalesce(nfl_week_closes_at(96, seas, 2, 0)::text, 'null') || ')');
+  -- A ROLLING LEAGUE HAS NO RUN to sync to — every dropped player clears on
+  -- his own timer — so the board falls back to the default pair and says so
+  -- rather than pretending it found one.
+  perform lt_true((set_transaction_rules(lid, p_waiver_clear_min => -1) ->> 'ok')::boolean,
+    'lt8 switch it to rolling 24h');
+  perform lt_true((league_week_turnover(lid) ->> 'dow')::int = 3
+              and (league_week_turnover(lid) ->> 'minute')::int = 180
+              and league_week_turnover(lid) ->> 'source' = 'rolling',
+    'lt8 …and it falls back to Wednesday 3am, labelled rolling: ' || league_week_turnover(lid)::text);
+  -- An after-games hold of NONE is the other way to have no run.
+  perform lt_true((set_transaction_rules(lid, p_waiver_clear_min => 180,
+      p_waiver_game_hold_dow => -1) ->> 'ok')::boolean, 'lt8 turn the after-games hold off');
+  perform lt_true(league_week_turnover(lid) ->> 'source' = 'no_hold_day',
+    'lt8 …and that is named too rather than guessed at: ' || league_week_turnover(lid)::text);
+  perform lt_true(league_week_turnover('00000000-0000-0000-0000-000000000000'::uuid) ->> 'source' = 'default',
+    'lt8 a league that does not exist answers the default rather than throwing');
+
   delete from nfl_slate where season = seas and week in (94, 95, 96, 97);
   delete from matchup where league_id = lid;
 end $$;
