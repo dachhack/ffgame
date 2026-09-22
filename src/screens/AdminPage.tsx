@@ -26,6 +26,8 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '@drip/core/data/liveApi';
+import { DAY_LABEL, SLEEPER_WAIVER_DAYS, WAIVER_DAY_MODES, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
+  waiverDaysOf, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
@@ -471,13 +473,13 @@ function FaabWallets({ leagueId }: { leagueId: string }) {
 // schedule knobs send -1 to CLEAR (daily clear → rolling; window → always).
 interface TxnRules {
   mode: WaiverMode; budget: number; review: TradeReview;
-  clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
+  clearMin: number | null; days: WaiverDayMode[]; gameHold: number | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
   faMode: FaMode;
   agentWaivers: boolean;
   /** 0319: the FAAB floor, the days free agency may open (null = every
    *  day), the trade deadline week (null = none). */
-  minBid: number; faDays: number[] | null; deadline: number | null;
+  minBid: number; deadline: number | null;
 }
 function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [init, setInit] = useState<TxnRules | null>(null);
@@ -488,8 +490,10 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [pickTrading, setPickTrading_] = useState(true);
   const [pickNote, setPickNote] = useState<string | null>(null);
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
-  const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
-  const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
+  // 0337: ONE SCHEDULE — the run's days, free agency's days and the days adds
+  // waited for the run were three pickers answering one question.
+  const [days, setDays] = useState<WaiverDayMode[]>([...SLEEPER_WAIVER_DAYS]);
+  const [gameHold, setGameHold] = useState<number | null>(3);
   const [holdDays, setHoldDays] = useState(1);
   const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
@@ -497,7 +501,6 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   // 0287: the window said open-or-hours; the MODE can also say none at all.
   const [faMode, setFaMode] = useState<FaMode>('open');
   const [minBid, setMinBid] = useState(0);
-  const [faDays, setFaDays] = useState<number[] | null>(null);    // days FA may open; null = every day
   const [deadline, setDeadline] = useState<number | null>(null);  // trade deadline week; null = none
   const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -508,8 +511,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
       const cur: TxnRules = {
         mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
         clearMin: r.waiver_clear_min ?? null,
-        clearDow: Array.isArray(r.waiver_clear_dow) && r.waiver_clear_dow.length ? [...r.waiver_clear_dow].sort() : null,
-        faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
+        days: waiverDaysOf(r.waiver_days),
+        gameHold: r.waiver_game_hold_dow ?? null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
         // Absent reads from the hours, exactly as league_fa_mode does, so a
@@ -518,14 +521,13 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         // Absent means ON (0213), the same default league_agent_waivers uses.
         agentWaivers: r.agent_waivers !== false,
         minBid: r.faab_min_bid ?? 0,
-        faDays: Array.isArray(r.fa_dow) && r.fa_dow.length ? [...r.fa_dow].sort() : null,
         deadline: r.trade_deadline_week ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudget(cur.budget); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading_(a.pick_trading !== false); }).catch(() => {});
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
+      setClearMin(cur.clearMin); setDays(cur.days); setGameHold(cur.gameHold); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
-      setMinBid(cur.minBid); setFaDays(cur.faDays); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
+      setMinBid(cur.minBid); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
     }).catch((e) => setMsg(errMsg(e, 'could not load rules')));
   }, [leagueId]);
   if (!init) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)' }}>{msg ?? 'loading rules…'}</div>;
@@ -534,10 +536,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
     setSaving(true); setMsg(null);
     try {
       const clearChanged = clearMin !== init.clearMin;
-      const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
-      const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
+      const daysChanged = days.join(',') !== init.days.join(',');
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
-      const faDaysChanged = JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? []);
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
@@ -546,14 +546,16 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
-        dowChanged ? (clearDow ?? []) : null,
-        faDowChanged ? (faDow ?? []) : null,
+        null,   // 0337: the run's days are the schedule now
+        null,   // …and so are the days adds wait for it
         agentWaivers !== init.agentWaivers ? agentWaivers : null,
         faMode !== init.faMode ? faMode : null,
         mode === 'faab' && minBid !== init.minBid ? minBid : null,
-        faDaysChanged ? (faDays ?? []) : null,
-        deadline !== init.deadline ? (deadline ?? -1) : null);
-      if (r.ok) { setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, faDays, deadline }); setMsg('✓ saved'); }
+        null,   // …and the days free agency may open
+        deadline !== init.deadline ? (deadline ?? -1) : null,
+        daysChanged ? days : null,
+        gameHold !== init.gameHold ? (gameHold ?? -1) : null);
+      if (r.ok) { setInit({ mode, budget, review, clearMin, days, gameHold, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, deadline }); setMsg('✓ saved'); }
       else setMsg(r.error ?? 'save failed');
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -683,31 +685,36 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
-        {clearMin != null && (
-          <div>
-            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>RUN DAYS (ET)</div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-              {toggle(clearDow === null, 'ALL', () => setClearDow(null))}
-              {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-                <span key={d}>{toggle(!!clearDow?.includes(i), d, () => {
-                  const cur = clearDow ?? [];
-                  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                  setClearDow(next.length ? next : null);
-                })}</span>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 0337: THE WEEKLY SCHEDULE. One mode a day, Sleeper's four, with
+            Sleeper's own sentence under each — the three pickers that used to
+            answer this between them could contradict each other, and did. */}
         <div>
-          <div className="mono" title="On checked days, instant adds stay closed until that day's waiver run has cleared." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FA WAITS FOR THE RUN ON</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WEEKLY SCHEDULE (ET)</div>
+            {toggle(days.join(',') === SLEEPER_WAIVER_DAYS.join(','), 'SLEEPER DEFAULT', () => setDays([...SLEEPER_WAIVER_DAYS]))}
+          </div>
+          <div style={{ marginTop: 6, display: 'grid', gap: 5, maxWidth: 420 }}>
+            {days.map((m, i) => (
+              <div key={DAY_LABEL[i]} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', fontWeight: 700, width: 96 }}>{DAY_LABEL[i]}</span>
+                <select value={m} onChange={(e) => setDays(days.map((x, j) => (j === i ? (e.target.value as WaiverDayMode) : x)))}
+                  className="mono" style={{ fontSize: 10.5, padding: '3px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5 }}>
+                  {WAIVER_DAY_MODES.map((k) => <option key={k} value={k}>{WAIVER_MODE_LABEL[k]}</option>)}
+                </select>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flex: 1, minWidth: 0 }}>{WAIVER_MODE_HINT[m]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Sleeper's AFTER GAMES WAIVERS CLEAR: a player dropped once the
+            week's games have started is not a free agent until this morning's
+            run, whatever his own hold says. */}
+        <div>
+          <div className="mono" title="A player dropped after the week's games start stays on waivers until this morning's run." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>AFTER GAMES, WAIVERS CLEAR</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-            {toggle(faDow === null, 'NEVER', () => setFaDow(null))}
-            {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-              <span key={`fa-${d}`}>{toggle(!!faDow?.includes(i), d, () => {
-                const cur = faDow ?? [];
-                const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                setFaDow(next.length ? next : null);
-              })}</span>
+            {toggle(gameHold === null, 'NONE', () => setGameHold(null))}
+            {[2, 3, 4].map((d) => (
+              <span key={d}>{toggle(gameHold === d, DAY_LABEL[d].slice(0, 3), () => setGameHold(d))}</span>
             ))}
           </div>
         </div>
@@ -722,23 +729,8 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             {toggle(faMode === 'off', '🚫 NONE — WAIVERS ONLY', () => setFaMode('off'))}
           </div>
           {faMode !== 'off' && (
-            <div style={{ marginTop: 8 }}>
-              <div className="mono" title="Sleeper's per-day schedule: on a day not checked, every unowned player is a waiver claim." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY DAYS (ET)</div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-                {toggle(faDays === null, 'ALL', () => setFaDays(null))}
-                {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-                  <span key={`fad-${d}`}>{toggle(!!faDays?.includes(i), d, () => {
-                    const cur = faDays ?? [];
-                    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                    setFaDays(next.length ? next : null);
-                  })}</span>
-                ))}
-              </div>
-              {faDays !== null && (
-                <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5, maxWidth: 360 }}>
-                  Other days are waivers-only: every unowned player is a claim, clearing at the run or the next free-agency morning, whichever comes first.
-                </div>
-              )}
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5, maxWidth: 380 }}>
+              Which DAYS free agency opens is the weekly schedule above. This is the league-wide switch: off means every unowned player is a claim, every day, whatever the schedule says.
             </div>
           )}
           {faMode === 'off' && (

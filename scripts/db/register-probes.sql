@@ -72,6 +72,11 @@ begin
   r := create_native_league('Register League', '2024', 2, 5, 60);
   perform assert_ok(r, 'rg0 create');
   lid := (r ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   code := r ->> 'invite_code';
   perform probe_as('1'); perform assert_ok(native_join(code, 'RG-B'), 'rg0a b joins');
   perform probe_as('f');

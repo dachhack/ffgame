@@ -51,6 +51,11 @@ begin
                             null, null, null, 'classic');
   perform dm_ok(r, 'dm0 classic league created');
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   perform probe_as('c'); perform dm_ok(native_join(code, 'MD-C'), 'dm0a c joins');
   reset role;
   -- MDH players have kicked off; ZZZ players have no game this week at all.

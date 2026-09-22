@@ -2094,6 +2094,17 @@ export const rosterRules = (leagueId: string) =>
          *  it has already passed. */
         faab_min_bid?: number; fa_dow?: number[] | null;
         trade_deadline_week?: number | null; trade_deadline_passed?: boolean;
+        /** 0337: THE SCHEDULE. Always seven entries — explicit, derived from
+         *  the old keys, or Sleeper's default — so a console never has to
+         *  guess what an unset league is doing. `waiver_days_set` says which
+         *  of the three it is looking at; `waiver_clear_min_effective` is the
+         *  run's time with the 3am default already applied (null = no daily
+         *  run at all), and `waiver_game_hold_dow` is Sleeper's after-games
+         *  morning (null = none). */
+        waiver_days?: import('./waiverDays').WaiverDayMode[] | null;
+        waiver_days_set?: boolean;
+        waiver_clear_min_effective?: number | null;
+        waiver_game_hold_dow?: number | null;
         /** 0321: the trade floor. trade_veto_votes is the EFFECTIVE bar;
          *  trade_veto_votes_set is null while it is the majority fallback. */
         /** 0326: is this league served by the anonymous public read API? */
@@ -2203,6 +2214,14 @@ export const setTransactionRules = (
   faabMinBid: number | null = null,
   faDow: number[] | null = null,
   tradeDeadlineWeek: number | null = null,
+  /** 0337: THE SCHEDULE — seven modes, Sunday first, one of 'fa' | 'waivers' |
+   *  'waivers_to_fa' | 'locked'. [] clears back to the default schedule; null
+   *  leaves it. It replaces `waiverClearDow` / `faDow` / `faAfterWaiversDow`
+   *  as the thing a console edits: the run days ARE the schedule now. */
+  waiverDays: import('./waiverDays').WaiverDayMode[] | null = null,
+  /** 0337: Sleeper's AFTER GAMES WAIVERS CLEAR — the morning a player dropped
+   *  once the week's games have started comes off waivers. -1 clears to none. */
+  waiverGameHoldDow: number | null = null,
 ) =>
   rpc<{ ok: boolean; error?: string; waiver_mode?: WaiverMode; faab_budget?: number; trade_review?: TradeReview; agent_waivers?: boolean; fa_mode?: FaMode }>(
     'set_transaction_rules', {
@@ -2212,6 +2231,7 @@ export const setTransactionRules = (
       p_waiver_clear_dow: waiverClearDow, p_fa_after_waivers_dow: faAfterWaiversDow,
       p_agent_waivers: agentWaivers, p_fa_mode: faMode,
       p_faab_min_bid: faabMinBid, p_fa_dow: faDow, p_trade_deadline_week: tradeDeadlineWeek,
+      p_waiver_days: waiverDays, p_waiver_game_hold_dow: waiverGameHoldDow,
     });
 /** THE TRADE FLOOR (0321), the commissioner's own call rather than another
  *  argument on set_transaction_rules: the review mode, how long a league vote

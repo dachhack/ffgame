@@ -243,6 +243,11 @@ begin
   -- ── DRIP IS UNTOUCHED ─────────────────────────────────────────────────────
   perform probe_as('b');
   drip_lid := (create_native_league('Still Hidden', '2026', 4, 12, 60) ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = drip_lid;
   drip_code := (select invite_code from league where id = drip_lid);
   perform probe_as('c'); perform assert_ok(native_join(drip_code, 'DR-C'), 'ol12 c joins the drip league');
   reset role;

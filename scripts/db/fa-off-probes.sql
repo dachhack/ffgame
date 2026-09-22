@@ -88,7 +88,17 @@ begin
   perform fo_as('1');
   perform fo_true(league_fa_mode(lid) = 'open',
     'fo1 no hours set ⇒ open, exactly as this league already behaved');
-  perform fo_true(fa_window_open(lid), 'fo1a and the wire is open');
+  -- 0337: fa_mode alone no longer opens the wire — the weekly schedule does,
+  -- and an unconfigured league now runs Sleeper's (waivers all week, Sunday
+  -- clearing to free agency). `open` here means "not switched off", which is
+  -- exactly what the mode is for.
+  perform fo_true(not fa_window_open(lid),
+    'fo1a …and the wire is CLOSED on a waivers day, whatever the mode says');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_days =>
+    '["fa","fa","fa","fa","fa","fa","fa"]'::jsonb), 'fo1b open every day on the schedule');
+  perform fo_true(fa_window_open(lid), 'fo1c …and now the wire is open');
+  perform fo_ok(set_transaction_rules(lid, p_waiver_days => '[]'::jsonb),
+    'fo1d …and the rest of this suite runs on the league''s own settings again');
   perform fo_ok(set_transaction_rules(lid, p_fa_start_min => 600, p_fa_end_min => 660),
     'fo2 the commissioner sets hours');
   perform fo_true(league_fa_mode(lid) = 'window',
@@ -474,8 +484,12 @@ begin
 
   -- a league that clears three hours from now, and a player dropped into it
   want := (et_now + 180) % 1440;
-  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want, p_waiver_hold_days => 1),
-    'fo29 the league clears three hours out');
+  -- 0337: the after-games hold OFF for this section. It is Sleeper's rule
+  -- that a drop made once the week's games have started waits for Wednesday's
+  -- run, and it would (correctly) overrule the per-drop clock this section is
+  -- measuring — the harness plants past kickoffs, so it fires here.
+  perform fo_ok(set_transaction_rules(lid, p_waiver_clear_min => want, p_waiver_hold_days => 1,
+    p_waiver_game_hold_dow => -1), 'fo29 the league clears three hours out');
   select slug into dropped from native_roster where league_id = lid and roster_id = seat limit 1;
   perform fo_ok(drop_player(lid, seat, dropped), 'fo30 a player is dropped');
   select waived_until into held from league_pool where league_id = lid and slug = dropped;

@@ -18,6 +18,65 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.458.0 — one waiver schedule, Sleeper's
+
+Founder, holding Sleeper's settings screen up next to ours: "I think we've got
+conflicting logic in waivers." He was right, and it was structural. "Can I add
+this player today?" was answered by THREE independent day-pickers, in two
+consoles, composing in an order neither of them stated — `waiver_clear_dow`
+(the run's days), `fa_dow` (free agency's days) and `fa_after_waivers_dow` (the
+days adds wait for the run). Which let a commissioner build states the game
+cannot honour:
+
+  · a day that waits for a run that never happens — the door was held shut
+    "until the run" and then opened at the clear time on a day the run does not
+    visit, having cleared nobody. Sleeper's WAIVERS TO FA promises players
+    clear ONCE and then become free agents; ours opened on a promise it had
+    not kept;
+  · a day in neither picker: no adds, no run, claims sitting — Sleeper's
+    LOCKED, arrived at by accident, with nothing in either console saying so;
+  · a daily window on top of both, so a "waits for the run" day with a 10am
+    window opened at 10am, not at the clear time the copy named;
+  · and no per-day LOCKED at all, because `fa_mode: 'off'` is the whole league.
+
+SO THE THREE PICKERS ARE ONE, with Sleeper's four values and Sleeper's own
+words under each: FREE AGENCY, WAIVERS, WAIVERS TO FA, LOCKED. The run days
+ARE the schedule — a day clears if and only if its mode is one of the two that
+say so — which makes the first two conflicts unsayable rather than merely
+discouraged.
+
+AND THE ONE SETTING WE NEVER HAD: Sleeper's AFTER GAMES WAIVERS CLEAR, the
+orange line on his screenshot ("Players stay on waivers after games until Wed
+3am"). A player dropped once the week's games have started is not a free agent
+until that morning's run, whatever his own hold says — the rule that stops the
+fastest phone winning every injury. Default Wednesday, like Sleeper's.
+
+WHAT EXISTING LEAGUES GET — the founder's call, asked and answered: "sleeper
+defaults".
+  · A league that configured ANY of the old keys keeps exactly what it had,
+    derived day by day. Nothing changes under anyone who made a choice.
+  · A league that never said anything — which is most of them, including the
+    one that prompted this — gets Sleeper's own schedule: waivers all week,
+    Sunday clearing to free agency at the 3am run. THAT IS A CHANGE, and it is
+    the point. Unset used to read "open", which made the wire a race and the
+    FAAB budget decoration: 694 free agents, every one an instant ADD.
+
+The clock keeps one compatibility clause, because the four modes cannot say
+"free agency all day AND the run visits" — Sleeper has no such day, and an old
+league could have one. A league with no explicit schedule keeps the run days it
+already had; a league with one is read by it alone.
+
+Both consoles lose three pickers and gain one seven-row list, and both
+rulebooks now print THE WEEK as a single sentence out of core
+(`waiverScheduleLine`), so the app, the web and the settings screen cannot
+describe the same league three ways again.
+
+Sixteen probe suites had been leaning on the old default and now say plainly
+that their wire is open; the four that test the clocks derive, as a configured
+league does. `scripts/db/waiver-schedule-probes.sql` covers the schedule
+itself, twelve assertions in `check:waiverdays` cover the reading, and the
+harness is back to the same three failures it has on `main`.
+
 ### v0.457.0 — the morning after
 
 Founder, over the week-2 report and the live board side by side: "the weekly

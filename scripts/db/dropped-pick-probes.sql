@@ -46,6 +46,11 @@ begin
   perform probe_as('b');
   lid := (create_native_league('Dropped Picks', '2026', 4, 7, 60, 'snake', 200, 15, 1,
                                null, null, null, 'classic') ->> 'league_id')::uuid;
+  -- 0337: this suite predates the weekly waiver schedule, whose default is
+  -- now Sleeper's (waivers all week). It tests adds and drops, not the
+  -- schedule, so it says plainly that its wire is open.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   code := (select invite_code from league where id = lid);
   perform probe_as('c'); perform dp_ok(native_join(code, 'DP-C'), 'dp0 c joins');
   select sleeper_roster_id into seat_b from league_membership where league_id = lid and app_user_id = b;

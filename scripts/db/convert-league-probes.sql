@@ -208,6 +208,10 @@ begin
   r := convert_league_to_native(lid, pool);
   perform assert_err(r, 'already a native league', 'cv13 converting twice is refused');
 
+  -- 0337: a converted league gets the default schedule like any other, and
+  -- this suite is about the conversion, not the week. Open the wire.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"]}'::jsonb where id = lid;
   r := drop_player(lid, 1, 'probe-rb-two');
   perform assert_ok(r, 'cv14 native machinery answers: a drop works');
   perform assert_true((select count(*) from league_txn where league_id = lid and kind = 'drop' and slug = 'probe-rb-two') = 1,

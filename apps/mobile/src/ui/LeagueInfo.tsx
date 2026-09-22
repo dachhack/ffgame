@@ -12,6 +12,7 @@ import {
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
+import { waiverDaysOf, waiverScheduleLine } from '@drip/core/data/waiverDays';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -28,7 +29,6 @@ const fmtEt = (m: number): string => {
   const h12 = ((h24 + 11) % 12) + 1;
   return `${h12}:${String(mm).padStart(2, '0')}${h24 < 12 ? 'am' : 'pm'}`;
 };
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const prettySlug = (slug: string): string => {
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
@@ -346,15 +346,14 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
       <Row k="MODE" v={mode === 'faab' ? 'FAAB blind bids' : mode === 'standings' ? 'reverse standings' : 'rolling priority'} tone="you" />
       {mode === 'faab' && <Row k="SEASON BUDGET" v={`${rr.faab_budget ?? 100}`} />}
       <Row k="HOLD AFTER A DROP" v={`${rr.waiver_hold_days ?? 2} day${(rr.waiver_hold_days ?? 2) === 1 ? '' : 's'}`} />
-      <Row k="CLAIMS CLEAR" v={rr.waiver_clear_min == null ? 'rolling — 24h after the drop' : `${fmtEt(rr.waiver_clear_min)} ET`} />
-      {!!rr.waiver_clear_dow?.length && <Row k="CLEAR DAYS" v={rr.waiver_clear_dow.map((d) => DOW[d]).join(' · ')} />}
+      <Row k="CLAIMS CLEAR" v={rr.waiver_clear_min_effective == null ? 'rolling — 24h after the drop' : `${fmtEt(rr.waiver_clear_min_effective)} ET`} />
+      {/* 0337: the week, as one sentence — core's reading, so the two hosts
+          and the console cannot describe the same league differently. */}
+      <Row k="THE WEEK" v={waiverScheduleLine(waiverDaysOf(rr.waiver_days), rr.waiver_clear_min_effective ?? null, rr.waiver_game_hold_dow ?? null)} />
 
       <Head>FREE AGENCY</Head>
-      <Row k="WINDOW" v={rr.fa_start_min == null || rr.fa_end_min == null ? 'always open'
+      <Row k="WINDOW" v={rr.fa_start_min == null || rr.fa_end_min == null ? 'as the week above says'
         : `${fmtEt(rr.fa_start_min)} – ${fmtEt(rr.fa_end_min)} ET`} />
-      {!!rr.fa_after_waivers_dow?.length && (
-        <Row k="ADDS WAIT FOR WAIVERS" v={rr.fa_after_waivers_dow.map((d) => DOW[d]).join(' · ')} />
-      )}
 
       <Head>TRADES</Head>
       {/* 0321: the floor's rules, as the rulebook page states every other

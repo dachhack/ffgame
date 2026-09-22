@@ -19,6 +19,8 @@ import {
   setPickTrading as setPickTradingRpc, pickAssets,
   type PosCaps, type TradeReview, type WaiverMode, type FaMode,
 } from '@drip/core/data/liveApi';
+import { DAY_LABEL, SLEEPER_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
+  nextWaiverMode, waiverDaysOf, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Chip, LinkButton, Mono, Notice, PrimaryButton } from './prims';
@@ -55,13 +57,13 @@ function TimeStep({ label, value, onChange }: { label: string; value: number; on
 
 interface Rules {
   mode: WaiverMode; budget: number; review: TradeReview;
-  clearMin: number | null; clearDow: number[] | null; faDow: number[] | null;
+  clearMin: number | null; days: WaiverDayMode[]; gameHold: number | null;
   holdDays: number; faStart: number | null; faEnd: number | null;
   faMode: FaMode;
   agentWaivers: boolean;
   /** 0319: the FAAB floor, the days free agency may open (null = every
    *  day), the trade deadline week (null = none). */
-  minBid: number; faDays: number[] | null; deadline: number | null;
+  minBid: number; deadline: number | null;
 }
 
 export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'waivers' }: {
@@ -83,8 +85,11 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const setPickTrading = setPickTrading_;
   const [pickNote, setPickNote] = useState<string | null>(null);
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
-  const [clearDow, setClearDow] = useState<number[] | null>(null); // null = every day (0=Sun…6=Sat ET)
-  const [faDow, setFaDow] = useState<number[] | null>(null);       // days FA waits for the waiver run
+  // 0337: ONE SCHEDULE. The run's days, free agency's days and the days adds
+  // waited for the run were three pickers answering one question; this is that
+  // question, once per day, in Sleeper's four words.
+  const [days, setDays] = useState<WaiverDayMode[]>([...SLEEPER_WAIVER_DAYS]);
+  const [gameHold, setGameHold] = useState<number | null>(3);      // after-games morning; null = none
   const [holdDays, setHoldDays] = useState(1);
   const [agentWaivers, setAgentWaivers] = useState(true);
   const [faStart, setFaStart] = useState<number | null>(null);     // null = always open
@@ -92,7 +97,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [faMode, setFaMode] = useState<FaMode>('open');
   const [faEnd, setFaEnd] = useState<number | null>(null);
   const [minBidDraft, setMinBidDraft] = useState('0');
-  const [faDays, setFaDays] = useState<number[] | null>(null);    // days FA may open; null = every day
+
   const [deadline, setDeadline] = useState<number | null>(null);  // trade deadline week; null = none
   const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [listed, setListed] = useState<boolean | null>(null);      // null = still loading
@@ -114,8 +119,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
       const cur: Rules = {
         mode: r.waiver_mode ?? 'rolling', budget: r.faab_budget ?? 100, review: r.trade_review ?? 'none',
         clearMin: r.waiver_clear_min ?? null,
-        clearDow: Array.isArray(r.waiver_clear_dow) && r.waiver_clear_dow.length ? [...r.waiver_clear_dow].sort() : null,
-        faDow: Array.isArray(r.fa_after_waivers_dow) && r.fa_after_waivers_dow.length ? [...r.fa_after_waivers_dow].sort() : null,
+        days: waiverDaysOf(r.waiver_days),
+        gameHold: r.waiver_game_hold_dow ?? null,
         holdDays: r.waiver_hold_days ?? 1,
         faStart: r.fa_start_min ?? null, faEnd: r.fa_end_min ?? null,
         // Absent reads from the hours, exactly as league_fa_mode does, so a
@@ -126,14 +131,14 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         // opposite of what the worker will do.
         agentWaivers: r.agent_waivers !== false,
         minBid: r.faab_min_bid ?? 0,
-        faDays: Array.isArray(r.fa_dow) && r.fa_dow.length ? [...r.fa_dow].sort() : null,
+
         deadline: r.trade_deadline_week ?? null,
       };
       setInit(cur); setMode(cur.mode); setBudgetDraft(String(cur.budget)); setReview(cur.review);
       pickAssets(leagueId).then((a) => { if (a.ok) setPickTrading(a.pick_trading !== false); }).catch(() => {});
-      setClearMin(cur.clearMin); setClearDow(cur.clearDow); setFaDow(cur.faDow); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
+      setClearMin(cur.clearMin); setDays(cur.days); setGameHold(cur.gameHold); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
-      setMinBidDraft(String(cur.minBid)); setFaDays(cur.faDays); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
+      setMinBidDraft(String(cur.minBid)); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
       const pc = r.pos_caps ?? ({} as PosCaps);
       setCaps({ ...pc }); setCapsInit({ ...pc });
       setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
@@ -153,10 +158,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
     setBusy(true); setMsg(null);
     try {
       const clearChanged = clearMin !== init.clearMin;
-      const dowChanged = JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? []);
-      const faDowChanged = JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []);
       const faChanged = faStart !== init.faStart || faEnd !== init.faEnd;
-      const faDaysChanged = JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? []);
+      const daysChanged = days.join(',') !== init.days.join(',');
       const r = await setTransactionRules(leagueId,
         mode !== init.mode ? mode : null,
         mode === 'faab' && budget !== init.budget ? budget : null,
@@ -165,16 +168,18 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
         holdDays !== init.holdDays ? holdDays : null,
         faChanged ? (faStart ?? -1) : null,
         faChanged ? (faEnd ?? -1) : null,
-        dowChanged ? (clearDow ?? []) : null,
-        faDowChanged ? (faDow ?? []) : null,
+        null,   // 0337: the run's days are the schedule now
+        null,   // …and so are the days adds wait for it
         agentWaivers !== init.agentWaivers ? agentWaivers : null,
         faMode !== init.faMode ? faMode : null,
         mode === 'faab' && minBid !== init.minBid ? minBid : null,
-        faDaysChanged ? (faDays ?? []) : null,
-        deadline !== init.deadline ? (deadline ?? -1) : null);
+        null,   // …and the days free agency may open
+        deadline !== init.deadline ? (deadline ?? -1) : null,
+        daysChanged ? days : null,
+        gameHold !== init.gameHold ? (gameHold ?? -1) : null);
       if (r.ok) {
         commit();
-        setInit({ mode, budget, review, clearMin, clearDow, faDow, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, faDays, deadline });
+        setInit({ mode, budget, review, clearMin, days, gameHold, holdDays, faStart, faEnd, faMode, agentWaivers, minBid, deadline });
         setMsg('✓ saved'); onSaved();
       } else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
     } catch (e) { warn(); setMsg(friendlyError(e)); }
@@ -230,9 +235,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
     || clearMin !== init.clearMin || holdDays !== init.holdDays || faStart !== init.faStart || faEnd !== init.faEnd
     || agentWaivers !== init.agentWaivers || faMode !== init.faMode
     || (mode === 'faab' && minBid !== init.minBid) || deadline !== init.deadline
-    || JSON.stringify(faDays ?? []) !== JSON.stringify(init.faDays ?? [])
-    || JSON.stringify(clearDow ?? []) !== JSON.stringify(init.clearDow ?? [])
-    || JSON.stringify(faDow ?? []) !== JSON.stringify(init.faDow ?? []));
+    || days.join(',') !== init.days.join(',') || gameHold !== init.gameHold);
 
   const heads = {
     waivers: { title: '⇄ Waivers & trades', sub: 'Waiver system, free agency, trade review, roster rules.' },
@@ -327,24 +330,41 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               <TimeStep label="CLEAR" value={clearMin} onChange={setClearMin} />
             </View>
           )}
-          {/* Sleeper's run days: waivers process only on the checked days.
-              Meaningful with a daily clear; the server assumes 3:00am ET when
-              days are set with no time. */}
-          {clearMin !== null && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-              <Mono size={9} tone="faint">DAYS</Mono>
-              <Chip label="ALL" on={clearDow === null} onPress={() => { tap(); setClearDow(null); }} />
-              {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-                <Chip key={d} label={d} on={!!clearDow?.includes(i)}
-                  onPress={() => {
-                    tap();
-                    const cur = clearDow ?? [];
-                    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                    setClearDow(next.length ? next : null);
-                  }} />
-              ))}
+          {/* 0337: THE WEEKLY SCHEDULE — Sleeper's own list, one mode a day.
+              Tapping a day rings through the four; the hint under it is
+              Sleeper's own sentence for whichever it now reads, so a
+              commissioner comparing the two screens is comparing words, not
+              translating ours. */}
+          <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, padding: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Mono size={9} tone="faint" track={0.1}>WEEKLY SCHEDULE</Mono>
+              <View style={{ flex: 1 }} />
+              <Chip label="SLEEPER DEFAULT" on={days.join(',') === SLEEPER_WAIVER_DAYS.join(',')}
+                onPress={() => { tap(); setDays([...SLEEPER_WAIVER_DAYS]); }} />
             </View>
-          )}
+            {days.map((m, i) => (
+              <View key={DAY_LABEL[i]} style={{ marginTop: 7 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mono size={10} weight="700" style={{ width: 92 }}>{DAY_LABEL[i]}</Mono>
+                  <View style={{ flex: 1 }} />
+                  <Chip label={WAIVER_MODE_LABEL[m]} on
+                    onPress={() => { tap(); setDays(days.map((x, j) => (j === i ? nextWaiverMode(x) : x))); }} />
+                </View>
+                <Mono size={8} tone="faint" style={{ marginTop: 2, lineHeight: fs(12) }}>{WAIVER_MODE_HINT[m]}</Mono>
+              </View>
+            ))}
+          </View>
+          {/* Sleeper's AFTER GAMES WAIVERS CLEAR: a player dropped once the
+              week's games have started is not a free agent until this
+              morning's run, whatever his own hold says. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+            <Mono size={9} tone="faint">AFTER GAMES, CLEAR</Mono>
+            <Chip label="NONE" on={gameHold === null} onPress={() => { tap(); setGameHold(null); }} />
+            {[2, 3, 4].map((d) => (
+              <Chip key={d} label={DAY_LABEL[d].slice(0, 3)} on={gameHold === d}
+                onPress={() => { tap(); setGameHold(d); }} />
+            ))}
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             <Mono size={9} tone="faint">HOLD</Mono>
             {[0, 1, 2, 3].map((d) => (
@@ -370,23 +390,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             </Mono>
           )}
           {faMode !== 'off' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-              <Mono size={9} tone="faint">DAYS</Mono>
-              <Chip label="ALL" on={faDays === null} onPress={() => { tap(); setFaDays(null); }} />
-              {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-                <Chip key={`fad-${d}`} label={d} on={!!faDays?.includes(i)}
-                  onPress={() => {
-                    tap();
-                    const cur = faDays ?? [];
-                    const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                    setFaDays(next.length ? next : null);
-                  }} />
-              ))}
-            </View>
-          )}
-          {faMode !== 'off' && faDays !== null && (
-            <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-              Sleeper's schedule: other days are waivers-only — every unowned player is a claim, clearing at the run or the next free-agency morning, whichever comes first.
+            <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
+              Which DAYS free agency opens is the weekly schedule above. This is the league-wide switch: off means every unowned player is a claim, every day, whatever the schedule says.
             </Mono>
           )}
           {faMode === 'window' && (
@@ -395,24 +400,8 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               <TimeStep label="CLOSES" value={faEnd ?? 1380} onChange={setFaEnd} />
             </View>
           )}
-          {/* Sleeper's quiet morning: on checked days, instant adds stay closed
-              until that day's waiver run has cleared — nobody snipes the add
-              market while claims are still being decided. */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-            <Mono size={9} tone="faint">WAITS FOR THE WAIVER RUN ON</Mono>
-            <Chip label="NEVER" on={faDow === null} onPress={() => { tap(); setFaDow(null); }} />
-            {(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const).map((d, i) => (
-              <Chip key={d} label={d} on={!!faDow?.includes(i)}
-                onPress={() => {
-                  tap();
-                  const cur = faDow ?? [];
-                  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort();
-                  setFaDow(next.length ? next : null);
-                }} />
-            ))}
-          </View>
           <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
-            On checked days, adds open only after the waiver clear time ({fmtEt(clearMin ?? 180)} ET) has passed.
+            A day that should open only once the run has spoken is WAIVERS TO FA on the schedule — one setting, so the door can never open on a run that never happened.
           </Mono>
 
           {sec('TRADES')}
