@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.469.1 — a door nobody could name
+
+Founder, hunting for the control v0.461.0 shipped: "It's not clear where I go
+in the app to republish the weekly report."
+
+Of course it wasn't. 0341 put the WEEKLY REPORT card INSIDE the commissioner's
+`EDIT SCORES` section, on the reasoning that both are about a finished week —
+which is true and useless, because the NAV ITEM says "EDIT SCORES" and says
+nothing about a report. A door nobody can name is a door nobody opens, and no
+amount of good content behind it helps.
+
+It gets its own item: RUN THE SEASON → **WEEKLY REPORT**, right under EDIT
+SCORES. The card is unchanged; only its address is.
+
+The web is left alone. Its commissioner console is wide enough to show both
+panels under one MATCHUPS tab at the same time, and the report panel carries
+its own 📋 WEEKLY REPORT heading on the page — so there is nothing there to
+hunt for. The app's nav is a list of names you choose BEFORE you see anything,
+which is exactly why a wrong name costs more on a phone.
+
 ### v0.469.0 — the waiver run opens up
 
 Founder: "can we have the daily waiver report be clickable in chat and open a

@@ -99,6 +99,12 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // 0321: the trade floor — review mode, the league vote, offer expiry, FAAB.
     { id: 'tradefloor', label: 'TRADE FLOOR', nativeOnly: true },
     { id: 'scores', label: 'EDIT SCORES', nativeOnly: true },
+    // 0341 put the weekly-report control INSIDE 'EDIT SCORES', on the grounds
+    // that both are about a finished week. Founder, looking for it: "It's not
+    // clear where I go in the app to republish the weekly report." Of course
+    // not — the label promises score editing and says nothing about a report,
+    // and a door nobody can name is a door nobody opens. It gets its own.
+    { id: 'report', label: 'WEEKLY REPORT', nativeOnly: true },
     { id: 'players', label: 'PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
@@ -448,7 +454,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
             {section === 'awards' && <><AwardsCard leagueId={leagueId} /><PublicApiCard leagueId={leagueId} /></>}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
-            {section === 'scores' && native && <WeeklyReportCard leagueId={leagueId} />}
+            {section === 'report' && native && <WeeklyReportCard leagueId={leagueId} />}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
           </ScrollView>
