@@ -1,17 +1,22 @@
-// THE WAIVER SCHEDULE (0337) — one day, one mode, both consoles.
+// THE WAIVER SCHEDULE (0337, 0338) — one day, one mode, both consoles.
 //
-// Founder, holding Sleeper's settings screen next to ours: "I think we've got
-// conflicting logic in waivers." We had three day-pickers — the run's days,
-// free agency's days, and the days adds wait for the run — answering one
-// question between them, in an order neither console stated. Sleeper asks it
-// once, per day, with four answers. So do we.
+// Founder: "I think we've got conflicting logic in waivers." We had three
+// day-pickers — the run's days, free agency's days, and the days adds wait for
+// the run — answering one question between them, in an order neither console
+// stated. It is asked once now, per day, with four answers.
 //
-// The words are Sleeper's own, because a commissioner comparing the two
-// screens should not have to work out which of our phrasings means his.
+// 0338, the same founder a day later: "looks like the three waiver selections
+// can conflict with the daily schedule?" They could. The schedule stopped its
+// three pickers contradicting EACH OTHER and left the controls ABOVE it —
+// ROLLING 24H, HOLD, AFTER GAMES CLEAR — free to promise a run the schedule
+// never holds. So the second half of that rule lives here: what each control
+// can mean given the others, which readings are honest, and what to say when
+// one of them cannot be honoured. Both consoles ask this file rather than
+// deciding for themselves, and scripts/check-waiver-days.mjs pins the answers.
 
 export type WaiverDayMode = 'fa' | 'waivers' | 'waivers_to_fa' | 'locked';
 
-/** Sunday first — `extract(dow)`'s order, and Sleeper's list order. */
+/** Sunday first — `extract(dow)`'s order. */
 export const WAIVER_DAY_MODES: readonly WaiverDayMode[] = ['fa', 'waivers', 'waivers_to_fa', 'locked'];
 
 export const WAIVER_MODE_LABEL: Record<WaiverDayMode, string> = {
@@ -21,7 +26,7 @@ export const WAIVER_MODE_LABEL: Record<WaiverDayMode, string> = {
   locked: 'LOCKED',
 };
 
-/** Sleeper's own one-line description of each. */
+/** One line each, in the words the rest of fantasy football uses for them. */
 export const WAIVER_MODE_HINT: Record<WaiverDayMode, string> = {
   fa: 'Players are free agents for the entire day.',
   waivers: 'Players clear waivers once. Other FA remain on waivers after.',
@@ -34,8 +39,8 @@ export const DAY_SHORT = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
 
 /** What a league that has never said anything runs: waivers all week, Sunday
  *  clearing to free agency at the morning run so the day's streamers can be
- *  picked up once the claims have been decided. Sleeper's own default. */
-export const SLEEPER_WAIVER_DAYS: readonly WaiverDayMode[] =
+ *  picked up once the claims have been decided. The standard week. */
+export const DEFAULT_WAIVER_DAYS: readonly WaiverDayMode[] =
   ['waivers_to_fa', 'waivers', 'waivers', 'waivers', 'waivers', 'waivers', 'waivers'];
 
 /** Read seven modes out of whatever the server sent. Anything missing or
@@ -49,11 +54,151 @@ export function waiverDaysOf(raw: unknown): WaiverDayMode[] {
   });
 }
 
-/** The next mode in the ring — the compact editor both consoles use, where
- *  Sleeper has the room for a sheet per day. */
-export function nextWaiverMode(m: WaiverDayMode): WaiverDayMode {
-  const i = WAIVER_DAY_MODES.indexOf(m);
-  return WAIVER_DAY_MODES[(i + 1) % WAIVER_DAY_MODES.length];
+/** THE MODES A LEAGUE CAN ACTUALLY SAY (0338).
+ *
+ *  WAIVERS TO FA means "the run decides today's claims, and then the leftovers
+ *  are free agents". A league on ROLLING 24H has no run: each dropped player
+ *  clears 24 hours after HIS drop, on his own clock, and there is no moment in
+ *  the day when today's claims have been decided. So the mode has nothing to
+ *  name, and offering it is how the old bug got back in — the door opened at
+ *  3:00am, a time that appears nowhere in such a league's settings, on a run
+ *  that never happened. Three modes when rolling, four when there is a run. */
+export function waiverDayModesFor(clearMin: number | null): readonly WaiverDayMode[] {
+  return clearMin == null ? ['fa', 'waivers', 'locked'] : WAIVER_DAY_MODES;
+}
+
+/** The next mode in the ring — the compact editor both consoles use. Rings
+ *  through the modes this league can say, so the rolling case simply never
+ *  lands on WAIVERS TO FA. */
+export function nextWaiverMode(m: WaiverDayMode, clearMin: number | null = 180): WaiverDayMode {
+  const ring = waiverDayModesFor(clearMin);
+  const i = ring.indexOf(m);
+  return ring[(i + 1) % ring.length];          // -1 + 1 = 0: an unsayable mode rings to the first
+}
+
+/** A stored schedule read for a league as it is configured NOW. A league that
+ *  set WAIVERS TO FA days and then moved to ROLLING 24H keeps the rows; they
+ *  read as WAIVERS, which is what the database does with them (0338's
+ *  `fa_window_open_at`) — the shut half of the pair, because a door that opens
+ *  on a run nobody runs is the bug, and a door that stays shut is a setting. */
+export function normalizeWaiverDays(days: readonly WaiverDayMode[], clearMin: number | null): WaiverDayMode[] {
+  const ok = new Set(waiverDayModesFor(clearMin));
+  return days.map((m) => (ok.has(m) ? m : 'waivers'));
+}
+
+/** Does the run visit this day? The client's copy of `league_waiver_day_clears`
+ *  for a league with an explicit schedule: the day that promises a run is the
+ *  day the run happens. */
+export function dayClears(m: WaiverDayMode): boolean {
+  return m === 'waivers' || m === 'waivers_to_fa';
+}
+
+/** WHERE THE AFTER-GAMES HOLD ACTUALLY LANDS (0338).
+ *
+ *  "Players dropped once the games start stay on waivers until Wednesday" is a
+ *  promise about a RUN. Pick a Wednesday the schedule spends as FREE AGENCY or
+ *  LOCKED and there is no run that morning to decide anybody — the hold would
+ *  expire on nothing, which is the same shape of bug as a door opening on a
+ *  run that never happened. So the hold rolls forward to the first day at or
+ *  after the chosen one that the schedule does clear. Null when the schedule
+ *  clears no day at all: then there is no run all week and the rule cannot
+ *  apply, so each player keeps his own hold. */
+export function effectiveGameHoldDow(days: readonly WaiverDayMode[], dow: number | null): number | null {
+  if (dow == null) return null;
+  for (let i = 0; i < 7; i++) {
+    const d = (dow + i) % 7;
+    if (dayClears(days[d])) return d;
+  }
+  return null;
+}
+
+/** THE HOLD, SAID HONESTLY. Hold days count RUNS — "wait for the second run
+ *  after the drop" — so with no daily run there is nothing for them to count,
+ *  and the database gives a rolling league a flat 24 hours whatever the number
+ *  says (0126, unchanged). A console offering 2 DAYS and 3 DAYS there is
+ *  offering settings that do nothing. */
+export function holdLine(clearMin: number | null, holdDays: number): string {
+  if (clearMin == null) {
+    return holdDays === 0
+      ? 'Rolling: a dropped player is a free agent the moment he is dropped.'
+      : 'Rolling: each dropped player clears exactly 24h after his own drop.';
+  }
+  const at = etTime(clearMin);
+  return holdDays === 0
+    ? `Daily: a dropped player is free immediately; claims resolve at the ${at} run.`
+    : `Daily: a dropped player clears at the ${at} run${holdDays > 1 ? `, ${holdDays} runs after the drop` : ' on the next day the run visits'}.`;
+}
+
+/** WHAT THIS COMBINATION CANNOT DO (0338).
+ *
+ *  The schedule made the three old day-pickers agree with each other. This is
+ *  the other half: the controls around it — the run mode, the hold, the
+ *  after-games day, the free-agency switch — say things the schedule may not
+ *  be able to honour. Rather than silently picking a winner (which is how a
+ *  commissioner ends up with a league that behaves unlike its own settings
+ *  screen), every console prints these, in the order a reader meets them.
+ *
+ *  'warn' is a setting that will not do what it says. 'info' is a setting that
+ *  is simply redundant. Nothing here blocks a save: they all have a defined
+ *  reading, and the reading is what the text names. */
+export interface WaiverConflict { level: 'warn' | 'info'; text: string }
+
+export function waiverConflicts(cfg: {
+  days: readonly WaiverDayMode[];
+  clearMin: number | null;
+  holdDays: number;
+  gameHoldDow: number | null;
+  faMode: 'open' | 'window' | 'off';
+  faStart?: number | null;
+  faEnd?: number | null;
+}): WaiverConflict[] {
+  const { days, clearMin, holdDays, gameHoldDow, faMode } = cfg;
+  const out: WaiverConflict[] = [];
+  const named = (pred: (m: WaiverDayMode) => boolean) => days
+    .map((m, i) => (pred(m) ? DAY_LABEL[i][0] + DAY_LABEL[i].slice(1, 3).toLowerCase() : null))
+    .filter(Boolean).join(', ');
+
+  // 1. The run mode against the schedule's two-stage days.
+  if (clearMin == null) {
+    const wf = named((m) => m === 'waivers_to_fa');
+    if (wf) out.push({ level: 'warn', text: `ROLLING 24H has no run for a day to clear AT, so WAIVERS TO FA has no moment to open on — ${wf} read as WAIVERS. Switch to DAILY AT A SET TIME to use them.` });
+  }
+
+  // 2. The hold against the run mode. Hold days count runs; rolling has none.
+  if (clearMin == null && holdDays > 1) {
+    out.push({ level: 'info', text: `HOLD counts RUNS, and ROLLING 24H has none — ${holdDays} DAYS reads the same as 1 DAY here: a flat 24h from the drop.` });
+  }
+
+  // 3. The after-games day against the schedule's run days.
+  if (gameHoldDow != null) {
+    const eff = effectiveGameHoldDow(days, gameHoldDow);
+    const nm = (d: number) => DAY_LABEL[d][0] + DAY_LABEL[d].slice(1).toLowerCase();
+    if (eff == null) {
+      out.push({ level: 'warn', text: `AFTER GAMES, CLEAR names ${nm(gameHoldDow)}, but the schedule has no day the run visits at all — the after-games hold cannot apply and each player keeps his own hold.` });
+    } else if (eff !== gameHoldDow) {
+      out.push({ level: 'warn', text: `AFTER GAMES, CLEAR names ${nm(gameHoldDow)}, which the schedule spends as ${WAIVER_MODE_LABEL[days[gameHoldDow]]} — no run that morning, so the hold lands on ${nm(eff)} instead.` });
+    }
+  }
+
+  // 4. The league-wide free-agency switch against the days that open a door.
+  if (faMode === 'off') {
+    const open = named((m) => m === 'fa' || m === 'waivers_to_fa');
+    if (open) out.push({ level: 'warn', text: `FREE AGENCY is NONE — WAIVERS ONLY, which overrules the schedule: ${open} cannot open a door. Every unowned player is a claim, every day.` });
+  }
+
+  // 5. The daily window against the run it is supposed to follow. A window
+  //    that has closed by the time the run speaks leaves a WAIVERS TO FA day
+  //    with no open minutes — the door is technically unlocked at an hour the
+  //    league does not have.
+  if (faMode === 'window' && clearMin != null && cfg.faEnd != null && cfg.faStart != null) {
+    const wf = named((m) => m === 'waivers_to_fa');
+    const closesBefore = cfg.faEnd > cfg.faStart ? cfg.faEnd <= clearMin : false;  // an overnight window wraps past the run
+    if (wf && closesBefore) {
+      out.push({ level: 'warn', text: `The free-agency window closes at ${etTime(cfg.faEnd)}, before the ${etTime(clearMin)} run — ${wf} never reach an open minute.` });
+    }
+  }
+
+  return out;
 }
 
 /** Minutes past midnight ET → "3:00am". */
@@ -68,8 +213,13 @@ export function etTime(min: number): string {
 /** The schedule as a sentence, for the rulebook — the same reading in both
  *  hosts, and the one place the four modes are turned into prose. */
 export function waiverScheduleLine(
-  days: WaiverDayMode[], clearMin: number | null, gameHoldDow: number | null,
+  rawDays: WaiverDayMode[], clearMin: number | null, rawGameHoldDow: number | null,
 ): string {
+  // Read as the league is configured, not as the rows were typed: a stored
+  // WAIVERS TO FA in a rolling league is a WAIVERS day, and an after-games day
+  // the run does not visit is the next one it does (0338).
+  const days = normalizeWaiverDays(rawDays, clearMin);
+  const gameHoldDow = effectiveGameHoldDow(days, rawGameHoldDow);
   const at = clearMin == null ? null : etTime(clearMin);
   const group = (mode: WaiverDayMode) => days
     .map((m, i) => (m === mode ? DAY_LABEL[i][0] + DAY_LABEL[i].slice(1, 3).toLowerCase() : null))
@@ -82,7 +232,7 @@ export function waiverScheduleLine(
   if (lk) parts.push(`${lk}: locked — nothing moves`);
   if (gameHoldDow != null && DAY_LABEL[gameHoldDow]) {
     parts.push(`players dropped once the games start stay on waivers until ${
-      DAY_LABEL[gameHoldDow][0] + DAY_LABEL[gameHoldDow].slice(1).toLowerCase()}${at ? ` ${at}` : ''}`);
+      DAY_LABEL[gameHoldDow][0] + DAY_LABEL[gameHoldDow].slice(1).toLowerCase()} ${at ?? etTime(180)}`);
   }
   return parts.join(' · ');
 }

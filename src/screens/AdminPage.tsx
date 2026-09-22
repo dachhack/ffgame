@@ -26,8 +26,9 @@ import {
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
 } from '@drip/core/data/liveApi';
-import { DAY_LABEL, SLEEPER_WAIVER_DAYS, WAIVER_DAY_MODES, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
-  waiverDaysOf, type WaiverDayMode } from '@drip/core/data/waiverDays';
+import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
+  waiverDaysOf, waiverDayModesFor, normalizeWaiverDays, effectiveGameHoldDow,
+  holdLine, waiverConflicts, etTime, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
 import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
@@ -492,7 +493,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [clearMin, setClearMin] = useState<number | null>(null);   // null = rolling 24h
   // 0337: ONE SCHEDULE — the run's days, free agency's days and the days adds
   // waited for the run were three pickers answering one question.
-  const [days, setDays] = useState<WaiverDayMode[]>([...SLEEPER_WAIVER_DAYS]);
+  const [days, setDays] = useState<WaiverDayMode[]>([...DEFAULT_WAIVER_DAYS]);
   const [gameHold, setGameHold] = useState<number | null>(3);
   const [holdDays, setHoldDays] = useState(1);
   const [agentWaivers, setAgentWaivers] = useState(true);
@@ -505,6 +506,13 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
   const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // ── THE SHEET, READ AS THIS LEAGUE IS CONFIGURED (0338) ───────────────────
+  // Core's readings, shared with the phone's settings sheet, the rulebook and
+  // the database (migration 0338), and pinned by check:waiverdays — so no two
+  // of them can describe the same league differently.
+  const shownDays = normalizeWaiverDays(days, clearMin);
+  const effGameHold = effectiveGameHoldDow(shownDays, gameHold);
+  const conflicts = waiverConflicts({ days, clearMin, holdDays, gameHoldDow: gameHold, faMode, faStart, faEnd });
   useEffect(() => {
     rosterRules(leagueId).then((r) => {
       if (r.error || !r.ok) { setMsg(r.error ?? 'could not load rules'); return; }
@@ -677,7 +685,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         {clearMin != null && hourStep(clearMin, setClearMin, 'CLEAR TIME')}
         {clearMin != null && (
           <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (DAYS)</div>
+            <div className="mono" title="How many runs a dropped player waits for." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD (RUNS)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
               <button onClick={() => setHoldDays(Math.max(0, holdDays - 1))} className="mono" style={stepBtnStyle}>−</button>
               <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{holdDays === 0 ? 'NONE' : holdDays}</span>
@@ -685,30 +693,53 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
-        {/* 0337: THE WEEKLY SCHEDULE. One mode a day, Sleeper's four, with
-            Sleeper's own sentence under each — the three pickers that used to
-            answer this between them could contradict each other, and did. */}
+        {/* 0338: hold days count RUNS, and 24H AFTER DROP has none — the
+            database gives a flat 24 hours whatever the number says, so the
+            stepper is not offered here. NONE still means "free immediately",
+            which it can honour, and the stored count is left untouched. */}
+        {clearMin == null && (
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOLD</div>
+            <div style={{ display: 'flex', gap: 4, marginTop: 5 }}>
+              {toggle(holdDays === 0, 'NONE', () => setHoldDays(0))}
+              {toggle(holdDays > 0, '24H', () => { if (holdDays === 0) setHoldDays(1); })}
+            </div>
+          </div>
+        )}
+        {/* 0337: THE WEEKLY SCHEDULE. One mode a day, with its own sentence
+            under each — the three pickers that used to answer this between
+            them could contradict each other, and did.
+            0338: the dropdown offers the modes THIS league can say, and the
+            rows read NORMALIZED (a stored WAIVERS TO FA in a league with no
+            run shows as the WAIVERS the database reads it as) while the raw
+            value stays stored, so a league that goes back to a daily run gets
+            its Sunday back rather than having quietly lost it. */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>WEEKLY SCHEDULE (ET)</div>
-            {toggle(days.join(',') === SLEEPER_WAIVER_DAYS.join(','), 'SLEEPER DEFAULT', () => setDays([...SLEEPER_WAIVER_DAYS]))}
+            {toggle(days.join(',') === DEFAULT_WAIVER_DAYS.join(','), 'DEFAULT', () => setDays([...DEFAULT_WAIVER_DAYS]))}
           </div>
           <div style={{ marginTop: 6, display: 'grid', gap: 5, maxWidth: 420 }}>
-            {days.map((m, i) => (
+            {shownDays.map((m, i) => (
               <div key={DAY_LABEL[i]} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--text)', fontWeight: 700, width: 96 }}>{DAY_LABEL[i]}</span>
                 <select value={m} onChange={(e) => setDays(days.map((x, j) => (j === i ? (e.target.value as WaiverDayMode) : x)))}
                   className="mono" style={{ fontSize: 10.5, padding: '3px 6px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5 }}>
-                  {WAIVER_DAY_MODES.map((k) => <option key={k} value={k}>{WAIVER_MODE_LABEL[k]}</option>)}
+                  {waiverDayModesFor(clearMin).map((k) => <option key={k} value={k}>{WAIVER_MODE_LABEL[k]}</option>)}
                 </select>
-                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flex: 1, minWidth: 0 }}>{WAIVER_MODE_HINT[m]}</span>
+                <span className="mono" style={{ fontSize: 9, color: faMode === 'off' && (m === 'fa' || m === 'waivers_to_fa') ? 'var(--warn)' : 'var(--faint)', flex: 1, minWidth: 0 }}>
+                  {faMode === 'off' && (m === 'fa' || m === 'waivers_to_fa')
+                    ? 'Overruled by NONE — WAIVERS ONLY: no door opens today.'
+                    : WAIVER_MODE_HINT[m]}
+                </span>
               </div>
             ))}
           </div>
         </div>
-        {/* Sleeper's AFTER GAMES WAIVERS CLEAR: a player dropped once the
-            week's games have started is not a free agent until this morning's
-            run, whatever his own hold says. */}
+        {/* AFTER GAMES, WAIVERS CLEAR: a player dropped once the week's games
+            have started is not a free agent until this morning's run, whatever
+            his own hold says. 0338 names the morning it really lands on — the
+            chosen day rolled forward to one the run visits. */}
         <div>
           <div className="mono" title="A player dropped after the week's games start stays on waivers until this morning's run." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>AFTER GAMES, WAIVERS CLEAR</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
@@ -717,6 +748,13 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
               <span key={d}>{toggle(gameHold === d, DAY_LABEL[d].slice(0, 3), () => setGameHold(d))}</span>
             ))}
           </div>
+          {gameHold !== null && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 5, maxWidth: 260, lineHeight: 1.5 }}>
+              {effGameHold === null
+                ? 'No day on the schedule holds a run, so this cannot apply.'
+                : `Held until ${DAY_LABEL[effGameHold][0] + DAY_LABEL[effGameHold].slice(1).toLowerCase()} ${etTime(clearMin ?? 180)} ET.`}
+            </div>
+          )}
         </div>
         <div>
           <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>FREE AGENCY</div>
@@ -745,12 +783,27 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
         {faMode === 'window' && hourStep(faEnd ?? 1320, (m) => setFaEnd(m), 'CLOSES')}
         <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save'}</button>
       </div>
+      {/* WHAT THIS COMBINATION DOES (0338). Founder: "looks like the three
+          waiver selections can conflict with the daily schedule?" They could.
+          Every setting here has a defined reading, so none of this blocks a
+          save — it names which reading, where the old screen let a control
+          look effective while the schedule quietly overruled it. */}
+      {conflicts.length > 0 && (
+        <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: 6, padding: '8px 10px', maxWidth: 620, display: 'grid', gap: 5 }}>
+          <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>HOW THESE READ TOGETHER</div>
+          {conflicts.map((c, i) => (
+            <div key={i} className="mono" style={{ fontSize: 10.5, color: c.level === 'warn' ? 'var(--warn)' : 'var(--faint)', lineHeight: 1.5 }}>
+              {c.level === 'warn' ? '⚠ ' : '· '}{c.text}
+            </div>
+          ))}
+        </div>
+      )}
       {/* FAAB wallets (0173) — only meaningful in FAAB mode, and the grant RPC
           refuses outside it, so the whole block is gated on the SAVED mode
           rather than the unsaved toggle. */}
       {init?.mode === 'faab' && <FaabWallets leagueId={leagueId} />}
       <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        FAAB: claims carry blind bids against a season budget — highest bid wins, winner pays, losers keep their money. Changing the mode or budget resets every team's balance. Trade review parks accepted trades until you approve or veto them. A daily clear time holds dropped players until that ET time (× hold days); the free-agency window gates instant pickups only — claims can be submitted around the clock.
+        FAAB: claims carry blind bids against a season budget — highest bid wins, winner pays, losers keep their money. Changing the mode or budget resets every team's balance. Trade review parks accepted trades until you approve or veto them. {holdLine(clearMin, holdDays)} The free-agency window gates instant pickups only — claims can be submitted around the clock.
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>

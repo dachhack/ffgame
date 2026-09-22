@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.460.0 — the controls around the schedule
+
+Founder, back on the waivers sheet the day after 0337 shipped: "looks like the
+three waiver selections can conflict with the daily schedule?"
+
+They could. 0337 stopped three day-pickers contradicting EACH OTHER and left
+the controls ABOVE the schedule free to promise a run the schedule never holds
+— the same bug, one storey up.
+
+ROLLING 24H means there is no daily run: every dropped player clears on his own
+24-hour clock. But a WAIVERS TO FA day still asked "has the run spoken yet?"
+and `coalesce(clear_min, 180)` answered it with 3:00am — a time that appears
+nowhere in such a league's settings. The wire opened every morning on a run
+that had never happened, which is precisely what 0337 was written to make
+unsayable. It now reads as WAIVERS, and the mode is not offered at all while
+there is no run to clear at: three modes rolling, four daily.
+
+AFTER GAMES, CLEAR <day> is a promise about a run too. Nothing stopped a
+commissioner naming a Wednesday his schedule spends as FREE AGENCY, and then
+the hold expired at 3:00am Wednesday having decided nobody — the door bug read
+backwards. The chosen day now rolls forward to the first one the run actually
+visits, and a week with no run anywhere leaves the rule inapplicable rather
+than holding players until a morning that clears them on nothing. Both sheets
+name the morning it really lands on, and the time.
+
+HOLD counts RUNS. A rolling league has none, so the database gives it a flat
+24 hours whatever the number says (0126, unchanged) — and both consoles stopped
+offering 2 DAYS and 3 DAYS there, which did nothing. NONE / 24H rolling, the
+full stepper daily, and the stored count is left untouched so a league that
+goes back to a daily run keeps its 3.
+
+What cannot be made unsayable is named out loud instead: a new HOW THESE READ
+TOGETHER block on both sheets prints what each combination actually does — free
+agency OFF overruling the days that open a door, a daily window that shuts
+before the run, a hold that rolls forward. Nothing blocks a save; every setting
+has a defined reading, and the text says which.
+
+A stored WAIVERS TO FA is never rewritten, only read as WAIVERS while it cannot
+apply, so switching back to a daily run hands the commissioner his Sunday back.
+
+Migration 0338, `waiver_game_hold_dow_effective` published on `roster_rules`,
+two new probe groups (ws8, ws9) and 20 more assertions in `check:waiverdays`.
+The word "Sleeper" is gone from the waiver copy — it describes the schedule
+most of fantasy football runs, not one site's — and stays only where the app
+really does talk to Sleeper.
+
 ### v0.459.0 — what the generals were worth
 
 Founder, looking at C. Olave's card on the phone: "the twin generals bonus
