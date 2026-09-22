@@ -11,6 +11,7 @@
 // whole kit. The old "web only for now" list is empty.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { clearsOn } from '@drip/core/data/waiverDays';
 import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leaguePool, nativeRosters, setRosterSpot,
@@ -307,6 +308,15 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
+  // 0340/0341: Sleeper's trending adds per slug, and whether owned players are
+  // in the list at all. Founder: "Also has the option to see owned players and
+  // if they belong to you other teams (button right there to trade)." Off by
+  // default — the wire's first job is still who you can HAVE.
+  const [trend, setTrend] = useState<Record<string, { a: number; d: number }>>({});
+  const [showOwned, setShowOwned] = useState(false);
+  /** ⇄ TRADE on an owned row: the trade centre, opened on that seat. The whole
+   *  point of a button in the row is not having to go and find the person. */
+  const [tradeSeed, setTradeSeed] = useState<number | null>(null);
   useEffect(() => {
     // ONE CALL, BOTH NUMBERS (v0.306.1): the live market carries ESPN's ADP
     // beside the ownership share. `setLiveAdp` overlays the baked consensus, so
@@ -320,6 +330,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     leagueMarket(leagueId).then((r) => {
       if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
+      setTrend(r.trend ?? {});
       installLiveMarket(r);
     }).catch(() => {});
     return () => { alive = false; };
@@ -426,6 +437,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
 
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
+  /** 0341: WHO HOLDS HIM. `rosters` is league-wide; the wire was throwing the
+   *  answer away with `!rostered.has(slug)`. */
+  const ownerOf = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rosters) m.set(r.slug, r.roster_id);
+    return m;
+  }, [rosters]);
   const myRoster = team?.my_roster_id ?? null;
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
@@ -448,6 +466,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
+  const seatName = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const w of team?.waiver_order ?? []) m.set(w.roster_id, w.team || `Roster ${w.roster_id}`);
+    return m;
+  }, [team?.waiver_order]);
   const shownName = useMemo(() => (team?.waiver_order ?? []).find((w) => w.roster_id === shownRid)?.team ?? null, [team, shownRid]);
   const cap = team?.roster_cap ?? null;
   // FULL means "no ACTIVE seat left" (0199), not "the roster total is
@@ -532,14 +555,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     [eligiblePos]);
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = pool.filter((p) => !rostered.has(p.slug)
+    const base = pool.filter((p) => (showOwned || !rostered.has(p.slug))
       && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
       && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
   /** The teams actually IN this pool, so the filter never offers an empty one. */
   const poolTeams = useMemo(
     () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
@@ -549,10 +572,6 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     if (!p.waived_until) return null;
     const ms = Date.parse(p.waived_until) - (Date.now() + skew.current);
     return ms > 0 ? ms : null;
-  };
-  const fmtLeft = (ms: number) => {
-    const h = Math.floor(ms / 3_600_000), m = Math.ceil((ms % 3_600_000) / 60_000);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -992,12 +1011,23 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: 6 }}
           contentContainerStyle={{ gap: 6, paddingRight: 12 }}>
           <Chip label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
+          {/* 0341: owned players in the list, with who holds them. */}
+          <Chip label={showOwned ? 'OWNED ✓' : 'SHOW OWNED'} on={showOwned}
+            onPress={() => { tap(); setShowOwned(!showOwned); }} />
           {poolTeams.map((tm) => (
             <Chip key={tm} label={tm} on={nflTeam === tm} onPress={() => { tap(); setNflTeam(nflTeam === tm ? 'ALL' : tm); }} />
           ))}
         </ScrollView>
         {free.slice(0, 60).map((p) => {
           const left = waivedFor(p);
+          // 0341: THE DAY HE CLEARS. A countdown has to be read and converted
+          // before it means anything, it is wrong the moment the screen
+          // sleeps, and past a day it stops being a duration anybody can
+          // picture. The day is the answer already converted.
+          const clears = clearsOn(p.waived_until, Date.now() + skew.current);
+          const ownRid = ownerOf.get(p.slug);
+          const isMine = ownRid != null && ownRid === myRoster;
+          const adds = trend[p.slug]?.a ?? 0;
           // OVER-LIMIT ROSTERS ARE THE ONLY LOCK-OUT LEFT (v0.403.0). A shut
           // FA window used to disable this for anyone without a waiver hold —
           // most of the pool, since only a DROP sets one — so the board was a
@@ -1026,15 +1056,39 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{p.team}</Mono>
                   <FlagChip slug={p.slug} size={7.5} />
-                  {left != null && <Mono size={8.5} tone="warn">⏳ {fmtLeft(left)}</Mono>}
+                  {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
+                  {showOwned && ownRid != null && (
+                    <Mono size={8.5} tone={isMine ? 'you' : 'dim'} weight="700">
+                      → {isMine ? 'you' : (seatName.get(ownRid) ?? `Roster ${ownRid}`)}
+                    </Mono>
+                  )}
+                  {adds > 0 && (
+                    <Mono size={8.5} tone="you" weight="700">
+                      ↗{adds >= 1_000_000 ? `${(adds / 1_000_000).toFixed(1)}M` : adds >= 1000 ? `${Math.round(adds / 1000)}K` : adds}
+                    </Mono>
+                  )}
                 </View>
               </Pressable>
-              <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
-                style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
-                <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
-                  {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
-                </Text>
-              </Pressable>
+              {ownRid != null ? (
+                // AN OWNED PLAYER IS NOT AN ADD. His row's button is the move
+                // that is actually on offer; on your own player there is none,
+                // so the row says so rather than growing a dead button.
+                isMine ? (
+                  <Mono size={9.5} tone="faint" style={{ paddingHorizontal: 11, paddingVertical: 7 }}>yours</Mono>
+                ) : (
+                  <Pressable disabled={myRoster == null} onPress={() => { tap(); setTradeSeed(ownRid); setTab('trades'); }}
+                    style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: myRoster == null ? 0.45 : 1 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.you }}>⇄ TRADE</Text>
+                  </Pressable>
+                )
+              ) : (
+                <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
+                  style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                    {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           );
         })}
@@ -1058,7 +1112,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}
         reviewHours={team.trade_review_hours} vetoNeed={team.trade_veto_votes}
         offerDays={team.trade_offer_days} faabTrading={team.faab_trading} myFaab={team.my_faab}
-        isCommish={!!team.is_commish} presetPartner={tradePartner} onChanged={() => void refresh()} />
+        isCommish={!!team.is_commish} presetPartner={tradeSeed ?? tradePartner} onChanged={() => void refresh()} />
       )}
 
       {/* waiver order */}

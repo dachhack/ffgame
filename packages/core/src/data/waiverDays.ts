@@ -236,3 +236,38 @@ export function waiverScheduleLine(
   }
   return parts.join(' · ');
 }
+
+/** ── WHEN HE CLEARS, AS A DAY (0341) ────────────────────────────────────────
+ *
+ *  Founder, over Sleeper's player list: "Waivers in sleeper have the date the
+ *  player clears." Ours printed a COUNTDOWN — `⏳ 6h 12m` — which is a worse
+ *  answer to the same question in every way that matters. A countdown has to
+ *  be read and converted before it means anything ("6h 12m from 9:52pm is…"),
+ *  it is wrong the moment the screen sleeps, and at 30 hours it stops being a
+ *  duration a person can picture at all. A weekday is none of those: `W (Wed)`
+ *  is the answer, already converted, and it stays true while you read it.
+ *
+ *  TODAY and TOMORROW are named rather than dated, because that is how the
+ *  answer is used — "can I have him tonight?" — and a bare "Tue" on a Monday
+ *  makes you count. Beyond that the weekday IS the date at this range: a hold
+ *  never runs a week, so a day name cannot be ambiguous.
+ *
+ *  Null when he is already free: the caller draws no badge at all rather than
+ *  a badge saying nothing, which is the difference between a wire that reads
+ *  as a list of players and one that reads as a list of locks. */
+export function clearsOn(until: string | null | undefined, now: number = Date.now()): { day: string; short: string } | null {
+  if (!until) return null;
+  const at = Date.parse(until);
+  if (!Number.isFinite(at) || at <= now) return null;
+  // Compare CALENDAR days in the viewer's own zone, not elapsed hours: a hold
+  // ending at 3am Wednesday is "Wed" from Tuesday lunchtime and from Tuesday
+  // 11pm alike, and `(at - now) / 86400000` would call the second one "today".
+  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
+  const d1 = new Date(at); d1.setHours(0, 0, 0, 0);
+  const days = Math.round((d1.getTime() - d0.getTime()) / 86_400_000);
+  if (days <= 0) return { day: 'today', short: 'today' };
+  if (days === 1) return { day: 'tomorrow', short: 'tmrw' };
+  const i = new Date(at).getDay();
+  const full = DAY_LABEL[i];
+  return { day: full[0] + full.slice(1).toLowerCase(), short: full.slice(0, 3)[0] + full.slice(1, 3).toLowerCase() };
+}

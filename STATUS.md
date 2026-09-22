@@ -18,6 +18,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.465.0 — the web hub, the wire, and words on the rail
+
+Three founder asks in one pass: mirror 0341's league page on the web, build
+the players screen he photographed, and "ditch the navigation icons at the
+bottom in favor of just large text".
+
+THE WEB HUB IS THE APP'S TWIN NOW. Same three sections in the same order —
+Matchups, Standings, Activity — off the same `league_week_scoreboard`, with
+the twelve tiles behind a ⚙ SETTINGS chip beside the league name. The table
+went INLINE: it used to be a tile that opened the results page, which is one
+click to learn where you sit in your own league; that page is still behind
+"every pairing →". A tile that opens its own sheet closes the menu first,
+because two stacked sheets is a place to get lost.
+
+THE WIRE SAYS WHEN, WHO, AND WHAT THE REST OF FOOTBALL IS DOING.
+
+· THE DAY, NOT A COUNTDOWN. Founder: "Waivers in sleeper have the date the
+  player clears." Ours printed `⏳ 6h 12m`, which is a worse answer to the
+  same question in every way that matters: it has to be read and converted
+  before it means anything, it is wrong the moment the screen sleeps, and past
+  a day it stops being a duration anybody can picture. `W · Wed` is the answer
+  already converted, and it stays true while you look at it. Core's `clearsOn`
+  compares CALENDAR days in the viewer's zone rather than elapsed hours —
+  a 3am hold read at 11:30pm is still TOMORROW, which an hours reading calls
+  today. Today and tomorrow are named rather than dated, because that is how
+  the answer gets used.
+
+· WHO HOLDS HIM. "the option to see owned players and if they belong to you
+  other teams (button right there to trade)." This needed no server work at
+  all: `nativeRosters` is league-wide and both wires already had it — they
+  were throwing the answer away with `!rostered.has(slug)`. A SHOW OWNED chip
+  lets them through, tagged `→ Team PadreF3`, and an owned row's button is the
+  move actually available: ⇄ TRADE, which opens the trade centre on that seat.
+  Your own player says "yours" rather than growing a dead button. Off by
+  default — the wire's first job is still who you can HAVE.
+
+· AND THE TREND, from 0340's board: `↗1.5M`, drawn only where there is a
+  count, because a zero is not news and a column of them is noise.
+
+WORDS ON THE RAIL. The bottom bar ran a 23px glyph over a 9px caption — an
+icon explained by a label, two marks saying one thing, and the label was the
+one being read. The glyph goes and the label takes the whole rail at 13.5px,
+the size it could never be as a footnote to a picture. The rail's own height
+is unchanged. The chat dot survives, because it says something no word on the
+rail does, and rides the label now. The art stays on disk: deleting binaries
+is a separate decision from changing a layout.
+
+Nine new assertions in `check:waiverdays` for `clearsOn`.
+
 ### v0.464.0 — the league tab reads like a league
 
 Founder, with Sleeper's LEAGUE tab open beside ours: "Let's follow the sleeper

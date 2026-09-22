@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { Animated, AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments, commishOverview } from '@drip/core/data/liveApi';
@@ -546,7 +546,7 @@ export function App() {
             content (screens reserve bottom padding for it), so its coming
             and going never reflows what you're reading. */}
         {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
-          <LeagueBottomBar theme={theme} light={isLight(themeName)} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
+          <LeagueBottomBar theme={theme} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
             onGo={(id) => setView(id)}
             items={([
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
@@ -598,24 +598,20 @@ export function App() {
 
 /** The room bar (v0.356.0, founder: "I like how linkedin has their menu at
  *  the bottom") — the strip that lived under the league title, rebuilt as a
- *  bottom bar: icon over label, one column per room, the active room in the
- *  theme's `you`. `shift` (the shell's chrome fold) ducks it below the safe
- *  area on scroll-down and brings it home on scroll-up. */
+ *  bottom bar: one column per room, the active room in the theme's `you`.
+ *  `shift` (the shell's chrome fold) ducks it below the safe area on
+ *  scroll-down and brings it home on scroll-up.
+ *
+ *  0341: THE ICONS ARE GONE (founder: "ditch the navigation icons at the
+ *  bottom in favor of just large text"). The rail ran a 23px glyph over a 9px
+ *  caption — an icon explained by a label, two marks saying one thing, and the
+ *  label was the one being read. The art (assets/rail/*.png, a picked set in
+ *  two halo weights) is no longer referenced by the rail; it is left on disk
+ *  rather than deleted, since removing binaries is a separate decision from
+ *  changing a layout. */
 const BAR_H = 50;
-/** The founder's picked set (v0.356.6): sheet C1 glyphs with C2's list
- *  clipboard for DRAFT. Light themes run the bare stickers; dark themes run
- *  the same art with a thin light halo baked in, so the VS mark's navy half
- *  doesn't sink into a dark rail. One family everywhere. */
-const RAIL_ICONS: Record<'home' | 'picks' | 'draft' | 'team' | 'chat', { light: number; dark: number }> = {
-  home:  { light: require('./assets/rail/league.png'),  dark: require('./assets/rail/league-halo.png') },
-  picks: { light: require('./assets/rail/matchup.png'), dark: require('./assets/rail/matchup-halo.png') },
-  draft: { light: require('./assets/rail/draft.png'),   dark: require('./assets/rail/draft-halo.png') },
-  team:  { light: require('./assets/rail/team.png'),    dark: require('./assets/rail/team-halo.png') },
-  chat:  { light: require('./assets/rail/chat.png'),    dark: require('./assets/rail/chat-halo.png') },
-};
-function LeagueBottomBar({ theme, light, shift, items, active, leagueId, onGo }: {
+function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
   theme: Theme;
-  light: boolean;
   shift: Animated.Value;
   items: ['home' | 'picks' | 'draft' | 'team' | 'chat', string, string][];
   active: string;
@@ -634,26 +630,35 @@ function LeagueBottomBar({ theme, light, shift, items, active, leagueId, onGo }:
       zIndex: 40, elevation: 70,
       transform: [{ translateY: shift.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_H + insets.bottom + 12] }) }],
     }}>
-      {/* Bigger items in the same rail (v0.356.3, founder: "make the bottom
-          menu items larger (but don't make the rail any taller) and colored
-          in each theme stand out") — the padding the icons grew into came
-          out of the rail's own, and the ACTIVE room sits on a pill of the
-          theme's accent so every theme carries its own color. */}
-      {items.map(([id, icon, label]) => {
+      {/* WORDS, NOT PICTURES (0341, founder: "ditch the navigation icons at
+          the bottom in favor of just large text").
+          
+          The rail carried a 23px glyph with a 9px caption under it, which is
+          an icon explained by a label — two things saying one thing, and the
+          label was the one being read. So the glyph goes and the label gets
+          the whole rail: 13.5px, the size the caption could never be while it
+          was a footnote to a picture. The rail's own height is unchanged, and
+          the ACTIVE room still sits on a pill of the theme's accent.
+          
+          The chat dot is the one mark that survives, because it says something
+          no word on the rail does — that there is something unread — and it
+          rides the label now instead of the icon that is gone. */}
+      {items.map(([id, , label]) => {
         const on = active === id;
         return (
           <Pressable key={id} onPress={() => onGo(id)}
             accessibilityRole="button"
             accessibilityLabel={label}
             accessibilityState={{ selected: on }}
-            style={{ flex: 1, alignItems: 'center' }}>
-            <View style={{ alignItems: 'center', gap: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 2, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ alignItems: 'center', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
               <View>
-                <Image source={RAIL_ICONS[id][light ? 'light' : 'dark']} accessibilityLabel={icon}
-                  style={{ width: 23, height: 23, opacity: on ? 1 : 0.62 }} resizeMode="contain" />
+                <Text numberOfLines={1} style={{
+                  fontFamily: MONO, fontSize: 13.5, fontWeight: '700', letterSpacing: 0.2,
+                  color: on ? theme.you : theme.dim,
+                }}>{label}</Text>
                 {id === 'chat' && <ChatChipDot leagueId={leagueId} active={active === 'chat'} />}
               </View>
-              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, color: on ? theme.you : theme.dim }}>{label}</Text>
             </View>
           </Pressable>
         );
