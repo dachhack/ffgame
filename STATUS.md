@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.481.0 — what would change hands
+
+THE TWO THAT REMAINED HAD NO LINEUP. The v0.480.0 sealed accounting settles
+Gridiron 2v5 and 9v10: neither side of either matchup has a single sealed row
+for week 1. A re-resolve fields such a side from its roster and injuries AS THEY
+STAND NOW, so it is scoring a different team from the one that played — 9v10's
+home goes from 166.9 stored to 94.7. The stored finals were computed against
+the week's own rosters and are the ones to believe. No third bug.
+
+WHICH RESULTS THE K/DST FIX WOULD FLIP. Founder: "list which matchups would
+flip." `diff-week --flips` resolves every drip matchup twice, dry — under the
+old WR rule the week was actually scored with, and under the fixed one — and
+lays the DIFFERENCE on the stored final: corrected = stored + (fixed − old).
+Not the fixed re-resolve itself, for the reason above. `exact` where the old
+rule reproduces the stored final; `estimate` where it cannot (no sealed
+lineup), because the delta is then measured on today's auto-fill. 0–0 unplayed
+weeks and classic leagues are skipped. Run for weeks 1 and 2 by ops/run/006–007.
+Writes nothing.
+
+TURF 6v11 TOTALS ONLY. Its final was right all along (the 005 diff reproduces
+it), but its slot rows came from the re-stamp, and the rebuilt Turf week-1
+report took its MVP from them alone. ops/run/008 gives it the same single
+totals row as the other five and rebuilds the report without that line.
+
+No migration.
+
 ### v0.480.0 — ten of twelve
 
 THE OLD RULE REPRODUCES TEN OF THE TWELVE. Re-resolved with the pre-v0.474.0

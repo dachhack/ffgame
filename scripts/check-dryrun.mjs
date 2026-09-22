@@ -91,6 +91,14 @@ ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${
   ok(dw.includes("m.status === 'scheduled'") && dw.includes('continue;'),
     'diff-week skips a scheduled matchup rather than printing an auto-lineup as a finding');
   ok(dw.includes('window-battle bonus'), 'diff-week names a drip side\'s window-battle bonus instead of flagging it');
+  // --flips (v0.481.0) resolves each matchup TWICE; both must be dry.
+  const fl = dw.slice(dw.indexOf("args.includes('--flips')"));
+  const flBody = fl.slice(0, fl.indexOf('break;'));
+  ok(flBody.length > 0 && (flBody.match(/resolveMatchup\(/g) ?? []).length === 2
+    && (flBody.match(/dryRun: true/g) ?? []).length === 2,
+    'diff-week --flips resolves exactly twice, and both resolves are dry runs');
+  ok(flBody.includes('stored') && /sh \+ fixed\.home - old\.home/.test(flBody),
+    '…and corrects the STORED final by the old→fixed delta rather than trusting a re-fielded re-resolve');
 }
 
 // ── a committed request runs once, and only on main (v0.477.0) ──

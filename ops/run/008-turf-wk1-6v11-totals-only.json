@@ -1,0 +1,5 @@
+{
+  "mode": "restore",
+  "file": "scripts/db/restore/2026-wk1-turf-6v11-totals-only.json",
+  "why": "Founder: \"reset Turf 6v11.\" Its final stays 80.3–81.6 (proven correct by the 005 diff); its re-stamp-written slot breakdown becomes one totals-only row, and the Turf week-1 report is rebuilt without the MVP line that breakdown produced."
+}
