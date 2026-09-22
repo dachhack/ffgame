@@ -57,6 +57,18 @@ with l as (
     coalesce(nullif(sj ->> 'trade_offer_days', '')::int, 0) as offer_days,
     coalesce((sj ->> 'faab_trading')::boolean, true) as faab_trading,
     coalesce(sj ->> 'waiver_mode', 'rolling') as waivers,
+    -- THE DOOR (0287/0319). Unset `fa_mode` reads from the window: a league
+    -- with no fa_start_min has always meant OPEN — every unrostered player
+    -- without a drop hold is an instant ADD, and the FAAB budget only ever
+    -- decides contested drops. That is the default, not a fault; it is also
+    -- not how Sleeper behaves, so it is worth seeing per league.
+    coalesce(nullif(sj ->> 'fa_mode', ''),
+             case when nullif(sj ->> 'fa_start_min', '') is not null then 'window' else 'open' end) as fa_mode,
+    nullif(sj ->> 'fa_start_min', '') as fa_start,
+    nullif(sj ->> 'fa_end_min', '') as fa_end,
+    coalesce(sj ->> 'fa_dow', '') as fa_days,
+    coalesce(sj ->> 'fa_after_waivers_dow', '') as fa_after_run,
+    coalesce(nullif(sj ->> 'waiver_clear_min', '')::int, 180) as clear_min,
     sj ->> 'salary_cap' is not null as contracts
   from l
 )
@@ -68,7 +80,8 @@ select left(name, 22) as league, season, provider, kind, mock, spec,
        case when rec_override is not null then '⚠ scoring.rec=' || rec_override || ' ≠ ppr key' else '' end as adp_note,
        coalesce(api_explicit::text, case when provider = 'native' then 'OPEN (default)' else 'private (default)' end) as api,
        review, coalesce(veto_set, greatest(1, ((seats - 2) / 2) + 1)) as veto_bar, seats, review_h, offer_days,
-       waivers, faab_trading as faab_trades, contracts
+       waivers, fa_mode, fa_start, fa_end, fa_days, fa_after_run, clear_min,
+       faab_trading as faab_trades, contracts
   from rules
  where not mock and kind = 'league'
  order by provider, season desc, name;

@@ -220,3 +220,75 @@ export function reportSections(r: WeekReport): ReportSection[] {
   }
   return out;
 }
+
+// ── WHEN THE LEAGUE HEARS IT (v0.457.0) ─────────────────────────────────────
+//
+// Founder, looking at a week-2 report posted while the Monday game was still
+// on: "the reports shouldn't go out until early AM on the day after the week
+// closes (Tuesday like 4AM EST)."
+//
+// So the report is no longer a race with the last whistle. The week's numbers
+// have all night to settle — a late stat correction, a game the scoreboard
+// was slow to hand over, a final re-stamped once the feed caught up — and the
+// league wakes up to one account of the week that is not going to change.
+//
+// THE RULE IS THE NEXT 4 AM EASTERN AFTER THE LAST GAME COULD HAVE ENDED, not
+// "Tuesday": a Monday-night week releases Tuesday morning, a Saturday-ending
+// week releases Sunday morning, and week 18 releases the day after whatever
+// day it actually finishes on. One rule, no calendar special cases.
+//
+// EASTERN BY NAME, NOT BY OFFSET. "4AM EST" is 09:00Z in January and 08:00Z in
+// September; hard-coding either puts the report an hour wrong for half the
+// season, and the half it is wrong for is the half the season is played in.
+export const REPORT_TZ = 'America/New_York';
+export const REPORT_HOUR_ET = 4;
+/** How long after kickoff a game can still be running — the pad between the
+ *  last kickoff and "the week is over". Generous on purpose: overrunning into
+ *  the 4 AM boundary costs a day, and no NFL game runs four hours. */
+export const GAME_RUN_MS = 4 * 60 * 60 * 1000;
+
+interface EtParts { y: number; mo: number; d: number; h: number; mi: number; s: number }
+function etParts(ms: number): EtParts {
+  const f = new Intl.DateTimeFormat('en-US', {
+    timeZone: REPORT_TZ, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p: Record<string, string> = {};
+  for (const x of f.formatToParts(new Date(ms))) if (x.type !== 'literal') p[x.type] = x.value;
+  // hour12:false still renders midnight as 24 in some ICU builds.
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute, s: +p.second };
+}
+
+/** The instant of an Eastern wall-clock reading. Two passes because the offset
+ *  it needs depends on the answer it is computing: the first guess lands
+ *  within an hour, which is close enough for the second to read the right side
+ *  of a DST change. */
+function etWall(y: number, mo: number, d: number, hour: number): number {
+  const naive = Date.UTC(y, mo - 1, d, hour);
+  const offsetAt = (ms: number) => {
+    const p = etParts(ms);
+    return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - (ms - (ms % 1000));
+  };
+  const first = naive - offsetAt(naive);
+  return naive - offsetAt(first);
+}
+
+/** The first 4 AM Eastern strictly after `afterMs` — when a week whose last
+ *  game ended at `afterMs` may be written up. */
+export function nextReportRelease(afterMs: number, hour = REPORT_HOUR_ET): number {
+  if (!Number.isFinite(afterMs)) return 0;
+  const p = etParts(afterMs);
+  const today = etWall(p.y, p.mo, p.d, hour);
+  if (today > afterMs) return today;
+  const next = new Date(Date.UTC(p.y, p.mo - 1, p.d) + 86_400_000);
+  return etWall(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), hour);
+}
+
+/** When a week whose last KICKOFF is `lastKickoffMs` may be reported. 0 when
+ *  the slate is unknown, which the caller reads as "no gate" rather than
+ *  holding a report forever on a missing row. */
+export function weekReportRelease(lastKickoffMs: number | null | undefined): number {
+  if (lastKickoffMs == null || !Number.isFinite(lastKickoffMs)) return 0;
+  return nextReportRelease(lastKickoffMs + GAME_RUN_MS);
+}

@@ -12,7 +12,7 @@
 // league_report primary key is the idempotency: an insert that hits it posts
 // nothing, so a restart or a re-run never says the same week twice.
 import { db } from './supabase.js';
-import { buildWeekReport, reportBody, reportHasScores } from '../../packages/core/src/data/weekReport.ts';
+import { buildWeekReport, reportBody, reportHasScores, weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[report]', ...a);
 
@@ -21,6 +21,27 @@ const REPORT_RECHECK_MS = 5 * 60_000;
 const lastCheck = new Map();          // week → ms
 const posted = new Set();             // `${league_id}:${week}` already reported
 const lastSummary = new Map();        // week → the last gate summary logged
+const release = new Map();            // week → the instant it may be reported
+
+/** THE MORNING AFTER (v0.457.0). Founder, on a week-2 report posted while the
+ *  Monday game was still on: "the reports shouldn't go out until early AM on
+ *  the day after the week closes (Tuesday like 4AM EST)."
+ *
+ *  Read off the SLATE, not off the finals: the last kickoff plus the longest a
+ *  game can run, rounded up to the next 4 AM Eastern (core's
+ *  weekReportRelease). A week with no slate row returns 0 — no gate — because
+ *  holding a report forever on a missing row is a worse failure than an early
+ *  one. Cached per week; the slate does not move. */
+async function releaseAt(week, season) {
+  const key = `${season}:${week}`;
+  if (release.has(key)) return release.get(key);
+  const { data } = await db().from('nfl_slate').select('kickoff')
+    .eq('week', week).eq('season', String(season)).order('kickoff', { ascending: false }).limit(1);
+  const last = data?.[0]?.kickoff ? Date.parse(data[0].kickoff) : null;
+  const at = weekReportRelease(last);
+  release.set(key, at);
+  return at;
+}
 
 /** Post the week's reports for every league whose finals are all stamped.
  *  Returns how many were posted this pass. (Admin requests, 0277, are swept
@@ -40,9 +61,12 @@ export async function postWeekReports(week, season, opts = {}) {
     if (!byLeague.has(m.league_id)) byLeague.set(m.league_id, []);
     byLeague.get(m.league_id).push(m);
   }
-  // A league is ready when every matchup of the week is final AND stamped.
+  // A league is ready when every matchup of the week is final AND stamped —
+  // and, since v0.457.0, when the morning after the week has arrived.
   const stamped = (m) => m.home_final != null && m.away_final != null;
-  const ready = [...byLeague].filter(([lid, ms]) =>
+  const due = opts.force ? 0 : await releaseAt(week, season);
+  const held = due > now;
+  const ready = held ? [] : [...byLeague].filter(([lid, ms]) =>
     !posted.has(`${lid}:${week}`) && ms.every((m) => m.status === 'final' && stamped(m)));
   const { data: leagues } = await db().from('league').select('id, name, season, settings_json')
     .in('id', [...byLeague.keys()]);
@@ -60,7 +84,9 @@ export async function postWeekReports(week, season, opts = {}) {
       : `${fin}/${ms.length} final, ${st}/${ms.length} stamped`;
     return `${l?.name ?? lid.slice(0, 8)}: ${state}`;
   }).join(' · ');
-  if (summary && summary !== lastSummary.get(week)) { log(`wk ${week} gate — ${summary}`); lastSummary.set(week, summary); }
+  const when = due ? `releases ${new Date(due).toISOString()}${held ? ` (held, ${Math.round((due - now) / 60000)} min)` : ''}` : 'no slate — ungated';
+  const line = `${when} · ${summary}`;
+  if (summary && line !== lastSummary.get(week)) { log(`wk ${week} gate — ${line}`); lastSummary.set(week, line); }
   if (!ready.length) return n;
 
   const { data: done } = await db().from('league_report').select('league_id').eq('week', week)

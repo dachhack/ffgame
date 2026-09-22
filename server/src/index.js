@@ -39,6 +39,7 @@ import { sweepVampireBites } from './vampireBite.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
+import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
@@ -319,6 +320,21 @@ async function manualSyncTick() {
   finally { manualSyncing = false; }
 }
 
+/** How often a complete-but-unreported week's finals are re-resolved. */
+const RESTAMP_MS = 10 * 60_000;
+const lastRestamp = new Map();   // week → ms of the last re-stamp
+const releaseCache = new Map();  // `${season}:${week}` → the report's release instant
+/** The week's 4 AM Eastern release (core's rule), off its last kickoff. */
+async function reportReleaseAt(week, season) {
+  const key = `${season}:${week}`;
+  if (releaseCache.has(key)) return releaseCache.get(key);
+  const { data } = await db().from('nfl_slate').select('kickoff')
+    .eq('week', week).eq('season', String(season)).order('kickoff', { ascending: false }).limit(1);
+  const at = weekReportRelease(data?.[0]?.kickoff ? Date.parse(data[0].kickoff) : null);
+  releaseCache.set(key, at);
+  return at;
+}
+
 /** One context's pass: fetch its scoreboard, then lock → poll → resolve →
  *  finalize at its BOARD week. Returns the games it saw (the caller pools them
  *  for the injury cadence) — or null when the context has nothing live. */
@@ -332,11 +348,36 @@ async function manualSyncTick() {
 async function closeWeek(tag, week, games, season, regular) {
   const slate = slateFromGames(games);
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
+  // A SHORT SCOREBOARD IS NOT A FINISHED WEEK (v0.457.0). Both callers gate on
+  // `games.every((g) => g.completed)`, and that is vacuously TRUE over a list
+  // missing the game still being played — which is how a week-2 report went
+  // out mid-Monday-night with the Rams game still on, freezing every final in
+  // the league 35 points light. The schedule is the second opinion: fewer
+  // games in hand than the slate says the week has, and the week is not over,
+  // whatever the games we DID get say about themselves.
+  const { count: slateGames } = await db().from('nfl_slate')
+    .select('*', { count: 'exact', head: true }).eq('week', week).eq('season', String(season));
+  if (slateGames && games.length < slateGames) {
+    log(`[${tag}] NOT closing: scoreboard has ${games.length} of ${slateGames} scheduled games`);
+    return;
+  }
   const f = await finalizeMatchups(week, true);
   if (f) log(`[${tag}] finalized`, f, 'matchups');
   try {
-    const stamped = await stampFinals(week, playerIndex);
-    if (stamped) log(`[${tag}] stamped finals on`, stamped, 'matchups');
+    // UNTIL THE REPORT GOES OUT, THE NUMBERS STAY LIVE (v0.457.0). stampFinals
+    // stamps a final matchup once and never revisits it, so a stamp taken a
+    // moment too early used to stand forever — in the standings, the report
+    // and the playoff seeding alike. Between the last whistle and the 4 AM
+    // release the finals are re-resolved instead, throttled, so a late
+    // correction or a game the feed was slow to hand over lands before the
+    // league is told anything. After release they freeze, which is what a
+    // final is for.
+    const due = regular ? await reportReleaseAt(week, season) : 0;
+    const pre = due > 0 && Date.now() < due;
+    const restamp = pre && Date.now() - (lastRestamp.get(week) ?? 0) >= RESTAMP_MS;
+    if (restamp) lastRestamp.set(week, Date.now());
+    const stamped = await stampFinals(week, playerIndex, { restamp });
+    if (stamped) log(`[${tag}] stamped finals on`, stamped, 'matchups', restamp ? '(re-stamp)' : '');
   } catch (e) { log(`[${tag}] stamp finals`, e.message); }
   // THE WEEKLY REPORT (v0.391.0): once a league's finals are all stamped,
   // its week gets written up and posted into its chat. Idempotent per

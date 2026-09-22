@@ -18,6 +18,67 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.457.0 — the morning after
+
+Founder, over the week-2 report and the live board side by side: "the weekly
+report doesn't seem to validate." The board read 162.50–160.50 with the Rams
+game still on; the report read 127.5–143.5 and called it "Team 2 by 16.0" —
+and the header records and the standings sided with the report, so a manager
+who was winning had already been given the loss.
+
+Three surfaces read ONE pair of columns — `matchup.home_final` / `away_final`
+— and the board reads the live engine. So the only question was whether those
+columns were stale, and THEY CANNOT BECOME UN-STALE: `stampFinals` selects
+`.eq('status','final').is('home_final', null)`, which stamps a matchup exactly
+once, from whatever plays existed at that instant, and can never revisit it.
+The stamp itself is dated by the screenshot: every player cell carried "Final
+·" except K. Williams (RB · LA), whose live 17.2 is the away side's entire
+17.0 gap.
+
+WHAT CLOSED A WEEK MID-GAME. `finalizeMatchups` is only ever called with
+completed = true, guarded at both call sites by `games.every((g) =>
+g.completed)` over the scoreboard ESPN returned — and that guard is VACUOUSLY
+TRUE OVER A SHORT LIST. A week-2 scoreboard that came back without its Monday
+game contained nothing but finished games.
+
+Three changes, each independent:
+
+  · THE SCHEDULE IS THE SECOND OPINION. `closeWeek` now counts the week's
+    `nfl_slate` rows and refuses to finalize while it holds fewer games than
+    the week has. Whatever the games we DID get say about themselves, a short
+    list is not a finished week.
+  · UNTIL THE REPORT GOES OUT, THE NUMBERS STAY LIVE. `stampFinals` gained
+    `opts.restamp`, and the tick asks for it — throttled to ten minutes —
+    between the last whistle and the release. A late correction, or a game the
+    feed was slow to hand over, now lands before anyone is told. After release
+    the finals freeze, which is what a final is for.
+  · THE REPORT WAITS FOR THE MORNING (founder: "the reports shouldn't go out
+    until early AM on the day after the week closes (Tuesday like 4AM EST)").
+    The gate is the next 4 AM EASTERN after the last game could have ended —
+    core's `weekReportRelease`, read off the slate's last kickoff plus four
+    hours. Not "Tuesday": a Saturday-ending week reports Sunday morning and
+    week 18 reports the day after whatever day it finishes on. One rule, no
+    calendar cases. By timezone NAME, because "4AM EST" is 09:00Z in January
+    and 08:00Z in September, and the season is played in the half where
+    hard-coding the other one puts the report an hour wrong.
+
+The already-broken week is repaired by `scripts/db/republish-week-reports.sql`
+— writes, two steps, meant to be run twice: clear the stale stamps, let the
+worker re-resolve them, then queue a rebuild for every league whose stored
+report still disagrees with its finals. It refuses outright while any of the
+week's games is not `post`, because clearing a stamp mid-game is exactly what
+put the week wrong. The rebuild rides `report_request`, so the worker replaces
+the payload AND the old chat line: the league sees one report, corrected.
+
+`scripts/db/week-report-mismatch-diag.sql` is the read-only companion that
+told these four mechanisms apart, and `league-compat-report.sql` now also
+prints each league's FREE-AGENCY DOOR — `fa_mode` unset reads OPEN, so a
+league that never set a window has every unrostered player as an instant ADD
+and a FAAB budget that only decides contested drops. That is the default
+rather than a fault, and it is not what Sleeper does, so it is worth seeing.
+
+Ten new assertions in `check:weekreport`, DST both ways. No migration.
+
 ### v0.456.1 — the opponent the board could not see
 
 Founder, week 2, over a screenshot with 104.2 on it: "my opponent has zero
