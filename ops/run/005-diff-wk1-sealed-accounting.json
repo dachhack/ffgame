@@ -1,0 +1,6 @@
+{
+  "mode": "diff",
+  "week": 1,
+  "legacy_teamunits": true,
+  "why": "READ-ONLY. Under the pre-v0.474.0 team-unit rule, 10 of 12 drip matchups now reproduce their stored finals; Gridiron 2v5 and 9v10 still don't, and both resolve with FEWER slots than the league fields (9v10 home 7 of 9; 2v5 away 6). The new sealed/loadout lines say whether those picks are gone from the database or present and dropped by the resolve, and what each side had armed."
+}
