@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.464.0 — the league tab reads like a league
+
+Founder, with Sleeper's LEAGUE tab open beside ours: "Let's follow the sleeper
+convention for my league. Matchups summary, rankings, then activity. Put all
+the league settings and info that is there now in a chip up by the league
+name. Hit the chip, open the settings."
+
+Ours was a MENU: twelve tiles, each a door to a sheet. Sleeper's is a PAGE —
+this week's games, the table, what the league just did — with the settings
+behind one gear. The second reads as a league; the first reads as a filing
+cabinet, and you have to open a drawer before anything tells you what is
+happening.
+
+The app's LEAGUE tab is now three sections in the order a person asks about
+them: MATCHUPS (this week's games, either side's total, a week pager that
+knows its own ends), STANDINGS (the table inline — it used to be a tile
+opening a sheet, which is one tap to learn where you are in your own league),
+and ACTIVITY (the register, with the full sheet a tap away).
+
+THE GEAR SITS BESIDE THE NAME, which App renders — so the sheet is a
+module-level bus, the same shape as `openPlayerCard`: App draws the chip and
+calls `openLeagueSettings`, a host mounted once presents it, and every tile
+stays exactly where it already lived. Nothing was deleted; the filing cabinet
+is fine as long as it is not the first thing you see. The context is cleared
+when the league closes, so the chip can never open a league you have left.
+
+AND THE NUMBER THE PAGE NEEDED. `leagueResults` reads
+`matchup.home_final/away_final`, and those are null until a week is stamped —
+so a league-wide board showed dashes all Sunday, which is the one day anybody
+looks at it. Migration 0341's `league_week_scoreboard` serves the stamped
+final where there is one and the sum of the worker's published window rows
+where there is not. They are the same number at the whistle, so the board does
+not jump when a week closes; it stops moving. A matchup with nothing published
+reads null rather than a manufactured 0–0.
+
+NOTHING SEALED LEAKS, and it is v0.456.1's argument again: the worker writes a
+window's row only once that window has KICKED OFF, which is the same moment
+the sealed_select RLS opens the opponent's real picks. It returns TOTALS ONLY
+— never `slot_scores` — so it says what the score is, never who is in the
+lineup, and a probe asserts a planted slug never leaves the function. The
+public API already publishes the same pair of numbers to anonymous callers for
+an opted-in league; this serves them to a member, live, which is narrower.
+
+Six probe groups in league-tab-probes.sql. The web hub is NOT yet mirrored —
+it is the next piece, and the two hosts are deliberately divergent until then.
+
 ### v0.463.0 — what the wire is doing
 
 Founder, holding Sleeper's PLAYERS tab up next to ours: "We can pull trending

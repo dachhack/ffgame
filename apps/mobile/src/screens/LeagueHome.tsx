@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -20,7 +20,228 @@ import { useLeagueScroll } from '../ui/scrollChrome';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
-export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo, onShop, onBack, onMessage, onTrade }: {
+/** ── THE GEAR (0341) ────────────────────────────────────────────────────────
+ *
+ *  Founder, with Sleeper's LEAGUE tab open beside ours: "Put all the league
+ *  settings and info that is there now in a chip up by the league name. Hit
+ *  the chip, open the settings."
+ *
+ *  The chip belongs beside the NAME, which App.tsx renders — one component up
+ *  from this screen and with no business knowing what a vampire card is. So
+ *  the sheet is a module-level bus, the same shape as `openPlayerCard`: App
+ *  renders the chip and calls `openLeagueSettings`, a host mounted once
+ *  presents it, and everything it opens stays here where it already lived. */
+export interface LeagueSettingsReq {
+  leagueId: string; rosterId: number | null; native: boolean; commish: boolean; classic: boolean;
+  teamName?: string | null;
+  onGo: (room: LeagueRoom) => void;
+  onShop: () => void;
+  onBack: () => void;
+  onMessage: (peerId: string, peer: string) => void;
+  onTrade: (rosterId: number) => void;
+}
+let settingsListener: ((p: LeagueSettingsReq | null) => void) | null = null;
+/** What the gear needs, installed by the league screen rather than threaded
+ *  through App — which knows the league's id and nothing else about it. Null
+ *  the moment the league closes, so the chip cannot open a stale league. */
+let settingsReq: LeagueSettingsReq | null = null;
+export const setLeagueSettingsCtx = (p: LeagueSettingsReq | null): void => { settingsReq = p; };
+/** True when the chip has something to open — App hides it otherwise rather
+ *  than offering a gear that does nothing. */
+export const leagueSettingsReady = (leagueId: string): boolean => settingsReq?.leagueId === leagueId;
+export const openLeagueSettings = (): void => {
+  if (!settingsReq) return;
+  track(Ev.hubTileOpened, { tile: 'settings' });
+  settingsListener?.(settingsReq);
+};
+export function LeagueSettingsHost() {
+  const [req, setReq] = useState<LeagueSettingsReq | null>(null);
+  useEffect(() => { settingsListener = setReq; return () => { settingsListener = null; }; }, []);
+  if (!req) return null;
+  return <LeagueSettingsSheet req={req} onClose={() => setReq(null)} />;
+}
+
+
+// ── THE SHEET THE GEAR OPENS ────────────────────────────────────────────────
+function LeagueSettingsSheet({ req, onClose }: { req: LeagueSettingsReq; onClose: () => void }) {
+  return (
+    <Overlay visible title="League settings" subtitle="TEAMS · RULES · HISTORY · ALERTS" onClose={onClose}>
+      <LeagueMenu leagueId={req.leagueId} teamName={req.teamName} rosterId={req.rosterId}
+        native={req.native} commish={req.commish}
+        onGo={(r) => { onClose(); req.onGo(r); }}
+        onShop={() => { onClose(); req.onShop(); }}
+        onBack={() => { onClose(); req.onBack(); }}
+        onMessage={(id, peer) => { onClose(); req.onMessage(id, peer); }}
+        onTrade={(rid) => { onClose(); req.onTrade(rid); }} />
+    </Overlay>
+  );
+}
+
+// ── THE LEAGUE TAB (0341) ───────────────────────────────────────────────────
+// Founder: "Let's follow the sleeper convention for my league. Matchups
+// summary, rankings, then activity."
+//
+// What was here was a MENU — twelve tiles, each a door to a sheet. Sleeper's
+// is a PAGE: this week's games, the table, what the league just did. The
+// second reads as a league; the first reads as a filing cabinet you have to
+// open a drawer of before anything tells you what is happening.
+//
+// So the tiles go behind the gear beside the league's name (App renders the
+// chip, `openLeagueSettings` opens it) and THIS is the league: three sections,
+// in the order a person asks about them.
+export function LeagueHome(props: {
+  leagueId: string;
+  teamName?: string | null;
+  rosterId: number | null;
+  native: boolean;
+  commish: boolean;
+  onGo: (room: LeagueRoom) => void;
+  onMessage: (peerId: string, peer: string) => void;
+  onTrade: (rosterId: number) => void;
+  onShop: () => void;
+  onBack: () => void;
+}) {
+  const { leagueId, rosterId, native, commish } = props;
+  const t = useTheme();
+  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
+  const [classic, setClassic] = useState(false);
+  const [sb, setSb] = useState<Awaited<ReturnType<typeof leagueWeekScoreboard>> | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
+  const [activityOpen, setActivityOpen] = useState(false);
+
+  // The gear's context lives with the league, not with App: it is cleared on
+  // the way out so the chip cannot open a league you have left.
+  useEffect(() => {
+    setLeagueSettingsCtx({ ...props, classic, leagueId });
+    return () => setLeagueSettingsCtx(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagueId, rosterId, native, commish, classic, props.teamName]);
+
+  useEffect(() => {
+    leagueGameMode(leagueId).then((g) => setClassic(g?.mode === 'classic')).catch(() => {});
+  }, [leagueId]);
+
+  // THE SCOREBOARD, on a poll. `week` null asks for the one being played; once
+  // a person pages, their choice sticks rather than being pulled back.
+  useEffect(() => {
+    let alive = true;
+    const load = () => leagueWeekScoreboard(leagueId, week).then((r) => {
+      if (!alive || !r?.ok) return;
+      setSb(r);
+      if (week == null && r.week != null) setWeek(r.week);
+      const ids = [...new Set((r.games ?? []).flatMap((g) => [g.home.roster_id, g.away.roster_id]))];
+      if (ids.length) matchupTeams(leagueId, ids).then((tm) => { if (alive) setTeams(tm); }).catch(() => {});
+    }).catch(() => {});
+    void load();
+    const id = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(id); };
+  }, [leagueId, week]);
+
+  const weeks = sb?.weeks ?? [];
+  const at = weeks.indexOf(week ?? -1);
+  const step = (d: number) => { const n = weeks[at + d]; if (n != null) { tap(); setWeek(n); } };
+  const nameOf = (rid: number, fallback: string | null) => teams[rid]?.team_name || fallback || `Roster ${rid}`;
+  const num = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(2));
+
+  const Section = ({ title, right }: { title: string; right?: React.ReactNode }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 6 }}>
+      <Text style={{ fontSize: 17, fontWeight: '700', color: t.text }}>{title}</Text>
+      <View style={{ flex: 1 }} />
+      {right}
+    </View>
+  );
+
+  return (
+    <ScrollView style={{ flex: 1 }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104 }}>
+      {!!props.teamName && <Mono size={9.5} tone="faint">you are {props.teamName}{commish ? ' · commissioner' : ''}</Mono>}
+
+      {/* ── MATCHUPS ──────────────────────────────────────────────────────
+          The week's games, each side's total, and who is ahead. A side still
+          being played is marked rather than silently mixed in with a final —
+          the number means something different before the whistle. */}
+      <Section title="Matchups" right={weeks.length > 1 ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable hitSlop={8} disabled={at <= 0} onPress={() => step(-1)}>
+            <Mono size={13} weight="700" tone={at <= 0 ? 'faint' : 'you'}>‹</Mono>
+          </Pressable>
+          <Mono size={10} weight="700" tone="dim">WEEK {week ?? '—'}</Mono>
+          <Pressable hitSlop={8} disabled={at < 0 || at >= weeks.length - 1} onPress={() => step(1)}>
+            <Mono size={13} weight="700" tone={at < 0 || at >= weeks.length - 1 ? 'faint' : 'you'}>›</Mono>
+          </Pressable>
+        </View>
+      ) : undefined} />
+      {sb && (sb.games ?? []).length === 0 && (
+        <Mono size={9.5} tone="faint" style={{ lineHeight: 14 }}>No games scheduled for this week yet.</Mono>
+      )}
+      {(sb?.games ?? []).map((g) => {
+        const hp = g.home.points, ap = g.away.points;
+        const hw = hp != null && ap != null && hp > ap;
+        const aw = hp != null && ap != null && ap > hp;
+        const mine = rosterId != null && (g.home.roster_id === rosterId || g.away.roster_id === rosterId);
+        const side = (s: typeof g.home, won: boolean) => (
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: won ? '800' : '600', color: won ? t.text : t.dim }}>
+              {nameOf(s.roster_id, s.team)}
+            </Text>
+            <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: won ? t.you : t.text, marginTop: 2 }}>
+              {num(s.points)}{s.live ? <Mono size={8.5} tone="warn"> LIVE</Mono> : null}
+            </Text>
+          </View>
+        );
+        return (
+          <View key={g.matchup_id} style={{
+            borderWidth: StyleSheet.hairlineWidth, borderColor: mine ? t.you : t.bd, borderRadius: 10,
+            backgroundColor: mine ? alpha(t.you, 8) : 'transparent',
+            paddingHorizontal: 12, paddingVertical: 10, marginTop: 8,
+          }}>
+            {!!(g.playoff || g.label) && (
+              <Mono size={8} tone="faint" track={0.1} style={{ marginBottom: 4 }}>
+                {g.label || (g.consolation ? 'CONSOLATION' : 'PLAYOFF')}
+              </Mono>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {side(g.home, hw)}
+              <Mono size={9} tone="faint">vs</Mono>
+              {side(g.away, aw)}
+            </View>
+          </View>
+        );
+      })}
+
+      {/* ── RANKINGS ──────────────────────────────────────────────────────
+          The table, inline. It used to be a tile that opened a sheet, which
+          is one tap to learn where you are in your own league. */}
+      <Section title="Standings" />
+      <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
+      <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
+      <Standings leagueId={leagueId} myRoster={rosterId} />
+
+      {/* ── ACTIVITY ──────────────────────────────────────────────────────
+          What the league just did. The register in full is long, so the page
+          carries it and the sheet is there for reading back through it. */}
+      {native && <Section title="Activity" right={
+        <Pressable hitSlop={8} onPress={() => { tap(); setActivityOpen(true); }}>
+          <Mono size={10} weight="700" tone="you">View all</Mono>
+        </Pressable>} />}
+      {native && (
+        <View style={{ maxHeight: 420, overflow: 'hidden' }}>
+          <RegisterView leagueId={leagueId} />
+        </View>
+      )}
+
+      <Overlay visible={activityOpen} title="League register" subtitle="EVERY MOVE SINCE THE DRAFT · NEWEST FIRST" onClose={() => setActivityOpen(false)}>
+        <RegisterView leagueId={leagueId} />
+      </Overlay>
+    </ScrollView>
+  );
+}
+
+/** THE MENU, NOW BEHIND THE GEAR (0341). Every tile it ever had, unchanged —
+ *  what moved is where you reach it from. The page in front of it is the
+ *  league; this is the filing cabinet, and a filing cabinet is a fine thing to
+ *  have as long as it is not the first thing you see. */
+function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onShop, onBack, onMessage, onTrade }: {
   leagueId: string;
   teamName?: string | null;
   rosterId: number | null;
@@ -36,7 +257,6 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   onBack: () => void;
 }) {
   const t = useTheme();
-  const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
   // The note lives HERE now (0182.1 — off the board, founder's call), so the
   // commissioner's empty-state prompt shows too, not just a standing note.
   const [note, setNote] = useState<{ text: string; canEdit: boolean } | null>(null);
@@ -128,7 +348,7 @@ export function LeagueHome({ leagueId, teamName, rosterId, native, commish, onGo
   };
 
   return (
-    <ScrollView style={{ flex: 1 }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}>
       {!!champion && (
         <View style={{ backgroundColor: alpha(t.you, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '800', color: t.text }}>🏆 {champion}</Text>

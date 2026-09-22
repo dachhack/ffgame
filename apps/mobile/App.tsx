@@ -31,7 +31,8 @@ import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
-import { LeagueHome } from './src/screens/LeagueHome';
+import { LeagueHome, LeagueSettingsHost, openLeagueSettings } from './src/screens/LeagueHome';
+import { tap } from './src/ui/feedback';
 import { ChatChipDot } from './src/ui/unread';
 import { registerForPush } from './src/ui/push';
 import { Admin } from './src/screens/Admin';
@@ -391,10 +392,21 @@ export function App() {
             {session.user.email}
           </Text>
         )}
+        {/* THE NAME, AND THE GEAR BESIDE IT (0341). Founder: "Put all the
+            league settings and info that is there now in a chip up by the
+            league name. Hit the chip, open the settings." The chip is here
+            because the NAME is here; what it opens lives in LeagueHome, which
+            owns every sheet it ever opened — see `openLeagueSettings`. */}
         {open && (
-          <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '700', color: theme.text, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 }}>
-            {open.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 18, fontWeight: '700', color: theme.text }}>
+              {open.name}
+            </Text>
+            <Pressable hitSlop={8} onPress={() => { tap(); openLeagueSettings(); }}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: theme.dim }}>⚙</Text>
+            </Pressable>
+          </View>
         )}
         </Animated.View>
         {/* The room strip moved to the BOTTOM (v0.356.0, founder: "I like how
@@ -559,6 +571,7 @@ export function App() {
           <ErrorBoundary>{body()}</ErrorBoundary>
           <WhatsNewSheet visible={whatsNewOpen} st={update} onClose={() => setWhatsNewOpen(false)} />
           <PlayerCardHost />
+          <LeagueSettingsHost />
           <AllFieldsSheet visible={fieldsOpen} onClose={() => setFieldsOpen(false)} />
           <SettingsModal
             visible={settingsOpen}
