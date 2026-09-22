@@ -1591,6 +1591,14 @@ export interface ReportWeek {
    *  early, OR a score the commissioner edited by hand, which the database
    *  cannot tell apart and so does not try to. */
   drifted: number;
+  /** Stamped finals computed BEFORE the week's last play landed (0345).
+   *  `drifted` cannot see this — a final and its window rows are written by
+   *  one pass, so a week frozen three hours early agrees with itself
+   *  perfectly. This is the two timestamps in the wrong order. */
+  stale: number;
+  /** When the week was last scored, and when its last play arrived — the pair
+   *  `stale` is counted from, so a console can show its working. */
+  scored_at: string | null; last_play_at: string | null;
   report: boolean; posted_at: string | null;
   week_state: { season: string | null; slate: number; feed: number; live: number; complete: boolean };
   request: { requested_at: string; done_at: string | null; error: string | null } | null;

@@ -9,6 +9,7 @@
 //   node src/cli.js simulate --reset <lg> <wk> revert a sim'd week (scheduled, cleared)
 //   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
 //   node src/cli.js seed-preseason-pool [lg] [wk=101]  deep slate-team pick pool for a preseason week
+//   node src/cli.js restamp <wk> [season] [--league=<uuid>]  ⚠ re-resolve a CLOSED week's stored finals
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -152,6 +153,71 @@ async function main() {
       console.log(args.includes('--json') ? JSON.stringify(data, null, 1) : auditText(data));
       break;
     }
+    case 'restamp': {
+      // ⚠ RE-STAMP A CLOSED WEEK'S FINALS (v0.470.0).
+      //   node src/cli.js restamp <week> [season] [--league=<uuid>] [--no-report]
+      //
+      // Founder, over the week-2 report, the league page and the live board:
+      // "A lot of discrepancy across the weekly report and the matchup results
+      // and summary views." All three disagreements are ONE number. The report
+      // and the standings read matchup.home_final/away_final; the board reads
+      // the live engine. v0.457.0 found those columns frozen mid-Monday-night
+      // and fixed the freeze going forward — it did not thaw the week that was
+      // already frozen, and a stamped final can never revisit itself.
+      //
+      // This is the thaw: re-resolve the week against the plays that exist NOW
+      // and write what comes out. It prints every matchup it moved, before and
+      // after, because it is rewriting results people have already read — and
+      // then rebuilds each affected league's weekly report from the corrected
+      // finals and replaces the chat line, since a right scoreboard under a
+      // wrong write-up is still a league arguing about the score.
+      const { stampFinals } = await import('./resolve.js');
+      const { buildLeagueReport, postReport } = await import('./report.js');
+      const { db } = await import('./supabase.js');
+      const week = Number(args.find((a) => !a.startsWith('--')));
+      if (!Number.isFinite(week)) { console.error('usage: restamp <week> [season] [--league=<uuid>] [--no-report]'); break; }
+      const season = args.filter((a) => !a.startsWith('--'))[1] ?? config.season;
+      const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const idx = await buildPlayerIndex();
+      let moved = [];
+      const n = await stampFinals(week, idx, { restamp: true, leagueId, report: (m) => { moved = m; } });
+      // Seats, not team names: this runs in a PUBLIC workflow log.
+      const shift = (a, b) => (a == null || b == null ? '  (was unstamped)' : `  ${(b - a) >= 0 ? '+' : ''}${(b - a).toFixed(2)}`);
+      console.log(`restamp: week ${week} (${season})${leagueId ? ` · league ${leagueId.slice(0, 8)}` : ' · every league'} — re-resolved ${n} matchup(s)`);
+      let changed = 0;
+      for (const m of moved.sort((x, y) => String(x.league_id).localeCompare(String(y.league_id)) || x.home_roster_id - y.home_roster_id)) {
+        const same = m.was.home != null && m.was.away != null
+          && Math.abs(m.was.home - m.now.home) < 0.005 && Math.abs(m.was.away - m.now.away) < 0.005;
+        if (same) continue;
+        changed++;
+        console.log(`  ${m.league_id.slice(0, 8)} wk${m.week} seat ${m.home_roster_id} vs seat ${m.away_roster_id}`);
+        console.log(`      home ${String(m.was.home ?? '—').padStart(7)} → ${String(m.now.home).padStart(7)}${shift(m.was.home, m.now.home)}`);
+        console.log(`      away ${String(m.was.away ?? '—').padStart(7)} → ${String(m.now.away).padStart(7)}${shift(m.was.away, m.now.away)}`);
+      }
+      console.log(`restamp: ${changed} matchup(s) moved, ${n - changed} unchanged`);
+      if (args.includes('--no-report')) { console.log('restamp: reports left alone (--no-report)'); break; }
+      // Only leagues whose numbers actually MOVED get their write-up replaced:
+      // deleting and re-posting an identical report would ping a league's chat
+      // to tell it nothing.
+      const lids = [...new Set(moved.filter((m) => !(m.was.home != null && m.was.away != null
+        && Math.abs(m.was.home - m.now.home) < 0.005 && Math.abs(m.was.away - m.now.away) < 0.005))
+        .map((m) => m.league_id))];
+      if (!lids.length) { console.log('restamp: nothing moved — no report to rebuild'); break; }
+      for (const lid of lids) {
+        try {
+          const [{ data: ls }, { data: rows }] = await Promise.all([
+            db().from('league').select('id, name, season, settings_json').eq('id', lid),
+            db().from('matchup').select('id, league_id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+              .eq('league_id', lid).eq('week', week),
+          ]);
+          if (!ls?.[0] || !rows?.length) { console.log(`  ${lid.slice(0, 8)}: no league/matchups — skipped`); continue; }
+          const report = await buildLeagueReport(ls[0], week, rows);
+          await postReport(ls[0], week, report, { force: true });
+          console.log(`  ${lid.slice(0, 8)}: report rebuilt — ${report.headline}`);
+        } catch (e) { console.log(`  ${lid.slice(0, 8)}: report FAILED — ${e.message}`); }
+      }
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
@@ -159,7 +225,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json] | restamp <wk> [season] [--league=<uuid>]');
   }
 }
 

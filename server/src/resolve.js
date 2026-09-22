@@ -720,7 +720,22 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
  *  so every window publishes and the totals are complete. Idempotent within a
  *  tick — the matchup_state upsert and credit_wallet's idem key make a re-run
  *  rewrite the same values. `opts.playsInjected` lets a caller that already
- *  injected the week's plays (a test, mainly) skip the live_play refetch. */
+ *  injected the week's plays (a test, mainly) skip the live_play refetch.
+ *
+ *  AND AFTER THE RELEASE, NOTHING — which is the point of a final, and also
+ *  the failure v0.457.0 left standing. The week-2 stamp that went out
+ *  mid-Monday-night was frozen light and can never un-freeze itself; the
+ *  guards added there stop it HAPPENING again and repair nothing that already
+ *  happened. `opts.restamp` with `opts.leagueId` is the repair — an errand
+ *  somebody runs on purpose, with the before/after in front of them
+ *  (`opts.report`), because rewriting a stored result is not a thing to do
+ *  quietly on a timer.
+ *
+ *  ONE CAVEAT THE OPERATOR OWNS: a seat that stored NO lineup is fielded by
+ *  `classicLineup` off its roster AS IT STANDS NOW, not as it stood that
+ *  Sunday. A managed seat's sealed rows are the week's own and nothing moves;
+ *  an abandoned seat re-stamped months later can be fielded by a player it did
+ *  not own at kickoff. Re-stamp the week that is wrong, and do it soon. */
 export async function stampFinals(week, playerIndex, opts = {}) {
   // `opts.restamp` re-resolves finals that are ALREADY stamped (v0.457.0).
   // Without it this selects `home_final is null` and so stamps a matchup
@@ -731,18 +746,36 @@ export async function stampFinals(week, playerIndex, opts = {}) {
   // belongs: before the league is told.
   let q = db().from('matchup').select('*').eq('week', week).eq('status', 'final');
   if (!opts.restamp) q = q.is('home_final', null);
+  // SCOPED TO ONE LEAGUE, when a caller asks (v0.470.0). The tick never does —
+  // it closes a week for everybody at once — but the repair errand does: a
+  // week frozen early is a fact about one league's stored columns, and
+  // rewriting eight other leagues' results to fix it is not a smaller blast
+  // radius than the bug.
+  if (opts.leagueId) q = q.eq('league_id', opts.leagueId);
   const { data } = await q;
   const rows = data ?? [];
   if (!rows.length) return 0;
   if (!opts.playsInjected) await injectWeekPlays(week);
   const ctx = await prefetchTick(rows, week);
   let done = 0; const errs = [];
+  // BEFORE AND AFTER, for a caller that has to show its work (v0.470.0).
+  // resolveMatchup returns the totals it wrote; paired with what the row
+  // carried on the way in, that is the whole audit trail a re-stamp owes
+  // anybody whose loss it is about to turn into a win.
+  const moved = [];
   for (let i = 0; i < rows.length; i += 20) {
     await Promise.all(rows.slice(i, i + 20).map((m) =>
       resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx })
-        .then(() => { done++; })
+        .then((r) => {
+          done++;
+          moved.push({ id: m.id, league_id: m.league_id, week: m.week,
+            home_roster_id: m.home_roster_id, away_roster_id: m.away_roster_id,
+            was: { home: m.home_final, away: m.away_final },
+            now: { home: r?.home ?? null, away: r?.away ?? null } });
+        })
         .catch((e) => errs.push(`${m.id}: ${e.message}`))));
   }
+  if (opts.report) opts.report(moved);
   // A failure leaves home_final NULL, so the next tick retries it — but surface
   // it loudly rather than letting a week quietly never close.
   if (errs.length) throw new Error(`stampFinals: ${errs.length}/${rows.length} failed — ${errs[0]}`);

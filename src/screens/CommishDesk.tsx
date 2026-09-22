@@ -563,6 +563,18 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
                 ⚠ {w.drifted} edited or stale
               </span>
             )}
+            {/* 0345. A DIFFERENT ACCUSATION FROM `drifted`, and the one that
+                catches the week that went out early: these finals were
+                computed before the week's last play arrived. Reposting will
+                faithfully repeat them — only a re-stamp changes the number,
+                and that is an admin errand, so this says so rather than
+                offering a button that cannot help. */}
+            {w.stale > 0 && (
+              <span className="mono" title={`Scored ${w.scored_at ? new Date(w.scored_at).toLocaleString() : '—'}, but the week's last play arrived ${w.last_play_at ? new Date(w.last_play_at).toLocaleString() : '—'}. These finals were computed without it. Reposting repeats them; only a re-stamp (admin) recomputes them.`}
+                style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', whiteSpace: 'nowrap' }}>
+                ⚠ {w.stale} scored before the last play
+              </span>
+            )}
             <button onClick={() => void post(w)} disabled={busy != null || !!block || open} className="mono"
               title={block ?? (w.posted_at ? 'Rebuild and replace this week\u2019s chat line' : 'Build and post this week\u2019s report into chat')}
               style={{ ...btn(!block && !open), opacity: block || open ? 0.45 : 1, whiteSpace: 'nowrap' }}>

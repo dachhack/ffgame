@@ -8,6 +8,8 @@
 --         0 would read as "bid nothing" rather than "this league has no bids";
 --   • wr5 an instant with no run says so rather than drawing an empty sheet
 --         that looks like a run nobody won.
+-- 0346 rides wr3 and wr4: the sheet HOLDS STILL between two reads, and in a
+-- FAAB league the biggest bid leads.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -30,11 +32,16 @@ begin
   -- decides carries the same processed_at, and the chat line it posts carries
   -- the same instant in created_at because they share a transaction.
   ran := now() - interval '2 hours';
-  insert into waiver_claim (league_id, roster_id, add_slug, drop_slug, status, note, bid, processed_at)
-    values (lid, 1, 'josh-allen', 'zach-wilson', 'won',  null,          14, ran),
-           (lid, 2, 'josh-allen', null,          'lost', 'outbid',       9, ran),
-           (lid, 2, 'tre-tucker', null,          'lost', 'roster full',  3, ran),
-           (lid, 1, 'bye-week-guy', null,        'won',  null,           0, ran);
+  -- DISTINCT FILING TIMES, because that is what a rolling league orders by and
+  -- because `id` is a gen_random_uuid(): four claims filed in the same
+  -- microsecond have no order at all, and a probe that asserts one is asserting
+  -- the dice. This suite found 0344's shuffle exactly that way — flaky, not
+  -- red — so it plants the order it then checks (0346).
+  insert into waiver_claim (league_id, roster_id, add_slug, drop_slug, status, note, bid, processed_at, created_at)
+    values (lid, 1, 'josh-allen', 'zach-wilson', 'won',  null,          14, ran, ran - interval '40 minutes'),
+           (lid, 2, 'josh-allen', null,          'lost', 'outbid',       9, ran, ran - interval '30 minutes'),
+           (lid, 2, 'tre-tucker', null,          'lost', 'roster full',  3, ran, ran - interval '20 minutes'),
+           (lid, 1, 'bye-week-guy', null,        'won',  null,           0, ran, ran - interval '10 minutes');
   insert into league_message (league_id, author_id, kind, body, txn, created_at)
     values (lid, null, 'txn', '📋 Waivers ran — …', '{"kind":"waiver","won":2,"lost":2}'::jsonb, ran);
   select g.created_at into line from league_message g
@@ -70,6 +77,11 @@ begin
     'wr3 a claim that carried a drop says so, and one that did not stays null');
   perform wr_true((rep -> 'won' -> 0 ->> 'team') is not null,
     'wr3 …and every row is named, so the sheet needs no second call');
+  -- 0346: the sheet HOLDS STILL. Same run, read twice, in the same order —
+  -- the assertion 0344's `order by wc.id` could pass or fail by luck.
+  perform wr_true(league_waiver_run(lid, line) -> 'won' = rep -> 'won'
+              and league_waiver_run(lid, line) -> 'lost' = rep -> 'lost',
+    'wr3 the same run read twice lists its claims in the same order');
 
   -- ── wr4. the bid means something only where there are bids ──
   perform wr_true(rep ->> 'mode' = 'rolling' and (rep -> 'won' -> 0 -> 'bid') = 'null'::jsonb,
@@ -80,6 +92,17 @@ begin
   perform wr_true(rep ->> 'mode' = 'faab' and (rep -> 'won' -> 0 ->> 'bid')::int = 14
               and (rep -> 'lost' -> 0 ->> 'bid')::int = 9,
     'wr4 …and now the bids are numbers, winners and losers alike');
+  -- 0346: with bids in play the sheet leads with the biggest one, which is
+  -- both the run's own first key and the only column anybody opens it to
+  -- compare. Here the FAAB order agrees with the filing order; the point is
+  -- that it is the BID deciding, so drop the top bid below its neighbour and
+  -- the row must move.
+  -- bye-week-guy was filed LAST and bid nothing; outbid the 14 and it must
+  -- jump the queue, which the filing-time order alone could never do.
+  update waiver_claim set bid = 20 where league_id = lid and add_slug = 'bye-week-guy';
+  perform wr_true((league_waiver_run(lid, line) -> 'won' -> 0 ->> 'add_slug') = 'bye-week-guy',
+    'wr4 …and the sheet leads with the highest bid, not the earliest claim');
+  update waiver_claim set bid = 0 where league_id = lid and add_slug = 'bye-week-guy';
   perform wr_true(jsonb_array_length(rep -> 'order') > 0
               and (rep -> 'order' -> 0 ? 'faab'),
     'wr4 the wire after the run carries what each seat has left: ' || (rep -> 'order')::text);

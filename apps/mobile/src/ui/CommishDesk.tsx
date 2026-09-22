@@ -588,6 +588,20 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
                 ⚠ {w.drifted} stored final{w.drifted === 1 ? '' : 's'} differ from the live scoring — a stamp taken early, or a score you edited by hand. The report repeats what is stored.
               </Mono>
             )}
+            {/* 0345. NOT THE SAME ACCUSATION as `drifted`, and the one that
+                catches a week that closed mid-game: these finals were
+                computed before the week's last play landed. A repost
+                faithfully repeats them — only a re-stamp changes the number,
+                and that is an admin errand, so say so rather than offer a
+                button that cannot help. */}
+            {w.stale > 0 && (
+              <Mono size={8.5} tone="warn" style={{ marginTop: 2, lineHeight: fs(12) }}>
+                ⚠ {w.stale} final{w.stale === 1 ? ' was' : 's were'} scored BEFORE this week's last play arrived
+                {w.scored_at && w.last_play_at
+                  ? ` (scored ${new Date(w.scored_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}, last play ${new Date(w.last_play_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
+                  : ''}. Reposting repeats them — the numbers need a re-stamp, which is an admin errand.
+              </Mono>
+            )}
             {w.request?.error ? <Mono size={8.5} tone="opp" style={{ marginTop: 2 }}>⚠ last try: {w.request.error}</Mono> : null}
           </View>
         );

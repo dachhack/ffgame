@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.470.0 — the morning after, actually repaired
+
+Founder, with the report, the league page and the live board open together: "A
+lot of discrepancy across the weekly report and the matchup results and summary
+views." Three surfaces, one number. The report and the league page's matchups
+and standings read `matchup.home_final` / `away_final`; the board reads the live
+engine. The screenshots say 127.5–143.5 in two places and 162.50–160.50 in the
+third — which is, to the decimal, v0.457.0's own week-2 incident, still on
+screen five versions later.
+
+v0.457.0 fixed the CAUSE and said so plainly: "Re-stamping stays an admin
+errand." Nobody ever built the errand, so a week frozen mid-Monday-night stayed
+frozen — every team 12 to 35 points light, and Hewy13 handed a loss it won by
+two. THE ERRAND EXISTS NOW: `cli restamp <week> [--league=…]` and a ⚠ Re-stamp
+workflow behind a typed confirmation. It re-resolves the week against the plays
+that exist now, prints every matchup it moved by seat (before → after, in a
+PUBLIC log, so seats and not names), and rebuilds the weekly report for each
+league whose numbers actually changed — a right scoreboard under a wrong
+write-up is still a league arguing about the score. A league that did not move
+is not touched and its chat is not pinged.
+
+AND THE CHECK THAT COULD NEVER HAVE CAUGHT IT. 0339's `drifted` compares a
+stored final against the sum of its own `matchup_state` rows — but ONE pass
+writes both, so a week stamped three hours early agrees with itself perfectly
+and with the football not at all. It catches a hand-edited score; it is blind
+to the exact failure it was written in the aftermath of. 0345 adds the check
+that can see it, and it is not arithmetic but the CLOCK: `live_play.ingested_at`
+after `matchup_state.updated_at` means the final was computed without plays that
+had not arrived yet. Two timestamps in the wrong order. Both consoles now say
+which of the two things is wrong, and that a repost repeats the number while
+only a re-stamp changes it.
+
+A stat correction weeks later trips it too, and should.
+
+ONE CAVEAT THE OPERATOR OWNS: a seat that stored no lineup is re-fielded from
+its roster AS IT STANDS NOW. Managed seats keep their sealed picks and nothing
+moves; an abandoned seat re-stamped months later can be fielded by a player it
+did not own. Repair the week that is wrong, soon.
+
+AND A SHUFFLE THE PROBES CAUGHT BY BEING FLAKY. 0344's run sheet ordered `by
+wc.id`, over a `gen_random_uuid()` primary key — so the same waiver run, opened
+twice, listed its winners and losers in two different orders, and wr3 failed on
+one assertion on a clean database and a different one on a dirty one. 0346
+orders by the bid where there are bids and the filing time where there are not,
+with `id` last as a tiebreak rather than as an order — and stops claiming to
+replay the run's own walk, two of whose five keys (`waiver_priority`, standings
+rank) the run itself rotates as it goes.
+
+Migrations 0345 and 0346; stale-final-probes.sql with eight groups; wr3/wr4
+gain the assertions that shuffle could pass by luck.
+
 ### v0.469.1 — a door nobody could name
 
 Founder, hunting for the control v0.461.0 shipped: "It's not clear where I go
