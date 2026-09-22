@@ -11,7 +11,8 @@ import {
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
-import { waiverDaysOf, waiverScheduleLine } from '@drip/core/data/waiverDays';
+import { waiverDaysOf, waiverScheduleLine, holdLine } from '@drip/core/data/waiverDays';
+import { CopyId } from './CommishDesk';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -335,8 +336,12 @@ export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: 
       <Head>WAIVERS</Head>
       <Row k="MODE" v={mode === 'faab' ? 'FAAB blind bids' : mode === 'standings' ? 'reverse standings' : 'rolling priority'} accent />
       {mode === 'faab' && <Row k="SEASON BUDGET" v={`${rr.faab_budget ?? 100}`} />}
-      <Row k="HOLD AFTER A DROP" v={`${rr.waiver_hold_days ?? 2} day${(rr.waiver_hold_days ?? 2) === 1 ? '' : 's'}`} />
-      <Row k="CLAIMS CLEAR" v={rr.waiver_clear_min_effective == null ? 'rolling — 24h after the drop' : `${fmtEt(rr.waiver_clear_min_effective)} ET`} />
+      {/* v0.462.0: core's own sentence, not "N days". Hold days count RUNS
+          (0338), so a rolling league's stored 3 is a flat 24h — this row said
+          "3 days" and the league did something else, which is the mismatch
+          0337 and 0338 exist to stop. The unset default is 1, as the database
+          has always read it; this said 2. */}
+      <Row k="HOLD AFTER A DROP" v={holdLine(rr.waiver_clear_min_effective ?? null, rr.waiver_hold_days ?? 1)} />
       {/* 0337: the week, as one sentence. The three day-pickers this replaces
           could describe the same league three ways; core's waiverScheduleLine
           is the single reading both hosts print. */}
@@ -353,6 +358,19 @@ export function RosterRulesPanel({ leagueId, bare }: { leagueId: string; bare?: 
         : 'process immediately'} />
       <Row k="AN OFFER STANDS" v={rr.trade_offer_days ? `${rr.trade_offer_days} day${rr.trade_offer_days === 1 ? '' : 's'}` : 'until it is answered'} />
       {rr.waiver_mode === 'faab' && <Row k="FAAB TRADING" v={rr.faab_trading === false ? 'off' : 'on'} />}
+
+      {/* THIS LEAGUE (v0.462.0). The id lived in exactly one place — inside
+          the public API URL on the commissioner's own panel, only while the
+          league was published — and the league route carries no id, so there
+          was nowhere a MEMBER could get it at all. It is what you point a
+          spreadsheet, a Discord bot or a rankings site at, so it belongs on
+          the page that states every other fact about the league. */}
+      <Head>THIS LEAGUE</Head>
+      <div style={{ padding: '6px 0' }}><CopyId leagueId={leagueId} /></div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+        What the public read API is addressed by. It is not a secret and it is not a password — it identifies the
+        league, it does not unlock it, and what the API serves is only ever what this page already shows.
+      </div>
     </div>
   );
 }

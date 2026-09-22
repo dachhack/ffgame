@@ -12,7 +12,7 @@ import {
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
-import { waiverDaysOf, waiverScheduleLine } from '@drip/core/data/waiverDays';
+import { waiverDaysOf, waiverScheduleLine, holdLine } from '@drip/core/data/waiverDays';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -20,7 +20,9 @@ import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
+import { copyText } from './copy';
 import { Mono } from './prims';
+import { CopyIdRow } from './CommishDesk';
 
 /** Minutes-since-midnight-ET → "3:30am" (CommishSettings' own formatter — the
  *  member view has to read the same clock the commissioner set). */
@@ -345,8 +347,10 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
       <Head>WAIVERS</Head>
       <Row k="MODE" v={mode === 'faab' ? 'FAAB blind bids' : mode === 'standings' ? 'reverse standings' : 'rolling priority'} tone="you" />
       {mode === 'faab' && <Row k="SEASON BUDGET" v={`${rr.faab_budget ?? 100}`} />}
-      <Row k="HOLD AFTER A DROP" v={`${rr.waiver_hold_days ?? 2} day${(rr.waiver_hold_days ?? 2) === 1 ? '' : 's'}`} />
-      <Row k="CLAIMS CLEAR" v={rr.waiver_clear_min_effective == null ? 'rolling — 24h after the drop' : `${fmtEt(rr.waiver_clear_min_effective)} ET`} />
+      {/* v0.462.0: core's own sentence, not "N days" — hold days count RUNS
+          (0338), so a rolling league's stored 3 is a flat 24h and this row
+          said "3 days". The unset default is 1, as the database reads it. */}
+      <Row k="HOLD AFTER A DROP" v={holdLine(rr.waiver_clear_min_effective ?? null, rr.waiver_hold_days ?? 1)} />
       {/* 0337: the week, as one sentence — core's reading, so the two hosts
           and the console cannot describe the same league differently. */}
       <Row k="THE WEEK" v={waiverScheduleLine(waiverDaysOf(rr.waiver_days), rr.waiver_clear_min_effective ?? null, rr.waiver_game_hold_dow ?? null)} />
@@ -362,6 +366,16 @@ export function RosterRulesView({ leagueId }: { leagueId: string }) {
         : rr.trade_review === 'league' ? `the league votes — ${rr.trade_veto_votes ?? 2} veto${(rr.trade_veto_votes ?? 2) === 1 ? '' : 'es'} in ${rr.trade_review_hours ?? 24}h kill a trade`
         : 'process immediately'} />
       <Row k="AN OFFER STANDS" v={rr.trade_offer_days ? `${rr.trade_offer_days} day${rr.trade_offer_days === 1 ? '' : 's'}` : 'until it is answered'} />
+
+      {/* THIS LEAGUE (v0.462.0). The id had nowhere a member could reach it:
+          it showed only inside the commissioner's public-API URL, published
+          only. It is what you point a spreadsheet or a Discord bot at. */}
+      <Head>THIS LEAGUE</Head>
+      <CopyIdRow leagueId={leagueId} />
+      <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(12) }}>
+        What the public read API is addressed by. Not a secret and not a password — it identifies the league, it does
+        not unlock it, and the API serves only what this page already shows.
+      </Mono>
       {rr.waiver_mode === 'faab' && <Row k="FAAB TRADING" v={rr.faab_trading === false ? 'off' : 'on'} />}
     </ScrollView>
   );
@@ -480,6 +494,7 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
   }, [leagueId, commish]);
 
   const link = inv ? inviteLink(inv.code) : '';
+  const [copied, setCopied] = useState(false);   // v0.462.0: the invite link's copy button
   const message = inv ? inviteMessage({ league: inv.name, code: inv.code, seatsOpen: inv.seats, game: inv.game }) : '';
   // The look-first link (v0.358.1) — classic leagues only; the bare site
   // already opens on drip, so a drip commissioner would be handing out the
@@ -517,13 +532,18 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
       </Mono>
       {!inv && !err && <Loading />}
       {!!inv && (<>
-        {/* The link is SELECTABLE rather than sitting behind a copy button:
-            copying is one of the things the OS share sheet already offers, and
-            a clipboard here would mean pulling in a native module for a button
-            the platform ships. Long-press to select, or ⇪ SEND for the sheet. */}
+        {/* The link stays SELECTABLE — long-press still works, and ⇪ SEND
+            opens the sheet — but it has a copy button now too. That note used
+            to say a clipboard here "would mean pulling in a native module for
+            a button the platform ships"; expo-clipboard came in for the league
+            id (v0.462.0), so the argument against it is gone. */}
         <View style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, backgroundColor: t.sh, paddingHorizontal: 10, paddingVertical: 9 }}>
           <Text selectable numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.text, lineHeight: 14 }}>{link}</Text>
         </View>
+        <Pressable onPress={() => { tap(); void copyText(link).then((ok) => { setCopied(ok); if (ok) setTimeout(() => setCopied(false), 1600); }); }}
+          style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+          <Mono size={9} tone={copied ? 'you' : 'dim'} weight="700">{copied ? '✓ COPIED' : '⧉ COPY LINK'}</Mono>
+        </Pressable>
         <Pressable onPress={send} style={{ borderWidth: 1, borderColor: t.you, borderRadius: 6, paddingVertical: 11, alignItems: 'center', marginTop: 8 }}>
           <Mono size={10} weight="700" tone="you">⇪ SEND THE INVITE</Mono>
         </Pressable>

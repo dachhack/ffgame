@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.462.0 — the league id, copyable
+
+Founder: "Where in the app and web UI can I find and easy copy the league Id?"
+Nowhere, was the honest answer, and on the phone it was worse than nowhere.
+
+It appeared in exactly one place: inside the public API URL on the
+commissioner's own panel, as plain text, and only while the league was
+PUBLISHED. The league route is `#/live` with no id in it — deliberately, so a
+reload lands on the leagues list — so the address bar did not have it either.
+A member had no way to reach it at all. Anyone pointing a spreadsheet, a
+Discord bot or a rankings site at their league was reading 36 hex characters
+off a screen.
+
+Now: a LEAGUE ID line with click-to-copy on the commissioner's panel — NOT
+gated on the publish switch, because a private league has an id too and a
+commissioner about to publish needs it before the URL exists — and the same
+line in the rulebook, where any member can reach it, under THIS LEAGUE, with a
+sentence saying what it is: not a secret and not a password. It identifies the
+league, it does not unlock it, and the API serves only what that page already
+shows.
+
+THE APP HAS A CLIPBOARD NOW. `expo-clipboard` is a dependency. It had been
+declined on purpose — LeagueInfo's invite link is `selectable` with a note
+saying a copy button "would mean pulling in a native module for a button the
+platform ships" — and for a LINK that was right: the OS share sheet copies,
+and ⇪ SEND was already there. A league id is not a link. It is 36 characters
+that nothing shares and nothing opens. Since the module is in, the invite link
+gets its copy button too, and both copy paths stay `selectable` so a long
+press still works when a clipboard is refused.
+
+AND A LINE THAT WAS LYING. Both rulebooks printed "HOLD AFTER A DROP: 3 days"
+straight off the stored number. Hold days count RUNS (0338), so a rolling
+league's stored 3 is a flat 24 hours — the rulebook described a league that
+does something else, which is the exact mismatch 0337 and 0338 exist to stop.
+It reads core's `holdLine` now, the same sentence the settings sheet prints,
+and its unset default is 1 rather than the 2 it had invented.
+
 ### v0.461.0 — the commissioner reposts a week
 
 Founder: "Maybe have an option for commish to regen any weekly report and post
