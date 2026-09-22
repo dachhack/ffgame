@@ -1,0 +1,6 @@
+{
+  "mode": "diff",
+  "week": 1,
+  "flips": true,
+  "why": "READ-ONLY. Founder: \"list which matchups would flip.\" For every drip matchup, stored final + (fixed-rule re-resolve − old-rule re-resolve): what the K/DST correction would do to the result, and whether the winner changes. `exact` where the old rule reproduces the stored final; `estimate` where a side had no sealed lineup and is re-fielded from today's roster."
+}

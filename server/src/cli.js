@@ -297,7 +297,7 @@ async function main() {
       const { db } = await import('./supabase.js');
       const pos = args.filter((a) => !a.startsWith('--'));
       const week = Number(pos[0]);
-      if (!Number.isFinite(week)) { console.error('usage: diff-week <week> [season] [--league=<uuid>] [--seat=<n>]'); break; }
+      if (!Number.isFinite(week)) { console.error('usage: diff-week <week> [season] [--league=<uuid>] [--seat=<n>] [--legacy-teamunits] [--flips]'); break; }
       const season = pos[1] ?? config.season;
       const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
       const seat = Number((args.find((a) => a.startsWith('--seat=')) ?? '').slice(7)) || null;
@@ -330,6 +330,51 @@ async function main() {
       await injectWeekPlays(week);
       const ctx = await prefetchTick(rows, week);
       console.log(`diff-week: week ${week} (${season}) — ${rows.length} matchup(s), READ-ONLY\n`);
+      // --flips (v0.481.0): WHICH DRIP RESULTS WOULD CHANGE HANDS if the
+      // K/DST correction were applied. Founder: "list which matchups would
+      // flip". Each drip matchup resolves twice, dry — once under the old
+      // WR rule the week was actually scored with, once under the fixed one —
+      // and the correction is the DIFFERENCE, laid on top of the stored final:
+      //   corrected = stored + (fixed − old)
+      // Not the fixed re-resolve itself: a side with no sealed rows is fielded
+      // from its roster as it stands NOW, so its re-resolve is a different
+      // team from the one that played (Gridiron 9v10). Where old == stored the
+      // two agree to the point and the line says `exact`; where they do not,
+      // the delta is still the K/DST effect but measured on today's auto-fill,
+      // and the line says `estimate`. Classic is skipped: its weeks were
+      // re-stamped with the fix already.
+      if (args.includes('--flips')) {
+        const f2 = (n) => Number(n).toFixed(2);
+        const who = (h, a) => (Math.abs(h - a) < 0.005 ? 'tie' : h > a ? 'home' : 'away');
+        let n = 0, flips = 0, moved = 0;
+        for (const m of rows.sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id)) {
+          if (!isDrip.get(m.league_id)) continue;
+          const tag = `${m.league_id.slice(0, 8)} wk${m.week} ${m.home_roster_id}v${m.away_roster_id}`;
+          if (m.status === 'scheduled' || m.home_final == null || m.away_final == null) { console.log(`${tag}  not final — skipped`); continue; }
+          // A 0–0 final is a week the league did not play (Kickoff, drafted
+          // after week 1) — there is no score for a correction to adjust.
+          if (Number(m.home_final) === 0 && Number(m.away_final) === 0) { console.log(`${tag}  0–0, not played — skipped`); continue; }
+          let old, fixed;
+          try {
+            old = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true, legacyTeamUnits: true });
+            fixed = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true });
+          } catch (e) { console.log(`${tag}  FAILED — ${e.message}`); continue; }
+          n++;
+          const sh = Number(m.home_final), sa = Number(m.away_final);
+          const exact = Math.abs(old.home - sh) < 0.15 && Math.abs(old.away - sa) < 0.15;
+          const ch = Math.round((sh + fixed.home - old.home) * 100) / 100;
+          const ca = Math.round((sa + fixed.away - old.away) * 100) / 100;
+          const was = who(sh, sa), now = who(ch, ca);
+          const changed = Math.abs(ch - sh) > 0.005 || Math.abs(ca - sa) > 0.005;
+          if (changed) moved++;
+          if (was !== now) flips++;
+          console.log(`${tag}  stored ${f2(sh)}–${f2(sa)} (${was})  →  corrected ${f2(ch)}–${f2(ca)} (${now})`
+            + `  ${exact ? 'exact' : 'estimate'}`
+            + (was !== now ? '   ⇄ FLIPS' : changed ? '' : '   (no change)'));
+        }
+        console.log(`\ndiff-week --flips: ${n} drip matchup(s) at week ${week} — ${moved} would move, ${flips} would change winner. Nothing was written.`);
+        break;
+      }
       for (const m of rows.sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id)) {
         // A SCHEDULED matchup has no sealed rows to score (resolve.js gathers
         // them only once the status has moved on), so a re-resolve falls to
@@ -568,6 +613,7 @@ async function main() {
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.seat) argv.push(`--seat=${req.seat}`);
         if (req.legacy_teamunits === true) argv.push('--legacy-teamunits');
+        if (req.flips === true) argv.push('--flips');
       } else if (req.mode === 'restamp') {
         if (req.confirm !== 'RESTAMP') throw new Error('restamp needs "confirm": "RESTAMP" — this rewrites stored results');
         argv.push('restamp', need('week'));

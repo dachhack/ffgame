@@ -1,0 +1,21 @@
+{
+  "note": "WEEK 1, TOTALS ONLY, for Turf Warriors seat 6 v 11 — the one Turf matchup the drip totals-only reset (ops/run/003) left out. Its final (80.3–81.6) was never wrong: the v0.480.0 read-only diff reproduces it exactly. But its per-slot rows were written by the week-1 re-stamp (run #3), not by the live week, and the rebuilt Turf report drew its MVP line from them alone. This gives it the same single 'ALL' totals row as the other five Turf matchups and rebuilds the Turf week-1 report, which then carries no MVP line because no matchup has an honest breakdown to take one from. Rewriting the final is a no-op.",
+  "season": "2026",
+  "week": 1,
+  "leagues": [
+    {
+      "league_id_prefix": "29bb2fba",
+      "name": "Turf Warriors",
+      "matchups": [
+        {
+          "home_roster_id": 6,
+          "away_roster_id": 11,
+          "home": 80.3,
+          "away": 81.6
+        }
+      ],
+      "reset_state": true,
+      "rebuild_report": true
+    }
+  ]
+}
