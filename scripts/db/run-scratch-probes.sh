@@ -209,3 +209,4 @@ $RUN -f scripts/db/waiver-schedule-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-S
 $RUN -f scripts/db/report-regen-probes.sql | grep -E "PROBE FAIL|ALL REPORT-REGEN PROBES" || { echo "REPORT-REGEN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/trend-board-probes.sql | grep -E "PROBE FAIL|ALL TREND-BOARD PROBES" || { echo "TREND-BOARD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/league-tab-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-TAB PROBES" || { echo "LEAGUE-TAB PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/waiver-run-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-RUN PROBES" || { echo "WAIVER-RUN PROBES FAILED"; exit 1; }

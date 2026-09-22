@@ -57,3 +57,64 @@ export function txnBody(body: string, look: TxnLook): string {
   const b = String(body ?? '');
   return b.startsWith(look.icon) ? b.slice(look.icon.length).trimStart() : b;
 }
+
+/** ── THE WAIVER RUN, IN FULL (0344) ─────────────────────────────────────────
+ *
+ *  Founder: "can we have the daily waiver report be clickable in chat and open
+ *  a detailed report?"
+ *
+ *  0290's chat line is `left(btrim(body), 500)`. A quiet Tuesday fits; a busy
+ *  FAAB Wednesday does not, and it truncates at exactly the wrong end — the
+ *  losers and their reasons are last in the sentence, and "why didn't I get
+ *  him" is the only question a waiver report exists to answer.
+ *
+ *  So the line gains a door, and this is what is behind it. */
+export interface WaiverRunEntry {
+  roster_id: number;
+  team: string | null;
+  add_slug: string;
+  add: string | null;
+  drop_slug: string | null;
+  drop: string | null;
+  /** FAAB leagues only; null elsewhere, where a 0 would read as "bid nothing"
+   *  rather than "this league does not bid". */
+  bid: number | null;
+  /** Losers only: the reason `process_waivers` recorded. */
+  why?: string;
+  /** A linked group (0316) — these claims stand or fall together, and a loser
+   *  whose partner failed is not the same story as one who was outbid. */
+  group_id?: string | null;
+  group_seq?: number | null;
+  group_max?: number | null;
+}
+export interface WaiverRunReport {
+  ok?: boolean;
+  error?: string;
+  /** False when no run can be found at that instant — an empty sheet would
+   *  otherwise read as a run in which nobody won anything. */
+  found?: boolean;
+  at?: string | null;
+  mode?: 'rolling' | 'standings' | 'faab';
+  won?: WaiverRunEntry[];
+  lost?: WaiverRunEntry[];
+  /** The wire AFTER the run: who is up next, and what is left to spend. */
+  order?: { roster_id: number; team: string | null; priority: number | null; faab: number | null }[];
+}
+
+/** Is this chat line a waiver run that can be opened? A txn bubble of any
+ *  other kind has nothing behind it, and drawing a tap target on one would
+ *  promise a sheet that never arrives. */
+export function isWaiverRun(txn: TxnPayload | null | undefined): boolean {
+  return txn?.kind === 'waiver';
+}
+
+/** One line for the sheet, so both hosts phrase a claim the same way. The chat
+ *  BODY is the server's sentence and stays as it is; this is the per-row
+ *  version, which has room to say what the sentence had to compress. */
+export function waiverRunLine(e: WaiverRunEntry, mode?: string): string {
+  const who = e.team || `Roster ${e.roster_id}`;
+  const bid = mode === 'faab' && e.bid != null ? ` $${e.bid}` : '';
+  const drop = e.drop ? ` · dropped ${e.drop}` : '';
+  const why = e.why ? ` — ${e.why}` : '';
+  return `${who}${bid} · ${e.add ?? e.add_slug}${drop}${why}`;
+}

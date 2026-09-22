@@ -187,8 +187,24 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
           </div>
         )}
       </div>
-      {/* THE ROOM BAR — phones only. Fixed, icon over label, active on an
-          accent pill; ducks with the scroll and returns on a pull up. */}
+      {/* THE ROOM BAR — phones only. Fixed, active on an accent pill; ducks
+          with the scroll and returns on a pull up.
+
+          WORDS, NOT PICTURES (v0.468.0). The app's rail dropped its icons in
+          v0.465.0 — founder: "ditch the navigation icons at the bottom in
+          favor of just large text" — and this one, which is a different
+          component in a different codebase, kept them: "Still have the icons
+          in the rail on web."
+
+          The argument is the same one and it is worth repeating here rather
+          than pointing at the app: a 22px glyph over an 8.5px caption is an
+          icon EXPLAINED BY a label, two marks saying one thing, and the label
+          is the one being read. So the glyph goes and the label takes the
+          whole rail at 13.5px — the size it could never be as a footnote to a
+          picture. The rail's own height is unchanged.
+
+          The unread dot stays. It is the one mark here that says something no
+          word on the rail does, and it rides the label now. */}
       {!wide && (
         <nav style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60, display: 'flex',
@@ -201,16 +217,15 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
             return (
               <button key={c.id} onClick={() => go(c.id)}
                 aria-current={on ? 'page' : undefined}
-                style={{ flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>
+                style={{ flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <span style={{
-                  position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  borderRadius: 9, padding: '3px 12px',
+                  position: 'relative', display: 'flex', alignItems: 'center',
+                  borderRadius: 9, padding: '7px 10px',
                   background: on ? 'color-mix(in srgb, var(--you) 16%, transparent)' : 'transparent',
                 }}>
-                  <img src={railIcon(c.icon, light)} alt="" style={{ width: 22, height: 22, opacity: on ? 1 : 0.62 }} />
-                  <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: on ? 'var(--you)' : 'var(--dim)' }}>{c.label}</span>
+                  <span className="mono" style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '0.02em', whiteSpace: 'nowrap', color: on ? 'var(--you)' : 'var(--dim)' }}>{c.label}</span>
                   {c.id === 'chat' && unread.n > 0 && (
-                    <span aria-hidden style={{ position: 'absolute', top: 0, right: 4, minWidth: 8, height: 8, borderRadius: 999, background: 'var(--opp)' }} />
+                    <span aria-hidden style={{ position: 'absolute', top: 2, right: -1, minWidth: 8, height: 8, borderRadius: 999, background: 'var(--opp)' }} />
                   )}
                 </span>
               </button>

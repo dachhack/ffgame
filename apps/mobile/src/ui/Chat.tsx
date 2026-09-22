@@ -9,12 +9,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   chatPost, chatMessages, chatDelete, chatMembers, dmSend, dmThreads, dmMessages,
-  chatPostPoll, pollCast, chatPin, chatReact, leagueReport,
+  chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
 import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
-import { txnLook, txnBody } from '@drip/core/data/txnChat';
+import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } from '@drip/core/data/txnChat';
 import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { Ev, track } from '@drip/core/analytics';
@@ -22,7 +22,7 @@ import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardInset } from './keyboard';
-import { useTheme, alpha, MONO } from '../theme.native';
+import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
 
@@ -109,14 +109,97 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // The sentence is composed server-side (0290) so push and chat read alike;
 // this is the rail and the colour, from the same shared look as the web bubble
 // so the two hosts cannot end up calling a trade different things.
-function TxnLine({ m }: { m: ChatMessage }) {
+function TxnLine({ m, onOpenRun }: { m: ChatMessage; onOpenRun?: () => void }) {
   const t = useTheme();
   const look = txnLook(m.txn);
   const rail = look.tone === 'you' ? t.you : look.tone === 'warn' ? t.warn : t.bd;
+  // 0344: a WAIVER RUN has a report behind it; every other txn kind is the
+  // whole story already, and a button on one would promise a sheet that never
+  // arrives.
+  const openable = isWaiverRun(m.txn) && !!onOpenRun;
+  const n = (m.txn?.won ?? 0) + (m.txn?.lost ?? 0);
   return (
     <View style={{ borderLeftWidth: 3, borderLeftColor: rail, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: alpha(t.dim, 7), borderRadius: 4 }}>
       <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{look.icon}  {txnBody(m.body, look)}</Text>
+      {openable && (
+        <Pressable onPress={() => { tap(); onOpenRun?.(); }} hitSlop={6}
+          style={{ alignSelf: 'flex-start', marginTop: 5, marginBottom: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: t.bg }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.warn }}>
+            📋 OPEN THE RUN{n > 0 ? ` · ${n} CLAIM${n === 1 ? '' : 'S'}` : ''} ▸
+          </Text>
+        </Pressable>
+      )}
     </View>
+  );
+}
+
+// ── THE RUN, IN FULL (0344) — the web twin ──────────────────────────────────
+// Founder: "can we have the daily waiver report be clickable in chat and open
+// a detailed report?" The chat line is capped at 500 characters server-side
+// and truncates at exactly the wrong end: the losers and their reasons are
+// last in the sentence, and "why didn't I get him" is the only question a
+// waiver report exists to answer. This is that end, uncut.
+export function WaiverRunSheet({ leagueId, at, onClose }: { leagueId: string; at: string; onClose: () => void }) {
+  const t = useTheme();
+  const [rep, setRep] = useState<WaiverRunReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    leagueWaiverRun(leagueId, at)
+      .then((r) => { if (!live) return; if (r?.ok) setRep(r); else setErr(friendlyError(r?.error ?? 'could not load the run')); })
+      .catch((e) => { if (live) setErr(friendlyError(e)); });
+    return () => { live = false; };
+  }, [leagueId, at]);
+  const mode = rep?.mode;
+  const when = rep?.at ? new Date(rep.at) : new Date(at);
+  const Group = ({ title, rows, tone }: { title: string; rows: WaiverRunReport['won']; tone: 'you' | 'dim' }) => (
+    <View style={{ marginTop: 12 }}>
+      <Mono size={9} tone="faint" weight="700" track={0.12}>{title}</Mono>
+      {(rows ?? []).length === 0
+        ? <Mono size={10} tone="faint" style={{ marginTop: 3 }}>none</Mono>
+        : (rows ?? []).map((e, i) => (
+          <View key={`${e.roster_id}-${e.add_slug}-${i}`}
+            style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 5, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd }}>
+            <Mono size={10.5} tone={tone} style={{ flex: 1, lineHeight: fs(15) }}>{waiverRunLine(e, mode)}</Mono>
+            {/* A LINKED GROUP (0316) stands or falls together — a loser whose
+                partner failed is not the same story as one who was outbid. */}
+            {!!e.group_id && <Mono size={8.5} tone="dim" weight="700">⛓ {e.group_seq ?? '?'}/{e.group_max ?? '?'}</Mono>}
+          </View>
+        ))}
+    </View>
+  );
+  return (
+    <Overlay visible title="📋 The waiver run"
+      subtitle={`${when.toLocaleString()}${mode ? ` · ${mode === 'faab' ? 'FAAB' : mode === 'standings' ? 'REVERSE STANDINGS' : 'ROLLING PRIORITY'}` : ''}`}
+      onClose={onClose}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+        {!!err && <Mono size={10} tone="opp" style={{ lineHeight: 15 }}>{err}</Mono>}
+        {!rep && !err && <Mono size={10} tone="faint">Loading…</Mono>}
+        {rep?.found === false && (
+          <Mono size={10} tone="faint" style={{ lineHeight: 16 }}>
+            No claims are on file for this run any more. The line in chat is still what happened; the detail behind it has been cleaned up.
+          </Mono>
+        )}
+        {rep?.found && (<>
+          <Group title="WON" rows={rep.won} tone="you" />
+          <Group title="DID NOT GO THROUGH" rows={rep.lost} tone="dim" />
+          {!!rep.order?.length && (
+            <View style={{ marginTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+              <Mono size={9} tone="faint" weight="700" track={0.12}>
+                THE WIRE NOW{mode === 'faab' ? ' · BUDGET LEFT' : ' · PRIORITY'}
+              </Mono>
+              {rep.order.map((o, i) => (
+                <View key={o.roster_id} style={{ flexDirection: 'row', gap: 8, paddingVertical: 3, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd }}>
+                  <Mono size={10} tone="faint" style={{ width: 18 }}>{o.priority ?? i + 1}</Mono>
+                  <Mono size={10.5} style={{ flex: 1 }}>{o.team ?? `Roster ${o.roster_id}`}</Mono>
+                  {o.faab != null && <Mono size={10.5} tone="dim" weight="700">${o.faab}</Mono>}
+                </View>
+              ))}
+            </View>
+          )}
+        </>)}
+      </ScrollView>
+    </Overlay>
   );
 }
 
@@ -417,6 +500,10 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [busy, setBusy] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [reportWeek, setReportWeek] = useState<number | null>(null);
+  // 0344: the waiver run whose sheet is up, keyed by the message's own
+  // timestamp — which IS the run's, since the claims and the chat line share
+  // a transaction.
+  const [runAt, setRunAt] = useState<string | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const sticky = useStickyScroll();
   // The message list shrinks by the keyboard's height when it opens, which
@@ -507,7 +594,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
             </View>
             {m.kind === 'txn'
-              ? <TxnLine m={m} />
+              ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
               : m.kind === 'poll'
@@ -523,6 +610,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       </ScrollView>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
+      {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
         {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}

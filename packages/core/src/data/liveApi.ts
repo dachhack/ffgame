@@ -14,6 +14,7 @@ import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
+import type { WaiverRunReport } from './txnChat';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -900,6 +901,16 @@ export interface ScoreboardGame {
 export const leagueWeekScoreboard = (leagueId: string, week?: number | null) =>
   rpc<{ ok?: boolean; error?: string; week?: number | null; weeks?: number[]; games?: ScoreboardGame[] }>(
     'league_week_scoreboard', { p_league_id: leagueId, p_week: week ?? null });
+
+/** THE WAIVER RUN BEHIND A CHAT LINE (0344). `at` is the message's own
+ *  `created_at`: the run stamps every claim `processed_at = now()` and posts
+ *  its chat line in the SAME transaction, so the two are the same instant.
+ *  Matched on the nearest run within five seconds rather than on equality —
+ *  the timestamps agree in the database but travel out as text and back as a
+ *  parameter, and a rule that needs that round trip to be byte-exact is one
+ *  that fails silently into an empty sheet. */
+export const leagueWaiverRun = (leagueId: string, at: string) =>
+  rpc<WaiverRunReport>('league_waiver_run', { p_league_id: leagueId, p_at: at });
 
 export interface MatchupResult { id: string; week: number; home_roster_id: number; away_roster_id: number; home_final: number | null; away_final: number | null; status: string; }
 /** Every matchup in a league (all weeks) with its final totals — the scoreboard/

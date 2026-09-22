@@ -18,6 +18,70 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.469.0 — the waiver run opens up
+
+Founder: "can we have the daily waiver report be clickable in chat and open a
+detailed report?"
+
+0290 posts one line when the run settles, and that line is
+`left(btrim(body), 500)`. A quiet Tuesday fits. A busy FAAB Wednesday does
+not — and it truncates at exactly the wrong end, because the losers and their
+reasons are LAST in the sentence, and "why didn't I get him" is the only
+question a waiver report exists to answer.
+
+So the line stays a line and gains a door. Behind it: every claim the run
+settled, who won what and for how much, who did not and WHY — outbid, roster
+full, no budget, a linked group that could not complete — and the wire as it
+stands afterwards, priority or budget left per seat. A linked group (0316) is
+marked, because a loser whose partner failed is not the same story as one who
+was outbid.
+
+NO CHANGE TO `process_waivers`, deliberately. The run's instant was already
+recoverable: every claim it settles is stamped `processed_at = now()`, the
+chat line is inserted in the SAME transaction, and `now()` is fixed for a
+transaction — so the message's `created_at` IS the run's `processed_at`.
+Re-emitting a function that big to add a key it does not need would have been
+the riskier change, not the safer one.
+
+MATCHED ON THE NEAREST INSTANT, not on equality. The two timestamps agree to
+the microsecond in the database, but they travel out through PostgREST as text
+and back as a parameter, and a rule that depends on that round trip being
+byte-exact is one that fails silently into an empty sheet. ±5 seconds, nearest
+wins; two runs of one league cannot be five seconds apart.
+
+A bid is a number in a FAAB league and NULL everywhere else, where a 0 would
+read as "bid nothing" rather than "this league has no bids". An instant with
+no run answers `found: false` rather than drawing an empty sheet that looks
+like a run nobody won.
+
+Only the waiver kind gets the button. Every other txn line is the whole story
+already, and a button on one would promise a sheet that never arrives.
+
+Migration 0344, waiver-run-probes.sql with five groups, both chats.
+
+### v0.468.0 — words on the web's rail too
+
+Founder, on the web build: "Still have the icons in the rail on web."
+
+He is right, and v0.465.0's note explains exactly why it missed: the app's
+bottom rail is `LeagueBottomBar` in apps/mobile/App.tsx, and the web's is
+`LeagueStrip` in src/app — different components, different codebases, one
+idea. Changing one and saying "the rail" was changed is the kind of claim
+that is true of the file and false of the product.
+
+The argument is the same one, and it is written out here rather than pointed
+at: a 22px glyph over an 8.5px caption is an icon EXPLAINED BY a label, two
+marks saying one thing, and the label is the one being read. The glyph goes
+and the label takes the whole rail at 13.5px — the size it could never be as
+a footnote to a picture. The rail's own height is unchanged. The unread dot
+stays, because it says something no word on the rail does, and rides the
+label now.
+
+NOT TOUCHED: the WIDE chip row under the league name, which carries a 15px
+icon beside each label. It is a chip row rather than a rail, the icon sits
+beside the word rather than over it, and nobody has complained about it —
+so it is a separate call, and the founder's to make.
+
 ### v0.467.0 — the gear outlives the tab
 
 Founder: "Need a way to go back to the settings. The settings chip only works
