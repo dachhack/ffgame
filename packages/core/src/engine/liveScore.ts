@@ -15,7 +15,7 @@
 /** A resolver slot row as `matchup_state.slot_scores` stores it. Structural on
  *  purpose: `liveApi`'s SlotScoreRow satisfies it, without dragging the
  *  Supabase client into the engine. */
-export interface SrvSlotScore { side: 'home' | 'away'; slot?: string | number | null; slug?: string | null; score: number }
+export interface SrvSlotScore { side: 'home' | 'away'; slot?: string | number | null; slug?: string | null; metric?: string | null; score: number }
 /** A resolver window row as `matchup_state` stores it. */
 export interface SrvWindowScore { game_window: string; home_score: number; away_score: number; slot_scores?: SrvSlotScore[] | null }
 
@@ -93,6 +93,63 @@ export function srvSlotRow<T extends SrvSlotScore>(rows: T[] | null | undefined,
   const bySlot = rows.find((r) => r.side === side && r.slot != null && String(r.slot) === String(slot));
   if (bySlot) return bySlot;
   return slug ? rows.find((r) => r.side === side && r.slug === slug) : undefined;
+}
+
+/** ── THE LINEUP THE RESOLVER COMPOSED (v0.456.1) ────────────────────────────
+ *
+ *  A seat's cards come from `sealed_pick`. Not every fielded lineup is in
+ *  there: `sideLineup` (server/src/resolve.js) BUILDS a side at resolve time —
+ *  and scores it — for an AI-controlled seat with no sealed rows, for a seat
+ *  that is unenrolled or unclaimed, and for any seat that set nothing under a
+ *  policy other than 'empty'. `materializeAutoLineups` writes most of those
+ *  back at lock, but declines to for an AI seat on purpose: its persona draw
+ *  and its bought buffs live in `aiSide`, and storing rows would strip them.
+ *
+ *  So those players exist in exactly one place a client can read: the
+ *  resolver's own per-slot rows, where `slug` and `metric` ride beside the
+ *  score. A board that reads only sealed_pick draws NO PLAYER against a live
+ *  number — the founder's "my opponent has zero players slotted against me",
+ *  with 104.2 on the same screen.
+ *
+ *  NOTHING LEAKS BY READING THEM. The worker publishes a window's slot rows
+ *  only once that window has kicked off (resolve.js `started(win)`), which is
+ *  the same moment the sealed_select RLS opens the opponent's real rows (0262).
+ *  A pick still sealed is not in here to find.
+ *
+ *  GHOST AND BYE ARE NOT PICKS. Two power-ups publish a slot row for a player
+ *  nobody fielded — a Ghost's flat 14, a Bye Steal's projection. They score,
+ *  and they are not a lineup, so they never become a card.
+ *
+ *  The web has read them since v0.387.5; this is that rule, lifted out so the
+ *  app shares it and `scripts/check-slotcard.mjs` can pin it. */
+export const PHANTOM_SLOT_METRICS = new Set(['ghost', 'bye']);
+
+/** One pick as the resolver published it, shaped like the sealed row it stands
+ *  in for. */
+export interface SrvPick { game_window: string; roster_slot: string; player_slug: string; metric_id: string | null }
+
+/** A side's picks from one window's published rows, for the slots `covered`
+ *  does not already hold a readable sealed row for. Empty when the window has
+ *  published nothing (it has not kicked), which is also when a missing card is
+ *  honestly still a secret. */
+export function srvSidePicks(
+  win: string,
+  rows: SrvSlotScore[] | null | undefined,
+  side: 'home' | 'away',
+  covered: readonly (string | number)[] = [],
+): SrvPick[] {
+  if (!rows?.length) return [];
+  const have = new Set(covered.map(String));
+  const out: SrvPick[] = [];
+  for (const r of rows) {
+    if (r.side !== side || !r.slug || r.slot == null || String(r.slot) === '') continue;
+    if (r.metric && PHANTOM_SLOT_METRICS.has(r.metric)) continue;
+    const slot = String(r.slot);
+    if (have.has(slot)) continue;   // a sealed row always wins its own slot
+    have.add(slot);                 // …and the first published row wins a duplicate
+    out.push({ game_window: win, roster_slot: slot, player_slug: r.slug, metric_id: r.metric ?? null });
+  }
+  return out;
 }
 
 /** The board headline: the sum of the resolver's per-window rows, read as

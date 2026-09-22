@@ -15,7 +15,7 @@ import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView,
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
-import { srvBoardTotals } from '@drip/core/engine/liveScore';
+import { srvBoardTotals, srvSidePicks } from '@drip/core/engine/liveScore';
 import { setSlugMetaOverrides, liveTeamFor } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
 import { powerupById, POWERUPS, isAmplifier, ampCapacity, buffAppliesToSpot, twinGeneralKeys, powerupAvailability, type ShopWindow } from '@drip/core/data/powerups';
@@ -436,6 +436,33 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  entry in the regular-season list and would render as its raw id. */
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
 
+  // THE LINEUP THE RESOLVER COMPOSED (v0.456.1; core's srvSidePicks has the
+  // why). An AI-CONTROLLED seat writes no sealed_pick rows at all — the worker
+  // builds its lineup at resolve time — so the opponent's players live only in
+  // the published slot rows. Merged ONCE, here, because every reader below
+  // wants them: the duel cards, the field under each duel, the ▦ FIELDS list
+  // and the play log. Everything downstream splits sides on `app_user_id`, and
+  // '' is nobody's account, so a composed row reads as the opponent's — which
+  // is the only side that can ever need one (a seat always reads its own).
+  //
+  // The worker publishes a window's slot rows only once it has kicked, the same
+  // moment the RLS opens the opponent's real rows, so this cannot show a pick
+  // that is still sealed.
+  const revealedAll = useMemo(() => {
+    if (!scores.length) return revealed;
+    const theirSide = youAreHome ? 'away' : 'home';
+    const out = [...revealed];
+    for (const st of scores) {
+      const covered = revealed
+        .filter((p) => p.app_user_id !== userId && p.game_window === st.game_window)
+        .map((p) => p.roster_slot);
+      for (const r of srvSidePicks(st.game_window, st.slot_scores, theirSide, covered)) {
+        out.push({ ...r, app_user_id: '', locked: true });
+      }
+    }
+    return out;
+  }, [revealed, scores, youAreHome, userId]);
+
   // The live duel log (0193): one engine run per open — resolveLiveMatchup
   // over the revealed picks with events captured. The plays are already in
   // the engine (refreshLive's setLivePlays); computing lazily on logFor means
@@ -444,13 +471,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     if (!logFor || !matchup) return null;
     try {
       return liveDuelEvents(
-        revealed.filter((p) => p.app_user_id === userId),
-        revealed.filter((p) => p.app_user_id !== userId),
+        revealedAll.filter((p) => p.app_user_id === userId),
+        revealedAll.filter((p) => p.app_user_id !== userId),
         matchup.week, youAreHome, [...buffs], oppBuffs,
       );
     } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logFor, revealed, matchup?.week, youAreHome, buffs, oppBuffs]);
+  }, [logFor, revealedAll, matchup?.week, youAreHome, buffs, oppBuffs]);
 
   /** The field(s) under one duel: the real NFL games the two players are in.
    *
@@ -470,8 +497,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     // map, which React cannot see. Reading the row count here is what ties the
     // fields to a re-render when the feeds land.
     if (!gameFeeds.length) return null;
-    const mySlug = revealed.find((p) => p.app_user_id === userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
-    const theirSlug = revealed.find((p) => p.app_user_id !== userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
+    const mySlug = revealedAll.find((p) => p.app_user_id === userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
+    const theirSlug = revealedAll.find((p) => p.app_user_id !== userId && p.game_window === win && p.roster_slot === slot)?.player_slug;
     const teams = [...new Set([mySlug, theirSlug]
       .map((sl) => (sl ? liveTeamFor(sl, duelPool[sl]?.team, LIVE_SEASON) : ''))
       .filter(Boolean))];
@@ -552,7 +579,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     if (!gameFeeds.length) return [] as { key: string; away: string; home: string; team: string; win: string; mine: boolean }[];
     const entries: { team: string; side: 'you'; clock: number }[] = [];
     const slugs = new Set<string>();
-    for (const rp of revealed) if (rp.player_slug) slugs.add(rp.player_slug);
+    for (const rp of revealedAll) if (rp.player_slug) slugs.add(rp.player_slug);
     for (const v of Object.values(picks)) if (v.player_slug) slugs.add(v.player_slug);
     for (const sl of slugs) {
       const tm = liveTeamFor(sl, duelPool[sl]?.team || pool.find((p) => p.slug === sl)?.team, LIVE_SEASON);
@@ -1194,8 +1221,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // that case deliberately falls through to the setup card below: a
         // window you left empty still has to appear, reading LOCKED, rather
         // than vanishing off the board.
-        const myLive = revealed.filter((p) => p.app_user_id === userId && p.game_window === w.id);
-        const theirLive = revealed.filter((p) => p.app_user_id !== userId && p.game_window === w.id);
+        const myLive = revealedAll.filter((p) => p.app_user_id === userId && p.game_window === w.id);
+        const theirLive = revealedAll.filter((p) => p.app_user_id !== userId && p.game_window === w.id);
         const winScores = scores.filter((s) => s.game_window === w.id);
         if (wLocked && (myLive.length || theirLive.length || winScores.length)) {
           return (
@@ -1223,7 +1250,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               // slot. No full statline on the app (founder's call) — just the
               // number the fielded metric is actually counting.
               liveExtras={(win, slot, who) => {
-                const rp = revealed.find((p) => p.game_window === win && p.roster_slot === slot
+                const rp = revealedAll.find((p) => p.game_window === win && p.roster_slot === slot
                   && (who === 'you' ? p.app_user_id === userId : p.app_user_id !== userId));
                 const pl = rp?.player_slug ? duelPool[rp.player_slug] : null;
                 if (!rp || !pl) return null;
@@ -1436,7 +1463,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
             // up. Listing a sealed opponent lineup here would leak exactly what
             // the sealed card exists to hide.
             if (winLocked(win)) {
-              for (const rp of revealed.filter((p) => p.app_user_id !== userId && p.game_window === win)) {
+              for (const rp of revealedAll.filter((p) => p.app_user_id !== userId && p.game_window === win)) {
                 const slug = rp.player_slug;
                 if (!slug) continue;
                 const row = oppPool.find((p) => p.slug === slug);

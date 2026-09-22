@@ -151,6 +151,21 @@ export function shortName(full: string): string {
   return `${parts[0][0]}. ${last}`;
 }
 
+/** A readable name for a slug nothing can look up (v0.456.1).
+ *
+ *  The boards name a player from the two rosters' pools. A lineup the RESOLVER
+ *  composed can name one who has since been dropped, and the alternative to
+ *  title-casing his slug is printing NO PLAYER over a live score. Hyphenated
+ *  first names (amon-ra) come out spaced, which is a small wrongness in a
+ *  fallback, where the big wrongness is a card that denies he exists. */
+export function nameFromSlug(slug: string): string {
+  if (!slug) return '';
+  const base = slug.endsWith('-dst') ? slug.slice(0, -4) : slug.endsWith('-k') ? slug.slice(0, -2) : slug;
+  const words = base.split('-').filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  const name = words.join(' ');
+  return slug.endsWith('-dst') ? `${name.toUpperCase()} D/ST` : name;
+}
+
 /** Deterministic 32-bit hash for seeding the per-week simulation. */
 export function hashStr(s: string): number {
   let h = 2166136261;

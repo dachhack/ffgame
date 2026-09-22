@@ -10,10 +10,11 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowPhase } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
-import { srvSlotRow } from '@drip/core/engine/liveScore';
+import { srvSlotRow, srvSidePicks } from '@drip/core/engine/liveScore';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById, isMetricSet } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
+import { nameFromSlug } from '@drip/core/data/players';
 import { teamFor } from '@drip/core/data/playerTeam';
 import { openPlayerCard } from './PlayerCardSheet';
 import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core/data/liveApi';
@@ -162,22 +163,34 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  (an opponent who hasn't revealed still occupies their half) and the
    *  explicit NO PLAYER seat after — a back that says "flips at kickoff" on a
    *  window that kicked hours ago is a promise the board can't keep. */
-  const liveFor = (p: RevealedPick | undefined, side: 'home' | 'away', who: 'you' | 'their', win: string, slot: string, idx: number) => {
+  const liveFor = (p: RevealedPick | undefined, side: 'home' | 'away', who: 'you' | 'their', win: string, slot: string, idx: number, sideAll: RevealedPick[]) => {
     const player = p?.player_slug ? pool[p.player_slug] : null;
     // THE WHOLE WINDOW, NOT THE SLOT (v0.434.0): an empty seat is a backup
     // for the facing player only when its side left the WHOLE window empty;
     // a seat left empty in a window that side partly filled just plays the
     // facing player unopposed. The card's line says which.
-    const sideRows = (who === 'their' ? theirs : mine).filter((q) => q.game_window === win && q.player_slug);
-    if (!p || !player) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed={!winKicked(win)} unopposed={winKicked(win)} windowEmpty={sideRows.length === 0} idx={idx} />;
-    const metric = metricById(player.pos as Pos, p.metric_id);
+    //
+    // `sideAll` is the side's sealed rows PLUS the ones the resolver composed
+    // (v0.456.1), so a window this side did field is never called empty just
+    // because the app could not read it.
+    const sideRows = sideAll.filter((q) => q.game_window === win && q.player_slug);
+    if (!p || !p.player_slug) return <LiveCard key={`${win}-${slot}-${who}`} side={who} sealed={!winKicked(win)} unopposed={winKicked(win)} windowEmpty={sideRows.length === 0} idx={idx} />;
+    // THE POOL MAY NOT KNOW HIM (v0.456.1). `pool` is the two rosters; a pick
+    // the resolver composed can name a player since dropped. The slug is
+    // enough to draw the card — better a name off the slug than NO PLAYER
+    // printed over a score the bar is already counting.
+    const cSlug = p.player_slug;
+    const cName = player?.full ?? nameFromSlug(cSlug);
+    const cPos = player?.pos ?? slugMeta(cSlug).pos;
+    const cTeam = player ? slugTeam(player) : (teamFor(cSlug) || slugMeta(cSlug).team);
+    const metric = metricById(cPos as Pos, p.metric_id);
     const row = rowOf(p, side);
     const ex = liveExtras?.(win, p.roster_slot, who);
     return (
       <LiveCard
         key={`${win}-${slot}-${who}`}
         side={who} idx={idx}
-        slug={player.slug} name={player.full} pos={player.pos} team={slugTeam(player)}
+        slug={cSlug} name={cName} pos={cPos} team={cTeam}
         // `||`, not `??` (v0.331.0): an empty-string metric_id sails past
         // `??` and then fails the render test, so the chip vanished with no
         // null anywhere in sight. isMetricSet is the shared predicate.
@@ -188,7 +201,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         gameLabel={ex?.gameLabel}
         stat={ex?.stat}
         coin={ex?.coin}
-        onPress={() => openPlayerCard({ slug: player.slug, name: player.full, pos: player.pos, team: slugTeam(player), week, userId })}
+        onPress={() => openPlayerCard({ slug: cSlug, name: cName, pos: cPos, team: cTeam, week, userId })}
       />
     );
   };
@@ -216,13 +229,24 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   return (
     <>
       {wins.map((win) => {
-        const my = mine.filter((p) => p.game_window === win);
-        const th = theirs.filter((p) => p.game_window === win);
+        const mySealed = mine.filter((p) => p.game_window === win);
+        const thSealed = theirs.filter((p) => p.game_window === win);
         const s = scores.find((x) => x.game_window === win);
-        if (!my.length && !th.length && !s) return null;
+        if (!mySealed.length && !thSealed.length && !s) return null;
+        // THE LINEUP THE RESOLVER COMPOSED (v0.456.1). An AI-controlled seat
+        // writes no sealed_pick rows at all — the worker builds its lineup at
+        // resolve — so this half of the board read NO PLAYER while the window
+        // bar counted its points. `srvSidePicks` reads those players out of the
+        // published slot rows, which the worker writes only for a window that
+        // has kicked, so nothing sealed can leak through it. A sealed row
+        // always wins its own slot; the web has done this since v0.387.5.
+        const my = [...mySealed,
+          ...srvSidePicks(win, s?.slot_scores, youSide, mySealed.map((p) => p.roster_slot)).map(asPick)];
+        const th = [...thSealed,
+          ...srvSidePicks(win, s?.slot_scores, oppSide, thSealed.map((p) => p.roster_slot)).map(asPick)];
         const you = s ? round1(Number(youAreHome ? s.home_score : s.away_score)) : null;
         const them = s ? round1(Number(youAreHome ? s.away_score : s.home_score)) : null;
-        const sealedBacks = !th.length && status !== 'final' ? Math.max(my.length, 1) : 0;
+        const sealedBacks = !thSealed.length && status !== 'final' ? Math.max(mySealed.length, 1) : 0;
         const hasRows = !!s?.slot_scores?.length;
         // A kicked window is never "SEALED" — from kickoff the reveal has, by
         // rule, happened; an empty opposing half from here on means UNOPPOSED.
@@ -236,7 +260,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         const st = winStatus?.(win)
           ?? (status === 'final' ? 'FINAL'
             : winKicked(win) || hasRows ? '● LIVE'
-            : th.length ? '🔒 LOCKED'
+            : thSealed.length ? '🔒 LOCKED'
             : 'SEALED');
         // PAIR BY ROSTER SLOT, NOT ARRAY POSITION (v0.344.2). `revealed`
         // arrives in query-row order, and zipping my[i] against th[i] crossed
@@ -362,8 +386,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                         entirely, which is how the moment gets lost. */}
                     {hasRows ? (
                       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                        {liveFor(mp, youSide, 'you', win, slot, i)}
-                        {liveFor(tp, oppSide, 'their', win, slot, i)}
+                        {liveFor(mp, youSide, 'you', win, slot, i, my)}
+                        {liveFor(tp, oppSide, 'their', win, slot, i, th)}
                       </View>
                     ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
@@ -404,6 +428,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
 /** The entry's own team first (rookies aren't in the baked 2025 table), then
  *  the LIVE layer (fresh directory bake + worker overrides, 0142), then the
  *  2025 bake as the last resort. */
+/** A composed pick, shaped like the sealed row it stands in for. '' is nobody's
+ *  account: every caller splits sides on `app_user_id`, and the only side that
+ *  can need one of these is the opponent's (a seat always reads its own). */
+const asPick = (r: { game_window: string; roster_slot: string; player_slug: string; metric_id: string | null }): RevealedPick =>
+  ({ ...r, app_user_id: '', locked: true });
+
 function slugTeam(p: PoolPlayer): string {
   return p.team || teamFor(p.slug) || slugMeta(p.slug).team;
 }
