@@ -25,8 +25,10 @@
 // Run: npx tsx scripts/check-live-score.mjs
 import {
   encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvSlotRow, srvBoardTotals, shownScore, fgBoostAt,
+  srvSidePicks,
 } from '../packages/core/src/engine/liveScore.ts';
 import { liveCardFlags } from '../packages/core/src/engine/matchup.ts';
+import { nameFromSlug } from '../packages/core/src/data/players.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -199,6 +201,72 @@ const rows = [
   ok(liveCardFlags(ev, 'you', 9999, { over: true }).hot === false, 'the same events read NOT hot once the game is over');
   const nuke = [...ev, { clock: 200, side: 'their', play: 'BUF: TD', delta: 6, youBank: 0, theirBank: 6.4, sig: true, effect: { type: 'nuke', text: '✕ NUKED' } }];
   ok(liveCardFlags(nuke, 'you', 9999, { over: true }).nuked === true, 'over: the scorch stays — a nuke is history, a streak is not');
+}
+
+// ── THE LINEUP THE RESOLVER COMPOSED (v0.456.1) ─────────────────────────────
+// Founder, week 2, looking at 104.2 on the same screen: "my opponent has zero
+// players slotted against me. What gives?" An AI-controlled seat writes no
+// sealed_pick rows — the worker builds its lineup at resolve — so the board,
+// which reads sealed_pick, drew NO PLAYER against a live number for a whole
+// week. The players are in the published slot rows all along, and this pins the
+// four things that make reading them either right or a leak.
+{
+  const win = 'tnf';
+  const published = [
+    { side: 'home', slot: '1', slug: 'amon-ra-st-brown', metric: 'rec_yds', score: 13.8 },
+    { side: 'away', slot: '1', slug: 'james-cook', metric: 'rush_yds', score: 32.9 },
+    { side: 'away', slot: '2', slug: 'khalil-shakir', metric: 'rec', score: 6.0 },
+  ];
+  const theirs = srvSidePicks(win, published, 'away');
+  ok(theirs.length === 2, `both of the opponent's scored slots become picks (got ${theirs.length})`);
+  ok(theirs[0].game_window === win && theirs[0].roster_slot === '1'
+     && theirs[0].player_slug === 'james-cook' && theirs[0].metric_id === 'rush_yds',
+    'and each carries the window, the slot, the player AND the metric — a card needs all four');
+  ok(srvSidePicks(win, published, 'home').every((p) => p.player_slug === 'amon-ra-st-brown'),
+    'the side filter holds: asking for home never returns the away lineup');
+
+  // A SEALED ROW ALWAYS WINS ITS OWN SLOT. The resolver's row is a stand-in for
+  // what could not be read, never an override of what could — a manager's own
+  // pick, and its metric, is the one the card must show.
+  const covered = srvSidePicks(win, published, 'away', ['1']);
+  ok(covered.length === 1 && covered[0].roster_slot === '2',
+    'a slot with a readable sealed row is skipped; the rest still fill in');
+  ok(srvSidePicks(win, published, 'away', ['1', '2']).length === 0,
+    'a fully readable side composes nothing at all');
+
+  // GHOSTS AND BYES ARE NOT PICKS. Both power-ups publish a scoring row for a
+  // player nobody fielded; drawing one as a card invents a lineup.
+  const phantoms = [
+    { side: 'away', slot: '3', slug: 'ghost-wr', metric: 'ghost', score: 14 },
+    { side: 'away', slot: '4', slug: 'some-back', metric: 'bye', score: 9.2 },
+    { side: 'away', slot: '5', slug: 'real-te', metric: 'rec_yds', score: 7.1 },
+  ];
+  const kept = srvSidePicks(win, phantoms, 'away');
+  ok(kept.length === 1 && kept[0].player_slug === 'real-te',
+    'a Ghost and a Bye Steal score but never become cards; the real pick beside them does');
+
+  // NOTHING PUBLISHED, NOTHING COMPOSED — which is exactly the state of a
+  // window that has not kicked, where a missing card is still honestly secret.
+  ok(srvSidePicks(win, [], 'away').length === 0 && srvSidePicks(win, null, 'away').length === 0
+     && srvSidePicks(win, undefined, 'away').length === 0,
+    'no rows (a window before kickoff) composes nothing — the seal is not read around');
+  ok(srvSidePicks(win, [{ side: 'away', slot: null, slug: 'x', score: 1 },
+                        { side: 'away', slot: '', slug: 'y', score: 1 },
+                        { side: 'away', slot: '6', slug: null, score: 1 }], 'away').length === 0,
+    'a row with no slot or no player is not a pick either');
+  // AND A NAME FOR A SLUG THE POOL CANNOT PLACE — the card is drawn either way.
+  ok(nameFromSlug('james-cook') === 'James Cook' && nameFromSlug('amon-ra-st-brown') === 'Amon Ra St Brown',
+    'a composed pick the pool has dropped still gets a legible name off its slug');
+  ok(nameFromSlug('buf-dst') === 'BUF D/ST' && nameFromSlug('harrison-butker-k') === 'Harrison Butker'
+     && nameFromSlug('') === '',
+    'a defense and a kicker keep their conventions; an empty slug stays empty');
+
+  const dupes = [
+    { side: 'away', slot: '1', slug: 'first-in', metric: 'rec_yds', score: 3 },
+    { side: 'away', slot: '1', slug: 'second-in', metric: 'rec_yds', score: 9 },
+  ];
+  ok(srvSidePicks(win, dupes, 'away').length === 1 && srvSidePicks(win, dupes, 'away')[0].player_slug === 'first-in',
+    'two rows on one slot yield ONE card, not a duplicate key');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL LIVE-SCORE ASSERTIONS PASSED');

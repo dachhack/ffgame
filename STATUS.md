@@ -18,6 +18,57 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.456.1 — the opponent the board could not see
+
+Founder, week 2, over a screenshot with 104.2 on it: "my opponent has zero
+players slotted against me. What gives?" Every window read NO PLAYER —
+"window left empty, the facing player subs as a backup" — while the WINDOW
+BATTLE bar credited that side 32.9 and 30.6.
+
+Both cannot be true, and the board's own arithmetic says which is: had the
+window really been empty, the best-ball rule would have made the facing
+player a backup and scored him ZERO in place. He posted 13.8 in his own
+slot. The engine paired him against somebody.
+
+THAT SOMEBODY IS AN AI-CONTROLLED SEAT, and it writes no `sealed_pick` rows
+at all. `sideLineup` builds such a side at resolve time and scores it;
+`materializeAutoLineups` declines to write it back on purpose, because the
+seat's persona draw and its bought buffs live in `aiSide` and storing rows
+would strip them. The cards read `sealed_pick`. So the lineup existed, in
+the resolver, and nowhere a client could look.
+
+Except one place: the resolver publishes `slug` AND `metric` beside every
+slot score, and it publishes a window's rows only once that window has
+KICKED — the same moment the sealed_select RLS opens the opponent's real
+rows. Reading them leaks nothing that is still sealed. THE WEB HAS READ THEM
+SINCE v0.387.5, for this exact complaint ("the card read NOT MATCHED UP").
+The app never got the rule.
+
+So the rule moved to core as `srvSidePicks` and both hosts share it:
+  · a sealed row always wins its own slot — a composed pick stands in for
+    what could not be read, it never overrides what could;
+  · a Ghost's flat 14 and a Bye Steal's projection publish slot rows for
+    players nobody fielded, and are never drawn as cards;
+  · nothing published means nothing composed, which is exactly the state of
+    a window before kickoff.
+
+On the app it is merged ONCE, in the board's `revealedAll`, because four
+readers wanted it and the bug wore four faces: the duel cards, the FIELD
+under each duel, the ▦ FIELDS list, and the per-duel play log. A window
+with a composed pick is no longer called empty, so the facing player stops
+being told he is a backup. And a pick the pool cannot name — the resolver
+can name a player since dropped — is drawn off its slug (`nameFromSlug`)
+rather than as NO PLAYER over a live score.
+
+`scripts/db/opponent-picks-invisible-diag.sql` is the read-only companion:
+it decides between this and the three other ways a lineup can score while
+staying unreadable (rows never locked, a `window_revealed` clock moved by a
+stray future-season slate row, orphaned rows under two authors that
+`assignSealedRows` drops). It prints no emails and no account ids, because
+that workflow logs in public.
+
+Twelve new assertions in `check:livescore`. No migration, no worker change.
+
 ### v0.456.0 — the round, audited
 
 Six audits of v0.437.0–v0.455.1 ran in parallel — web wiring, mobile parity,

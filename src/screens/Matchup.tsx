@@ -21,7 +21,7 @@ import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
   windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
-import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt } from '@drip/core/engine/liveScore';
+import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt, srvSidePicks } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
 import { openPlayerCard } from '../app/playerCard';
 import { ScoreDiffPanel } from '../app/scoreDiff';
@@ -640,12 +640,14 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   const srvOppKey = useMemo(() => {
     if (!liveCtx || srvHomeRoster == null) return '';
     const theirs = liveCtx.rosterId === srvHomeRoster ? 'away' : 'home';
+    // The rule itself moved to core as `srvSidePicks` (v0.456.1) — the app's
+    // board had never had it, so the same AI opponent that reads correctly
+    // here read "NO PLAYER, window left empty" on the phone all week while
+    // its points counted on the bar. One rule, both hosts.
     const rows: string[] = [];
     for (const st of srvStates) {
-      for (const r of st.slot_scores ?? []) {
-        if (r.side !== theirs || !r.slug || r.slot == null || r.slot === '') continue;
-        if (r.metric === 'ghost' || r.metric === 'bye') continue; // power-up phantoms, not a pick
-        rows.push(`${st.game_window}#${r.slot}|${r.slug}|${r.metric ?? ''}`);
+      for (const r of srvSidePicks(st.game_window, st.slot_scores, theirs)) {
+        rows.push(`${r.game_window}#${r.roster_slot}|${r.player_slug}|${r.metric_id ?? ''}`);
       }
     }
     return rows.sort().join('\n');
