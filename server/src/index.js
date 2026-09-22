@@ -19,6 +19,7 @@ import { syncDepthChart } from './poll/depthChart.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
 import { sweepAdp } from './poll/adp.js';
+import { sweepTrending } from './poll/trending.js';
 import { sweepProjections } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepDynasty } from './poll/dynasty.js';
@@ -677,6 +678,14 @@ async function tick() {
     const a = await sweepAdp(config.season, playerIndex, log);
     if (a.rows) log(`adp board: ${a.rows} rows, ${a.placed}/${a.priced} placed on a slug (source stamp ${a.fetchedAt ?? 'none'})`);
   } catch (e) { log('adp sweep error', e.message); }
+
+  // WHAT THE WIRE IS DOING (0340). Hourly, gated inside the sweep: Sleeper's
+  // own trending adds and drops, the one signal neither ESPN nor the bakes
+  // carry — a level says who is owned, this says who is being grabbed now.
+  try {
+    const tr = await sweepTrending(playerIndex, log);
+    if (tr.rows) log(`trending: ${tr.rows} rows, ${tr.placed}/${tr.seen} placed on a slug, ${tr.pruned} pruned (${tr.hours}h window)`);
+  } catch (e) { log('trending sweep error', e.message); }
 
   // THE WEEK'S NUMBER AND THE NEWS (0329). Hourly, gated inside the sweep:
   // a projection an hour stale is still this week's, and a headline an hour

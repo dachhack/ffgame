@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.463.0 — what the wire is doing
+
+Founder, holding Sleeper's PLAYERS tab up next to ours: "We can pull trending
+from sleeper. That's not one espn or stathead has."
+
+Right on both halves. Sleeper publishes, anonymously and with no key, how many
+of its leagues added or dropped each player over a rolling window
+(`/v1/players/nfl/trending/add?lookback_hours=24`). It is millions of real
+managers acting rather than anybody's model, and it is the one signal neither
+of our other sources carries: ESPN gives ownership PERCENT, which is a level,
+and StatHead's bakes are weekly. A level says who is owned. This says who is
+being grabbed this morning, which is what a waiver wire is actually for.
+
+This is the data layer — the board, the worker and the door. The screen that
+draws it is next.
+
+TWO ENDPOINTS, ONE ROW. Adds and drops are served separately and a player can
+be high in both. That is churn, not a signal, and a column showing only adds
+would read it as a recommendation — so they are merged and the board carries
+both directions.
+
+A DEFENSE TRENDS UNDER ITS TEAM. Sleeper keys team defenses by abbreviation
+('TB'), not a numeric id; ours are `<team>-dst`, so those place themselves
+without troubling the player index. Everything else is id-first like every
+other board: a row the index cannot place is stored with a null slug rather
+than guessed at by name, and a later pull can claim it — while a pull that has
+no slug for a row never erases one already learned.
+
+FRESHNESS IS A DAY, and a stale board serves an empty map rather than
+yesterday's "trending now" — the whole claim of the column is that it is
+current — while still reporting `trend_as_of`, so a screen can explain the
+empty column instead of just showing nothing.
+
+Migration 0340 (`trend_board`, `trend_board_is_fresh`, `upsert_trend_board`
+service-role only, `league_market` re-emitted with `trend`), a worker poll on
+the hour (`server/src/poll/trending.js`), eleven assertions in
+`check:trending` and six probe groups in `trend-board-probes.sql` — including
+that a signed-in member cannot write what the whole platform reads as a market
+signal, and that every key `league_market` served before 0340 still is.
+
 ### v0.462.0 — the league id, copyable
 
 Founder: "Where in the app and web UI can I find and easy copy the league Id?"

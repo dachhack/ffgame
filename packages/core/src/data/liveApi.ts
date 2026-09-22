@@ -2101,7 +2101,16 @@ export const leagueMarket = (leagueId: string) =>
          *  catalog to it, so it must not be shown as a projection directly. */
         dyn_format?: '1qb' | 'sf' | null; dyn_as_of?: string | null;
         dyn?: Record<string, number>; picks?: Record<string, number>;
-        proj_as_of?: string | null; proj?: Record<string, number> }>(
+        proj_as_of?: string | null; proj?: Record<string, number>;
+        /** 0340: WHAT THE WIRE IS DOING — Sleeper's own trending adds and
+         *  drops over `trend_hours`, per slug. `a` is how many leagues added
+         *  him, `d` how many dropped him; a player high in BOTH is churn
+         *  rather than a signal, which is why the drops ride along rather
+         *  than being thrown away. Empty when the board is over a day old:
+         *  a stale "trending now" is worse than no column, so the caller
+         *  hides it rather than painting yesterday as today. */
+        trend_as_of?: string | null; trend_hours?: number | null;
+        trend?: Record<string, { a: number; d: number }> }>(
     'league_market', { p_league_id: leagueId });
 /** Read the league's roster + transaction rules (any member; the commish editors' loader). */
 export const rosterRules = (leagueId: string) =>
