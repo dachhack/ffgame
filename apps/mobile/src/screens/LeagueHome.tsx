@@ -6,7 +6,7 @@
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
+import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, defaultOpenWeek, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -122,8 +122,27 @@ export function LeagueHome(props: {
     leagueGameMode(leagueId).then((g) => setClassic(g?.mode === 'classic')).catch(() => {});
   }, [leagueId]);
 
-  // THE SCOREBOARD, on a poll. `week` null asks for the one being played; once
-  // a person pages, their choice sticks rather than being pulled back.
+  // WHICH WEEK THIS OPENS ON (v0.465.2). Founder: "We should move default
+  // views to the next week on Weds AM" — and the rule for that already
+  // existed, in core's `openWeekFrom` (v0.401.0): a week stays open until the
+  // first Wednesday 00:00 ET after its games are done. Tuesday is when you
+  // read what just happened; Wednesday is when you start caring about what is
+  // next.
+  //
+  // This page was not asking it. It let the RPC default, and the RPC's own
+  // rule was "the lowest week not final" — which rolls the moment the last
+  // matchup STAMPS, on Tuesday morning. So LEAGUE showed week 3 while MATCHUP,
+  // which does ask, still showed week 2. One league, two answers, on the same
+  // phone. It asks now, so the two tabs cannot disagree.
+  useEffect(() => {
+    let alive = true;
+    if (week != null) return;
+    defaultOpenWeek(leagueId).then((w) => { if (alive && w != null) setWeek(w); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, week]);
+
+  // THE SCOREBOARD, on a poll. Once a person pages, their choice sticks rather
+  // than being pulled back by the next tick.
   useEffect(() => {
     let alive = true;
     const load = () => leagueWeekScoreboard(leagueId, week).then((r) => {

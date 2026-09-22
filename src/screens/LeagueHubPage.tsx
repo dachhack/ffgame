@@ -42,6 +42,17 @@ function HubMatchups({ leagueId, myRoster, wide }: { leagueId: string; myRoster:
   const [sb, setSb] = useState<Awaited<ReturnType<typeof leagueWeekScoreboard>> | null>(null);
   const [week, setWeek] = useState<number | null>(null);
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
+  // WHICH WEEK THIS OPENS ON (v0.465.2) — core's `openWeekFrom`, the same rule
+  // the matchup board uses, so the two cannot disagree about what week it is.
+  // A week stays open until the first Wednesday 00:00 ET after its games are
+  // done; letting the RPC default rolled it the moment the last matchup
+  // STAMPED, on Tuesday morning.
+  useEffect(() => {
+    let alive = true;
+    if (week != null) return;
+    defaultOpenWeek(leagueId).then((w) => { if (alive && w != null) setWeek(w); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, week]);
   useEffect(() => {
     let alive = true;
     const load = () => leagueWeekScoreboard(leagueId, week).then((r) => {

@@ -18,6 +18,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.465.2 — the board turns on Wednesday
+
+Founder, with the LEAGUE tab on week 3 and the MATCHUP tab on week 2 at the
+same moment, on the same phone: "We should move default views to the next
+week on Weds AM."
+
+The rule he is asking for already existed and was already right. Core's
+`openWeekFrom` (v0.401.0) says a week stays open until the first WEDNESDAY
+00:00 ET after its games are done — Tuesday is when you read what just
+happened, Wednesday is when you start caring about what is next. The matchup
+board has asked it since then.
+
+0341's league page did not. It let `league_week_scoreboard` default, and that
+default was "the lowest week that is not final" — which rolls the instant the
+last matchup STAMPS, on Tuesday morning. So one league gave two answers about
+what week it is, three inches apart.
+
+BOTH CLIENTS NOW ASK CORE, which is the fix that matters: one rule, asked
+once, and the two tabs cannot drift apart again.
+
+Migration 0342 fixes the FALLBACK — what the function says when nobody passes
+a week — because a default that is quietly wrong is a trap for the next
+caller, and there will be one. `nfl_week_closes_at` is a deliberate second
+copy of a calendar rule, so it is pinned: lt7 asserts Tuesday 23:59 and
+Wednesday 00:01 answer differently, and that a week finishing ON a Wednesday
+morning runs to the NEXT one rather than closing during its own run. A change
+to one copy that is not made to the other fails the harness.
+
+A HARNESS LESSON, worth the note: this suite passed alone and failed in the
+full run. Other suites seed `nfl_slate` rows for high week numbers in the same
+season, and 0342 measures a week against its slate — so a stray row turned one
+of these "no slate" cases into a measured one. The suite isolates the weeks it
+uses now.
+
 ### v0.465.1 — the sheet that would not open
 
 Founder, an hour after v0.465.0 shipped: "League settings/info chip needs to
