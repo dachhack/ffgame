@@ -29,7 +29,7 @@ import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/
 import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/leagueScoring.ts';
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
-import { setLeagueProjScoring } from '../../packages/core/src/engine/projScoring.ts';
+import { setLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
@@ -576,7 +576,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // scopedAdjustFor now, so this install is no longer optional — without it
     // the module-global would still hold the PREVIOUS matchup's league and
     // this one would be scored under someone else's bonuses.
-    setLeagueScoring(scoringKnobs);
+    setLeagueScoring(scoringKnobs, matchup.league_id);
     setLeagueFlags(matchup.league_id, flagRows);
     // GOLF (v0.303.1) rides the same synchronous install, and is set
     // UNCONDITIONALLY: it is a module global, so skipping the false case would
@@ -587,16 +587,28 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // now ranks by the league's own scoring. Installed with exactly the catalog
     // handed to the resolve below, so the lineup this seat is given and the
     // points it is then scored on come from one rulebook.
-    setLeagueProjScoring({ ...(gameMode.scoring ?? {}), ppr: gameMode.ppr });
+    // ONE RULE FOR WHICH `ppr` WINS (v0.473.0). `ppr` has two homes —
+    // settings_json.ppr (surfaced as gameMode.ppr) and the scoring catalog,
+    // where 0209 gave it a box — and `leagueCatalogOf` is the function that
+    // decides between them: the catalog copy exists only if a commissioner set
+    // it deliberately, so it goes last and wins. The clients have always asked
+    // it. This spread put `ppr` last instead, so the SERVER preferred
+    // settings_json and the board preferred the catalog, and any league whose
+    // two copies disagree was scored one way and displayed another.
+    //
+    // Both sides ask the same function now. Where the two copies agree — every
+    // league saved since 0209, because both writers write both — nothing moves.
+    const catalog = leagueCatalogOf(gameMode);
+    setLeagueProjScoring(catalog);
     const r = resolveClassicMatchup(
       sideOf(homePicks, matchup.home_roster_id), sideOf(awayPicks, matchup.away_roster_id),
-      matchup.week, { ...(gameMode.scoring ?? {}), ppr: gameMode.ppr }, slotDefs);
+      matchup.week, catalog, slotDefs);
     for (const s of r.states) states.push({ game_window: s.window, home_score: s.home, away_score: s.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;
   } else if (homePicks && awayPicks) {
     // ── Both sides have a lineup (human, AI, or auto-backup): real H2H engine ──
-    setLeagueScoring(scoringKnobs); // sync install — no await between here and the resolve
+    setLeagueScoring(scoringKnobs, matchup.league_id); // sync install — no await between here and the resolve
     setLeagueFlags(matchup.league_id, flagRows); // flags ride the same isolation rule
     const r = resolveLiveMatchup(homePicks.map(toLive), awayPicks.map(toLive), matchup.week,
       { homeBuffs: new Set(homeBuffs), awayBuffs: new Set(awayBuffs),
@@ -618,7 +630,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       }
       return { byWin, total: round(total) };
     };
-    setLeagueScoring(scoringKnobs); // sync install — solo() resolves synchronously below
+    setLeagueScoring(scoringKnobs, matchup.league_id); // sync install — solo() resolves synchronously below
     setLeagueFlags(matchup.league_id, flagRows);
     const h = solo(homePicks, 'home'), a = solo(awayPicks, 'away');
     const wins = new Set([...Object.keys(h.byWin), ...Object.keys(a.byWin)]);

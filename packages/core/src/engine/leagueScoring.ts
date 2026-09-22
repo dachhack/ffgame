@@ -82,14 +82,38 @@ export const SCORING_BOUNDS = {
 } as const;
 
 let active: LeagueScoring = DEFAULT_SCORING;
+let activeLeague: string | null = null;
 
-/** Install a league's adjustments (null/undefined/partial → defaults fill). */
-export function setLeagueScoring(s?: Partial<LeagueScoring> | null): void {
+/** Install a league's adjustments (null/undefined/partial → defaults fill).
+ *
+ *  `leagueId` SAYS WHOSE RULES THESE ARE (v0.473.0), and it is not decoration.
+ *  `active` is a module global with no owner, so a client that opened league A
+ *  and then league B scored B's players under A's tdBonus, ydMult, toPenalty
+ *  and scoped bonuses for as long as B's fetch took — a wrong number on screen,
+ *  settling to a different one a moment later, with nothing to say it had. The
+ *  flag cache beside this one has always carried its league (`flagsLeague`);
+ *  this one never did, and the asymmetry is the whole bug.
+ *
+ *  The server was already safe by discipline — it re-installs synchronously
+ *  before every single resolve, with a comment explaining why — but discipline
+ *  that only one of two callers knows about is not a property of the code.
+ *  Now a caller can ASK whose rules are loaded and decline to score until the
+ *  answer is its own. */
+export function setLeagueScoring(s?: Partial<LeagueScoring> | null, leagueId?: string | null): void {
   active = { ...DEFAULT_SCORING, scoped: [], ...(s ?? {}) };
+  activeLeague = leagueId ?? null;
 }
 
 export function clearLeagueScoring(): void {
   active = DEFAULT_SCORING;
+  activeLeague = null;
+}
+
+/** Which league the installed adjustments speak for (null = defaults, or an
+ *  install that did not say). A render path that scores a named league should
+ *  check this before believing a number. */
+export function scoringLeague(): string | null {
+  return activeLeague;
 }
 
 /** The adjustments in force — engine internals read this at resolve time. */
