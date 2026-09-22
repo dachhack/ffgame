@@ -1,0 +1,6 @@
+{
+  "mode": "diff",
+  "week": 2,
+  "flips": true,
+  "why": "READ-ONLY. 007 skipped all twelve drip week-2 matchups as not final without saying why; the skip line now prints each one's status and stored finals, so we can tell a week that has not been stamped from one that is still open."
+}
