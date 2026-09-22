@@ -10,6 +10,7 @@
 //   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
 //   node src/cli.js seed-preseason-pool [lg] [wk=101]  deep slate-team pick pool for a preseason week
 //   node src/cli.js restamp <wk> [season] [--league=<uuid>]  ⚠ re-resolve a CLOSED week's stored finals
+//   node src/cli.js diff-week <wk> [season] [--league=<uuid>] [--seat=<n>]  read-only per-slot scoring
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
@@ -218,6 +219,81 @@ async function main() {
       }
       break;
     }
+    case 'diff-week': {
+      // 🔎 WHERE THE BOARD AND THE SERVER DISAGREE (v0.472.0). READ-ONLY.
+      //   node src/cli.js diff-week <week> [season] [--league=<uuid>] [--seat=<n>]
+      //
+      // Founder, over the week-2 report and the live board: the two do not
+      // agree, and the re-stamp proved the stored finals are exactly what the
+      // resolver produces — which settles that the server agrees with ITSELF
+      // and settles nothing about which of the two is right about the
+      // football. Re-running a scorer reproduces its own bugs faithfully.
+      //
+      // So this prints the server's answer the way the board prints its own:
+      // one line per starter, the slot it filled, and what the engine paid it.
+      // Hold it beside the phone and the disagreement stops being a mystery —
+      // either a player is missing from one side, or one of them is worth a
+      // different number, and both are things you can see rather than argue
+      // about.
+      //
+      // IT WRITES NOTHING (resolveMatchup's dryRun returns before every write),
+      // so it is safe on live data mid-season, which is the only time anybody
+      // wants it.
+      const { resolveMatchup, injectWeekPlays, prefetchTick } = await import('./resolve.js');
+      const { db } = await import('./supabase.js');
+      const pos = args.filter((a) => !a.startsWith('--'));
+      const week = Number(pos[0]);
+      if (!Number.isFinite(week)) { console.error('usage: diff-week <week> [season] [--league=<uuid>] [--seat=<n>]'); break; }
+      const season = pos[1] ?? config.season;
+      const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const seat = Number((args.find((a) => a.startsWith('--seat=')) ?? '').slice(7)) || null;
+      let q = db().from('matchup').select('*').eq('week', week);
+      if (leagueId) q = q.eq('league_id', leagueId);
+      const { data: all } = await q;
+      let rows = all ?? [];
+      // A season filter needs the league, since `matchup` carries no season.
+      const { data: lgs } = await db().from('league').select('id, season')
+        .in('id', [...new Set(rows.map((m) => m.league_id))]);
+      const seasonOf = new Map((lgs ?? []).map((l) => [l.id, String(l.season)]));
+      rows = rows.filter((m) => seasonOf.get(m.league_id) === String(season));
+      if (seat) rows = rows.filter((m) => m.home_roster_id === seat || m.away_roster_id === seat);
+      if (!rows.length) { console.log(`diff-week: no matchups at week ${week} (${season})${leagueId ? ' in that league' : ''}${seat ? ` for seat ${seat}` : ''}`); break; }
+      const idx = await buildPlayerIndex();
+      await injectWeekPlays(week);
+      const ctx = await prefetchTick(rows, week);
+      console.log(`diff-week: week ${week} (${season}) — ${rows.length} matchup(s), READ-ONLY\n`);
+      for (const m of rows.sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id)) {
+        let r;
+        try { r = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true }); }
+        catch (e) { console.log(`  ${m.league_id.slice(0, 8)} seat ${m.home_roster_id} vs ${m.away_roster_id}: FAILED — ${e.message}\n`); continue; }
+        // Seats and player slugs only — this runs in a PUBLIC workflow log, so
+        // no team names and nothing that identifies an account.
+        const f = (n) => (n == null ? '   —  ' : Number(n).toFixed(2).padStart(7));
+        console.log(`── ${m.league_id.slice(0, 8)} · week ${m.week} · seat ${m.home_roster_id} vs seat ${m.away_roster_id} (${m.status})`);
+        console.log(`   stored final   home ${f(m.home_final)}   away ${f(m.away_final)}`);
+        console.log(`   resolves to    home ${f(r.home)}   away ${f(r.away)}`
+          + (Math.abs((m.home_final ?? r.home) - r.home) > 0.005 || Math.abs((m.away_final ?? r.away) - r.away) > 0.005 ? '   ⚠ DIFFERS' : ''));
+        for (const side of ['home', 'away']) {
+          const mine = (r.slots ?? []).filter((x) => x.side === side)
+            .sort((a, b) => String(a.slot).localeCompare(String(b.slot)));
+          const sum = mine.reduce((n, x) => n + (Number(x.score) || 0), 0);
+          console.log(`   ${side.toUpperCase()} — ${mine.length} slot(s), summing ${sum.toFixed(2)}`);
+          for (const x of mine) {
+            console.log(`      ${String(x.slot).padEnd(8)} ${String(x.slug ?? '—').padEnd(26)}`
+              + `${x.metric ? String(x.metric).padEnd(8) : '        '}${f(x.score)}`);
+          }
+          // THE LINE THAT ANSWERS THE QUESTION. A side whose slots do not add
+          // up to its own total is being paid for something that is not a
+          // slot, and that gap is the whole investigation.
+          if (Math.abs(sum - (side === 'home' ? r.home : r.away)) > 0.005) {
+            console.log(`      ⚠ slots sum ${sum.toFixed(2)} but the side totals ${(side === 'home' ? r.home : r.away).toFixed(2)}`);
+          }
+        }
+        console.log('');
+      }
+      console.log('diff-week: nothing was written.');
+      break;
+    }
     case 'seed-test-users': {
       const rows = await seedTestUsers(args[0], args[1]);
       console.log(`seeded ${rows.length} test users (log in with these on the live site):`);
@@ -225,7 +301,7 @@ async function main() {
       break;
     }
     default:
-      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json] | restamp <wk> [season] [--league=<uuid>]');
+      console.log('commands: leagues | sync <leagueId> | sync-week <leagueId> <wk> | poll-once | inj-once | simulate <lg> <wk> [--dry] | pods <wk> [season] | audit [wk] [season] [--json] | restamp <wk> [season] [--league=<uuid>] | diff-week <wk> [season] [--league=<uuid>] [--seat=<n>]');
   }
 }
 

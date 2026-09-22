@@ -18,6 +18,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.472.0 — show me the slots
+
+The re-stamp ran, re-resolved all sixteen of week 2's matchups across every
+league against the complete week — 6,867 plays, 1,118 players, sixteen game
+feeds — and moved NOTHING. Every stored final came back identical.
+
+WHICH MEANS THE DIAGNOSIS WAS WRONG. Week 2's finals are not a stamp taken
+before the Monday game; they are exactly what the engine produces from the
+whole week. v0.457.0 is the right story for what happened then and the wrong
+story for what is on screen now, and the screenshots reproducing its numbers to
+the decimal was a lead that got treated as a conclusion.
+
+AND IT SETTLES LESS THAN IT LOOKS LIKE. "Nothing moved" proves the stored
+finals agree with the resolver. It cannot prove either agrees with the
+football, because re-running a scorer reproduces its own bugs faithfully. The
+live question is now the opposite one: the matchup board and the server
+disagree over the same plays, and every delta is a WHOLE NUMBER — 12, 12, 13,
+16, 17, 22, 24, 35 — against scores carrying tenths. Eight of those in a row is
+not chance; something integer-valued is counted on one side and not the other.
+
+So: `diff-week`, read-only, in the same workflow behind a `diff` mode that
+needs no confirmation because it writes nothing. It prints the server's answer
+the way the board prints its own — one line per starter, the slot it filled,
+what the engine paid it — plus the line that may end the whole thing: whether a
+side's slots ADD UP TO that side's total. A side being paid for something that
+is not a slot would explain every symptom at once.
+
+THE READ-ONLY PROMISE IS STRUCTURAL, NOT STATED. `resolveMatchup` gains one
+return that sits above every write in the function, so "dry run" cannot degrade
+into "wrote slightly less" — there is no path from the exit to a write.
+check:dryrun asserts that arrangement rather than trusting it: it finds the
+exit, finds every `.upsert(` / `.update(` / `.insert(` / `.delete(` /
+`creditWallet(` in the same function, and requires all of them to come after.
+Negative-tested by moving a write above the exit, which turns it red.
+
+Run `diff` before `restamp`, and the workflow now says so: a re-stamp that
+moves nothing is not a repair, it is a second opinion from the same doctor.
+
+No migration.
+
 ### v0.471.0 — the shelf shows the week
 
 Founder, with Sleeper's league list open beside ours: "Matchup summary per
