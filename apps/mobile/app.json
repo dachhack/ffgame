@@ -58,6 +58,15 @@
           "backgroundColor": "#163138"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "//": "Posting a picture in chat (0349). photosPermission is the line iOS shows the first time the app reaches for the library. camera and microphone are OFF ON PURPOSE, and `false` is not the same as omitting them: left unset this plugin ADDS android.permission.RECORD_AUDIO to the manifest and writes both iOS usage strings, so a chat feature would ship the app asking for a microphone. `false` blocks them instead. Chat picks from the library and never opens the camera; if that ever changes, this is the line to change with it.",
+          "photosPermission": "Drip Fantasy uses your photos so you can post one in your league's chat.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "@react-native-google-signin/google-signin",
       "expo-web-browser",
       "./plugins/withCoreBundleInput",

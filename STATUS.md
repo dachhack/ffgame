@@ -18,6 +18,81 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.485.0 — the picture posts from the phone too
+
+Founder, on v0.484.0's web-only note: "Let's do it."
+
+The app has rendered chat images since 0148 and rendered the new uploads from
+the day they existed — it just had no way to make one. Now it does: 📷 beside
+the GIF button in the league channel and in a DM, the system photo library, and
+the same bucket and the same ordinary URL-bodied message the web posts.
+
+THE ORIGINAL IS PREFERRED. A picture already small enough, at sensible
+dimensions, is uploaded exactly as it sits on the phone — no re-encode, no
+generation loss. Only an oversized one goes through expo-image-manipulator
+(long edge to 1600, JPEG), and a GIF never does: Expo's picker keeps an
+animated GIF only at quality 1 with no cropper, and a manipulator pass would
+hand back frame one with the animation quietly gone. A GIF is posted as it came
+or refused for size — never silently flattened. WHETHER to re-encode is now one
+function in core (`shouldShrinkChatImage`), because the web shrinks with a
+canvas and the app with a native module, and the failure mode of letting those
+drift is the web sending 200 KB where the app sends 4 MB.
+
+No base64 anywhere: expo-file-system's `File.bytes()` hands over the actual
+bytes, which is a third less memory than moving a 4 MB photo through a string.
+That module already ships inside `expo`, so it is declared rather than added;
+the two new native modules are the picker and the manipulator, which means the
+app needs a rebuild, not just a bundle.
+
+AND IT ASKS FOR THE PHOTO LIBRARY AND NOTHING ELSE. Left unconfigured,
+expo-image-picker's plugin adds android.permission.RECORD_AUDIO and writes both
+iOS usage strings — a chat feature would have shipped the app asking for a
+microphone. `cameraPermission: false` and `microphonePermission: false` block
+them, and check:chatimage now fails if either comes back, along with the shrink
+rule and the picker's declared dependencies.
+
+Deleting a message deletes its picture here too, and the pin strip and DM
+previews read an upload as one rather than as half a URL — the same four
+touches the web got.
+
+No migration.
+
+### v0.484.0 — the league posts a picture
+
+Founder: "I want to allow users to post images in the chat."
+
+Chat has rendered images since 0148, but only ones already hosted somewhere
+else: a GIF out of the picker, an imgur link somebody pasted. The screenshot of
+the lineup that lost by 0.4, the photo of the trophy, the whiteboard from draft
+night — the pictures a league actually wants to show each other — had nowhere to
+go. Now there is a 📷 in the composer, and a pasted screenshot or a picture
+dragged onto the thread posts the same way, in the league channel and in DMs
+alike.
+
+NO NEW MESSAGE KIND AND NO NEW COLUMN. An upload posts as an ordinary message
+whose body is one image URL — exactly what a GIF has been since 0148 — so it
+pins, previews, reacts, deletes and renders through every path that already
+existed, including in an app build that predates it.
+
+THE PATH IS THE PERMISSION. 0349 adds the `chat-image` bucket (public-read, 6 MB,
+four types, no SVG) and three storage policies over
+`<league_id>/<author_id>/<random>.<ext>`: you may write only into a league you
+belong to, under your own id, and deleting is the author's or the commissioner's
+— the same two people chat_delete already trusts. Deleting the message deletes
+the file, because moderation that takes down the line and leaves the picture on
+the internet is not moderation. An upload that lands when its message does not
+is removed again rather than left in the bucket.
+
+The browser shrinks anything over 1600px before it goes up (an 8 MB phone photo
+becomes ~200 KB; GIFs pass through so the animation survives), and every step of
+that falls back to the original file rather than refusing to post.
+check:chatimage holds the path shape, the type list and the size cap against the
+SQL, and holds the one property that keeps the native app working: an upload URL
+still ends in an image extension. Posting is web only for now — the app renders
+these already, but picking a file there needs a native picker.
+
+Migration 0349.
+
 ### v0.483.0 — a played week stays played
 
 GRIDIRON 3v6 CORRECTED. ops/run/009 wrote 94.3–101.6 → 106.3–96.6 and rebuilt

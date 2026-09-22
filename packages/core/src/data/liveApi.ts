@@ -10,6 +10,7 @@ import { setTeamOverrides } from './playerTeam';
 import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
+import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
@@ -25,6 +26,11 @@ const tracked = <T,>(p: Promise<T>, event: string, props?: Props): Promise<T> =>
 /** GIF-vs-text for chat_posted: a whole-URL body that renders inline. */
 const looksImage = (s: string): boolean =>
   /^https?:\/\/\S+$/.test(s.trim()) && (/(tenor|giphy|imgur)\.com\//i.test(s) || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(s));
+/** What a message body IS, for analytics. An upload (0349) counts apart from a
+ *  GIF: they are one message shape to the database and two different features
+ *  to the question "is anybody posting pictures?". */
+const postKind = (body: string): 'image' | 'gif' | 'text' =>
+  isChatImageUrl(body) ? 'image' : looksImage(body) ? 'gif' : 'text';
 
 async function client() {
   const sb = await getSupabase();
@@ -2775,7 +2781,7 @@ export interface DmThreadRow { thread_id: string; peer_id: string; peer: string;
 export interface DmMessage { id: number; body: string; at: string; mine: boolean; }
 export const chatPost = (leagueId: string, body: string, mentions: string[] = []) =>
   tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post', { p_league_id: leagueId, p_body: body, p_mentions: mentions }),
-    Ev.chatPosted, { kind: looksImage(body) ? 'gif' : 'text', dm: false, mentions: mentions.length });
+    Ev.chatPosted, { kind: postKind(body), dm: false, mentions: mentions.length });
 export const chatPostPoll = (leagueId: string, question: string, options: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; id?: number }>('chat_post_poll', { p_league_id: leagueId, p_question: question, p_options: options }),
     Ev.chatPosted, { kind: 'poll', dm: false, options: options.length });
@@ -2805,7 +2811,7 @@ export const chatDelete = (leagueId: string, id: number) =>
 export const dmSend = (leagueId: string, to: string, body: string) =>
   tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
     p_league_id: leagueId, p_to: to, p_body: body,
-  }), Ev.chatPosted, { kind: looksImage(body) ? 'gif' : 'text', dm: true, mentions: 0 });
+  }), Ev.chatPosted, { kind: postKind(body), dm: true, mentions: 0 });
 // ── League presence (0151): touch on open, commish reads last-seen ──────────
 export const leagueTouch = (leagueId: string) =>
   rpc<{ ok: boolean; seen?: boolean }>('league_touch', { p_league_id: leagueId });

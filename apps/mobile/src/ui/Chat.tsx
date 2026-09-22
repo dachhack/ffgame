@@ -17,6 +17,8 @@ import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
 import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } from '@drip/core/data/txnChat';
 import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
+import { isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
+import { pickChatImage } from './imagePost';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
@@ -37,11 +39,14 @@ const fmtWhen = (at: string): string => {
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
 
-/** Only these hosts (or bare image files) render inline — anything else stays text. */
+/** Only these hosts (or bare image files) render inline — anything else stays
+ *  text. Our own bucket (0349) leads the list, as on web: an upload is the one
+ *  image URL whose provenance we know. */
 const isImageUrl = (s: string): boolean => {
   const t = s.trim();
   if (!/^https?:\/\/\S+$/.test(t)) return false;
-  return /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
+  return isChatImageUrl(t)
+    || /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
     || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(t);
 };
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -394,6 +399,44 @@ function useComposerPad(): { pad: number; kb: number } {
   return { pad: kb > 0 ? 10 + kb : 10 + 58 + insets.bottom, kb };
 }
 
+// ── POSTING A PICTURE (v0.485.0) ────────────────────────────────────────────
+// The web grew this in v0.484.0 and the app renders what it posts; this is the
+// other direction. Same shape as the web hook (src/app/chat.tsx): pick, shrink,
+// upload, then post the URL as an ordinary message — chat already renders a
+// body that is an image URL, so nothing downstream learns a new kind.
+//
+// A dismissed picker is not an error and says nothing. An upload whose message
+// never lands is removed again rather than left in the bucket.
+function useImagePost(leagueId: string, post: (body: string) => Promise<boolean>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pick = async () => {
+    if (busy) return;
+    setError(null);
+    try {
+      const ready = await pickChatImage();
+      if (!ready) return;                       // dismissed
+      if (!ready.ok) { warn(); setError(ready.error); return; }
+      setBusy(true);
+      const up = await uploadChatImage(leagueId, ready.bytes, ready.type);
+      if (!up.ok || !up.url) { warn(); setError(friendlyError(up.error ?? 'Could not upload that image.')); return; }
+      if (!(await post(up.url))) await removeChatImage(up.url);
+    } catch (x) { warn(); setError(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return { pick, busy, error };
+}
+
+/** The 📷 in a composer. Dimmed and inert while one is on its way up. */
+function ImageButton({ onPick, busy }: { onPick: () => void; busy: boolean }) {
+  return (
+    <Pressable hitSlop={6} disabled={busy} onPress={() => { tap(); onPick(); }}
+      accessibilityLabel="post a picture" style={{ paddingVertical: 7, opacity: busy ? 0.5 : 1 }}>
+      <Text style={{ fontSize: 15 }}>{busy ? '…' : '📷'}</Text>
+    </Pressable>
+  );
+}
+
 /** Scroll body pinned to the newest message unless the reader scrolled up. */
 function useStickyScroll() {
   const ref = useRef<ScrollView>(null);
@@ -406,15 +449,19 @@ function useStickyScroll() {
   return { ref, onScroll, onContentSizeChange };
 }
 
-function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
+function Composer({ draft, setDraft, busy, err, onSend, placeholder, image }: {
   draft: string; setDraft: (v: string) => void; busy: boolean; err: string | null; onSend: () => void; placeholder: string;
+  /** v0.485.0: the picture path, when this surface has one. */
+  image?: { pick: () => void; busy: boolean; error: string | null };
 }) {
   const t = useTheme();
   const { pad: composerPad } = useComposerPad();
   return (
     <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
-      {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
+      {!!(err ?? image?.error) && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err ?? image?.error}</Mono>}
+      {!!image?.busy && <Mono size={9.5} tone="faint" style={{ marginBottom: 6 }}>Uploading your picture…</Mono>}
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+        {!!image && <ImageButton onPick={image.pick} busy={image.busy} />}
         {/* multiline so a long draft WRAPS and the box grows (capped ~5 lines,
             then it scrolls inside) — the founder could not see what they were
             typing past one line. Return still SENDS (submitBehavior keeps the
@@ -521,19 +568,21 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
   const names = members.map((m) => m.name);
-  const sendBody = async (body: string) => {
-    if (!body || busy) return;
+  const sendBody = async (body: string): Promise<boolean> => {
+    if (!body || busy) return false;
     setBusy(true); setErr(null);
     try {
       // mentions travel as ids — the rule (including @all) lives in
       // core/data/mentions so the two apps cannot disagree about it.
       const mentions = mentionIds(body, members);
       const r = await chatPost(leagueId, body, mentions);
-      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return; }
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return false; }
       commit(); setDraft(''); setGifOpen(false); await load();
-    } catch (x) { warn(); setErr(friendlyError(x)); }
+      return true;
+    } catch (x) { warn(); setErr(friendlyError(x)); return false; }
     finally { setBusy(false); }
   };
+  const img = useImagePost(leagueId, sendBody);
   const pinToggle = (m: ChatMessage) =>
     chatPin(leagueId, m.id, !m.pinned)
       .then((r) => { if (r.ok) { commit(); void load(); } else { warn(); setErr(friendlyError(r.error ?? '')); } })
@@ -544,7 +593,14 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     if (m.mine || canModerate) buttons.push({
       text: 'Delete', style: 'destructive',
       onPress: () => {
-        chatDelete(leagueId, m.id).then((r) => { if (r.ok) { commit(); void load(); } else { warn(); setErr(friendlyError(r.error ?? '')); } }).catch(() => warn());
+        // 0349: the line and the picture go together, as on web — a moderated
+        // image stops being on the internet, not just in the thread.
+        chatDelete(leagueId, m.id)
+          .then(async (r) => {
+            if (!r.ok) { warn(); setErr(friendlyError(r.error ?? '')); return; }
+            commit(); await removeChatImage(m.body); void load();
+          })
+          .catch(() => warn());
       },
     });
     if (!buttons.length) return;
@@ -575,7 +631,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
               <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>{p.author}</Text>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>
-                {p.kind === 'poll' ? `📊 ${p.body}` : isImageUrl(p.body) ? '🖼 GIF' : p.body}
+                {p.kind === 'poll' ? `📊 ${p.body}` : isChatImageUrl(p.body) ? '🖼 IMAGE' : isImageUrl(p.body) ? '🖼 GIF' : p.body}
               </Text>
             </Pressable>
           ))}
@@ -613,7 +669,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: composerPad }}>
-        {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
+        {!!(err ?? img.error) && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err ?? img.error}</Mono>}
+        {img.busy && <Mono size={9.5} tone="faint" style={{ marginBottom: 6 }}>Uploading your picture…</Mono>}
         {(sugg.length > 0 || (suggAll && members.some((m) => !m.me))) && (
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
             {suggAll && members.some((m) => !m.me) && (
@@ -646,6 +703,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>GIF</Text>
             </Pressable>
           )}
+          <ImageButton onPick={() => { setGifOpen(false); setPollOpen(false); void img.pick(); }} busy={img.busy} />
           <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => void sendBody(draft.trim())}
             placeholder="message the league… (@ to mention)" placeholderTextColor={t.faint} returnKeyType="send"
             multiline submitBehavior="blurAndSubmit"
@@ -711,7 +769,11 @@ function DmHome({ leagueId, initialDm }: { leagueId: string; initialDm?: { peerI
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontSize: 13, fontWeight: th.unread > 0 ? '700' : '400', color: t.text }}>{th.peer}</Text>
-                  {!!th.preview && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>{th.preview}</Text>}
+                  {/* the preview is the body's first 80 characters, so an image
+                      message would read as half a URL (0349). */}
+                  {!!th.preview && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>
+                    {isChatImageUrl(th.preview) ? '🖼 Picture' : isImageUrl(th.preview) ? '🖼 GIF' : th.preview}
+                  </Text>}
                 </View>
                 <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(th.last_at)}</Text>
                 {th.unread > 0 && (
@@ -763,18 +825,19 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.threadId]);
   useEffect(() => { track(Ev.chatOpened, { dm: true }); }, []);
-  const send = async () => {
-    const body = draft.trim();
-    if (!body || busy) return;
+  const sendBody = async (body: string): Promise<boolean> => {
+    if (!body || busy) return false;
     setBusy(true); setErr(null);
     try {
       const r = await dmSend(leagueId, thread.peerId, body);
-      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return; }
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not send.')); return false; }
       commit(); setDraft('');
       if (r.thread_id) { if (!thread.threadId) onThreadId(r.thread_id); await load(r.thread_id); }
-    } catch (x) { warn(); setErr(friendlyError(x)); }
+      return true;
+    } catch (x) { warn(); setErr(friendlyError(x)); return false; }
     finally { setBusy(false); }
   };
+  const img = useImagePost(leagueId, sendBody);
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
@@ -797,7 +860,8 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         ))}
         <View style={{ height: 6 }} />
       </ScrollView>
-      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void send()} placeholder={`message ${thread.peer}…`} />
+      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void sendBody(draft.trim())}
+        placeholder={`message ${thread.peer}…`} image={{ pick: () => void img.pick(), busy: img.busy, error: img.error }} />
     </View>
   );
 }

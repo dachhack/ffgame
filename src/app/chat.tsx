@@ -25,14 +25,20 @@ import { reportSections, type WeekReport } from '@drip/core/data/weekReport';
 import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } from '@drip/core/data/txnChat';
 import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
+import { isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
+import { prepareChatImage, pastedImage, droppedImage } from './imagePost';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
 
-/** Only these hosts (or bare image files) render inline — anything else stays text. */
+/** Only these hosts (or bare image files) render inline — anything else stays
+ *  text. Our own bucket (0349) leads the list: an upload is the one image URL
+ *  we know the provenance of, and it is named first so it keeps rendering even
+ *  if the extension ever leaves the path. */
 const isImageUrl = (s: string): boolean => {
   const t = s.trim();
   if (!/^https?:\/\/\S+$/.test(t)) return false;
-  return /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
+  return isChatImageUrl(t)
+    || /^(https?:\/\/)(media\d*\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|i\.imgur\.com)\//i.test(t)
     || /\.(gif|png|jpe?g|webp)(\?\S*)?$/i.test(t);
 };
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -41,8 +47,16 @@ const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *  against the league's real member names (longest name wins). */
 function Body({ body, names }: { body: string; names: string[] }) {
   if (isImageUrl(body)) {
-    return <img src={body.trim()} alt="" loading="lazy"
-      style={{ display: 'block', maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginTop: 2 }} />;
+    // 200px tall in the thread, full size in a new tab — a screenshot of a
+    // lineup is posted to be read, and 200px is not enough to read one.
+    const src = body.trim();
+    return (
+      <a href={src} target="_blank" rel="noopener noreferrer" title="open full size"
+        style={{ display: 'block', marginTop: 2 }}>
+        <img src={src} alt="" loading="lazy"
+          style={{ display: 'block', maxWidth: '100%', maxHeight: 200, borderRadius: 8 }} />
+      </a>
+    );
   }
   if (!names.length || !body.includes('@')) return <>{body}</>;
   const re = new RegExp(`@(${[...names].sort((a, b) => b.length - a.length).map(escRe).join('|')})`, 'g');
@@ -375,9 +389,13 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
 
 /** Shared scrolling message body: newest at the bottom, pinned there while
  *  new messages arrive unless the reader has scrolled up into history. */
-function MessageScroll({ children, dep }: { children: React.ReactNode; dep: unknown }) {
+function MessageScroll({ children, dep, onFile }: { children: React.ReactNode; dep: unknown; onFile?: (f: File | null) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // 0349: dragging a picture onto the conversation posts it. The outline only
+  // appears while something is actually over the thread, so the chat does not
+  // grow a dashed box it never uses.
+  const [over, setOver] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
@@ -386,9 +404,61 @@ function MessageScroll({ children, dep }: { children: React.ReactNode; dep: unkn
     <div ref={ref} onScroll={(e) => {
       const el = e.currentTarget;
       stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    }} style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', minHeight: 0 }}>
+    }}
+      onDragOver={onFile ? (e) => { e.preventDefault(); setOver(true); } : undefined}
+      onDragLeave={onFile ? () => setOver(false) : undefined}
+      onDrop={onFile ? (e) => { e.preventDefault(); setOver(false); onFile(droppedImage(e)); } : undefined}
+      style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', minHeight: 0,
+        ...(over ? { outline: '2px dashed var(--you)', outlineOffset: -4 } : {}) }}>
       {children}
     </div>
+  );
+}
+
+// ── POSTING A PICTURE (0349) ────────────────────────────────────────────────
+// Founder: "I want to allow users to post images in the chat."
+//
+// One path for all three ways in (the 📷 button, a paste, a drop) and both
+// surfaces (the league channel and a DM): shrink it (imagePost.ts), put it in
+// the bucket (core/data/chatImage.ts), then post its URL as an ordinary
+// message. Which is the whole trick — chat already renders a body that is an
+// image URL, so nothing else in the stack has to learn what a picture is.
+//
+// AND IT CLEANS UP AFTER ITSELF. If the upload lands but the message does not
+// (a flood guard, a dropped connection), the file is removed again. A bucket
+// quietly filling with images nobody can see is the kind of bill that turns up
+// months later.
+function useImagePost(leagueId: string, post: (body: string) => Promise<boolean>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pick = async (file: File | null | undefined) => {
+    if (!file || busy) return;
+    setError(null); setBusy(true);
+    try {
+      const ready = await prepareChatImage(file);
+      if (!ready.ok) { setError(ready.error); return; }
+      const up = await uploadChatImage(leagueId, ready.blob, ready.type);
+      if (!up.ok || !up.url) { setError(friendlyError(up.error ?? 'Could not upload that image.')); return; }
+      if (!(await post(up.url))) await removeChatImage(up.url);
+    } catch (x) { setError(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return { pick, busy, error };
+}
+
+/** The 📷 in a composer: a hidden file input and the button that opens it. */
+function ImageButton({ onPick, busy }: { onPick: (f: File | null) => void; busy: boolean }) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/png,image/jpeg,image/gif,image/webp" style={{ display: 'none' }}
+        onChange={(e) => { onPick(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+      <button onClick={() => ref.current?.click()} disabled={busy} className="mono"
+        title="post a picture" aria-label="post a picture"
+        style={{ ...linkBtn, fontSize: 13, padding: '0 2px', alignSelf: 'center', opacity: busy ? 0.5 : 1 }}>
+        {busy ? '…' : '📷'}
+      </button>
+    </>
   );
 }
 
@@ -484,8 +554,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
   const names = members.map((m) => m.name);
-  const sendBody = async (body: string) => {
-    if (!body || busy) return;
+  const sendBody = async (body: string): Promise<boolean> => {
+    if (!body || busy) return false;
     setBusy(true); setErr(null);
     try {
       // mentions travel as ids, derived from the @names still present at send
@@ -493,11 +563,13 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       // native app cannot drift on which "@all"s are real ones.
       const mentions = mentionIds(body, members);
       const r = await chatPost(leagueId, body, mentions);
-      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return; }
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return false; }
       setDraft(''); setGifOpen(false); await load();
-    } catch (x) { setErr(friendlyError(x)); }
+      return true;
+    } catch (x) { setErr(friendlyError(x)); return false; }
     finally { setBusy(false); }
   };
+  const img = useImagePost(leagueId, sendBody);
   // Repaint ONE message's reactions in place (v0.329.0). Not `load()`: the
   // 8-second poll already refreshes the page, and refetching on every tap
   // would yank the scroll position away from the message being reacted to.
@@ -505,9 +577,18 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     setMsgs((cur) => (cur ?? []).map((m) => (m.id === id ? { ...m, reactions } : m)));
     setPins((cur) => cur.map((m) => (m.id === id ? { ...m, reactions } : m)));
   };
-  const del = async (id: number) => {
-    try { const r = await chatDelete(leagueId, id); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
-    catch (x) { setErr(friendlyError(x)); }
+  // 0349: the line and the picture go together. The storage policy lets the
+  // author and the commissioner through — the same two chat_delete just let
+  // through — so a moderated image stops being on the internet, not just in the
+  // thread. A GIF or a pasted link is somebody else's file; removeChatImage
+  // ignores anything that is not ours.
+  const del = async (m: ChatMessage) => {
+    try {
+      const r = await chatDelete(leagueId, m.id);
+      if (!r.ok) { setErr(friendlyError(r.error ?? '')); return; }
+      await removeChatImage(m.body);
+      await load();
+    } catch (x) { setErr(friendlyError(x)); }
   };
   const pin = async (id: number, on: boolean) => {
     try { const r = await chatPin(leagueId, id, on); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
@@ -539,7 +620,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
             <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
               <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', flex: 'none' }}>{p.author}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {p.kind === 'poll' ? `📊 ${p.body}` : isImageUrl(p.body) ? '🖼 GIF' : p.body}
+                {p.kind === 'poll' ? `📊 ${p.body}` : isChatImageUrl(p.body) ? '🖼 IMAGE' : isImageUrl(p.body) ? '🖼 GIF' : p.body}
               </span>
               {canModerate && (
                 <button onClick={() => void pin(p.id, false)} className="mono" style={{ ...linkBtn, fontSize: 8.5, padding: 0 }} title="unpin">✕</button>
@@ -548,7 +629,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
           ))}
         </div>
       )}
-      <MessageScroll dep={msgs?.length ?? 0}>
+      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Nothing yet — say hello to the league.</div>}
         {msgs?.map((m) => (
@@ -562,7 +643,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                   style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>{m.pinned ? '📌✕' : '📌'}</button>
               )}
               {(m.mine || canModerate) && (
-                <button onClick={() => void del(m.id)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
+                <button onClick={() => void del(m)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
             </div>
             {m.kind === 'txn'
@@ -586,7 +667,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
-        {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
+        {(err ?? img.error) && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err ?? img.error}</div>}
+        {img.busy && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 6 }}>Uploading your picture…</div>}
         {(sugg.length > 0 || suggAll) && (
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
             {suggAll && (
@@ -613,8 +695,10 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
             <button onClick={() => { setGifOpen((v) => !v); setPollOpen(false); }} title="send a GIF" className="mono"
               style={{ ...linkBtn, fontSize: 11, padding: '0 2px', alignSelf: 'center' }}>GIF</button>
           )}
+          <ImageButton onPick={(f) => void img.pick(f)} busy={img.busy} />
           <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length && !suggAll) void sendBody(draft.trim()); }}
+            onPaste={(e) => { const f = pastedImage(e); if (f) { e.preventDefault(); void img.pick(f); } }}
             placeholder="message the league… (@ to mention)" style={{ ...input, fontSize: 12.5 }} />
           <button onClick={() => void sendBody(draft.trim())} disabled={busy || !draft.trim()} className="mono"
             style={{ ...btn, padding: '9px 16px', opacity: busy || !draft.trim() ? 0.5 : 1 }}>➤</button>
@@ -665,15 +749,20 @@ function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone:
   );
 }
 
-function Composer({ draft, setDraft, busy, err, onSend, placeholder }: {
+function Composer({ draft, setDraft, busy, err, onSend, placeholder, image }: {
   draft: string; setDraft: (v: string) => void; busy: boolean; err: string | null; onSend: () => void; placeholder: string;
+  /** 0349: the picture path, when this surface has one. */
+  image?: { pick: (f: File | null) => void; busy: boolean; error: string | null };
 }) {
   return (
     <div style={{ borderTop: '1px solid var(--bd)', padding: '10px 14px' }}>
-      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err}</div>}
+      {(err ?? image?.error) && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginBottom: 6 }}>{err ?? image?.error}</div>}
+      {image?.busy && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 6 }}>Uploading your picture…</div>}
       <div style={{ display: 'flex', gap: 8 }}>
+        {image && <ImageButton onPick={image.pick} busy={image.busy} />}
         <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') onSend(); }}
+          onPaste={image ? (e) => { const f = pastedImage(e); if (f) { e.preventDefault(); image.pick(f); } } : undefined}
           placeholder={placeholder} style={{ ...input, fontSize: 12.5 }} />
         <button onClick={onSend} disabled={busy || !draft.trim()} className="mono"
           style={{ ...btn, padding: '9px 16px', opacity: busy || !draft.trim() ? 0.5 : 1 }}>➤</button>
@@ -729,7 +818,11 @@ function DmHome({ leagueId }: { leagueId: string }) {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid var(--bd)', padding: '9px 2px', cursor: 'pointer' }}>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 12.5, fontWeight: t.unread > 0 ? 700 : 400, color: 'var(--text)' }}>{t.peer}</span>
-                  {t.preview && <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.preview}</span>}
+                  {t.preview && <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {/* the preview is the body's first 80 characters, so an image
+                        message would read as half a URL (0349). */}
+                    {isChatImageUrl(t.preview) ? '🖼 Picture' : isImageUrl(t.preview) ? '🖼 GIF' : t.preview}
+                  </span>}
                 </span>
                 <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', flex: 'none' }}>{fmtWhen(t.last_at)}</span>
                 {t.unread > 0 && (
@@ -769,25 +862,26 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.threadId]);
-  const send = async () => {
-    const body = draft.trim();
-    if (!body || busy) return;
+  const sendBody = async (body: string): Promise<boolean> => {
+    if (!body || busy) return false;
     setBusy(true); setErr(null);
     try {
       const r = await dmSend(leagueId, thread.peerId, body);
-      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return; }
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return false; }
       setDraft('');
       if (r.thread_id) { if (!thread.threadId) onThreadId(r.thread_id); await load(r.thread_id); }
-    } catch (x) { setErr(friendlyError(x)); }
+      return true;
+    } catch (x) { setErr(friendlyError(x)); return false; }
     finally { setBusy(false); }
   };
+  const img = useImagePost(leagueId, sendBody);
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: '1px solid var(--bd)' }}>
         <button onClick={onBack} className="mono" style={linkBtn}>←</button>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{thread.peer}</span>
       </div>
-      <MessageScroll dep={msgs?.length ?? 0}>
+      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Say hello.</div>}
         {msgs?.map((m) => (
@@ -799,7 +893,8 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
           </div>
         ))}
       </MessageScroll>
-      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void send()} placeholder={`message ${thread.peer}…`} />
+      <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void sendBody(draft.trim())}
+        placeholder={`message ${thread.peer}…`} image={{ pick: (f) => void img.pick(f), busy: img.busy, error: img.error }} />
     </>
   );
 }
