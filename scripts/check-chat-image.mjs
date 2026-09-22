@@ -20,8 +20,8 @@
 //     shows up as a picture in an app that has never heard of the bucket.
 import { readFileSync } from 'node:fs';
 import {
-  CHAT_IMAGE_BUCKET, CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_TYPES,
-  chatImageType, chatImageKey, chatImageBase, isChatImageUrl, chatImagePath,
+  CHAT_IMAGE_BUCKET, CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_EDGE, CHAT_IMAGE_SMALL_ENOUGH, CHAT_IMAGE_TYPES,
+  chatImageType, chatImageKey, chatImageBase, isChatImageUrl, chatImagePath, shouldShrinkChatImage,
 } from '../packages/core/src/data/chatImage';
 
 let fails = 0;
@@ -125,6 +125,54 @@ const sql = readFileSync(new URL('../supabase/migrations/0349_the_league_posts_a
   // a picture rather than as half a link.
   ok('an 80-character preview of an upload is still recognised as one', isChatImageUrl(url.slice(0, 80)), url.slice(0, 80));
   ok('…and that prefix is genuinely shorter than the URL', url.length > 80, url.length);
+}
+
+// ── BOTH HOSTS SHRINK TO THE SAME PLACE (v0.485.0) ─────────────────────────
+// The web re-encodes with a canvas and the app with expo-image-manipulator, so
+// the two could easily drift into the web sending 200 KB and the app sending
+// 4 MB — which nobody would notice until the storage bill did. WHETHER to
+// re-encode is one function, here, used by both.
+{
+  const MB = 1048576;
+  ok('a 4000px phone photo is shrunk',
+    shouldShrinkChatImage({ bytes: 6 * MB, width: 4032, height: 3024, type: 'image/jpeg' }));
+  ok('a small screenshot is left alone',
+    !shouldShrinkChatImage({ bytes: 180 * 1024, width: 1170, height: 1200, type: 'image/png' }));
+  ok('…but a heavy one at the same size is not, because the bytes are the cost',
+    shouldShrinkChatImage({ bytes: 2 * MB, width: 1170, height: 1200, type: 'image/png' }));
+  ok('exactly at the long edge is not over it',
+    !shouldShrinkChatImage({ bytes: 1024, width: CHAT_IMAGE_MAX_EDGE, height: 900, type: 'image/jpeg' }));
+  ok('one pixel over is', shouldShrinkChatImage({ bytes: 1024, width: CHAT_IMAGE_MAX_EDGE + 1, height: 900, type: 'image/jpeg' }));
+  ok('the tall edge counts too', shouldShrinkChatImage({ bytes: 1024, width: 900, height: CHAT_IMAGE_MAX_EDGE + 1, type: 'image/jpeg' }));
+  // THE ONE THAT PROTECTS SOMEBODY'S GIF. Every re-encode path on both hosts
+  // keeps frame one — a GIF is posted as it came or refused for size, never
+  // silently flattened.
+  ok('a GIF is NEVER re-encoded, however big',
+    !shouldShrinkChatImage({ bytes: 5 * MB, width: 4000, height: 4000, type: 'image/gif' }));
+  ok('unknown dimensions fall back to the byte test',
+    shouldShrinkChatImage({ bytes: 4 * MB, type: 'image/jpeg' })
+    && !shouldShrinkChatImage({ bytes: 1024, type: 'image/jpeg' }));
+  ok('the small-enough floor is under the hard cap', CHAT_IMAGE_SMALL_ENOUGH < CHAT_IMAGE_MAX_BYTES);
+}
+
+// ── THE APP ASKS FOR THE PHOTO LIBRARY AND NOTHING ELSE ────────────────────
+// expo-image-picker's config plugin, left unconfigured, ADDS
+// android.permission.RECORD_AUDIO and writes both iOS usage strings. A chat
+// feature would ship the app asking for a microphone, and nobody reads a
+// generated manifest until a store review does. `false` blocks them.
+{
+  const app = JSON.parse(readFileSync(new URL('../apps/mobile/app.json', import.meta.url), 'utf8'));
+  const plugin = (app.expo.plugins ?? []).find((p) => Array.isArray(p) && p[0] === 'expo-image-picker');
+  ok('the app declares the image picker plugin', !!plugin);
+  const opts = plugin?.[1] ?? {};
+  ok('…with the line iOS shows before opening the library',
+    typeof opts.photosPermission === 'string' && opts.photosPermission.length > 20, opts.photosPermission);
+  ok('…the camera explicitly OFF, not merely unmentioned', opts.cameraPermission === false, opts.cameraPermission);
+  ok('…and the microphone too', opts.microphonePermission === false, opts.microphonePermission);
+  const deps = JSON.parse(readFileSync(new URL('../apps/mobile/package.json', import.meta.url), 'utf8')).dependencies;
+  for (const m of ['expo-image-picker', 'expo-image-manipulator', 'expo-file-system']) {
+    ok(`${m} is a declared dependency, not a borrowed transitive one`, !!deps[m], deps[m]);
+  }
 }
 
 if (fails) { console.log(`\n${fails} CHAT IMAGE ASSERTION(S) FAILED`); process.exit(1); }

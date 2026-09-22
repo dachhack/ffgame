@@ -18,6 +18,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.485.0 — the picture posts from the phone too
+
+Founder, on v0.484.0's web-only note: "Let's do it."
+
+The app has rendered chat images since 0148 and rendered the new uploads from
+the day they existed — it just had no way to make one. Now it does: 📷 beside
+the GIF button in the league channel and in a DM, the system photo library, and
+the same bucket and the same ordinary URL-bodied message the web posts.
+
+THE ORIGINAL IS PREFERRED. A picture already small enough, at sensible
+dimensions, is uploaded exactly as it sits on the phone — no re-encode, no
+generation loss. Only an oversized one goes through expo-image-manipulator
+(long edge to 1600, JPEG), and a GIF never does: Expo's picker keeps an
+animated GIF only at quality 1 with no cropper, and a manipulator pass would
+hand back frame one with the animation quietly gone. A GIF is posted as it came
+or refused for size — never silently flattened. WHETHER to re-encode is now one
+function in core (`shouldShrinkChatImage`), because the web shrinks with a
+canvas and the app with a native module, and the failure mode of letting those
+drift is the web sending 200 KB where the app sends 4 MB.
+
+No base64 anywhere: expo-file-system's `File.bytes()` hands over the actual
+bytes, which is a third less memory than moving a 4 MB photo through a string.
+That module already ships inside `expo`, so it is declared rather than added;
+the two new native modules are the picker and the manipulator, which means the
+app needs a rebuild, not just a bundle.
+
+AND IT ASKS FOR THE PHOTO LIBRARY AND NOTHING ELSE. Left unconfigured,
+expo-image-picker's plugin adds android.permission.RECORD_AUDIO and writes both
+iOS usage strings — a chat feature would have shipped the app asking for a
+microphone. `cameraPermission: false` and `microphonePermission: false` block
+them, and check:chatimage now fails if either comes back, along with the shrink
+rule and the picker's declared dependencies.
+
+Deleting a message deletes its picture here too, and the pin strip and DM
+previews read an upload as one rather than as half a URL — the same four
+touches the web got.
+
+No migration.
+
 ### v0.484.0 — the league posts a picture
 
 Founder: "I want to allow users to post images in the chat."

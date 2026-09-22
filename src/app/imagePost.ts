@@ -7,8 +7,9 @@
 // chat renders it 200px tall. Uploading the original would spend the league's
 // data on pixels nobody can see, fail the bucket's 6 MB cap often enough to
 // look broken, and make the message slow to load for everyone else for ever.
-// 1600px on the long edge is generous for a screenshot of a lineup — the one
-// thing people zoom into — and turns an 8 MB photo into ~200 KB.
+// The size to aim at, and whether a given picture is worth re-encoding at all,
+// are core's rules (data/chatImage.ts) — the app shrinks with a different
+// module and has to land in the same place.
 //
 // WHAT IS LEFT ALONE: GIFs (a canvas re-encode would freeze the animation, and
 // an animated GIF is usually the whole point) and anything already small. Those
@@ -18,13 +19,9 @@
 // thing an old browser, a private window or an oversized image can refuse. If
 // any step throws we post the file as it came in and let the size cap decide;
 // a picture that posts a bit big beats a picture that will not post.
-import { CHAT_IMAGE_MAX_BYTES, chatImageType } from '@drip/core/data/chatImage';
-
-/** Longest edge we keep. Chat shows images at 200px tall; this leaves room to
- *  open one full-screen without it being a postage stamp. */
-const MAX_EDGE = 1600;
-/** Below this, re-encoding is a waste — it can even make the file bigger. */
-const SMALL_ENOUGH = 320 * 1024;
+import {
+  CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_EDGE, chatImageType, shouldShrinkChatImage,
+} from '@drip/core/data/chatImage';
 
 export type PreparedImage = { ok: true; blob: Blob; type: string } | { ok: false; error: string };
 
@@ -39,13 +36,13 @@ function canEncode(type: string): boolean {
   } catch { return false; }
 }
 
-async function shrink(file: File, target: string): Promise<Blob | null> {
+async function shrink(file: File, target: 'image/webp' | 'image/jpeg'): Promise<Blob | null> {
   let bmp: ImageBitmap | null = null;
   try {
     bmp = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
-    // Already small enough on both edges AND a modest file: nothing to gain.
-    if (scale === 1 && file.size <= SMALL_ENOUGH) return null;
+    // Whether to bother is core's call, so the app and the web agree on it.
+    if (!shouldShrinkChatImage({ bytes: file.size, width: bmp.width, height: bmp.height, type: target })) return null;
+    const scale = Math.min(1, CHAT_IMAGE_MAX_EDGE / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
     const h = Math.max(1, Math.round(bmp.height * scale));
     const canvas = document.createElement('canvas');

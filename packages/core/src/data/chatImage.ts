@@ -34,6 +34,31 @@ export const CHAT_IMAGE_MAX_BYTES = 6 * 1024 * 1024;
 export const CHAT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 export type ChatImageType = (typeof CHAT_IMAGE_TYPES)[number];
 
+// ── WHAT A HOST SHOULD SEND (v0.485.0) ──────────────────────────────────────
+// The shrink itself needs a canvas on web and a native module on the phone, so
+// each host does its own. WHETHER to shrink is policy, and policy lives here:
+// otherwise the web quietly sends 200 KB, the app sends 4 MB, and nobody
+// notices until the storage bill or a league on a bad connection does.
+
+/** The long edge a picture is reduced to. Chat renders images ~200px tall and
+ *  opens them full-screen; 1600 is generous for the thing people actually zoom
+ *  into (a screenshot of a lineup) and turns an 8 MB photo into ~200 KB. */
+export const CHAT_IMAGE_MAX_EDGE = 1600;
+/** Under this, re-encoding is a waste — it can even make the file bigger. */
+export const CHAT_IMAGE_SMALL_ENOUGH = 320 * 1024;
+
+/** Should the host re-encode this picture before uploading it?
+ *
+ *  A GIF never should: every re-encode path either keeps frame one or drops the
+ *  animation, and an animated GIF is usually the whole point of posting one. It
+ *  is uploaded as it came or refused for being over the cap — flattening
+ *  somebody's GIF without saying so would be worse than either. */
+export function shouldShrinkChatImage(o: { bytes: number; width?: number; height?: number; type: ChatImageType }): boolean {
+  if (o.type === 'image/gif') return false;
+  if (Math.max(o.width ?? 0, o.height ?? 0) > CHAT_IMAGE_MAX_EDGE) return true;
+  return o.bytes > CHAT_IMAGE_SMALL_ENOUGH;
+}
+
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
 };
