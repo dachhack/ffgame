@@ -18,6 +18,50 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.471.0 — the shelf shows the week
+
+Founder, with Sleeper's league list open beside ours: "Matchup summary per
+league and a notification for unread chats. Let's also give the commish option
+to turn off reports posting in chat."
+
+Sleeper's landing screen answers the only question a list of leagues is ever
+opened to ask — AM I WINNING — before you tap anything. Ours answered "what are
+these leagues called". A shelf of names is a menu; a shelf of live scores is a
+reason to open the app on a Sunday.
+
+Every card now carries this week's fixture: my seat first with the accent
+whichever side of the schedule put it on, the opponent under it, both records,
+and the verdict in one word. A LIVE game says LEADING, never WINNING — a
+35-point first-quarter lead is not a result, and the word and the colour agree
+about that because `verdictOf` owns the distinction and both clients ask it.
+A week with no fixture draws nothing: a card that prints 0.00 is claiming a
+game was played.
+
+ONE CALL FOR THE WHOLE SHELF. 0347 serves every league's fixture AND its unread
+counts together, replacing a `chat_unread` fan-out of one RPC per league per
+minute — so the scores cost less than the badges did on their own. The unread
+badge moves onto the league NAME, where a count reads as a property of that
+league rather than as a separate inbox to parse.
+
+AND IT ASKS THE FUNCTIONS THE LEAGUE PAGE ASKS. Scores from
+`league_week_scoreboard`, records from `league_standings`, rather than a second
+expression computing the same thing. Two surfaces disagreeing about a score is
+the bug this session opened on; the cheapest way not to have it is not to have
+a second opinion.
+
+THE REPORT CAN STAY OUT OF CHAT (0348), and the switch turns off the
+ANNOUNCEMENT rather than the report. Off, the week is still built, still
+stored, still opened by the report screen and still rebuildable from the
+console — it simply does not interrupt the chat every Tuesday at 4 AM. A
+setting that deleted the season because somebody quieted a notification would
+be a trap. ↻ REPOST posts regardless: an explicit press is a person asking for
+this week, not the standing schedule the setting is about. Default ON, read
+through `coalesce` — an absent key is SQL NULL, and 0343 already paid for that
+lesson once with a whole fleet's waiver schedule.
+
+Migrations 0347 and 0348; shelf-probes.sql with eight groups; check:slate with
+twenty-five assertions on the sentence the card says.
+
 ### v0.470.0 — the morning after, actually repaired
 
 Founder, with the report, the league page and the live board open together: "A

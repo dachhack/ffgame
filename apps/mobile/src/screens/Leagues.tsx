@@ -8,10 +8,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
 import {
-  myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, chatUnread, setLeagueArchived,
-  leagueTypeLine, leagueLandingRoom,
-  type AdminLeague, type Enrollment, type WaitlistRow,
+  myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, setLeagueArchived,
+  leagueTypeLine, leagueLandingRoom, myLeagueSlate,
+  type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
 } from '@drip/core/data/liveApi';
+import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -88,6 +89,12 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   // ALL vs ⚑ COMMISH — same two-chip filter the web's league home has. Only
   // rendered when you actually commission something; a pure player never sees it.
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  // 0347 · THE SHELF SHOWS THE WEEK. Founder, with Sleeper's list open: "Matchup
+  // summary per league and a notification for unread chats." One call for every
+  // league's current fixture AND its unread counts — it replaced a `chat_unread`
+  // fan-out of one RPC per league per minute, and a summary done the old way
+  // would have doubled it. Keyed by league id so a card looks its own row up.
+  const [slate, setSlate] = useState<Record<string, LeagueSlateRow>>({});
 
   const load = useCallback(async () => {
     setErr(null);
@@ -115,6 +122,20 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
 
   useEffect(() => { void load(); }, [load]);
 
+  // The shelf's live half, on its own timer: the enrollments above change when
+  // you join a league, these change every time somebody scores. A failure
+  // leaves the previous slate standing rather than blanking every card — a
+  // score that goes missing on one bad poll is worse than one a minute stale.
+  useEffect(() => {
+    let dead = false;
+    const poll = () => myLeagueSlate()
+      .then((r) => { if (!dead && r.ok && r.leagues) setSlate(Object.fromEntries(r.leagues.map((x) => [x.league_id, x]))); })
+      .catch(() => {});
+    poll();
+    const id = setInterval(poll, 60_000);
+    return () => { dead = true; clearInterval(id); };
+  }, [userId]);
+
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   if (rows === null) {
@@ -136,7 +157,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}
-      <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)}
+      <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)} slate={slate}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 
       {/* THE CONTROL ROW, AT THE TOP — the web's arrangement (v0.292.3,
@@ -262,7 +283,24 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                   </View>
                 )}
               </View>
+              {/* 0347: the badge rides the NAME, not a strip below it — an
+                  unread count is a property of this league and reads as one
+                  only while it is next to the league. Mentions take the warn
+                  fill; a plain count stays in the accent outline. */}
+              {(() => {
+                const b = unreadBadge(slate[e.league_id] ?? { unread: { league: 0, dm: 0, mention: 0 } } as LeagueSlateRow);
+                if (!b) return null;
+                return (
+                  <View style={{ flexShrink: 0, minWidth: 22, alignItems: 'center', backgroundColor: b.mention ? t.warn : alpha(t.you, 14),
+                    borderWidth: StyleSheet.hairlineWidth, borderColor: b.mention ? t.warn : t.you, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: b.mention ? t.onAccent : t.you }}>
+                      {b.mention ? `@${b.n}` : b.n}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
+            <MatchupStrip row={slate[e.league_id]} />
           </Pressable>
         );
       })}
@@ -375,35 +413,86 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
 }
 
 
+/** THIS WEEK'S GAME, ON THE SHELF (0347).
+ *
+ *  Founder, holding up Sleeper's league list: "Matchup summary per league."
+ *  Their landing screen answers the only question a list of leagues is ever
+ *  opened to ask — am I winning — before you tap anything; ours answered "what
+ *  are these leagues called".
+ *
+ *  Two seats, two scores, and the verdict in one word. My side is named first
+ *  and carries the accent whatever side of the fixture the schedule put it on,
+ *  because the card is read from one seat and "home" is the schedule's business
+ *  rather than the reader's.
+ *
+ *  It renders NOTHING without a game: a bye, an odd league, a week not yet
+ *  scheduled. A card that prints 0.00 is claiming a game was played. */
+function MatchupStrip({ row }: { row: LeagueSlateRow | undefined }) {
+  const t = useTheme();
+  const g = row?.game;
+  if (!g) return null;
+  const v = verdictOf(g);
+  // A live game is LEADING, never winning — see verdictOf. The colour follows
+  // the word rather than the arithmetic, so a 40-point first-quarter lead is
+  // amber-neutral rather than dressed as a result.
+  const tone = v === 'won' ? t.you : v === 'lost' ? t.opp : v === 'leading' ? t.you : v === 'trailing' ? t.opp : t.mid;
+  const live = !!(g.me?.live || g.opp?.live);
+  const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'
+    : v === 'leading' ? 'LEADING' : v === 'trailing' ? 'TRAILING' : v === 'level' ? 'LEVEL' : null;
+  return (
+    <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, gap: 3 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Mono size={8.5} weight="700" track={0.14} tone="faint">
+          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
+        </Mono>
+        {live && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.opp }} />}
+        <View style={{ flex: 1 }} />
+        {word && <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: tone }}>{word}</Text>}
+      </View>
+      <SlateLine side={g.me} mine points={g.me?.points} tone={tone} />
+      <SlateLine side={g.opp} points={g.opp?.points} tone={t.mid} />
+    </View>
+  );
+}
+
+function SlateLine({ side, points, mine, tone }: {
+  side: LeagueSlateRow['game'] extends null ? never : NonNullable<LeagueSlateRow['game']>['me'];
+  points: number | null | undefined; mine?: boolean; tone: string;
+}) {
+  const t = useTheme();
+  const rec = recordLabel(side?.record);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+      <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: mine ? '700' : '400', color: mine ? t.text : t.mid }}>
+        {side?.team || sideLabel(side)}
+      </Text>
+      {rec && <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{rec}</Text>}
+      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: mine ? tone : t.mid, minWidth: 58, textAlign: 'right' }}>
+        {scoreLabel(points)}
+      </Text>
+    </View>
+  );
+}
+
 // ── cross-league chat inbox (0154 polish) ────────────────────────────────────
 // One strip over the league list: every league carrying unread chat, with its
 // count (@ marked when mentioned), each chip a straight tap into that
 // league's chat. Renders nothing when the slate is clean — a permanent inbox
 // header would just be furniture.
-function InboxStrip({ rows, onOpenChat }: {
+//
+// FED BY THE SHELF'S OWN CALL since 0347, rather than by its own fan-out of
+// one chat_unread per league per minute.
+function InboxStrip({ rows, slate, onOpenChat }: {
   rows: Enrollment[];
+  slate: Record<string, LeagueSlateRow>;
   onOpenChat: (e: Enrollment) => void;
 }) {
   const t = useTheme();
-  const [counts, setCounts] = useState<Record<string, { n: number; mention: boolean }>>({});
-  useEffect(() => {
-    let dead = false;
-    const poll = () => {
-      for (const e of rows) {
-        chatUnread(e.league_id)
-          .then((r) => {
-            if (dead || !r.ok) return;
-            const n = (r.league ?? 0) + (r.dm ?? 0);
-            setCounts((cur) => ({ ...cur, [e.league_id]: { n, mention: (r.mention ?? 0) > 0 } }));
-          })
-          .catch(() => {});
-      }
-    };
-    poll();
-    const id = setInterval(poll, 60_000);
-    return () => { dead = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows.map((e) => e.league_id).join(',')]);
+  const counts: Record<string, { n: number; mention: boolean }> = {};
+  for (const e of rows) {
+    const b = slate[e.league_id] ? unreadBadge(slate[e.league_id]!) : null;
+    if (b) counts[e.league_id] = b;
+  }
   const loud = rows.filter((e) => (counts[e.league_id]?.n ?? 0) > 0);
   if (!loud.length) return null;
   return (

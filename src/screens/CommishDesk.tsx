@@ -24,7 +24,7 @@ import {
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
-  leagueReportWeeks, commishRequestWeekReport, type ReportWeek,
+  leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
 
@@ -499,9 +499,14 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
   const [weeks, setWeeks] = useState<ReportWeek[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // 0348: does this league want the report ANNOUNCED in chat? Off keeps
+  // building and storing every week — only the chat line stops.
+  const [chatOn, setChatOn] = useState(true);
+  const [flipping, setFlipping] = useState(false);
   const load = () => leagueReportWeeks(leagueId).then((r) => {
     if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
     setWeeks(r.weeks ?? []);
+    setChatOn(r.report_chat !== false);
   }).catch((e) => setMsg(errMsg(e, 'could not load')));
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
   // While a request is open the worker is a minute away; poll so the line
@@ -541,6 +546,29 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
         REPLACES its chat line rather than adding a second one, so this is safe to press twice. A week still being
         played is refused — a report built mid-game freezes those scores, which is how a week went out wrong once.
       </div>
+      {/* 0348 · THE ANNOUNCEMENT IS OPTIONAL, THE RECORD IS NOT. Founder:
+          "give the commish option to turn off reports posting in chat." Off
+          stops the weekly chat line and nothing else — the week is still built
+          and stored, the report screen still opens it, the history survives.
+          A setting that deleted the season because somebody quieted a
+          notification would be a trap. And ↻ REPOST still posts: that is a
+          person asking for this week on purpose, not the standing schedule. */}
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 0 10px', cursor: 'pointer' }}>
+        <input type="checkbox" checked={chatOn} disabled={flipping}
+          onChange={async (ev) => {
+            const on = ev.target.checked;
+            setFlipping(true); setChatOn(on); setMsg(null);
+            const r = await commishSetReportChat(leagueId, on).catch(() => null);
+            setFlipping(false);
+            if (!r?.ok) { setChatOn(!on); setMsg(r?.error ?? 'could not save'); return; }
+            setMsg(on ? '✓ the weekly report will post in chat' : '✓ the weekly report will be written but not posted in chat');
+          }} />
+        <span style={{ ...small, marginBottom: 0 }}>
+          <b style={{ color: 'var(--text)' }}>Post the weekly report in chat</b><br />
+          Off, the week is still written up and the report screen still opens it — it just doesn’t interrupt
+          chat. Pressing ↻ REPOST below posts anyway, because that’s you asking.
+        </span>
+      </label>
       {weeks == null && <div style={small}>loading…</div>}
       {weeks?.length === 0 && <div style={small}>No weeks with matchups yet.</div>}
       {weeks?.map((w) => {

@@ -211,3 +211,4 @@ $RUN -f scripts/db/trend-board-probes.sql | grep -E "PROBE FAIL|ALL TREND-BOARD 
 $RUN -f scripts/db/league-tab-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-TAB PROBES" || { echo "LEAGUE-TAB PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/waiver-run-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-RUN PROBES" || { echo "WAIVER-RUN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/stale-final-probes.sql | grep -E "PROBE FAIL|ALL STALE-FINAL PROBES" || { echo "STALE-FINAL PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/shelf-probes.sql | grep -E "PROBE FAIL|ALL SHELF PROBES" || { echo "SHELF PROBES FAILED"; exit 1; }

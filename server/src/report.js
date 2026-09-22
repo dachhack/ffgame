@@ -195,6 +195,16 @@ export async function buildLeagueReport(league, week, weekRows) {
 /** Store the payload and, only when this call is the one that stored it,
  *  post the chat line. Returns true when the message went out. */
 export async function postReport(league, week, report, opts = {}) {
+  // 0348: THE ANNOUNCEMENT IS OPTIONAL, THE RECORD IS NOT. A league that has
+  // turned the chat line off still gets its week built and stored — the report
+  // screen opens it, the history is intact, the console can rebuild it — it
+  // just does not interrupt the chat to say so. Turning off a notification
+  // must never turn off the recording behind it.
+  //
+  // `force` (the commissioner's ↻ REPOST, the admin's request) posts anyway:
+  // an explicit press is somebody asking for this week, now, and is not the
+  // standing schedule the setting is about.
+  const announce = opts.force || league?.settings_json?.report_chat !== false;
   if (opts.force) {
     // Replace, don't duplicate: the old line goes, the payload is overwritten.
     const { error: dErr } = await db().from('league_message').delete()
@@ -209,6 +219,10 @@ export async function postReport(league, week, report, opts = {}) {
       .select('league_id');
     if (error) throw new Error(`league_report: ${error.message}`);
     if (!ins?.length) return false;          // already reported by an earlier pass
+  }
+  if (!announce) {
+    log(league.name ?? league.id, 'wk', week, '— stored, chat line off —', report.headline);
+    return true;
   }
   const { error: mErr } = await db().from('league_message').insert({
     league_id: league.id, author_id: null, kind: 'report', report_week: week,
