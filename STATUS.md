@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.468.0 — words on the web's rail too
+
+Founder, on the web build: "Still have the icons in the rail on web."
+
+He is right, and v0.465.0's note explains exactly why it missed: the app's
+bottom rail is `LeagueBottomBar` in apps/mobile/App.tsx, and the web's is
+`LeagueStrip` in src/app — different components, different codebases, one
+idea. Changing one and saying "the rail" was changed is the kind of claim
+that is true of the file and false of the product.
+
+The argument is the same one, and it is written out here rather than pointed
+at: a 22px glyph over an 8.5px caption is an icon EXPLAINED BY a label, two
+marks saying one thing, and the label is the one being read. The glyph goes
+and the label takes the whole rail at 13.5px — the size it could never be as
+a footnote to a picture. The rail's own height is unchanged. The unread dot
+stays, because it says something no word on the rail does, and rides the
+label now.
+
+NOT TOUCHED: the WIDE chip row under the league name, which carries a 15px
+icon beside each label. It is a chip row rather than a rail, the icon sits
+beside the word rather than over it, and nobody has complained about it —
+so it is a separate call, and the founder's to make.
+
 ### v0.467.0 — the gear outlives the tab
 
 Founder: "Need a way to go back to the settings. The settings chip only works
