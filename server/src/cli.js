@@ -20,6 +20,34 @@ import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
 import { simulate } from './simulate.js';
 import { seedTestUsers } from './seedTestUsers.js';
+import { setRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
+
+/** THE WEEK'S SLATE, FROM THE DATABASE (v0.476.0) — what the tick installs
+ *  from ESPN before it stamps anything, and what the CLI never installed.
+ *
+ *  Without a runtime slate every window lookup — windowForTeam, windowKickoffMs,
+ *  windowsForWeek — answers from the BAKED 2025 SCHEDULE. Classic never asks
+ *  (one weekly lineup, no windows), which is why its re-stamps came out exactly
+ *  right. Drip asks for every pick: which window a player's game is in, when
+ *  that window locks, whether a buff armed in time, whether a slot is
+ *  unopposed. A 2026 week resolved against 2025's windows is a different week,
+ *  and that is the shape of the week-1 drip drop — not a scoring bug, a
+ *  calendar from the wrong year.
+ *
+ *  Reads nfl_slate for the season-week and hands setRuntimeSlate the same
+ *  shape closeWeek does. Returns the game count so the caller can say what it
+ *  installed, and ZERO — loudly — when there is nothing to install. */
+async function installWeekSlate(week, season) {
+  const { db } = await import('./supabase.js');
+  const { data } = await db().from('nfl_slate').select('home,away,win,kickoff')
+    .eq('season', String(season)).eq('week', week);
+  const games = (data ?? []).map((g) => ({
+    away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win,
+    kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined,
+  }));
+  setRuntimeSlate(week, games);
+  return games.length;
+}
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -199,6 +227,11 @@ async function main() {
           if ((l.settings_json?.game_mode ?? 'drip') !== 'classic') skip.add(l.id);
         }
       }
+      const slateN = await installWeekSlate(week, season);
+      console.log(slateN
+        ? `restamp: week ${week} slate installed — ${slateN} games (windows resolve against ${season}, not the baked 2025 schedule)`
+        : `restamp: ⚠ NO nfl_slate rows for week ${week} (${season}) — windows would resolve against the baked 2025 schedule; refusing`);
+      if (!slateN) break;
       const idx = await buildPlayerIndex();
       let moved = [];
       const n = await stampFinals(week, idx, { restamp: true, leagueId, skipLeagues: skip, report: (m) => { moved = m; } });
@@ -279,11 +312,29 @@ async function main() {
       rows = rows.filter((m) => seasonOf.get(m.league_id) === String(season));
       if (seat) rows = rows.filter((m) => m.home_roster_id === seat || m.away_roster_id === seat);
       if (!rows.length) { console.log(`diff-week: no matchups at week ${week} (${season})${leagueId ? ' in that league' : ''}${seat ? ` for seat ${seat}` : ''}`); break; }
+      const slateN = await installWeekSlate(week, season);
+      console.log(slateN
+        ? `diff-week: week ${week} slate installed — ${slateN} games`
+        : `diff-week: ⚠ NO nfl_slate rows for week ${week} (${season}) — window lookups fall back to the baked 2025 schedule, so a DRIP diff below is not meaningful`);
+      // Which leagues are drip, so the slot-sum line can say what a gap IS
+      // rather than flag it. Every league in `rows` is read once.
+      const { data: modes } = await db().from('league').select('id, settings_json')
+        .in('id', [...new Set(rows.map((m) => m.league_id))]);
+      const isDrip = new Map((modes ?? []).map((l) => [l.id, (l.settings_json?.game_mode ?? 'drip') !== 'classic']));
       const idx = await buildPlayerIndex();
       await injectWeekPlays(week);
       const ctx = await prefetchTick(rows, week);
       console.log(`diff-week: week ${week} (${season}) — ${rows.length} matchup(s), READ-ONLY\n`);
       for (const m of rows.sort((a, b) => String(a.league_id).localeCompare(String(b.league_id)) || a.home_roster_id - b.home_roster_id)) {
+        // A SCHEDULED matchup has no sealed rows to score (resolve.js gathers
+        // them only once the status has moved on), so a re-resolve falls to
+        // the auto-lineup and prints a number that means nothing. Say so
+        // instead of printing it — the week-2 run did, and it was read as a
+        // finding.
+        if (m.status === 'scheduled') {
+          console.log(`── ${m.league_id.slice(0, 8)} · week ${m.week} · seat ${m.home_roster_id} vs seat ${m.away_roster_id} (scheduled) — not played yet, nothing to compare\n`);
+          continue;
+        }
         let r;
         try { r = await resolveMatchup(m, idx, undefined, { playsInjected: true, ctx, dryRun: true }); }
         catch (e) { console.log(`  ${m.league_id.slice(0, 8)} seat ${m.home_roster_id} vs ${m.away_roster_id}: FAILED — ${e.message}\n`); continue; }
@@ -306,8 +357,18 @@ async function main() {
           // THE LINE THAT ANSWERS THE QUESTION. A side whose slots do not add
           // up to its own total is being paid for something that is not a
           // slot, and that gap is the whole investigation.
-          if (Math.abs(sum - (side === 'home' ? r.home : r.away)) > 0.005) {
-            console.log(`      ⚠ slots sum ${sum.toFixed(2)} but the side totals ${(side === 'home' ? r.home : r.away).toFixed(2)}`);
+          const total = side === 'home' ? r.home : r.away;
+          const gap = Math.round((total - sum) * 100) / 100;
+          if (Math.abs(gap) > 0.005) {
+            // In DRIP a side's total is its slots PLUS a flat bonus per contested
+            // window it won (liveResolve's battleVerdict, WINDOW_WIN_BONUS = 5),
+            // baked into the window state and never into a slot row. A gap that
+            // is a whole multiple of 5 is that, and is the design working. Any
+            // other gap — or any gap at all in classic — is still worth a ⚠.
+            const bonusish = isDrip.get(m.league_id) && gap > 0 && Math.abs(gap / 5 - Math.round(gap / 5)) < 1e-9;
+            console.log(bonusish
+              ? `      + ${gap.toFixed(2)} window-battle bonus (${Math.round(gap / 5)} contested window${Math.round(gap / 5) === 1 ? '' : 's'} won) — slots ${sum.toFixed(2)}, side ${total.toFixed(2)}`
+              : `      ⚠ slots sum ${sum.toFixed(2)} but the side totals ${total.toFixed(2)}`);
           }
         }
         console.log('');
@@ -356,6 +417,21 @@ async function main() {
         }
         const lid = hit[0].id;
         console.log(`  ${lg.league_id_prefix} · ${lg.matchups.length} matchup(s)`);
+        // `clear_report` (v0.476.0): a week put back to 0-0 because it was
+        // never played has no business keeping the write-up a mistaken
+        // re-stamp posted for it. Removes the stored report and its chat line
+        // for THIS league-week only, before the finals are written, so a
+        // failure here leaves the numbers untouched rather than half-done.
+        if (lg.clear_report === true && !dry) {
+          const { error: e1 } = await db().from('league_message').delete()
+            .eq('league_id', lid).eq('kind', 'report').eq('report_week', week);
+          const { error: e2 } = await db().from('league_report').delete()
+            .eq('league_id', lid).eq('week', week);
+          if (e1 || e2) { console.log(`      clear_report FAILED — ${(e1 ?? e2).message}; league skipped`); refused += lg.matchups.length; continue; }
+          console.log(`      week ${week} report and chat line removed`);
+        } else if (lg.clear_report === true) {
+          console.log(`      would remove the week ${week} report and chat line`);
+        }
         for (const m of lg.matchups ?? []) {
           const { data: rows } = await db().from('matchup')
             .select('id, home_final, away_final')

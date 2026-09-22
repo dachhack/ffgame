@@ -18,6 +18,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.476.0 — a calendar from the wrong year
+
+Founder, on the two loose ends: Kickoff League's week 1 "should be all ties" —
+the league drafted after week 1 and never played it — "let's check into the
+drip difference."
+
+THE TIES FIRST, BECAUSE THEY ARE A CORRECTION. The v0.474.0 week-1 re-stamp
+found 0-0 on all four Kickoff matchups, re-resolved them against whatever the
+rosters held, and wrote 15-to-48-point "results" for a week nobody played. A
+second restore file puts the zeros back, and `restore-week` gains
+`clear_report`, which drops the write-up and chat line that run posted — a
+report on a week that was not played is not a report.
+
+THE DRIP DIFFERENCE HAS TWO PARTS, AND ONE OF THEM WAS NEVER A BUG. The
+"slots sum 5.00 and 10.00 short of their own side totals" in the week-2 diff is
+the WINDOW BATTLE: a flat WINDOW_WIN_BONUS (5) to the side that wins each
+contested window, baked into the window's state and never into a slot row.
+One window won, +5; two, +10. diff-week now names it instead of flagging it,
+and skips a `scheduled` matchup outright — it has no sealed rows, resolves to
+an auto-lineup, and the week-2 run printed exactly that as if it were a
+finding.
+
+THE OTHER PART IS THE DROP, AND IT IS A CALENDAR. `closeWeek` calls
+`setRuntimeSlate` from the ESPN scoreboard before it stamps anything. The CLI
+never did. Without a runtime slate, nflSlate.ts falls back — by design, for
+the demo — to the BAKED 2025 SCHEDULE, so `windowForTeam`, `windowKickoffMs`
+and `windowsForWeek` all answered from last year. Classic never asks about
+windows (one weekly lineup), which is why every classic re-stamp landed on the
+board's number to the decimal. Drip asks for every pick: which window a game
+is in, when it locks, whether a buff armed in time, whether a slot is
+unopposed. A 2026 week resolved against 2025's windows is a different week,
+and -69.1 is what a different week looks like. Both `restamp` and `diff-week`
+install the week's slate from the nfl_slate table first now, and refuse when
+there is none to install.
+
+NOT YET PROVEN TO BE THE WHOLE OF IT. `ruledOutSlugs` reads injury_status as it
+stands today — the table has no history — so every auto-fill benches whoever is
+OUT or IR now, whatever he did that week; a manual sealed pick is unaffected.
+And applied_state, seat reassignment and buff arm-stamps are all "as they stand
+now" too. So drip stays off the re-stamp by default. The measurement that ends
+it is cheap and read-only: `diff` on week 1 for a drip league — stored equal to
+re-resolved means the slate was the whole story; a remaining gap names the
+next thing.
+
+check:dryrun gains eight assertions. No migration.
+
 ### v0.475.0 — a drip week does not come back
 
 WEEK 2 WAS A CLEAN REPAIR. Eight matchups moved and every one landed on the

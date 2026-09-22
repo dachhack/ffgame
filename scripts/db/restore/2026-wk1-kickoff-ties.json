@@ -1,0 +1,18 @@
+{
+  "note": "KICKOFF LEAGUE, WEEK 1, BACK TO THE TIES IT WAS. The league did not draft until after week 1, so week 1 was never played and was stamped 0-0 across the board on purpose. The v0.474.0 week-1 re-stamp (run #3, 2026-09-22T19:14Z) found finals of 0 on every matchup, re-resolved them against whatever the rosters held at the time, and wrote 15-to-48-point 'results' for a week nobody played. Founder: 'It should be all ties.' These are the zeros the run printed as its before-values. clear_report drops the week-1 write-up and chat line the same run posted, since a report on a week that was not played is not a report.",
+  "season": "2026",
+  "week": 1,
+  "leagues": [
+    {
+      "league_id_prefix": "5ae08e35",
+      "name": "Kickoff League",
+      "clear_report": true,
+      "matchups": [
+        { "home_roster_id": 1, "away_roster_id": 8, "home": 0, "away": 0 },
+        { "home_roster_id": 2, "away_roster_id": 7, "home": 0, "away": 0 },
+        { "home_roster_id": 3, "away_roster_id": 6, "home": 0, "away": 0 },
+        { "home_roster_id": 4, "away_roster_id": 5, "home": 0, "away": 0 }
+      ]
+    }
+  ]
+}

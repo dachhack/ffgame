@@ -43,9 +43,18 @@ name: Re-stamp a week's finals
 # tells you which of the two numbers to believe before you rewrite anything.
 #
 # WHAT `restamp` CANNOT DO. A seat that stored no lineup is fielded from its
-# roster AS IT STANDS NOW. For a managed seat the sealed picks are the week's own
-# and nothing shifts; for an abandoned seat, a re-stamp months later can field a
-# player that seat did not own at kickoff. Repair the week that is wrong, soon.
+# roster AS IT STANDS NOW, and injuries are read AS THEY STAND NOW — a player OUT
+# or IR today is worth zero to every auto-fill, whatever he did that week. For a
+# managed seat the sealed picks are the week's own and nothing shifts; for an
+# abandoned seat or a best-ball spot, a re-stamp months later can field a
+# different player than the week did. Repair the week that is wrong, soon.
+#
+# WHY DRIP WENT WRONG, NOW KNOWN (v0.476.0). The tick installs the week's slate
+# from ESPN before it stamps; the CLI never did, so every window lookup answered
+# from the BAKED 2025 SCHEDULE. Classic never asks about windows; drip asks for
+# every pick. Both `diff` and `restamp` now install the week's slate from the
+# nfl_slate table first and refuse if there is none. Drip stays off by default
+# until a read-only `diff` on a drip week shows stored == re-resolved.
 #
 # Secrets required (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
