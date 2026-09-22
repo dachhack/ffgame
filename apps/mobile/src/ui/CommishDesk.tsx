@@ -14,7 +14,7 @@ import {
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
-  leagueReportWeeks, commishRequestWeekReport, type ReportWeek,
+  leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -527,9 +527,14 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
   const [weeks, setWeeks] = useState<ReportWeek[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // 0348: does the report ANNOUNCE itself in chat? Off stops the chat line and
+  // nothing else — the week is still built, stored and openable.
+  const [chatOn, setChatOn] = useState<boolean | null>(null);
+  const [flipping, setFlipping] = useState(false);
   const load = () => leagueReportWeeks(leagueId).then((r) => {
     if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
     setWeeks(r.weeks ?? []);
+    setChatOn(r.report_chat !== false);
   }).catch((e) => setMsg(friendlyError(e)));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
   // A queued request is a minute from posting; poll so the line flips in front
@@ -550,6 +555,17 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
     } catch (e) { warn(); setMsg(friendlyError(e)); }
     finally { setBusy(null); void load(); }
   };
+  const toggleChat = async () => {
+    if (flipping || chatOn === null) return;
+    const on = !chatOn;
+    setFlipping(true); setMsg(null);
+    try {
+      const r = await commishSetReportChat(leagueId, on);
+      if (r.ok) { commit(); setChatOn(on); setMsg(on ? '✓ the report will post in chat' : '✓ written, but not posted in chat'); }
+      else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setFlipping(false); void load(); }
+  };
   const blocker = (w: ReportWeek): string | null => {
     if (w.stamped === 0) return 'no finals stamped yet';
     if (!w.week_state.complete) {
@@ -562,6 +578,21 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
   return (
     <Card>
       <LabelInfo label="WEEKLY REPORT" info={'Build a week\u2019s report from the finals as they stand and post it into league chat. Posting a week again REPLACES its chat line rather than adding a second one, so it is safe to tap twice. A week still being played is refused \u2014 a report built mid-game freezes those scores, which is how a week went out wrong once.'} />
+      {/* 0348 · THE ANNOUNCEMENT IS OPTIONAL, THE RECORD IS NOT. Founder:
+          "give the commish option to turn off reports posting in chat." OFF
+          stops the weekly chat line only — the week is still written up and
+          the report screen still opens it, so quieting a notification never
+          stops recording the season. ↻ REPOST posts regardless: that is a
+          person asking for this week on purpose. */}
+      <Mono size={9} tone="faint" style={{ marginTop: 12 }}>POST THE REPORT IN CHAT</Mono>
+      <Row>
+        <Chip label={chatOn === null ? '…' : chatOn ? 'ON' : 'OFF'} on={chatOn === true}
+          disabled={flipping || chatOn === null} onPress={() => { tap(); void toggleChat(); }} />
+      </Row>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 5, lineHeight: fs(13) }}>
+        Off, the week is still written up and the report screen still opens it — it just doesn’t interrupt chat.
+        Tapping ↻ REPOST below posts anyway, because that’s you asking.
+      </Mono>
       {weeks == null && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>}
       {weeks?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No weeks with matchups yet.</Mono>}
       {weeks?.map((w) => {
@@ -586,6 +617,20 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
             {w.drifted > 0 && (
               <Mono size={8.5} tone="warn" style={{ marginTop: 2, lineHeight: fs(12) }}>
                 ⚠ {w.drifted} stored final{w.drifted === 1 ? '' : 's'} differ from the live scoring — a stamp taken early, or a score you edited by hand. The report repeats what is stored.
+              </Mono>
+            )}
+            {/* 0345. NOT THE SAME ACCUSATION as `drifted`, and the one that
+                catches a week that closed mid-game: these finals were
+                computed before the week's last play landed. A repost
+                faithfully repeats them — only a re-stamp changes the number,
+                and that is an admin errand, so say so rather than offer a
+                button that cannot help. */}
+            {w.stale > 0 && (
+              <Mono size={8.5} tone="warn" style={{ marginTop: 2, lineHeight: fs(12) }}>
+                ⚠ {w.stale} final{w.stale === 1 ? ' was' : 's were'} scored BEFORE this week's last play arrived
+                {w.scored_at && w.last_play_at
+                  ? ` (scored ${new Date(w.scored_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}, last play ${new Date(w.last_play_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
+                  : ''}. Reposting repeats them — the numbers need a re-stamp, which is an admin errand.
               </Mono>
             )}
             {w.request?.error ? <Mono size={8.5} tone="opp" style={{ marginTop: 2 }}>⚠ last try: {w.request.error}</Mono> : null}

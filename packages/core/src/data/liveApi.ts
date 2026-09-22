@@ -1591,12 +1591,29 @@ export interface ReportWeek {
    *  early, OR a score the commissioner edited by hand, which the database
    *  cannot tell apart and so does not try to. */
   drifted: number;
+  /** Stamped finals computed BEFORE the week's last play landed (0345).
+   *  `drifted` cannot see this — a final and its window rows are written by
+   *  one pass, so a week frozen three hours early agrees with itself
+   *  perfectly. This is the two timestamps in the wrong order. */
+  stale: number;
+  /** When the week was last scored, and when its last play arrived — the pair
+   *  `stale` is counted from, so a console can show its working. */
+  scored_at: string | null; last_play_at: string | null;
   report: boolean; posted_at: string | null;
   week_state: { season: string | null; slate: number; feed: number; live: number; complete: boolean };
   request: { requested_at: string; done_at: string | null; error: string | null } | null;
 }
 export const leagueReportWeeks = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; season?: string; weeks?: ReportWeek[] }>('league_report_weeks', { p_league_id: leagueId });
+  rpc<{ ok: boolean; error?: string; season?: string; report_chat?: boolean; weeks?: ReportWeek[] }>(
+    'league_report_weeks', { p_league_id: leagueId });
+/** 0348: announce the weekly report in chat, or keep it to the report screen.
+ *  OFF stops the CHAT LINE, never the write-up — the week is still built and
+ *  stored, so the history survives a commissioner quieting a notification. A
+ *  commissioner's own ↻ REPOST posts regardless: that is an explicit press,
+ *  not the standing schedule this setting is about. */
+export const commishSetReportChat = (leagueId: string, on: boolean) =>
+  rpc<{ ok: boolean; error?: string; report_chat?: boolean }>(
+    'commish_set_report_chat', { p_league_id: leagueId, p_on: on });
 export const commishRequestWeekReport = (leagueId: string, week: number) =>
   rpc<{ ok: boolean; error?: string; queued?: boolean; note?: string; id?: number; week_state?: ReportWeek['week_state'] }>(
     'commish_request_week_report', { p_league_id: leagueId, p_week: week });
@@ -2814,6 +2831,28 @@ export const leagueLastSeen = (leagueId: string) =>
 export const leagueSignals = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; polls_unvoted?: number; waiver_results?: number;
         commish?: { waiting: number; review: number } | null }>('league_signals', { p_league_id: leagueId });
+
+/** ── THE SHELF, IN ONE ASK (0347) ────────────────────────────────────────────
+ *  Founder: "Matchup summary per league and a notification for unread chats."
+ *  Every enrolled league's current matchup — my side and my opponent's, with
+ *  records — plus that league's unread counts, in a single round trip. It
+ *  replaces a `chat_unread` fan-out of one RPC per league per minute, and its
+ *  scores come from the same `league_week_scoreboard` the league page reads,
+ *  so a list and the page it opens can never disagree about a score. */
+export interface SlateSide {
+  roster_id: number; team: string | null; points: number | null; live: boolean;
+  record: { wins: number; losses: number; ties: number } | null;
+}
+export interface LeagueSlateRow {
+  league_id: string; name: string; roster_id: number; week: number | null;
+  /** Null for a bye, an odd league, or a week with no fixture for this seat —
+   *  a card that prints a score is claiming a game was played. */
+  game: { status: string; playoff: boolean; consolation: boolean; label: string | null;
+          me: SlateSide; opp: SlateSide } | null;
+  unread: { league: number; dm: number; mention: number };
+}
+export const myLeagueSlate = () =>
+  rpc<{ ok: boolean; error?: string; leagues?: LeagueSlateRow[] }>('my_league_slate', {});
 
 export const dmThreads = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });

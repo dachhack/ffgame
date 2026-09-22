@@ -1,0 +1,93 @@
+name: Re-stamp a week's finals
+
+# ⚠ REWRITES STORED RESULTS. Run this only to repair a week whose finals were
+# frozen wrong — and know which week, and why, before you press it.
+#
+# WHAT IS BROKEN WHEN YOU NEED THIS. Three surfaces read ONE pair of columns,
+# `matchup.home_final` / `away_final`: the weekly report, the league page's
+# matchups + standings, and playoff seeding. The live matchup board reads the
+# engine instead. When those columns are stamped a moment too early — the
+# week-2 stamp that went out with the Monday game still on — every one of those
+# three says the same wrong thing, the board says the right one, and they can
+# never agree again on their own: `stampFinals` writes a final exactly once and
+# after the week's 4 AM release it never revisits it. That freeze is what a
+# final is FOR; it is also why a bad one needs a person.
+#
+# WHAT THIS DOES. Re-resolves the week against the plays that exist now, writes
+# the totals that come out, prints every matchup it moved (before → after, by
+# seat), and rebuilds + re-posts the weekly report for each league whose numbers
+# actually changed. A league that did not move is not touched and its chat is
+# not pinged. Running it twice is harmless: the second pass moves nothing.
+#
+# WHAT IT CANNOT DO. A seat that stored no lineup is fielded from its roster AS
+# IT STANDS NOW. For a managed seat the sealed picks are the week's own and
+# nothing shifts; for an abandoned seat, a re-stamp months later can field a
+# player that seat did not own at kickoff. Repair the week that is wrong, soon.
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (the worker's service-role creds)
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: 'week to re-stamp (e.g. 2)'
+        required: true
+        default: ''
+      league:
+        description: 'league UUID to scope to — BLANK MEANS EVERY LEAGUE'
+        required: false
+        default: ''
+      season:
+        description: 'season override (blank → PILOT_SEASON, default 2026)'
+        required: false
+        default: ''
+      report:
+        description: 'also rebuild + re-post that week’s report'
+        type: boolean
+        default: true
+      confirm:
+        description: 'type RESTAMP to confirm you are rewriting stored results'
+        required: true
+        default: ''
+
+# Shared with Sync/Simulate: a re-stamp and a sim must never write the same
+# league-week from two runners.
+concurrency: live-sim
+
+jobs:
+  restamp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install worker deps
+        working-directory: server
+        run: npm ci
+      - name: Re-stamp week ${{ inputs.week }}
+        working-directory: server
+        env:
+          WEEK: ${{ inputs.week }}
+          LEAGUE: ${{ inputs.league }}
+          PILOT_SEASON: ${{ inputs.season }}
+          WANT_REPORT: ${{ inputs.report }}
+          CONFIRM: ${{ inputs.confirm }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -uo pipefail
+          # The confirm box is the whole safety rail: every other input has a
+          # harmless default, and this one cannot be pressed by accident.
+          if [ "$CONFIRM" != "RESTAMP" ]; then
+            echo "::error::type RESTAMP in the confirm box — this rewrites stored results"; exit 1
+          fi
+          if [ -z "$WEEK" ]; then echo "::error::a week is required"; exit 1; fi
+          if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then
+            echo "::error::SUPABASE_URL secret is missing or not an https:// URL. Set SUPABASE_URL (https://<ref>.supabase.co) and SUPABASE_SERVICE_ROLE_KEY in Settings → Secrets and variables → Actions."; exit 1
+          fi
+          args="$WEEK"
+          if [ -n "${PILOT_SEASON:-}" ]; then args="$args $PILOT_SEASON"; fi
+          if [ -n "$LEAGUE" ]; then args="$args --league=$LEAGUE"; fi
+          if [ "$WANT_REPORT" != "true" ]; then args="$args --no-report"; fi
+          # shellcheck disable=SC2086
+          npm run --silent cli -- restamp $args

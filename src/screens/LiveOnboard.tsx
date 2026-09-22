@@ -8,10 +8,12 @@ import {
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
-  myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, chatUnread,
+  myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
+  type LeagueSlateRow,
   leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
+import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
@@ -573,6 +575,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // cadence; chat_unread never marks anything read. Skipped under browse-as
   // (it would answer for the ADMIN, or refuse).
   const [unreads, setUnreads] = useState<Record<string, { n: number; mention: boolean }>>({});
+  // 0347 · THE SHELF SHOWS THE WEEK. Founder, with Sleeper's league list open:
+  // "Matchup summary per league and a notification for unread chats." One call
+  // carries every league's current fixture AND its unread counts, so the badge
+  // below costs nothing it was not already paying and the score costs nothing
+  // extra at all.
+  const [slate, setSlate] = useState<Record<string, LeagueSlateRow>>({});
   // THE LEAGUE-CARD SIGNAL POLL LEFT IN v0.356.16 (founder: "Avatar, league
   // name, built text of league type, drafting if drafting. That's all we
   // need"). It ran lineupAlarmFor + leagueTrades + leagueSignals for EVERY
@@ -583,15 +591,20 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     if (viewAs || !enrollments?.length) return;
     let dead = false;
     const ids = [...new Set(enrollments.filter((e) => !e.league?.is_mock).map((e) => e.league_id))];
-    const poll = () => Promise.all(ids.map((id) => chatUnread(id).then((r) => [id, r] as const).catch(() => null)))
-      .then((rows) => {
-        if (dead) return;
+    const want = new Set(ids);
+    // ONE CALL FOR THE WHOLE SHELF (0347), where this was one per league. A
+    // failed poll leaves the previous slate standing: a score that vanishes on
+    // one bad round trip is worse than one a minute stale.
+    const poll = () => myLeagueSlate()
+      .then((r) => {
+        if (dead || !r.ok || !r.leagues) return;
+        const rowsFor = r.leagues.filter((x) => want.has(x.league_id));
+        setSlate(Object.fromEntries(rowsFor.map((x) => [x.league_id, x])));
         const m: Record<string, { n: number; mention: boolean }> = {};
-        for (const row of rows) {
-          if (row && row[1].ok) m[row[0]] = { n: (row[1].league ?? 0) + (row[1].dm ?? 0), mention: (row[1].mention ?? 0) > 0 };
-        }
+        for (const x of rowsFor) { const b = unreadBadge(x); if (b) m[x.league_id] = b; }
         setUnreads(m);
-      });
+      })
+      .catch(() => {});
     void poll();
     const t = setInterval(() => { if (!document.hidden) void poll(); }, 60_000);
     return () => { dead = true; clearInterval(t); };
@@ -1006,7 +1019,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         // board that fails to build simply leaves you standing there.
         if (room === 'matchup') void openHeroBoard(e, viewAs?.userId ?? session.user.id, loadSimLeague, navigate);
       }}
-      unreads={unreads}
+      unreads={unreads} slate={slate}
       onAdd={guard(() => setView('add'))}
       onFind={guard(() => setView('board'))}
       onDeleted={refresh}
@@ -1033,7 +1046,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
@@ -1041,8 +1054,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   onDeleted: () => void; isCommish: boolean;
   /** Open the league's HOME page (0182) — the card's primary action. */
   onOpen: (e: Enrollment) => void;
-  /** league_id → unread chat counts, for the card badges (0183). */
+  /** league_id → unread chat counts, for the card badges (0183). Since 0347
+   *  these ride in on the same call as the scores below. */
   unreads: Record<string, { n: number; mention: boolean }>;
+  /** league_id → this week's fixture (0347) — the card's matchup summary. */
+  slate: Record<string, LeagueSlateRow>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -1138,11 +1154,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish={false} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
       </div>
 
@@ -1301,8 +1317,67 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
 // rooms, and this card is the ONLY door to its builder — the hub carries no
 // such tile. Cutting it would not have made the card quieter, it would have
 // made those leagues unplayable.
-function LeagueCard({ e, commish, onPodBuild, onOpen }: {
+/** THIS WEEK'S GAME, ON THE SHELF (0347) — the web twin of the app's
+ *  MatchupStrip.
+ *
+ *  Founder, holding up Sleeper's league list: "Matchup summary per league."
+ *  Their landing screen answers the question a list of leagues is opened to
+ *  ask — am I winning — before you tap anything.
+ *
+ *  My seat is named first and carries the colour whichever side of the fixture
+ *  the schedule put it on: the card is read from one seat, and "home" is the
+ *  schedule's business rather than the reader's. A live game says LEADING, not
+ *  WINNING — a 35-point first-quarter lead is not a result, and the word and
+ *  the colour agree about that (verdictOf owns the distinction, so both
+ *  clients make it the same way).
+ *
+ *  Renders nothing without a fixture: a bye, an odd league, a week not yet
+ *  scheduled. A row that prints 0.00 is claiming a game was played. */
+function SlateStrip({ row }: { row?: LeagueSlateRow }) {
+  const g = row?.game;
+  if (!g) return null;
+  const v = verdictOf(g);
+  const tone = v === 'won' || v === 'leading' ? 'var(--you)'
+    : v === 'lost' || v === 'trailing' ? 'var(--opp)' : 'var(--mid)';
+  const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'
+    : v === 'leading' ? 'LEADING' : v === 'trailing' ? 'TRAILING' : v === 'level' ? 'LEVEL' : null;
+  const live = !!(g.me?.live || g.opp?.live);
+  const line = (side: typeof g.me, mine: boolean) => {
+    const rec = recordLabel(side?.record);
+    return (
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 12, fontWeight: mine ? 700 : 400, color: mine ? 'var(--text)' : 'var(--mid)' }}>
+          {side?.team || `Seat ${side?.roster_id}`}
+        </span>
+        {rec && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{rec}</span>}
+        <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 56, textAlign: 'right', color: mine ? tone : 'var(--mid)' }}>
+          {scoreLabel(side?.points)}
+        </span>
+      </div>
+    );
+  };
+  return (
+    <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid var(--bd)', display: 'grid', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>
+          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
+        </span>
+        {live && <span aria-hidden style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--opp)' }} />}
+        <span style={{ flex: 1 }} />
+        {word && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: tone }}>{word}</span>}
+      </div>
+      {line(g.me, true)}
+      {line(g.opp, false)}
+    </div>
+  );
+}
+
+function LeagueCard({ e, commish, slate, unread, onPodBuild, onOpen }: {
   e: Enrollment; commish: boolean;
+  /** 0347: this league's current fixture, or undefined while the shelf loads. */
+  slate?: LeagueSlateRow;
+  unread?: { n: number; mention: boolean };
   onPodBuild: () => void;
   onOpen: () => void;
 }) {
@@ -1332,6 +1407,18 @@ function LeagueCard({ e, commish, onPodBuild, onOpen }: {
           <div className="grotesk" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, color: 'var(--text)', minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</span>
             {commish && <span className="mono" title="you run this league" style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '1px 5px' }}>COMMISH</span>}
+            {/* 0347: the unread badge rides the NAME. A count is a property of
+                this league and reads as one only while it sits beside it. */}
+            {unread && (
+              <span className="mono" title={unread.mention ? 'somebody named you' : 'unread messages'}
+                style={{ flexShrink: 0, marginLeft: 'auto', fontSize: 9, fontWeight: 700,
+                  color: unread.mention ? 'var(--on-accent)' : 'var(--you)',
+                  background: unread.mention ? 'var(--warn)' : 'transparent',
+                  border: `1px solid ${unread.mention ? 'var(--warn)' : 'var(--you)'}`,
+                  borderRadius: 999, padding: '1px 7px' }}>
+                {unread.mention ? `@${unread.n}` : unread.n}
+              </span>
+            )}
           </div>
           {/* Wraps rather than clips (v0.357.2): the line carries the game
               now, and a clipped ellipsis would hide the very words the founder
@@ -1347,6 +1434,7 @@ function LeagueCard({ e, commish, onPodBuild, onOpen }: {
           )}
         </div>
       </button>
+      <SlateStrip row={slate} />
       {/* The showdown's crown (0090) stays: it is a RESULT, not a signal chip,
           it renders only once the whole contest week is final, and no other
           surface reports it. */}
