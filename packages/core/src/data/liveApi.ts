@@ -13,7 +13,7 @@ import { supabaseUrl } from './liveConfig';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
-import { openWeekFrom } from './openWeek';
+import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -852,9 +852,32 @@ export async function defaultOpenWeek(leagueId: string, season?: string, preseas
   // v0.401.0: the ordering and the cutoff moved into openWeekFrom, a pure
   // function parity can test against fixed instants. The cutoff also MOVED —
   // it used to be last kickoff + 4h, so the screen jumped to next week the
-  // moment Monday night football ended; it now holds until Wednesday 00:00 ET.
-  return openWeekFrom(weeks, kicks, Date.now(), finals) ?? (pre ? 101 : 1);
+  // moment Monday night football ended.
+  //
+  // v0.466.0: and it moved again, from Wednesday midnight to THIS LEAGUE'S
+  // WAIVER RUN. Founder: "We want it synced with the waiver run so that when
+  // you see the week matchup, you see the impacts of new rosters from the
+  // waiver run." A board that turns over before the run shows next week's
+  // matchup against last week's rosters. A league that has no run — rolling
+  // waivers, or a schedule that clears no day — gets the default pair, which
+  // is what `league_week_turnover` returns and says `source` about.
+  const turn = await leagueWeekTurnover(leagueId).catch(() => null);
+  return openWeekFrom(weeks, kicks, Date.now(), finals,
+    turn && turn.dow != null ? { dow: turn.dow, minute: turn.minute } : DEFAULT_TURNOVER)
+    ?? (pre ? 101 : 1);
 }
+
+/** WHEN THIS LEAGUE'S BOARD TURNS OVER (0343) — the day and time of the waiver
+ *  run that reshapes its rosters for the week ahead, which is the moment the
+ *  matchup screens stop showing the week just played.
+ *
+ *  `source` is which answer you are looking at: `run` is the league's own
+ *  after-games clearing run; `rolling`, `no_hold_day` and `no_run` are the
+ *  three ways a league can have no such moment, all of which fall back to
+ *  Wednesday 3:00am ET because the board still has to turn over somewhere. */
+export const leagueWeekTurnover = (leagueId: string) =>
+  rpc<WeekTurnover & { source?: 'run' | 'rolling' | 'no_hold_day' | 'no_run' | 'default' }>(
+    'league_week_turnover', { p_league_id: leagueId });
 
 /** ── THE WEEK'S SCOREBOARD, FOR ANYBODY IN THE LEAGUE (0341) ────────────────
  *  Founder: "Matchups summary, rankings, then activity." `leagueResults`

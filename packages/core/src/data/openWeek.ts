@@ -18,9 +18,23 @@
 //    next. The founder's line is the better rule and it is also the simpler
 //    one to say.
 //
-// THE RULE: a week stays open until the first Wednesday 00:00 ET after its
-// games are done. Before that you get the week just played; from Wednesday
-// you get the week to be played.
+// THE RULE: a week stays open until THE LEAGUE'S WAIVER RUN, the first one
+// after its games are done. Before that you get the week just played; from the
+// run you get the week to be played.
+//
+// v0.466.0 — founder: "We want it synced with the waiver run so that when you
+// see the week matchup, you see the impacts of new rosters from the waiver
+// run." The first cut of this rule said Wednesday 00:00 ET, which was the
+// right DAY for the wrong reason and three hours early: the run that reshapes
+// every roster for the week ahead is AFTER-GAMES WAIVERS CLEAR (0337), and it
+// lands at the league's own clear time — 3:00am ET by default — on the league's
+// own hold day, Wednesday by default. Turning the board over at midnight
+// showed you next week's matchup against last week's rosters, which is the one
+// thing the page must not do.
+//
+// So the boundary is a DAY and a TIME this league actually keeps, passed in
+// rather than assumed. A league that moved its run to Tuesday 5am turns over
+// at Tuesday 5am, and its board and its wire agree about what week it is.
 //
 // A PURE FUNCTION, because the interesting cases are all calendar edges —
 // Tuesday 23:59 vs Wednesday 00:01, a week with no Monday game, the November
@@ -33,6 +47,16 @@ export interface WeekKicks { first: number; last: number }
 
 /** Games are done this long after the last one KICKS OFF (not ends). */
 export const GAME_MS = 4 * 3_600_000;
+
+/** When a league's board turns over: a weekday (0 = Sunday … 3 = Wednesday)
+ *  and a time of day in minutes past midnight ET.
+ *
+ *  The defaults are the defaults everywhere else — Wednesday, 3:00am ET — so a
+ *  caller with no league in hand (a demo board, a test) gets the schedule an
+ *  unconfigured league runs. `league_week_turnover` (0343) is where a real
+ *  league's pair comes from. */
+export interface WeekTurnover { dow: number; minute: number }
+export const DEFAULT_TURNOVER: WeekTurnover = { dow: 3, minute: 180 };
 
 /** Weekday in US Eastern, 0 = Sunday … 3 = Wednesday. `America/New_York`
  *  rather than a fixed offset: the season straddles the November change, and
@@ -62,12 +86,28 @@ function etHourOf(ms: number): number {
  *  "add N days then set midnight" has to be done IN the target zone to survive
  *  a DST change, and stepping until the zone itself reports Wednesday hour 0
  *  is the version that cannot get that wrong. At most ~170 iterations. */
-export function weekClosesAt(lastKickoffMs: number): number {
+export function weekClosesAt(lastKickoffMs: number, turn: WeekTurnover = DEFAULT_TURNOVER): number {
   const HOUR = 3_600_000;
-  // Start from the top of the hour after the games are done, then walk.
+  const dow = ((turn?.dow ?? 3) % 7 + 7) % 7;
+  const minute = Math.min(Math.max(turn?.minute ?? 180, 0), 1439);
+  const hour = Math.floor(minute / 60);
+  const past = minute % 60;
+  // Start from the top of the hour after the games are done, then walk. The
+  // walk finds the RUN'S HOUR rather than midnight, and the leftover minutes
+  // are added afterwards — within one hour nothing can move underneath them.
+  //
+  // Adding three hours to an ET midnight would NOT do: the DST changes happen
+  // at 2:00am ET, so on those two Sundays "midnight + 3h" is 2am or 4am, not
+  // 3am. Walking until the zone itself reports the hour is the version that
+  // cannot get that wrong, which is the same reason the original walked.
   let t = Math.ceil((lastKickoffMs + GAME_MS) / HOUR) * HOUR;
   for (let i = 0; i < 24 * 8; i++) {
-    if (etWeekday(t) === 3 && etHourOf(t) === 0) return t;
+    if (etWeekday(t) === dow && etHourOf(t) === hour) {
+      const at = t + past * 60_000;
+      // A run whose minutes put it back before the games are done belongs to
+      // next week's occurrence, not this one.
+      return at > lastKickoffMs + GAME_MS ? at : at + 7 * 24 * HOUR;
+    }
     t += HOUR;
   }
   return t;   // unreachable in practice; never loop for ever over a clock
@@ -85,6 +125,10 @@ export function openWeekFrom(
   nowMs: number,
   /** Week → every matchup in it is FINAL. v0.407.0; see below. */
   finals: Record<number, boolean> = {},
+  /** This league's waiver run — the moment its rosters change for the week
+   *  ahead. v0.466.0; defaults to Wednesday 3:00am ET, which is what an
+   *  unconfigured league runs. */
+  turn: WeekTurnover = DEFAULT_TURNOVER,
 ): number | null {
   if (!weeks.length) return null;
   const ordered = weeks.slice().sort((a, b) =>
@@ -110,7 +154,7 @@ export function openWeekFrom(
       if (finals[w]) continue;
       return w;
     }
-    if (nowMs < weekClosesAt(k.last)) return w;
+    if (nowMs < weekClosesAt(k.last, turn)) return w;
   }
   return ordered[ordered.length - 1];
 }

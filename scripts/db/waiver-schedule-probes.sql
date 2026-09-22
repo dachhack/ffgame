@@ -11,7 +11,11 @@
 --         ON — the door stays shut instead of opening at a phantom 3am;
 --   • ws9 (0338) the after-games hold ends at a run that HAPPENS — the chosen
 --         day rolls forward to one the schedule clears, and a week with no run
---         at all leaves the rule inapplicable rather than expiring on nothing.
+--         at all leaves the rule inapplicable rather than expiring on nothing;
+--   • ws10 (0343) A LEAGUE THAT HAS SET NOTHING STILL HAS A RUN — the legacy
+--         branch returned NULL rather than true for an absent picker, and NULL
+--         is not true, so the schedule was ignored outright for every such
+--         league.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -29,7 +33,7 @@ insert into app_user (id, email) select ('00000000-0000-0000-0000-00000000370' |
 update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb where email like 'ws0%@test.dev';
 
 do $$
-declare r jsonb; lid uuid; lid2 uuid; d jsonb; sun timestamptz; mon timestamptz; t timestamptz;
+declare r jsonb; lid uuid; lid2 uuid; d jsonb; sun timestamptz; mon timestamptz; t timestamptz; seas text := '2026';
 begin
   perform ws_as('01');
   r := create_native_league('WaiverSched', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
@@ -192,6 +196,40 @@ begin
   perform ws_true(waiver_game_hold_dow_effective(lid) = 3,
     'ws9 a Wednesday the run does visit is left exactly where it was');
   delete from nfl_slate where season = '2026' and week = 99;
+
+  -- ── ws10 (0343). THE DEFAULT LEAGUE'S RUN ──
+  -- This is the branch every suite above walks past. They all set an explicit
+  -- schedule or an explicit `waiver_clear_dow` first, which is the half that
+  -- worked; nothing asserted what a league that has set NOTHING does.
+  --
+  -- It did nothing. With no `waiver_clear_dow` key, `jsonb_typeof(NULL)` is
+  -- NULL, `NULL <> 'array'` is NULL, and NULL OR NULL OR NULL is NULL — so
+  -- `league_waiver_day_clears` answered NULL, which every caller reads as a
+  -- no. `waiver_hold_until` then found no clearing day in nine days of
+  -- walking and fell through to a flat 24 hours from the drop, and the
+  -- after-games rule had no morning to land on and did nothing at all.
+  perform ws_as('01');
+  r := create_native_league('WaiverUnset', seas, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  lid2 := (r ->> 'league_id')::uuid;
+  perform ws_true((select settings_json -> 'waiver_clear_dow' is null and settings_json -> 'waiver_days' is null
+                     from league where id = lid2),
+    'ws10 a fresh league really has set neither picker');
+  perform ws_true(league_waiver_day_clears(lid2, now()) is true,
+    'ws10 …and its run still visits today — NULL is not true, and this was NULL');
+  perform ws_true((select bool_and(league_waiver_day_clears(lid2, now() + make_interval(days => i)))
+                     from generate_series(0, 6) i),
+    'ws10 …every day of the week, which is what "no picker" has always meant');
+  perform ws_true(waiver_game_hold_dow_effective(lid2) = 3,
+    'ws10 so the after-games hold has its Wednesday to land on (got '
+      || coalesce(waiver_game_hold_dow_effective(lid2)::text, 'null') || ')');
+  -- THE COST, in the one place a manager would feel it: a dropped player
+  -- cleared 24h after the drop instead of at the league's 3:00am run.
+  t := waiver_hold_until(lid2);
+  perform ws_true(extract(hour from t at time zone 'America/New_York')::int = 3
+              and extract(minute from t at time zone 'America/New_York')::int = 0,
+    'ws10 a drop clears AT THE RUN, not 24 hours after the drop (got ' || t::text || ')');
+  perform ws_true(t <= now() + interval '25 hours',
+    'ws10 …and at the next one, not a week out');
 end $$;
 
 select 'ALL WAIVER-SCHEDULE PROBES PASS' as result;

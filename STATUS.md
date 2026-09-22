@@ -18,6 +18,64 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.466.0 — the board turns with the run
+
+Founder, asked whether "Weds AM" meant midnight or the waiver run: "We want it
+synced with the waiver run so that when you see the week matchup, you see the
+impacts of new rosters from the waiver run."
+
+v0.465.2 turned the board at Wednesday 00:00 ET — the right DAY for the wrong
+reason, and three hours early. The run that reshapes every roster for the week
+ahead is AFTER GAMES WAIVERS CLEAR (0337), and it lands at the league's own
+clear time on the league's own hold day. Turning over at midnight showed next
+week's matchup against last week's rosters, which is the one thing that page
+must not do.
+
+The boundary stops being a constant and becomes THIS LEAGUE'S RUN. Not a new
+rule — a read of two that exist: `waiver_game_hold_dow_effective` (0338) for
+the day, rolled forward to one the schedule's run actually visits, and
+`league_waiver_clear_min` (0337) for the time. A league that moved its run to
+Tuesday 5am turns over Tuesday 5am, three days before the default league does,
+and its board and its wire never disagree about what week it is. A rolling
+league has no such moment at all, so it falls back to Wednesday 3:00am and
+`league_week_turnover` SAYS so in `source` rather than leaving a screen to
+guess.
+
+`weekClosesAt` walks to the run's HOUR and adds the leftover minutes there —
+never "ET midnight + 3h", because the DST switches happen at 2:00am ET and
+that sum is 2am or 4am on those two Sundays.
+
+── AND A NULL THAT WAS READING AS "NO RUN AT ALL" ──────────────────────────
+
+Found while wiring the turnover, and far bigger than the thing that found it.
+`league_waiver_day_clears` (0337) falls back, for a league with no explicit
+schedule, to: the day is in `waiver_clear_dow`, or there is no
+`waiver_clear_dow` and the run visits every day.
+
+That second half never happened. With the key absent the value is SQL NULL, so
+`jsonb_typeof(NULL)` is NULL, so `NULL <> 'array'` is NULL — and NULL OR NULL
+OR NULL is NULL, not true. The function answered NULL for every league that
+had never touched the old key, which is every league created since 0337.
+
+NULL is not true, and every caller reads it as a no:
+
+  · `waiver_hold_until` walked nine days looking for a clearing day, found
+    none, and fell through to its "no run to wait for" branch — so a dropped
+    player cleared a flat 24 hours after the drop instead of at the league's
+    3:00am run. The schedule was being ignored outright.
+  · AFTER GAMES WAIVERS CLEAR needs a clearing day to land on, so the rule
+    that stops the fastest phone winning every injury did nothing at all.
+  · and 0338's `waiver_game_hold_dow_effective` answered null, which is what
+    made this visible — the board had no run to turn over on.
+
+The probes never caught it because every waiver suite sets an explicit
+schedule or an explicit `waiver_clear_dow` before asserting anything, which is
+exactly the branch that worked. ws1 asserted the default league's DAYS and its
+DOOR; nothing asserted its RUN. ws10 does now, including the cost in the one
+place a manager feels it.
+
+Migration 0343, ten new assertions across check:draftspots, ws10 and lt8.
+
 ### v0.465.2 — the board turns on Wednesday
 
 Founder, with the LEAGUE tab on week 3 and the MATCHUP tab on week 2 at the
