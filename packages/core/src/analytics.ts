@@ -62,7 +62,7 @@ export const Ev = {
   commishPremiumToggled: 'commish_premium_toggled', // {on}
   // social + league-life layer (the 0147–0150 sprint: chat, trades, push)
   chatOpened: 'chat_opened',              // {dm} — a chat surface came up (league channel or a DM thread)
-  chatPosted: 'chat_posted',              // {kind:'text'|'gif'|'image'|'poll', dm, mentions} — message accepted by the server
+  chatPosted: 'chat_posted',              // {kind:'text'|'gif'|'image'|'poll', dm, mentions, captioned} — message accepted by the server
   pollVoted: 'poll_voted',                // cast or changed a vote on a league poll
   chatPinned: 'chat_pinned',              // {on} — commish pinned/unpinned a message
   chatReacted: 'chat_reacted',            // {emoji} — a quick reaction toggled (0210)

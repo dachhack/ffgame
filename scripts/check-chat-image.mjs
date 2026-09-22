@@ -20,7 +20,8 @@
 //     shows up as a picture in an app that has never heard of the bucket.
 import { readFileSync } from 'node:fs';
 import {
-  CHAT_IMAGE_BUCKET, CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_EDGE, CHAT_IMAGE_SMALL_ENOUGH, CHAT_IMAGE_TYPES,
+  CHAT_IMAGE_BUCKET, CHAT_IMAGE_CAPTION_MAX, CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_EDGE,
+  CHAT_IMAGE_SMALL_ENOUGH, CHAT_IMAGE_TYPES,
   chatImageType, chatImageKey, chatImageBase, isChatImageUrl, chatImagePath, shouldShrinkChatImage,
 } from '../packages/core/src/data/chatImage';
 
@@ -173,6 +174,45 @@ const sql = readFileSync(new URL('../supabase/migrations/0349_the_league_posts_a
   for (const m of ['expo-image-picker', 'expo-image-manipulator', 'expo-file-system']) {
     ok(`${m} is a declared dependency, not a borrowed transitive one`, !!deps[m], deps[m]);
   }
+}
+
+// ── THE CAPTION IS BESIDE THE BODY, NOT INSIDE IT (0350) ───────────────────
+// Founder: "Allow the user to caption the image so they can QC and add any
+// text." The tempting shape is "<url>\n<caption>" in the body — and it is the
+// one shape that breaks every client already installed, because inline
+// rendering keys on the body being a bare image URL (0148). So the caption got
+// a column, and these are the properties that keep that decision honest.
+{
+  const cap = readFileSync(new URL('../supabase/migrations/0350_a_picture_with_something_to_say.sql', import.meta.url), 'utf8');
+  ok('the migration gives both message tables a caption',
+    /alter table league_message add column if not exists caption text/.test(cap)
+    && /alter table dm_message\s+add column if not exists caption text/.test(cap));
+  const sqlMax = /length\(c\) > (\d+)/.exec(cap);
+  ok('the SQL caps the caption', !!sqlMax);
+  ok('…at the length the composer stops typing at', sqlMax && Number(sqlMax[1]) === CHAT_IMAGE_CAPTION_MAX,
+    { sql: sqlMax && Number(sqlMax[1]), ts: CHAT_IMAGE_CAPTION_MAX });
+  // THE ONE THAT KEEPS OLD BUILDS POSTING. PostgREST resolves an RPC by the
+  // argument names it is given; a default means a client that sends only the
+  // first three keeps working. Without it, every app build in the wild would
+  // start failing to send the moment this migration ran.
+  ok('chat_post takes the caption as a DEFAULTED argument', /p_caption text default null/.test(cap));
+  ok('…and so does dm_send',
+    /create or replace function dm_send\(p_league_id uuid, p_to uuid, p_body text, p_caption text default null\)/.test(cap));
+  ok('the message payload carries the caption back', /'caption', m\.caption/.test(cap));
+  ok('a DM thread previews the caption rather than 80 characters of URL',
+    /left\(coalesce\(m\.caption, m\.body\), 80\)/.test(cap));
+  // The body of an image message is still exactly the URL, which is the whole
+  // reason the caption went somewhere else. Longest realistic one, well under
+  // the 500 the body has always been capped at.
+  const longest = chatImageBase() + chatImageKey(LEAGUE, AUTHOR, 'image/jpeg');
+  ok('an image body is still a bare URL a 0148 client renders inline', isChatImageUrl(longest) && !/\s/.test(longest));
+  ok('…and nowhere near the 500-character body cap', longest.length < 500, longest.length);
+  // Worth being straight about: a URL plus a full caption WOULD have fitted in
+  // the body's 500 characters. Space was never the argument — the column
+  // exists so that a build which predates captions still renders the picture,
+  // which is the assertion above, not this arithmetic.
+  ok('the caption cap is a remark, not an essay', CHAT_IMAGE_CAPTION_MAX >= 100 && CHAT_IMAGE_CAPTION_MAX <= 500,
+    CHAT_IMAGE_CAPTION_MAX);
 }
 
 if (fails) { console.log(`\n${fails} CHAT IMAGE ASSERTION(S) FAILED`); process.exit(1); }

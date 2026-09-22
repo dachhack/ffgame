@@ -26,7 +26,9 @@ import {
 } from '@drip/core/data/chatImage';
 
 export type PreparedImage =
-  | { ok: true; bytes: Uint8Array; type: ChatImageType }
+  /** `uri` is the file these exact bytes came from — what the draft shows the
+   *  poster before they send it (0350). Local, so the preview costs nothing. */
+  | { ok: true; bytes: Uint8Array; type: ChatImageType; uri: string }
   | { ok: false; error: string };
 
 const tooBig = (n: number) =>
@@ -58,7 +60,7 @@ export async function pickChatImage(): Promise<PreparedImage | null> {
   const size = a.fileSize ?? original.size ?? 0;
   if (!shouldShrinkChatImage({ bytes: size, width: a.width, height: a.height, type })) {
     if (size > CHAT_IMAGE_MAX_BYTES) return { ok: false, error: tooBig(size) };
-    return { ok: true, bytes: await original.bytes(), type };
+    return { ok: true, bytes: await original.bytes(), type, uri: a.uri };
   }
 
   // Oversized: resize the long edge and re-encode. JPEG rather than WebP —
@@ -71,11 +73,11 @@ export async function pickChatImage(): Promise<PreparedImage | null> {
     const saved = await (await ctx.renderAsync()).saveAsync({ format: SaveFormat.JPEG, compress: 0.82 });
     const out = new File(saved.uri);
     if (out.size > CHAT_IMAGE_MAX_BYTES) return { ok: false, error: tooBig(out.size) };
-    return { ok: true, bytes: await out.bytes(), type: 'image/jpeg' };
+    return { ok: true, bytes: await out.bytes(), type: 'image/jpeg', uri: saved.uri };
   } catch {
     // The manipulator can refuse a file the picker was happy with. Posting the
     // original a bit big beats a picture that will not post at all.
     if (size > CHAT_IMAGE_MAX_BYTES) return { ok: false, error: tooBig(size) };
-    return { ok: true, bytes: await original.bytes(), type };
+    return { ok: true, bytes: await original.bytes(), type, uri: a.uri };
   }
 }
