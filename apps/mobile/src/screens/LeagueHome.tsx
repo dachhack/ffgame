@@ -30,9 +30,17 @@ export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
  *  from this screen and with no business knowing what a vampire card is. So
  *  the sheet is a module-level bus, the same shape as `openPlayerCard`: App
  *  renders the chip and calls `openLeagueSettings`, a host mounted once
- *  presents it, and everything it opens stays here where it already lived. */
+ *  presents it, and everything it opens stays here where it already lived.
+ *
+ *  v0.467.0 — founder: "Need a way to go back to the settings. The settings
+ *  chip only works on the league tab." The first cut installed this context
+ *  from LeagueHome, which meant it was torn down the moment you left the
+ *  LEAGUE tab — so on MATCHUP, MY TEAM or CHAT the chip was still drawn and
+ *  did nothing, which is worse than not drawing it. The CHIP lives as long as
+ *  a league is open, so its context has to as well: App installs it now, for
+ *  the whole time `open` is set, and clears it when the league closes. */
 export interface LeagueSettingsReq {
-  leagueId: string; rosterId: number | null; native: boolean; commish: boolean; classic: boolean;
+  leagueId: string; rosterId: number | null; native: boolean; commish: boolean;
   teamName?: string | null;
   onGo: (room: LeagueRoom) => void;
   onShop: () => void;
@@ -104,23 +112,10 @@ export function LeagueHome(props: {
   const { leagueId, rosterId, native, commish } = props;
   const t = useTheme();
   const chromeScroll = useLeagueScroll();   // the shell's folding chrome (v0.356.0)
-  const [classic, setClassic] = useState(false);
   const [sb, setSb] = useState<Awaited<ReturnType<typeof leagueWeekScoreboard>> | null>(null);
   const [week, setWeek] = useState<number | null>(null);
   const [teams, setTeams] = useState<Record<number, TeamInfo>>({});
   const [activityOpen, setActivityOpen] = useState(false);
-
-  // The gear's context lives with the league, not with App: it is cleared on
-  // the way out so the chip cannot open a league you have left.
-  useEffect(() => {
-    setLeagueSettingsCtx({ ...props, classic, leagueId });
-    return () => setLeagueSettingsCtx(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leagueId, rosterId, native, commish, classic, props.teamName]);
-
-  useEffect(() => {
-    leagueGameMode(leagueId).then((g) => setClassic(g?.mode === 'classic')).catch(() => {});
-  }, [leagueId]);
 
   // WHICH WEEK THIS OPENS ON (v0.465.2). Founder: "We should move default
   // views to the next week on Weds AM" — and the rule for that already

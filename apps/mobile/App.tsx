@@ -31,7 +31,7 @@ import { LivePicks } from './src/screens/LivePicks';
 import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
-import { LeagueHome, LeagueSettingsHost, openLeagueSettings } from './src/screens/LeagueHome';
+import { LeagueHome, LeagueSettingsHost, openLeagueSettings, setLeagueSettingsCtx } from './src/screens/LeagueHome';
 import { tap } from './src/ui/feedback';
 import { ChatChipDot } from './src/ui/unread';
 import { registerForPush } from './src/ui/push';
@@ -181,6 +181,34 @@ export function App() {
   const [tradePartner, setTradePartner] = useState<number | null>(null);
   useEffect(() => { if (view !== 'chat') setChatDm(null); }, [view]);
   useEffect(() => { if (view !== 'team') setTradePartner(null); }, [view]);
+
+  /** THE GEAR'S CONTEXT LIVES AS LONG AS THE LEAGUE DOES (v0.467.0).
+   *
+   *  Founder: "Need a way to go back to the settings. The settings chip only
+   *  works on the league tab." It did, and for a reason that is obvious once
+   *  said: LeagueHome installed this and tore it down on unmount, so leaving
+   *  the LEAGUE tab left the chip drawn and inert — worse than not drawing it,
+   *  because a control that does nothing reads as a broken app rather than an
+   *  absent feature.
+   *
+   *  The CHIP is rendered here, for as long as `open` is set, so its context
+   *  belongs here too. Cleared when the league closes, so it can never open a
+   *  league you have left. */
+  useEffect(() => {
+    if (!open) { setLeagueSettingsCtx(null); return; }
+    setLeagueSettingsCtx({
+      leagueId: open.leagueId,
+      rosterId: open.rosterId,
+      native: open.native,
+      commish: !!open.commish,
+      onGo: (room) => setView(room),
+      onMessage: (peerId, peer) => { setChatDm({ peerId, peer }); setView('chat'); },
+      onTrade: (rid) => { setTradePartner(rid); setView('team'); },
+      onShop: () => { setShopSignal((n) => n + 1); setView('picks'); },
+      onBack: () => setOpen(null),
+    });
+    return () => setLeagueSettingsCtx(null);
+  }, [open]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { chromeDrv.reset(); }, [view, open?.leagueId]);
 
