@@ -63,7 +63,10 @@ reported "0 moved" as if that settled something. It did not; a scorer re-run
 against its own defect agrees with itself. The diff is what asked a question
 the resolver could not answer by agreeing with itself.
 
-Week 1, 2 and 3 need a re-stamp now, which is what the errand is for.
+Weeks 1 and 2 need a re-stamp now, which is what the errand is for. NOT week 3
+— `stampFinals` only ever touches a matchup whose status is already 'final',
+and week 3 has not kicked off, so there is no stored number there to be wrong
+yet. A week is repaired after it closes, not before.
 
 check:teamunit, nine assertions. No migration.
 
