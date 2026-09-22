@@ -12,8 +12,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
-import { setLeagueFlags } from '@drip/core/data/commish';
-import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
+import { setLeagueFlags, flagsLeague } from '@drip/core/data/commish';
+import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
@@ -639,7 +639,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // flagsVer is the same recompute signal; scoring and flags are both
         // module caches React cannot see.
         leagueScoringGet(r.leagueId).then((sc) => {
-          if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
+          if (sc?.ok) { setLeagueScoring(parseScoring(sc), r.leagueId); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === r.rosterId ? m.away_roster_id : m.home_roster_id;
         const teamsP = matchupTeams(r.leagueId, [r.rosterId, oppRoster]);
@@ -852,6 +852,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     return new Map(slotDefs.map((d, i) => [d.slot, names[i]]));
   }, [slotDefs]);
   const nameOf = (d: { slot: string; label?: string; pos: string[] }) => slotName.get(d.slot) ?? d.slot;
+  // THE RULES BEFORE THE NUMBERS (v0.473.0) — the app twin's comment applies
+  // verbatim. Both module caches now name the league they hold, so the board
+  // asks instead of assuming: until they speak for THIS league it is scoring
+  // under whatever the last league left behind.
+  const rulesReady = useMemo(() => {
+    void flagsVer;
+    const lid = ros?.leagueId;
+    return !!lid && scoringLeague() === lid && flagsLeague() === lid;
+  }, [flagsVer, ros?.leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -1277,7 +1286,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     }).catch(() => {});
   }, [state, locked, matchup, userId, browsing, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
-  if (state === 'loading') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
+  // A wrong score is worse than a late one, and this one was wrong SILENTLY.
+  if (state === 'loading' || !rulesReady) return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading…</div>;
   const weekBtn = (on: boolean): React.CSSProperties => ({
     fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
     color: on ? 'var(--text)' : 'var(--faint)', background: 'var(--surface)',

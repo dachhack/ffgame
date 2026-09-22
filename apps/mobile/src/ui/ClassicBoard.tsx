@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
-import { setLeagueFlags } from '@drip/core/data/commish';
-import { setLeagueScoring, parseScoring } from '@drip/core/engine/leagueScoring';
+import { setLeagueFlags, flagsLeague } from '@drip/core/data/commish';
+import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
@@ -497,7 +497,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // anything, or it draws numbers the worker doesn't. flagsVer is the
         // shared recompute signal: both are module caches React can't see.
         leagueScoringGet(leagueId).then((sc) => {
-          if (sc?.ok) { setLeagueScoring(parseScoring(sc)); setFlagsVer((v) => v + 1); }
+          if (sc?.ok) { setLeagueScoring(parseScoring(sc), leagueId); setFlagsVer((v) => v + 1); }
         }).catch(() => {});
         const oppRoster = m.home_roster_id === seat ? m.away_roster_id : m.home_roster_id;
         // THE LIVE INJURY REPORT (v0.299.1). This screen had never loaded it —
@@ -707,6 +707,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return new Map(slotDefs.map((d, i) => [d.slot, names[i]]));
   }, [slotDefs]);
   const nameOf = (d: { slot: string; label?: string; pos: string[] }) => slotName.get(d.slot) ?? d.slot;
+  // Both module caches now name the league they hold, so the board can ask
+  // rather than assume. flagsVer is the recompute signal both installs bump.
+  const rulesReady = useMemo(() => {
+    void flagsVer;
+    return scoringLeague() === leagueId && flagsLeague() === leagueId;
+  }, [flagsVer, leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -1133,7 +1139,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   }, [state, locked, matchup, userId, browsing, setupReady, stashReady, pool, slotDefs, bestball, mine, stashed, expMap, slate, fillValue]);
 
 
-  if (state === 'loading') return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
+  // THE RULES BEFORE THE NUMBERS (v0.473.0). `setLeagueScoring` and
+  // `setLeagueFlags` are module caches filled by two fetches that land AFTER
+  // the first paint, and the scoring cache used to carry no league at all — so
+  // a board opened in one league scored its players under the PREVIOUS
+  // league's tdBonus, ydMult, toPenalty and scoped bonuses until its own
+  // arrived, then quietly settled on a different total. A founder in eight
+  // leagues met that every time he changed screens.
+  //
+  // A wrong score is worse than a late one, and this one was wrong SILENTLY —
+  // nothing on the card said the rules were still in the post. So the board
+  // waits for both caches to speak for THIS league, which is the same spinner
+  // it already shows and typically the same tick.
+  if (state === 'loading' || !rulesReady) return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
   if (byeWeek != null) return (
     <NoGame week={byeWeek} bye>
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>

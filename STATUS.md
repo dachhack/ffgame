@@ -18,6 +18,53 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.473.0 — whose rules are loaded
+
+Founder, reading the new league summaries: "Are we applying all of the league
+scoring adjustments in the report and matchup summary?"
+
+IN THOSE TWO, YES, AND BY CONSTRUCTION. Neither scores anything. The weekly
+report is built from `matchup_state.slot_scores` and the stored finals; the
+league page and the shelf read `league_week_scoreboard` and `league_standings`.
+Every number on them was computed by the resolver with the league's catalog,
+its 0143 adjustments, its 0144 flags, its 0145 scoped rules and its golf
+setting installed. They inherit the rules rather than re-deriving them, which
+is the whole reason they cannot disagree with the resolver.
+
+THE PLACE THAT DOES SCORE IS THE LIVE BOARD, and the question found two real
+defects there, both silent.
+
+ONE: THE SCORING CACHE HAD NO OWNER. `setLeagueFlags` has always recorded which
+league its rows are for (`flagsLeague`). `setLeagueScoring` recorded nothing —
+`active` was a bare module global. Both are filled by fetches that land AFTER
+the first paint, so a board opened in one league scored its players under the
+PREVIOUS league's tdBonus, ydMult, toPenalty and scoped bonuses until its own
+arrived, then settled quietly on a different total. The server was safe by
+discipline, re-installing synchronously before every resolve with a comment
+explaining why — but discipline only one of two callers knows about is not a
+property of the code. The cache names its league now, and both boards wait for
+both caches to speak for THIS league before painting a score. A wrong number is
+worse than a late one, and this one was wrong with nothing on screen to say so.
+
+It is also, precisely, the shape of the transient in the founder's own
+screenshots: the same matchup read 149.20 and then 127.70 a minute apart.
+
+TWO: `ppr` HAS TWO HOMES AND THE SIDES PICKED DIFFERENT WINNERS.
+settings_json.ppr and the 0209 scoring catalog both carry it. `leagueCatalogOf`
+is the function that decides — the catalog copy exists only if a commissioner
+set it deliberately, so it goes last and wins — and the clients have always
+asked it. The resolver spread `ppr: gameMode.ppr` last instead, so it preferred
+settings_json while the board preferred the catalog. Any league whose two
+copies disagree was scored one way and displayed another. Both sides ask the
+one function now. Where the copies agree — every league saved since 0209, since
+both writers write both — nothing moves.
+
+Neither of these is yet proven to be the 12-to-35-point gap; `diff-week` is
+still the measurement that settles that. They are two ways the two sides were
+free to disagree, found by looking where the founder pointed.
+
+check:ruleset, twenty assertions. No migration.
+
 ### v0.472.0 — show me the slots
 
 The re-stamp ran, re-resolved all sixteen of week 2's matchups across every
