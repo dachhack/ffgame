@@ -137,7 +137,24 @@ export async function syncWeek(leagueId, week, season = config.season, playerInd
       status: 'scheduled', lock_at: lockAt,
     });
   }
-  if (matchups.length) await db().from('matchup').upsert(matchups, { onConflict: 'league_id,week,home_roster_id,away_roster_id' });
+  // A PLAYED MATCHUP IS NOT RE-SCHEDULED (v0.483.0). Sleeper's state week
+  // stays on the week just played until it rolls over midweek, so every sync
+  // pass between the last whistle and that rollover re-mirrors a FINISHED
+  // week — and this upsert used to write `status: 'scheduled'` and a fresh
+  // lock_at over it. Its finals survived (they are not in the payload), but
+  // standings, the weekly report, the record book and the commish desk all
+  // read `status = 'final'`, so the week silently fell out of every one of
+  // them: all twelve drip week-2 matchups were found 'scheduled' with their
+  // finals stamped. The pairing is the conflict key, so a matchup already past
+  // 'scheduled' has nothing left for Sleeper to tell us — leave it alone.
+  if (matchups.length) {
+    const { data: have } = await db().from('matchup')
+      .select('home_roster_id, away_roster_id, status').eq('league_id', lid).eq('week', week);
+    const played = new Set((have ?? []).filter((m) => m.status !== 'scheduled')
+      .map((m) => `${m.home_roster_id}:${m.away_roster_id}`));
+    const open = matchups.filter((m) => !played.has(`${m.home_roster_id}:${m.away_roster_id}`));
+    if (open.length) await db().from('matchup').upsert(open, { onConflict: 'league_id,week,home_roster_id,away_roster_id' });
+  }
 
   // Store each roster's WHOLE roster as the player pool (and the
   // unenrolled-opponent fallback), resolved to our shared slug via the Sleeper

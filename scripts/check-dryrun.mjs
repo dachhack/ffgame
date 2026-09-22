@@ -130,6 +130,28 @@ ok(found >= 2, `resolveMatchup still contains the writes this guard is about (${
     'a league with any refused row does not get its report rebuilt over half-restored numbers');
 }
 
+// ── a played week is never re-scheduled by the sync (v0.483.0) ──
+// Sleeper's state week names the week just played until its midweek rollover,
+// so the sync re-mirrors a FINISHED week on every pass in between. Its upsert
+// used to write status 'scheduled' over it, and every reader of
+// `status = 'final'` — standings, report, record book — dropped the week.
+{
+  const sy = readFileSync(new URL('../server/src/sync.js', import.meta.url), 'utf8');
+  const sw = sy.slice(sy.indexOf('export async function syncWeek('), sy.indexOf('export async function', sy.indexOf('export async function syncWeek(') + 10));
+  ok(/filter\(\(m\) => m\.status !== 'scheduled'\)/.test(sw) && sw.includes('played.has('),
+    "syncWeek sets aside every matchup already past 'scheduled'");
+  ok(!/upsert\(matchups,/.test(sw) && /upsert\(open,/.test(sw),
+    '…and upserts only the ones still open — never the whole mirrored list');
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  const rf = cli.slice(cli.indexOf("case 'refinalize-week'"), cli.indexOf("case 'seed-test-users'"));
+  ok(rf.length > 0, 'refinalize-week is in the CLI');
+  ok(rf.includes(".eq('status', 'scheduled')") && rf.includes(".not('home_final', 'is', null)")
+    && rf.includes(".not('away_final', 'is', null)") && rf.includes(".lte('lock_at', nowIso)"),
+    'refinalize-week touches only scheduled rows with BOTH finals stamped and lock_at past — never a game still to play');
+  ok(!/resolveMatchup|stampFinals|home_final:|away_final:/.test(rf),
+    '…and resolves nothing and writes no score — status only');
+}
+
 // And the caller that hands the dry run to a person must actually ask for it.
 //
 // The slice ENDS AT restore-week, not at the next case that happened to follow
