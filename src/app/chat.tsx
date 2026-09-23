@@ -494,6 +494,32 @@ function ImageDraft({ src, busy, initialCaption, onSend, onCancel }: {
   );
 }
 
+/** THE + MENU (v0.487.0). Founder: "Let's do a + button that lets you then
+ *  select poll, image, gif." 📊, GIF and 📷 had become a row of buttons eating
+ *  the input's width; they live behind one + now, and each choice opens what
+ *  its old button opened. Poll stays the commissioner's — the server's rule. */
+function PlusMenu({ canPoll, canGif, onPick, onClose }: {
+  canPoll: boolean; canGif: boolean; onPick: (what: 'poll' | 'image' | 'gif') => void; onClose: () => void;
+}) {
+  const item = (what: 'poll' | 'image' | 'gif', icon: string, label: string) => (
+    <button key={what} onClick={() => onPick(what)} className="mono"
+      style={{ ...linkBtn, display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 4px', fontSize: 10.5, color: 'var(--text)', textAlign: 'left' }}>
+      <span style={{ fontSize: 15, width: 22, textAlign: 'center' }}>{icon}</span>{label}
+    </button>
+  );
+  return (
+    <div style={{ borderTop: '1px solid var(--bd)', padding: '6px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="mono" style={{ flex: 1, fontSize: 9, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700 }}>ADD TO CHAT</div>
+        <button onClick={onClose} className="mono" style={linkBtn} title="close">✕</button>
+      </div>
+      {canPoll && item('poll', '📊', 'POLL')}
+      {item('image', '📷', 'IMAGE')}
+      {canGif && item('gif', '🎞', 'GIF')}
+    </div>
+  );
+}
+
 /** The 📷 in a composer: a hidden file input and the button that opens it. */
 function ImageButton({ onPick, busy }: { onPick: (f: File | null) => void; busy: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -589,6 +615,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   // — which IS the run's, since the claims and the line share a transaction.
   const [runAt, setRunAt] = useState<string | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  // The + menu's IMAGE choice needs a file input to click; it is this one.
+  const fileRef = useRef<HTMLInputElement>(null);
   const load = () => chatMessages(leagueId)
     .then((r) => {
       if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); }
@@ -720,6 +749,17 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      {plusOpen && (
+        <PlusMenu canPoll={canModerate} canGif={!!GIF} onClose={() => setPlusOpen(false)}
+          onPick={(what) => {
+            setPlusOpen(false); setPollOpen(false); setGifOpen(false);
+            if (what === 'poll') setPollOpen(true);
+            else if (what === 'gif') setGifOpen(true);
+            else fileRef.current?.click();
+          }} />
+      )}
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ''; if (f) void img.pick(f); }} />
       {img.pending && (
         <ImageDraft src={img.pending.preview} busy={img.busy} initialCaption={draft}
           onSend={(c) => void img.confirm(c)} onCancel={img.cancel} />
@@ -745,15 +785,17 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
           </div>
         )}
         <div style={{ display: 'flex', gap: 6 }}>
-          {canModerate && (
-            <button onClick={() => { setPollOpen((v) => !v); setGifOpen(false); }} title="post a poll" className="mono"
-              style={{ ...linkBtn, fontSize: 13, padding: '0 2px' }}>📊</button>
-          )}
-          {GIF && (
-            <button onClick={() => { setGifOpen((v) => !v); setPollOpen(false); }} title="send a GIF" className="mono"
-              style={{ ...linkBtn, fontSize: 11, padding: '0 2px', alignSelf: 'center' }}>GIF</button>
-          )}
-          <ImageButton onPick={(f) => void img.pick(f)} busy={img.busy} />
+          {(() => {
+            const up = plusOpen || pollOpen || gifOpen || !!img.pending;
+            return (
+              <button disabled={img.busy}
+                onClick={() => { if (up) { setPlusOpen(false); setPollOpen(false); setGifOpen(false); img.cancel(); } else setPlusOpen(true); }}
+                title={up ? 'close' : 'add a poll, image or GIF'} aria-label={up ? 'close' : 'add a poll, image or GIF'}
+                style={{ flex: 'none', width: 34, height: 34, alignSelf: 'center', borderRadius: '50%', border: '1px solid var(--bd)', background: 'var(--bg)', color: up ? 'var(--you)' : 'var(--dim)', fontSize: 18, lineHeight: 1, cursor: 'pointer', padding: 0, opacity: img.busy ? 0.5 : 1 }}>
+                {img.busy ? '…' : up ? '×' : '+'}
+              </button>
+            );
+          })()}
           <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length && !suggAll) void sendBody(draft.trim()); }}
             onPaste={(e) => { const f = pastedImage(e); if (f) { e.preventDefault(); void img.pick(f); } }}
