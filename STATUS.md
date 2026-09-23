@@ -18,6 +18,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.499.0 — fix it mid-week, see what's left, and a green harness
+
+- **Mid-week fixes.** Any classic week that has started now gets the "✏️ fix"
+  button (web weekly report, app WEEKLY REPORT · REDRAW). It opens the point
+  adjustments and the lineup fix, and they count on the next scoring pass. The
+  re-score controls still only appear once every game is final and scores are
+  stamped (`WeekFixBox`, web and app).
+- **Adds left.** When a league sets transaction limits, managers see what they
+  have left on My Team, web and app. For example: "1 of 3 adds left this week
+  (resets Wed 3:00 AM ET) · 3 of 10 left this season · 1 of 1 trade left".
+  Add, claim and bid buttons disable when adds run out. The shared core
+  formatter is `data/txnLimits.ts` (check:txnlimits, in check:parity).
+- **The full probe harness passes end to end: 129 suites, exit 0.** What was
+  failing, and why:
+  - Suites plant "kicked off an hour ago" games and leave them behind, so a
+    game in progress leaked into every later suite and tripped the
+    after-games waiver hold (waiver-rules w20, waiver-schedule ws10).
+    `run-scratch-probes.sh` now snapshots `nfl_slate` after the +10y shift
+    and restores it before every suite.
+  - ol22, dp4a and dm8 expected `drop_player` to throw on a kicked-off
+    player. Since 0317 it answers `{ok:false}`, so they failed on a correct
+    refusal. They now read the answer and check the player stayed.
+  - ol24's add was refused because free agency was shut (0337's default
+    schedule), not by the kickoff lock it meant to test. The fixture now opens
+    the wire.
+  - ol15a, never reached before, expected a drip-league drop after kickoff to
+    go through. 0317 refuses it in every format. It now asserts the refusal,
+    plus the fact that the trigger stays classic-only (ol15b).
+  - adjust-probes assumed the generated schedule starts at week 1. It now
+    plants weeks 96–97.
+  - The earlier "no grants" and seat-agent sa3 failures were ordering
+    effects of running suites alone. The full harness runs them in order.
+- `scripts/db/illegal-rosters-now.sql`: a read-only list of who 0360 locked,
+  and why (run it with the database-query workflow).
+
 ### v0.498.0 — the roster has to be legal
 
 Founder: "We need to confirm roster movement limits when over the limit or

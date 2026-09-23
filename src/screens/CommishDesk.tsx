@@ -677,6 +677,11 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
         // RE-SCORE (0353): a classic week whose games are over and whose
         // finals are stamped. Anything else has nothing a re-score could fix.
         const canRescore = classic && w.stamped > 0 && w.week_state.complete;
+        // FIX MID-WEEK (v0.499.0): a point adjustment or a lineup fix is as
+        // useful on Sunday as after the week — the Thursday crash is fixed
+        // before Monday, not after it. Any classic week that has started gets
+        // the box; only a finished, stamped one gets the re-score in it.
+        const canFix = classic && (w.stamped > 0 || w.week_state.feed > 0 || w.week_state.live > 0);
         return (
           <div key={w.week}>
           <div style={row}>
@@ -712,13 +717,15 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
               style={{ ...btn(!block && !open), opacity: block || open ? 0.45 : 1, whiteSpace: 'nowrap' }}>
               {busy === w.week ? '…' : open ? '⏳ queued' : w.posted_at ? '↻ repost' : '📋 post'}
             </button>
-            {canRescore && (
+            {canFix && (
               <button onClick={() => setRescoreWeek(rescoreWeek === w.week ? null : w.week)} className="mono"
                 title="Adjust a player's points or fix a lineup for this week, and recompute the week's scores from the plays as they stand now — preview first, nothing changes until you apply"
-                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score · ✏️ fix</button>
+                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>{canRescore ? '⟳ re-score · ✏️ fix' : '✏️ fix'}</button>
             )}
           </div>
-          {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
+          {rescoreWeek === w.week && (canRescore
+            ? <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />
+            : <WeekFixBox leagueId={leagueId} week={w.week} />)}
           </div>
         );
       })}
@@ -805,6 +812,23 @@ export function WaiverHoldsPanel({ leagueId }: { leagueId: string }) {
 // change hands, and which seats saved no lineup (fielded from today's roster);
 // APPLY confirms that preview, rewrites the finals, rebuilds the week's
 // report and tells the league in chat.
+// A week still being played (or played but not yet scored): the fixes
+// without the re-score, which only a finished, stamped week can take. The
+// worker's next tick scores what is saved here, and the week's final stamp
+// keeps it.
+function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  return (
+    <div style={{ margin: '4px 0 10px', padding: '10px 12px', border: '1px solid var(--bd)', borderRadius: 8, background: 'var(--bg)' }}>
+      <div style={{ ...small, maxWidth: 'none', marginBottom: 8 }}>
+        Week {week} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it.
+        Re-scoring opens once every game is final.
+      </div>
+      <AdjustBox leagueId={leagueId} week={week} />
+      <LineupFixBox leagueId={leagueId} week={week} />
+    </div>
+  );
+}
+
 function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: number; onApplied: () => void }) {
   const [st, setSt] = useState<RescoreState | null>(null);
   const [busy, setBusy] = useState(false);

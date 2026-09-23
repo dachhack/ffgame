@@ -23,7 +23,9 @@ import {
   leagueContracts, type ContractDeal,
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
+  leagueTxnLimits, type TxnLimits,
 } from '@drip/core/data/liveApi';
+import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
@@ -298,6 +300,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // a tab that isn't there.
   const [keeperCount, setKeeperCount] = useState(0);
   const [team, setTeam] = useState<NativeTeamState | null>(null);
+  // TRANSACTION LIMITS (0358): what this team has left — the web twin's line.
+  const [limits, setLimits] = useState<TxnLimits | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
@@ -410,6 +414,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       if (tm.error) { setErr(friendlyError(tm.error)); return; }
       skew.current = Date.parse(tm.server_now) - Date.now();
       setTeam(tm); setRosters(r); setPool(p); setErr(null);
+      if (tm.my_roster_id != null) leagueTxnLimits(leagueId, tm.my_roster_id).then(setLimits).catch(() => {});
       // A pickup just signed a street deal — the row's chip should say so on
       // this refresh, not the next visit.
       loadDeals();
@@ -796,6 +801,20 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         })}
       </View>
 
+      {/* 📏 TRANSACTION LIMITS (0358): what's left, when the league sets any. */}
+      {(() => {
+        const sum = txnLimitSummary(limits);
+        if (!sum.text) return null;
+        return (
+          <Card style={{ borderLeftWidth: 3, borderLeftColor: sum.addsOut || sum.tradesOut ? t.warn : t.bd }}>
+            <Mono size={9.5} tone={sum.addsOut ? 'warn' : 'text'} weight="700">{sum.addsOut ? '📏 NO ADDS LEFT' : '📏 TRANSACTION LIMITS'}</Mono>
+            <Mono size={9} tone="dim" style={{ marginTop: 4, lineHeight: fs(14) }}>
+              {`${sum.text}.${sum.addsOut ? ' Pickups and claims are refused until the count resets; drops always work.' : ''}`}
+            </Mono>
+          </Card>
+        );
+      })()}
+
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
         <Card style={{ borderLeftWidth: 3, borderLeftColor: t.opp }}>
@@ -1066,7 +1085,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           // most of the pool, since only a DROP sets one — so the board was a
           // wall of dead buttons for the hours the window was closed. It is a
           // claim now: 0288 made the server take one.
-          const blocked = !!team.roster_issue;
+          const blocked = !!team.roster_issue || txnLimitSummary(limits).addsOut;
           const can = !busy && myRoster != null && !blocked;
           const claim = left != null || team.fa_open === false;
           return (
