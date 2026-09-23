@@ -36,14 +36,26 @@ const WEEK = 1;
 function makeFakeDb(tables) {
   const rpc = [];
   const match = (rows, preds) => rows.filter((r) => preds.every((p) => p(r)));
-  function builder(source, preds = []) {
-    const rowsNow = () => match(source, preds);
+  // `ord` / `rng` model .order().range() (v0.489.4): the worker pages its reads
+  // of injury_status past PostgREST's 1000-row cap, and a double that answers
+  // every select with everything would prove a pagination bug absent. It has to
+  // sort and slice like the real client, or the test is agreeing with itself.
+  function builder(source, preds = [], ord = [], rng = null) {
+    const rowsNow = () => {
+      let rows = match(source, preds);
+      for (const c of [...ord].reverse()) {
+        rows = [...rows].sort((a, b) => String(a[c] ?? '').localeCompare(String(b[c] ?? '')));
+      }
+      return rng ? rows.slice(rng[0], rng[1] + 1) : rows;
+    };
     const api = {
       select: () => api,
-      eq: (c, v) => builder(source, [...preds, (r) => r[c] === v]),
-      in: (c, vs) => { const s = new Set(vs); return builder(source, [...preds, (r) => s.has(r[c])]); },
-      is: (c, v) => builder(source, [...preds, (r) => (v === null ? r[c] == null : r[c] === v)]),
-      not: (c, op, v) => builder(source, [...preds, (r) => (op === 'is' && v === null ? r[c] != null : true)]),
+      eq: (c, v) => builder(source, [...preds, (r) => r[c] === v], ord, rng),
+      in: (c, vs) => { const s = new Set(vs); return builder(source, [...preds, (r) => s.has(r[c])], ord, rng); },
+      is: (c, v) => builder(source, [...preds, (r) => (v === null ? r[c] == null : r[c] === v)], ord, rng),
+      not: (c, op, v) => builder(source, [...preds, (r) => (op === 'is' && v === null ? r[c] != null : true)], ord, rng),
+      order: (c) => builder(source, preds, [...ord, c], rng),
+      range: (from, to) => builder(source, preds, ord, [from, to]),
       maybeSingle: () => Promise.resolve({ data: rowsNow()[0] ?? null, error: null }),
       then: (res, rej) => Promise.resolve({ data: rowsNow(), error: null }).then(res, rej),
       // .update(patch).eq(...).select('id') → mutate the matched rows, return them.

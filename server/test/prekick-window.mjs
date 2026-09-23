@@ -28,6 +28,11 @@ function makeFakeDb(tables) {
       eq: (c, v) => builder(rows.filter((r) => r[c] === v)),
       in: (c, vs) => { const s = new Set(vs); return builder(rows.filter((r) => s.has(r[c]))); },
       not: (c, op, v) => builder(rows.filter((r) => (op === 'is' && v === null ? r[c] != null : true))),
+      // .order().range() (v0.489.4): the worker pages its injury_status reads
+      // past PostgREST's 1000-row cap, so every double it touches has to offer
+      // the same chain. Slicing for real keeps a paging bug findable here.
+      order: () => api,
+      range: (from, to) => builder(rows.slice(from, to + 1)),
       maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
       then: (res, rej) => Promise.resolve({ data: rows, error: null }).then(res, rej),
     };
