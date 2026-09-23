@@ -18,6 +18,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.0 — two sources for who is hurt
+
+Founder: "I think Alec Pierce is out but he's listed as D in the platform."
+
+He was. ESPN's report had Pierce DOUBTFUL, stamped 01:03Z; Sleeper had him OUT,
+stamped 18:00Z the same day. The platform polled ESPN and only ESPN, so it
+faithfully showed a designation seventeen hours behind the one his managers were
+looking at in Sleeper.
+
+NOT ONE PLAYER. Comparing both feeds that day: of the 51 players BOTH sources
+designate, 23 disagreed — Sleeper more severe in all but three — and 174 of
+Sleeper's designations ESPN's report never mentions at all. And not cosmetic:
+injury_status is what 0333 discounts a projection by (O or IR to zero, D to a
+quarter), what the lock's auto-fill treats as ruled out, and what IR eligibility
+reads. Shown D instead of O, Pierce was valued at a quarter of a player nobody
+could start.
+
+SO THE POLLER READS BOTH, and the rule for disagreement lives in core
+(data/injuryMerge.ts) where check:injurymerge holds it. Freshness first — each
+source is stale in its own direction, ESPN lagging mid-week news and Sleeper
+holding an Out after a player is cleared, and both carry a timestamp. The
+league's own platform breaks a tie no clock can. And ESPN's 630-odd ACTIVE
+entries, which this poller used to drop on the floor, now count as what they are:
+a dated statement that a man is available, which on the day would have cleared 24
+players Sleeper still had flagged. Sleeper's directory is fetched on its own slow
+clock (6h, SLEEPER_INJURY_MS) because it is 15 MB and they ask for once a day;
+staleness costs nothing, since merging compares the timestamps INSIDE each
+statement rather than when we fetched them.
+
+AND THE OLDER BUG, found while wiring the first: THE TABLE COULD NEVER FORGET.
+This poller has only ever UPSERT-ed, and nothing else in the codebase deletes
+from injury_status — not the worker, not a migration, not a cron. A player hurt
+in October and cleared in November stayed Out for ever unless some later report
+happened to name him again. A poll now writes the whole picture and prunes
+everyone neither source designates any more, guarded so a short feed cannot
+un-injure the league: it prunes only with a healthy ESPN report (40+ entries) and
+a Sleeper snapshot in hand, and says in its log line when it skipped.
+
+Expect designations to MOVE on the first poll after deploy, in both directions —
+that is the correction, not a regression.
+
+No migration.
+
 ### v0.488.0 — the comment can be corrected
 
 Founder: "Let's have long press on a comment to edit it if you are the author or
