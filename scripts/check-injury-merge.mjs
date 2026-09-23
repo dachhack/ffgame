@@ -123,6 +123,13 @@ const ok = (name, cond, got) => {
   ok('the delete is chunked', /i \+= 200/.test(poller));
   ok('Sleeper is fetched on its own slow clock, not the injury poll\'s',
     /SLEEPER_INJURY_MS/.test(poller) && /sleeperCache/.test(poller));
+  // A prune deletes rows the whole product reads. The tick's log line is the
+  // only window on it, and a bare count cannot tell a poll that cleared forty
+  // designations from one that was not allowed to clear any.
+  const tick = readFileSync(new URL('../server/src/index.js', import.meta.url), 'utf8');
+  ok('the tick logs what the poll actually did', /prune SKIPPED/.test(tick) && /cleared/.test(tick));
+  ok('…naming both sources, so a missing one is visible',
+    /espn \$\{r\.espn\}, sleeper/.test(tick));
 }
 
 if (fails) { console.log(`\n${fails} INJURY MERGE ASSERTION(S) FAILED`); process.exit(1); }

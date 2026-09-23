@@ -57,7 +57,10 @@ async function sleeperInjuries(playerIndex, now = Date.now()) {
     // news_updated is the only per-player clock Sleeper gives. It moves on any
     // news, not only an injury one — which is imprecise in our favour: the news
     // that clears a player bumps it too.
-    rows.set(slug, { status, at: Number(p?.news_updated) || null, body: p?.injury_body_part ?? null });
+    rows.set(slug, {
+      status, at: Number(p?.news_updated) || null,
+      team: p?.team ?? null, body: p?.injury_body_part ?? null,
+    });
   }
   sleeperCache = { at: now, rows };
   return rows;
@@ -88,7 +91,9 @@ export async function pollInjuries(playerIndex) {
       // The DETAIL stays ESPN's whatever wins the designation: it is the only
       // side that writes a sentence about what happened and when he is back.
       designation_date: e?.date ?? null, return_date: e?.returnDate ?? null,
-      comment: e?.comment ?? null, team: e?.team ?? s?.team ?? null,
+      // ESPN writes the sentence; where it has none, Sleeper's body part is
+      // still better than a blank in the detail sheet.
+      comment: e?.comment ?? s?.body ?? null, team: e?.team ?? s?.team ?? null,
       updated_at: now,
     });
   }

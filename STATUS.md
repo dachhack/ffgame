@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.1 — and the log says which
+
+v0.489.0's poll returns what it did — how many designations stand, from which
+source, how many it cleared, and whether the prune was allowed to run at all —
+and the tick threw all of it away and logged a bare count. A poll that cleared
+forty designations and one that could not clear any read identically, which is
+exactly backwards: the second is the one worth noticing. The line now says both
+sources and either "— N cleared" or "— prune SKIPPED, feed incomplete", and
+check:injurymerge holds it, because a delete nobody can see is a delete nobody
+will question.
+
+Two smaller things in the same poll: a Sleeper-only designation now keeps its
+TEAM (it was reading a field the row never carried, so those rows stored null),
+and where ESPN has written no sentence about an injury, Sleeper's body part
+stands in — "Heel" beats a blank in the detail sheet.
+
+No migration.
+
 ### v0.489.0 — two sources for who is hurt
 
 Founder: "I think Alec Pierce is out but he's listed as D in the platform."
