@@ -34,6 +34,13 @@ TEAM (it was reading a field the row never carried, so those rows stored null),
 and where ESPN has written no sentence about an injury, Sleeper's body part
 stands in — "Heel" beats a blank in the detail sheet.
 
+AND A WAY TO ASK, next time. scripts/db/injury-status-diag.sql (read-only, via
+dbquery.yml) prints how fresh the table is, which feed decided the designations
+standing now, every pooled player carrying one worst-first, one player by name
+for "is X really out?", and the count that would reveal the prune having
+silently stopped. Answering the Alec Pierce question took pulling both feeds by
+hand — fine once, poor the second time.
+
 No migration.
 
 ### v0.489.0 — two sources for who is hurt
