@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.496.0 — the league counts its moves
+
+Item 6 of the commissioner list: 📏 TRANSACTION LIMITS, web (beside waiver
+holds) and app (WAIVER ORDER · LIMITS). There are three optional caps, blank
+meaning none: adds per week, adds per season, and trades per season.
+- The week turns at the league's own turnover, the after-games waiver run
+  (`league_txn_week_start`).
+- Counted from the register, so the limit and the record agree:
+  - adds are 'add' and 'waiver' lines;
+  - a commissioner move doesn't count;
+  - an undone move gives its add back;
+  - a trade is one instant of 'trade' lines.
+- Adds: `add_free_agent`, `submit_waiver_claim` and `process_waivers` now ask
+  `add_limit_reason` beside `wire_block_reason`. Their bodies are otherwise
+  copied unchanged from the current definitions. A claim over the limit at
+  run time is lost, with the reason. Drops are never blocked.
+- Trades: `_trade_lock_reason` also asks `trade_limit_reason`, so a deal is
+  refused at acceptance for two-team and multi-team trades alike.
+- Migration 0358. The setter posts the new limits to league chat.
+- Checks: `scripts/db/txn-limit-probes.sql` passes. The waiver, FAAB,
+  free-agency-off, trade (floor, multi, undo, signal), vampire, guillotine,
+  seat-cap, agent-wire, commissioner-desk and undo-hold suites pass on the
+  patched functions.
+- One pre-existing failure: seat-agent sa3 fails when run after
+  agent-wire/commish-desk, with or without this change (fixture
+  interference), and passes on its own.
+
 ### v0.495.0 — the commissioner redraws a week
 
 Item 5 of the commissioner list: 🔀 REDRAW A WEEK, web (the matchups tab,

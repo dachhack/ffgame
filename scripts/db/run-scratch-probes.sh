@@ -219,3 +219,4 @@ $RUN -f scripts/db/undo-hold-probes.sql | grep -E "PROBE FAIL|ALL UNDO-HOLD PROB
 $RUN -f scripts/db/adjust-probes.sql | grep -E "PROBE FAIL|ALL ADJUST PROBES" || { echo "ADJUST PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/lineup-fix-probes.sql | grep -E "PROBE FAIL|ALL LINEUP-FIX PROBES" || { echo "LINEUP-FIX PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/redraw-probes.sql | grep -E "PROBE FAIL|ALL REDRAW PROBES" || { echo "REDRAW PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/txn-limit-probes.sql | grep -E "PROBE FAIL|ALL TXN-LIMIT PROBES" || { echo "TXN-LIMIT PROBES FAILED"; exit 1; }

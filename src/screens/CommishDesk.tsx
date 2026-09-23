@@ -32,6 +32,7 @@ import {
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
+  leagueTxnLimits, commishSetTxnLimits,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
@@ -212,6 +213,59 @@ export function MedianGamePanel({ leagueId }: { leagueId: string }) {
         {note(msg)}
       </div>
       <div style={{ ...small, marginTop: 6 }}>Every regular-season week each team also plays the league's median score: above it a win, below it a loss. Points for and against are untouched. Standings recompute the moment this changes.</div>
+    </div>
+  );
+}
+
+// ── 📏 TRANSACTION LIMITS (0358) ─────────────────────────────────────────────
+// Three optional caps, blank = none. The week turns at the league's turnover
+// (the after-games waiver run), so a weekly cap resets when the week does.
+// A commissioner's own moves never count, and drops are never limited.
+export function TxnLimitsPanel({ leagueId }: { leagueId: string }) {
+  const [wk, setWk] = useState('');
+  const [sn, setSn] = useState('');
+  const [tr, setTr] = useState('');
+  const [init, setInit] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const str = (n: number | null | undefined) => (n == null ? '' : String(n));
+  const load = () => leagueTxnLimits(leagueId).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setWk(str(r.max_adds_week)); setSn(str(r.max_adds_season)); setTr(str(r.max_trades_season));
+    setInit([str(r.max_adds_week), str(r.max_adds_season), str(r.max_trades_season)].join('|'));
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const num = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.floor(Number(v))) || null);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await commishSetTxnLimits(leagueId, num(wk), num(sn), num(tr)); setMsg(r.ok ? '✓ saved — the league was told' : r.error ?? 'failed'); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const field = (label: string, v: string, set: (x: string) => void) => (
+    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input value={v} onChange={(e) => set(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" inputMode="numeric"
+        style={{ ...inp, width: 56, padding: '4px 6px', fontSize: 12.5 }} />
+      <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)' }}>{label}</span>
+    </label>
+  );
+  const changed = init != null && [wk, sn, tr].join('|') !== init;
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>TRANSACTION LIMITS</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Cap each team's pickups (free agents and waiver wins) per week and per season, and its trades per season. Leave a box
+        empty for no limit. The week turns at your league's weekly waiver run. Your own commissioner moves never count, an
+        undone move gives its add back, and drops are never limited. A waiver claim over the limit when the run reaches it is lost, with the reason.
+      </div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        {field('adds / week', wk, setWk)}
+        {field('adds / season', sn, setSn)}
+        {field('trades / season', tr, setTr)}
+        <button onClick={() => void save()} disabled={busy || !changed} className="mono" style={btn(changed)}>save</button>
+        {note(msg)}
+      </div>
     </div>
   );
 }

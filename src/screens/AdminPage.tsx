@@ -49,7 +49,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -1660,6 +1660,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           <TransactionRulesEditor leagueId={l.league_id} />
           <WaiverOrderPanel leagueId={l.league_id} />
           <WaiverHoldsPanel leagueId={l.league_id} />
+          <TxnLimitsPanel leagueId={l.league_id} />
           <MedianGamePanel leagueId={l.league_id} />
           <TradeFloorPanel leagueId={l.league_id} />
         </div>

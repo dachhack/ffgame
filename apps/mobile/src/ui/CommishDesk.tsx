@@ -21,6 +21,7 @@ import {
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
+  leagueTxnLimits, commishSetTxnLimits,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -1087,6 +1088,56 @@ export function ScheduleCard({ leagueId }: { leagueId: string }) {
           <Row><Chip label="SWAP" on disabled={busy || !why.trim()} onPress={() => { tap(); void swap(); }} /></Row>
         </View>
       )}
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── 📏 TRANSACTION LIMITS (0358) — the web's TxnLimitsPanel ─────────────────
+export function TxnLimitsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [wk, setWk] = useState('');
+  const [sn, setSn] = useState('');
+  const [tr, setTr] = useState('');
+  const [init, setInit] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const str = (n: number | null | undefined) => (n == null ? '' : String(n));
+  const load = () => leagueTxnLimits(leagueId).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    setWk(str(r.max_adds_week)); setSn(str(r.max_adds_season)); setTr(str(r.max_trades_season));
+    setInit([str(r.max_adds_week), str(r.max_adds_season), str(r.max_trades_season)].join('|'));
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const num = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.floor(Number(v))) || null);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetTxnLimits(leagueId, num(wk), num(sn), num(tr));
+      if (r.ok) { commit(); setMsg('✓ saved — the league was told'); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const field = (label: string, v: string, set: (x: string) => void) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <TextInput value={v} onChangeText={(x) => set(x.replace(/[^0-9]/g, ''))} placeholder="none" placeholderTextColor={t.faint} keyboardType="number-pad"
+        style={{ width: 64, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, fontSize: fs(12.5), color: t.text }} />
+      <Mono size={9.5} tone="dim">{label}</Mono>
+    </View>
+  );
+  const changed = init != null && [wk, sn, tr].join('|') !== init;
+  return (
+    <Card>
+      <LabelInfo label="TRANSACTION LIMITS" info="Cap each team's pickups (free agents and waiver wins) per week and per season, and its trades per season. Leave a box empty for no limit. The week turns at your league's weekly waiver run. Your own commissioner moves never count, an undone move gives its add back, and drops are never limited. A waiver claim over the limit when the run reaches it is lost, with the reason." />
+      <View style={{ gap: 8, marginTop: 8 }}>
+        {field('ADDS / WEEK', wk, setWk)}
+        {field('ADDS / SEASON', sn, setSn)}
+        {field('TRADES / SEASON', tr, setTr)}
+      </View>
+      <View style={{ marginTop: 8 }}>
+        <Row><Chip label="SAVE" on={changed} disabled={busy || !changed} onPress={() => { tap(); void save(); }} /></Row>
+      </View>
       <Note msg={msg} />
     </Card>
   );

@@ -68,7 +68,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
-import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, DuesCard } from '../ui/CommishDesk';
+import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TxnLimitsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, DuesCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -95,7 +95,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // lacked — co-commissioners, the locks, the waiver order, score edits.
     { id: 'commish', label: 'COMMISSIONERS' },
     { id: 'locks', label: 'LOCKS', nativeOnly: true },
-    { id: 'order', label: 'WAIVER ORDER', nativeOnly: true },
+    { id: 'order', label: 'WAIVER ORDER · LIMITS', nativeOnly: true },
     // 0321: the trade floor — review mode, the league vote, offer expiry, FAAB.
     { id: 'tradefloor', label: 'TRADE FLOOR', nativeOnly: true },
     { id: 'scores', label: 'EDIT SCORES', nativeOnly: true },
@@ -450,7 +450,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
-            {section === 'order' && native && <><WaiverOrderCard leagueId={leagueId} /><WaiverHoldsCard leagueId={leagueId} /></>}
+            {section === 'order' && native && <><WaiverOrderCard leagueId={leagueId} /><WaiverHoldsCard leagueId={leagueId} /><TxnLimitsCard leagueId={leagueId} /></>}
             {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
             {section === 'awards' && <><AwardsCard leagueId={leagueId} /><PublicApiCard leagueId={leagueId} /><WriteApiCard leagueId={leagueId} /></>}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}

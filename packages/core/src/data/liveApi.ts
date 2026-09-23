@@ -2718,6 +2718,16 @@ export const commishSwapOpponents = (leagueId: string, week: number, a: number, 
   tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_swap_opponents',
     { p_league_id: leagueId, p_week: week, p_a: a, p_b: b, p_note: note }), Ev.commishAction, { tool: 'redraw' });
 
+/** TRANSACTION LIMITS (0358): adds per week (the week turns at the league's
+ *  turnover), adds per season, trades per season. null = no limit. With a
+ *  roster, what that team has used. */
+export interface TxnLimits { ok: boolean; error?: string; max_adds_week: number | null; max_adds_season: number | null; max_trades_season: number | null; week_start?: string; used?: { week: number; season: number; trades: number } | null }
+export const leagueTxnLimits = (leagueId: string, rosterId?: number | null) =>
+  rpc<TxnLimits>('league_txn_limits', { p_league_id: leagueId, p_roster_id: rosterId ?? null });
+export const commishSetTxnLimits = (leagueId: string, addsWeek: number | null, addsSeason: number | null, tradesSeason: number | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_set_txn_limits',
+    { p_league_id: leagueId, p_adds_week: addsWeek, p_adds_season: addsSeason, p_trades_season: tradesSeason }), Ev.commishAction, { tool: 'txn_limits' });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>
