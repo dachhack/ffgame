@@ -8,6 +8,7 @@ import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   requestLeagueSync, leagueSyncState, type SyncState,
+  apiKeys, apiKeyCreate, apiKeyRevoke, apiWriteLog, publicApiUrl, type ApiKeyRow, type ApiWriteLogRow,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
@@ -595,6 +596,134 @@ export function RecruitPanel({ leagueId, commish, bare }: { leagueId: string; co
           </div>
         </>)}
       </>)}
+    </div>
+  );
+}
+
+// ── 🔑 API KEYS (0352) ──────────────────────────────────────────────────────
+// Where a manager mints the key an outside tool uses to run their team — a
+// lineup optimiser, a waiver bot, a Discord command — once the commissioner
+// has switched the write API on. The key appears ONCE: the server keeps only
+// its hash, so there is nothing to show again and nothing a leak of the
+// database could hand out. The commissioner sees every key in the league and
+// can revoke any of them; everyone else sees their own.
+const when2 = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never');
+export function ApiKeysPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
+  const [st, setSt] = useState<{ on: boolean; commish: boolean; keys: ApiKeyRow[] } | null>(null);
+  const [log, setLog] = useState<ApiWriteLogRow[]>([]);
+  const [label, setLabel] = useState('');
+  const [scope, setScope] = useState<'team' | 'league'>('team');
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => Promise.all([
+    apiKeys(leagueId).then((r) => {
+      if (r.ok) setSt({ on: !!r.write_api, commish: !!r.is_commish, keys: r.keys ?? [] });
+      else setMsg(r.error ?? 'could not load');
+    }),
+    apiWriteLog(leagueId, 20).then((r) => setLog(r.entries ?? [])),
+  ]).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const mint = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null); setFresh(null); setCopied(false);
+    try {
+      const r = await apiKeyCreate(leagueId, label.trim(), scope);
+      if (r.ok && r.key) { setFresh(r.key); setLabel(''); } else setMsg(r.error ?? 'failed');
+    } catch (e) { setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const revoke = async (k: ApiKeyRow) => {
+    if (busy || !window.confirm(`Revoke ${k.label || k.prefix}? Anything using it stops working at once.`)) return;
+    setBusy(true);
+    try { const r = await apiKeyRevoke(k.id); if (!r.ok) setMsg(r.error ?? 'failed'); }
+    catch (e) { setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const copy = async () => {
+    if (!fresh) return;
+    try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { setMsg('select the key and copy it by hand'); }
+  };
+  const btn: React.CSSProperties = { background: 'var(--you)', color: 'var(--on-accent)', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' };
+  const ghost: React.CSSProperties = { background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '5px 10px', fontSize: 10, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' };
+  const small: React.CSSProperties = { fontSize: 10, color: 'var(--dim)', lineHeight: 1.6 };
+  if (!st) return <div style={box(bare)}>{msg ? <span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{msg}</span> : <Loading />}</div>;
+  const live = st.keys.filter((k) => !k.revoked_at);
+  return (
+    <div style={box(bare)}>
+      {!st.on ? (
+        <div className="mono" style={small}>
+          The write API is off for this league. {st.commish
+            ? 'Switch it on under ⚑ Manage league → 🏅 AWARDS & BADGES → WRITE API, and every manager can mint a key here.'
+            : 'Only the commissioner can switch it on — ask them if you want to run your team from another tool.'}
+          {live.length > 0 && ' Keys made before it was switched off start working again the moment it is switched back on.'}
+        </div>
+      ) : (
+        <>
+          <div className="mono" style={small}>
+            A key lets another tool act as you in this league — set lineups, add and drop, claim, trade
+            {st.commish ? ', and with LEAGUE scope run your commissioner tools' : ''}. It can do nothing you cannot.
+            Send it as <code>Authorization: Bearer drip_sk_…</code> to:
+          </div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--you)', wordBreak: 'break-all', margin: '6px 0 10px' }}>{publicApiUrl(leagueId)}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} placeholder="what is it for? (e.g. lineup bot)"
+              style={{ flex: '1 1 180px', background: 'var(--card)', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 10px', fontSize: 12, color: 'var(--text)' }} />
+            {st.commish && (
+              <button onClick={() => setScope(scope === 'team' ? 'league' : 'team')} className="mono" style={ghost}
+                title={scope === 'team' ? 'your own team only' : 'every team, and your commissioner tools'}>
+                {scope === 'team' ? 'TEAM SCOPE' : 'LEAGUE SCOPE'}
+              </button>
+            )}
+            <button onClick={() => void mint()} disabled={busy} className="mono" style={btn}>MAKE A KEY</button>
+          </div>
+          {fresh && (
+            <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--you)', borderRadius: 6 }}>
+              <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)', marginBottom: 6 }}>
+                COPY IT NOW — THIS IS THE ONLY TIME IT WILL BE SHOWN
+              </div>
+              <div className="mono" style={{ fontSize: 11, wordBreak: 'break-all', color: 'var(--text)', userSelect: 'all' }}>{fresh}</div>
+              <button onClick={() => void copy()} className="mono" style={{ ...ghost, marginTop: 8 }}>{copied ? '✓ COPIED' : '⧉ COPY'}</button>
+            </div>
+          )}
+        </>
+      )}
+      {msg && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+      {st.keys.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>
+            {st.commish ? 'EVERY KEY IN THE LEAGUE' : 'YOUR KEYS'}
+          </div>
+          {st.keys.map((k) => (
+            <div key={k.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--bd)', opacity: k.revoked_at ? 0.45 : 1, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--text)' }}>
+                  {k.label || 'unnamed key'}
+                  {st.commish && !k.mine && k.owner ? <span style={{ color: 'var(--dim)' }}>{` · ${k.owner}`}</span> : null}
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>
+                  {k.prefix}… · {k.scope.toUpperCase()} · {k.revoked_at ? `revoked ${when2(k.revoked_at)}` : `last used ${when2(k.last_used_at)}`}
+                </div>
+              </div>
+              {!k.revoked_at && <button onClick={() => void revoke(k)} disabled={busy} className="mono" style={{ ...ghost, color: 'var(--opp)' }}>REVOKE</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {log.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>
+            {st.commish ? 'RECENT WRITES, EVERY KEY' : 'RECENT WRITES, YOUR KEYS'}
+          </div>
+          {log.map((l) => (
+            <div key={l.id} className="mono" style={{ fontSize: 9.5, padding: '4px 0', borderBottom: '1px solid var(--bd)', color: l.ok ? 'var(--text)' : 'var(--opp)' }}>
+              {l.ok ? '✓' : '✕'} {l.action}{l.roster_id != null ? ` · roster ${l.roster_id}` : ''} · {l.label || l.prefix || 'key'} · {when2(l.at)}
+              {!l.ok && l.error ? <span style={{ color: 'var(--dim)' }}>{` — ${l.error}`}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

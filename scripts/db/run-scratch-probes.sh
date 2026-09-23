@@ -212,3 +212,5 @@ $RUN -f scripts/db/league-tab-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-TAB PR
 $RUN -f scripts/db/waiver-run-probes.sql | grep -E "PROBE FAIL|ALL WAIVER-RUN PROBES" || { echo "WAIVER-RUN PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/stale-final-probes.sql | grep -E "PROBE FAIL|ALL STALE-FINAL PROBES" || { echo "STALE-FINAL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/shelf-probes.sql | grep -E "PROBE FAIL|ALL SHELF PROBES" || { echo "SHELF PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/write-api-probes.sql | grep -E "PROBE FAIL|ALL WRITE-API PROBES" || { echo "WRITE-API PROBES FAILED"; exit 1; }
+SCRATCH_PG_DIR=$DIR SCRATCH_PG_PORT=$PORT npx tsx scripts/db/write-api-e2e.mjs | grep -E "^FAIL|ALL WRITE-API E2E PASS" || { echo "WRITE-API E2E FAILED"; exit 1; }

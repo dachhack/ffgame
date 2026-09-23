@@ -18,6 +18,68 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.490.0 — the league answers to a key
+
+Founder: "Let's do an API for external league and team control like ESPN.
+Commish has to opt in."
+
+0326 built the read half and wrote down why it stopped: "A write API needs
+per-user consent; it is a different project." This is that project, on the
+same base URL, documented in docs/public-api.md.
+
+THE SHAPE. The commissioner switches the league in (WRITE API, beside PUBLIC
+READ API in the console; off by default for every league). Each manager then
+mints their own key under 🔑 API keys in the league menu, web and app. A key
+belongs to one league and one person, is shown once, and is stored only as a
+SHA-256. It acts as its owner with exactly their powers, because every route
+ends in the same RPC the app calls. TEAM scope reaches only your own seats,
+even for the commissioner. LEAGUE scope is the commissioner's alone and adds
+every seat plus the commissioner's tools. A lineup bot does not need to be able
+to veto trades.
+
+Routes: me, lineup (read and set), add, drop, claims (file and cancel),
+roster-spot, trades (propose, accept, decline, cancel), and for league scope
+trades approve/veto, waivers/process, players move/remove, waiver-priority.
+
+THE ONE DOOR. `api_write` (0352) is granted to the service role alone. It
+hashes the key, checks the switch, then sets the request's JWT claims to the
+key's owner for the rest of the transaction. From there `owns_roster`,
+`is_league_commish` and every RPC's own guard answer as they would in the app.
+The claims carry no email, so `is_admin()` is false: a key is never a platform
+admin, whoever made it. It always passes the KEY's league, and checks that a
+claim or trade named by id belongs to it, because the owner may sit in other
+leagues and to `auth.uid()` they are the same person there.
+
+LINEUPS ASK THE POLICIES OUT LOUD. A lineup is `sealed_pick` rows the app
+writes under RLS, and RLS does not apply to a function running as its owner. So
+`_api_set_lineup` asks the policies' questions itself: your seat or one you
+co-manage, or a league-scope commissioner in a CLASSIC league only (0320),
+never a drip league. The kickoff, legality, slot-cap, flag and stash triggers
+fire for every writer. A trigger's refusal comes back as a 409 with nothing
+half-done.
+
+Every write is logged (key, action, seat, why it failed). The commissioner
+reads the league's log and can revoke any key; a manager reads their own.
+
+TESTED FOR REAL THIS TIME. `scripts/db/write-api-probes.sql` holds the SQL:
+scopes, isolation, revocation, the switch, the admin check, the log.
+`scripts/db/write-api-e2e.mjs` loads the actual Deno router under Node and
+answers its PostgREST calls from the scratch database, as the service role —
+routing, status codes, body parsing, cache headers. `check:writeapi` pins the
+router's actions to the SQL whitelist and the four properties above.
+
+THE HARNESS WAS BROKEN, AND IS FIXED. run-scratch-probes.sh had died at 0349
+since the chat-image migration: the shim had no storage schema. It has one now.
+The shim's auth.uid() also reads the request claims first, as Supabase's does.
+Existing suites never set claims, and the failing set is identical before and
+after that change. Five suites fail on today's date for reasons that predate
+this work and are unchanged: waiver-rules, classic-open-lineup, dropped-pick,
+draft-midseason and waiver-schedule.
+
+DEPLOY. The migration applies on merge. The edge function does NOT: run
+deploy-functions.yml with `public-api` (it deploys with --no-verify-jwt, which
+a drip_sk_ bearer needs).
+
 ### v0.489.5 — any pickup can name a drop
 
 Founder: "Even if you have empty spots on your roster, you should have the

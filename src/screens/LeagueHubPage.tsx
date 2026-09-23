@@ -20,7 +20,7 @@ import { NotifPrefsCard } from './NativeLeague';
 import {
   myMatchup, defaultOpenWeek, matchupTeams, leagueNote, leagueSignals, nativeRosters, leaguePool, playoffState, leagueGameMode, leagueContracts, chatMembers,
   leaveLeague, friendlyError, leagueTypeLine, vampireState, feedingBell, guillotineState,
-  leagueWeekScoreboard, leagueStandings,
+  leagueWeekScoreboard, leagueStandings, leagueWriteApi,
   type Enrollment, type LiveMatchup, type TeamInfo, type VampireState, type StandingsRow,
 } from '@drip/core/data/liveApi';
 import { VampirePanel } from './VampirePanel';
@@ -29,7 +29,7 @@ import { LeagueHistory } from './LeagueHistory';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { PRESEASON_BASE } from '@drip/core/data/nflSlate';
 import { setCardLeague } from '../app/playerCard';
-import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel } from './LeagueInfo';
+import { ScoringPanel, RosterRulesPanel, RegisterPanel, RecruitPanel, ApiKeysPanel } from './LeagueInfo';
 
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
 
@@ -333,8 +333,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   // reason a second click on the open tile closes it. 'alerts' joined in
   // v0.287.0: the app puts push prefs on the league menu, so the web's mirror
   // hosts the same NotifPrefsCard the team screen does rather than a fork.
-  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire' | 'guillotine' | 'history';
+  type InfoPanel = 'scoring' | 'roster' | 'register' | 'alerts' | 'recruit' | 'vampire' | 'guillotine' | 'history' | 'api';
   const [info, setInfo] = useState<null | InfoPanel>(null);
+  // Is the write API on here? One probe decides whether members see the 🔑 tile.
+  const [writeApi, setWriteApi] = useState(false);
+  useEffect(() => { leagueWriteApi(e.league_id).then((v) => setWriteApi(v === true)).catch(() => {}); }, [e.league_id]);
   // 🧛 (v0.383.0, app v0.382.1's twin): a vampire league gets its own tile —
   // every other format answers `vampire:false` to this one probe and never
   // shows it. The badge is `feedingBell`'s call: this seat's window is open.
@@ -573,6 +576,13 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
             and simply isn't drawn for anyone else. */}
         <Tile icon="📣" title="Recruit" sub={commish ? 'invite link · board listing' : 'invite link'}
           onClick={() => toggleInfo('recruit')} />
+        {/* 🔑 API KEYS (0352) — only where there is something to do: the
+            commissioner, who can switch the write API on, or anybody once
+            it is on. A tile for a door that is shut is a tile to ignore. */}
+        {(commish || writeApi) && (
+          <Tile icon="🔑" title="API keys" sub={writeApi ? 'run your team from another tool' : 'off — switch on under Commissioner'}
+            onClick={() => toggleInfo('api')} />
+        )}
         {commish && (
           <Tile icon="⚑" title="Commissioner" sub="seats · rules · kit · scoring" onClick={() => { setMenuOpen(false); onManage(); }} accent
             badge={sig.commish && sig.commish.waiting + sig.commish.review > 0
@@ -625,6 +635,11 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       {info === 'alerts' && (
         <Sheet title="🔔 Alerts" subtitle="WHAT PINGS THIS BROWSER" onClose={() => setInfo(null)}>
           <NotifPrefsCard bare leagueId={e.league_id} />
+        </Sheet>
+      )}
+      {info === 'api' && (
+        <Sheet title="🔑 API keys" subtitle="LET ANOTHER TOOL RUN YOUR TEAM" max={620} onClose={() => setInfo(null)}>
+          <ApiKeysPanel leagueId={e.league_id} bare />
         </Sheet>
       )}
       {info === 'recruit' && (
