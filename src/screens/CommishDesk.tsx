@@ -31,6 +31,7 @@ import {
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
+  commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
@@ -993,6 +994,86 @@ function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
             style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
           <button onClick={() => void save()} disabled={busy || !changed || !why.trim()} className="mono" style={btn(true)}>save lineup</button>
           {changed && <button onClick={() => setChosen(stored)} className="mono" style={btn(false)}>reset</button>}
+        </div>
+      )}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── 🔀 REDRAW A WEEK (0357) ──────────────────────────────────────────────────
+// Swap two teams' opponents in a week that hasn't started: tap one team, then
+// the other. A team on bye can be swapped in. Saved lineups follow their team;
+// a drip power-up already armed against an opponent blocks the swap.
+export function SchedulePanel({ leagueId }: { leagueId: string }) {
+  const [weeks, setWeeks] = useState<RedrawWeek[] | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [pick, setPick] = useState<RedrawTeam[]>([]);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => commishOpenSchedule(leagueId).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    const ws = r.weeks ?? [];
+    setWeeks(ws);
+    setWeek((w) => (w != null && ws.some((x) => x.week === w) ? w : ws[0]?.week ?? null));
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const wk = weeks?.find((w) => w.week === week) ?? null;
+  const tap = (t: RedrawTeam) => {
+    setMsg(null);
+    if (pick.some((p) => p.roster_id === t.roster_id)) setPick(pick.filter((p) => p.roster_id !== t.roster_id));
+    else setPick(pick.length >= 2 ? [t] : [...pick, t]);
+  };
+  const swap = async () => {
+    if (busy || pick.length !== 2 || week == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSwapOpponents(leagueId, week, pick[0].roster_id, pick[1].roster_id, why);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setMsg(`✓ ${r.note ?? 'swapped'}`); setPick([]); setWhy('');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const team = (t: RedrawTeam) => {
+    const on = pick.some((p) => p.roster_id === t.roster_id);
+    return (
+      <button key={t.roster_id} onClick={() => tap(t)} className="mono"
+        style={{ ...btn(on), flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</button>
+    );
+  };
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div className="mono" style={subhead}>🔀 REDRAW A WEEK</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Swap two teams' opponents in a week that hasn't kicked off: tap one team, then the other. A team on bye can be
+        swapped in, and the other team takes the bye. Saved lineups follow their team. Playoff weeks follow the seeds and aren't listed here.
+        Each change is posted in league chat.
+      </div>
+      {weeks == null && <div style={small}>loading…</div>}
+      {weeks?.length === 0 && <div style={small}>No week is open to redraw — every scheduled week has started, or there's no schedule yet.</div>}
+      {!!weeks?.length && (
+        <select value={week ?? ''} onChange={(e) => { setWeek(Number(e.target.value)); setPick([]); }}
+          style={{ ...inp, padding: '5px 8px', fontSize: 12.5, marginBottom: 8 }}>
+          {weeks.map((w) => <option key={w.week} value={w.week}>Week {w.week}</option>)}
+        </select>
+      )}
+      {wk?.games.map((g) => (
+        <div key={g.id} style={{ ...row, gap: 8 }}>
+          {team(g.home)}<span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>vs</span>{team(g.away)}
+        </div>
+      ))}
+      {!!wk?.byes.length && (
+        <div style={{ ...row, gap: 8 }}>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>BYE</span>{wk.byes.map(team)}
+        </div>
+      )}
+      {pick.length === 2 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <span style={{ ...cell, fontWeight: 700 }}>Swap {pick[0].name} ⇄ {pick[1].name}</span>
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, minWidth: 160, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void swap()} disabled={busy || !why.trim()} className="mono" style={btn(true)}>swap</button>
         </div>
       )}
       {note(msg)}

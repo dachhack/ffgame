@@ -20,6 +20,7 @@ import {
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
+  commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -1018,6 +1019,76 @@ function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
       )}
       <Note msg={msg} />
     </View>
+  );
+}
+
+// ── 🔀 REDRAW A WEEK (0357) — the web's SchedulePanel ───────────────────────
+export function ScheduleCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [weeks, setWeeks] = useState<RedrawWeek[] | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [pick, setPick] = useState<RedrawTeam[]>([]);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => commishOpenSchedule(leagueId).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    const ws = r.weeks ?? [];
+    setWeeks(ws);
+    setWeek((w) => (w != null && ws.some((x) => x.week === w) ? w : ws[0]?.week ?? null));
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const wk = weeks?.find((w) => w.week === week) ?? null;
+  const toggle = (x: RedrawTeam) => {
+    setMsg(null);
+    if (pick.some((p) => p.roster_id === x.roster_id)) setPick(pick.filter((p) => p.roster_id !== x.roster_id));
+    else setPick(pick.length >= 2 ? [x] : [...pick, x]);
+  };
+  const swap = async () => {
+    if (busy || pick.length !== 2 || week == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSwapOpponents(leagueId, week, pick[0].roster_id, pick[1].roster_id, why);
+      if (!r.ok) { warn(); setMsg(friendlyError(r.error ?? 'failed')); return; }
+      commit(); setMsg(`✓ ${r.note ?? 'swapped'}`); setPick([]); setWhy('');
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const team = (x: RedrawTeam) => (
+    <Chip key={x.roster_id} label={x.name} on={pick.some((p) => p.roster_id === x.roster_id)} onPress={() => { tap(); toggle(x); }} />
+  );
+  return (
+    <Card>
+      <LabelInfo label="REDRAW A WEEK" info="Swap two teams' opponents in a week that hasn't kicked off: tap one team, then the other. A team on bye can be swapped in, and the other team takes the bye. Saved lineups follow their team. Playoff weeks follow the seeds and aren't listed. Each change is posted in league chat." />
+      {weeks == null && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>}
+      {weeks?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No week is open to redraw — every scheduled week has started, or there's no schedule yet.</Mono>}
+      {!!weeks?.length && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {weeks.map((w) => <Chip key={w.week} label={`WK ${w.week}`} on={w.week === week} onPress={() => { tap(); setWeek(w.week); setPick([]); }} />)}
+        </View>
+      )}
+      <View style={{ gap: 6, marginTop: 8 }}>
+        {wk?.games.map((g) => (
+          <View key={g.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {team(g.home)}<Mono size={9} tone="faint">vs</Mono>{team(g.away)}
+          </View>
+        ))}
+        {!!wk?.byes.length && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={9} tone="faint">BYE</Mono>{wk.byes.map(team)}
+          </View>
+        )}
+      </View>
+      {pick.length === 2 && (
+        <View style={{ gap: 6, marginTop: 10 }}>
+          <Mono size={10} weight="700">{`Swap ${pick[0].name} ⇄ ${pick[1].name}`}</Mono>
+          <TextInput value={why} onChangeText={setWhy} placeholder="why — the league sees this" placeholderTextColor={t.faint} maxLength={200}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text }} />
+          <Row><Chip label="SWAP" on disabled={busy || !why.trim()} onPress={() => { tap(); void swap(); }} /></Row>
+        </View>
+      )}
+      <Note msg={msg} />
+    </Card>
   );
 }
 

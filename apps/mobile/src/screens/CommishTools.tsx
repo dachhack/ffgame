@@ -68,7 +68,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
-import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, DuesCard } from '../ui/CommishDesk';
+import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, DuesCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -104,7 +104,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // clear where I go in the app to republish the weekly report." Of course
     // not — the label promises score editing and says nothing about a report,
     // and a door nobody can name is a door nobody opens. It gets its own.
-    { id: 'report', label: 'WEEKLY REPORT', nativeOnly: true },
+    { id: 'report', label: 'WEEKLY REPORT · REDRAW', nativeOnly: true },
     { id: 'players', label: 'PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
@@ -454,7 +454,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'tradefloor' && native && <TradeFloorCard leagueId={leagueId} />}
             {section === 'awards' && <><AwardsCard leagueId={leagueId} /><PublicApiCard leagueId={leagueId} /><WriteApiCard leagueId={leagueId} /></>}
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
-            {section === 'report' && native && <WeeklyReportCard leagueId={leagueId} />}
+            {section === 'report' && native && <><WeeklyReportCard leagueId={leagueId} /><ScheduleCard leagueId={leagueId} /></>}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
             {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
           </ScrollView>

@@ -2708,6 +2708,16 @@ export const commishSetWeekLineup = (leagueId: string, week: number, rosterId: n
   tracked(rpc<{ ok: boolean; error?: string; in?: string[]; out?: string[]; rescore?: boolean }>('commish_set_week_lineup',
     { p_league_id: leagueId, p_week: week, p_roster_id: rosterId, p_picks: picks, p_note: note }), Ev.commishAction, { tool: 'lineup_fix' });
 
+/** THE COMMISSIONER REDRAWS A WEEK (0357): swap two teams' opponents in a
+ *  week that hasn't started. A team on bye can be swapped in. */
+export interface RedrawTeam { roster_id: number; name: string }
+export interface RedrawWeek { week: number; games: { id: string; home: RedrawTeam; away: RedrawTeam }[]; byes: RedrawTeam[] }
+export const commishOpenSchedule = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; weeks?: RedrawWeek[] }>('commish_open_schedule', { p_league_id: leagueId });
+export const commishSwapOpponents = (leagueId: string, week: number, a: number, b: number, note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_swap_opponents',
+    { p_league_id: leagueId, p_week: week, p_a: a, p_b: b, p_note: note }), Ev.commishAction, { tool: 'redraw' });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>

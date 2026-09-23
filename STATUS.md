@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.495.0 — the commissioner redraws a week
+
+Item 5 of the commissioner list: 🔀 REDRAW A WEEK, web (the matchups tab,
+under the weekly report) and app (WEEKLY REPORT · REDRAW).
+- The commissioner taps two teams and gives a reason. X played A and Y played
+  B; now Y plays A and X plays B.
+- A team on bye can be swapped in. It takes the game, and the other team takes
+  the bye.
+- Only for a week that hasn't started: every game `scheduled`, the first
+  kickoff still ahead, not a playoff week.
+- Saved lineups are stored per matchup, so each team's picks move with it,
+  untouched (through 0356's switch). A team sent to a bye has its picks
+  removed, because the resolver adopts a lone orphaned lineup.
+- A drip power-up already armed or bought for either game was aimed at the old
+  opponent, so the swap is refused while one exists.
+- Migration 0357 adds `commish_open_schedule`, `commish_swap_opponents` and
+  `schedule_edit_log`. One chat line gives the new pairings.
+- Checks: `scripts/db/redraw-probes.sql` passes and is in the harness.
+
 ### v0.494.0 — the commissioner fixes a lineup
 
 Item 4 of the commissioner list: 🧾 FIX A LINEUP, web and app, classic only.
