@@ -2728,6 +2728,12 @@ export const commishSetTxnLimits = (leagueId: string, addsWeek: number | null, a
   tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_set_txn_limits',
     { p_league_id: leagueId, p_adds_week: addsWeek, p_adds_season: addsSeason, p_trades_season: tradesSeason }), Ev.commishAction, { tool: 'txn_limits' });
 
+/** THE ROSTER HAS TO BE LEGAL (0360): every team in the league whose roster
+ *  is illegal right now, roster id → the reason. While one is, its adds and
+ *  lineup changes are refused and its best-ball spots stay empty. */
+export const leagueRosterIssues = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; issues?: Record<string, string> }>('league_roster_issues', { p_league_id: leagueId });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>

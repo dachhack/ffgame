@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.498.0 — the roster has to be legal
+
+Founder: "We need to confirm roster movement limits when over the limit or
+players in taxi or IR outside of the allowed designations… Best ball positions
+shouldn't do their magic if a team has too many players on their roster.
+Warnings for these are good to have."
+
+- Migration 0360 widens `roster_illegal_reason`, the one gate every add,
+  claim, waiver run, lineup write and My Team warning already used. It now
+  also catches:
+  - a player on IR or OUT without one of that spot's designations. Only
+    judged while the injury feed has rows, so an empty feed flags nobody;
+  - a taxi player past the experience ceiling;
+  - a shelf over its spots;
+  - more active players than active seats plus open taxi spots (after a
+    draft, the taxi's share sits active legally; seat-cap sc2).
+- Still allowed while illegal: `set_roster_spot` (the fix itself) and drops.
+- Best ball: `ClassicSide.bestballOff` keeps an illegal team's best-ball spots
+  empty. The resolver reads `league_illegal_rosters` once per tick, for
+  classic best-ball leagues only, and only while a week is being scored
+  (`home_final` null), so a re-score of an old week isn't judged by today's
+  roster. Both boards read `league_roster_issues` every minute and draw the
+  same thing.
+- Warnings:
+  - both boards show a banner on either side that's illegal, and stop
+    offering lineup edits to your own;
+  - My Team (web, app) and the app's drip picks screen reword theirs to say
+    what's refused and what fixes it.
+- Tests: `roster-legal-probes.sql` (in the harness) and `check:bblegal` (in
+  check:parity) pass, and so do the suites around rosters, stashes, waivers,
+  trades and lineups.
+- Two probes changed:
+  - agent-wire aw10k: a swap with a healed player left on IR is now refused,
+    which is the new rule;
+  - lineup-fix: the IR fixture player now carries a designation.
+- ol22 (classic-open-lineups) still fails, as before this change.
+
 ### v0.497.0 — the commissioner seeds the bracket
 
 Item 7, the last of the commissioner list: the playoff seed override.

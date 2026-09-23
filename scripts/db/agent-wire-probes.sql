@@ -396,8 +396,13 @@ begin
   update injury_status set status = 'Q' where player_slug = 'awir-1';
   perform assert_err(set_roster_spot(lid, 'awir-1', 'active'), 'active roster is full',
     'aw10j a healed player cannot come back while the active roster is full (0198, unchanged)');
+  -- 0360: and while he sits on IR healed, the roster is illegal — no pickup,
+  -- not even a swap, until he comes off IR or goes.
+  perform assert_err(add_free_agent(lid, bot_seat, 'awir-9', 'awir-8'), 'isn''t designated',
+    'aw10k a healed player left on IR blocks every pickup (0360)');
+  update injury_status set status = 'O' where player_slug = 'awir-1';
   perform assert_ok(add_free_agent(lid, bot_seat, 'awir-9', 'awir-8'),
-    'aw10k (a swap keeps the count where it is)');
+    'aw10k2 ruled out again, the swap goes through (a swap keeps the count where it is)');
   perform probe_as('a');
   perform assert_ok(set_team_controller(lid, bot_seat, 'human'), 'aw10l the seat handed back');
   perform probe_as_worker();

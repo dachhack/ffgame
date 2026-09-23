@@ -229,6 +229,14 @@ async function leagueAdjustmentsOf(leagueId, week, ctx) {
   return data ?? [];
 }
 
+/** Seats whose roster is illegal right now (0360), as a Set of roster ids —
+ *  their best-ball spots don't fill. */
+async function illegalRostersOf(leagueId, ctx) {
+  if (ctx?.illegal) return ctx.illegal.get(leagueId) ?? new Set();
+  const { data } = await db().rpc('league_illegal_rosters', { p_league_ids: [leagueId] });
+  return new Set((data ?? []).map((r) => r.roster_id));
+}
+
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId, ctx) {
   if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
@@ -287,7 +295,17 @@ export async function prefetchTick(live, week) {
     if (!adjust.has(r.league_id)) adjust.set(r.league_id, []);
     adjust.get(r.league_id).push({ week: r.week, slug: r.slug, points: r.points });
   }
-  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust };
+  // 0360: which seats are illegal, asked only of the leagues it can change —
+  // classic ones with a best-ball spot. Everyone else's lineup gate is the
+  // table trigger's, and costs the tick nothing.
+  const bbLeagues = [...mode].filter(([, gm]) => gm?.mode === 'classic' && leagueBestball(gm).length > 0).map(([id]) => id);
+  const ill = bbLeagues.length ? await db().rpc('league_illegal_rosters', { p_league_ids: bbLeagues }) : { data: [] };
+  const illegal = new Map();   // leagueId -> Set(roster) (0360: best ball stays off)
+  for (const r of ill?.data ?? []) {
+    if (!illegal.has(r.league_id)) illegal.set(r.league_id, new Set());
+    illegal.get(r.league_id).add(r.roster_id);
+  }
+  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust, illegal };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -603,6 +621,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         rosters.get(row.roster_id).push(p);
       }
     }
+    // AN ILLEGAL ROSTER'S BEST BALL STAYS EMPTY (0360). Judged while the week
+    // is being scored — every live tick and the first stamp, when home_final
+    // is still null — against the roster as it stands, the same roster the
+    // fill reads. A re-stamp or re-score of a week already stamped does not ask:
+    // today's roster says nothing about whether a team was legal back then.
+    const illegal = matchup.home_final == null && bestball.length ? await illegalRostersOf(matchup.league_id, ctx) : new Set();
     const sideOf = (picks, rosterId) => ({
       picks: classify(picks),
       hasLineup: hasRows(picks, rosterId),
@@ -610,6 +634,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       bestball,
       ruledOut,
       playRisk: riskOf,
+      bestballOff: illegal.has(rosterId),
     });
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,

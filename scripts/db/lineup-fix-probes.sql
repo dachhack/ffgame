@@ -55,6 +55,8 @@ begin
   insert into native_roster (league_id, roster_id, slug, acquired, spot) values
     (lid, b, 'lf-thu', 'draft', 'active'), (lid, b, 'lf-ir', 'draft', 'ir'), (lid, b, 'lf-sun', 'draft', 'active'),
     (lid, b, 'lf-sun2', 'draft', 'active'), (lid, a, 'lf-a', 'draft', 'active');
+  -- The IR man is hurt (0360: a healed player on IR makes the roster illegal).
+  insert into injury_status (player_slug, status) values ('lf-ir', 'IR') on conflict (player_slug) do update set status = 'IR';
   insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (lid, 91, a, b, 'live') returning id into mid;
 
   -- ── f1. the lock stands for the manager ──

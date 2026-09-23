@@ -799,9 +799,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
         <Card style={{ borderLeftWidth: 3, borderLeftColor: t.opp }}>
-          <Display size={13} tone="opp">⚠ Roster over its limits</Display>
+          <Display size={13} tone="opp">⚠ Your roster isn’t legal</Display>
           <Mono size={9.5} style={{ marginTop: 6, lineHeight: fs(15) }}>
-            {team.roster_issue}. Adds, waiver claims, and weekly lineups are locked until your roster is legal — drops always work.
+            {team.roster_issue}. Until it is, adds, waiver claims and lineup changes are refused, and best-ball spots stay empty. Moving a player to a spot he’s allowed in, and drops, always work.
           </Mono>
         </Card>
       )}

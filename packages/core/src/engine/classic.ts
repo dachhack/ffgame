@@ -1211,6 +1211,10 @@ export interface ClassicSide {
    *  worker's injury_status). A normal league still starts him at full value;
    *  a golf league prices the blank he might post. Absent means no claim. */
   playRisk?: (slug: string) => number;
+  /** THE ROSTER IS ILLEGAL (0360): its best-ball spots don't fill. They stay
+   *  best-ball spots (a stored pick in one is still ignored), so an illegal
+   *  roster can't pick up the points it is carrying too many players for. */
+  bestballOff?: boolean;
 }
 
 // ── What a player is WORTH to an auto-fill (v0.252.0) ───────────────────────
@@ -1367,6 +1371,7 @@ export function classicLineup(s: ClassicSide, week: number, sc?: number | Partia
   // would, so one player can't be started twice.
   const stored = s.hasLineup ?? s.picks.length > 0;
   const started = stored ? manual : unmanagedStart(s, slots, bb, week);
+  if (s.bestballOff) return started;
   return [...started, ...bestballFill(started, s.bestball ?? [], s.roster ?? [], week, sc, slots)];
 }
 

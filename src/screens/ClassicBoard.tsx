@@ -40,7 +40,7 @@ import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
@@ -878,6 +878,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     leaguePlayerAdjustments(lid, adjWeek).then((r) => install(r?.ok ? r.adjustments ?? [] : [])).catch(() => install([]));
     return () => { alive = false; };
   }, [ros?.leagueId, adjWeek]);
+  // THE ROSTER HAS TO BE LEGAL (0360): which teams are illegal right now. Their
+  // lineups can't change and their best-ball spots stay empty, on this board as
+  // in the worker, so the board says so rather than drawing a fill that won't
+  // score. Refreshed every minute: a drop fixes it mid-week.
+  const [issues, setIssues] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const lid = ros?.leagueId;
+    if (!lid) return;
+    let alive = true;
+    const get = () => leagueRosterIssues(lid).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
+    void get();
+    const id = window.setInterval(get, 60_000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, [ros?.leagueId]);
   // Cleared on leaving the league, not on changing week: the cache is keyed by
   // week, so the week before's rows can't score this one, and clearing between
   // weeks would drop the board to Loading… on every ‹ WK ›.
@@ -1014,7 +1028,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // only exist once locked (pre-lock there are no scores to chase).
   const effective = useMemo(() => {
     void playsAt;
-    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
+    // The worker judges legality while the week is being scored (0360); a
+    // stamped week keeps the fill it was scored with.
+    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!issues[String(rid)];
+    const myRid = ros?.rosterId;
+    const oppRid = matchup && myRid != null ? (matchup.home_roster_id === myRid ? matchup.away_roster_id : matchup.home_roster_id) : undefined;
+    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[], bbOff = false) => {
       const out: Record<string, string | null> = {};
       const manualPicks: ClassicPick[] = [];
       for (const d of slotDefs) {
@@ -1037,7 +1056,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
         }
       }
-      if (matchup && bb.size) {
+      if (matchup && bb.size && !bbOff) {
         // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
         // itself with whoever scores most, so before anyone has scored it used
         // to render empty and count ZERO toward the projected total —
@@ -1074,10 +1093,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       return out;
     };
     return {
-      mine: build(mine, pool.map((p) => p.slug)),
-      theirs: build(theirs, oppPool.map((p) => p.slug)),
+      mine: build(mine, pool.map((p) => p.slug), off(myRid)),
+      theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -1230,8 +1249,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   /** May I still change this spot? Sealed by the server, or holding a player
    *  whose game has begun, means no — everything else is fair game, including
    *  mid-week once other players have played. */
+  // An illegal roster (0360) can't change its lineup: the server refuses the
+  // write, so the board doesn't offer it. The banner above says why.
+  const illegalMine = !!issues[String(ros?.rosterId)];
   const canEdit = (slot: string): boolean =>
-    !browsing && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+    !browsing && !illegalMine && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
   /** Write one or more spots in a single save. A MOVE touches two (the target
    *  and the spot the player left), and they have to travel together — writing
@@ -1430,6 +1452,28 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           VIEWING {names.me.toUpperCase()} vs {names.opp.toUpperCase()} · ↩ MY MATCHUP
         </button>
       )}
+      {/* ⚠ AN ILLEGAL ROSTER (0360) — either side of this board. The lineup
+          is frozen and best-ball spots stay empty until it's fixed, and a
+          board that just showed empty spots would look broken rather than
+          ruled on. Mine says how to fix it; theirs says why their spots are
+          blank. */}
+      {matchup && ros && [ros.rosterId, matchup.home_roster_id === ros.rosterId ? matchup.away_roster_id : matchup.home_roster_id].map((rid, i) => {
+        const why = issues[String(rid)];
+        if (!why) return null;
+        const mineSide = i === 0 && !browsing;
+        return (
+          <div key={rid} className="mono" style={{ marginTop: 7, border: '1px solid var(--warn)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>
+              ⚠ {mineSide ? 'YOUR ROSTER ISN’T LEGAL' : `${(i === 0 ? names.me : names.opp).toUpperCase()}’S ROSTER ISN’T LEGAL`}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
+              {why}. {mineSide
+                ? 'Until it is, your lineup is frozen, pickups are refused and best-ball spots stay empty. Moving a player to a spot he is allowed in, or dropping one, always works (MY TEAM).'
+                : 'Until it is fixed, that lineup is frozen and its best-ball spots stay empty.'}
+            </div>
+          </div>
+        );
+      })}
       {/* 🪓 CHOPPED (v0.385.0) — the app twin's banner. A manager whose team
           fell saw a normal board with an empty lineup and nothing saying why. */}
       {chopped != null && !browsing && (

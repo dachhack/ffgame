@@ -3182,9 +3182,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       {/* over-limit lockout: no adds/claims/weekly lineups until legal */}
       {team.roster_issue && (
         <div style={{ ...card, marginBottom: 12, borderLeft: '3px solid var(--opp)' }}>
-          <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--opp)' }}>⚠ Roster over its limits</div>
+          <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--opp)' }}>⚠ Your roster isn’t legal</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
-            {team.roster_issue}. Adds, waiver claims, and weekly lineups are locked until your roster is legal — drops (and trades that get you legal) always work.
+            {team.roster_issue}. Until it is, adds, waiver claims and lineup changes are refused, and best-ball spots stay empty. Moving a player to a spot he’s allowed in, drops, and trades that get you legal always work.
           </div>
         </div>
       )}
@@ -3517,7 +3517,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   const claim = left != null || team.fa_open === false;
                   return (
                     <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null || blocked} className="mono"
-                      title={team.roster_issue ? 'roster over its limits — drop players first'
+                      title={team.roster_issue ? `your roster isn’t legal — ${team.roster_issue}`
                         : left != null ? 'on waivers — put in a claim'
                         : team.fa_open === false ? 'free agency is closed — put in a claim for the next run' : undefined}
                       style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null || blocked ? 0.4 : 1 }}>
