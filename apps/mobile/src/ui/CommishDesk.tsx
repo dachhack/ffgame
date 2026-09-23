@@ -18,6 +18,7 @@ import {
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
+  leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -646,7 +647,7 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
               <Mono size={10} weight="700">WEEK {w.week}</Mono>
               <View style={{ flex: 1 }} />
               {canRescore && (
-                <Chip label="⟳ RE-SCORE" on={rescoreWeek === w.week}
+                <Chip label="⟳ RE-SCORE · ✏️" on={rescoreWeek === w.week}
                   onPress={() => { tap(); setRescoreWeek(rescoreWeek === w.week ? null : w.week); }} />
               )}
               <Chip label={busy === w.week ? '…' : open ? '⏳ QUEUED' : w.posted_at ? '↻ REPOST' : '📋 POST'}
@@ -804,6 +805,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
       <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
         {`Recompute week ${week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings. Preview first — nothing changes until you apply.`}
       </Mono>
+      <AdjustBox leagueId={leagueId} week={week} />
       {running && <Mono size={9} tone="dim">{`⏳ ${req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…`}</Mono>}
       {req?.error ? <Mono size={9} tone="opp">{`⚠ Last ${req.apply ? 'apply' : 'preview'} failed: ${req.error}`}</Mono> : null}
       {res && (
@@ -826,6 +828,91 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
           <Chip label={`✓ APPLY — REWRITE WEEK ${week}`} on disabled={busy} onPress={() => { tap(); ask(true); }} />
         )}
       </Row>
+      <Note msg={msg} />
+    </View>
+  );
+}
+
+// ── ✏️ POINT ADJUSTMENTS (0355) — the web's AdjustBox ───────────────────────
+// Points on or off one player's week, with the reason the league reads. Saved
+// at once and counted by every board; a finished week's finals follow when it
+// is re-scored just below.
+function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const t = useTheme();
+  const [rows, setRows] = useState<PlayerAdjustment[] | null>(null);
+  const [found, setFound] = useState<AdjustCandidate[]>([]);
+  const [q, setQ] = useState('');
+  const [pick, setPick] = useState<{ slug: string; name: string } | null>(null);
+  const [pts, setPts] = useState('');
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search?: string) => leaguePlayerAdjustments(leagueId, week, search?.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    setRows(r.adjustments ?? []); setFound(r.found ?? []);
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId, week]);
+  const save = async (slug: string, points: number, note: string) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note);
+      if (!r.ok) { warn(); setMsg(friendlyError(r.error ?? 'failed')); return; }
+      commit();
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      setPick(null); setPts(''); setWhy(''); setFound([]); setQ('');
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const n = Number(pts);
+  const input = { borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text } as const;
+  return (
+    <View style={{ gap: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
+      <Mono size={9.5} weight="700" tone="dim">{`✏️ POINT ADJUSTMENTS · WEEK ${week}`}</Mono>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
+        Add or take points from one player for this week — a stat correction, a ruling. It counts wherever his points count (a starting spot, not the bench), every board shows it with your reason, and the league chat is told.
+      </Mono>
+      {rows?.map((a) => (
+        <View key={a.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ flex: 1, fontSize: fs(12), color: t.text }}>
+            {a.name}<Text style={{ fontWeight: '700', color: a.points > 0 ? t.you : t.warn }}>{` ${a.points > 0 ? '+' : ''}${a.points}`}</Text>
+            <Text style={{ color: t.faint }}>{` — ${a.note}`}</Text>
+          </Text>
+          <Chip label="REMOVE" on={false} disabled={busy} onPress={() => { tap(); void save(a.slug, 0, ''); }} />
+        </View>
+      ))}
+      {pick ? (
+        <View style={{ gap: 6 }}>
+          <Mono size={10} weight="700">{pick.name}</Mono>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput value={pts} onChangeText={setPts} placeholder="+6 or -2" placeholderTextColor={t.faint}
+              keyboardType="numbers-and-punctuation" style={{ ...input, width: 80 }} />
+            <TextInput value={why} onChangeText={setWhy} placeholder="why — the league sees this" placeholderTextColor={t.faint}
+              maxLength={200} style={{ ...input, flex: 1 }} />
+          </View>
+          <Row>
+            <Chip label="SAVE" on disabled={busy || !Number.isFinite(n) || n === 0 || !why.trim()}
+              onPress={() => { tap(); void save(pick.slug, n, why); }} />
+            <Chip label="CANCEL" on={false} onPress={() => { tap(); setPick(null); }} />
+          </Row>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput value={q} onChangeText={setQ} onSubmitEditing={() => void load(q)} placeholder="find a player to adjust"
+            placeholderTextColor={t.faint} style={{ ...input, flex: 1 }} />
+          <Chip label="SEARCH" on={false} onPress={() => { tap(); void load(q); }} />
+        </View>
+      )}
+      {!pick && found.map((p) => (
+        <Pressable key={p.slug} onPress={() => {
+          tap(); const had = rows?.find((a) => a.slug === p.slug);
+          setPick(p); setPts(had ? String(had.points) : ''); setWhy(had?.note ?? '');
+        }} style={{ paddingVertical: 6 }}>
+          <Text style={{ fontSize: fs(12), color: t.text }}>
+            {p.name}<Text style={{ color: t.faint }}>{` ${p.pos} · ${p.team}${p.owner ? ` · ${p.owner}` : ' · free agent'}  ›`}</Text>
+          </Text>
+        </Pressable>
+      ))}
       <Note msg={msg} />
     </View>
   );

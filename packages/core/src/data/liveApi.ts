@@ -2680,6 +2680,22 @@ export const commishSetWaiverHold = (leagueId: string, slug: string, mode: 'free
   tracked(rpc<{ ok: boolean; error?: string; until?: string | null; note?: string }>('commish_set_waiver_hold',
     { p_league_id: leagueId, p_slug: slug, p_mode: mode, p_until: until ?? null }), Ev.commishAction, { tool: 'waiver_hold' });
 
+/** THE COMMISSIONER'S POINT ADJUSTMENTS (0355): points added to or taken off
+ *  one player's week, classic leagues only. classicPoints adds them once the
+ *  host installs them (setLeagueAdjustments). */
+export interface PlayerAdjustment { week: number; slug: string; name: string; points: number; note: string; set_at: string }
+export interface AdjustCandidate { slug: string; name: string; pos: string; team: string; owner: string | null }
+/** `search` (commissioner only) also finds pool players to adjust. */
+export const leaguePlayerAdjustments = (leagueId: string, week?: number | null, search?: string) =>
+  rpc<{ ok: boolean; error?: string; adjustments?: PlayerAdjustment[]; found?: AdjustCandidate[] }>(
+    'league_player_adjustments', { p_league_id: leagueId, p_week: week ?? null, p_search: search ?? null });
+/** points 0 removes it. `rescore` says the week is stamped and keeps its old
+ *  finals until it is re-scored. */
+export const commishSetPlayerAdjustment = (leagueId: string, week: number, slug: string, points: number, note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; points?: number; note?: string; rescore?: boolean; removed?: boolean }>(
+    'commish_set_player_adjustment', { p_league_id: leagueId, p_week: week, p_slug: slug, p_points: points, p_note: note }),
+    Ev.commishAction, { tool: 'point_adjust' });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>

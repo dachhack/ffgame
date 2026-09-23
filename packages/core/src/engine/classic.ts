@@ -22,7 +22,7 @@
 // This module owns every default; SQL stores sanitized overrides only.
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
-import { flagRulesFor, flagFor } from '../data/commish';
+import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
 import { scopedAdjustFor } from './leagueScoring';
@@ -685,10 +685,18 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  *  one game for almost every player, matching Sleeper's per-game bonuses).
  *  The commissioner's flag rules (0144) apply exactly as in drip: bonus_mult
  *  scales the points, bonus_pts lands flat on the final. Requires the flag
- *  cache installed (setLeagueFlags) — both resolvers and both boards keep it. */
+ *  cache installed (setLeagueFlags) — both resolvers and both boards keep it.
+ *
+ *  Last, the commissioner's POINT ADJUSTMENT for this player's week (0355),
+ *  flat on the total and after every rule — it corrects what he scored, so it
+ *  is not multiplied by a bonus that already paid on the uncorrected number.
+ *  Here rather than in classicPointsFrom because it is keyed by week, and a
+ *  season game log reading plays it holds has no week cache to speak for. */
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos, slot?: string | null): number {
   const { plays } = playsForPlayer(player, week);
-  return classicPointsFrom(plays, player, sc, scoreAs, slot);
+  const adj = adjustmentFor(player.id, week);
+  const pts = classicPointsFrom(plays, player, sc, scoreAs, slot);
+  return adj ? round1(pts + adj) : pts;
 }
 
 /** The same scoring, over plays you already hold (v0.284.0).

@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
-import { setLeagueFlags, flagsLeague } from '@drip/core/data/commish';
+import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -40,7 +40,7 @@ import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
@@ -859,8 +859,29 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   const rulesReady = useMemo(() => {
     void flagsVer;
     const lid = ros?.leagueId;
-    return !!lid && scoringLeague() === lid && flagsLeague() === lid;
-  }, [flagsVer, ros?.leagueId]);
+    return !!lid && scoringLeague() === lid && flagsLeague() === lid && (matchup == null || adjustmentsLeague() === lid);
+  }, [flagsVer, ros?.leagueId, matchup]);
+  // THE COMMISSIONER'S ADJUSTMENTS (0355) — a third module cache classicPoints
+  // reads, week-scoped, so it reloads with the week and clears on exit. A
+  // failed load installs none rather than holding the board on Loading…: the
+  // worst it can do is show a total without a correction the final carries.
+  const [adjusts, setAdjusts] = useState<PlayerAdjustment[]>([]);
+  const adjWeek = matchup?.week;
+  useEffect(() => {
+    const lid = ros?.leagueId;
+    if (!lid || adjWeek == null) return;
+    let alive = true;
+    const install = (rows: PlayerAdjustment[]) => {
+      if (!alive) return;
+      setLeagueAdjustments(lid, rows); setAdjusts(rows); setFlagsVer((v) => v + 1);
+    };
+    leaguePlayerAdjustments(lid, adjWeek).then((r) => install(r?.ok ? r.adjustments ?? [] : [])).catch(() => install([]));
+    return () => { alive = false; };
+  }, [ros?.leagueId, adjWeek]);
+  // Cleared on leaving the league, not on changing week: the cache is keyed by
+  // week, so the week before's rows can't score this one, and clearing between
+  // weeks would drop the board to Loading… on every ‹ WK ›.
+  useEffect(() => () => clearLeagueAdjustments(), [ros?.leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -1894,6 +1915,19 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
             style={{ ...card, width: '100%', maxWidth: 560, maxHeight: '86vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
             <FieldGame week={matchup.week} team={fieldGame} onClose={() => setFieldGame(null)} />
           </div>
+        </div>
+      )}
+
+      {adjusts.length > 0 && (
+        <div style={card}>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 6 }}>✏️ COMMISSIONER ADJUSTMENTS · WEEK {adjWeek}</div>
+          {adjusts.map((a) => (
+            <div key={a.slug} className="mono" style={{ fontSize: 10.5, lineHeight: 1.7 }}>
+              <b>{a.name}</b> <span style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)', fontWeight: 700 }}>{a.points > 0 ? '+' : ''}{r1(Number(a.points))}</span>
+              <span style={{ color: 'var(--dim)' }}> — {a.note}</span>
+            </div>
+          ))}
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4 }}>Already included in each player's points above.</div>
         </div>
       )}
 

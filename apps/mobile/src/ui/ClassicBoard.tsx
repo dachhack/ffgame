@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
-import { setLeagueFlags, flagsLeague } from '@drip/core/data/commish';
+import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -42,7 +42,7 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -711,8 +711,25 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // rather than assume. flagsVer is the recompute signal both installs bump.
   const rulesReady = useMemo(() => {
     void flagsVer;
-    return scoringLeague() === leagueId && flagsLeague() === leagueId;
-  }, [flagsVer, leagueId]);
+    return scoringLeague() === leagueId && flagsLeague() === leagueId && (matchup == null || adjustmentsLeague() === leagueId);
+  }, [flagsVer, leagueId, matchup]);
+  // THE COMMISSIONER'S ADJUSTMENTS (0355) — the web twin's comment applies: a
+  // week-scoped module cache classicPoints reads, reloaded with the week,
+  // cleared on exit, and installed empty when the load fails.
+  const [adjusts, setAdjusts] = useState<PlayerAdjustment[]>([]);
+  const adjWeek = matchup?.week;
+  useEffect(() => {
+    if (adjWeek == null) return;
+    let alive = true;
+    const install = (rows: PlayerAdjustment[]) => {
+      if (!alive) return;
+      setLeagueAdjustments(leagueId, rows); setAdjusts(rows); setFlagsVer((v) => v + 1);
+    };
+    leaguePlayerAdjustments(leagueId, adjWeek).then((r) => install(r?.ok ? r.adjustments ?? [] : [])).catch(() => install([]));
+    return () => { alive = false; };
+  }, [leagueId, adjWeek]);
+  // Cleared on leaving the league, not on changing week (keyed by week).
+  useEffect(() => () => clearLeagueAdjustments(), [leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -1742,6 +1759,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           {!bench.length && <Mono size={10} tone="faint">everyone's starting</Mono>}
         </View>
       </Card>
+      )}
+
+      {adjusts.length > 0 && (
+        <Card>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 6 }}>{`✏️ COMMISSIONER ADJUSTMENTS · WEEK ${adjWeek}`}</Mono>
+          {adjusts.map((a) => (
+            <Text key={a.slug} style={{ fontSize: 11, lineHeight: 17, color: t.text }}>
+              <Text style={{ fontWeight: '700' }}>{a.name}</Text>
+              <Text style={{ fontWeight: '700', color: a.points > 0 ? t.you : t.warn }}>{` ${a.points > 0 ? '+' : ''}${r1(Number(a.points))}`}</Text>
+              <Text style={{ color: t.dim }}>{` — ${a.note}`}</Text>
+            </Text>
+          ))}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Already included in each player's points above.</Mono>
+        </Card>
       )}
 
       <Mono size={8.5} tone="faint" style={{ lineHeight: 14 }}>

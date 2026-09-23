@@ -28,6 +28,7 @@ import {
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
+  leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
@@ -656,8 +657,8 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
             </button>
             {canRescore && (
               <button onClick={() => setRescoreWeek(rescoreWeek === w.week ? null : w.week)} className="mono"
-                title="Recompute this week's scores from the plays as they stand now — preview first, nothing changes until you apply"
-                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score</button>
+                title="Adjust a player's points for this week, and recompute the week's scores from the plays as they stand now — preview first, nothing changes until you apply"
+                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score · ✏️ adjust</button>
             )}
           </div>
           {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
@@ -789,6 +790,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         Recompute week {week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings.
         Preview first: nothing changes until you apply.
       </div>
+      <AdjustBox leagueId={leagueId} week={week} />
       {running && <div style={small}>⏳ {req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…</div>}
       {req?.error && <div style={{ ...small, color: 'var(--opp)' }}>⚠ Last {req.apply ? 'apply' : 'preview'} failed: {req.error}</div>}
       {res && (
@@ -819,6 +821,81 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         )}
         {note(msg)}
       </div>
+    </div>
+  );
+}
+
+// ── ✏️ POINT ADJUSTMENTS (0355) ──────────────────────────────────────────────
+// Points on or off one player's week, with the reason the league will read.
+// Lives in the re-score box because on a finished week that is where it lands:
+// the adjustment is saved at once and counted by every board, and the stored
+// finals follow when the week is re-scored below.
+function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const [rows, setRows] = useState<PlayerAdjustment[] | null>(null);
+  const [found, setFound] = useState<AdjustCandidate[]>([]);
+  const [q, setQ] = useState('');
+  const [pick, setPick] = useState<{ slug: string; name: string } | null>(null);
+  const [pts, setPts] = useState('');
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search?: string) => leaguePlayerAdjustments(leagueId, week, search?.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setRows(r.adjustments ?? []); setFound(r.found ?? []);
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId, week]);
+  const save = async (slug: string, points: number, note: string) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      setPick(null); setPts(''); setWhy(''); setFound([]); setQ('');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const n = Number(pts);
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>✏️ POINT ADJUSTMENTS · WEEK {week}</div>
+      <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
+        Add or take points from one player for this week — a stat correction, a ruling. It counts wherever his points count
+        (a starting spot, not the bench), every board shows it with your reason, and the league chat is told.
+      </div>
+      {rows?.map((a) => (
+        <div key={a.slug} style={{ ...row, flexWrap: 'wrap' }}>
+          <span style={{ ...cell, flex: '1 1 160px' }}>{a.name} <b style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)' }}>{a.points > 0 ? '+' : ''}{a.points}</b>
+            <span style={{ color: 'var(--faint)' }}> — {a.note}</span></span>
+          <button onClick={() => void save(a.slug, 0, '')} disabled={busy} className="mono" style={btn(false)}>remove</button>
+        </div>
+      ))}
+      {pick ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+          <span style={{ ...cell, fontWeight: 700 }}>{pick.name}</span>
+          <input value={pts} onChange={(e) => setPts(e.target.value)} placeholder="+6 or -2" inputMode="decimal"
+            style={{ ...inp, width: 80, padding: '5px 8px', fontSize: 12.5 }} />
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, minWidth: 160, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void save(pick.slug, n, why)} disabled={busy || !Number.isFinite(n) || n === 0 || !why.trim()}
+            className="mono" style={btn(true)}>save</button>
+          <button onClick={() => setPick(null)} className="mono" style={btn(false)}>cancel</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void load(q); }}
+            placeholder="find a player to adjust" style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void load(q)} className="mono" style={btn(false)}>search</button>
+        </div>
+      )}
+      {!pick && found.map((p) => (
+        <div key={p.slug} style={row}>
+          <span style={{ ...cell, flex: 1 }}>{p.name} <span style={{ color: 'var(--faint)' }}>{p.pos} · {p.team}{p.owner ? ` · ${p.owner}` : ' · free agent'}</span></span>
+          <button onClick={() => { const had = rows?.find((a) => a.slug === p.slug); setPick(p); setPts(had ? String(had.points) : ''); setWhy(had?.note ?? ''); }}
+            className="mono" style={btn(false)}>adjust</button>
+        </div>
+      ))}
+      {note(msg)}
     </div>
   );
 }

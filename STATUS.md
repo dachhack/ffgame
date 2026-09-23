@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.493.0 — the commissioner corrects a stat
+
+Item 3 of the commissioner list: ✏️ POINT ADJUSTMENTS, web and app. The
+commissioner adds or takes points (−50 to +50, one decimal) from one player
+for one week, with a reason the league reads.
+- Classic leagues only. A drip week isn't a sum of points, and it can't be
+  re-scored afterwards (0353).
+- Applied in `classicPoints`, as a flat layer after the flag and the scoped
+  rules. That puts it in the worker's resolve, the re-score and both classic
+  boards from one install, so the board and the final cannot disagree.
+- It counts where the player's points count: a starting spot, or a best-ball
+  spot choosing by points. It does not count on the bench.
+- The boards list the week's adjustments under the board, with the reason.
+- In the console it sits inside the week's ⟳ RE-SCORE box (now "⟳ re-score ·
+  ✏️ adjust"). The adjustment is saved at once, and a stamped week says so:
+  its finals change when it is re-scored in the same box. Each change, and
+  each removal, is one line in league chat.
+- Migration 0355 adds `player_adjustment` (league-readable),
+  `commish_set_player_adjustment` and `league_player_adjustments`. The
+  commissioner's call to `league_player_adjustments` also searches the pool,
+  listing rostered players first.
+- Checks: `scripts/db/adjust-probes.sql` (in the harness) and
+  `scripts/check-adjust.mjs` (in check:parity) cover the week scoping, flat
+  after the multiplier, starter vs bench, and exact identity when cleared.
+  The server tests pass.
+
 ### v0.492.0 — the commissioner can take it back
 
 Founder, on the list of finer commissioner controls: "Merge and apk, then build
