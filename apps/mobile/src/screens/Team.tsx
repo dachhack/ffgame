@@ -368,6 +368,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // A bid already typed when the server said "roster full" — carried into the
   // bid sheet again once a drop is chosen (v0.489.3).
   const [pendingBid, setPendingBid] = useState<number | null>(null);
+  // Whether the sheet's drop is REQUIRED (no open seat) or a choice (v0.489.5).
+  const [dropRequired, setDropRequired] = useState(false);
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [myArtOpen, setMyArtOpen] = useState(false);       // own team art
@@ -601,7 +603,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     // v0.403.0 — the web twin. A closed window is a CLAIM, not a dead button:
     // he is on waivers if he carries a hold OR free agency cannot reach him
     // right now, the same question 0288 taught the server to ask.
-    const onWaivers = waivedFor(p) != null || team?.fa_open === false;
+    const onWaivers = isClaim(p);
     // FAAB league: a claim carries a blind bid — ask for it first.
     if (onWaivers && team?.waiver_mode === 'faab') {
       setClaimFor({ p, drop: dropSlug }); setBidDraft(pendingBid != null ? String(pendingBid) : ''); setPendingBid(null); return;
@@ -616,7 +618,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
    *  opened, instead of an error telling you to go and do it. */
   const askForDrop = (p: LeaguePoolPlayer, bid: number | null) => (error: string) => {
     if (!seatFullError(error)) return false;
-    setPendingBid(bid); setPendingAdd(p);
+    setPendingBid(bid); setDropRequired(true); setPendingAdd(p);
     return true;
   };
   const submitClaimBid = () => {
@@ -626,7 +628,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     setClaimFor(null); setBidDraft('');
     void run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid), drop ? undefined : askForDrop(p, bid));
   };
-  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) { setPendingBid(null); setPendingAdd(p); } else doAdd(p); };
+  /** A claim, not an instant add: he carries a hold, or free agency can't reach him now. */
+  const isClaim = (p: LeaguePoolPlayer) => waivedFor(p) != null || team?.fa_open === false;
+  /** EVERY PICKUP CAN NAME A DROP (v0.489.5) — the web twin. With no open
+   *  seat the drop is required; with one it is a choice, led by a button to
+   *  go on without one. */
+  const addOrClaim = (p: LeaguePoolPlayer) => { setPendingBid(null); setDropRequired(full); setPendingAdd(p); };
 
 
   if (!team) {
@@ -1186,17 +1193,27 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         )}
       </Overlay>
 
-      {/* roster full → choose a drop for the pending add */}
-      <Overlay visible={!!pendingAdd} title={pendingAdd ? `Drop who for ${pendingAdd.full_name}?` : ''}
-        subtitle="Your roster is full — the add and the drop happen together." onClose={() => { setPendingAdd(null); setPendingBid(null); }}>
+      {/* the pickup's drop — required with no open seat, a choice with one */}
+      <Overlay visible={!!pendingAdd}
+        title={!pendingAdd ? '' : dropRequired ? `Drop who for ${pendingAdd.full_name}?` : `${isClaim(pendingAdd) ? 'Claim' : 'Add'} ${pendingAdd.full_name}`}
+        subtitle={dropRequired ? 'Your roster is full — the add and the drop happen together.' : 'You have an open spot, so a drop is optional. Pick one below to make room anyway.'}
+        onClose={() => { setPendingAdd(null); setPendingBid(null); }}>
+        {!dropRequired && pendingAdd && (
+          <View style={{ marginBottom: 8 }}>
+            <PrimaryButton label={`${isClaim(pendingAdd) ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'} WITHOUT A DROP`}
+              disabled={busy} onPress={() => { tap(); doAdd(pendingAdd); }} />
+          </View>
+        )}
         <ScrollView style={{ maxHeight: 380 }}>
-          {/* ACTIVE players only: a signing lands active, so dropping a taxi
-              or IR player frees no seat and the server would refuse it. */}
-          {mine.filter((p) => p.spot === 'active').map((p) => (
+          {/* REQUIRED: active players only — a signing lands active, so
+              dropping a taxi or IR player frees no seat and the server would
+              refuse it. OPTIONAL: anyone, since there is a seat either way. */}
+          {mine.filter((p) => !dropRequired || p.spot === 'active').map((p) => (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
               <Face slug={p.slug} pos={p.pos} />
               <PosPill pos={p.pos} size={8} />
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
+              {p.spot !== 'active' && <Mono size={8.5} tone="faint">{p.spot.toUpperCase()}</Mono>}
               <Pressable disabled={busy} onPress={() => { tap(); pendingAdd && doAdd(pendingAdd, p.slug); }}
                 style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.opp }}>DROP</Text>

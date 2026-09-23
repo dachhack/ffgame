@@ -2755,6 +2755,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // A bid already typed when the server said "roster full" — carried into the
   // bid modal again once a drop is chosen, so nobody types it twice.
   const [pendingBid, setPendingBid] = useState<number | null>(null);
+  // Whether the picker's drop is REQUIRED (no open seat) or a choice (v0.489.5).
+  const [dropRequired, setDropRequired] = useState(false);
   // The league's LINEUP SHAPE — what the roster lays itself out against: the
   // starting spots, and how many bench/IR/taxi places exist (v0.285.0, matching
   // the app's roster since v0.281.0).
@@ -3022,7 +3024,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     // the same question 0288 taught the server to ask. Without this half the
     // client still called add_free_agent and got "free agency is closed",
     // which is what "all the waivers are closed" looked like from the outside.
-    const onWaivers = waivedFor(p) != null || team?.fa_open === false;
+    const onWaivers = isClaim(p);
     // FAAB league: a claim carries a blind bid — ask for it first.
     if (onWaivers && team?.waiver_mode === 'faab') {
       setClaimFor({ p, drop: dropSlug }); setBidDraft(pendingBid != null ? String(pendingBid) : ''); setPendingBid(null); return;
@@ -3038,7 +3040,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
    *  done, rather than print an error that tells you to go and do it. */
   const askForDrop = (p: LeaguePoolPlayer, bid: number | null) => (error: string) => {
     if (!seatFullError(error)) return false;
-    setPendingBid(bid); setPendingAdd(p);
+    setPendingBid(bid); setDropRequired(true); setPendingAdd(p);
     return true;
   };
   const submitClaimBid = () => {
@@ -3048,7 +3050,14 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     setClaimFor(null); setBidDraft('');
     run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid), drop ? undefined : askForDrop(p, bid));
   };
-  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) { setPendingBid(null); setPendingAdd(p); } else doAdd(p); };
+  /** A claim, not an instant add: he carries a hold, or free agency can't reach him now. */
+  const isClaim = (p: LeaguePoolPlayer) => waivedFor(p) != null || team?.fa_open === false;
+  /** EVERY PICKUP CAN NAME A DROP (v0.489.5). Founder: "Even if you have empty
+   *  spots on your roster, you should have the option to designate a drop with
+   *  your pickup." So the picker always opens: with no open seat the drop is
+   *  required, as before; with one it is a choice, led by a button to go on
+   *  without one. The server has taken a drop on either move all along. */
+  const addOrClaim = (p: LeaguePoolPlayer) => { setPendingBid(null); setDropRequired(full); setPendingAdd(p); };
 
   if (!team) return (
     <div>
@@ -3636,14 +3645,28 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       {pendingAdd && (
         <div onClick={() => { setPendingAdd(null); setPendingBid(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Roster full — drop who for {pendingAdd.full_name}?</div>
-            {/* ACTIVE players only: a signing lands active, so dropping a taxi
-                or IR player frees no seat and the server would refuse it. */}
-            {mine.filter((p) => p.spot === 'active').map((p) => (
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {dropRequired ? `Roster full — drop who for ${pendingAdd.full_name}?` : `${isClaim(pendingAdd) ? 'Claim' : 'Add'} ${pendingAdd.full_name}`}
+            </div>
+            {!dropRequired && (
+              <>
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
+                  You have an open spot, so a drop is optional. Pick one below to make room anyway.
+                </div>
+                <button onClick={() => doAdd(pendingAdd)} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 10 }}>
+                  {isClaim(pendingAdd) ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'} WITHOUT A DROP
+                </button>
+              </>
+            )}
+            {/* REQUIRED: active players only — a signing lands active, so
+                dropping a taxi or IR player frees no seat and the server would
+                refuse it. OPTIONAL: anyone, since there is a seat either way. */}
+            {mine.filter((p) => !dropRequired || p.spot === 'active').map((p) => (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{p.full_name}</span>
+                {p.spot !== 'active' && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.spot.toUpperCase()}</span>}
                 <button onClick={() => doAdd(pendingAdd, p.slug)} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
               </div>
             ))}

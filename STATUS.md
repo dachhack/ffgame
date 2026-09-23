@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.5 — any pickup can name a drop
+
+Founder: "Even if you have empty spots on your roster, you should have the
+option to designate a drop with your pickup."
+
+Until now the drop picker appeared only when the roster was full, so a manager
+with an open seat had no way to say "take him, and cut this one" in one move.
+The add and the cut had to be two moves. On a claim that means dropping
+someone today for a player who might not arrive until the run, or at all.
+
+Every ADD, CLAIM and BID now opens the picker, web and app alike:
+- NO OPEN SEAT: unchanged. The drop is required, and only active players are
+  offered, because dropping a taxi or IR player frees no seat.
+- AN OPEN SEAT: the drop is a choice. The picker leads with "ADD / CLAIM / BID
+  WITHOUT A DROP" and lists the whole roster, taxi and IR included and tagged,
+  because with a seat free any drop is legal.
+
+A FAAB claim still goes on to the bid box, which names the drop. The server has
+accepted a drop on both `add_free_agent` and `submit_waiver_claim` whether or
+not the roster was full, and process_waivers carries a claim's drop out at the
+run. So this is a client change only.
+
+No migration.
+
 ### v0.489.4 — a thousand rows was the whole report
 
 v0.489.3 found the league pool being read 1,000 rows at a time — PostgREST's
