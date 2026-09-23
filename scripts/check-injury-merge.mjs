@@ -177,5 +177,29 @@ const ok = (name, cond, got) => {
     /espn \$\{r\.espn\}, sleeper/.test(tick));
 }
 
+// ── AND EVERY READ OF THE TABLE TAKES THE WHOLE TABLE (v0.489.4) ───────────
+// PostgREST answers any select with at most 1000 rows, silently — the cap
+// v0.489.3 hit on the league pool. injury_status had no prune until 0489, so it
+// accumulated every designation the poller had ever seen, well past a thousand,
+// and a truncated read does not look truncated: it looks like the players past
+// the cap are fit, to every card and to the lock's auto-fill. The prune keeps
+// the table small now, which means a poll that CANNOT prune is the moment this
+// would bite — exactly when nobody is looking.
+{
+  const api = readFileSync(new URL('../packages/core/src/data/liveApi.ts', import.meta.url), 'utf8');
+  const worker = readFileSync(new URL('../server/src/injuries.js', import.meta.url), 'utf8');
+  const reads = [...api.matchAll(/from\('injury_status'\)/g)].length;
+  ok('the client still reads the table in the two places we know about', reads === 2, reads);
+  ok('…and both page rather than taking PostgREST\'s first thousand',
+    (api.match(/allRows<InjuryStatusRow>/) && api.match(/c\.from\('injury_status'\)\.select\('player_slug, status'\)/)) ? true : false);
+  ok('the worker\'s ruled-out set pages too', /allRows\(\(from, to\) => db\(\)\.from\('injury_status'\)\s*\n?\s*\.select\('player_slug'\)/.test(worker));
+  ok('…as does its status map', /\.select\('player_slug,status'\)\.order\('player_slug'\)\.range/.test(worker));
+  // Ordered by the primary key: without a total order, two pages can overlap
+  // or skip, which is a truncation that moves around instead of holding still.
+  ok('every paged read is ordered on the primary key',
+    (worker.match(/\.order\('player_slug'\)/g) ?? []).length === 2
+    && (api.match(/\.order\('player_slug'\)/g) ?? []).length === 2);
+}
+
 if (fails) { console.log(`\n${fails} INJURY MERGE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL INJURY MERGE ASSERTIONS PASSED');

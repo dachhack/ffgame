@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.4 — a thousand rows was the whole report
+
+v0.489.3 found the league pool being read 1,000 rows at a time — PostgREST's
+max-rows, applied silently — and paged past it. The same cap was on every read
+of injury_status, in both the client and the worker, and nobody had noticed for
+the same reason: a truncated report does not look truncated. It looks like the
+players past the cap are fit, on every card that asks and to the lock's
+auto-fill that seats them.
+
+And this table was the worst place for it. Until 0489 nothing ever pruned it, so
+it accumulated every designation the poller had ever seen — comfortably past a
+thousand — which means these reads have been partial for as long as they have
+existed, and partial in an arbitrary way that shifts with physical row order.
+
+All four now page on the primary key: loadLiveInjuries and the roster gate's
+map in core, ruledOutSlugs and injuryStatusMap in the worker. 0489's prune keeps
+the table around 350 rows, so this is belt and braces today — but the prune is
+exactly what stops working first (it refuses a short feed, a failed write, a
+malformed record), and this is the failure that would follow it, unseen.
+
+check:injurymerge pins all four, including the ORDER: two pages of an unordered
+select can overlap or skip, which is a truncation that moves around rather than
+holding still.
+
+No migration.
+
 ### v0.489.3 — a full roster asks for a drop
 
 Founder, on a FAAB claim: "My roster is full but it doesn't force me to select

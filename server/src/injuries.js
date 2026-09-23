@@ -18,6 +18,26 @@
 // awareness at all and could field a player ruled OUT. Now all five ask here.
 import { db } from './supabase.js';
 
+// PAGED READS (v0.489.4). PostgREST answers any select with at most 1000 rows,
+// silently, and BOTH reads below want the whole table. injury_status had no
+// prune until 0489 — it accumulated every designation the poller had ever seen
+// — so these have been quietly truncated for as long as they have existed, and
+// a truncated ruled-out set does not look truncated: it looks like the players
+// past the cap are fit, to the lock's auto-fill and to every price it computes.
+// Ordered by the primary key so no row falls between pages.
+const PAGE = 1000;
+async function allRows(select) {
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await select(from, from + PAGE - 1);
+    if (error) return { rows: out, error };
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return { rows: out, error: null };
+}
+
 const TTL_MS = 60_000; // one fetch per tick, not one per matchup
 let cache = null; // { at: ms, outs: Set<string> }
 
@@ -27,10 +47,10 @@ let cache = null; // { at: ms, outs: Set<string> }
  *  never been a successful read. */
 export async function ruledOutSlugs(now = Date.now()) {
   if (cache && now - cache.at < TTL_MS) return cache.outs;
-  const { data, error } = await db().from('injury_status')
-    .select('player_slug').in('status', ['O', 'IR']);
+  const { rows, error } = await allRows((from, to) => db().from('injury_status')
+    .select('player_slug').in('status', ['O', 'IR']).order('player_slug').range(from, to));
   if (error) return cache?.outs ?? new Set();
-  cache = { at: now, outs: new Set((data ?? []).map((r) => r.player_slug)) };
+  cache = { at: now, outs: new Set(rows.map((r) => r.player_slug)) };
   return cache.outs;
 }
 
@@ -44,9 +64,10 @@ let statusCache = null; // { at: ms, map: Map<slug, status> }
  *  ruledOutSlugs — a failed read serves the last known map. */
 export async function injuryStatusMap(now = Date.now()) {
   if (statusCache && now - statusCache.at < TTL_MS) return statusCache.map;
-  const { data, error } = await db().from('injury_status').select('player_slug,status');
+  const { rows, error } = await allRows((from, to) => db().from('injury_status')
+    .select('player_slug,status').order('player_slug').range(from, to));
   if (error) return statusCache?.map ?? new Map();
-  statusCache = { at: now, map: new Map((data ?? []).map((r) => [r.player_slug, String(r.status ?? '').toUpperCase()])) };
+  statusCache = { at: now, map: new Map(rows.map((r) => [r.player_slug, String(r.status ?? '').toUpperCase()])) };
   return statusCache.map;
 }
 

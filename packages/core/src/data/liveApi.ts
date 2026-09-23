@@ -574,11 +574,19 @@ export async function loadDepthChart(): Promise<number> {
 
 export async function loadLiveInjuries(week: number): Promise<number> {
   try {
-    const { data, error } = await (await client()).from('injury_status')
-      .select('player_slug, status, return_date, comment, team, updated_at');
-    if (error) return 0;
+    // PAGED (v0.489.4), for the same reason the pool loaders are: PostgREST
+    // answers any select with at most 1000 rows, silently. This table had no
+    // prune until 0489, so it accumulated every designation the worker had ever
+    // seen — comfortably past a thousand — and a truncated read does not look
+    // truncated. It looks like the players past the cap are healthy, on every
+    // card that asks. The prune keeps it small now; paging means a poll that
+    // cannot prune does not quietly take the report back down to 1000 rows.
+    const c = await client();
+    const data = await allRows<InjuryStatusRow>((from, to) => c.from('injury_status')
+      .select('player_slug, status, return_date, comment, team, updated_at')
+      .order('player_slug').range(from, to));
     const rows: Record<string, InjuryRow> = {};
-    for (const r of (data ?? []) as InjuryStatusRow[]) {
+    for (const r of data) {
       // Trust the worker's normalizer, but never let an unexpected status
       // through — a stray value would render as a mystery badge on a card.
       if (r.status !== 'O' && r.status !== 'D' && r.status !== 'Q' && r.status !== 'IR') continue;
@@ -602,10 +610,11 @@ export async function loadLiveInjuries(week: number): Promise<number> {
  *  roster can never clobber the week a live board has installed. */
 export async function injuryTags(): Promise<Record<string, 'O' | 'D' | 'Q' | 'IR'>> {
   try {
-    const { data, error } = await (await client()).from('injury_status').select('player_slug, status');
-    if (error) return {};
+    const c = await client();
+    const data = await allRows<{ player_slug: string; status: string }>((from, to) =>
+      c.from('injury_status').select('player_slug, status').order('player_slug').range(from, to));
     const out: Record<string, 'O' | 'D' | 'Q' | 'IR'> = {};
-    for (const r of (data ?? []) as { player_slug: string; status: string }[]) {
+    for (const r of data) {
       if (r.status === 'O' || r.status === 'D' || r.status === 'Q' || r.status === 'IR') out[r.player_slug] = r.status;
     }
     return out;
