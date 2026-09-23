@@ -32,7 +32,7 @@ import {
   POS_CAP_KEYS, type PosCaps,
   leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
-  submitWaiverClaim, cancelWaiverClaim, processWaivers, friendlyError,
+  submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
   setTeamName, setTeamAvatar,
   setDraftQueue, myDraftQueue, setAutodraft, myQueueMaxes, setQueueMax, auctionMarketValue,
@@ -2752,6 +2752,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // FAAB: a waiver claim needs a blind bid — collected in a small modal.
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null);
   const [bidDraft, setBidDraft] = useState('');
+  // A bid already typed when the server said "roster full" — carried into the
+  // bid modal again once a drop is chosen, so nobody types it twice.
+  const [pendingBid, setPendingBid] = useState<number | null>(null);
   // The league's LINEUP SHAPE — what the roster lays itself out against: the
   // starting spots, and how many bench/IR/taxi places exist (v0.285.0, matching
   // the app's roster since v0.281.0).
@@ -2894,8 +2897,14 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // standing empty is not a bench spot. Falls back to the total for a league
   // the server hasn't told us the seat count for.
   const seats = team?.active_seats ?? null;
-  const activeHeld = mine.filter((p) => p.spot === 'active').length;
-  const full = seats != null ? activeHeld >= seats : (cap != null && mine.length >= cap);
+  // v0.489.3 — COUNTED FROM THE ROSTER ROWS, NOT FROM \`mine\`. \`mine\` is the
+  // roster joined to the pool, and a player the pool fetch did not return (it
+  // was capped at 1,000 of a 1,200-man pool) fell out of the count: the founder
+  // was one short of full on paper, full on the server, and a FAAB claim went
+  // to the bid without asking for a drop. The server's own count is the floor.
+  const myRows = rosters.filter((r) => r.roster_id === myRoster);
+  const activeHeld = Math.max(myRows.filter((r) => (r.spot ?? 'active') === 'active').length, team?.active_held ?? 0);
+  const full = seats != null ? activeHeld >= seats : (cap != null && myRows.length >= cap);
 
   // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.285.0) ────────────────────────
   // Was one flat list of everybody with a spot tag; now it is the shape the
@@ -2991,13 +3000,14 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
 
-  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, onRefused?: (error: string) => boolean) => {
     if (viewAs) { setErr(`Read-only: you're browsing as ${viewAs.label}. Exit view-as to use this.`); return; }
     if (busy) return;
     setBusy(true); setErr(null);
     try {
       const r = await fn();
-      if (!r.ok) setErr(friendlyError(r.error ?? 'That didn’t work.')); else notifyRosterChanged(leagueId);
+      if (!r.ok) { if (!(r.error && onRefused?.(r.error))) setErr(friendlyError(r.error ?? 'That didn’t work.')); }
+      else notifyRosterChanged(leagueId);
       await refresh();
     }
     catch (x) { setErr(friendlyError(x)); }
@@ -3014,19 +3024,31 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     // which is what "all the waivers are closed" looked like from the outside.
     const onWaivers = waivedFor(p) != null || team?.fa_open === false;
     // FAAB league: a claim carries a blind bid — ask for it first.
-    if (onWaivers && team?.waiver_mode === 'faab') { setClaimFor({ p, drop: dropSlug }); setBidDraft(''); return; }
+    if (onWaivers && team?.waiver_mode === 'faab') {
+      setClaimFor({ p, drop: dropSlug }); setBidDraft(pendingBid != null ? String(pendingBid) : ''); setPendingBid(null); return;
+    }
     return run(() => onWaivers
       ? submitWaiverClaim(leagueId, myRoster, p.slug, dropSlug)
-      : addFreeAgent(leagueId, myRoster, p.slug, dropSlug));
+      : addFreeAgent(leagueId, myRoster, p.slug, dropSlug),
+      dropSlug ? undefined : askForDrop(p, null));
+  };
+  /** THE SERVER HAS THE LAST WORD ON FULL (v0.489.3). If it refuses a move
+   *  with no drop because the active roster is full, that is the screen's
+   *  count being wrong — so ask for the drop, which is what it should have
+   *  done, rather than print an error that tells you to go and do it. */
+  const askForDrop = (p: LeaguePoolPlayer, bid: number | null) => (error: string) => {
+    if (!seatFullError(error)) return false;
+    setPendingBid(bid); setPendingAdd(p);
+    return true;
   };
   const submitClaimBid = () => {
     if (myRoster == null || !claimFor) return;
     const bid = Math.max(0, parseInt(bidDraft || '0', 10) || 0);
     const { p, drop } = claimFor;
     setClaimFor(null); setBidDraft('');
-    run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid));
+    run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid), drop ? undefined : askForDrop(p, bid));
   };
-  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) setPendingAdd(p); else doAdd(p); };
+  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) { setPendingBid(null); setPendingAdd(p); } else doAdd(p); };
 
   if (!team) return (
     <div>
@@ -3612,10 +3634,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       )}
 
       {pendingAdd && (
-        <div onClick={() => setPendingAdd(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div onClick={() => { setPendingAdd(null); setPendingBid(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Roster full — drop who for {pendingAdd.full_name}?</div>
-            {mine.map((p) => (
+            {/* ACTIVE players only: a signing lands active, so dropping a taxi
+                or IR player frees no seat and the server would refuse it. */}
+            {mine.filter((p) => p.spot === 'active').map((p) => (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
@@ -3623,7 +3647,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 <button onClick={() => doAdd(pendingAdd, p.slug)} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
               </div>
             ))}
-            <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={() => setPendingAdd(null)} className="mono" style={linkBtn}>cancel</button></div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}><button onClick={() => { setPendingAdd(null); setPendingBid(null); }} className="mono" style={linkBtn}>cancel</button></div>
           </div>
         </div>
       )}

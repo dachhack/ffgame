@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.3 — a full roster asks for a drop
+
+Founder, on a FAAB claim: "My roster is full but it doesn't force me to select
+a player to drop when waivering."
+
+Both team screens decide FULL by counting the roster, and they counted it
+through the league POOL — the roster joined to `league_pool` by slug. That pool
+is 1,200 players by default (POOL_CAP) and up to 2,000 with extras, and it was
+fetched with `.range(0, 1999)`, which PostgREST answers with at most its
+max-rows: 1,000. So every player ranked past 1,000 was missing from the screen
+— off the wire, and off his own manager's roster count. Roster one such
+pickup and you read a seat short of full: BID goes straight to the bid box, no
+drop asked for, and the server (which counts `native_roster` itself) refuses
+the claim with an error telling you to include one.
+
+THREE FIXES, the first being the cause:
+- `leaguePool`, `leaguePoolExp` and `nativeRosters` page past the cap, on a
+  total order (rank then slug) so no row sits on a page boundary. The same
+  shape `weekLivePlays` has used for a year for the same limit.
+- FULL counts the raw roster rows, never below the server's own
+  `active_held` — no pool join between the question and the answer.
+- THE SERVER HAS THE LAST WORD. A move with no drop refused for a full active
+  roster (0199's `roster_seat_error`) now opens the drop picker instead of
+  printing the refusal, and a FAAB bid already typed rides into the bid box
+  again once the drop is chosen. `seatFullError` in core decides what counts
+  as that refusal; check:seatfull reads the deployed `roster_seat_error` out of
+  the migrations and holds the match to its wording, and to nothing else.
+
+And the picker offers ACTIVE players only, web and app. A signing lands active,
+so dropping a taxi or IR player frees no seat and the server refuses it — the
+picker was offering drops that could not work.
+
+NOT VERIFIED AGAINST THE LIVE LEAGUE: no database access in this session, so
+which of the founder's players fell past rank 1,000 is inferred, not seen. The
+safety net covers any other way the count could lag.
+
+No migration.
+
 ### v0.489.2 — the fix that did not reach him
 
 Founder, after v0.489.1 shipped: "Pierce is still D in my app."
