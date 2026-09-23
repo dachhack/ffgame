@@ -44,16 +44,22 @@ let sleeperCache = null; // { at, rows: Map<slug, {status, at}> }
 /** Sleeper's designations, keyed by our slug. Cached; null when we have never
  *  managed a fetch (which switches the prune off rather than pruning on half a
  *  picture). */
-async function sleeperInjuries(playerIndex, now = Date.now()) {
-  if (sleeperCache && now - sleeperCache.at < SLEEPER_TTL_MS) return sleeperCache.rows;
-  let players;
-  try { players = await getPlayers(); } catch { return sleeperCache?.rows ?? null; }
+export function sleeperRows(players, slugForSleeperId) {
   const rows = new Map();
   for (const [sid, p] of Object.entries(players ?? {})) {
     const status = mapSleeperStatus(p?.injury_status);
     if (!status) continue;
-    const slug = playerIndex.sleeper(sid);
-    if (!slug) continue;
+    // `.slug`, NOT the entry. playerIndex.sleeper() answers with a META OBJECT
+    // — { slug, full, pos, team, espnId } — and v0.489.0 keyed this map by the
+    // object itself. Every Sleeper designation then sat under a key no ESPN
+    // slug could equal and no database column could take, so the merge saw
+    // nothing from Sleeper, the upsert carried objects where text belonged,
+    // and Alec Pierce stayed Doubtful through the whole fix built to correct
+    // him. Every other caller in the worker writes `?.slug`; this one now does
+    // too, and check:injurymerge builds a fake index of the real shape so the
+    // contract is asserted rather than remembered.
+    const slug = slugForSleeperId(sid)?.slug;
+    if (typeof slug !== 'string' || !slug) continue;
     // news_updated is the only per-player clock Sleeper gives. It moves on any
     // news, not only an injury one — which is imprecise in our favour: the news
     // that clears a player bumps it too.
@@ -62,6 +68,14 @@ async function sleeperInjuries(playerIndex, now = Date.now()) {
       team: p?.team ?? null, body: p?.injury_body_part ?? null,
     });
   }
+  return rows;
+}
+
+async function sleeperInjuries(playerIndex, now = Date.now()) {
+  if (sleeperCache && now - sleeperCache.at < SLEEPER_TTL_MS) return sleeperCache.rows;
+  let players;
+  try { players = await getPlayers(); } catch { return sleeperCache?.rows ?? null; }
+  const rows = sleeperRows(players, (sid) => playerIndex.sleeper(sid));
   sleeperCache = { at: now, rows };
   return rows;
 }
@@ -97,14 +111,30 @@ export async function pollInjuries(playerIndex) {
       updated_at: now,
     });
   }
-  if (records.length) await db().from('injury_status').upsert(records, { onConflict: 'player_slug' });
+  // NOTHING MALFORMED GOES TO THE DATABASE. A slug is a text primary key; a
+  // record carrying anything else fails the whole batch, and v0.489.0 sent
+  // objects and never looked at the error.
+  const clean = records.filter((r) => typeof r.player_slug === 'string' && r.player_slug.length > 0);
+  const malformed = records.length - clean.length;
+  let wrote = false;
+  if (clean.length) {
+    const { error } = await db().from('injury_status').upsert(clean, { onConflict: 'player_slug' });
+    if (error) console.log('[injuries] upsert failed:', error.message);
+    else wrote = true;
+  }
 
   // ── and clear everyone neither source designates any more ────────────────
+  //
+  // NEVER ON THE BACK OF A WRITE THAT DID NOT LAND. v0.489.0 pruned whether or
+  // not the upsert succeeded, so a poll that wrote nothing could still delete —
+  // subtraction with no addition, which is the one shape of this job that loses
+  // data. The prune now needs the write confirmed, every record well-formed,
+  // a whole ESPN report, and a Sleeper snapshot in hand.
   let pruned = 0;
   const espnEntries = (feed?.injuries ?? []).reduce((n, t) => n + (t?.injuries?.length ?? 0), 0);
-  const canPrune = sleeper != null && espnEntries >= PRUNE_FLOOR;
+  const canPrune = wrote && malformed === 0 && sleeper != null && espnEntries >= PRUNE_FLOOR;
   if (canPrune) {
-    const keep = new Set(records.map((r) => r.player_slug));
+    const keep = new Set(clean.map((r) => r.player_slug));
     const { data: held } = await db().from('injury_status').select('player_slug');
     const gone = (held ?? []).map((r) => r.player_slug).filter((s) => !keep.has(s));
     // Chunked: a delete-in with a thousand slugs is one URL too long for PostgREST.
@@ -115,7 +145,7 @@ export async function pollInjuries(playerIndex) {
     }
   }
   return {
-    feedTimestamp: feed?.timestamp, count: records.length, pruned,
+    feedTimestamp: feed?.timestamp, count: clean.length, pruned, malformed,
     espn: Object.keys(espn).length, sleeper: sleeper?.size ?? null, prunedSkipped: !canPrune,
   };
 }

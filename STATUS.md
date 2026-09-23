@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.489.2 — the fix that did not reach him
+
+Founder, after v0.489.1 shipped: "Pierce is still D in my app."
+
+He was, and the reason was mine. `playerIndex.sleeper(sid)` answers with a META
+OBJECT — { slug, full, pos, team, espnId } — and v0.489.0 read it as a slug. So
+every Sleeper designation was keyed by an object no ESPN slug could equal and no
+text column could take: the merge saw nothing at all from Sleeper, and Alec
+Pierce stayed Doubtful right through the release built to correct him. Every
+other caller in the worker writes `?.slug`. This one now does too.
+
+THE WORSE HALF WAS THE PRUNE. Those object-keyed records went into the same
+upsert as the good ones, which fails a text primary key — and nothing read the
+error, so a poll could write NOTHING and then delete on the strength of it.
+Subtraction with no addition is the one shape of this job that loses data. The
+prune now requires the write confirmed, every record well-formed, a whole ESPN
+report and a Sleeper snapshot; malformed records never reach the database at
+all; and the log line says "N MALFORMED, prune skipped" rather than looking
+clean.
+
+check:injurymerge now builds a fake index of the REAL shape and asserts every
+key it produces is a string slug — the contract asserted instead of remembered,
+which is what would have caught this before it shipped.
+
+THE TABLE SELF-HEALS on the next poll: a poll writes the whole picture from both
+sources, so designations lost while this was broken come back with it.
+
+No migration.
+
 ### v0.489.1 — and the log says which
 
 v0.489.0's poll returns what it did — how many designations stand, from which
