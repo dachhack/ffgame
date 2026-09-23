@@ -78,153 +78,182 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   onClose: () => void;
 }) {
   const t = useTheme();
+  // THE GEAR IS A MENU NOW (v0.487.0). Founder: "the app settings menu. It's
+  // huge. Can we make a tiny pop-up when you hit the gear that allows you to
+  // pick categories then options?" Every option used to be on one scroll —
+  // notifications, a push log, eight themes, three sizes, nine decks, a voice
+  // list — so finding one meant scrolling past all the others. The sheet opens
+  // on a short list of categories, each showing what it is set to; a tap opens
+  // just that category's options, ‹ goes back. The options themselves are the
+  // same controls as before, moved, not rebuilt.
+  const [section, setSection] = useState<Section | null>(null);
+  // Every open starts at the menu — reopening onto a sub-page you left an hour
+  // ago is a surprise, not a convenience.
+  useEffect(() => { if (visible) setSection(null); }, [visible]);
+  const themeName = THEME_OPTS.find((o) => o.id === theme)?.name ?? theme;
+  const skinName = SKIN_OPTS.find((o) => o.id === skin)?.name ?? skin;
+  const sizeName = CARD_SIZES.find((o) => o.id === cardSize)?.name ?? cardSize;
+  const sections: { id: Section; icon: string; name: string; value: string }[] = [
+    { id: 'notifications', icon: '🔔', name: 'Notifications', value: 'alerts, test push, recent pushes' },
+    { id: 'theme', icon: '🎨', name: 'Colour theme', value: themeName },
+    { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
+    { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
+    ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
+  ];
+  const current = sections.find((x) => x.id === section);
   return (
-    <Overlay visible={visible} title="Settings" subtitle={`DRIP FANTASY ${version.toUpperCase()}`} onClose={onClose}>
-      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 18 }}>
-        <PushPrefs />
-
-        <View style={{ gap: 8 }}>
-          <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            {THEME_OPTS.map((o) => {
-              const on = theme === o.id;
-              // Each swatch is painted in ITS OWN theme's colours, not the
-              // active one — you pick a theme by seeing it, and a row of
-              // identically-tinted chips tells you nothing about what you'd get.
-              const th = THEMES[o.id];
-              return (
-                <Pressable
-                  key={o.id}
-                  onPress={() => onTheme(o.id)}
-                  style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 7,
-                    borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8,
-                    backgroundColor: th.bg,
-                    borderWidth: on ? 2 : StyleSheet.hairlineWidth,
-                    borderColor: on ? t.you : t.bd,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row' }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: th.you }} />
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: th.opp, marginLeft: -3 }} />
-                  </View>
-                  <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: th.text }}>{o.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={{ gap: 8 }}>
-          <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD SIZE</Mono>
-          <Mono size={9} tone="faint">On the setup board. Smaller fits a whole window on screen; larger is easier to read and to hit.</Mono>
-          <View style={{ flexDirection: 'row', gap: 7 }}>
-            {CARD_SIZES.map((o) => {
-              const on = cardSize === o.id;
-              // A proportional swatch, so the choice is visible rather than a
-              // word you have to close the sheet to evaluate. Same 2.5:3.5 as
-              // the real card; the widths are the real caps, quartered.
-              const w = Math.round((o.w ?? 152) / 4);
-              return (
-                <Pressable
-                  key={o.id}
-                  onPress={() => onCardSize(o.id)}
-                  style={{
-                    flex: 1, alignItems: 'center', gap: 6, paddingVertical: 9,
-                    borderRadius: 7, backgroundColor: on ? t.sh : 'transparent',
-                    borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
-                  }}
-                >
-                  <View style={{ height: 40, justifyContent: 'flex-end' }}>
-                    <View style={{ width: w, aspectRatio: 0.714, borderRadius: 3, backgroundColor: on ? t.you : t.bd }} />
-                  </View>
-                  <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on ? t.you : t.faint }}>{o.name.toUpperCase()}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={{ gap: 8 }}>
-          <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD DECK</Mono>
-          <Mono size={9} tone="faint">The back your opponent&rsquo;s sealed cards show until kickoff.</Mono>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {SKIN_OPTS.map((o) => {
-              const on = skin === o.id;
-              const art = CARD_BACKS[o.id];
-              return (
-                <Pressable key={o.id} onPress={() => onSkin(o.id)} style={{ width: 62, gap: 4 }}>
-                  <View
-                    style={{
-                      width: 62, height: 84, borderRadius: 6, overflow: 'hidden',
-                      backgroundColor: '#1A2740',
-                      borderWidth: on ? 2 : StyleSheet.hairlineWidth,
-                      borderColor: on ? t.you : t.bd,
-                    }}
-                  >
-                    {art ? <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
-                  </View>
-                  <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', textAlign: 'center', color: on ? t.you : t.faint }}>
-                    {o.name.toUpperCase()}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <VoicePicker />
-
-        {isAdmin && <RehearsalToggle />}
-
-        <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
-          <Mono size={8.5} weight="700" track={0.16} tone="faint">MORE</Mono>
-          {/* No Commissioner entry here anymore: commissioner tools are the
-              ⚑ COMMISH tab inside each league you run — where the league is,
-              not in a global menu that then asks which league you meant. */}
-          {isAdmin && (
-            <Pressable
-              onPress={() => { onClose(); onAdmin(); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
-            >
-              <Text style={{ fontSize: 16 }}>◆</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Admin</Text>
-                <Mono size={9} tone="faint">Health, leagues, code requests, audit.</Mono>
-              </View>
+    <Overlay visible={visible} title={current ? current.name : 'Settings'} subtitle={`DRIP FANTASY ${version.toUpperCase()}`} onClose={onClose}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: section ? 18 : 8 }}>
+        {section ? (
+          <>
+            <Pressable hitSlop={8} onPress={() => { tap(); setSection(null); }} style={{ alignSelf: 'flex-start' }}>
+              <Mono size={10} weight="700" tone="dim" track={0.08}>‹ ALL SETTINGS</Mono>
             </Pressable>
-          )}
-          {onWhatsNew && (
-            <Pressable
-              onPress={() => { onClose(); onWhatsNew(); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: behind > 0 ? 2 : StyleSheet.hairlineWidth, borderColor: behind > 0 ? t.you : t.bd, borderRadius: 8, padding: 11 }}
-            >
-              <Text style={{ fontSize: 16 }}>🆕</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>What's new</Text>
-                <Mono size={9} tone={behind > 0 ? 'you' : 'faint'}>{behind > 0 ? `You are ${behind} ${behind === 1 ? 'version' : 'versions'} behind — tap to update.` : `${version} · what changed, by version.`}</Mono>
+            {section === 'notifications' && <PushPrefs />}
+            {section === 'theme' && (
+              <View style={{ gap: 8 }}>
+                <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                  {THEME_OPTS.map((o) => {
+                    const on = theme === o.id;
+                    // Each swatch is painted in ITS OWN theme's colours, not the
+                    // active one — you pick a theme by seeing it, and a row of
+                    // identically-tinted chips tells you nothing about what you'd get.
+                    const th = THEMES[o.id];
+                    return (
+                      <Pressable
+                        key={o.id}
+                        onPress={() => onTheme(o.id)}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 7,
+                          borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8,
+                          backgroundColor: th.bg,
+                          borderWidth: on ? 2 : StyleSheet.hairlineWidth,
+                          borderColor: on ? t.you : t.bd,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row' }}>
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: th.you }} />
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: th.opp, marginLeft: -3 }} />
+                        </View>
+                        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: th.text }}>{o.name}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
-            </Pressable>
-          )}
-          <Pressable
-            onPress={() => { onClose(); onDemo(); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11 }}
-          >
-            <Text style={{ fontSize: 16 }}>▶</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>Demo board</Text>
-              <Mono size={9} tone="faint">A real 2025 week, replayed. Not your matchup.</Mono>
+
+            )}
+            {section === 'cards' && (
+              <View style={{ gap: 18 }}>
+                <View style={{ gap: 8 }}>
+                  <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD SIZE</Mono>
+                  <Mono size={9} tone="faint">On the setup board. Smaller fits a whole window on screen; larger is easier to read and to hit.</Mono>
+                  <View style={{ flexDirection: 'row', gap: 7 }}>
+                    {CARD_SIZES.map((o) => {
+                      const on = cardSize === o.id;
+                      // A proportional swatch, so the choice is visible rather than a
+                      // word you have to close the sheet to evaluate. Same 2.5:3.5 as
+                      // the real card; the widths are the real caps, quartered.
+                      const w = Math.round((o.w ?? 152) / 4);
+                      return (
+                        <Pressable
+                          key={o.id}
+                          onPress={() => onCardSize(o.id)}
+                          style={{
+                            flex: 1, alignItems: 'center', gap: 6, paddingVertical: 9,
+                            borderRadius: 7, backgroundColor: on ? t.sh : 'transparent',
+                            borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
+                          }}
+                        >
+                          <View style={{ height: 40, justifyContent: 'flex-end' }}>
+                            <View style={{ width: w, aspectRatio: 0.714, borderRadius: 3, backgroundColor: on ? t.you : t.bd }} />
+                          </View>
+                          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on ? t.you : t.faint }}>{o.name.toUpperCase()}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={{ gap: 8 }}>
+                  <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD DECK</Mono>
+                  <Mono size={9} tone="faint">The back your opponent&rsquo;s sealed cards show until kickoff.</Mono>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {SKIN_OPTS.map((o) => {
+                      const on = skin === o.id;
+                      const art = CARD_BACKS[o.id];
+                      return (
+                        <Pressable key={o.id} onPress={() => onSkin(o.id)} style={{ width: 62, gap: 4 }}>
+                          <View
+                            style={{
+                              width: 62, height: 84, borderRadius: 6, overflow: 'hidden',
+                              backgroundColor: '#1A2740',
+                              borderWidth: on ? 2 : StyleSheet.hairlineWidth,
+                              borderColor: on ? t.you : t.bd,
+                            }}
+                          >
+                            {art ? <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
+                          </View>
+                          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', textAlign: 'center', color: on ? t.you : t.faint }}>
+                            {o.name.toUpperCase()}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+              </View>
+            )}
+            {section === 'voice' && <VoicePicker />}
+            {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
+          </>
+        ) : (
+          <>
+            {sections.map((x) => (
+              <Pressable key={x.id} onPress={() => { tap(); setSection(x.id); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ fontSize: 16, width: 22, textAlign: 'center' }}>{x.icon}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{x.name}</Text>
+                  <Mono size={9} tone="faint">{x.value}</Mono>
+                </View>
+                <Text style={{ fontSize: 18, color: t.faint }}>›</Text>
+              </Pressable>
+            ))}
+            {/* The one-tap actions: no options behind them, so no › and no
+                second line — they only need to be findable, not described. */}
+            <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4, paddingTop: 2 }}>
+              {isAdmin && <ActionRow icon="◆" label="Admin" onPress={() => { onClose(); onAdmin(); }} />}
+              {onWhatsNew && (
+                <ActionRow icon="🆕" label="What's new" onPress={() => { onClose(); onWhatsNew(); }}
+                  hint={behind > 0 ? `${behind} behind — update` : version} strong={behind > 0} />
+              )}
+              <ActionRow icon="▶" label="Demo board" hint="a real 2025 week" onPress={() => { onClose(); onDemo(); }} />
+              <ActionRow icon="⎋" label="Sign out" onPress={() => { onClose(); onSignOut(); }} />
             </View>
-          </Pressable>
-          <Pressable
-            onPress={() => { onClose(); onSignOut(); }}
-            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 11, alignItems: 'center' }}
-          >
-            <Mono size={11} weight="700" tone="dim" track={0.06}>SIGN OUT</Mono>
-          </Pressable>
-        </View>
+          </>
+        )}
       </ScrollView>
     </Overlay>
+  );
+}
+
+type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'rehearsal';
+
+/** One compact line in the menu's lower half: an action, not a category. */
+function ActionRow({ icon, label, hint, strong, onPress }: {
+  icon: string; label: string; hint?: string; strong?: boolean; onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={() => { tap(); onPress(); }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, paddingVertical: 9 }}>
+      <Text style={{ fontSize: 14, width: 22, textAlign: 'center', color: t.dim }}>{icon}</Text>
+      <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: strong ? t.you : t.text }}>{label}</Text>
+      {!!hint && <Mono size={9} tone={strong ? 'you' : 'faint'}>{hint}</Mono>}
+    </Pressable>
   );
 }
 
@@ -237,7 +266,7 @@ function RehearsalToggle() {
   const [on, setOn] = useState(rehearsalToolsOn());
   const flip = () => { tap(); setRehearsalTools(!on); setOn(!on); };
   return (
-    <View style={{ gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 14 }}>
+    <View style={{ gap: 8 }}>
       <Mono size={8.5} weight="700" track={0.16} tone="faint">🧪 REHEARSAL TOOLS</Mono>
       <Pressable onPress={flip}
         style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.warn : t.bd, backgroundColor: on ? alpha(t.warn, 12) : t.surface }}>

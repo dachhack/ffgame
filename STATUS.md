@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.487.0 — one plus, one gear
+
+ONE + IN LEAGUE CHAT. Founder: "Let's do a + button that lets you then select
+poll, image, gif." The 📊 / GIF / 📷 row beside the message box is gone; one +
+opens POLL (commissioners — the server's rule, unchanged), IMAGE (the v0.485.0
+picker and caption draft, unchanged) and GIF, and shows × while anything it
+opened is up, so the same button shuts it. The text box gets its width back.
+App and web. DM composers keep their single 📷 — one button needs no menu.
+
+THE GEAR IS A MENU. Founder: "the app settings menu. It's huge. Can we make a
+tiny pop-up when you hit the gear that allows you to pick categories then
+options?" Settings now opens on a short list — Notifications, Colour theme,
+Cards, Play-by-play voice (and Rehearsal tools for admins) — each showing what
+it is set to, then one-line actions for Admin, What's new, Demo board and Sign
+out. Tapping a category shows only its options, with ‹ ALL SETTINGS to go back;
+every open starts at the list. The option controls themselves are the same
+ones, moved rather than rebuilt. App only; the web gear is already a dropdown.
+
+Checks: check:chatplus and check:settingsmenu in check:parity (the menu guard
+fails 15 ways against the old one-scroll sheet).
+
 ### v0.486.0 — a picture with something to say
 
 Founder, an hour after 0349 shipped: "it posts instantly after picking. Allow

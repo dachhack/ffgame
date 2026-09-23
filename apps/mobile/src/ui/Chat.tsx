@@ -474,6 +474,46 @@ function ImageDraft({ uri, busy, initialCaption, onSend, onCancel }: {
   );
 }
 
+/** THE + MENU (v0.487.0). Founder: "Let's do a + button that lets you then
+ *  select poll, image, gif." League chat's composer had grown a row of
+ *  buttons — 📊, GIF, 📷 — that ate the text box's width. They live behind one
+ *  + now; each choice opens exactly what its old button opened. Poll stays the
+ *  commissioner's, because the server only takes one from them. */
+function PlusMenu({ canPoll, canGif, onPick, onClose }: {
+  canPoll: boolean; canGif: boolean; onPick: (what: 'poll' | 'image' | 'gif') => void; onClose: () => void;
+}) {
+  const t = useTheme();
+  const item = (what: 'poll' | 'image' | 'gif', icon: string, label: string) => (
+    <Pressable key={what} onPress={() => { tap(); onPick(what); }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4 }}>
+      <Text style={{ fontSize: 16, width: 24, textAlign: 'center' }}>{icon}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text, letterSpacing: 0.6 }}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Mono size={9} tone="faint" track={0.12} style={{ flex: 1 }}>ADD TO CHAT</Mono>
+        <Pressable hitSlop={8} onPress={() => { tap(); onClose(); }}><Text style={{ fontSize: 14, color: t.dim }}>✕</Text></Pressable>
+      </View>
+      {canPoll && item('poll', '📊', 'POLL')}
+      {item('image', '📷', 'IMAGE')}
+      {canGif && item('gif', '🎞', 'GIF')}
+    </View>
+  );
+}
+
+/** The + itself: × while anything it opened is up, so it also shuts it. */
+function PlusButton({ open, busy, onPress }: { open: boolean; busy: boolean; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable hitSlop={6} disabled={busy} accessibilityLabel={open ? 'close' : 'add a poll, image or GIF'} onPress={() => { tap(); onPress(); }}
+      style={{ width: 34, height: 34, borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', marginBottom: 1, opacity: busy ? 0.5 : 1 }}>
+      <Text style={{ fontSize: 19, lineHeight: 21, color: open ? t.you : t.dim }}>{busy ? '…' : open ? '×' : '+'}</Text>
+    </Pressable>
+  );
+}
+
 /** The 📷 in a composer. Dimmed and inert while one is on its way up. */
 function ImageButton({ onPick, busy }: { onPick: () => void; busy: boolean }) {
   return (
@@ -608,6 +648,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   // a transaction.
   const [runAt, setRunAt] = useState<string | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
   const sticky = useStickyScroll();
   // The message list shrinks by the keyboard's height when it opens, which
   // would slide the newest message out of view under the composer. Re-pin.
@@ -731,6 +772,15 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && !!GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
+      {plusOpen && (
+        <PlusMenu canPoll={canModerate} canGif={!!GIF} onClose={() => setPlusOpen(false)}
+          onPick={(what) => {
+            setPlusOpen(false); setPollOpen(false); setGifOpen(false);
+            if (what === 'poll') setPollOpen(true);
+            else if (what === 'gif') setGifOpen(true);
+            else void img.pick();
+          }} />
+      )}
       {!!img.pending && (
         <ImageDraft uri={img.pending.uri} busy={img.busy} initialCaption={draft}
           onSend={(c) => void img.confirm(c)} onCancel={img.cancel} />
@@ -758,19 +808,11 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
             (v0.376.1), so the buttons anchor to its bottom edge, WhatsApp-
             style, instead of floating mid-box. */}
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
-          {canModerate && (
-            <Pressable hitSlop={6} onPress={() => { tap(); setPollOpen((v) => !v); setGifOpen(false); }}
-              style={{ paddingVertical: 7 }}>
-              <Text style={{ fontSize: 15 }}>📊</Text>
-            </Pressable>
-          )}
-          {!!GIF && (
-            <Pressable hitSlop={6} onPress={() => { tap(); setGifOpen((v) => !v); setPollOpen(false); }}
-              style={{ paddingVertical: 11 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>GIF</Text>
-            </Pressable>
-          )}
-          <ImageButton onPick={() => { setGifOpen(false); setPollOpen(false); void img.pick(); }} busy={img.busy} />
+          <PlusButton open={plusOpen || pollOpen || gifOpen || !!img.pending} busy={img.busy}
+            onPress={() => {
+              if (plusOpen || pollOpen || gifOpen || img.pending) { setPlusOpen(false); setPollOpen(false); setGifOpen(false); img.cancel(); }
+              else setPlusOpen(true);
+            }} />
           <TextInput value={draft} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => void sendBody(draft.trim())}
             placeholder="message the league… (@ to mention)" placeholderTextColor={t.faint} returnKeyType="send"
             multiline submitBehavior="blurAndSubmit"
