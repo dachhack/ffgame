@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.494.0 — the commissioner fixes a lineup
+
+Item 4 of the commissioner list: 🧾 FIX A LINEUP, web and app, classic only.
+The commissioner sets one team's lineup for a week past the kickoff locks: the
+start a crashed app never saved, or a ruling the league made.
+- Where: the week's ⟳ RE-SCORE box (web "⟳ re-score · ✏️ fix"), beside the
+  point adjustments. Pick a team, then set each spot. Best-ball spots are
+  shown but not set, because they fill themselves.
+- Who is offered: the team's players that week. That means its roster now
+  (IR and taxi included), anyone already in that week's lineup, and anyone
+  who left the team after the week's first kickoff. The server enforces this.
+  Which spot a player fits is core's `slotAllows`, shared by both consoles
+  (`data/lineupFix.ts`).
+- The locks still apply to everyone else. Migration 0356 adds one check to the
+  four lock triggers (kickoff, legal roster, stash, flag): a
+  transaction-local `drip.commish_lineup` switch that only
+  `commish_set_week_lineup` sets, and it clears the switch before returning.
+  The slot cap still applies.
+- Rows written after the week's kickoff land sealed, which is what the
+  resolver scores.
+- A reason is required. `lineup_edit_log` keeps the lineup before and after,
+  and one chat line names who came in and who went out. A stamped week says
+  its finals change on re-score.
+- Checks: `scripts/db/lineup-fix-probes.sql` (in the harness) and
+  `check:lineupfix` (in check:parity) pass. The flag-rules, taxi-ir,
+  taxi-rules, lock-hold, write-api and backup-assign suites pass on the
+  patched triggers.
+- Two pre-existing failures, with or without this change: classic-open-lineups
+  fails outside the full harness (no table grants), and ol22 (dropping a
+  mid-game player) fails inside it.
+- Limit: the box only appears on finished weeks, so a mid-week fix waits for
+  the week to end.
+
 ### v0.493.0 — the commissioner corrects a stat
 
 Item 3 of the commissioner list: ✏️ POINT ADJUSTMENTS, web and app. The

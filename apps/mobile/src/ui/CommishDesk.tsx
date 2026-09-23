@@ -19,6 +19,7 @@ import {
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
+  commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -28,6 +29,7 @@ import { copyText } from './copy';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { LabelInfo } from './InfoChip';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
+import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
 
 function inputStyle(t: ReturnType<typeof useTheme>, width = 90) {
   return { width, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg } as const;
@@ -806,6 +808,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         {`Recompute week ${week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings. Preview first — nothing changes until you apply.`}
       </Mono>
       <AdjustBox leagueId={leagueId} week={week} />
+      <LineupFixBox leagueId={leagueId} week={week} />
       {running && <Mono size={9} tone="dim">{`⏳ ${req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…`}</Mono>}
       {req?.error ? <Mono size={9} tone="opp">{`⚠ Last ${req.apply ? 'apply' : 'preview'} failed: ${req.error}`}</Mono> : null}
       {res && (
@@ -913,6 +916,106 @@ function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
           </Text>
         </Pressable>
       ))}
+      <Note msg={msg} />
+    </View>
+  );
+}
+
+// ── 🧾 FIX A LINEUP (0356) — the web's LineupFixBox ─────────────────────────
+// One seat's lineup for this week past the kickoff locks. Tap a spot for the
+// seat's own players who fit it; a reason is required and the league is told.
+function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const t = useTheme();
+  const [teams, setTeams] = useState<{ roster_id: number; name: string }[] | null>(null);
+  const [rid, setRid] = useState<number | null>(null);
+  const [slots, setSlots] = useState<FixSlot[]>([]);
+  const [cands, setCands] = useState<LineupFixCandidate[]>([]);
+  const [raw, setRaw] = useState<{ slot: string; slug: string | null }[]>([]);
+  const [stored, setStored] = useState<Record<string, string | null>>({});
+  const [chosen, setChosen] = useState<Record<string, string | null>>({});
+  const [author, setAuthor] = useState(true);
+  const [openSlot, setOpenSlot] = useState<string | null>(null);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    setTeams(null); setRid(null);
+    commishWeekLineup(leagueId, week).then((r) => { if (r.ok) setTeams(r.teams ?? []); else setMsg(friendlyError(r.error ?? 'could not load')); })
+      .catch((e) => setMsg(friendlyError(e)));
+    leagueGameMode(leagueId).then((gm) => { if (gm.ok) setSlots(fixSlots(gm)); }).catch(() => {});
+  }, [leagueId, week]);
+  // The stored rows meet the league's spots once both have loaded.
+  useEffect(() => { const c = fixChosen(slots, raw); setStored(c); setChosen(c); }, [slots, raw]);
+  const open = (r: number | null) => {
+    setRid(r); setMsg(null); setOpenSlot(null);
+    if (r == null) return;
+    commishWeekLineup(leagueId, week, r).then((x) => {
+      if (!x.ok) { setMsg(friendlyError(x.error ?? 'could not load')); return; }
+      setCands(x.candidates ?? []); setRaw(x.stored ?? []); setAuthor(x.has_author !== false);
+    }).catch((e) => setMsg(friendlyError(e)));
+  };
+  const save = async () => {
+    if (busy || rid == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetWeekLineup(leagueId, week, rid, fixPayload(slots, chosen), why);
+      if (!r.ok) { warn(); setMsg(friendlyError(r.error ?? 'failed')); return; }
+      commit(); setWhy('');
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      open(rid);
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  const nameOf = (slug: string | null) => (slug ? cands.find((c) => c.slug === slug)?.name ?? slug : '— empty —');
+  const changed = fixChanged(slots, stored, chosen);
+  return (
+    <View style={{ gap: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
+      <Mono size={9.5} weight="700" tone="dim">{`🧾 FIX A LINEUP · WEEK ${week}`}</Mono>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
+        Set a team's lineup for this week past the kickoff locks — the start an app never saved, a ruling your league made. Only that team's own players that week are offered. The league sees who came in, who went out, and your reason.
+      </Mono>
+      {teams == null && <Mono size={9} tone="faint">Loading…</Mono>}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {(teams ?? []).map((tm) => (
+          <Chip key={tm.roster_id} label={tm.name} on={rid === tm.roster_id} onPress={() => { tap(); open(rid === tm.roster_id ? null : tm.roster_id); }} />
+        ))}
+      </View>
+      {rid != null && !author && <Mono size={9} tone="faint">This seat has nobody to field a lineup for — its lineup is computed from its roster.</Mono>}
+      {rid != null && author && slots.map((s) => {
+        const cur = chosen[s.slot] ?? null;
+        const moved = cur !== (stored[s.slot] ?? null);
+        return (
+          <View key={s.slot}>
+            <Pressable disabled={s.bestball} onPress={() => { tap(); setOpenSlot(openSlot === s.slot ? null : s.slot); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 }}>
+              <Mono size={9.5} tone="faint" style={{ width: 56 }}>{s.name}</Mono>
+              <Text style={{ flex: 1, fontSize: fs(12), color: s.bestball ? t.faint : t.text, fontWeight: moved ? '700' : '400' }}>
+                {s.bestball ? '🎯 best ball — fills itself' : `${nameOf(cur)}  ›`}
+              </Text>
+            </Pressable>
+            {openSlot === s.slot && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 64, paddingBottom: 6 }}>
+                <Chip label="EMPTY" on={cur == null} onPress={() => { tap(); setChosen({ ...chosen, [s.slot]: null }); setOpenSlot(null); }} />
+                {fixOptions(slots, s.slot, cands, chosen).map((c) => (
+                  <Chip key={c.slug} on={cur === c.slug}
+                    label={`${c.name} · ${c.pos}${c.spot && c.spot !== 'active' ? ` · ${c.spot.toUpperCase()}` : ''}${c.why === 'left' ? ' · since left' : ''}`}
+                    onPress={() => { tap(); setChosen({ ...chosen, [s.slot]: c.slug }); setOpenSlot(null); }} />
+                ))}
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {rid != null && author && (
+        <View style={{ gap: 6 }}>
+          <TextInput value={why} onChangeText={setWhy} placeholder="why — the league sees this" placeholderTextColor={t.faint} maxLength={200}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text }} />
+          <Row>
+            <Chip label="SAVE LINEUP" on disabled={busy || !changed || !why.trim()} onPress={() => { tap(); void save(); }} />
+            {changed && <Chip label="RESET" on={false} onPress={() => { tap(); setChosen(stored); }} />}
+          </Row>
+        </View>
+      )}
       <Note msg={msg} />
     </View>
   );

@@ -2696,6 +2696,18 @@ export const commishSetPlayerAdjustment = (leagueId: string, week: number, slug:
     'commish_set_player_adjustment', { p_league_id: leagueId, p_week: week, p_slug: slug, p_points: points, p_note: note }),
     Ev.commishAction, { tool: 'point_adjust' });
 
+/** THE COMMISSIONER FIXES A LINEUP (0356): one seat's classic lineup for a
+ *  week, past the kickoff locks. With no roster, the week's seats. */
+export interface LineupFixCandidate { slug: string; why: 'roster' | 'lineup' | 'left'; name: string; pos: string; team: string; exp: number | null; spot: string | null }
+export const commishWeekLineup = (leagueId: string, week: number, rosterId?: number | null) =>
+  rpc<{ ok: boolean; error?: string; teams?: { roster_id: number; name: string }[]; team?: string; has_author?: boolean;
+        stored?: { slot: string; slug: string | null }[]; candidates?: LineupFixCandidate[] }>(
+    'commish_week_lineup', { p_league_id: leagueId, p_week: week, p_roster_id: rosterId ?? null });
+/** `picks` is the WHOLE lineup: a spot left out is emptied. */
+export const commishSetWeekLineup = (leagueId: string, week: number, rosterId: number, picks: { slot: string; slug: string | null }[], note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; in?: string[]; out?: string[]; rescore?: boolean }>('commish_set_week_lineup',
+    { p_league_id: leagueId, p_week: week, p_roster_id: rosterId, p_picks: picks, p_note: note }), Ev.commishAction, { tool: 'lineup_fix' });
+
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
 export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>

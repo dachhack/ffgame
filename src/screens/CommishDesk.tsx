@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { mono, linkBtn, btn, inp, subhead, errMsg } from './adminUi';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
+import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, leaguePublicApi, commishSetWireLock, commishLockTeam, type AdminMember,
@@ -29,6 +30,7 @@ import {
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
+  commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
@@ -657,8 +659,8 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
             </button>
             {canRescore && (
               <button onClick={() => setRescoreWeek(rescoreWeek === w.week ? null : w.week)} className="mono"
-                title="Adjust a player's points for this week, and recompute the week's scores from the plays as they stand now — preview first, nothing changes until you apply"
-                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score · ✏️ adjust</button>
+                title="Adjust a player's points or fix a lineup for this week, and recompute the week's scores from the plays as they stand now — preview first, nothing changes until you apply"
+                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score · ✏️ fix</button>
             )}
           </div>
           {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
@@ -791,6 +793,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         Preview first: nothing changes until you apply.
       </div>
       <AdjustBox leagueId={leagueId} week={week} />
+      <LineupFixBox leagueId={leagueId} week={week} />
       {running && <div style={small}>⏳ {req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…</div>}
       {req?.error && <div style={{ ...small, color: 'var(--opp)' }}>⚠ Last {req.apply ? 'apply' : 'preview'} failed: {req.error}</div>}
       {res && (
@@ -895,6 +898,103 @@ function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
             className="mono" style={btn(false)}>adjust</button>
         </div>
       ))}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── 🧾 FIX A LINEUP (0356) ───────────────────────────────────────────────────
+// One seat's lineup for this week, past the kickoff locks: the start a crashed
+// app never saved, a ruling the league made. Each spot offers only the seat's
+// own players that week (the server's rule) who fit it (core's slotAllows).
+// A reason is required, the league is told who came in and who went out, and
+// a stamped week's finals follow when it is re-scored below.
+function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const [teams, setTeams] = useState<{ roster_id: number; name: string }[] | null>(null);
+  const [rid, setRid] = useState<number | null>(null);
+  const [slots, setSlots] = useState<FixSlot[]>([]);
+  const [cands, setCands] = useState<LineupFixCandidate[]>([]);
+  const [stored, setStored] = useState<Record<string, string | null>>({});
+  const [chosen, setChosen] = useState<Record<string, string | null>>({});
+  const [author, setAuthor] = useState(true);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    setTeams(null); setRid(null);
+    commishWeekLineup(leagueId, week).then((r) => { if (r.ok) setTeams(r.teams ?? []); else setMsg(r.error ?? 'could not load'); })
+      .catch((e) => setMsg(errMsg(e, 'could not load')));
+    leagueGameMode(leagueId).then((gm) => { if (gm.ok) setSlots(fixSlots(gm)); }).catch(() => {});
+  }, [leagueId, week]);
+  const open = (r: number | null) => {
+    setRid(r); setMsg(null);
+    if (r == null) return;
+    commishWeekLineup(leagueId, week, r).then((x) => {
+      if (!x.ok) { setMsg(x.error ?? 'could not load'); return; }
+      setCands(x.candidates ?? []); setRaw(x.stored ?? []); setAuthor(x.has_author !== false);
+    }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  };
+  // The stored rows meet the league's spots once both have loaded.
+  const [raw, setRaw] = useState<{ slot: string; slug: string | null }[]>([]);
+  useEffect(() => { const c = fixChosen(slots, raw); setStored(c); setChosen(c); }, [slots, raw]);
+  const save = async () => {
+    if (busy || rid == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetWeekLineup(leagueId, week, rid, fixPayload(slots, chosen), why);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setWhy('');
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      open(rid);
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const nameOf = (slug: string | null) => (slug ? cands.find((c) => c.slug === slug)?.name ?? slug : '—');
+  const changed = fixChanged(slots, stored, chosen);
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>🧾 FIX A LINEUP · WEEK {week}</div>
+      <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
+        Set a team's lineup for this week past the kickoff locks — the start an app never saved, a ruling your league made.
+        Only that team's own players that week are offered. The league sees who came in, who went out, and your reason.
+      </div>
+      <select value={rid ?? ''} onChange={(e) => open(e.target.value ? Number(e.target.value) : null)}
+        style={{ ...inp, padding: '5px 8px', fontSize: 12.5, marginBottom: 6 }}>
+        <option value="">{teams == null ? 'loading…' : 'choose a team…'}</option>
+        {(teams ?? []).map((t) => <option key={t.roster_id} value={t.roster_id}>{t.name}</option>)}
+      </select>
+      {rid != null && !author && <div style={small}>This seat has nobody to field a lineup for — its lineup is computed from its roster.</div>}
+      {rid != null && author && slots.map((s) => {
+        const opts = fixOptions(slots, s.slot, cands, chosen);
+        const cur = chosen[s.slot] ?? null;
+        return (
+          <div key={s.slot} style={{ ...row, gap: 8 }}>
+            <span className="mono" style={{ ...mono, fontSize: 11, width: 64, color: 'var(--faint)' }}>{s.name}</span>
+            {s.bestball
+              ? <span style={{ ...small, marginBottom: 0 }}>🎯 best ball — fills itself</span>
+              : (
+                <select value={cur ?? ''} onChange={(e) => setChosen({ ...chosen, [s.slot]: e.target.value || null })}
+                  style={{ ...inp, flex: 1, padding: '4px 6px', fontSize: 12.5, fontWeight: cur !== (stored[s.slot] ?? null) ? 700 : 400 }}>
+                  <option value="">— empty —</option>
+                  {cur && !opts.some((c) => c.slug === cur) && <option value={cur}>{nameOf(cur)} (doesn't fit this spot)</option>}
+                  {opts.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name} · {c.pos} {c.team}{c.spot && c.spot !== 'active' ? ` · ${c.spot.toUpperCase()}` : ''}{c.why === 'left' ? ' · since dropped or traded' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+          </div>
+        );
+      })}
+      {rid != null && author && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void save()} disabled={busy || !changed || !why.trim()} className="mono" style={btn(true)}>save lineup</button>
+          {changed && <button onClick={() => setChosen(stored)} className="mono" style={btn(false)}>reset</button>}
+        </div>
+      )}
       {note(msg)}
     </div>
   );

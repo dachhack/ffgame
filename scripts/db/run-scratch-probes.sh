@@ -217,3 +217,4 @@ SCRATCH_PG_DIR=$DIR SCRATCH_PG_PORT=$PORT npx tsx scripts/db/write-api-e2e.mjs |
 $RUN -f scripts/db/rescore-probes.sql | grep -E "PROBE FAIL|ALL RESCORE PROBES" || { echo "RESCORE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/undo-hold-probes.sql | grep -E "PROBE FAIL|ALL UNDO-HOLD PROBES" || { echo "UNDO-HOLD PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/adjust-probes.sql | grep -E "PROBE FAIL|ALL ADJUST PROBES" || { echo "ADJUST PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/lineup-fix-probes.sql | grep -E "PROBE FAIL|ALL LINEUP-FIX PROBES" || { echo "LINEUP-FIX PROBES FAILED"; exit 1; }
