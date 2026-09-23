@@ -16,7 +16,7 @@ import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useEffect, useRef, useState } from 'react';
 import {
-  chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPost, chatMessages, chatDelete, chatEdit, chatUnread, chatMembers, dmSend, dmThreads, dmMessages, dmEdit,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
@@ -26,6 +26,7 @@ import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } fr
 import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { CHAT_IMAGE_CAPTION_MAX, isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
+import { canEditDm, canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
 import { prepareChatImage, pastedImage, droppedImage } from './imagePost';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
@@ -536,6 +537,60 @@ function ImageButton({ onPick, busy }: { onPick: (f: File | null) => void; busy:
   );
 }
 
+/** THE EDITOR (0351): the message's own words, in place, with the two
+ *  decisions beside them. In place rather than in the composer — a correction
+ *  belongs where the sentence is, and the conversation above it stays put. */
+function EditBox({ m, onSave, onCancel }: {
+  m: { body: string; caption?: string | null };
+  /** Returns an error to show, or null once it has saved and reloaded. */
+  onSave: (body: string, caption: string | null) => Promise<string | null>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(editSeed(m));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const target = editTarget(m);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const body = target === 'caption' ? m.body : text.trim();
+      const caption = target === 'caption' ? text.trim() || null : (m.caption ?? null);
+      setErr(await onSave(body, caption));
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 2 }}>
+      {target === 'caption' && <Body body={m.body} names={[]} />}
+      <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+        <input value={text} autoFocus maxLength={target === 'caption' ? CHAT_IMAGE_CAPTION_MAX : 500}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') onCancel(); }}
+          placeholder={target === 'caption' ? 'say something about it…' : 'say it again…'}
+          style={{ ...input, fontSize: 12.5 }} />
+        <button onClick={() => void save()} disabled={busy} className="mono"
+          style={{ ...btn, padding: '7px 12px', opacity: busy ? 0.5 : 1 }}>SAVE</button>
+        <button onClick={onCancel} disabled={busy} className="mono" style={{ ...linkBtn, fontSize: 9 }}>CANCEL</button>
+      </div>
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 4 }}>{err}</div>}
+    </div>
+  );
+}
+
+/** "edited by Taco Time Titans" — the name, because the case worth surfacing is
+ *  somebody ELSE having reworded you. */
+function EditedNote({ m }: { m: { edited_at?: string | null; edited_by?: string | null } }) {
+  const note = editNote(m);
+  if (!note) return null;
+  return (
+    <span className="mono" title={m.edited_at ? new Date(m.edited_at).toLocaleString() : undefined}
+      style={{ fontSize: 8, color: 'var(--faint)', fontStyle: 'italic', marginLeft: 4 }}>
+      · {note}
+    </span>
+  );
+}
+
 /** QUICK REACTIONS on one message (v0.329.0).
  *
  *  Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,
@@ -618,6 +673,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [plusOpen, setPlusOpen] = useState(false);
   // The + menu's IMAGE choice needs a file input to click; it is this one.
   const fileRef = useRef<HTMLInputElement>(null);
+  /** 0351: the one message being reworded, if any. */
+  const [editing, setEditing] = useState<number | null>(null);
   const load = () => chatMessages(leagueId)
     .then((r) => {
       if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); }
@@ -723,11 +780,28 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                 <button onClick={() => void pin(m.id, !m.pinned)} className="mono" title={m.pinned ? 'unpin' : 'pin'}
                   style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>{m.pinned ? '📌✕' : '📌'}</button>
               )}
+              {canEditMessage(m, canModerate) && (
+                <button onClick={() => setEditing(editing === m.id ? null : m.id)} className="mono"
+                  title={m.mine ? 'edit' : 'edit as commissioner — your name goes on it'}
+                  style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>✎</button>
+              )}
               {(m.mine || canModerate) && (
                 <button onClick={() => void del(m)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
+              <EditedNote m={m} />
             </div>
-            {m.kind === 'txn'
+            {editing === m.id
+              ? <EditBox m={m} onCancel={() => setEditing(null)}
+                  onSave={async (body, caption) => {
+                    // The new words are where the @names are now, so mentions
+                    // come off the edit rather than off what it replaced.
+                    const r = await chatEdit(leagueId, m.id, body,
+                      mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
+                    if (!r.ok) return friendlyError(r.error ?? 'Could not save that.');
+                    setEditing(null); await load();
+                    return null;
+                  }} />
+              : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
@@ -958,6 +1032,9 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
   onThreadId: (tid: string) => void;
 }) {
   const [msgs, setMsgs] = useState<DmMessage[] | null>(thread.threadId ? null : []);
+  /** 0351: the one message being reworded. Yours only — a DM has no
+   *  commissioner, so there is nobody else an edit could come from. */
+  const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -996,11 +1073,28 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         {msgs?.map((m) => (
           <div key={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div style={{ maxWidth: '78%', borderRadius: 10, padding: '7px 11px', background: m.mine ? 'color-mix(in srgb, var(--you) 18%, var(--surface))' : 'var(--bg)', border: '1px solid var(--bd)' }}>
-              <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                <Body body={m.body} names={[]} />
-                {!!m.caption && <div style={{ marginTop: 3 }}><Body body={m.caption} names={[]} /></div>}
+              {editing === m.id ? (
+                <EditBox m={m} onCancel={() => setEditing(null)}
+                  onSave={async (body, caption) => {
+                    if (!thread.threadId) return null;
+                    const r = await dmEdit(thread.threadId, m.id, body, caption);
+                    if (!r.ok) return friendlyError(r.error ?? 'Could not save that.');
+                    setEditing(null); await load(thread.threadId);
+                    return null;
+                  }} />
+              ) : (
+                <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  <Body body={m.body} names={[]} />
+                  {!!m.caption && <div style={{ marginTop: 3 }}><Body body={m.caption} names={[]} /></div>}
+                </div>
+              )}
+              <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 2, textAlign: m.mine ? 'right' : 'left' }}>
+                {canEditDm(m) && editing !== m.id && (
+                  <button onClick={() => setEditing(m.id)} className="mono" title="edit"
+                    style={{ ...linkBtn, fontSize: 9, padding: '0 4px 0 0', color: 'var(--faint)' }}>✎</button>
+                )}
+                {fmtWhen(m.at)}<EditedNote m={m} />
               </div>
-              <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 2, textAlign: m.mine ? 'right' : 'left' }}>{fmtWhen(m.at)}</div>
             </div>
           </div>
         ))}

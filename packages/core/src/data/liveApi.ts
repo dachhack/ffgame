@@ -2773,6 +2773,11 @@ export interface ChatMessage {
   /** What the poster wrote under a picture (0350). Null on everything else,
    *  and on every message posted before captions existed. */
   caption?: string | null;
+  /** When this message was last reworded (0351), and by whom as a display name
+   *  — null when the author edited their own, which the clients render as a
+   *  plain "edited". Both null on anything nobody has edited. */
+  edited_at?: string | null;
+  edited_by?: string | null;
   /** A weekly report line (0275): the house posted it; the link opens the week. */
   report?: { week: number };
   /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
@@ -2781,7 +2786,12 @@ export interface ChatMessage {
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
 export interface DmThreadRow { thread_id: string; peer_id: string; peer: string; last_at: string; preview: string | null; unread: number; }
-export interface DmMessage { id: number; body: string; at: string; mine: boolean; caption?: string | null; }
+export interface DmMessage {
+  id: number; body: string; at: string; mine: boolean; caption?: string | null;
+  /** 0351. No editor name: a DM has no commissioner, so every edit is the
+   *  author's own and every note reads "edited". */
+  edited_at?: string | null;
+}
 /** `caption` (0350) rides beside the body rather than inside it: the body of an
  *  image message stays the bare URL every client already renders inline. */
 export const chatPost = (leagueId: string, body: string, mentions: string[] = [], caption?: string | null) =>
@@ -2814,6 +2824,20 @@ export const chatReact = (leagueId: string, messageId: number, emoji: string) =>
     Ev.chatReacted, { emoji });
 export const chatDelete = (leagueId: string, id: number) =>
   rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
+/** REWORD a message (0351) — the author's or the commissioner's, and signed
+ *  either way. An image message keeps its URL and edits its caption; the server
+ *  holds that line too, so `body` there is the one it already had. */
+export const chatEdit = (leagueId: string, id: number, body: string, mentions: string[] = [], caption?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; unchanged?: boolean; edited_at?: string; edited_by?: string }>('chat_edit', {
+    p_league_id: leagueId, p_id: id, p_body: body, p_mentions: mentions, p_caption: caption ?? null,
+  }), Ev.chatEdited);
+/** REWORD a DM (0351) — yours only; there is nobody else in a thread who could.
+ *  Like the league channel, an image message keeps its URL and edits its
+ *  caption. */
+export const dmEdit = (threadId: string, id: number, body: string, caption?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; unchanged?: boolean; edited_at?: string }>('dm_edit', {
+    p_thread_id: threadId, p_id: id, p_body: body, p_caption: caption ?? null,
+  }), Ev.chatEdited, { dm: true });
 export const dmSend = (leagueId: string, to: string, body: string, caption?: string | null) =>
   tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
     p_league_id: leagueId, p_to: to, p_body: body, p_caption: caption ?? null,
