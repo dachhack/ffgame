@@ -29,6 +29,7 @@ import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { fixTeam } from '../../scripts/espn/espnAdapter.mjs';
 import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
+import { sweepRescores } from './rescore.js';
 import { postWeekReports, sweepRequests } from './report.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
@@ -631,6 +632,12 @@ async function tick() {
     try { await closePriorWeek(reg.espnWeek + reg.offset, season); }
     catch (e) { log('prior week close error', e.message); }
   }
+
+  // THE COMMISSIONER'S RE-SCORES (0353): preview or apply a finished classic
+  // week the console asked about. Swept every tick, whatever the week is
+  // doing — the queue is almost always empty, which is one SELECT.
+  try { const rs = await sweepRescores(playerIndex, log); if (rs) log('rescore:', rs, 'request(s) closed'); }
+  catch (e) { log('rescore sweep error', e.message); }
 
   // Week-agnostic work, once per tick regardless of how many contexts ran.
   //

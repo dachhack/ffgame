@@ -1618,6 +1618,26 @@ export interface ReportWeek {
   week_state: { season: string | null; slate: number; feed: number; live: number; complete: boolean };
   request: { requested_at: string; done_at: string | null; error: string | null } | null;
 }
+/** THE COMMISSIONER'S RE-SCORE (0353). A PREVIEW re-resolves a finished
+ *  classic week and changes nothing; an APPLY rewrites the finals, rebuilds
+ *  the week's report and tells the league — and is refused unless a preview
+ *  of that week finished in the last 30 minutes and found a change. */
+export interface RescoreState {
+  ok: boolean; error?: string; week?: number;
+  /** A fresh preview that found a change is waiting to be confirmed. */
+  can_apply?: boolean;
+  request?: {
+    id: number; apply: boolean; requested_at: string; started_at: string | null;
+    done_at: string | null; error: string | null;
+    result: import('./rescore').RescoreResult | null;
+  } | null;
+}
+export const commishRequestRescore = (leagueId: string, week: number, apply = false) =>
+  tracked(rpc<{ ok: boolean; error?: string; id?: number; note?: string }>('commish_request_rescore',
+    { p_league_id: leagueId, p_week: week, p_apply: apply }), Ev.commishAction, { tool: apply ? 'rescore_apply' : 'rescore_preview' });
+export const leagueRescoreState = (leagueId: string, week: number) =>
+  rpc<RescoreState>('league_rescore_state', { p_league_id: leagueId, p_week: week });
+
 export const leagueReportWeeks = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; season?: string; report_chat?: boolean; weeks?: ReportWeek[] }>(
     'league_report_weeks', { p_league_id: leagueId });

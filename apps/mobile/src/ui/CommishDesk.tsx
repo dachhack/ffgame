@@ -4,7 +4,7 @@
 // order, the median game, a final week's scores, and dues — plus 0321's trade
 // floor and 0339's weekly report. Each card loads its own state and saves on
 // the tap.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, Alert } from 'react-native';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
@@ -16,6 +16,7 @@ import {
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
+  commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -24,6 +25,7 @@ import { tap, commit, warn } from './feedback';
 import { copyText } from './copy';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { LabelInfo } from './InfoChip';
+import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
 
 function inputStyle(t: ReturnType<typeof useTheme>, width = 90) {
   return { width, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg } as const;
@@ -565,6 +567,10 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
   // nothing else — the week is still built, stored and openable.
   const [chatOn, setChatOn] = useState<boolean | null>(null);
   const [flipping, setFlipping] = useState(false);
+  // 0353: the week whose RE-SCORE box is open; classic leagues only.
+  const [rescoreWeek, setRescoreWeek] = useState<number | null>(null);
+  const [classic, setClassic] = useState(false);
+  useEffect(() => { leagueGameMode(leagueId).then((g) => setClassic(g.mode === 'classic')).catch(() => {}); }, [leagueId]);
   const load = () => leagueReportWeeks(leagueId).then((r) => {
     if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
     setWeeks(r.weeks ?? []);
@@ -632,11 +638,16 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
       {weeks?.map((w) => {
         const block = blocker(w);
         const open = !!w.request && !w.request.done_at;
+        const canRescore = classic && w.stamped > 0 && w.week_state.complete;
         return (
           <View key={w.week} style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Mono size={10} weight="700">WEEK {w.week}</Mono>
               <View style={{ flex: 1 }} />
+              {canRescore && (
+                <Chip label="⟳ RE-SCORE" on={rescoreWeek === w.week}
+                  onPress={() => { tap(); setRescoreWeek(rescoreWeek === w.week ? null : w.week); }} />
+              )}
               <Chip label={busy === w.week ? '…' : open ? '⏳ QUEUED' : w.posted_at ? '↻ REPOST' : '📋 POST'}
                 on={!block && !open} disabled={busy != null || !!block || open}
                 onPress={() => { tap(); void post(w); }} />
@@ -656,23 +667,98 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
             {/* 0345. NOT THE SAME ACCUSATION as `drifted`, and the one that
                 catches a week that closed mid-game: these finals were
                 computed before the week's last play landed. A repost
-                faithfully repeats them — only a re-stamp changes the number,
-                and that is an admin errand, so say so rather than offer a
-                button that cannot help. */}
+                faithfully repeats them — only a re-score changes the number,
+                which since 0353 is the commissioner's ⟳ RE-SCORE in a classic
+                league (a drip week cannot be rebuilt). */}
             {w.stale > 0 && (
               <Mono size={8.5} tone="warn" style={{ marginTop: 2, lineHeight: fs(12) }}>
                 ⚠ {w.stale} final{w.stale === 1 ? ' was' : 's were'} scored BEFORE this week's last play arrived
                 {w.scored_at && w.last_play_at
                   ? ` (scored ${new Date(w.scored_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}, last play ${new Date(w.last_play_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`
-                  : ''}. Reposting repeats them — the numbers need a re-stamp, which is an admin errand.
+                  : ''}. Reposting repeats them — {classic ? 'tap ⟳ RE-SCORE to recompute them.' : 'a drip week can’t be re-scored after the fact.'}
               </Mono>
             )}
             {w.request?.error ? <Mono size={8.5} tone="opp" style={{ marginTop: 2 }}>⚠ last try: {w.request.error}</Mono> : null}
+            {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
           </View>
         );
       })}
       <Note msg={msg} />
     </Card>
+  );
+}
+
+// ── ⟳ RE-SCORE A WEEK (0353) — the web's RescoreBox ─────────────────────────
+// PREVIEW changes nothing; APPLY confirms it, rewrites the finals, rebuilds the
+// week's report and tells the league. The worker does the scoring.
+function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: number; onApplied: () => void }) {
+  const t = useTheme();
+  const [st, setSt] = useState<RescoreState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const last = useRef<RescoreState | null>(null);
+  const load = () => leagueRescoreState(leagueId, week).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    const prev = last.current?.request;
+    if (prev && !prev.done_at && r.request?.id === prev.id && r.request.done_at && r.request.apply) onApplied();
+    last.current = r;
+    setSt(r);
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId, week]);
+  const req = st?.request ?? null;
+  const running = !!req && !req.done_at;
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => void load(), 4000);
+    return () => clearInterval(id);
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+  const send = async (apply: boolean) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishRequestRescore(leagueId, week, apply);
+      if (r.ok) { commit(); setMsg(`✓ ${r.note ?? 'queued'}`); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const ask = (apply: boolean) => {
+    if (!apply) { void send(false); return; }
+    Alert.alert(`Rewrite week ${week}'s scores?`,
+      'Standings, the weekly report and the league chat will all show the new numbers.',
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Apply', style: 'destructive', onPress: () => { void send(true); } }]);
+  };
+  const res = req?.done_at && !req.error ? req.result : null;
+  const moved = (res?.matchups ?? []).filter((m) => m.moved);
+  const warning = req && !req.apply ? autofillWarning(res) : null;
+  return (
+    <View style={{ marginTop: 8, padding: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, gap: 6 }}>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
+        {`Recompute week ${week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings. Preview first — nothing changes until you apply.`}
+      </Mono>
+      {running && <Mono size={9} tone="dim">{`⏳ ${req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…`}</Mono>}
+      {req?.error ? <Mono size={9} tone="opp">{`⚠ Last ${req.apply ? 'apply' : 'preview'} failed: ${req.error}`}</Mono> : null}
+      {res && (
+        <View style={{ gap: 3 }}>
+          <Mono size={9.5} weight="700">
+            {`${req!.apply ? '✓ Applied. ' : 'Preview: '}${rescoreHeadline(res, req!.apply)}${req!.apply && res.report === 'rebuilt' ? ' The weekly report was rebuilt.' : ''}`}
+          </Mono>
+          {moved.map((m) => (
+            <Mono key={m.id} size={9} tone={m.flipped ? 'warn' : 'text'} style={{ lineHeight: fs(13) }}>
+              {`${sideLine(m.home_team || `Roster ${m.home_roster_id}`, m.was.home, m.now.home)}  vs  ${sideLine(m.away_team || `Roster ${m.away_roster_id}`, m.was.away, m.now.away)}${m.flipped ? (req!.apply ? '  · result changed' : '  · result would change') : ''}`}
+            </Mono>
+          ))}
+          {warning && <Mono size={8.5} tone="warn" style={{ lineHeight: fs(13) }}>{`⚠ ${warning}`}</Mono>}
+        </View>
+      )}
+      <Row>
+        <Chip label={req && !req.apply && req.done_at ? '⟳ PREVIEW AGAIN' : '⟳ PREVIEW'} on={false}
+          disabled={busy || running} onPress={() => { tap(); ask(false); }} />
+        {st?.can_apply && !running && (
+          <Chip label={`✓ APPLY — REWRITE WEEK ${week}`} on disabled={busy} onPress={() => { tap(); ask(true); }} />
+        )}
+      </Row>
+      <Note msg={msg} />
+    </View>
   );
 }
 
