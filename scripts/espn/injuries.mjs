@@ -69,14 +69,25 @@ export function mapStatus(item) {
 }
 
 /** Normalize the ESPN injuries payload to { slug: { status, date, returnDate,
- *  comment, team } } for players `resolveSlug` recognizes (default: by name). */
-export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace(/\s+/g, '-')) {
+ *  comment, team } } for players `resolveSlug` recognizes (default: by name).
+ *
+ *  `keepActive` (v0.489.0) keeps the feed's ~630 ACTIVE entries, as status 'A'.
+ *  They were dropped here for as long as ESPN was the only source, and rightly:
+ *  a row saying "this man is fine" had nothing to write to a table of
+ *  designations. With Sleeper beside it they are the opposite of nothing — a
+ *  dated statement of availability is what keeps another feed's stale flag from
+ *  benching a player who has been cleared. Off by default, so every existing
+ *  caller (the CLI probe, check:injuries) sees the report it always saw. */
+export function normalizeInjuries(feed, resolveSlug = (n) => normName(n).replace(/\s+/g, '-'), opts = {}) {
+  const { keepActive = false } = opts;
   const out = {};
   for (const team of feed?.injuries ?? []) {
     const abbr = teamAbbrOf(team);
     for (const item of team?.injuries ?? []) {
-      const status = mapStatus(item);
-      if (!status) continue; // skip Active
+      const active = (item?.type?.abbreviation || '').toUpperCase() === 'A'
+        || (item?.status || '').toLowerCase() === 'active';
+      const status = mapStatus(item) ?? (keepActive && active ? 'A' : null);
+      if (!status) continue; // Active (unless asked for) / unknown
       const name = item?.athlete?.displayName;
       if (!name) continue;
       // Athlete id first where the resolver understands it (0200), then the
