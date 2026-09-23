@@ -27,8 +27,13 @@
 //     enforces this too — see 0351 — so this is the honest half of the UI, not
 //     the only guard.
 //
-// AND EVERY EDIT SIGNS ITSELF. edited_by is a name, not a flag, because the
-// case that matters is not "this was changed" but "somebody else changed it".
+// AND EVERY EDIT SIGNS ITSELF — but only names a name when there is one worth
+// naming. Fixing your own typo reads "edited"; a commissioner rewording you
+// reads "edited by <them>". The case that matters is not "this was changed" but
+// "somebody ELSE changed it", and putting your own name on your own correction
+// only buries that. The server decides which of the two it is (0351 sends
+// edited_by as null for a self-edit), because it is the only party that knows
+// both ids.
 
 /** A message, as much of one as these rules need. */
 export interface EditableMessage {
@@ -38,6 +43,8 @@ export interface EditableMessage {
   body: string;
   caption?: string | null;
   edited_at?: string | null;
+  /** The editor's display name, or null when the author edited their own
+   *  (0351) — which is the difference between "edited" and "edited by". */
   edited_by?: string | null;
 }
 
@@ -66,9 +73,19 @@ export function editSeed(m: EditableMessage): string {
   return (editTarget(m) === 'caption' ? m.caption : m.body) ?? '';
 }
 
-/** The note under an edited message, or null when it has not been. Names the
- *  editor because "edited" alone leaves the interesting case unsaid. */
-export function editNote(m: EditableMessage | null | undefined): string | null {
+/** The note under an edited message, or null when it has not been.
+ *
+ *  "edited" for your own correction, "edited by <name>" when somebody else made
+ *  it. A name on a self-edit is noise, and noise is what a reader learns to
+ *  skip — including the one time the name is the whole story. */
+export function editNote(m: { edited_at?: string | null; edited_by?: string | null } | null | undefined): string | null {
   if (!m?.edited_at) return null;
-  return `edited by ${m.edited_by || 'someone'}`;
+  return m.edited_by ? `edited by ${m.edited_by}` : 'edited';
+}
+
+/** May this person edit this DM? Only its author — a DM thread has two people
+ *  in it and no commissioner, so there is nobody else an edit could come from.
+ *  (Kind and author checks do not apply: every DM is somebody's own words.) */
+export function canEditDm(m: { mine?: boolean } | null | undefined): boolean {
+  return !!m?.mine;
 }

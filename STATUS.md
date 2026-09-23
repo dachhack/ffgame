@@ -31,10 +31,17 @@ the ✕ it already had, and either one opens the words in place — in the threa
 not in the composer, because a correction belongs where the sentence is.
 
 THE NOTE IS THE POINT, not a footnote to it. Every edit is stamped with WHO, in
-the same statement as the new text, and renders as "edited by <name>" beside the
-timestamp. An edit that leaves no mark is a commissioner quietly rewriting what
-somebody said and that person never finding out; the name is there because the
-question a reader has is not "was this changed" but "who changed it".
+the same statement as the new text. Founder: "Just plain edited for self edits"
+— so your own correction reads "edited" and somebody else's reads "edited by
+<them>". The row always records who; the server simply sends no name when the
+editor is the author, since a name on every edit is noise a reader learns to
+skip, including the one time the name is the whole story. An edit that leaves no
+mark at all is a commissioner quietly rewriting somebody and that person never
+finding out.
+
+AND DMs GET THE SAME LONG PRESS, for the author only — "Self edits only in DMs."
+There is no commissioner inside a private thread, so there is nobody else an
+edit could come from, no editor name to store, and no note there but "edited".
 
 THREE THINGS AN EDIT CANNOT REACH, each refused by the server and not merely
 hidden by the clients. The house's own lines — a weekly report, a waiver run, an
@@ -50,9 +57,10 @@ chat_post uses — adding @Allen in an edit has to reach Allen, and removing him
 has to stop. No edit window: the author can fix a week-old typo, and what makes
 that safe is the record of who touched it, not a clock.
 
-check:chatedit holds who may edit what, the bare-URL rule in both languages at
-once (SQL keeps its own copy, since SQL cannot import TypeScript), and that the
-note can never come out empty.
+check:chatedit holds who may edit what (channel and DM), which of the two notes
+appears, the bare-URL rule in both languages at once (SQL keeps its own copy,
+since SQL cannot import TypeScript), and that the note can never come out
+empty.
 
 Migration 0351.
 

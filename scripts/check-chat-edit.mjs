@@ -19,7 +19,7 @@
 //     leaves no mark is a commissioner rewriting somebody quietly.
 import { readFileSync } from 'node:fs';
 import {
-  canEditMessage, editNote, editSeed, editTarget, isBareUrlBody,
+  canEditDm, canEditMessage, editNote, editSeed, editTarget, isBareUrlBody,
 } from '../packages/core/src/data/chatEdit';
 
 let fails = 0;
@@ -86,16 +86,41 @@ const PIC = 'https://auth.dripfantasy.com/storage/v1/object/public/chat-image/l/
 }
 
 // ── THE NOTE, WHICH IS THE WHOLE SAFEGUARD ─────────────────────────────────
+// Founder: "Just plain edited for self edits." So the note has two forms, and
+// which one appears is the entire signal — a name on every edit, including your
+// own typo fixes, is noise a reader learns to skip, and the one time the name
+// matters it gets skipped with the rest.
 {
+  const AT = '2026-09-23T01:00:00Z';
   ok('an unedited message carries no note', editNote(text()) === null);
-  ok('an edited one names who did it',
-    editNote(text({ edited_at: '2026-09-23T01:00:00Z', edited_by: 'Taco Time Titans' })) === 'edited by Taco Time Titans');
-  // Never a bare "edited": the interesting case is somebody ELSE having done
-  // it, so an unnameable editor still gets said out loud.
-  ok('…and says someone rather than nothing when the name is missing',
-    editNote(text({ edited_at: '2026-09-23T01:00:00Z' })) === 'edited by someone'
-    && editNote(text({ edited_at: '2026-09-23T01:00:00Z', edited_by: '' })) === 'edited by someone');
+  ok('your own correction is just "edited"', editNote(text({ edited_at: AT })) === 'edited');
+  ok('…and so is an empty name, rather than a gap', editNote(text({ edited_at: AT, edited_by: '' })) === 'edited');
+  ok('somebody ELSE reading as "edited by" is the whole point',
+    editNote(text({ edited_at: AT, edited_by: 'Taco Time Titans' })) === 'edited by Taco Time Titans');
   ok('a name with no timestamp is not an edit', editNote(text({ edited_by: 'Someone' })) === null);
+  ok('the note never comes out empty when there was an edit',
+    !!editNote(text({ edited_at: AT })) && !!editNote(text({ edited_at: AT, edited_by: 'X' })));
+}
+
+// ── DMs: SELF EDITS ONLY ───────────────────────────────────────────────────
+// Founder: "Self edits only in DMs." There is no commissioner inside a private
+// thread, so the author is the only person an edit could come from — and the
+// note there can only ever read "edited".
+{
+  ok('you may edit your own DM', canEditDm({ mine: true }));
+  ok('you may not edit theirs', !canEditDm({ mine: false }));
+  ok('a missing message is not editable', !canEditDm(null) && !canEditDm(undefined) && !canEditDm({}));
+  ok('a DM picture edits its caption too, same rule as the channel',
+    editTarget({ body: PIC, caption: 'ha' }) === 'caption');
+  ok('the server records the edit on a DM', /alter table dm_message add column if not exists edited_at timestamptz/.test(sql));
+  ok('…and refuses anybody but the author', /if msg\.author_id <> me then/.test(sql));
+  ok('…keeping a picture\'s picture there as well',
+    /if _chat_is_media_body\(msg\.body\) then\s+b := msg\.body;/.test(sql));
+  ok('dm_messages hands the edit back', /'edited_at', m\.edited_at,/.test(sql));
+  // No edited_by column on a DM at all: every edit there is a self-edit, so
+  // storing a name would be storing the author's own, twice.
+  ok('a DM carries no editor name, because there is only one person it could be',
+    !/dm_message add column if not exists edited_by/.test(sql));
 }
 
 // ── AND THE SERVER REFUSES THE SAME THINGS ─────────────────────────────────
@@ -118,7 +143,14 @@ const PIC = 'https://auth.dripfantasy.com/storage/v1/object/public/chat-image/l/
   ok('an edit that changes nothing does not stamp one',
     /if b = m\.body and cap is not distinct from m\.caption then/.test(sql));
   ok('the payload hands back a NAME, not a uuid the clients would have to join',
-    /'edited_by', case when m\.edited_by is null then null else _chat_display_name/.test(sql));
+    /'edited_by', case when m\.edited_by is null or m\.edited_by = m\.author_id/.test(sql)
+    && /_chat_display_name\(m\.league_id, m\.edited_by\)/.test(sql));
+  // The server decides "edited" vs "edited by" — it is the only party holding
+  // both ids. The row still records who; this is presentation, not amnesia.
+  ok('…and sends NO name for a self-edit, which is what renders as plain "edited"',
+    /m\.edited_by = m\.author_id\s*\n?\s*then null/.test(sql));
+  ok('the row itself still records the editor either way',
+    /edited_at = now\(\), edited_by = me/.test(sql));
 }
 
 if (fails) { console.log(`\n${fails} CHAT EDIT ASSERTION(S) FAILED`); process.exit(1); }

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  chatPost, chatMessages, chatDelete, chatEdit, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPost, chatMessages, chatDelete, chatEdit, chatMembers, dmSend, dmThreads, dmMessages, dmEdit,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
@@ -18,7 +18,7 @@ import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } fr
 import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { CHAT_IMAGE_CAPTION_MAX, isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
-import { canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
+import { canEditDm, canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
 import { pickChatImage } from './imagePost';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
@@ -580,9 +580,11 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder, image }: {
  *  already offers Pin and Delete now offers Edit, and this is what it opens —
  *  in the thread rather than in a dialog, because a correction belongs where
  *  the sentence is and an Alert.prompt only exists on iOS anyway. */
-function EditBox({ m, leagueId, members, onDone, onCancel }: {
-  m: ChatMessage; leagueId: string; members: { id: string; name: string; me: boolean }[];
-  onDone: () => void; onCancel: () => void;
+function EditBox({ m, onSave, onCancel }: {
+  m: { body: string; caption?: string | null };
+  /** Returns an error to show, or null once it has saved and reloaded. */
+  onSave: (body: string, caption: string | null) => Promise<string | null>;
+  onCancel: () => void;
 }) {
   const t = useTheme();
   const [text, setText] = useState(editSeed(m));
@@ -593,13 +595,10 @@ function EditBox({ m, leagueId, members, onDone, onCancel }: {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      // The new words are where the @names are now, so mentions come off the
-      // edit rather than off what it replaced.
       const body = target === 'caption' ? m.body : text.trim();
       const caption = target === 'caption' ? text.trim() || null : (m.caption ?? null);
-      const r = await chatEdit(leagueId, m.id, body, mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
-      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save that.')); return; }
-      commit(); onDone();
+      const e = await onSave(body, caption);
+      if (e) { warn(); setErr(e); } else commit();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
   };
@@ -627,7 +626,7 @@ function EditBox({ m, leagueId, members, onDone, onCancel }: {
 
 /** "edited by Taco Time Titans" — the name, because the case worth surfacing is
  *  somebody ELSE having reworded you. */
-function EditedNote({ m }: { m: ChatMessage }) {
+function EditedNote({ m }: { m: { edited_at?: string | null; edited_by?: string | null } }) {
   const t = useTheme();
   const note = editNote(m);
   if (!note) return null;
@@ -816,8 +815,16 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <EditedNote m={m} />
             </View>
             {editing === m.id
-              ? <EditBox m={m} leagueId={leagueId} members={members}
-                  onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />
+              ? <EditBox m={m} onCancel={() => setEditing(null)}
+                  onSave={async (body, caption) => {
+                    // The new words are where the @names are now, so mentions
+                    // come off the edit rather than off what it replaced.
+                    const r = await chatEdit(leagueId, m.id, body,
+                      mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
+                    if (!r.ok) return friendlyError(r.error ?? 'Could not save that.');
+                    setEditing(null); void load();
+                    return null;
+                  }} />
               : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
@@ -984,6 +991,9 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
 }) {
   const t = useTheme();
   const [msgs, setMsgs] = useState<DmMessage[] | null>(thread.threadId ? null : []);
+  /** 0351: the one message being reworded. Yours only — a DM has no
+   *  commissioner, so there is nobody else an edit could come from. */
+  const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1030,11 +1040,28 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         {msgs?.length === 0 && <Mono size={10} tone="faint">Say hello.</Mono>}
         {msgs?.map((m) => (
           <View key={m.id} style={{ flexDirection: 'row', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
-            <View style={{ maxWidth: '78%', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: m.mine ? alpha(t.you, 18) : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
-              <MsgBody body={m.body} names={[]} />
-              {!!m.caption && <View style={{ marginTop: 3 }}><MsgBody body={m.caption} names={[]} /></View>}
-              <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 2, textAlign: m.mine ? 'right' : 'left' }}>{fmtWhen(m.at)}</Text>
-            </View>
+            {/* 0351: the same long press as the league channel, offering the
+                one thing that applies here — your own words, reworded. */}
+            <Pressable onLongPress={() => { if (canEditDm(m)) { tap(); setEditing(m.id); } }} delayLongPress={350}
+              style={{ maxWidth: '78%', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: m.mine ? alpha(t.you, 18) : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
+              {editing === m.id ? (
+                <EditBox m={m} onCancel={() => setEditing(null)}
+                  onSave={async (body, caption) => {
+                    if (!thread.threadId) return null;
+                    const r = await dmEdit(thread.threadId, m.id, body, caption);
+                    if (!r.ok) return friendlyError(r.error ?? 'Could not save that.');
+                    setEditing(null); void load(thread.threadId);
+                    return null;
+                  }} />
+              ) : (<>
+                <MsgBody body={m.body} names={[]} />
+                {!!m.caption && <View style={{ marginTop: 3 }}><MsgBody body={m.caption} names={[]} /></View>}
+              </>)}
+              <View style={{ flexDirection: 'row', gap: 4, marginTop: 2, justifyContent: m.mine ? 'flex-end' : 'flex-start' }}>
+                <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint }}>{fmtWhen(m.at)}</Text>
+                <EditedNote m={m} />
+              </View>
+            </Pressable>
           </View>
         ))}
         <View style={{ height: 6 }} />

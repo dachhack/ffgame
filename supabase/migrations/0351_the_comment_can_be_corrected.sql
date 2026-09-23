@@ -11,10 +11,17 @@
 --
 -- THE NOTE IS THE POINT, not a footnote to it. An edit that leaves no mark is a
 -- commissioner quietly rewriting what somebody said, and the person who said it
--- finding out never. So edited_by is a USER, rendered as a name — because the
--- question a reader actually has is not "was this changed" but "who changed
--- it". Both are set in the same statement as the new text; there is no path
--- through this function that edits without signing.
+-- finding out never. So edited_by is a USER, and both it and edited_at are set
+-- in the same statement as the new text; there is no path through this function
+-- that edits without signing.
+--
+-- BUT THE PAYLOAD ONLY NAMES A NAME WHEN THERE IS ONE WORTH NAMING. A self-edit
+-- comes back with edited_by null, so it reads "edited"; an edit by anybody else
+-- comes back with their display name, so it reads "edited by <them>". The row
+-- always records who — this is presentation, not amnesia — but a reader's
+-- question is "did somebody ELSE change this", and putting your own name on
+-- your own typo fix only buries the one case that matters. The server decides,
+-- because it is the only party holding both ids.
 --
 -- WHAT CANNOT BE EDITED, and why each one is refused rather than left to the
 -- clients to hide:
@@ -113,7 +120,9 @@ create or replace function _chat_message_json(m league_message, me uuid) returns
     'pinned', m.pinned,
     'caption', m.caption,
     'edited_at', m.edited_at,
-    'edited_by', case when m.edited_by is null then null else _chat_display_name(m.league_id, m.edited_by) end,
+    -- null for a self-edit: the clients render that as a plain "edited".
+    'edited_by', case when m.edited_by is null or m.edited_by = m.author_id
+                      then null else _chat_display_name(m.league_id, m.edited_by) end,
     'mentions_me', coalesce(me = any(m.mentions), false),
     'reactions', _chat_reactions_json(m.id, me))
   || case when m.kind = 'poll' then jsonb_build_object('poll', jsonb_build_object(
@@ -130,5 +139,71 @@ create or replace function _chat_message_json(m league_message, me uuid) returns
      else '{}'::jsonb end;
 $$;
 
+-- ── DMs: the author, and only the author ───────────────────────────────────
+-- A DM thread has two people in it and no commissioner, so there is nobody an
+-- edit could come from but the person who wrote it. That makes edited_by
+-- unnecessary here — every edit is a self-edit, and every note reads "edited".
+alter table dm_message add column if not exists edited_at timestamptz;
+
+create or replace function dm_edit(p_thread_id uuid, p_id bigint, p_body text, p_caption text default null)
+  returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); msg dm_message; b text; cap text;
+begin
+  select m.* into msg from dm_message m
+    join dm_thread t on t.id = m.thread_id
+   where m.id = p_id and m.thread_id = p_thread_id
+     and (t.user_lo = me or t.user_hi = me);
+  if not found then return jsonb_build_object('ok', false, 'error', 'no such message'); end if;
+  if msg.author_id <> me then
+    return jsonb_build_object('ok', false, 'error', 'you can only edit your own messages');
+  end if;
+  -- Same rule as the league channel: a picture keeps its picture.
+  if _chat_is_media_body(msg.body) then
+    b := msg.body;
+    begin cap := _chat_clean_caption(p_caption);
+    exception when others then return jsonb_build_object('ok', false, 'error', sqlerrm); end;
+  else
+    begin b := _chat_clean_body(p_body); cap := _chat_clean_caption(p_caption);
+    exception when others then return jsonb_build_object('ok', false, 'error', sqlerrm); end;
+  end if;
+  if b = msg.body and cap is not distinct from msg.caption then
+    return jsonb_build_object('ok', true, 'unchanged', true);
+  end if;
+  update dm_message set body = b, caption = cap, edited_at = now() where id = p_id;
+  return jsonb_build_object('ok', true, 'id', p_id, 'edited_at', now());
+end $$;
+
+-- ── dm_messages v3: 0350's body, carrying the edit ─────────────────────────
+create or replace function dm_messages(p_thread_id uuid, p_before bigint default null, p_limit int default 50)
+  returns jsonb language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); t dm_thread; lim int := least(greatest(coalesce(p_limit, 50), 1), 100);
+        out jsonb; top bigint;
+begin
+  select * into t from dm_thread where id = p_thread_id and (user_lo = me or user_hi = me);
+  if not found then return jsonb_build_object('ok', false, 'error', 'forbidden'); end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', m.id, 'body', m.body, 'at', m.created_at,
+           'caption', m.caption,
+           'edited_at', m.edited_at,
+           'mine', m.author_id = me) order by m.id desc), '[]'::jsonb)
+    into out
+    from (select * from dm_message
+            where thread_id = p_thread_id and (p_before is null or id < p_before)
+            order by id desc limit lim) m;
+  if p_before is null then
+    select max(id) into top from dm_message where thread_id = p_thread_id;
+    if top is not null then
+      update dm_thread set
+        lo_last_read = case when user_lo = me then greatest(lo_last_read, top) else lo_last_read end,
+        hi_last_read = case when user_hi = me then greatest(hi_last_read, top) else hi_last_read end
+        where id = p_thread_id;
+    end if;
+  end if;
+  return jsonb_build_object('ok', true, 'messages', out,
+    'peer', _chat_display_name(t.league_id, case when t.user_lo = me then t.user_hi else t.user_lo end));
+end $$;
+
 grant execute on function chat_edit(uuid, bigint, text, uuid[], text) to authenticated;
+grant execute on function dm_edit(uuid, bigint, text, text) to authenticated;
+grant execute on function dm_messages(uuid, bigint, int) to authenticated;
 grant execute on function _chat_is_media_body(text) to authenticated, anon;
