@@ -645,7 +645,15 @@ async function tick() {
   // early games play.
   const injEvery = injuryPollEvery(seen, Date.now());
   if (Date.now() - lastInjuryPoll >= injEvery) {
-    try { const r = await pollInjuries(playerIndex); lastInjuryPoll = Date.now(); log('injuries', r.count, '@', r.feedTimestamp); }
+    try {
+      const r = await pollInjuries(playerIndex);
+      lastInjuryPoll = Date.now();
+      // v0.489.0: both sources, and what was CLEARED. A poll that pruned 40
+      // designations and one that could not prune at all read identically as
+      // a bare count, and the second is the one worth noticing.
+      log(`injuries: ${r.count} standing (espn ${r.espn}, sleeper ${r.sleeper ?? 'none'})`,
+        r.prunedSkipped ? '— prune SKIPPED, feed incomplete' : `— ${r.pruned} cleared`, '@', r.feedTimestamp);
+    }
     catch (e) { log('injury poll error', e.message); }
   }
 
