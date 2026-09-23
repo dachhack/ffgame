@@ -2773,6 +2773,10 @@ export interface ChatMessage {
   /** What the poster wrote under a picture (0350). Null on everything else,
    *  and on every message posted before captions existed. */
   caption?: string | null;
+  /** When this message was last reworded, and BY WHOM as a display name
+   *  (0351). Null on anything nobody has edited. */
+  edited_at?: string | null;
+  edited_by?: string | null;
   /** A weekly report line (0275): the house posted it; the link opens the week. */
   report?: { week: number };
   /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
@@ -2814,6 +2818,13 @@ export const chatReact = (leagueId: string, messageId: number, emoji: string) =>
     Ev.chatReacted, { emoji });
 export const chatDelete = (leagueId: string, id: number) =>
   rpc<{ ok: boolean; error?: string }>('chat_delete', { p_league_id: leagueId, p_id: id });
+/** REWORD a message (0351) — the author's or the commissioner's, and signed
+ *  either way. An image message keeps its URL and edits its caption; the server
+ *  holds that line too, so `body` there is the one it already had. */
+export const chatEdit = (leagueId: string, id: number, body: string, mentions: string[] = [], caption?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; unchanged?: boolean; edited_at?: string; edited_by?: string }>('chat_edit', {
+    p_league_id: leagueId, p_id: id, p_body: body, p_mentions: mentions, p_caption: caption ?? null,
+  }), Ev.chatEdited);
 export const dmSend = (leagueId: string, to: string, body: string, caption?: string | null) =>
   tracked(rpc<{ ok: boolean; error?: string; thread_id?: string; id?: number }>('dm_send', {
     p_league_id: leagueId, p_to: to, p_body: body, p_caption: caption ?? null,

@@ -16,7 +16,7 @@ import { mentionIds } from '@drip/core/data/mentions';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useEffect, useRef, useState } from 'react';
 import {
-  chatPost, chatMessages, chatDelete, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPost, chatMessages, chatDelete, chatEdit, chatUnread, chatMembers, dmSend, dmThreads, dmMessages,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
@@ -26,6 +26,7 @@ import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } fr
 import { ModalBackdrop, Sheet } from './ui';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { CHAT_IMAGE_CAPTION_MAX, isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
+import { canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
 import { prepareChatImage, pastedImage, droppedImage } from './imagePost';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
@@ -536,6 +537,62 @@ function ImageButton({ onPick, busy }: { onPick: (f: File | null) => void; busy:
   );
 }
 
+/** THE EDITOR (0351): the message's own words, in place, with the two
+ *  decisions beside them. In place rather than in the composer — a correction
+ *  belongs where the sentence is, and the conversation above it stays put. */
+function EditBox({ m, leagueId, members, onDone, onCancel }: {
+  m: ChatMessage; leagueId: string; members: { id: string; name: string; me: boolean }[];
+  onDone: () => void; onCancel: () => void;
+}) {
+  const [text, setText] = useState(editSeed(m));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const target = editTarget(m);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      // The new words are where the @names are now, so mentions come off the
+      // edit rather than off what it replaced.
+      const body = target === 'caption' ? m.body : text.trim();
+      const caption = target === 'caption' ? text.trim() || null : (m.caption ?? null);
+      const r = await chatEdit(leagueId, m.id, body, mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not save that.')); return; }
+      onDone();
+    } catch (x) { setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 2 }}>
+      {target === 'caption' && <Body body={m.body} names={[]} />}
+      <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+        <input value={text} autoFocus maxLength={target === 'caption' ? CHAT_IMAGE_CAPTION_MAX : 500}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') onCancel(); }}
+          placeholder={target === 'caption' ? 'say something about it…' : 'say it again…'}
+          style={{ ...input, fontSize: 12.5 }} />
+        <button onClick={() => void save()} disabled={busy} className="mono"
+          style={{ ...btn, padding: '7px 12px', opacity: busy ? 0.5 : 1 }}>SAVE</button>
+        <button onClick={onCancel} disabled={busy} className="mono" style={{ ...linkBtn, fontSize: 9 }}>CANCEL</button>
+      </div>
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--opp)', marginTop: 4 }}>{err}</div>}
+    </div>
+  );
+}
+
+/** "edited by Taco Time Titans" — the name, because the case worth surfacing is
+ *  somebody ELSE having reworded you. */
+function EditedNote({ m }: { m: ChatMessage }) {
+  const note = editNote(m);
+  if (!note) return null;
+  return (
+    <span className="mono" title={m.edited_at ? new Date(m.edited_at).toLocaleString() : undefined}
+      style={{ fontSize: 8, color: 'var(--faint)', fontStyle: 'italic', marginLeft: 4 }}>
+      · {note}
+    </span>
+  );
+}
+
 /** QUICK REACTIONS on one message (v0.329.0).
  *
  *  Founder: "can we have quick reactions in chat..Like thumbs up, agree, fire,
@@ -618,6 +675,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [plusOpen, setPlusOpen] = useState(false);
   // The + menu's IMAGE choice needs a file input to click; it is this one.
   const fileRef = useRef<HTMLInputElement>(null);
+  /** 0351: the one message being reworded, if any. */
+  const [editing, setEditing] = useState<number | null>(null);
   const load = () => chatMessages(leagueId)
     .then((r) => {
       if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); }
@@ -723,11 +782,20 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                 <button onClick={() => void pin(m.id, !m.pinned)} className="mono" title={m.pinned ? 'unpin' : 'pin'}
                   style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>{m.pinned ? '📌✕' : '📌'}</button>
               )}
+              {canEditMessage(m, canModerate) && (
+                <button onClick={() => setEditing(editing === m.id ? null : m.id)} className="mono"
+                  title={m.mine ? 'edit' : 'edit as commissioner — your name goes on it'}
+                  style={{ ...linkBtn, fontSize: 9, padding: '0 2px' }}>✎</button>
+              )}
               {(m.mine || canModerate) && (
                 <button onClick={() => void del(m)} className="mono" style={{ ...linkBtn, fontSize: 9, color: 'var(--opp)', padding: '0 2px' }}>✕</button>
               )}
+              <EditedNote m={m} />
             </div>
-            {m.kind === 'txn'
+            {editing === m.id
+              ? <EditBox m={m} leagueId={leagueId} members={members}
+                  onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />
+              : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />

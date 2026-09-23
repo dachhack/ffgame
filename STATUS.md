@@ -18,6 +18,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.488.0 — the comment can be corrected
+
+Founder: "Let's have long press on a comment to edit it if you are the author or
+the league commish. The comment adds an edited note with the name of who edited
+it."
+
+Until now the only way to fix a typo was to delete the message and say it again,
+which costs its reactions, its pin and its place in the conversation. Now the
+app's long press offers ✎ Edit above Pin and Delete, the web grows a ✎ beside
+the ✕ it already had, and either one opens the words in place — in the thread,
+not in the composer, because a correction belongs where the sentence is.
+
+THE NOTE IS THE POINT, not a footnote to it. Every edit is stamped with WHO, in
+the same statement as the new text, and renders as "edited by <name>" beside the
+timestamp. An edit that leaves no mark is a commissioner quietly rewriting what
+somebody said and that person never finding out; the name is there because the
+question a reader has is not "was this changed" but "who changed it".
+
+THREE THINGS AN EDIT CANNOT REACH, each refused by the server and not merely
+hidden by the clients. The house's own lines — a weekly report, a waiver run, an
+add or a drop — are the league's record of what happened, and the commissioner
+is exactly the person with both the motive and the buttons. A poll, because
+editing the question after votes are in changes what those votes meant. And a
+picture's URL: an edit on an image message rewrites its CAPTION (0350), since
+swapping the URL would strand the uploaded file in the bucket and turn "fix a
+typo" into "replace the evidence".
+
+Mentions are recomputed from the new text, through the same membership filter
+chat_post uses — adding @Allen in an edit has to reach Allen, and removing him
+has to stop. No edit window: the author can fix a week-old typo, and what makes
+that safe is the record of who touched it, not a clock.
+
+check:chatedit holds who may edit what, the bare-URL rule in both languages at
+once (SQL keeps its own copy, since SQL cannot import TypeScript), and that the
+note can never come out empty.
+
+Migration 0351.
+
 ### v0.487.0 — one plus, one gear
 
 ONE + IN LEAGUE CHAT. Founder: "Let's do a + button that lets you then select

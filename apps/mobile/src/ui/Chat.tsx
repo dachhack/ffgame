@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  chatPost, chatMessages, chatDelete, chatMembers, dmSend, dmThreads, dmMessages,
+  chatPost, chatMessages, chatDelete, chatEdit, chatMembers, dmSend, dmThreads, dmMessages,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
@@ -18,6 +18,7 @@ import { txnLook, txnBody, isWaiverRun, waiverRunLine, type WaiverRunReport } fr
 import { Overlay } from './Overlay';
 import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { CHAT_IMAGE_CAPTION_MAX, isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
+import { canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
 import { pickChatImage } from './imagePost';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
@@ -575,6 +576,64 @@ function Composer({ draft, setDraft, busy, err, onSend, placeholder, image }: {
   );
 }
 
+/** THE EDITOR (0351): the message's own words, in place. The long press that
+ *  already offers Pin and Delete now offers Edit, and this is what it opens —
+ *  in the thread rather than in a dialog, because a correction belongs where
+ *  the sentence is and an Alert.prompt only exists on iOS anyway. */
+function EditBox({ m, leagueId, members, onDone, onCancel }: {
+  m: ChatMessage; leagueId: string; members: { id: string; name: string; me: boolean }[];
+  onDone: () => void; onCancel: () => void;
+}) {
+  const t = useTheme();
+  const [text, setText] = useState(editSeed(m));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const target = editTarget(m);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      // The new words are where the @names are now, so mentions come off the
+      // edit rather than off what it replaced.
+      const body = target === 'caption' ? m.body : text.trim();
+      const caption = target === 'caption' ? text.trim() || null : (m.caption ?? null);
+      const r = await chatEdit(leagueId, m.id, body, mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
+      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save that.')); return; }
+      commit(); onDone();
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ marginTop: 2 }}>
+      {target === 'caption' && <MsgBody body={m.body} names={[]} />}
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 3, alignItems: 'flex-end' }}>
+        <TextInput value={text} autoFocus maxLength={target === 'caption' ? CHAT_IMAGE_CAPTION_MAX : 500}
+          onChangeText={setText} onSubmitEditing={() => void save()} returnKeyType="done"
+          multiline submitBehavior="blurAndSubmit"
+          placeholder={target === 'caption' ? 'say something about it…' : 'say it again…'} placeholderTextColor={t.faint}
+          style={{ flex: 1, maxHeight: 110, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+        <Pressable disabled={busy} onPress={() => { tap(); void save(); }}
+          style={{ backgroundColor: t.you, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.onAccent }}>SAVE</Text>
+        </Pressable>
+        <Pressable disabled={busy} hitSlop={6} onPress={() => { tap(); onCancel(); }} style={{ paddingVertical: 9 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>CANCEL</Text>
+        </Pressable>
+      </View>
+      {!!err && <Mono size={9.5} tone="opp" style={{ marginTop: 4 }}>{err}</Mono>}
+    </View>
+  );
+}
+
+/** "edited by Taco Time Titans" — the name, because the case worth surfacing is
+ *  somebody ELSE having reworded you. */
+function EditedNote({ m }: { m: ChatMessage }) {
+  const t = useTheme();
+  const note = editNote(m);
+  if (!note) return null;
+  return <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint, fontStyle: 'italic' }}>· {note}</Text>;
+}
+
 /** QUICK REACTIONS on one message (v0.329.0) — the web chat's Reactions in RN.
  *  See there for the reasoning; in short: counts always visible because they
  *  ARE the content, the six-chip picker behind a `+` because six always-on
@@ -649,6 +708,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [runAt, setRunAt] = useState<string | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  /** 0351: the one message being reworded, if any. */
+  const [editing, setEditing] = useState<number | null>(null);
   const sticky = useStickyScroll();
   // The message list shrinks by the keyboard's height when it opens, which
   // would slide the newest message out of view under the composer. Re-pin.
@@ -687,6 +748,10 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       .catch(() => warn());
   const menu = (m: ChatMessage) => {
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
+    // 0351. Founder: "long press on a comment to edit it if you are the author
+    // or the league commish." First, because correcting a message is the
+    // gentlest thing in this menu and Delete should never be the easy one.
+    if (canEditMessage(m, canModerate)) buttons.push({ text: '✎ Edit', onPress: () => setEditing(m.id) });
     if (canModerate) buttons.push({ text: m.pinned ? '📌 Unpin' : '📌 Pin', onPress: () => void pinToggle(m) });
     if (m.mine || canModerate) buttons.push({
       text: 'Delete', style: 'destructive',
@@ -748,8 +813,12 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: m.mine ? t.you : t.warn }}>{m.author}</Text>
               <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(m.at)}</Text>
               {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
+              <EditedNote m={m} />
             </View>
-            {m.kind === 'txn'
+            {editing === m.id
+              ? <EditBox m={m} leagueId={leagueId} members={members}
+                  onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />
+              : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'
               ? <ReportLine m={m} onOpen={() => setReportWeek(m.report?.week ?? null)} />
