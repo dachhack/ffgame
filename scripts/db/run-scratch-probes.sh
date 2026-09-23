@@ -93,6 +93,19 @@ echo "all migrations applied"
 $RUN -c "update nfl_slate set kickoff = kickoff + interval '10 years' where week between 1 and 18 and kickoff is not null;" >/dev/null
 echo "regular-season slate shifted +10y (fixtures are calendar-independent)"
 
+# ── EACH SUITE STARTS FROM THE SAME SLATE ────────────────────────────────────
+# Suites plant their own games — "BUF kicked off two hours ago" is how a lock
+# gets tested — and most leave them behind. Left behind, a game that kicked off
+# an hour ago is a game in progress for every suite that runs after it, and
+# the after-games waiver hold (0337) reads exactly that: waiver-rules w20 and
+# waiver-schedule ws10 failed or passed by which suites happened to run
+# first. So the slate is snapshotted here and put back before every suite. A
+# suite's plants still hold for the whole of that suite; they just end with it.
+$RUN -c "create table _probe_slate as select * from nfl_slate;" \
+     -c "create procedure _probe_reset_slate() language sql as \$\$ delete from nfl_slate; insert into nfl_slate select * from _probe_slate; \$\$;" >/dev/null
+probe_run() { $PSQL -d scratch -v ON_ERROR_STOP=1 -q -c "call _probe_reset_slate()" "$@"; }
+RUN=probe_run
+
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/auction-engine-probes.sql | grep -E "PROBE FAIL|ALL AUCTION-ENGINE PROBES" || { echo "AUCTION-ENGINE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/division-probes.sql | grep -E "PROBE FAIL|ALL DIVISION PROBES" || { echo "DIVISION PROBES FAILED"; exit 1; }

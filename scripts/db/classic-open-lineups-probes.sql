@@ -198,11 +198,14 @@ begin
   -- Sunday's player still moves: his game is ahead.
   perform assert_ok(drop_player(lid, 1, 'sunday-man'), 'ol21 a player yet to kick off can still be dropped');
   -- Thursday's cannot — he is mid-game.
-  begin
-    perform drop_player(lid, 1, 'thursday-man');
-    raise exception 'PROBE FAIL ol22 — a player mid-game was dropped';
-  exception when check_violation then null;
-  end;
+  -- 0317: drop_player ANSWERS this refusal ({ok:false}) instead of letting
+  -- the classic trigger throw it, so the probe reads the answer — and checks
+  -- the player really stayed. (It used to wait for an exception that no
+  -- longer comes, and failed on a correct refusal.)
+  perform assert_true((select (x ->> 'ok') = 'false' and x ->> 'error' like '%game has started%'
+                  from (select drop_player(lid, 1, 'thursday-man') as x) q),
+    'ol22 — a player mid-game was dropped');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and slug = 'thursday-man'), 'ol22b — and he is still on the roster');
   -- IR needs a real designation and a spot to put him in, so give him both:
   -- otherwise set_roster_spot refuses for its OWN reasons and proves nothing
   -- about kickoffs. (That is the trap this probe was written wrong once for.)
@@ -227,6 +230,11 @@ begin
   reset role; perform probe_as_server();
   update league_pool set waived_until = null where league_id = lid and slug = 'thursday-man';
   delete from native_roster where league_id = lid and slug = 'thursday-man';
+  -- …and open the wire (0337's default schedule is Sleeper's, with free
+  -- agency shut most of the week). Shut, the add was refused for THAT reason,
+  -- which this probe then mistook for the kickoff lock it is here to prove.
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || '{"waiver_days": ["fa","fa","fa","fa","fa","fa","fa"], "fa_mode": "open"}'::jsonb where id = lid;
   set local role authenticated; perform probe_as('b');
   begin
     perform add_free_agent(lid, 1, 'thursday-man');
@@ -266,14 +274,24 @@ begin
   perform assert_true((select count(*) from sealed_pick where matchup_id = drip_mid) = 1,
     'ol14 DRIP: a LOCKED pick is readable, exactly as before');
 
-  -- A DRIP roster is untouched by 0179 even for the same kicked-off player.
+  -- A DRIP roster is untouched by 0179's TRIGGER even for the same kicked-off
+  -- player — but 0317 closed a manager's drop after kickoff in every format,
+  -- as an answer from drop_player. (This probe predates 0317 and expected the
+  -- drop to go through; it never ran that far in the full harness to notice.)
   reset role; perform probe_as_server();
   update draft set status = 'complete' where league_id = drip_lid;
   insert into league_pool (league_id, slug, full_name, pos, team, rank)
     values (drip_lid, 'thursday-man', 'Thursday Man', 'RB', 'BUF', 1) on conflict do nothing;
   insert into native_roster (league_id, roster_id, slug, acquired) values (drip_lid, 1, 'thursday-man', 'draft');
   set local role authenticated; perform probe_as('b');
-  perform assert_ok(drop_player(drip_lid, 1, 'thursday-man'), 'ol15a DRIP: roster moves are not gated on kickoff');
+  perform assert_true((select (x ->> 'ok') = 'false' and x ->> 'error' like '%game has started%'
+                         from (select drop_player(drip_lid, 1, 'thursday-man') as x) q),
+    'ol15a DRIP: a manager''s drop after kickoff is refused here too (0317)');
+  reset role; perform probe_as_server();
+  delete from native_roster where league_id = drip_lid and slug = 'thursday-man';
+  perform assert_true(not exists (select 1 from native_roster where league_id = drip_lid and slug = 'thursday-man'),
+    'ol15b DRIP: the kickoff TRIGGER stays classic-only — the server still moves him');
+  set local role authenticated; perform probe_as('b');
 
   -- DRIP's window rule still bites: 'thu' kicked off two hours ago.
   perform probe_as('c');

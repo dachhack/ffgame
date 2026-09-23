@@ -150,11 +150,14 @@ begin
   -- THROUGH drop_player, the door a manager actually uses. A bare DELETE here
   -- would prove nothing: native_roster's RLS grants SELECT only, so as
   -- `authenticated` it removes zero rows and the trigger never fires.
-  begin
-    perform drop_player(lid, seat, 'md-1');
-    raise exception 'PROBE FAIL dm8 — a kicked-off player was dropped AFTER the draft; the 0179 lock did not re-arm';
-  exception when check_violation then null;
-  end;
+  -- 0317: drop_player ANSWERS this refusal ({ok:false}) instead of letting
+  -- the classic trigger throw it, so the probe reads the answer — and checks
+  -- the player really stayed. (It used to wait for an exception that no
+  -- longer comes, and failed on a correct refusal.)
+  perform dm_true((select (x ->> 'ok') = 'false' and x ->> 'error' like '%game has started%'
+                  from (select drop_player(lid, seat, 'md-1') as x) q),
+    'dm8 — a kicked-off player was dropped AFTER the draft; the 0179 lock did not re-arm');
+  perform dm_true(exists (select 1 from native_roster where league_id = lid and slug = 'md-1'), 'dm8b — and he is still on the roster');
   reset role;
   -- …and a player with no game this week is still movable, so the lock is a
   -- lock and not an outage.

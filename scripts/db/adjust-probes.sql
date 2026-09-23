@@ -42,61 +42,65 @@ begin
     select jsonb_agg(jsonb_build_object('slug', 'aj-' || g, 'full', 'Adjust Player ' || g, 'pos', 'WR', 'team', 'AJJ', 'exp', 0))
     from generate_series(1, 20) g));
   select sleeper_roster_id into b from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000001802';
-  perform aj_ok(native_generate_schedule(lid, 2), 'a0 schedule');
+  -- Weeks the real slate doesn't cover, planted by hand: a generated schedule
+  -- starts at the league's current week, which depends on what ran before.
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status)
+    select lid, w, min(sleeper_roster_id), max(sleeper_roster_id), 'scheduled'
+      from league_membership, generate_series(96, 97) w where league_id = lid group by w;
   insert into native_roster (league_id, roster_id, slug, acquired) values (lid, b, 'aj-12', 'draft');
 
   -- ── a1. the commissioner adjusts ──
-  r := commish_set_player_adjustment(lid, 1, 'aj-12', 6, 'TD credited to the wrong receiver');
+  r := commish_set_player_adjustment(lid, 96, 'aj-12', 6, 'TD credited to the wrong receiver');
   perform aj_ok(r, 'a1 adjust');
   perform aj_true((r ->> 'rescore')::boolean = false, 'a1 an unstamped week needs no re-score');
-  perform aj_true((select points from player_adjustment where league_id = lid and week = 1 and slug = 'aj-12') = 6, 'a1 stored');
+  perform aj_true((select points from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12') = 6, 'a1 stored');
   select body into line from league_message where league_id = lid order by created_at desc, id desc limit 1;
-  perform aj_true(line = '✏️ The commissioner adjusted Adjust Player 12''s week 1 score by +6.0 — TD credited to the wrong receiver',
+  perform aj_true(line = '✏️ The commissioner adjusted Adjust Player 12''s week 96 score by +6.0 — TD credited to the wrong receiver',
     'a1 the league is told: ' || coalesce(line, '∅'));
 
   -- ── a2. a second save replaces ──
-  perform aj_ok(commish_set_player_adjustment(lid, 1, 'aj-12', -2.25, 'fumble reassigned'), 'a2 replace');
+  perform aj_ok(commish_set_player_adjustment(lid, 96, 'aj-12', -2.25, 'fumble reassigned'), 'a2 replace');
   perform aj_true((select count(*) from player_adjustment where league_id = lid) = 1, 'a2 still one row');
   perform aj_true((select points from player_adjustment where league_id = lid and slug = 'aj-12') = -2.3, 'a2 replaced, one decimal');
 
   -- ── a3. a stamped week says it needs a re-score ──
-  update matchup set home_final = 100, away_final = 90, status = 'final' where league_id = lid and week = 2;
-  r := commish_set_player_adjustment(lid, 2, 'aj-3', 1.5, 'stat correction');
-  perform aj_ok(r, 'a3 adjust week 2');
+  update matchup set home_final = 100, away_final = 90, status = 'final' where league_id = lid and week = 97;
+  r := commish_set_player_adjustment(lid, 97, 'aj-3', 1.5, 'stat correction');
+  perform aj_ok(r, 'a3 adjust week 97');
   perform aj_true((r ->> 'rescore')::boolean, 'a3 a stamped week needs a re-score');
 
   -- ── a4. reads ──
   perform aj_as('02');
-  r := league_player_adjustments(lid, 1, 'Adjust');
+  r := league_player_adjustments(lid, 96, 'Adjust');
   perform aj_ok(r, 'a4 a member reads');
-  perform aj_true(jsonb_array_length(r -> 'adjustments') = 1 and r #>> '{adjustments,0,slug}' = 'aj-12', 'a4 week 1 only');
+  perform aj_true(jsonb_array_length(r -> 'adjustments') = 1 and r #>> '{adjustments,0,slug}' = 'aj-12', 'a4 week 96 only');
   perform aj_true(jsonb_array_length(r -> 'found') = 0, 'a4 a member''s search finds nothing');
   perform aj_true(jsonb_array_length(league_player_adjustments(lid) -> 'adjustments') = 2, 'a4 every week without p_week');
   perform aj_as('01');
-  r := league_player_adjustments(lid, 1, 'Adjust Player 1');
+  r := league_player_adjustments(lid, 96, 'Adjust Player 1');
   perform aj_true(r #>> '{found,0,slug}' = 'aj-12' and r #>> '{found,0,owner}' = 'AJ-B', 'a4 rostered first, with his team: ' || (r -> 'found')::text);
 
   -- ── a5. refusals ──
   perform aj_as('02');
-  perform aj_refused(commish_set_player_adjustment(lid, 1, 'aj-12', 3, 'x'), 'commissioner only', 'a5 a manager');
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'aj-12', 3, 'x'), 'commissioner only', 'a5 a manager');
   perform aj_as('01');
-  perform aj_refused(commish_set_player_adjustment(lid, 1, 'aj-12', 3, '  '), 'say why', 'a5 no reason');
-  perform aj_refused(commish_set_player_adjustment(lid, 1, 'aj-12', 51, 'x'), 'between -50', 'a5 too many');
-  perform aj_refused(commish_set_player_adjustment(lid, 1, 'aj-12', -50.5, 'x'), 'between -50', 'a5 too few');
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'aj-12', 3, '  '), 'say why', 'a5 no reason');
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'aj-12', 51, 'x'), 'between -50', 'a5 too many');
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'aj-12', -50.5, 'x'), 'between -50', 'a5 too few');
   perform aj_refused(commish_set_player_adjustment(lid, 99, 'aj-12', 3, 'x'), 'no week 99', 'a5 no such week');
-  perform aj_refused(commish_set_player_adjustment(lid, 1, 'nobody', 3, 'x'), 'pool', 'a5 not in the pool');
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'nobody', 3, 'x'), 'pool', 'a5 not in the pool');
   r := create_native_league('Dripping', '2026', 2, 8, 60, 'snake', 200, 15, 1);
   dlid := (r ->> 'league_id')::uuid;
   perform aj_refused(commish_set_player_adjustment(dlid, 1, 'aj-12', 3, 'x'), 'classic', 'a5 a drip league');
 
   -- ── a6. removal ──
   select count(*) into n from league_message where league_id = lid;
-  r := commish_set_player_adjustment(lid, 1, 'aj-12', 0, null);
+  r := commish_set_player_adjustment(lid, 96, 'aj-12', 0, null);
   perform aj_ok(r, 'a6 remove');
-  perform aj_true(not exists (select 1 from player_adjustment where league_id = lid and week = 1), 'a6 gone');
+  perform aj_true(not exists (select 1 from player_adjustment where league_id = lid and week = 96), 'a6 gone');
   select body into line from league_message where league_id = lid order by created_at desc, id desc limit 1;
-  perform aj_true(line = '✏️ The commissioner removed the week 1 adjustment on Adjust Player 12 (was -2.3)', 'a6 in words: ' || line);
-  r := commish_set_player_adjustment(lid, 1, 'aj-12', 0, null);
+  perform aj_true(line = '✏️ The commissioner removed the week 96 adjustment on Adjust Player 12 (was -2.3)', 'a6 in words: ' || line);
+  r := commish_set_player_adjustment(lid, 96, 'aj-12', 0, null);
   perform aj_true((r ->> 'removed')::boolean = false, 'a6 removing nothing');
   perform aj_true((select count(*) from league_message where league_id = lid) = n + 1, 'a6 and quietly');
 end $$;

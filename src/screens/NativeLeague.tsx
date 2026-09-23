@@ -54,7 +54,9 @@ import {
   pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
   setLeagueFormat, type LeagueFormat,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
+  leagueTxnLimits, type TxnLimits,
 } from '@drip/core/data/liveApi';
+import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
@@ -2699,6 +2701,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // set_roster_spot from a browsing admin moves the ADMIN's own player.
   const { viewAs } = useStore();
   const [team, setTeam] = useState<NativeTeamState | null>(null);
+  // TRANSACTION LIMITS (0358): what this team has left, said before the tap
+  // that would be refused rather than after it.
+  const [limits, setLimits] = useState<TxnLimits | null>(null);
   const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
@@ -2856,6 +2861,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       if (t.error) { setErr(friendlyError(t.error)); return; }
       skew.current = Date.parse(t.server_now) - Date.now();
       setTeam(t); setRosters(r); setPool(p); setErr(null);
+      if (t.my_roster_id != null) leagueTxnLimits(leagueId, t.my_roster_id).then(setLimits).catch(() => {});
     } catch (x) { setErr(friendlyError(x)); }
   };
   useEffect(() => {
@@ -3189,6 +3195,19 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         </div>
       )}
 
+      {/* 📏 TRANSACTION LIMITS (0358): what's left, when the league sets any. */}
+      {(() => {
+        const sum = txnLimitSummary(limits);
+        if (!sum.text) return null;
+        return (
+          <div className="mono" style={{ ...card, marginBottom: 12, fontSize: 10.5, lineHeight: 1.5, color: 'var(--dim)',
+            borderLeft: `3px solid ${sum.addsOut || sum.tradesOut ? 'var(--warn)' : 'var(--bd)'}` }}>
+            <b style={{ color: sum.addsOut ? 'var(--warn)' : 'var(--text)' }}>📏 {sum.addsOut ? 'No adds left' : 'Transaction limits'}</b> — {sum.text}.
+            {sum.addsOut ? ' Pickups and claims are refused until the count resets; drops always work.' : ''}
+          </div>
+        );
+      })()}
+
       {/* ONE AREA AT A TIME. Identity and the over-limit warning stay above the
           tabs, exactly as on the app: who you are and what's broken outrank any
           tab you happen to be standing in. */}
@@ -3513,11 +3532,13 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   // only a DROP sets one. So for the hours the window was
                   // closed the board was a wall of dead buttons. It is a
                   // CLAIM now: 0288 made the server take one.
-                  const blocked = !!team.roster_issue;
+                  const addsOut = txnLimitSummary(limits).addsOut;
+                  const blocked = !!team.roster_issue || addsOut;
                   const claim = left != null || team.fa_open === false;
                   return (
                     <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null || blocked} className="mono"
                       title={team.roster_issue ? `your roster isn’t legal — ${team.roster_issue}`
+                        : addsOut ? 'no adds left — see the transaction limits above'
                         : left != null ? 'on waivers — put in a claim'
                         : team.fa_open === false ? 'free agency is closed — put in a claim for the next run' : undefined}
                       style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null || blocked ? 0.4 : 1 }}>

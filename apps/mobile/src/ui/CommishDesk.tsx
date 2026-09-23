@@ -645,13 +645,16 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
         const block = blocker(w);
         const open = !!w.request && !w.request.done_at;
         const canRescore = classic && w.stamped > 0 && w.week_state.complete;
+        // FIX MID-WEEK (v0.499.0) — the web twin's rule: any classic week that
+        // has started gets the fixes; only a finished, stamped one the re-score.
+        const canFix = classic && (w.stamped > 0 || w.week_state.feed > 0 || w.week_state.live > 0);
         return (
           <View key={w.week} style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Mono size={10} weight="700">WEEK {w.week}</Mono>
               <View style={{ flex: 1 }} />
-              {canRescore && (
-                <Chip label="⟳ RE-SCORE · ✏️" on={rescoreWeek === w.week}
+              {canFix && (
+                <Chip label={canRescore ? '⟳ RE-SCORE · ✏️' : '✏️ FIX'} on={rescoreWeek === w.week}
                   onPress={() => { tap(); setRescoreWeek(rescoreWeek === w.week ? null : w.week); }} />
               )}
               <Chip label={busy === w.week ? '…' : open ? '⏳ QUEUED' : w.posted_at ? '↻ REPOST' : '📋 POST'}
@@ -685,7 +688,9 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
               </Mono>
             )}
             {w.request?.error ? <Mono size={8.5} tone="opp" style={{ marginTop: 2 }}>⚠ last try: {w.request.error}</Mono> : null}
-            {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
+            {rescoreWeek === w.week && (canRescore
+              ? <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />
+              : <WeekFixBox leagueId={leagueId} week={w.week} />)}
           </View>
         );
       })}
@@ -759,6 +764,21 @@ export function WaiverHoldsCard({ leagueId }: { leagueId: string }) {
       {found.filter((p) => !(held ?? []).some((h) => h.slug === p.slug)).map(line)}
       <Note msg={msg} />
     </Card>
+  );
+}
+
+// A week still being scored: the fixes without the re-score (the web's
+// WeekFixBox). The next scoring pass counts them; the final stamp keeps them.
+function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const t = useTheme();
+  return (
+    <View style={{ marginTop: 8, padding: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, gap: 6 }}>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
+        {`Week ${week} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it. Re-scoring opens once every game is final.`}
+      </Mono>
+      <AdjustBox leagueId={leagueId} week={week} />
+      <LineupFixBox leagueId={leagueId} week={week} />
+    </View>
   );
 }
 

@@ -114,11 +114,14 @@ begin
     'dp3 the open pick on him is gone');
   -- A MANAGER CANNOT DROP A PLAYER WHOSE GAME HAS STARTED — that is 0179's
   -- classic kickoff lock, and it is the correct answer here.
-  begin
-    perform drop_player(lid, seat_b, 'dp-thu');
-    raise exception 'PROBE FAIL dp4a — a manager dropped a player who had already kicked off';
-  exception when check_violation then null;
-  end;
+  -- 0317: drop_player ANSWERS this refusal ({ok:false}) instead of letting
+  -- the classic trigger throw it, so the probe reads the answer — and checks
+  -- the player really stayed. (It used to wait for an exception that no
+  -- longer comes, and failed on a correct refusal.)
+  perform dp_true((select (x ->> 'ok') = 'false' and x ->> 'error' like '%game has started%'
+                  from (select drop_player(lid, seat_b, 'dp-thu') as x) q),
+    'dp4a — a manager dropped a player who had already kicked off');
+  perform dp_true(exists (select 1 from native_roster where league_id = lid and slug = 'dp-thu'), 'dp4ab — and he is still on the roster');
   -- The paths that DO move such a player are the server's (waivers, the
   -- guillotine, commish tools), which the trigger exempts. This is the actor
   -- that matters for the 0278 question below.
