@@ -22,6 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { mapEspnAbbr, mapSleeperStatus, mergeInjury, INJURY_SEVERITY } from '../packages/core/src/data/injuryMerge';
 import { normalizeInjuries } from './espn/injuries.mjs';
+import { sleeperRows } from '../server/src/poll/injuries.js';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -110,6 +111,40 @@ const ok = (name, cond, got) => {
   ok('…dated, or they could never clear anything', !!kept['josh-downs']?.date);
 }
 
+// ── THE SHAPE playerIndex ACTUALLY ANSWERS WITH ────────────────────────────
+// v0.489.0 read `playerIndex.sleeper(sid)` as a slug. It is a META OBJECT —
+// { slug, full, pos, team, espnId } — so every Sleeper designation was keyed by
+// an object no ESPN slug could equal and no text column could take. The merge
+// saw nothing from Sleeper and Alec Pierce stayed Doubtful right through the
+// release built to correct him. Every other caller in the worker writes
+// `?.slug`; this builds a fake index of the REAL shape so the contract is
+// asserted instead of remembered.
+{
+  const directory = {
+    '8142': { full_name: 'Alec Pierce', position: 'WR', team: 'IND', injury_status: 'Out',
+              injury_body_part: 'Heel', news_updated: 1790100059925 },
+    '4034': { full_name: 'Healthy Man', position: 'WR', team: 'IND', injury_status: null },
+    '9999': { full_name: 'Unknown Man', position: 'WR', team: 'IND', injury_status: 'Out' },
+    '7777': { full_name: 'Suspended Man', position: 'RB', team: 'IND', injury_status: 'Sus' },
+  };
+  // The real index's answer, field for field.
+  const index = (sid) => (sid === '8142'
+    ? { slug: 'alec-pierce', full: 'Alec Pierce', pos: 'WR', team: 'IND', espnId: '4035687' }
+    : sid === '7777' ? { slug: 'suspended-man', full: 'Suspended Man', pos: 'RB', team: 'IND', espnId: null }
+    : null);
+  const rows = sleeperRows(directory, index);
+  const keys = [...rows.keys()];
+  ok('every key is a STRING slug — the bug that shipped, caught',
+    keys.every((k) => typeof k === 'string' && k.length > 0), keys);
+  ok('…and the string is the slug, not the object stringified', keys.includes('alec-pierce'), keys);
+  ok('Pierce carries his status, clock and body part',
+    rows.get('alec-pierce')?.status === 'O' && rows.get('alec-pierce')?.at === 1790100059925
+    && rows.get('alec-pierce')?.body === 'Heel', rows.get('alec-pierce'));
+  ok('a healthy player is not a row', !rows.has('healthy-man'));
+  ok('a player the index cannot place is skipped, not keyed by undefined', rows.size === 1, keys);
+  ok('a suspension is still not an injury, even with a slug', !rows.has('suspended-man'));
+}
+
 // ── A DESIGNATION HAS TO BE ABLE TO END ────────────────────────────────────
 {
   const poller = readFileSync(new URL('../server/src/poll/injuries.js', import.meta.url), 'utf8');
@@ -119,6 +154,16 @@ const ok = (name, cond, got) => {
   ok('…and only with a Sleeper snapshot in hand', /sleeper != null && espnEntries/.test(poller));
   ok('a poll that cannot prune says so rather than looking clean',
     /prunedSkipped: !canPrune/.test(poller));
+  // THE DEEPER HALF OF THE SAME BUG. v0.489.0 pruned whether or not the upsert
+  // landed, so a poll that wrote nothing could still delete: subtraction with
+  // no addition, the one shape of this job that loses data.
+  ok('the prune needs the write CONFIRMED, not merely attempted', /canPrune = wrote &&/.test(poller));
+  ok('…and refuses outright if any record was malformed', /malformed === 0/.test(poller));
+  ok('a malformed record never reaches the database',
+    /typeof r\.player_slug === 'string'/.test(poller));
+  ok('the upsert error is read rather than dropped', /upsert failed/.test(poller));
+  ok('the slug comes off the index entry, not the entry itself',
+    /slugForSleeperId\(sid\)\?\.slug/.test(poller));
   // PostgREST puts an .in() list in the URL; a thousand slugs is a 414.
   ok('the delete is chunked', /i \+= 200/.test(poller));
   ok('Sleeper is fetched on its own slow clock, not the injury poll\'s',

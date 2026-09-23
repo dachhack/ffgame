@@ -652,7 +652,9 @@ async function tick() {
       // designations and one that could not prune at all read identically as
       // a bare count, and the second is the one worth noticing.
       log(`injuries: ${r.count} standing (espn ${r.espn}, sleeper ${r.sleeper ?? 'none'})`,
-        r.prunedSkipped ? '— prune SKIPPED, feed incomplete' : `— ${r.pruned} cleared`, '@', r.feedTimestamp);
+        r.malformed ? `— ${r.malformed} MALFORMED, prune skipped`
+          : r.prunedSkipped ? '— prune SKIPPED, write or feed incomplete' : `— ${r.pruned} cleared`,
+        '@', r.feedTimestamp);
     }
     catch (e) { log('injury poll error', e.message); }
   }
