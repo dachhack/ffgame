@@ -2647,14 +2647,38 @@ export interface RegisterRow {
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
   from_roster: number | null; from_team: string | null;
+  /** 0354: this line was taken back by the commissioner; the lines the undo
+   *  itself wrote carry `undo_of`; and — for the commissioner only — whether
+   *  ↩ UNDO would accept this line right now. */
+  undone?: boolean; undo_of?: number | null; can_undo?: boolean | null;
   /** Waiver wins in a FAAB league. */
   bid: number | null;
   /** Event detail (0221): "guillotine week 3", "franchise tagged — $18 for 1yr". */
   note?: string | null;
 }
 export const leagueRegister = (leagueId: string, limit = 100) =>
-  rpc<{ ok: boolean; error?: string; rows?: RegisterRow[] }>('league_register',
+  rpc<{ ok: boolean; error?: string; rows?: RegisterRow[]; is_commish?: boolean }>('league_register',
     { p_league_id: leagueId, p_limit: limit });
+
+/** ↩ UNDO (0354) — the commissioner takes back an add, a drop or a waiver
+ *  claim from its register line: the pickup goes back on waivers, the drop
+ *  comes home, a FAAB bid is refunded and the waiver order restored where
+ *  nothing has moved it since. Refused, with the reason, when the move is no
+ *  longer true (the pickup moved on, the drop was picked up, a game kicked off). */
+export const commishUndoTxn = (txnId: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_undo_txn', { p_txn_id: txnId }),
+    Ev.commishAction, { tool: 'undo_txn' });
+
+/** A PLAYER'S WAIVER HOLD, BY HAND (0354). */
+export interface HeldPlayer { slug: string; name: string; pos: string; team: string; until: string | null; claims?: number }
+export const leagueWaiverHolds = (leagueId: string, search?: string) =>
+  rpc<{ ok: boolean; error?: string; next_run?: string | null; held?: HeldPlayer[]; found?: HeldPlayer[] }>(
+    'league_waiver_holds', { p_league_id: leagueId, p_search: search ?? null });
+/** 'free' = a free agent now; 'next_run' = on waivers until the run a drop
+ *  would wait for; 'until' = held until `until` (within two weeks). */
+export const commishSetWaiverHold = (leagueId: string, slug: string, mode: 'free' | 'next_run' | 'until', until?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; until?: string | null; note?: string }>('commish_set_waiver_hold',
+    { p_league_id: leagueId, p_slug: slug, p_mode: mode, p_until: until ?? null }), Ev.commishAction, { tool: 'waiver_hold' });
 
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */

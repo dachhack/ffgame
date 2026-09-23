@@ -5,7 +5,7 @@
 // floor and 0339's weekly report. Each card loads its own state and saves on
 // the tap.
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View, Alert } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View, Alert } from 'react-native';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, commishSetWireLock, commishLockTeam, adminLeagueMembers, type AdminMember,
@@ -17,6 +17,7 @@ import {
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
+  leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
 } from '@drip/core/data/liveApi';
@@ -683,6 +684,74 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
           </View>
         );
       })}
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── WAIVER HOLDS (0354) — the web's WaiverHoldsPanel ────────────────────────
+// The app has no date picker (a native module for one field is a new native
+// dependency — see Draft.tsx), so "hold until" is a choice of how long from
+// now; the web takes any moment inside the same two weeks.
+const HOLD_DAYS = [1, 2, 3, 7] as const;
+const etShort = (iso: string | null | undefined) => (iso
+  ? new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'
+  : '—');
+export function WaiverHoldsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [held, setHeld] = useState<HeldPlayer[] | null>(null);
+  const [found, setFound] = useState<HeldPlayer[]>([]);
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search = q) => leagueWaiverHolds(leagueId, search.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(friendlyError(r.error ?? 'could not load')); return; }
+    setHeld(r.held ?? []); setFound(r.found ?? []); setNextRun(r.next_run ?? null);
+  }).catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const set = async (p: HeldPlayer, mode: 'free' | 'next_run' | 'until', days?: number) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const at = mode === 'until' && days ? new Date(Date.now() + days * 86_400_000).toISOString() : undefined;
+      const r = await commishSetWaiverHold(leagueId, p.slug, mode, at);
+      if (r.ok) { commit(); setMsg(`✓ ${r.note ?? 'saved'}`); setOpen(null); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const line = (p: HeldPlayer) => (
+    <View key={p.slug} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingVertical: 7, gap: 5 }}>
+      <Pressable onPress={() => { tap(); setOpen(open === p.slug ? null : p.slug); }}>
+        <Text style={{ fontSize: fs(12.5), color: t.text }}>{p.name} <Text style={{ color: t.faint }}>{`${p.pos} · ${p.team}`}</Text></Text>
+        <Mono size={8.5} tone={p.until ? 'warn' : 'faint'}>
+          {`${p.until ? `on waivers until ${etShort(p.until)}` : 'free agent'}${p.claims ? ` · ${p.claims} claim${p.claims === 1 ? '' : 's'}` : ''}`}
+        </Mono>
+      </Pressable>
+      {open === p.slug && (
+        <Row>
+          {!!p.until && <Chip label="FREE NOW" on={false} disabled={busy} onPress={() => { tap(); void set(p, 'free'); }} />}
+          <Chip label="TO NEXT RUN" on={false} disabled={busy} onPress={() => { tap(); void set(p, 'next_run'); }} />
+          {HOLD_DAYS.map((d) => (
+            <Chip key={d} label={`+${d}D`} on={false} disabled={busy} onPress={() => { tap(); void set(p, 'until', d); }} />
+          ))}
+        </Row>
+      )}
+    </View>
+  );
+  return (
+    <Card>
+      <LabelInfo label="WAIVER HOLDS" info={`Free a player now, send him to waivers until the next run (${etShort(nextRun)}), or hold him for a day or more. Claims already on him wait for his new hold. Each change is posted in league chat. Tap a player for his options.`} />
+      {held == null && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Loading…</Mono>}
+      {held?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Nobody is on waivers right now.</Mono>}
+      {held?.map(line)}
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+        <TextInput value={q} onChangeText={setQ} onSubmitEditing={() => void load()} placeholder="find a free agent" placeholderTextColor={t.faint}
+          style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text }} />
+        <Chip label="SEARCH" on={false} onPress={() => { tap(); void load(); }} />
+      </View>
+      {found.filter((p) => !(held ?? []).some((h) => h.slug === p.slug)).map(line)}
       <Note msg={msg} />
     </Card>
   );

@@ -215,3 +215,4 @@ $RUN -f scripts/db/shelf-probes.sql | grep -E "PROBE FAIL|ALL SHELF PROBES" || {
 $RUN -f scripts/db/write-api-probes.sql | grep -E "PROBE FAIL|ALL WRITE-API PROBES" || { echo "WRITE-API PROBES FAILED"; exit 1; }
 SCRATCH_PG_DIR=$DIR SCRATCH_PG_PORT=$PORT npx tsx scripts/db/write-api-e2e.mjs | grep -E "^FAIL|ALL WRITE-API E2E PASS" || { echo "WRITE-API E2E FAILED"; exit 1; }
 $RUN -f scripts/db/rescore-probes.sql | grep -E "PROBE FAIL|ALL RESCORE PROBES" || { echo "RESCORE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/undo-hold-probes.sql | grep -E "PROBE FAIL|ALL UNDO-HOLD PROBES" || { echo "UNDO-HOLD PROBES FAILED"; exit 1; }

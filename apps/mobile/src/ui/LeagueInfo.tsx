@@ -10,6 +10,7 @@ import {
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   requestLeagueSync, leagueSyncState, type SyncState,
   apiKeys, apiKeyCreate, apiKeyRevoke, apiWriteLog, publicApiUrl, type ApiKeyRow, type ApiWriteLogRow,
+  commishUndoTxn,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
@@ -409,11 +410,27 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [rows, setRows] = useState<RegisterRow[] | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => {
-    leagueRegister(leagueId, 200)
-      .then((r) => { if (r.ok && r.rows) setRows(r.rows); else setErr(true); })
-      .catch(() => setErr(true));
-  }, [leagueId]);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueRegister(leagueId, 200)
+    .then((r) => { if (r.ok && r.rows) setRows(r.rows); else setErr(true); })
+    .catch(() => setErr(true));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  /** ↩ UNDO (0354) — the web RegisterPanel's twin. `can_undo` is set only
+   *  for the commissioner, and only where the server would accept it. */
+  const undo = (r: RegisterRow) => {
+    const who = r.team ?? `Roster ${r.roster_id}`;
+    const what = r.kind === 'drop' ? `drop of ${prettySlug(r.slug)}` : `${r.kind === 'waiver' ? 'waiver claim for' : 'pickup of'} ${prettySlug(r.slug)}`;
+    Alert.alert(`Undo ${who}'s ${what}?`,
+      `A pickup goes back on waivers, a dropped player comes back to ${who}, and a FAAB bid is refunded. The league is told in chat.`,
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Undo', style: 'destructive', onPress: () => {
+        setBusy(r.id); setMsg(null);
+        commishUndoTxn(r.id)
+          .then((res) => { if (res.ok) { commit(); setMsg('✓ undone'); } else { warn(); setMsg(friendlyError(res.error ?? 'could not undo')); } })
+          .catch((x) => { warn(); setMsg(friendlyError(x)); })
+          .finally(() => { setBusy(null); void load(); });
+      } }]);
+  };
   if (err) return <Mono size={10} tone="opp" style={{ padding: 14 }}>Couldn't load the register.</Mono>;
   if (!rows) return <Loading />;
   if (!rows.length) {
@@ -426,11 +443,12 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
   }
   return (
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+      {msg && <Mono size={10} tone={msg.startsWith('✓') ? 'you' : 'opp'} style={{ marginBottom: 6 }}>{msg}</Mono>}
       {rows.map((r) => {
         const k = KIND[r.kind] ?? KIND.add;
         const team = r.team ?? `Roster ${r.roster_id}`;
         return (
-          <View key={r.id} style={{ flexDirection: 'row', gap: 9, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+          <View key={r.id} style={{ flexDirection: 'row', gap: 9, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.bd, opacity: r.undone ? 0.5 : 1 }}>
             <Text style={{ fontSize: fs(12), width: 18, textAlign: 'center', color: r.kind === 'drop' ? t.opp : t.you }}>{k.icon}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ fontSize: fs(11.5), lineHeight: fs(16), color: t.text }}>
@@ -441,8 +459,14 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
                 {r.kind === 'waiver' && r.bid != null && r.bid > 0 ? <Text style={{ color: t.dim }}>{` for ${r.bid}`}</Text> : null}
                 {r.note ? <Text style={{ color: t.dim }}>{` · ${r.note}`}</Text> : null}
               </Text>
-              <Mono size={8.5} tone="faint" style={{ marginTop: 1 }}>{when(r.at)}</Mono>
+              <Mono size={8.5} tone="faint" style={{ marginTop: 1 }}>{`${when(r.at)}${r.undone ? ' · ↩ undone by the commissioner' : ''}`}</Mono>
             </View>
+            {r.can_undo && (
+              <Pressable disabled={busy != null} onPress={() => { tap(); undo(r); }} hitSlop={6}
+                style={{ alignSelf: 'center', borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4, opacity: busy != null ? 0.5 : 1 }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.warn }}>{busy === r.id ? '…' : '↩ UNDO'}</Text>
+              </Pressable>
+            )}
           </View>
         );
       })}

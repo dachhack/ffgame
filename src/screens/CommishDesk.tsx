@@ -28,6 +28,7 @@ import {
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
+  leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
 
@@ -663,6 +664,77 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
           </div>
         );
       })}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── WAIVER HOLDS (0354) ──────────────────────────────────────────────────────
+// A player's hold, by hand: free him now, send him back to waivers until the
+// next run, or hold him until a chosen moment. Every player on waivers right
+// now is listed soonest first, with the claims waiting on him; a search finds
+// the free agents a commissioner might want to put on waivers. Each change is
+// announced in chat — a player becoming claimable is the league's business.
+const etShort = (iso: string | null | undefined) => (iso
+  ? new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'
+  : '—');
+export function WaiverHoldsPanel({ leagueId }: { leagueId: string }) {
+  const [held, setHeld] = useState<HeldPlayer[] | null>(null);
+  const [found, setFound] = useState<HeldPlayer[]>([]);
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search = q) => leagueWaiverHolds(leagueId, search.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setHeld(r.held ?? []); setFound(r.found ?? []); setNextRun(r.next_run ?? null);
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(''); /* eslint-disable-next-line */ }, [leagueId]);
+  const set = async (p: HeldPlayer, mode: 'free' | 'next_run' | 'until') => {
+    if (busy) return;
+    let at: string | undefined;
+    if (mode === 'until') {
+      if (!until) { setMsg('pick a date and time first'); return; }
+      at = new Date(until).toISOString();
+    }
+    setBusy(p.slug); setMsg(null);
+    try { const r = await commishSetWaiverHold(leagueId, p.slug, mode, at); setMsg(r.ok ? `✓ ${r.note ?? 'saved'}` : r.error ?? 'failed'); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(null); void load(); }
+  };
+  const line = (p: HeldPlayer) => (
+    <div key={p.slug} style={{ ...row, flexWrap: 'wrap' }}>
+      <span style={{ ...cell, flex: '1 1 160px' }}>{p.name} <span style={{ color: 'var(--faint)' }}>{p.pos} · {p.team}</span></span>
+      <span className="mono" style={{ ...mono, fontSize: 11, color: p.until ? 'var(--warn)' : 'var(--faint)' }}>
+        {p.until ? `on waivers until ${etShort(p.until)}` : 'free agent'}{p.claims ? ` · ${p.claims} claim${p.claims === 1 ? '' : 's'}` : ''}
+      </span>
+      {p.until && <button onClick={() => void set(p, 'free')} disabled={!!busy} className="mono" style={btn(false)}>free now</button>}
+      <button onClick={() => void set(p, 'next_run')} disabled={!!busy} className="mono" style={btn(false)} title={`until ${etShort(nextRun)}`}>to next run</button>
+      <button onClick={() => void set(p, 'until')} disabled={!!busy || !until} className="mono" style={btn(false)}>hold until ↓</button>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>WAIVER HOLDS</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Free a player now, send him to waivers until the next run ({etShort(nextRun)}), or hold him until the time below.
+        Claims already on him wait for his new hold. Each change is posted in league chat.
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+        <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)' }}>HOLD UNTIL</span>
+        <input type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} style={{ ...inp, padding: '4px 6px', fontSize: 12 }} />
+        <span style={{ ...small, marginBottom: 0 }}>your local time, within two weeks</span>
+      </div>
+      {held == null && <div style={small}>loading…</div>}
+      {held?.length === 0 && <div style={small}>Nobody is on waivers right now.</div>}
+      {held?.map(line)}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void load(); }}
+          placeholder="find a free agent to put on waivers" style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+        <button onClick={() => void load()} className="mono" style={btn(false)}>search</button>
+      </div>
+      {found.filter((p) => !(held ?? []).some((h) => h.slug === p.slug)).map(line)}
       {note(msg)}
     </div>
   );

@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.492.0 — the commissioner can take it back
+
+Founder, on the list of finer commissioner controls: "Merge and apk, then build
+1 and 2. Then the rest of the list. These are all good."
+
+1. ↩ UNDO AN ADD, A DROP OR A WAIVER CLAIM, from its line in the league
+   register, web and app, for the commissioner only. Trades could be reversed
+   since 0328, but a pickup could not.
+   - The player who came in goes back ON WAIVERS on the league's normal hold,
+     not straight to free agency, where the fastest phone would have him
+     before the league knew. The player who went out comes back to the same
+     seat. A FAAB bid is refunded.
+   - The waiver order is put back only if nothing has moved it since. 0354
+     logs every waiver-priority change, and the seat's old place is restored
+     only while exactly one change sits at the run's instant and the seat
+     still holds the place the run gave it. Otherwise the order is left alone,
+     and the chat line says so.
+   - A drop that rode an add undoes the whole move from either line.
+   - The original register lines are marked undone. The undo's own lines are
+     labelled and can't be undone themselves. One house line tells the league.
+   - REFUSED, WITH THE REASON: the pickup has moved on, the drop has been picked
+     up, the pickup's game has kicked off (0317's rule), a lone drop has no seat
+     to come back to, or the line is a trade. The register offers ↩ UNDO only
+     where the undo would accept it, because both use the same plan function.
+   - The undo takes the rows it will mark BEFORE it changes anything, rather
+     than recognising them by timestamp. The probes found that out: inside one
+     transaction every row shares one `at`.
+2. WAIVER HOLDS, BY HAND, in the commissioner console next to the waiver order.
+   A held player can be freed now, sent back to waivers until the next run, or
+   held until a chosen time within two weeks. A search finds free agents to put
+   on waivers. Pending claims on him are re-dated with the hold: a claim never
+   clears before the hold does. Each change is posted in chat. The app has no
+   date picker, so it offers +1/+2/+3/+7 days; the web takes any time.
+
+Migration 0354. Probes: scripts/db/undo-hold-probes.sql, which runs each step
+in its own transaction the way production does.
+
 ### v0.491.0 — the commissioner re-scores a week
 
 Founder, on commissioner tools: "Change scoring for previous weeks? Change
