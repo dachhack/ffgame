@@ -16,7 +16,7 @@ import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
-  nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim,
+  nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, seatFullError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
   myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
@@ -365,6 +365,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     injuryTags().then(setInjTags).catch(() => {});
   }, [leagueId]);
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
+  // A bid already typed when the server said "roster full" — carried into the
+  // bid sheet again once a drop is chosen (v0.489.3).
+  const [pendingBid, setPendingBid] = useState<number | null>(null);
   const [bidDraft, setBidDraft] = useState('');
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [myArtOpen, setMyArtOpen] = useState(false);       // own team art
@@ -477,8 +480,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // reached": a signing always lands active, and an empty taxi or IR place is
   // not a bench spot. Falls back to the total when the server didn't say.
   const seats = team?.active_seats ?? null;
-  const activeHeld = mine.filter((p) => p.spot === 'active').length;
-  const full = seats != null ? activeHeld >= seats : (cap != null && mine.length >= cap);
+  // v0.489.3 — COUNTED FROM THE ROSTER ROWS, NOT FROM \`mine\`. \`mine\` is the
+  // roster joined to the pool, and a player the pool fetch did not return (it
+  // was capped at 1,000 of a 1,200-man pool) fell out of the count: the founder
+  // was one short of full on paper, full on the server, and a FAAB claim went
+  // to the bid without asking for a drop. The server's own count is the floor.
+  const myRows = rosters.filter((r) => r.roster_id === myRoster);
+  const activeHeld = Math.max(myRows.filter((r) => (r.spot ?? 'active') === 'active').length, team?.active_held ?? 0);
+  const full = seats != null ? activeHeld >= seats : (cap != null && myRows.length >= cap);
 
   /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
    *  button on every line (v0.285.0). Tapping an empty taxi place opens the
@@ -574,12 +583,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     return ms > 0 ? ms : null;
   };
 
-  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, onRefused?: (error: string) => boolean) => {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
       const r = await fn();
-      if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'That didn’t work.')); } else { commit(); notifyRosterChanged(leagueId); }
+      if (!r.ok) { warn(); if (!(r.error && onRefused?.(r.error))) setErr(friendlyError(r.error ?? 'That didn’t work.')); }
+      else { commit(); notifyRosterChanged(leagueId); }
       await refresh();
     } catch (x) { warn(); setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -593,19 +603,30 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     // right now, the same question 0288 taught the server to ask.
     const onWaivers = waivedFor(p) != null || team?.fa_open === false;
     // FAAB league: a claim carries a blind bid — ask for it first.
-    if (onWaivers && team?.waiver_mode === 'faab') { setClaimFor({ p, drop: dropSlug }); setBidDraft(''); return; }
+    if (onWaivers && team?.waiver_mode === 'faab') {
+      setClaimFor({ p, drop: dropSlug }); setBidDraft(pendingBid != null ? String(pendingBid) : ''); setPendingBid(null); return;
+    }
     void run(() => onWaivers
       ? submitWaiverClaim(leagueId, myRoster, p.slug, dropSlug)
-      : addFreeAgent(leagueId, myRoster, p.slug, dropSlug));
+      : addFreeAgent(leagueId, myRoster, p.slug, dropSlug),
+      dropSlug ? undefined : askForDrop(p, null));
+  };
+  /** THE SERVER HAS THE LAST WORD ON FULL (v0.489.3) — the web twin. A move
+   *  refused for a full active roster opens the drop sheet it should have
+   *  opened, instead of an error telling you to go and do it. */
+  const askForDrop = (p: LeaguePoolPlayer, bid: number | null) => (error: string) => {
+    if (!seatFullError(error)) return false;
+    setPendingBid(bid); setPendingAdd(p);
+    return true;
   };
   const submitClaimBid = () => {
     if (myRoster == null || !claimFor) return;
     const bid = Math.max(0, parseInt(bidDraft || '0', 10) || 0);
     const { p, drop } = claimFor;
     setClaimFor(null); setBidDraft('');
-    void run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid));
+    void run(() => submitWaiverClaim(leagueId, myRoster, p.slug, drop, bid), drop ? undefined : askForDrop(p, bid));
   };
-  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) setPendingAdd(p); else doAdd(p); };
+  const addOrClaim = (p: LeaguePoolPlayer) => { if (full) { setPendingBid(null); setPendingAdd(p); } else doAdd(p); };
 
 
   if (!team) {
@@ -1167,9 +1188,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
 
       {/* roster full → choose a drop for the pending add */}
       <Overlay visible={!!pendingAdd} title={pendingAdd ? `Drop who for ${pendingAdd.full_name}?` : ''}
-        subtitle="Your roster is full — the add and the drop happen together." onClose={() => setPendingAdd(null)}>
+        subtitle="Your roster is full — the add and the drop happen together." onClose={() => { setPendingAdd(null); setPendingBid(null); }}>
         <ScrollView style={{ maxHeight: 380 }}>
-          {mine.map((p) => (
+          {/* ACTIVE players only: a signing lands active, so dropping a taxi
+              or IR player frees no seat and the server would refuse it. */}
+          {mine.filter((p) => p.spot === 'active').map((p) => (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
               <Face slug={p.slug} pos={p.pos} />
               <PosPill pos={p.pos} size={8} />

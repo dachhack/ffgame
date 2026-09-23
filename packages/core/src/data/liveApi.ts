@@ -3670,33 +3670,59 @@ export const makeDraftPick = (leagueId: string, slug: string) =>
 export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number; lots_awarded?: number }>('draft_tick', { p_league_id: leagueId });
 
 export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; sleeper_id?: string | null; }
+/** EVERY ROW, NOT THE FIRST THOUSAND (v0.489.3).
+ *
+ *  PostgREST answers any select with at most its max-rows (1000 here) — a
+ *  `.range(0, 1999)` asks for two thousand and quietly gets one. A league pool
+ *  is 1,200 players by default (POOL_CAP) and up to 2,000 with extras, so
+ *  every player ranked past 1,000 was missing from the team screen: off the
+ *  wire, and — the way the founder found it — off HIS OWN ROSTER COUNT. A
+ *  waiver pickup ranked 1,040 vanished from `mine`, the roster read one short
+ *  of full, and a FAAB claim went straight to the bid with no drop asked for.
+ *  Paged like `weekLivePlays`, on a total order so no row falls between pages. */
+async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> {
-  const { data, error } = await (await client()).from('league_pool')
+  const c = await client();
+  return allRows<LeaguePoolPlayer>((from, to) => c.from('league_pool')
     // sleeper_id (0205) rides along so `setSlugMetaOverrides` can install the
     // identity the IDP bake is keyed by — see slugMeta.slugSleeperId.
     .select('slug, full_name, pos, team, rank, waived_until, espn_id, sleeper_id')
-    .eq('league_id', leagueId).order('rank').range(0, 1999);
-  if (error) throw error;
-  return (data ?? []) as LeaguePoolPlayer[];
+    // slug breaks rank ties: paging needs a TOTAL order, or a row can sit on
+    // the boundary and be served twice or never.
+    .eq('league_id', leagueId).order('rank').order('slug').range(from, to));
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at
  *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't
  *  know); tenure-filtered spots refuse unknowns, so a re-seed fills them in. */
 export async function leaguePoolExp(leagueId: string): Promise<Record<string, number>> {
-  const { data, error } = await (await client()).from('league_pool')
-    .select('slug, exp').eq('league_id', leagueId).not('exp', 'is', null).range(0, 1999);
-  if (error) throw error;
+  const c = await client();
+  const rows = await allRows<{ slug: string; exp: number }>((from, to) => c.from('league_pool')
+    .select('slug, exp').eq('league_id', leagueId).not('exp', 'is', null).order('slug').range(from, to));
   const out: Record<string, number> = {};
-  for (const r of (data ?? []) as { slug: string; exp: number }[]) out[r.slug] = r.exp;
+  for (const r of rows) out[r.slug] = r.exp;
   return out;
 }
 
 export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; spot?: 'active' | 'taxi' | 'ir' | 'out'; }
 export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
-  const { data, error } = await (await client()).from('native_roster')
-    .select('roster_id, slug, acquired, spot').eq('league_id', leagueId).range(0, 1999);
-  if (error) throw error;
-  return (data ?? []) as NativeRosterRow[];
+  // Paged for the same reason as the pool: a 32-team league with deep benches
+  // is past a thousand rostered players, and a missing row is a missing man.
+  const c = await client();
+  return allRows<NativeRosterRow>((from, to) => c.from('native_roster')
+    .select('roster_id, slug, acquired, spot').eq('league_id', leagueId)
+    .order('roster_id').order('slug').range(from, to));
 }
 
 export const dropPlayer = (leagueId: string, rosterId: number, slug: string) =>
@@ -3704,6 +3730,12 @@ export const dropPlayer = (leagueId: string, rosterId: number, slug: string) =>
 export const addFreeAgent = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string) =>
   tracked(rpc<{ ok: boolean; error?: string }>('add_free_agent', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null }),
     Ev.waiverClaimed, { type: 'fa', drop: !!dropSlug });
+/** Is this refusal the server saying the ACTIVE roster is full (0199's
+ *  `roster_seat_error`, reached through add_free_agent / submit_waiver_claim)?
+ *  Both team screens answer it by asking for a drop rather than printing it —
+ *  the server is the authority on full, and the screen's own count can lag. */
+export const seatFullError = (error: string | null | undefined): boolean =>
+  !!error && /\broster (is )?full\b/i.test(error);
 export const submitWaiverClaim = (leagueId: string, rosterId: number, addSlug: string, dropSlug?: string, bid = 0) =>
   tracked(rpc<{ ok: boolean; error?: string; claim_id?: string; clears_at?: string; bid?: number }>('submit_waiver_claim', { p_league_id: leagueId, p_roster_id: rosterId, p_add_slug: addSlug, p_drop_slug: dropSlug ?? null, p_bid: bid }),
     Ev.waiverClaimed, { type: 'waiver', drop: !!dropSlug, bid });
