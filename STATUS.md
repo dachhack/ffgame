@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.490.1 — the chip opens the picker
+
+Founder, asked what tapping the IR chip does: "Let's have the chip open the
+picker and always open the picker. Make sure this is the same on the web and
+app and for both types of IR spots."
+
+Two chips that looked alike did opposite things. A FILLED IR/OUT/taxi chip
+("IR ↩") moved its player straight back to active on one tap, with no
+confirmation, and failed with a red error when the active roster was full. An
+EMPTY chip did nothing; only the "＋ move someone" text beside it opened the
+picker.
+
+Now every stash chip opens that place's picker, filled or empty, on IR, OUT and
+the taxi squad, web and app. The shared row component draws all three shelves,
+so IR alone would have been the odd one out:
+- From a filled place, the sheet leads with the player in it and a ↩ BACK TO
+  ACTIVE button, then offers the active roster to move in.
+- From an empty place, it is the picker it always was.
+- A shelf already at its limit greys every move-in with the reason ("IR is full
+  (3/3) — move someone back to active first"), instead of letting the tap find
+  out.
+
+The ↩ glyph is gone from the chip, since the chip no longer does that on its
+own. No swap in one step: moving a man out and another in are still two moves,
+each one the server answers for.
+
+No migration.
+
 ### v0.490.0 — the league answers to a key
 
 Founder: "Let's do an API for external league and team control like ESPN.
