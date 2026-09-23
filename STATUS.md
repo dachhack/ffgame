@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.497.0 — the commissioner seeds the bracket
+
+Item 7, the last of the commissioner list: the playoff seed override.
+- Web: the SEEDING list in the playoffs tab.
+  - Its ↑↓ existed, but was measured against plain standings, not the
+    league's real seeding (division winners first).
+  - It now starts from the bracket's actual seeds once one is built.
+- App: the playoff card gains the same SEEDING list, with ↑/↓. It could only
+  regenerate from the standings before.
+- Both now call `commish_seed_playoffs` (migration 0359). A seeding that
+  differs from the league's own top N needs a reason, and the league is told
+  the seeds with it. The bracket records `by_hand`.
+- A rebuilt round 1 clears lineups saved for the old games. The confirm says
+  so, and the answer counts them.
+- `league_default_seeds` gives the order to compare against.
+- Everything else is the existing generator: refused once underway, and it
+  checks the list names N different teams.
+- Shared core `data/seeds.ts`.
+- Checks: `check:seeds` (in check:parity) and
+  `scripts/db/seed-override-probes.sql` (in the harness) pass.
+
 ### v0.496.0 — the league counts its moves
 
 Item 6 of the commissioner list: 📏 TRANSACTION LIMITS, web (beside waiver

@@ -15,7 +15,7 @@ import {
   commishSetManager, teamManagers, type TeamManagerRow,
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   convertLeagueToNative, type ConvertSummary, commishRepairPoolRow, nativeReschedule,
-  playoffState, setPlayoffRules, generatePlayoffs, advancePlayoffs, autoGeneratePlayoffs,
+  playoffState, setPlayoffRules, advancePlayoffs, autoGeneratePlayoffs, leagueDefaultSeeds, commishSeedPlayoffs,
   leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
   keeperState, rolloverLeague, type KeeperState,
   pickAssets, type PickAssetRow,
@@ -49,6 +49,7 @@ import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
+import { seedStart, seedsCustom, moveSeed as moveSeedIn } from '@drip/core/data/seeds';
 import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, DuesPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
@@ -4355,7 +4356,7 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
 }
 
 // The panel's one explainer (v0.350.2) — everything else it prints is state.
-const PLAYOFF_INFO = 'Bracket size, when it starts, and whether the league plays one at all.\n\nOFF ends the season with the last regular-season week \u2014 the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.\n\nSeeding = regular-season standings (wins, then points-for). Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week, and finished rounds roll forward automatically.';
+const PLAYOFF_INFO = 'Bracket size, when it starts, and whether the league plays one at all.\n\nOFF ends the season with the last regular-season week \u2014 the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.\n\nSeeding = regular-season standings (wins, then points-for; division winners first when there are divisions), or your own order with ↑↓ under SEEDING, which needs a reason posted to the league. Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week, and finished rounds roll forward automatically.';
 
 function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
@@ -4363,8 +4364,12 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const [startWeek, setStartWeek] = useState(15);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  // The commish can reorder seeding before generating; defaults to standings.
+  // The commish can reorder seeding before generating (0359). The list starts
+  // from the bracket's own seeds when one is built, else the league's seeding
+  // order (division winners first), which is what "custom" is measured against.
   const [seedOrder, setSeedOrder] = useState<number[] | null>(null);
+  const [dflt, setDflt] = useState<number[]>([]);
+  const [why, setWhy] = useState('');
   const load = async () => {
     // The season closes itself (0162): the auto-generate poke rides next to
     // the advance poke — builds round 1 when the last reg-season game is final.
@@ -4372,8 +4377,10 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
     await advancePlayoffs(leagueId).catch(() => {});
     const s = await playoffState(leagueId);
     if (s.error || !s.ok) { setMsg(s.error ?? 'could not load playoffs'); return; }
-    setSt(s); setTeams(s.playoff_teams); setStartWeek(s.playoff_start_week);
-    setSeedOrder((cur) => cur ?? s.standings.map((x) => x.roster_id));
+    const d = await leagueDefaultSeeds(leagueId).catch(() => null);
+    const def = d?.ok ? d.seeds ?? [] : s.standings.map((x) => x.roster_id);
+    setSt(s); setTeams(s.playoff_teams); setStartWeek(s.playoff_start_week); setDflt(def);
+    setSeedOrder((cur) => cur ?? seedStart(def, s.generated ? s.seeds : null, s.standings.map((x) => x.roster_id)));
   };
   useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
   if (!st) return <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>{msg ?? 'loading playoffs…'}</div>;
@@ -4391,13 +4398,16 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const conRounds: PlayoffMatchup[][] = [];
   for (const m of st.matchups) { ((m.consolation ? conRounds : rounds)[m.round - 1] ??= []).push(m); }
   const standingsIds = st.standings.map((x) => x.roster_id);
-  const order = seedOrder ?? standingsIds;
-  const customOrder = order.join(',') !== standingsIds.join(',');
-  const moveSeed = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= order.length) return;
-    const next = order.slice(); [next[i], next[j]] = [next[j], next[i]];
-    setSeedOrder(next);
+  const order = seedOrder ?? seedStart(dflt, null, standingsIds);
+  const customOrder = teams > 0 && seedsCustom(order, dflt, teams);
+  const moveSeed = (i: number, dir: -1 | 1) => setSeedOrder(moveSeedIn(order, i, dir));
+  const seedIt = () => {
+    if (st.generated && !window.confirm('Rebuild round 1 with this seeding? Lineups already saved for the current round-1 games are cleared.')) return;
+    void run(async () => {
+      const r = await commishSeedPlayoffs(leagueId, order.slice(0, teams), customOrder ? why : null);
+      if (r.ok) setWhy('');
+      return r;
+    });
   };
   const toggle = (on: boolean, label: string, onClick: () => void, off = false) => (
     <button onClick={onClick} disabled={off} className="mono" style={{ ...mono, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', cursor: off ? 'default' : 'pointer', opacity: off ? 0.5 : 1, color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '4px 10px' }}>{label}</button>
@@ -4447,7 +4457,8 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
             <button onClick={() => run(() => setPlayoffRules(leagueId, teams, teams === 0 ? null : startWeek))} disabled={busy} className="mono" style={btn(true)}>save</button>
           )}
           {!st.underway && teams !== 0 && st.playoff_teams !== 0 && (
-            <button onClick={() => run(() => generatePlayoffs(leagueId, order.slice(0, teams)))} disabled={busy} className="mono" style={btn(true)}>
+            <button onClick={seedIt} disabled={busy || (customOrder && !why.trim())} className="mono" style={btn(true)}
+              title={customOrder && !why.trim() ? 'Custom seeding needs a reason (below) — it is posted to the league' : undefined}>
               {st.generated ? 'regenerate bracket' : 'generate bracket'}
             </button>
           )}
@@ -4521,7 +4532,7 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
           <div style={subhead}>SEEDING{st.underway ? ' (LOCKED)' : ''}</div>
           {customOrder && !st.underway && <>
             <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--warn)' }}>CUSTOM ORDER</span>
-            <button onClick={() => setSeedOrder(standingsIds)} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>↺ back to standings</button>
+            <button onClick={() => setSeedOrder(seedStart(dflt, null, standingsIds))} className="mono" style={{ ...linkBtn, fontSize: 11.5 }}>↺ back to the league's seeding</button>
           </>}
         </div>
         {order.map((rid, i) => {
@@ -4542,8 +4553,13 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
         })}
         <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6 }}>
           {st.underway ? 'Seeds locked into the bracket.'
-            : `Top ${teams} make the playoffs — everyone else starts on the consolation ladder. Use ↑↓ to override the seeding before generating.`}
+            : `Top ${teams} make the playoffs — everyone else starts on the consolation ladder. Use ↑↓ to override the seeding, then ${st.generated ? 'regenerate' : 'generate'} the bracket.`}
         </div>
+        {customOrder && !st.underway && (
+          <input value={why} onChange={(e) => setWhy(e.target.value)} maxLength={200}
+            placeholder="why the custom seeding — posted to the league with the seeds"
+            style={{ ...inp, width: '100%', marginTop: 6, padding: '5px 8px', fontSize: 12.5 }} />
+        )}
       </div>
       )}
     </div>

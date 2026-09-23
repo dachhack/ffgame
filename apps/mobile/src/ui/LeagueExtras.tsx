@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, generatePlayoffs, leaguePool,
+  advancePlayoffs, autoGeneratePlayoffs, commishMovePlayer, commishRemovePlayer, friendlyError, leagueDefaultSeeds, commishSeedPlayoffs, leaguePool,
   leagueStandings, nativeRosters, playoffState, setPlayoffRules,
   leagueContracts, setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   guillotineTick, guillotineState, vampireState, vampireSteal, commishRuleSteal,
@@ -16,6 +16,7 @@ import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PosPill, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
 import { LabelInfo } from './InfoChip';
+import { seedStart, seedsCustom, moveSeed } from '@drip/core/data/seeds';
 
 // ── Standings: wins, points, differential ────────────────────────────────────
 type StandSort = 'record' | 'pf' | 'diff';
@@ -660,13 +661,25 @@ const PLAYOFF_INFO = `Bracket size, when it starts, and whether the league plays
 
 OFF ends the season with the last regular-season week — the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.
 
-Seeding comes from the standings: wins, then points-for. Higher seeds host. A 6-team bracket byes the top two. The bracket itself shows on the MY TEAM screen for everyone.`
+Seeding comes from the standings: wins, then points-for (division winners first when the league has divisions). Higher seeds host. A 6-team bracket byes the top two. Use ↑↓ under SEEDING to seed by hand — that needs a reason, and the league is told. The bracket itself shows on the MY TEAM screen for everyone.`
 
 export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onChanged: () => void }) {
+  const t = useTheme();
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const load = () => playoffState(leagueId).then(setSt).catch(() => {});
+  // 0359: the commissioner's seeding. Starts from the bracket's seeds, else
+  // the league's own order, which is what "custom" is measured against.
+  const [dflt, setDflt] = useState<number[]>([]);
+  const [order, setOrder] = useState<number[] | null>(null);
+  const [why, setWhy] = useState('');
+  const load = () => Promise.all([playoffState(leagueId), leagueDefaultSeeds(leagueId).catch(() => null)]).then(([s, d]) => {
+    setSt(s);
+    if (!s.ok) return;
+    const def = d?.ok ? d.seeds ?? [] : s.standings.map((x) => x.roster_id);
+    setDflt(def);
+    setOrder(seedStart(def, s.generated ? s.seeds : null, s.standings.map((x) => x.roster_id)));
+  }).catch(() => {});
   useEffect(() => {
     void load();
     // The season closes itself (0162): once the last regular-season game is
@@ -684,6 +697,9 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
   };
   if (!st || st.error) return null;
   const off = st.playoff_teams === 0;
+  const n = st.playoff_teams;
+  const seedList = order ?? seedStart(dflt, null, st.standings.map((x) => x.roster_id));
+  const custom = n > 0 && seedsCustom(seedList, dflt, n);
   return (
     <View>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 4 }}>{note}</Mono>}
@@ -717,15 +733,46 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
               </View>
               <View style={{ marginTop: 8 }}>
                 <PrimaryButton label={busy ? '…' : st.generated ? 'REGENERATE ROUND 1' : 'GENERATE THE BRACKET'}
-                  disabled={busy} onPress={() => {
+                  disabled={busy || (custom && !why.trim())} onPress={() => {
                     tap();
+                    const go = () => void run(async () => {
+                      const r = await commishSeedPlayoffs(leagueId, seedList.slice(0, n), custom ? why : null);
+                      if (r.ok) setWhy('');
+                      return r;
+                    }, st.generated ? 'round 1 rebuilt' : 'bracket generated');
                     if (st.generated) {
-                      Alert.alert('Regenerate round 1?', 'Reseeds from the current standings — any manual bracket state from the old round 1 is replaced.', [
+                      Alert.alert('Regenerate round 1?', 'Rebuilds round 1 with the seeding below. Lineups already saved for the current round-1 games are cleared.', [
                         { text: 'cancel', style: 'cancel' },
-                        { text: 'regenerate', style: 'destructive', onPress: () => void run(() => generatePlayoffs(leagueId), 'round 1 rebuilt') },
+                        { text: 'regenerate', style: 'destructive', onPress: go },
                       ]);
-                    } else void run(() => generatePlayoffs(leagueId), 'bracket generated');
+                    } else go();
                   }} />
+                {custom && !why.trim() && <Mono size={8.5} tone="warn" style={{ marginTop: 4 }}>Custom seeding needs a reason — it is posted to the league.</Mono>}
+              </View>
+              <View style={{ marginTop: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mono size={9} tone="faint" weight="700">SEEDING</Mono>
+                  {custom && <Mono size={8.5} tone="warn" weight="700">CUSTOM ORDER</Mono>}
+                  {custom && <Chip label="↺ LEAGUE ORDER" on={false} onPress={() => { tap(); setOrder(seedStart(dflt, null, st.standings.map((x) => x.roster_id))); }} />}
+                </View>
+                {seedList.map((rid, i) => {
+                  const row = st.standings.find((x) => x.roster_id === rid);
+                  const seeded = i < n;
+                  return (
+                    <View key={rid} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderColor: t.bd }}>
+                      <Mono size={10} weight="700" tone={seeded ? 'you' : 'faint'} style={{ width: 24 }}>{seeded ? `#${i + 1}` : '—'}</Mono>
+                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text, fontWeight: seeded ? '700' : '400' }}>{row?.team ?? `Team ${rid}`}</Text>
+                      <Mono size={9.5} tone="dim">{row ? `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}` : ''}</Mono>
+                      <Chip label="↑" on={false} disabled={i === 0} onPress={() => { tap(); setOrder(moveSeed(seedList, i, -1)); }} />
+                      <Chip label="↓" on={false} disabled={i === seedList.length - 1} onPress={() => { tap(); setOrder(moveSeed(seedList, i, 1)); }} />
+                    </View>
+                  );
+                })}
+                {custom && (
+                  <TextInput value={why} onChangeText={setWhy} maxLength={200} placeholderTextColor={t.faint}
+                    placeholder="why the custom seeding — posted to the league"
+                    style={{ marginTop: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text }} />
+                )}
               </View>
             </>
           )}

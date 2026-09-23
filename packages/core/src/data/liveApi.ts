@@ -3130,6 +3130,15 @@ export const setPlayoffRules = (leagueId: string, teams: number | null, startWee
   rpc<{ ok: boolean; error?: string }>('set_playoff_rules', { p_league_id: leagueId, p_teams: teams, p_start_week: startWeek });
 /** Commissioner: (re)build round 1 — standings seeding, or an explicit seed
  *  order (override). Locked once underway. */
+/** THE COMMISSIONER SEEDS THE BRACKET (0359). The league's own seeding order
+ *  (division winners first, 0215), every team. */
+export const leagueDefaultSeeds = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; seeds?: number[] }>('league_default_seeds', { p_league_id: leagueId });
+/** Build the bracket from `seeds` (the top N, in order). An order that differs
+ *  from the league's own needs a reason, which is posted with the seeds. */
+export const commishSeedPlayoffs = (leagueId: string, seeds: number[], note?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; by_hand?: boolean; lineups_cleared?: number; note?: string | null }>('commish_seed_playoffs',
+    { p_league_id: leagueId, p_seeds: seeds, p_note: note ?? null }), Ev.commishAction, { tool: 'seed_playoffs' });
 export const generatePlayoffs = (leagueId: string, seeds: number[] | null = null) =>
   rpc<{ ok: boolean; error?: string }>('generate_playoffs', { p_league_id: leagueId, p_seeds: seeds, p_auto: false });
 /** The season closes itself (0162): any member's league-load poke — builds
