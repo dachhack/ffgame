@@ -215,3 +215,10 @@ $RUN -f scripts/db/shelf-probes.sql | grep -E "PROBE FAIL|ALL SHELF PROBES" || {
 $RUN -f scripts/db/write-api-probes.sql | grep -E "PROBE FAIL|ALL WRITE-API PROBES" || { echo "WRITE-API PROBES FAILED"; exit 1; }
 SCRATCH_PG_DIR=$DIR SCRATCH_PG_PORT=$PORT npx tsx scripts/db/write-api-e2e.mjs | grep -E "^FAIL|ALL WRITE-API E2E PASS" || { echo "WRITE-API E2E FAILED"; exit 1; }
 $RUN -f scripts/db/rescore-probes.sql | grep -E "PROBE FAIL|ALL RESCORE PROBES" || { echo "RESCORE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/undo-hold-probes.sql | grep -E "PROBE FAIL|ALL UNDO-HOLD PROBES" || { echo "UNDO-HOLD PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/adjust-probes.sql | grep -E "PROBE FAIL|ALL ADJUST PROBES" || { echo "ADJUST PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/lineup-fix-probes.sql | grep -E "PROBE FAIL|ALL LINEUP-FIX PROBES" || { echo "LINEUP-FIX PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/redraw-probes.sql | grep -E "PROBE FAIL|ALL REDRAW PROBES" || { echo "REDRAW PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/txn-limit-probes.sql | grep -E "PROBE FAIL|ALL TXN-LIMIT PROBES" || { echo "TXN-LIMIT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/seed-override-probes.sql | grep -E "PROBE FAIL|ALL SEED-OVERRIDE PROBES" || { echo "SEED-OVERRIDE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/roster-legal-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-LEGAL PROBES" || { echo "ROSTER-LEGAL PROBES FAILED"; exit 1; }

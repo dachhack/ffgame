@@ -2647,14 +2647,92 @@ export interface RegisterRow {
   roster_id: number; team: string | null;
   /** Trades only: the seat the player came from. */
   from_roster: number | null; from_team: string | null;
+  /** 0354: this line was taken back by the commissioner; the lines the undo
+   *  itself wrote carry `undo_of`; and — for the commissioner only — whether
+   *  ↩ UNDO would accept this line right now. */
+  undone?: boolean; undo_of?: number | null; can_undo?: boolean | null;
   /** Waiver wins in a FAAB league. */
   bid: number | null;
   /** Event detail (0221): "guillotine week 3", "franchise tagged — $18 for 1yr". */
   note?: string | null;
 }
 export const leagueRegister = (leagueId: string, limit = 100) =>
-  rpc<{ ok: boolean; error?: string; rows?: RegisterRow[] }>('league_register',
+  rpc<{ ok: boolean; error?: string; rows?: RegisterRow[]; is_commish?: boolean }>('league_register',
     { p_league_id: leagueId, p_limit: limit });
+
+/** ↩ UNDO (0354) — the commissioner takes back an add, a drop or a waiver
+ *  claim from its register line: the pickup goes back on waivers, the drop
+ *  comes home, a FAAB bid is refunded and the waiver order restored where
+ *  nothing has moved it since. Refused, with the reason, when the move is no
+ *  longer true (the pickup moved on, the drop was picked up, a game kicked off). */
+export const commishUndoTxn = (txnId: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_undo_txn', { p_txn_id: txnId }),
+    Ev.commishAction, { tool: 'undo_txn' });
+
+/** A PLAYER'S WAIVER HOLD, BY HAND (0354). */
+export interface HeldPlayer { slug: string; name: string; pos: string; team: string; until: string | null; claims?: number }
+export const leagueWaiverHolds = (leagueId: string, search?: string) =>
+  rpc<{ ok: boolean; error?: string; next_run?: string | null; held?: HeldPlayer[]; found?: HeldPlayer[] }>(
+    'league_waiver_holds', { p_league_id: leagueId, p_search: search ?? null });
+/** 'free' = a free agent now; 'next_run' = on waivers until the run a drop
+ *  would wait for; 'until' = held until `until` (within two weeks). */
+export const commishSetWaiverHold = (leagueId: string, slug: string, mode: 'free' | 'next_run' | 'until', until?: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; until?: string | null; note?: string }>('commish_set_waiver_hold',
+    { p_league_id: leagueId, p_slug: slug, p_mode: mode, p_until: until ?? null }), Ev.commishAction, { tool: 'waiver_hold' });
+
+/** THE COMMISSIONER'S POINT ADJUSTMENTS (0355): points added to or taken off
+ *  one player's week, classic leagues only. classicPoints adds them once the
+ *  host installs them (setLeagueAdjustments). */
+export interface PlayerAdjustment { week: number; slug: string; name: string; points: number; note: string; set_at: string }
+export interface AdjustCandidate { slug: string; name: string; pos: string; team: string; owner: string | null }
+/** `search` (commissioner only) also finds pool players to adjust. */
+export const leaguePlayerAdjustments = (leagueId: string, week?: number | null, search?: string) =>
+  rpc<{ ok: boolean; error?: string; adjustments?: PlayerAdjustment[]; found?: AdjustCandidate[] }>(
+    'league_player_adjustments', { p_league_id: leagueId, p_week: week ?? null, p_search: search ?? null });
+/** points 0 removes it. `rescore` says the week is stamped and keeps its old
+ *  finals until it is re-scored. */
+export const commishSetPlayerAdjustment = (leagueId: string, week: number, slug: string, points: number, note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; points?: number; note?: string; rescore?: boolean; removed?: boolean }>(
+    'commish_set_player_adjustment', { p_league_id: leagueId, p_week: week, p_slug: slug, p_points: points, p_note: note }),
+    Ev.commishAction, { tool: 'point_adjust' });
+
+/** THE COMMISSIONER FIXES A LINEUP (0356): one seat's classic lineup for a
+ *  week, past the kickoff locks. With no roster, the week's seats. */
+export interface LineupFixCandidate { slug: string; why: 'roster' | 'lineup' | 'left'; name: string; pos: string; team: string; exp: number | null; spot: string | null }
+export const commishWeekLineup = (leagueId: string, week: number, rosterId?: number | null) =>
+  rpc<{ ok: boolean; error?: string; teams?: { roster_id: number; name: string }[]; team?: string; has_author?: boolean;
+        stored?: { slot: string; slug: string | null }[]; candidates?: LineupFixCandidate[] }>(
+    'commish_week_lineup', { p_league_id: leagueId, p_week: week, p_roster_id: rosterId ?? null });
+/** `picks` is the WHOLE lineup: a spot left out is emptied. */
+export const commishSetWeekLineup = (leagueId: string, week: number, rosterId: number, picks: { slot: string; slug: string | null }[], note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; in?: string[]; out?: string[]; rescore?: boolean }>('commish_set_week_lineup',
+    { p_league_id: leagueId, p_week: week, p_roster_id: rosterId, p_picks: picks, p_note: note }), Ev.commishAction, { tool: 'lineup_fix' });
+
+/** THE COMMISSIONER REDRAWS A WEEK (0357): swap two teams' opponents in a
+ *  week that hasn't started. A team on bye can be swapped in. */
+export interface RedrawTeam { roster_id: number; name: string }
+export interface RedrawWeek { week: number; games: { id: string; home: RedrawTeam; away: RedrawTeam }[]; byes: RedrawTeam[] }
+export const commishOpenSchedule = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; weeks?: RedrawWeek[] }>('commish_open_schedule', { p_league_id: leagueId });
+export const commishSwapOpponents = (leagueId: string, week: number, a: number, b: number, note: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_swap_opponents',
+    { p_league_id: leagueId, p_week: week, p_a: a, p_b: b, p_note: note }), Ev.commishAction, { tool: 'redraw' });
+
+/** TRANSACTION LIMITS (0358): adds per week (the week turns at the league's
+ *  turnover), adds per season, trades per season. null = no limit. With a
+ *  roster, what that team has used. */
+export interface TxnLimits { ok: boolean; error?: string; max_adds_week: number | null; max_adds_season: number | null; max_trades_season: number | null; week_start?: string; used?: { week: number; season: number; trades: number } | null }
+export const leagueTxnLimits = (leagueId: string, rosterId?: number | null) =>
+  rpc<TxnLimits>('league_txn_limits', { p_league_id: leagueId, p_roster_id: rosterId ?? null });
+export const commishSetTxnLimits = (leagueId: string, addsWeek: number | null, addsSeason: number | null, tradesSeason: number | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; note?: string }>('commish_set_txn_limits',
+    { p_league_id: leagueId, p_adds_week: addsWeek, p_adds_season: addsSeason, p_trades_season: tradesSeason }), Ev.commishAction, { tool: 'txn_limits' });
+
+/** THE ROSTER HAS TO BE LEGAL (0360): every team in the league whose roster
+ *  is illegal right now, roster id → the reason. While one is, its adds and
+ *  lineup changes are refused and its best-ball spots stay empty. */
+export const leagueRosterIssues = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; issues?: Record<string, string> }>('league_roster_issues', { p_league_id: leagueId });
 
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
@@ -3058,6 +3136,15 @@ export const setPlayoffRules = (leagueId: string, teams: number | null, startWee
   rpc<{ ok: boolean; error?: string }>('set_playoff_rules', { p_league_id: leagueId, p_teams: teams, p_start_week: startWeek });
 /** Commissioner: (re)build round 1 — standings seeding, or an explicit seed
  *  order (override). Locked once underway. */
+/** THE COMMISSIONER SEEDS THE BRACKET (0359). The league's own seeding order
+ *  (division winners first, 0215), every team. */
+export const leagueDefaultSeeds = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; seeds?: number[] }>('league_default_seeds', { p_league_id: leagueId });
+/** Build the bracket from `seeds` (the top N, in order). An order that differs
+ *  from the league's own needs a reason, which is posted with the seeds. */
+export const commishSeedPlayoffs = (leagueId: string, seeds: number[], note?: string | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; by_hand?: boolean; lineups_cleared?: number; note?: string | null }>('commish_seed_playoffs',
+    { p_league_id: leagueId, p_seeds: seeds, p_note: note ?? null }), Ev.commishAction, { tool: 'seed_playoffs' });
 export const generatePlayoffs = (leagueId: string, seeds: number[] | null = null) =>
   rpc<{ ok: boolean; error?: string }>('generate_playoffs', { p_league_id: leagueId, p_seeds: seeds, p_auto: false });
 /** The season closes itself (0162): any member's league-load poke — builds

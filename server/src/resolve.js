@@ -30,7 +30,7 @@ import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/l
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
-import { setLeagueFlags } from '../../packages/core/src/data/commish.ts';
+import { setLeagueFlags, setLeagueAdjustments } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
@@ -219,6 +219,24 @@ async function leagueFlagsOf(leagueId, ctx) {
   return (data ?? []).map((r) => ({ slug: r.slug, label: r.label, rules: r.rules ?? {} }));
 }
 
+/** The commissioner's point adjustments (0355) for a league-week — rows for
+ *  the engine cache, [] when none. Classic only; the drip branches never read
+ *  them. */
+async function leagueAdjustmentsOf(leagueId, week, ctx) {
+  if (ctx?.adjust) return ctx.adjust.get(leagueId) ?? [];
+  const { data } = await db().from('player_adjustment').select('week,slug,points')
+    .eq('league_id', leagueId).eq('week', week);
+  return data ?? [];
+}
+
+/** Seats whose roster is illegal right now (0360), as a Set of roster ids —
+ *  their best-ball spots don't fill. */
+async function illegalRostersOf(leagueId, ctx) {
+  if (ctx?.illegal) return ctx.illegal.get(leagueId) ?? new Set();
+  const { data } = await db().rpc('league_illegal_rosters', { p_league_ids: [leagueId] });
+  return new Set((data ?? []).map((r) => r.roster_id));
+}
+
 /** The league's missed-pick policy: 'best_lineup' (default) | 'ai' | 'empty'. */
 async function lineupPolicy(leagueId, ctx) {
   if (ctx) return ctx.policy.get(leagueId) ?? 'best_lineup';
@@ -235,7 +253,7 @@ async function lineupPolicy(leagueId, ctx) {
 export async function prefetchTick(live, week) {
   const leagueIds = [...new Set(live.map((m) => m.league_id))];
   const matchupIds = live.map((m) => m.id);
-  const [mem, lg, lu, ap, pk, fl, ag] = await Promise.all([
+  const [mem, lg, lu, ap, pk, fl, ag, adj] = await Promise.all([
     db().from('league_membership').select('league_id,sleeper_roster_id,app_user_id,enrolled,controller').in('league_id', leagueIds),
     db().from('league').select('id,lineup_policy,settings_json').in('id', leagueIds),
     db().from('sleeper_lineup').select('league_id,roster_id,starters_json').in('league_id', leagueIds).eq('week', week),
@@ -243,6 +261,7 @@ export async function prefetchTick(live, week) {
     db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
     db().from('player_flag').select('league_id,slug,label,rules').in('league_id', leagueIds),
     db().from('seat_agent').select('league_id,roster_id,agent_user_id').in('league_id', leagueIds),
+    db().from('player_adjustment').select('league_id,week,slug,points').in('league_id', leagueIds).eq('week', week),
   ]);
   const members = new Map();   // leagueId -> Map(roster -> member)
   for (const m of mem.data ?? []) {
@@ -271,7 +290,22 @@ export async function prefetchTick(live, week) {
   }
   const agents = new Map();    // `${leagueId}:${roster}` -> agent uid (0180: unclaimed classic seats)
   for (const r of ag.data ?? []) agents.set(`${r.league_id}:${r.roster_id}`, r.agent_user_id);
-  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents };
+  const adjust = new Map();    // leagueId -> [{week,slug,points}] (0355, this week only)
+  for (const r of adj.data ?? []) {
+    if (!adjust.has(r.league_id)) adjust.set(r.league_id, []);
+    adjust.get(r.league_id).push({ week: r.week, slug: r.slug, points: r.points });
+  }
+  // 0360: which seats are illegal, asked only of the leagues it can change —
+  // classic ones with a best-ball spot. Everyone else's lineup gate is the
+  // table trigger's, and costs the tick nothing.
+  const bbLeagues = [...mode].filter(([, gm]) => gm?.mode === 'classic' && leagueBestball(gm).length > 0).map(([id]) => id);
+  const ill = bbLeagues.length ? await db().rpc('league_illegal_rosters', { p_league_ids: bbLeagues }) : { data: [] };
+  const illegal = new Map();   // leagueId -> Set(roster) (0360: best ball stays off)
+  for (const r of ill?.data ?? []) {
+    if (!illegal.has(r.league_id)) illegal.set(r.league_id, new Set());
+    illegal.get(r.league_id).add(r.roster_id);
+  }
+  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust, illegal };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -451,6 +485,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   let slotRows = []; // per-slot detail: { win, side, slot, slug, metric, score }
   let homeTotal = 0, awayTotal = 0;
   const gameMode = await leagueModeOf(matchup.league_id, ctx);
+  const adjustRows = gameMode.mode === 'classic' ? await leagueAdjustmentsOf(matchup.league_id, matchup.week, ctx) : [];
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
@@ -586,6 +621,12 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         rosters.get(row.roster_id).push(p);
       }
     }
+    // AN ILLEGAL ROSTER'S BEST BALL STAYS EMPTY (0360). Judged while the week
+    // is being scored — every live tick and the first stamp, when home_final
+    // is still null — against the roster as it stands, the same roster the
+    // fill reads. A re-stamp or re-score of a week already stamped does not ask:
+    // today's roster says nothing about whether a team was legal back then.
+    const illegal = matchup.home_final == null && bestball.length ? await illegalRostersOf(matchup.league_id, ctx) : new Set();
     const sideOf = (picks, rosterId) => ({
       picks: classify(picks),
       hasLineup: hasRows(picks, rosterId),
@@ -593,6 +634,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       bestball,
       ruledOut,
       playRisk: riskOf,
+      bestballOff: illegal.has(rosterId),
     });
     // Flags (0144) bite classic scoring too (bonus_mult / bonus_pts /
     // no_start-in-best-ball) — install synchronously right before the resolve,
@@ -604,6 +646,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // this one would be scored under someone else's bonuses.
     setLeagueScoring(scoringKnobs, matchup.league_id);
     setLeagueFlags(matchup.league_id, flagRows);
+    // THE COMMISSIONER'S ADJUSTMENTS (0355) — classicPoints adds them, so they
+    // are a module global like the flags and installed the same way: every
+    // classic matchup, empty included, or one league's correction would score
+    // the next league's player.
+    setLeagueAdjustments(matchup.league_id, adjustRows);
     // GOLF (v0.303.1) rides the same synchronous install, and is set
     // UNCONDITIONALLY: it is a module global, so skipping the false case would
     // leave the previous matchup's golf league in force over this one.

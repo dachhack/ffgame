@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
-import { setLeagueFlags, flagsLeague } from '@drip/core/data/commish';
+import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -42,7 +42,7 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, type MatchupResult } from '@drip/core/data/liveApi';
+import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -711,8 +711,35 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // rather than assume. flagsVer is the recompute signal both installs bump.
   const rulesReady = useMemo(() => {
     void flagsVer;
-    return scoringLeague() === leagueId && flagsLeague() === leagueId;
-  }, [flagsVer, leagueId]);
+    return scoringLeague() === leagueId && flagsLeague() === leagueId && (matchup == null || adjustmentsLeague() === leagueId);
+  }, [flagsVer, leagueId, matchup]);
+  // THE COMMISSIONER'S ADJUSTMENTS (0355) — the web twin's comment applies: a
+  // week-scoped module cache classicPoints reads, reloaded with the week,
+  // cleared on exit, and installed empty when the load fails.
+  const [adjusts, setAdjusts] = useState<PlayerAdjustment[]>([]);
+  const adjWeek = matchup?.week;
+  useEffect(() => {
+    if (adjWeek == null) return;
+    let alive = true;
+    const install = (rows: PlayerAdjustment[]) => {
+      if (!alive) return;
+      setLeagueAdjustments(leagueId, rows); setAdjusts(rows); setFlagsVer((v) => v + 1);
+    };
+    leaguePlayerAdjustments(leagueId, adjWeek).then((r) => install(r?.ok ? r.adjustments ?? [] : [])).catch(() => install([]));
+    return () => { alive = false; };
+  }, [leagueId, adjWeek]);
+  // THE ROSTER HAS TO BE LEGAL (0360) — the web twin's comment applies: which
+  // teams are illegal right now, refreshed every minute.
+  const [issues, setIssues] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    const get = () => leagueRosterIssues(leagueId).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
+    void get();
+    const id = setInterval(get, 60_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [leagueId]);
+  // Cleared on leaving the league, not on changing week (keyed by week).
+  useEffect(() => () => clearLeagueAdjustments(), [leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -842,7 +869,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // the engine's fills — the same bestballFill the worker scores with.
   const effective = useMemo(() => {
     void playsAt;
-    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[]) => {
+    // Judged while the week is being scored (0360); a stamped week keeps the
+    // fill it was scored with.
+    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!issues[String(rid)];
+    const oppRid = matchup ? (matchup.home_roster_id === seat ? matchup.away_roster_id : matchup.home_roster_id) : undefined;
+    const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[], bbOff = false) => {
       const out: Record<string, string | null> = {};
       const manualPicks: ClassicPick[] = [];
       for (const d of slotDefs) {
@@ -865,7 +896,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           manualPicks.push({ slot: r.slot, player: mkPlayer(r.player) });
         }
       }
-      if (matchup && bb.size) {
+      if (matchup && bb.size && !bbOff) {
         // BEFORE KICKOFF, rank by PROJECTION (founder). A best-ball spot fills
         // itself with whoever scores most, so before anyone has scored it used
         // to render empty and count ZERO toward the projected total —
@@ -902,10 +933,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       return out;
     };
     return {
-      mine: build(mine, pool.map((p) => p.slug)),
-      theirs: build(theirs, oppPool.map((p) => p.slug)),
+      mine: build(mine, pool.map((p) => p.slug), off(seat)),
+      theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, seat]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -1062,8 +1093,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   };
   /** May I still change this spot? Sealed by the server, or holding a player
    *  whose game has begun, means no. */
+  // An illegal roster (0360) can't change its lineup: the server refuses the
+  // write, so the board doesn't offer it. The banner above says why.
+  const illegalMine = !!issues[String(seat)];
   const canEdit = (slot: string): boolean =>
-    !browsing && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+    !browsing && !illegalMine && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
 
   /** Write one or more spots in a single save. A MOVE touches two — the target
    *  and the spot the player left — and they must travel together, or the same
@@ -1218,6 +1252,24 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           something about a lineup that can still change. */}
       {board && (
         <>
+        {/* ⚠ AN ILLEGAL ROSTER (0360), either side — the web twin's banner. */}
+        {matchup && [seat, matchup.home_roster_id === seat ? matchup.away_roster_id : matchup.home_roster_id].map((rid, i) => {
+          const why = issues[String(rid)];
+          if (!why) return null;
+          const mineSide = i === 0 && !browsing;
+          return (
+            <View key={rid} style={{ marginBottom: 9, borderWidth: 1, borderColor: t.warn, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
+              <Mono size={11} tone="warn" weight="700" track={0.08}>
+                {mineSide ? '⚠ YOUR ROSTER ISN’T LEGAL' : `⚠ ${(i === 0 ? names.me : names.opp).toUpperCase()}’S ROSTER ISN’T LEGAL`}
+              </Mono>
+              <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
+                {`${why}. ${mineSide
+                  ? 'Until it is, your lineup is frozen, pickups are refused and best-ball spots stay empty. Moving a player to a spot he is allowed in, or dropping one, always works (MY TEAM).'
+                  : 'Until it is fixed, that lineup is frozen and its best-ball spots stay empty.'}`}
+              </Mono>
+            </View>
+          );
+        })}
         {/* 🪓 CHOPPED (v0.385.0). The audit's finding: a manager whose team fell
             saw a normal board with an empty lineup and nothing saying why. The
             block's CHOPPED list was the only record, and it isn't on this
@@ -1742,6 +1794,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           {!bench.length && <Mono size={10} tone="faint">everyone's starting</Mono>}
         </View>
       </Card>
+      )}
+
+      {adjusts.length > 0 && (
+        <Card>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 6 }}>{`✏️ COMMISSIONER ADJUSTMENTS · WEEK ${adjWeek}`}</Mono>
+          {adjusts.map((a) => (
+            <Text key={a.slug} style={{ fontSize: 11, lineHeight: 17, color: t.text }}>
+              <Text style={{ fontWeight: '700' }}>{a.name}</Text>
+              <Text style={{ fontWeight: '700', color: a.points > 0 ? t.you : t.warn }}>{` ${a.points > 0 ? '+' : ''}${r1(Number(a.points))}`}</Text>
+              <Text style={{ color: t.dim }}>{` — ${a.note}`}</Text>
+            </Text>
+          ))}
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Already included in each player's points above.</Mono>
+        </Card>
       )}
 
       <Mono size={8.5} tone="faint" style={{ lineHeight: 14 }}>

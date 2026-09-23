@@ -22,7 +22,7 @@
 // This module owns every default; SQL stores sanitized overrides only.
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
-import { flagRulesFor, flagFor } from '../data/commish';
+import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
 import { scopedAdjustFor } from './leagueScoring';
@@ -685,10 +685,18 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
  *  one game for almost every player, matching Sleeper's per-game bonuses).
  *  The commissioner's flag rules (0144) apply exactly as in drip: bonus_mult
  *  scales the points, bonus_pts lands flat on the final. Requires the flag
- *  cache installed (setLeagueFlags) — both resolvers and both boards keep it. */
+ *  cache installed (setLeagueFlags) — both resolvers and both boards keep it.
+ *
+ *  Last, the commissioner's POINT ADJUSTMENT for this player's week (0355),
+ *  flat on the total and after every rule — it corrects what he scored, so it
+ *  is not multiplied by a bonus that already paid on the uncorrected number.
+ *  Here rather than in classicPointsFrom because it is keyed by week, and a
+ *  season game log reading plays it holds has no week cache to speak for. */
 export function classicPoints(player: Player, week: number, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos, slot?: string | null): number {
   const { plays } = playsForPlayer(player, week);
-  return classicPointsFrom(plays, player, sc, scoreAs, slot);
+  const adj = adjustmentFor(player.id, week);
+  const pts = classicPointsFrom(plays, player, sc, scoreAs, slot);
+  return adj ? round1(pts + adj) : pts;
 }
 
 /** The same scoring, over plays you already hold (v0.284.0).
@@ -1203,6 +1211,10 @@ export interface ClassicSide {
    *  worker's injury_status). A normal league still starts him at full value;
    *  a golf league prices the blank he might post. Absent means no claim. */
   playRisk?: (slug: string) => number;
+  /** THE ROSTER IS ILLEGAL (0360): its best-ball spots don't fill. They stay
+   *  best-ball spots (a stored pick in one is still ignored), so an illegal
+   *  roster can't pick up the points it is carrying too many players for. */
+  bestballOff?: boolean;
 }
 
 // ── What a player is WORTH to an auto-fill (v0.252.0) ───────────────────────
@@ -1359,6 +1371,7 @@ export function classicLineup(s: ClassicSide, week: number, sc?: number | Partia
   // would, so one player can't be started twice.
   const stored = s.hasLineup ?? s.picks.length > 0;
   const started = stored ? manual : unmanagedStart(s, slots, bb, week);
+  if (s.bestballOff) return started;
   return [...started, ...bestballFill(started, s.bestball ?? [], s.roster ?? [], week, sc, slots)];
 }
 

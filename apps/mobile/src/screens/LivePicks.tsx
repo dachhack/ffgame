@@ -1064,7 +1064,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       {!!rosterIssue && (
         <Notice tone="opp">
           <Mono size={10} tone="opp" style={{ lineHeight: 15 }}>
-            ⚠ {rosterIssue}. Picks and power-ups are locked until your roster is legal — drops always work, in the MY TEAM tab.
+            ⚠ {rosterIssue}. Picks and power-ups are locked until your roster is legal — moving a player to a spot he’s allowed in, and drops, always work, in the MY TEAM tab.
           </Mono>
         </Notice>
       )}

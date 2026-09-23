@@ -18,6 +18,206 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.498.0 — the roster has to be legal
+
+Founder: "We need to confirm roster movement limits when over the limit or
+players in taxi or IR outside of the allowed designations… Best ball positions
+shouldn't do their magic if a team has too many players on their roster.
+Warnings for these are good to have."
+
+- Migration 0360 widens `roster_illegal_reason`, the one gate every add,
+  claim, waiver run, lineup write and My Team warning already used. It now
+  also catches:
+  - a player on IR or OUT without one of that spot's designations. Only
+    judged while the injury feed has rows, so an empty feed flags nobody;
+  - a taxi player past the experience ceiling;
+  - a shelf over its spots;
+  - more active players than active seats plus open taxi spots (after a
+    draft, the taxi's share sits active legally; seat-cap sc2).
+- Still allowed while illegal: `set_roster_spot` (the fix itself) and drops.
+- Best ball: `ClassicSide.bestballOff` keeps an illegal team's best-ball spots
+  empty. The resolver reads `league_illegal_rosters` once per tick, for
+  classic best-ball leagues only, and only while a week is being scored
+  (`home_final` null), so a re-score of an old week isn't judged by today's
+  roster. Both boards read `league_roster_issues` every minute and draw the
+  same thing.
+- Warnings:
+  - both boards show a banner on either side that's illegal, and stop
+    offering lineup edits to your own;
+  - My Team (web, app) and the app's drip picks screen reword theirs to say
+    what's refused and what fixes it.
+- Tests: `roster-legal-probes.sql` (in the harness) and `check:bblegal` (in
+  check:parity) pass, and so do the suites around rosters, stashes, waivers,
+  trades and lineups.
+- Two probes changed:
+  - agent-wire aw10k: a swap with a healed player left on IR is now refused,
+    which is the new rule;
+  - lineup-fix: the IR fixture player now carries a designation.
+- ol22 (classic-open-lineups) still fails, as before this change.
+
+### v0.497.0 — the commissioner seeds the bracket
+
+Item 7, the last of the commissioner list: the playoff seed override.
+- Web: the SEEDING list in the playoffs tab.
+  - Its ↑↓ existed, but was measured against plain standings, not the
+    league's real seeding (division winners first).
+  - It now starts from the bracket's actual seeds once one is built.
+- App: the playoff card gains the same SEEDING list, with ↑/↓. It could only
+  regenerate from the standings before.
+- Both now call `commish_seed_playoffs` (migration 0359). A seeding that
+  differs from the league's own top N needs a reason, and the league is told
+  the seeds with it. The bracket records `by_hand`.
+- A rebuilt round 1 clears lineups saved for the old games. The confirm says
+  so, and the answer counts them.
+- `league_default_seeds` gives the order to compare against.
+- Everything else is the existing generator: refused once underway, and it
+  checks the list names N different teams.
+- Shared core `data/seeds.ts`.
+- Checks: `check:seeds` (in check:parity) and
+  `scripts/db/seed-override-probes.sql` (in the harness) pass.
+
+### v0.496.0 — the league counts its moves
+
+Item 6 of the commissioner list: 📏 TRANSACTION LIMITS, web (beside waiver
+holds) and app (WAIVER ORDER · LIMITS). There are three optional caps, blank
+meaning none: adds per week, adds per season, and trades per season.
+- The week turns at the league's own turnover, the after-games waiver run
+  (`league_txn_week_start`).
+- Counted from the register, so the limit and the record agree:
+  - adds are 'add' and 'waiver' lines;
+  - a commissioner move doesn't count;
+  - an undone move gives its add back;
+  - a trade is one instant of 'trade' lines.
+- Adds: `add_free_agent`, `submit_waiver_claim` and `process_waivers` now ask
+  `add_limit_reason` beside `wire_block_reason`. Their bodies are otherwise
+  copied unchanged from the current definitions. A claim over the limit at
+  run time is lost, with the reason. Drops are never blocked.
+- Trades: `_trade_lock_reason` also asks `trade_limit_reason`, so a deal is
+  refused at acceptance for two-team and multi-team trades alike.
+- Migration 0358. The setter posts the new limits to league chat.
+- Checks: `scripts/db/txn-limit-probes.sql` passes. The waiver, FAAB,
+  free-agency-off, trade (floor, multi, undo, signal), vampire, guillotine,
+  seat-cap, agent-wire, commissioner-desk and undo-hold suites pass on the
+  patched functions.
+- One pre-existing failure: seat-agent sa3 fails when run after
+  agent-wire/commish-desk, with or without this change (fixture
+  interference), and passes on its own.
+
+### v0.495.0 — the commissioner redraws a week
+
+Item 5 of the commissioner list: 🔀 REDRAW A WEEK, web (the matchups tab,
+under the weekly report) and app (WEEKLY REPORT · REDRAW).
+- The commissioner taps two teams and gives a reason. X played A and Y played
+  B; now Y plays A and X plays B.
+- A team on bye can be swapped in. It takes the game, and the other team takes
+  the bye.
+- Only for a week that hasn't started: every game `scheduled`, the first
+  kickoff still ahead, not a playoff week.
+- Saved lineups are stored per matchup, so each team's picks move with it,
+  untouched (through 0356's switch). A team sent to a bye has its picks
+  removed, because the resolver adopts a lone orphaned lineup.
+- A drip power-up already armed or bought for either game was aimed at the old
+  opponent, so the swap is refused while one exists.
+- Migration 0357 adds `commish_open_schedule`, `commish_swap_opponents` and
+  `schedule_edit_log`. One chat line gives the new pairings.
+- Checks: `scripts/db/redraw-probes.sql` passes and is in the harness.
+
+### v0.494.0 — the commissioner fixes a lineup
+
+Item 4 of the commissioner list: 🧾 FIX A LINEUP, web and app, classic only.
+The commissioner sets one team's lineup for a week past the kickoff locks: the
+start a crashed app never saved, or a ruling the league made.
+- Where: the week's ⟳ RE-SCORE box (web "⟳ re-score · ✏️ fix"), beside the
+  point adjustments. Pick a team, then set each spot. Best-ball spots are
+  shown but not set, because they fill themselves.
+- Who is offered: the team's players that week. That means its roster now
+  (IR and taxi included), anyone already in that week's lineup, and anyone
+  who left the team after the week's first kickoff. The server enforces this.
+  Which spot a player fits is core's `slotAllows`, shared by both consoles
+  (`data/lineupFix.ts`).
+- The locks still apply to everyone else. Migration 0356 adds one check to the
+  four lock triggers (kickoff, legal roster, stash, flag): a
+  transaction-local `drip.commish_lineup` switch that only
+  `commish_set_week_lineup` sets, and it clears the switch before returning.
+  The slot cap still applies.
+- Rows written after the week's kickoff land sealed, which is what the
+  resolver scores.
+- A reason is required. `lineup_edit_log` keeps the lineup before and after,
+  and one chat line names who came in and who went out. A stamped week says
+  its finals change on re-score.
+- Checks: `scripts/db/lineup-fix-probes.sql` (in the harness) and
+  `check:lineupfix` (in check:parity) pass. The flag-rules, taxi-ir,
+  taxi-rules, lock-hold, write-api and backup-assign suites pass on the
+  patched triggers.
+- Two pre-existing failures, with or without this change: classic-open-lineups
+  fails outside the full harness (no table grants), and ol22 (dropping a
+  mid-game player) fails inside it.
+- Limit: the box only appears on finished weeks, so a mid-week fix waits for
+  the week to end.
+
+### v0.493.0 — the commissioner corrects a stat
+
+Item 3 of the commissioner list: ✏️ POINT ADJUSTMENTS, web and app. The
+commissioner adds or takes points (−50 to +50, one decimal) from one player
+for one week, with a reason the league reads.
+- Classic leagues only. A drip week isn't a sum of points, and it can't be
+  re-scored afterwards (0353).
+- Applied in `classicPoints`, as a flat layer after the flag and the scoped
+  rules. That puts it in the worker's resolve, the re-score and both classic
+  boards from one install, so the board and the final cannot disagree.
+- It counts where the player's points count: a starting spot, or a best-ball
+  spot choosing by points. It does not count on the bench.
+- The boards list the week's adjustments under the board, with the reason.
+- In the console it sits inside the week's ⟳ RE-SCORE box (now "⟳ re-score ·
+  ✏️ adjust"). The adjustment is saved at once, and a stamped week says so:
+  its finals change when it is re-scored in the same box. Each change, and
+  each removal, is one line in league chat.
+- Migration 0355 adds `player_adjustment` (league-readable),
+  `commish_set_player_adjustment` and `league_player_adjustments`. The
+  commissioner's call to `league_player_adjustments` also searches the pool,
+  listing rostered players first.
+- Checks: `scripts/db/adjust-probes.sql` (in the harness) and
+  `scripts/check-adjust.mjs` (in check:parity) cover the week scoping, flat
+  after the multiplier, starter vs bench, and exact identity when cleared.
+  The server tests pass.
+
+### v0.492.0 — the commissioner can take it back
+
+Founder, on the list of finer commissioner controls: "Merge and apk, then build
+1 and 2. Then the rest of the list. These are all good."
+
+1. ↩ UNDO AN ADD, A DROP OR A WAIVER CLAIM, from its line in the league
+   register, web and app, for the commissioner only. Trades could be reversed
+   since 0328, but a pickup could not.
+   - The player who came in goes back ON WAIVERS on the league's normal hold,
+     not straight to free agency, where the fastest phone would have him
+     before the league knew. The player who went out comes back to the same
+     seat. A FAAB bid is refunded.
+   - The waiver order is put back only if nothing has moved it since. 0354
+     logs every waiver-priority change, and the seat's old place is restored
+     only while exactly one change sits at the run's instant and the seat
+     still holds the place the run gave it. Otherwise the order is left alone,
+     and the chat line says so.
+   - A drop that rode an add undoes the whole move from either line.
+   - The original register lines are marked undone. The undo's own lines are
+     labelled and can't be undone themselves. One house line tells the league.
+   - REFUSED, WITH THE REASON: the pickup has moved on, the drop has been picked
+     up, the pickup's game has kicked off (0317's rule), a lone drop has no seat
+     to come back to, or the line is a trade. The register offers ↩ UNDO only
+     where the undo would accept it, because both use the same plan function.
+   - The undo takes the rows it will mark BEFORE it changes anything, rather
+     than recognising them by timestamp. The probes found that out: inside one
+     transaction every row shares one `at`.
+2. WAIVER HOLDS, BY HAND, in the commissioner console next to the waiver order.
+   A held player can be freed now, sent back to waivers until the next run, or
+   held until a chosen time within two weeks. A search finds free agents to put
+   on waivers. Pending claims on him are re-dated with the hold: a claim never
+   clears before the hold does. Each change is posted in chat. The app has no
+   date picker, so it offers +1/+2/+3/+7 days; the web takes any time.
+
+Migration 0354. Probes: scripts/db/undo-hold-probes.sql, which runs each step
+in its own transaction the way production does.
+
 ### v0.491.0 — the commissioner re-scores a week
 
 Founder, on commissioner tools: "Change scoring for previous weeks? Change

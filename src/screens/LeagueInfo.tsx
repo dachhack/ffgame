@@ -9,6 +9,7 @@ import {
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   requestLeagueSync, leagueSyncState, type SyncState,
   apiKeys, apiKeyCreate, apiKeyRevoke, apiWriteLog, publicApiUrl, type ApiKeyRow, type ApiWriteLogRow,
+  commishUndoTxn,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
@@ -401,11 +402,26 @@ const when = (iso: string): string => {
 export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boolean }) {
   const [rows, setRows] = useState<RegisterRow[] | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => {
-    leagueRegister(leagueId, 200)
-      .then((r) => { if (r.ok && r.rows) setRows(r.rows); else setErr(true); })
-      .catch(() => setErr(true));
-  }, [leagueId]);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueRegister(leagueId, 200)
+    .then((r) => { if (r.ok && r.rows) setRows(r.rows); else setErr(true); })
+    .catch(() => setErr(true));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  /** ↩ UNDO (0354), the commissioner's. `can_undo` is only ever set for the
+   *  commissioner, and only where the server's undo would accept the line. */
+  const undo = async (r: RegisterRow) => {
+    if (busy != null) return;
+    const who = r.team ?? `Roster ${r.roster_id}`;
+    const what = r.kind === 'drop' ? `drop of ${prettySlug(r.slug)}` : `${r.kind === 'waiver' ? 'waiver claim for' : 'pickup of'} ${prettySlug(r.slug)}`;
+    if (!window.confirm(`Undo ${who}'s ${what}? A pickup goes back on waivers, a dropped player comes back to ${who}, and a FAAB bid is refunded. The league is told in chat.`)) return;
+    setBusy(r.id); setMsg(null);
+    try {
+      const res = await commishUndoTxn(r.id);
+      setMsg(res.ok ? '✓ undone' : friendlyError(res.error ?? 'could not undo'));
+    } catch (e) { setMsg(friendlyError(e)); }
+    finally { setBusy(null); void load(); }
+  };
   if (err) return <div style={box(bare)}><span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load the register.</span></div>;
   if (!rows) return <div style={box(bare)}><Loading /></div>;
   if (!rows.length) {
@@ -420,11 +436,12 @@ export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boo
   }
   return (
     <div style={bare ? {} : { ...panel, maxHeight: 460, overflowY: 'auto' }}>
+      {msg && <div className="mono" style={{ fontSize: 10, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginBottom: 6 }}>{msg}</div>}
       {rows.map((r) => {
         const k = KIND[r.kind] ?? KIND.add;
         const team = r.team ?? `Roster ${r.roster_id}`;
         return (
-          <div key={r.id} style={{ display: 'flex', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--bd)' }}>
+          <div key={r.id} style={{ display: 'flex', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--bd)', opacity: r.undone ? 0.5 : 1 }}>
             <span style={{ width: 16, textAlign: 'center', fontSize: 12, color: r.kind === 'drop' ? 'var(--opp)' : 'var(--you)' }}>{k.icon}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text)' }}>
@@ -433,8 +450,17 @@ export function RegisterPanel({ leagueId, bare }: { leagueId: string; bare?: boo
                 {r.note ? <span style={{ color: 'var(--dim)' }}>{` · ${r.note}`}</span> : null}
                 {r.kind === 'waiver' && r.bid != null && r.bid > 0 ? <span style={{ color: 'var(--dim)' }}>{` for ${r.bid}`}</span> : null}
               </div>
-              <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 1 }}>{when(r.at)}</div>
+              <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 1 }}>
+                {when(r.at)}{r.undone ? ' · ↩ undone by the commissioner' : ''}
+              </div>
             </div>
+            {r.can_undo && (
+              <button onClick={() => void undo(r)} disabled={busy != null} className="mono" title="Take this move back"
+                style={{ background: 'none', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 8px', fontSize: 9.5, fontWeight: 700,
+                  color: 'var(--warn)', cursor: busy != null ? 'default' : 'pointer', alignSelf: 'center', whiteSpace: 'nowrap' }}>
+                {busy === r.id ? '…' : '↩ undo'}
+              </button>
+            )}
           </div>
         );
       })}

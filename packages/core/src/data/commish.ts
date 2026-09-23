@@ -64,3 +64,40 @@ export function flagRulesFor(slug: string): FlagRules {
 export function flagsLeague(): string | null {
   return flagLeague;
 }
+
+// ── THE COMMISSIONER'S POINT ADJUSTMENTS (0355) ─────────────────────────────
+// Points added to or taken off ONE player in ONE week, by the commissioner, for
+// a stat the feed got wrong. The same module-cache contract as the flags above,
+// and read in the same place — classicPoints — so the worker's resolve and both
+// boards cannot disagree about what a corrected week was worth. Keyed by week
+// as well as slug: a correction to week 3 is not a standing bonus.
+//
+// One league at a time, and installed EMPTY for a league with none: a board
+// that clears it on exit leaves nothing behind for the next league to inherit.
+let adjLeague: string | null = null;
+let adjustments = new Map<string, number>();
+const adjKey = (week: number, slug: string) => `${week}|${slug}`;
+
+export function setLeagueAdjustments(leagueId: string, rows: { week: number; slug: string; points: number | string }[]): void {
+  adjLeague = leagueId;
+  adjustments = new Map();
+  for (const r of rows) {
+    const p = Math.round(Number(r.points) * 10) / 10;
+    if (Number.isFinite(p) && p !== 0) adjustments.set(adjKey(Number(r.week), r.slug), p);
+  }
+}
+
+export function clearLeagueAdjustments(): void {
+  adjLeague = null;
+  adjustments = new Map();
+}
+
+/** The commissioner's adjustment to this player's week, 0 when none. */
+export function adjustmentFor(slug: string, week: number): number {
+  return adjustments.get(adjKey(week, slug)) ?? 0;
+}
+
+/** Which league the adjustment cache speaks for (null = empty). */
+export function adjustmentsLeague(): string | null {
+  return adjLeague;
+}

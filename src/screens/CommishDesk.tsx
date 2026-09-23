@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { mono, linkBtn, btn, inp, subhead, errMsg } from './adminUi';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
+import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
 import {
   leagueCommissioners, addCommissioner, removeCommissioner, transferCommissioner, type CommissionerRow,
   rosterRules, leaguePublicApi, commishSetWireLock, commishLockTeam, type AdminMember,
@@ -28,6 +29,11 @@ import {
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
   leagueReportWeeks, commishRequestWeekReport, commishSetReportChat, type ReportWeek,
   commishRequestRescore, leagueRescoreState, leagueGameMode, type RescoreState,
+  leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
+  commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
+  commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
+  leagueTxnLimits, commishSetTxnLimits,
+  leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
 
@@ -207,6 +213,59 @@ export function MedianGamePanel({ leagueId }: { leagueId: string }) {
         {note(msg)}
       </div>
       <div style={{ ...small, marginTop: 6 }}>Every regular-season week each team also plays the league's median score: above it a win, below it a loss. Points for and against are untouched. Standings recompute the moment this changes.</div>
+    </div>
+  );
+}
+
+// ── 📏 TRANSACTION LIMITS (0358) ─────────────────────────────────────────────
+// Three optional caps, blank = none. The week turns at the league's turnover
+// (the after-games waiver run), so a weekly cap resets when the week does.
+// A commissioner's own moves never count, and drops are never limited.
+export function TxnLimitsPanel({ leagueId }: { leagueId: string }) {
+  const [wk, setWk] = useState('');
+  const [sn, setSn] = useState('');
+  const [tr, setTr] = useState('');
+  const [init, setInit] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const str = (n: number | null | undefined) => (n == null ? '' : String(n));
+  const load = () => leagueTxnLimits(leagueId).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setWk(str(r.max_adds_week)); setSn(str(r.max_adds_season)); setTr(str(r.max_trades_season));
+    setInit([str(r.max_adds_week), str(r.max_adds_season), str(r.max_trades_season)].join('|'));
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const num = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.floor(Number(v))) || null);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { const r = await commishSetTxnLimits(leagueId, num(wk), num(sn), num(tr)); setMsg(r.ok ? '✓ saved — the league was told' : r.error ?? 'failed'); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const field = (label: string, v: string, set: (x: string) => void) => (
+    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input value={v} onChange={(e) => set(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" inputMode="numeric"
+        style={{ ...inp, width: 56, padding: '4px 6px', fontSize: 12.5 }} />
+      <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)' }}>{label}</span>
+    </label>
+  );
+  const changed = init != null && [wk, sn, tr].join('|') !== init;
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>TRANSACTION LIMITS</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Cap each team's pickups (free agents and waiver wins) per week and per season, and its trades per season. Leave a box
+        empty for no limit. The week turns at your league's weekly waiver run. Your own commissioner moves never count, an
+        undone move gives its add back, and drops are never limited. A waiver claim over the limit when the run reaches it is lost, with the reason.
+      </div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        {field('adds / week', wk, setWk)}
+        {field('adds / season', sn, setSn)}
+        {field('trades / season', tr, setTr)}
+        <button onClick={() => void save()} disabled={busy || !changed} className="mono" style={btn(changed)}>save</button>
+        {note(msg)}
+      </div>
     </div>
   );
 }
@@ -655,14 +714,85 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
             </button>
             {canRescore && (
               <button onClick={() => setRescoreWeek(rescoreWeek === w.week ? null : w.week)} className="mono"
-                title="Recompute this week's scores from the plays as they stand now — preview first, nothing changes until you apply"
-                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score</button>
+                title="Adjust a player's points or fix a lineup for this week, and recompute the week's scores from the plays as they stand now — preview first, nothing changes until you apply"
+                style={{ ...btn(rescoreWeek === w.week), whiteSpace: 'nowrap' }}>⟳ re-score · ✏️ fix</button>
             )}
           </div>
           {rescoreWeek === w.week && <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} />}
           </div>
         );
       })}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── WAIVER HOLDS (0354) ──────────────────────────────────────────────────────
+// A player's hold, by hand: free him now, send him back to waivers until the
+// next run, or hold him until a chosen moment. Every player on waivers right
+// now is listed soonest first, with the claims waiting on him; a search finds
+// the free agents a commissioner might want to put on waivers. Each change is
+// announced in chat — a player becoming claimable is the league's business.
+const etShort = (iso: string | null | undefined) => (iso
+  ? new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'
+  : '—');
+export function WaiverHoldsPanel({ leagueId }: { leagueId: string }) {
+  const [held, setHeld] = useState<HeldPlayer[] | null>(null);
+  const [found, setFound] = useState<HeldPlayer[]>([]);
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search = q) => leagueWaiverHolds(leagueId, search.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setHeld(r.held ?? []); setFound(r.found ?? []); setNextRun(r.next_run ?? null);
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(''); /* eslint-disable-next-line */ }, [leagueId]);
+  const set = async (p: HeldPlayer, mode: 'free' | 'next_run' | 'until') => {
+    if (busy) return;
+    let at: string | undefined;
+    if (mode === 'until') {
+      if (!until) { setMsg('pick a date and time first'); return; }
+      at = new Date(until).toISOString();
+    }
+    setBusy(p.slug); setMsg(null);
+    try { const r = await commishSetWaiverHold(leagueId, p.slug, mode, at); setMsg(r.ok ? `✓ ${r.note ?? 'saved'}` : r.error ?? 'failed'); }
+    catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(null); void load(); }
+  };
+  const line = (p: HeldPlayer) => (
+    <div key={p.slug} style={{ ...row, flexWrap: 'wrap' }}>
+      <span style={{ ...cell, flex: '1 1 160px' }}>{p.name} <span style={{ color: 'var(--faint)' }}>{p.pos} · {p.team}</span></span>
+      <span className="mono" style={{ ...mono, fontSize: 11, color: p.until ? 'var(--warn)' : 'var(--faint)' }}>
+        {p.until ? `on waivers until ${etShort(p.until)}` : 'free agent'}{p.claims ? ` · ${p.claims} claim${p.claims === 1 ? '' : 's'}` : ''}
+      </span>
+      {p.until && <button onClick={() => void set(p, 'free')} disabled={!!busy} className="mono" style={btn(false)}>free now</button>}
+      <button onClick={() => void set(p, 'next_run')} disabled={!!busy} className="mono" style={btn(false)} title={`until ${etShort(nextRun)}`}>to next run</button>
+      <button onClick={() => void set(p, 'until')} disabled={!!busy || !until} className="mono" style={btn(false)}>hold until ↓</button>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>WAIVER HOLDS</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Free a player now, send him to waivers until the next run ({etShort(nextRun)}), or hold him until the time below.
+        Claims already on him wait for his new hold. Each change is posted in league chat.
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+        <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--dim)' }}>HOLD UNTIL</span>
+        <input type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} style={{ ...inp, padding: '4px 6px', fontSize: 12 }} />
+        <span style={{ ...small, marginBottom: 0 }}>your local time, within two weeks</span>
+      </div>
+      {held == null && <div style={small}>loading…</div>}
+      {held?.length === 0 && <div style={small}>Nobody is on waivers right now.</div>}
+      {held?.map(line)}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void load(); }}
+          placeholder="find a free agent to put on waivers" style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+        <button onClick={() => void load()} className="mono" style={btn(false)}>search</button>
+      </div>
+      {found.filter((p) => !(held ?? []).some((h) => h.slug === p.slug)).map(line)}
       {note(msg)}
     </div>
   );
@@ -717,6 +847,8 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         Recompute week {week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings.
         Preview first: nothing changes until you apply.
       </div>
+      <AdjustBox leagueId={leagueId} week={week} />
+      <LineupFixBox leagueId={leagueId} week={week} />
       {running && <div style={small}>⏳ {req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…</div>}
       {req?.error && <div style={{ ...small, color: 'var(--opp)' }}>⚠ Last {req.apply ? 'apply' : 'preview'} failed: {req.error}</div>}
       {res && (
@@ -747,6 +879,258 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         )}
         {note(msg)}
       </div>
+    </div>
+  );
+}
+
+// ── ✏️ POINT ADJUSTMENTS (0355) ──────────────────────────────────────────────
+// Points on or off one player's week, with the reason the league will read.
+// Lives in the re-score box because on a finished week that is where it lands:
+// the adjustment is saved at once and counted by every board, and the stored
+// finals follow when the week is re-scored below.
+function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const [rows, setRows] = useState<PlayerAdjustment[] | null>(null);
+  const [found, setFound] = useState<AdjustCandidate[]>([]);
+  const [q, setQ] = useState('');
+  const [pick, setPick] = useState<{ slug: string; name: string } | null>(null);
+  const [pts, setPts] = useState('');
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = (search?: string) => leaguePlayerAdjustments(leagueId, week, search?.trim() || undefined).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    setRows(r.adjustments ?? []); setFound(r.found ?? []);
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId, week]);
+  const save = async (slug: string, points: number, note: string) => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      setPick(null); setPts(''); setWhy(''); setFound([]); setQ('');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const n = Number(pts);
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>✏️ POINT ADJUSTMENTS · WEEK {week}</div>
+      <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
+        Add or take points from one player for this week — a stat correction, a ruling. It counts wherever his points count
+        (a starting spot, not the bench), every board shows it with your reason, and the league chat is told.
+      </div>
+      {rows?.map((a) => (
+        <div key={a.slug} style={{ ...row, flexWrap: 'wrap' }}>
+          <span style={{ ...cell, flex: '1 1 160px' }}>{a.name} <b style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)' }}>{a.points > 0 ? '+' : ''}{a.points}</b>
+            <span style={{ color: 'var(--faint)' }}> — {a.note}</span></span>
+          <button onClick={() => void save(a.slug, 0, '')} disabled={busy} className="mono" style={btn(false)}>remove</button>
+        </div>
+      ))}
+      {pick ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+          <span style={{ ...cell, fontWeight: 700 }}>{pick.name}</span>
+          <input value={pts} onChange={(e) => setPts(e.target.value)} placeholder="+6 or -2" inputMode="decimal"
+            style={{ ...inp, width: 80, padding: '5px 8px', fontSize: 12.5 }} />
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, minWidth: 160, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void save(pick.slug, n, why)} disabled={busy || !Number.isFinite(n) || n === 0 || !why.trim()}
+            className="mono" style={btn(true)}>save</button>
+          <button onClick={() => setPick(null)} className="mono" style={btn(false)}>cancel</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void load(q); }}
+            placeholder="find a player to adjust" style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void load(q)} className="mono" style={btn(false)}>search</button>
+        </div>
+      )}
+      {!pick && found.map((p) => (
+        <div key={p.slug} style={row}>
+          <span style={{ ...cell, flex: 1 }}>{p.name} <span style={{ color: 'var(--faint)' }}>{p.pos} · {p.team}{p.owner ? ` · ${p.owner}` : ' · free agent'}</span></span>
+          <button onClick={() => { const had = rows?.find((a) => a.slug === p.slug); setPick(p); setPts(had ? String(had.points) : ''); setWhy(had?.note ?? ''); }}
+            className="mono" style={btn(false)}>adjust</button>
+        </div>
+      ))}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── 🧾 FIX A LINEUP (0356) ───────────────────────────────────────────────────
+// One seat's lineup for this week, past the kickoff locks: the start a crashed
+// app never saved, a ruling the league made. Each spot offers only the seat's
+// own players that week (the server's rule) who fit it (core's slotAllows).
+// A reason is required, the league is told who came in and who went out, and
+// a stamped week's finals follow when it is re-scored below.
+function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const [teams, setTeams] = useState<{ roster_id: number; name: string }[] | null>(null);
+  const [rid, setRid] = useState<number | null>(null);
+  const [slots, setSlots] = useState<FixSlot[]>([]);
+  const [cands, setCands] = useState<LineupFixCandidate[]>([]);
+  const [stored, setStored] = useState<Record<string, string | null>>({});
+  const [chosen, setChosen] = useState<Record<string, string | null>>({});
+  const [author, setAuthor] = useState(true);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    setTeams(null); setRid(null);
+    commishWeekLineup(leagueId, week).then((r) => { if (r.ok) setTeams(r.teams ?? []); else setMsg(r.error ?? 'could not load'); })
+      .catch((e) => setMsg(errMsg(e, 'could not load')));
+    leagueGameMode(leagueId).then((gm) => { if (gm.ok) setSlots(fixSlots(gm)); }).catch(() => {});
+  }, [leagueId, week]);
+  const open = (r: number | null) => {
+    setRid(r); setMsg(null);
+    if (r == null) return;
+    commishWeekLineup(leagueId, week, r).then((x) => {
+      if (!x.ok) { setMsg(x.error ?? 'could not load'); return; }
+      setCands(x.candidates ?? []); setRaw(x.stored ?? []); setAuthor(x.has_author !== false);
+    }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  };
+  // The stored rows meet the league's spots once both have loaded.
+  const [raw, setRaw] = useState<{ slot: string; slug: string | null }[]>([]);
+  useEffect(() => { const c = fixChosen(slots, raw); setStored(c); setChosen(c); }, [slots, raw]);
+  const save = async () => {
+    if (busy || rid == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetWeekLineup(leagueId, week, rid, fixPayload(slots, chosen), why);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setWhy('');
+      setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      open(rid);
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  const nameOf = (slug: string | null) => (slug ? cands.find((c) => c.slug === slug)?.name ?? slug : '—');
+  const changed = fixChanged(slots, stored, chosen);
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>🧾 FIX A LINEUP · WEEK {week}</div>
+      <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
+        Set a team's lineup for this week past the kickoff locks — the start an app never saved, a ruling your league made.
+        Only that team's own players that week are offered. The league sees who came in, who went out, and your reason.
+      </div>
+      <select value={rid ?? ''} onChange={(e) => open(e.target.value ? Number(e.target.value) : null)}
+        style={{ ...inp, padding: '5px 8px', fontSize: 12.5, marginBottom: 6 }}>
+        <option value="">{teams == null ? 'loading…' : 'choose a team…'}</option>
+        {(teams ?? []).map((t) => <option key={t.roster_id} value={t.roster_id}>{t.name}</option>)}
+      </select>
+      {rid != null && !author && <div style={small}>This seat has nobody to field a lineup for — its lineup is computed from its roster.</div>}
+      {rid != null && author && slots.map((s) => {
+        const opts = fixOptions(slots, s.slot, cands, chosen);
+        const cur = chosen[s.slot] ?? null;
+        return (
+          <div key={s.slot} style={{ ...row, gap: 8 }}>
+            <span className="mono" style={{ ...mono, fontSize: 11, width: 64, color: 'var(--faint)' }}>{s.name}</span>
+            {s.bestball
+              ? <span style={{ ...small, marginBottom: 0 }}>🎯 best ball — fills itself</span>
+              : (
+                <select value={cur ?? ''} onChange={(e) => setChosen({ ...chosen, [s.slot]: e.target.value || null })}
+                  style={{ ...inp, flex: 1, padding: '4px 6px', fontSize: 12.5, fontWeight: cur !== (stored[s.slot] ?? null) ? 700 : 400 }}>
+                  <option value="">— empty —</option>
+                  {cur && !opts.some((c) => c.slug === cur) && <option value={cur}>{nameOf(cur)} (doesn't fit this spot)</option>}
+                  {opts.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name} · {c.pos} {c.team}{c.spot && c.spot !== 'active' ? ` · ${c.spot.toUpperCase()}` : ''}{c.why === 'left' ? ' · since dropped or traded' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+          </div>
+        );
+      })}
+      {rid != null && author && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void save()} disabled={busy || !changed || !why.trim()} className="mono" style={btn(true)}>save lineup</button>
+          {changed && <button onClick={() => setChosen(stored)} className="mono" style={btn(false)}>reset</button>}
+        </div>
+      )}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── 🔀 REDRAW A WEEK (0357) ──────────────────────────────────────────────────
+// Swap two teams' opponents in a week that hasn't started: tap one team, then
+// the other. A team on bye can be swapped in. Saved lineups follow their team;
+// a drip power-up already armed against an opponent blocks the swap.
+export function SchedulePanel({ leagueId }: { leagueId: string }) {
+  const [weeks, setWeeks] = useState<RedrawWeek[] | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [pick, setPick] = useState<RedrawTeam[]>([]);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => commishOpenSchedule(leagueId).then((r) => {
+    if (!r.ok) { setMsg(r.error ?? 'could not load'); return; }
+    const ws = r.weeks ?? [];
+    setWeeks(ws);
+    setWeek((w) => (w != null && ws.some((x) => x.week === w) ? w : ws[0]?.week ?? null));
+  }).catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  const wk = weeks?.find((w) => w.week === week) ?? null;
+  const tap = (t: RedrawTeam) => {
+    setMsg(null);
+    if (pick.some((p) => p.roster_id === t.roster_id)) setPick(pick.filter((p) => p.roster_id !== t.roster_id));
+    else setPick(pick.length >= 2 ? [t] : [...pick, t]);
+  };
+  const swap = async () => {
+    if (busy || pick.length !== 2 || week == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSwapOpponents(leagueId, week, pick[0].roster_id, pick[1].roster_id, why);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setMsg(`✓ ${r.note ?? 'swapped'}`); setPick([]); setWhy('');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const team = (t: RedrawTeam) => {
+    const on = pick.some((p) => p.roster_id === t.roster_id);
+    return (
+      <button key={t.roster_id} onClick={() => tap(t)} className="mono"
+        style={{ ...btn(on), flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</button>
+    );
+  };
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div className="mono" style={subhead}>🔀 REDRAW A WEEK</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        Swap two teams' opponents in a week that hasn't kicked off: tap one team, then the other. A team on bye can be
+        swapped in, and the other team takes the bye. Saved lineups follow their team. Playoff weeks follow the seeds and aren't listed here.
+        Each change is posted in league chat.
+      </div>
+      {weeks == null && <div style={small}>loading…</div>}
+      {weeks?.length === 0 && <div style={small}>No week is open to redraw — every scheduled week has started, or there's no schedule yet.</div>}
+      {!!weeks?.length && (
+        <select value={week ?? ''} onChange={(e) => { setWeek(Number(e.target.value)); setPick([]); }}
+          style={{ ...inp, padding: '5px 8px', fontSize: 12.5, marginBottom: 8 }}>
+          {weeks.map((w) => <option key={w.week} value={w.week}>Week {w.week}</option>)}
+        </select>
+      )}
+      {wk?.games.map((g) => (
+        <div key={g.id} style={{ ...row, gap: 8 }}>
+          {team(g.home)}<span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>vs</span>{team(g.away)}
+        </div>
+      ))}
+      {!!wk?.byes.length && (
+        <div style={{ ...row, gap: 8 }}>
+          <span className="mono" style={{ ...mono, fontSize: 10.5, color: 'var(--faint)' }}>BYE</span>{wk.byes.map(team)}
+        </div>
+      )}
+      {pick.length === 2 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <span style={{ ...cell, fontWeight: 700 }}>Swap {pick[0].name} ⇄ {pick[1].name}</span>
+          <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
+            style={{ ...inp, flex: 1, minWidth: 160, padding: '5px 8px', fontSize: 12.5 }} />
+          <button onClick={() => void swap()} disabled={busy || !why.trim()} className="mono" style={btn(true)}>swap</button>
+        </div>
+      )}
+      {note(msg)}
     </div>
   );
 }
