@@ -4,11 +4,12 @@
 // COMMISH, and these exist so a manager can look up "how does this league
 // score a 40-yard TD" or "who dropped him" without being handed the editors.
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   leagueGameMode, rosterRules, leagueRegister, playerFlags, leagueScoringGet,
   leagueInvite, leagueListingState, postLeagueListing, closeLeagueListing, friendlyError,
   requestLeagueSync, leagueSyncState, type SyncState,
+  apiKeys, apiKeyCreate, apiKeyRevoke, apiWriteLog, publicApiUrl, type ApiKeyRow, type ApiWriteLogRow,
   type GameModeInfo, type RegisterRow, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
@@ -602,6 +603,121 @@ export function RecruitView({ leagueId, commish }: { leagueId: string; commish: 
           </View>
         </>)}
       </>)}
+    </ScrollView>
+  );
+}
+
+// ── 🔑 API KEYS (0352) — the web's ApiKeysPanel, in the app's idiom ────────
+// A manager mints the key an outside tool uses to run their team, once the
+// commissioner has switched the write API on. The key is shown ONCE — the
+// server keeps only its hash — so the sheet says so in capitals and offers
+// the copy button right there. The commissioner sees and can revoke every key.
+const whenShort = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never');
+export function ApiKeysView({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [st, setSt] = useState<{ on: boolean; commish: boolean; keys: ApiKeyRow[] } | null>(null);
+  const [log, setLog] = useState<ApiWriteLogRow[]>([]);
+  const [label, setLabel] = useState('');
+  const [scope, setScope] = useState<'team' | 'league'>('team');
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const load = () => Promise.all([
+    apiKeys(leagueId).then((r) => {
+      if (r.ok) setSt({ on: !!r.write_api, commish: !!r.is_commish, keys: r.keys ?? [] });
+      else setErr(friendlyError(r.error ?? 'could not load'));
+    }),
+    apiWriteLog(leagueId, 20).then((r) => setLog(r.entries ?? [])),
+  ]).catch((x) => setErr(friendlyError(x)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const mint = async () => {
+    if (busy) return;
+    tap(); setBusy(true); setErr(null); setFresh(null); setCopied(false);
+    try {
+      const r = await apiKeyCreate(leagueId, label.trim(), scope);
+      if (r.ok && r.key) { commit(); setFresh(r.key); setLabel(''); } else { warn(); setErr(friendlyError(r.error ?? 'failed')); }
+    } catch (x) { warn(); setErr(friendlyError(x)); }
+    finally { setBusy(false); void load(); }
+  };
+  const revoke = (k: ApiKeyRow) => {
+    Alert.alert(`Revoke ${k.label || k.prefix}?`, 'Anything using it stops working at once.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Revoke', style: 'destructive', onPress: () => {
+        setBusy(true);
+        apiKeyRevoke(k.id).then((r) => { if (!r.ok) setErr(friendlyError(r.error ?? 'failed')); else commit(); })
+          .catch((x) => setErr(friendlyError(x)))
+          .finally(() => { setBusy(false); void load(); });
+      } },
+    ]);
+  };
+  const chip = (label2: string, onPress: () => void, tone: string = t.text) => (
+    <Pressable onPress={onPress} disabled={busy}
+      style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7 }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: tone }}>{label2}</Text>
+    </Pressable>
+  );
+  if (!st) return <Mono size={10} tone={err ? 'opp' : 'faint'}>{err ?? 'Loading…'}</Mono>;
+  return (
+    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24, gap: 10 }}>
+      {!st.on ? (
+        <Mono size={10} tone="dim" style={{ lineHeight: fs(16) }}>
+          {`The write API is off for this league. ${st.commish
+            ? 'Switch it on under Commissioner → AWARDS & BADGES → WRITE API, and every manager can make a key here.'
+            : 'Only the commissioner can switch it on — ask them if you want to run your team from another tool.'}`}
+        </Mono>
+      ) : (
+        <>
+          <Mono size={10} tone="dim" style={{ lineHeight: fs(16) }}>
+            {`A key lets another tool act as you in this league — set lineups, add and drop, claim, trade${st.commish ? ', and with LEAGUE scope run your commissioner tools' : ''}. It can do nothing you cannot. Send it as "Authorization: Bearer drip_sk_…" to:`}
+          </Mono>
+          <Mono size={9.5} tone="you">{publicApiUrl(leagueId)}</Mono>
+          <TextInput value={label} onChangeText={setLabel} maxLength={60} placeholder="what is it for? (e.g. lineup bot)"
+            placeholderTextColor={t.faint}
+            style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(12.5), color: t.text, backgroundColor: t.bg }} />
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {st.commish && chip(scope === 'team' ? 'TEAM SCOPE' : 'LEAGUE SCOPE', () => { tap(); setScope(scope === 'team' ? 'league' : 'team'); })}
+            {chip('MAKE A KEY', () => { void mint(); }, t.you)}
+          </View>
+          {st.commish && (
+            <Mono size={8.5} tone="faint">{scope === 'team' ? 'TEAM: your own team only.' : 'LEAGUE: every team, plus your commissioner tools.'}</Mono>
+          )}
+          {fresh && (
+            <View style={{ borderWidth: 1, borderColor: t.you, borderRadius: 7, padding: 10, gap: 6 }}>
+              <Mono size={9} tone="warn">COPY IT NOW — THIS IS THE ONLY TIME IT WILL BE SHOWN</Mono>
+              <Text selectable style={{ fontFamily: MONO, fontSize: fs(11), color: t.text }}>{fresh}</Text>
+              {chip(copied ? '✓ COPIED' : '⧉ COPY', () => { void copyText(fresh).then((ok) => setCopied(ok)); })}
+            </View>
+          )}
+        </>
+      )}
+      {err && <Mono size={10} tone="opp">{err}</Mono>}
+      {st.keys.length > 0 && (
+        <View style={{ gap: 2 }}>
+          <Mono size={9} tone="dim" track={0.1}>{st.commish ? 'EVERY KEY IN THE LEAGUE' : 'YOUR KEYS'}</Mono>
+          {st.keys.map((k) => (
+            <View key={k.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: t.bd, opacity: k.revoked_at ? 0.45 : 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>
+                  {(k.label || 'unnamed key') + (st.commish && !k.mine && k.owner ? ` · ${k.owner}` : '')}
+                </Text>
+                <Mono size={8.5} tone="faint">{`${k.prefix}… · ${k.scope.toUpperCase()} · ${k.revoked_at ? `revoked ${whenShort(k.revoked_at)}` : `last used ${whenShort(k.last_used_at)}`}`}</Mono>
+              </View>
+              {!k.revoked_at && chip('REVOKE', () => { tap(); revoke(k); }, t.opp)}
+            </View>
+          ))}
+        </View>
+      )}
+      {log.length > 0 && (
+        <View style={{ gap: 2 }}>
+          <Mono size={9} tone="dim" track={0.1}>{st.commish ? 'RECENT WRITES, EVERY KEY' : 'RECENT WRITES, YOUR KEYS'}</Mono>
+          {log.map((l) => (
+            <Mono key={l.id} size={9} tone={l.ok ? 'text' : 'opp'} style={{ paddingVertical: 3 }}>
+              {`${l.ok ? '✓' : '✕'} ${l.action}${l.roster_id != null ? ` · roster ${l.roster_id}` : ''} · ${l.label || l.prefix || 'key'} · ${whenShort(l.at)}${!l.ok && l.error ? ` — ${l.error}` : ''}`}
+            </Mono>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }

@@ -1,7 +1,9 @@
-# The Drip public read API (v1)
+# The Drip league API (v1)
 
-Anonymous, read-only access to leagues that have opted in. No key, no login,
-CORS open — the same bargain that made Sleeper's tooling ecosystem exist.
+Two halves on one base URL. **Reads** are anonymous: no key, no login, CORS
+open — the same bargain that made Sleeper's tooling ecosystem exist. **Writes**
+(since 0352) need a key, and a key exists only in a league whose commissioner
+switched the write API on — see [The write API](#the-write-api) below.
 
 ```
 GET https://<project>.supabase.co/functions/v1/public-api/v1/league/{league_id}
@@ -93,8 +95,8 @@ Not "not yet" — by design, and enforced in the SQL that builds each response
 - **Trade offers in flight.** Members see negotiations; the internet doesn't.
 - **Email addresses, claim emails, invite codes, chat, DMs, dues.** The
   all-time manager line carries an opaque handle, never an account id.
-- **Anything that writes.** A write API needs per-user consent; it is a
-  different project.
+- **Anything that writes, without a key.** Writes are the keyed half below;
+  the anonymous half never changes anything.
 
 ## Manners
 
@@ -114,3 +116,109 @@ API=https://<project>.supabase.co/functions/v1/public-api/v1
 curl -s "$API/league/$LEAGUE/standings" | jq '.standings[0]'
 curl -s "$API/league/$LEAGUE/transactions?limit=5" | jq '.transactions[].kind'
 ```
+
+## The write API
+
+Keyed control of a league from outside the app — the thing ESPN's API is used
+for: lineup optimisers, waiver bots, a Discord command that answers a trade.
+
+### Who can use it
+
+- **The commissioner opts the league in.** ⚑ Manage league → 🏅 AWARDS &
+  BADGES → WRITE API on the web, Commissioner → AWARDS & BADGES → WRITE API in
+  the app. Off by default for every league. Switching it off stops every key
+  in the league on its next call; switching it back on restores them.
+- **Each manager makes their own key**, under the league menu → 🔑 API keys.
+  A key belongs to one league and one person, and it is **shown once**: the
+  database keeps only its SHA-256, so there is nothing to show again and
+  nothing a leaked table could hand out. Ten live keys per person per league.
+- **A key acts as its owner, with exactly their powers.** Every write ends in
+  the same function the app calls, which asks its own permission question.
+  - `team` scope (anyone with a seat): the seats you own or co-manage, and
+    nothing else — even if you are the commissioner.
+  - `league` scope (the commissioner only): every seat, plus the
+    commissioner's tools. A lineup bot does not need to veto trades, so a
+    commissioner who builds one does not have to hand it that power.
+- **A key is never a platform admin**, whoever made it.
+- **Every write is logged** — key, action, seat, and why it failed if it
+  did. The commissioner reads the whole league's log; a manager reads their own.
+  The 🔑 sheet shows the latest, and any key can be revoked there.
+
+### Calling it
+
+```
+Authorization: Bearer drip_sk_<64 hex>
+```
+
+| Method & route | Body | Scope |
+|---|---|---|
+| `GET /v1/me` · `GET /v1/league/{id}/me` | — | any |
+| `GET /v1/league/{id}/lineup?roster_id=&week=` | — | any |
+| `PUT /v1/league/{id}/lineup` | `{roster_id, week, picks:[{game_window, roster_slot, player_slug, metric_id?}]}` | any |
+| `POST /v1/league/{id}/add` | `{roster_id, add, drop?}` | any |
+| `POST /v1/league/{id}/drop` | `{roster_id, player}` | any |
+| `POST /v1/league/{id}/claims` | `{roster_id, add, drop?, bid?}` | any |
+| `DELETE /v1/league/{id}/claims/{claim_id}` | — | any |
+| `POST /v1/league/{id}/roster-spot` | `{player, spot: active\|ir\|out\|taxi}` | any |
+| `POST /v1/league/{id}/trades` | `{roster_id, to_roster, give:[], get:[], note?, give_picks?, get_picks?, faab_dollars?, expires_hours?}` | any |
+| `POST /v1/league/{id}/trades/{trade_id}/accept` · `/decline` · `/cancel` | — | any |
+| `POST /v1/league/{id}/trades/{trade_id}/approve` · `/veto` | — | league |
+| `POST /v1/league/{id}/waivers/process` | — | league |
+| `POST /v1/league/{id}/players/{slug}/move` | `{to_roster}` | league |
+| `POST /v1/league/{id}/players/{slug}/remove` | `{waive?}` | league |
+| `PUT /v1/league/{id}/waiver-priority` | `{order:[roster ids]}` | league |
+
+Players are named by the league's `slug`, as `/players` lists them. A lineup
+`PUT` replaces the **unlocked** picks in each window it names and leaves every
+other window alone; a pick whose game has kicked off is never touched. Classic
+lineups use the one window `wk`. A league-scope key may set another team's
+lineup in a classic league only — drip picks are hidden until kickoff, and a
+commissioner reading them would be the exploit 0178 fenced off.
+
+### Answers
+
+`200` with the league's own answer on success. Otherwise
+`{ "ok": false, "error": { "code", "message" } }`:
+
+| Status | Means |
+|---|---|
+| `400` | Malformed: no `roster_id`, a body that is not a JSON object |
+| `401` | No key, or an unknown or revoked one |
+| `403` | Write API off; a key pointed at another league; a seat the key cannot act for; a commissioner route with a team key; an owner no longer in the league |
+| `404` | No such route, or no such claim or trade **in this league** |
+| `409` | A league rule stopped it mid-write — a kickoff lock, an illegal roster. Nothing changed |
+| `422` | The league said no, in its own words: `free agent — add him directly`, `bid exceeds your FAAB balance of $12` |
+| `429` | 60 writes a minute per key, one a second sustained |
+
+Keyed answers are `Cache-Control: no-store`. A keyed `GET` of a read section
+(`/rosters`, `/players`) is simply a read — send the header on everything if
+that is easier.
+
+### Example
+
+```bash
+API=https://<project>.supabase.co/functions/v1/public-api/v1
+KEY=drip_sk_…
+curl -s -H "Authorization: Bearer $KEY" "$API/me" | jq '{league_id, rosters, key}'
+curl -s -X POST -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
+  -d '{"roster_id": 3, "add": "jaylen-warren", "drop": "zamir-white"}' "$API/league/$LEAGUE/add"
+```
+
+### How it is built
+
+One SQL function, `api_write` (migration 0352), is the only door: granted to
+the service role alone, it hashes the key, checks the league's switch, then
+sets the request's JWT claims to the key's owner for the rest of the
+transaction — so `owns_roster`, `is_league_commish` and every RPC's own guard
+answer exactly as they would in the app. It always passes the **key's**
+league, never the caller's, and checks that a claim or trade named by id
+belongs to it. Lineups are written by `_api_set_lineup`, which asks the
+`sealed_pick` policies' questions out loud (RLS does not apply to a function
+running as its owner); the kickoff, legality, slot-cap, flag and stash
+triggers fire for every writer regardless.
+
+Pinned by `scripts/check-write-api.mjs` (router and whitelist agree; the door
+is the service role's; the claims carry no email; off by default),
+`scripts/db/write-api-probes.sql` (scopes, isolation, revocation, the log,
+the admin check) and `scripts/db/write-api-e2e.mjs` (the real router against
+the real SQL).

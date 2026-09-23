@@ -21,6 +21,7 @@ import {
   rosterRules, leaguePublicApi, commishSetWireLock, commishLockTeam, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
   leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl,
+  leagueWriteApi, commishSetWriteApi,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
@@ -343,6 +344,39 @@ export function PublicApiPanel({ leagueId }: { leagueId: string }) {
       )}
       <div style={{ ...small, marginTop: 6 }}>
         Published — the default — means anyone holding this league's link can read it: settings, rosters, standings, scores, the register, completed trades, the draft, history and awards, with no login, from anything that can make a web request. It is how rankings sites, spreadsheets and Discord bots plug in. There is no directory: a league is readable only by whoever has its id, so this means "if you have the link", not "listed anywhere". Never served either way: hidden picks before they reveal, pending waiver bids, trade offers in flight, email addresses, invite codes and chat. Make it private and every endpoint returns a 404 identical to a league that does not exist. Leagues imported from Sleeper, ESPN or Yahoo start private — they are a mirror of somebody else's system, not ours to publish.
+      </div>
+    </div>
+  );
+}
+
+// ── THE WRITE API (0352) — the commissioner's opt-in ────────────────────────
+// Off by default, for every league. On, every manager may mint a key under
+// ⚙ → 🔑 API keys that lets an outside tool act as them; off, every key in the
+// league stops on its next call and starts again when this goes back on.
+export function WriteApiPanel({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueWriteApi(leagueId).then((v) => setOn(v === true))
+    .catch((e) => setMsg(errMsg(e, 'could not load')));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [leagueId]);
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div style={subhead}>WRITE API</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={() => {
+          if (busy || on === null) return;
+          if (!on && !window.confirm('Let managers in this league run their teams from outside tools? Each manager makes their own key, and a key can do only what its owner can.')) return;
+          setBusy(true); setMsg(null);
+          commishSetWriteApi(leagueId, !on).then((r) => setMsg(r.ok ? '✓ saved' : r.error ?? 'failed'))
+            .catch((e) => setMsg(errMsg(e, 'failed')))
+            .finally(() => { setBusy(false); load(); }); }}
+          disabled={busy || on === null} className="mono" style={btn(on === true)}>{on ? 'ON' : 'OFF'}</button>
+        <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{on ? 'tap to switch every key off' : 'tap to let managers make keys'}</span>
+        {note(msg)}
+      </div>
+      <div style={{ ...small, marginTop: 6 }}>
+        Keyed control of the league from outside the app, the way ESPN's API works: set lineups, add and drop, file and cancel waiver claims, propose and answer trades. Each manager makes their own key under ⚙ → 🔑 API keys, and a key acts as that person with exactly their powers — a TEAM key reaches only their own team. Your own LEAGUE-scope key also reaches every team and your tools: run waivers, approve or veto trades, move players, set the waiver order. Every write is logged where you can see it, and you can revoke any key. Switching this off stops every key at once; switching it back on restores them.
       </div>
     </div>
   );

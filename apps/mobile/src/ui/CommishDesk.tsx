@@ -11,6 +11,7 @@ import {
   rosterRules, commishSetWireLock, commishLockTeam, adminLeagueMembers, type AdminMember,
   nativeTeamState, commishSetWaiverPriority, commishSetMedianGame, commishSetTradeRules,
   leagueAwards, commishSetAward, commishDeleteAward, commishSetPublicApi, publicApiUrl, leaguePublicApi,
+  leagueWriteApi, commishSetWriteApi,
   commishSetBadge, commishDeleteBadge, commishGrantBadge, commishRevokeBadge,
   type TradeReview, type LeagueAwards, type AwardDef,
   commishWeekScores, commishSetMatchupScore, type WeekScoreRow,
@@ -250,6 +251,39 @@ export function PublicApiCard({ leagueId }: { leagueId: string }) {
           commissioner about to publish needs it before the URL exists. */}
       <CopyIdRow leagueId={leagueId} />
       {on && <Mono size={8.5} tone="you" style={{ marginTop: 6 }}>{publicApiUrl(leagueId)}</Mono>}
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── THE WRITE API (0352) — the web's WriteApiPanel ──────────────────────────
+export function WriteApiCard({ leagueId }: { leagueId: string }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => leagueWriteApi(leagueId).then((v) => setOn(v === true))
+    .catch((e) => setMsg(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const flip = async () => {
+    if (busy || on === null) return;
+    setBusy(true); setMsg(null);
+    try { const r = await commishSetWriteApi(leagueId, !on); if (r.ok) { commit(); setMsg('✓ saved'); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); } }
+    catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const toggle = () => {
+    if (on) { void flip(); return; }
+    Alert.alert('Switch on the write API?',
+      'Managers will be able to run their teams from outside tools. Each makes their own key, and a key can do only what its owner can.',
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Switch on', onPress: () => { void flip(); } }]);
+  };
+  return (
+    <Card>
+      <LabelInfo label="WRITE API" info={'Keyed control of the league from outside the app, the way ESPN\'s API works: set lineups, add and drop, file and cancel waiver claims, propose and answer trades. Each manager makes their own key under the league menu → 🔑 API keys, and a key acts as that person with exactly their powers — a TEAM key reaches only their own team. Your own LEAGUE-scope key also reaches every team and your tools: run waivers, approve or veto trades, move players, set the waiver order. Every write is logged, and you can revoke any key. Off stops every key at once; back on restores them.'} />
+      <Row>
+        <Chip label={on ? 'ON' : 'OFF'} on={on === true} disabled={busy || on === null}
+          onPress={() => { tap(); toggle(); }} />
+      </Row>
       <Note msg={msg} />
     </Card>
   );

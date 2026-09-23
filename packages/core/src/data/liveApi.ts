@@ -2453,6 +2453,43 @@ export const commishSetPublicApi = (leagueId: string, on: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; public_api?: boolean }>('commish_set_public_api',
     { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'public_api' });
 
+// ── The write API (0352) ─────────────────────────────────────────────────────
+// Keyed control of a league from outside the app — lineups, adds and drops,
+// claims, trades, and for the commissioner the league's own tools. The
+// commissioner opts the league in; each manager mints their own key. A key is
+// shown ONCE (the server keeps only its hash) and acts as whoever minted it,
+// with exactly their powers — `team` scope for their own seats only, `league`
+// scope (the commissioner's) for every seat and the commissioner's tools.
+export interface ApiKeyRow {
+  id: string; label: string; scope: 'team' | 'league'; prefix: string;
+  created_at: string; last_used_at: string | null; revoked_at: string | null;
+  /** Mine, as opposed to one the commissioner can see because they can see all of them. */
+  mine: boolean;
+  /** The owner's team name — for the commissioner's list. */
+  owner: string | null;
+}
+export interface ApiWriteLogRow {
+  id: number; at: string; action: string; roster_id: number | null; ok: boolean;
+  error: string | null; prefix: string | null; label: string | null; mine: boolean;
+}
+export const leagueWriteApi = (leagueId: string) =>
+  rpc<boolean>('league_write_api', { p_league_id: leagueId });
+export const commishSetWriteApi = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; write_api?: boolean }>('commish_set_write_api',
+    { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'write_api' });
+export const apiKeys = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; write_api?: boolean; is_commish?: boolean; keys?: ApiKeyRow[] }>(
+    'api_keys', { p_league_id: leagueId });
+/** The returned `key` is the only time it exists outside the caller's hands. */
+export const apiKeyCreate = (leagueId: string, label: string, scope: 'team' | 'league' = 'team') =>
+  rpc<{ ok: boolean; error?: string; id?: string; key?: string; prefix?: string; scope?: string }>(
+    'api_key_create', { p_league_id: leagueId, p_label: label, p_scope: scope });
+export const apiKeyRevoke = (keyId: string) =>
+  rpc<{ ok: boolean; error?: string }>('api_key_revoke', { p_key_id: keyId });
+export const apiWriteLog = (leagueId: string, limit = 50) =>
+  rpc<{ ok: boolean; error?: string; entries?: ApiWriteLogRow[] }>('api_write_log_list',
+    { p_league_id: leagueId, p_limit: limit });
+
 // ── Weekly awards and badges (0325) ──────────────────────────────────────────
 /** An award DEFINITION: three choices that between them cover everything a
  *  week's scores can say about a team. `is_default` marks the built-in four a
