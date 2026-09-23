@@ -2415,7 +2415,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
   tone?: string;
   p: (LeaguePoolPlayer & { spot: string }) | null;
   busy: boolean;
-  /** IR/taxi only: fill this place, or empty it. Absent on starters + bench. */
+  /** IR/OUT/taxi only: open this place's picker. Absent on starters + bench. */
   onSlot?: () => void;
   slotVerb?: string;
   /** The NFL report's designation (v0.424.0) — O/D/Q/IR, or nothing. */
@@ -2427,15 +2427,19 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
     <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
       width: 74, minHeight: 26, flex: 'none', textAlign: 'center', border: `1px solid ${fg}`,
       background: bg, borderRadius: 5, padding: '3px 4px', fontSize: 8.5, fontWeight: 700, color: fg, lineHeight: 1.25 }}>
-      {slotBadgeLabel(badge)}{p && onSlot ? ' ↩' : ''}
+      {slotBadgeLabel(badge)}
     </span>
   );
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-      {/* On a FILLED taxi/IR place the badge is the way out — click TX ↩ and he
-          is back on the active roster. Nothing else on the line moves him. */}
-      {p && onSlot
-        ? <button onClick={onSlot} disabled={busy} title="back to the active roster"
+      {/* THE CHIP OPENS THE PICKER (v0.490.1), filled or empty, IR, OUT or
+          taxi alike — founder: "have the chip open the picker and always open
+          the picker". It used to move a filled place's player straight back
+          to active on one tap, with no confirmation, while an empty place's
+          chip did nothing at all: two chips that look the same, doing
+          opposite things. Every move now goes through the one sheet. */}
+      {onSlot
+        ? <button onClick={onSlot} disabled={busy} title={p ? `${p.full_name} — back to active, or move someone else in` : `move someone to the ${slotVerb ?? 'squad'}`}
             style={{ background: 'none', border: 0, padding: 0, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>{badgeBox}</button>
         : badgeBox}
       {p ? (
@@ -2761,7 +2765,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // starting spots, and how many bench/IR/taxi places exist (v0.285.0, matching
   // the app's roster since v0.281.0).
   const [gm, setGm] = useState<GameModeInfo | null>(null);
-  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | null>(null);  // an empty IR/OUT/taxi place, asking who
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | null>(null);  // an IR/OUT/taxi place's picker
+  // Who is IN the place whose chip opened the picker — null for an empty one.
+  // Always written with fillFor (openSpot), so it can never be stale.
+  const [fillOcc, setFillOcc] = useState<string | null>(null);
+  const openSpot = (spot: 'taxi' | 'ir' | 'out', occupant: string | null) => { setFillOcc(occupant); setFillFor(spot); };
   // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
   // The server has enforced both of these since 0164/0196, but no screen had
   // ever read the rules — so the picker offered every name and the rule only
@@ -3250,11 +3258,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </div>
           {bySpot.ir.map((p) => (
-            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterLine key={p.slug} badge="IR" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('ir', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterLine key={`ir-empty-${i}`} badge="IR" tone="var(--warn)" p={null} busy={busy}
-              slotVerb="injured reserve" onSlot={canStash ? () => setFillFor('ir') : undefined} />
+              slotVerb="injured reserve" onSlot={canStash ? () => openSpot('ir', null) : undefined} />
           ))}
         </>)}
 
@@ -3265,11 +3273,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             OUT ({bySpot.out.length}{gm?.shape?.out ? `/${gm.shape.out}` : ''})
           </div>
           {bySpot.out.map((p) => (
-            <RosterLine key={p.slug} badge="OUT" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterLine key={p.slug} badge="OUT" tone="var(--warn)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('out', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.out ?? 0) - bySpot.out.length) }, (_, i) => (
             <RosterLine key={`out-empty-${i}`} badge="OUT" tone="var(--warn)" p={null} busy={busy}
-              slotVerb="the OUT shelf" onSlot={canStash ? () => setFillFor('out') : undefined} />
+              slotVerb="the OUT shelf" onSlot={canStash ? () => openSpot('out', null) : undefined} />
           ))}
         </>)}
 
@@ -3279,11 +3287,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </div>
           {bySpot.taxi.map((p) => (
-            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+            <RosterLine key={p.slug} badge="TX" tone="var(--you)" p={p} busy={busy} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('taxi', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterLine key={`tx-empty-${i}`} badge="TX" tone="var(--you)" p={null} busy={busy}
-              slotVerb="taxi squad" onSlot={canStash ? () => setFillFor('taxi') : undefined} />
+              slotVerb="taxi squad" onSlot={canStash ? () => openSpot('taxi', null) : undefined} />
           ))}
         </>)}
 
@@ -3594,17 +3602,34 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       )}
 
       {/* roster full → choose a drop for the pending add */}
-      {/* AN EMPTY TAXI / IR PLACE, ASKING WHO GOES IN IT (v0.285.0) — the
-          picker offers the ACTIVE roster only. A player already on IR or the
-          taxi squad isn't a candidate for the other: send him back to active
-          first (click his badge), which keeps every move one legal step the
-          server can answer for rather than a silent two-step. */}
+      {/* AN IR / OUT / TAXI PLACE'S PICKER (v0.285.0; every chip since
+          v0.490.1). From a FILLED place it leads with the man in it and his
+          way back to active; either way it then offers the ACTIVE roster to
+          move in. A player already on IR or the taxi squad isn't a candidate
+          for the other: send him back to active first, which keeps every move
+          one legal step the server can answer for rather than a silent
+          two-step. A shelf already at its limit greys every move-in with the
+          reason, instead of letting the tap find out. */}
       {fillFor && (
         <div onClick={() => setFillFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-              {viewingMine ? '' : `${shownName ?? 'This team'}: `}{fillFor === 'ir' ? 'Move to injured reserve' : fillFor === 'out' ? 'Move to OUT' : 'Move to the taxi squad'}
+              {viewingMine ? '' : `${shownName ?? 'This team'}: `}{fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : 'Taxi squad'}
             </div>
+            {(() => {
+              const occ = fillOcc ? shown.find((p) => p.slug === fillOcc && p.spot === fillFor) : null;
+              if (!occ) return null;
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', marginTop: 8, borderTop: '1px solid var(--bd)', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+                  <PlayerImg playerId={occ.slug} espnId={occ.espn_id} team={occ.team} pos={occ.pos as Pos} size={24} />
+                  <PosPill pos={occ.pos as Pos} />
+                  <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{occ.full_name}</span>
+                  {injTags[occ.slug] && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)' }}>{injTags[occ.slug]}</span>}
+                  <button onClick={() => moveToSpot(occ.slug, 'active')} disabled={busy} className="mono"
+                    style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--you)' }}>↩ BACK TO ACTIVE</button>
+                </div>
+              );
+            })()}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
               {fillFor === 'ir'
                 ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report — your commissioner sets that list. Everyone else is greyed out below.`
@@ -3614,6 +3639,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   ? `The taxi squad holds prospects off your active roster — your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer. He can’t be started while he’s on it.`
                   : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
             </div>
+            {fillOcc && (
+              <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginTop: 12 }}>
+                OR MOVE SOMEONE {fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : 'TO THE TAXI SQUAD'}
+              </div>
+            )}
             {shown.filter((p) => p.spot === 'active').length === 0 && (
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Nobody on the active roster to move.</div>
             )}
@@ -3621,7 +3651,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               // Ineligible names stay VISIBLE and greyed rather than vanishing:
               // "why isn't he in the list" is a worse question than "why is he
               // greyed out", and the answer is printed right beside him.
-              const why = stashBlock(p.slug, fillFor);
+              const cap = gm?.shape?.[fillFor] ?? 0;
+              const full = cap > 0 && bySpot[fillFor].length >= cap;
+              const why = full
+                ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
+                : stashBlock(p.slug, fillFor);
               return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6, opacity: why ? 0.45 : 1, flexWrap: 'wrap' }}>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />

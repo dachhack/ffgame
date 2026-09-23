@@ -18,6 +18,79 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.491.0 — the commissioner re-scores a week
+
+Founder, on commissioner tools: "Change scoring for previous weeks? Change
+lineups for previous weeks and restamp? Change scoring for a player and
+restamp?", then: "Build the re-score button first."
+
+All three end in one step: re-resolve a finished week and write what comes
+out. That step existed only as restamp.yml, an operator's GitHub workflow. 0345
+taught the console to SEE a week that needs it ("⚠ scored before the last
+play") and then had to say "only a re-stamp (admin) recomputes them". Now the
+commissioner has the button, for their own league.
+
+⟳ RE-SCORE sits on each finished week in the WEEKLY REPORT panel, web and app,
+in classic leagues only.
+- PREVIEW changes nothing. The worker re-resolves the week with
+  `resolveMatchup`'s dry run, the same code the week was stamped with, and the
+  box lists every matchup that would move, before → after, and which results
+  would change hands. It also names seats that saved no lineup, because a
+  re-score fields those from TODAY's roster and injury report.
+- APPLY confirms that preview. It is refused unless a preview of the same week
+  finished in the last 30 minutes and found a change. It runs
+  `stampFinals(restamp)` for that one league, exactly what restamp.yml runs,
+  rebuilds the week's report and replaces its chat line, and posts one house
+  line naming the results that moved and any that changed hands.
+- DRIP IS REFUSED, in the SQL and again in the worker. A drip week was played
+  against power-ups and window state no later pass can rebuild; the week-1
+  run of 2026-09-22 moved two drip leagues by −69.1 and +105.4.
+
+The re-score reads today's scoring settings, so it is also how a settings
+change reaches a past week. That is the first of the founder's three asks.
+Per-player adjustments and past-week lineup edits are the next two, and both
+will end in this button.
+
+Pieces: migration 0353 (rescore_request queue, commish_request_rescore,
+league_rescore_state, rescore_finish, which is service role only); worker
+server/src/rescore.js, swept every tick; core data/rescore.ts, holding the
+moved/flipped rule and wording both screens share. Tests: server/test/rescore.mjs
+(the errand, fake db), scripts/db/rescore-probes.sql (the gates and the chat
+line, on the scratch db), check:rescore in check:parity.
+
+h2h-verify prints one "✗ FAIL coin totals are positive" line and still exits
+0. That predates this change; it happens on main too.
+
+Migration 0353. The worker redeploys on merge.
+
+### v0.490.1 — the chip opens the picker
+
+Founder, asked what tapping the IR chip does: "Let's have the chip open the
+picker and always open the picker. Make sure this is the same on the web and
+app and for both types of IR spots."
+
+Two chips that looked alike did opposite things. A FILLED IR/OUT/taxi chip
+("IR ↩") moved its player straight back to active on one tap, with no
+confirmation, and failed with a red error when the active roster was full. An
+EMPTY chip did nothing; only the "＋ move someone" text beside it opened the
+picker.
+
+Now every stash chip opens that place's picker, filled or empty, on IR, OUT and
+the taxi squad, web and app. The shared row component draws all three shelves,
+so IR alone would have been the odd one out:
+- From a filled place, the sheet leads with the player in it and a ↩ BACK TO
+  ACTIVE button, then offers the active roster to move in.
+- From an empty place, it is the picker it always was.
+- A shelf already at its limit greys every move-in with the reason ("IR is full
+  (3/3) — move someone back to active first"), instead of letting the tap find
+  out.
+
+The ↩ glyph is gone from the chip, since the chip no longer does that on its
+own. No swap in one step: moving a man out and another in are still two moves,
+each one the server answers for.
+
+No migration.
+
 ### v0.490.0 — the league answers to a key
 
 Founder: "Let's do an API for external league and team control like ESPN.
