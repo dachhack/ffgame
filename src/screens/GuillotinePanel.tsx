@@ -14,6 +14,7 @@
 // provisional (~), and a byed seat is never the one under the blade.
 import { useState } from 'react';
 import { useEffect } from 'react';
+import { InjuryNow } from '../app/ui';
 import { guillotineTick, guillotineState, type GuillotineState } from '@drip/core/data/liveApi';
 
 const hdr = (color: string): React.CSSProperties => ({ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color });
@@ -161,6 +162,7 @@ export function GuillotinePanel({ leagueId, myRoster, framed }: {
           {frenzy.slice(0, 12).map((p) => (
             <div key={p.slug} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name} · {p.pos}</span>
+              <InjuryNow slug={p.slug} style={{ alignSelf: 'center' }} />
               <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>#{p.rank}</span>
             </div>
           ))}

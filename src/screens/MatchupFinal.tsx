@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../app/store';
-import { Brand, SiteSettings, PosPill, useIsMobile, NoGameScreen } from '../app/ui';
+import { Brand, SiteSettings, PosPill, InjuryNow, useIsMobile, NoGameScreen } from '../app/ui';
 import { getTeam, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildMatchup, defaultLineup, aiLineup, slotKey, WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
 import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded } from '@drip/core/data/realPbp';
@@ -234,7 +234,7 @@ export function MatchupFinal({ week }: { week: number }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                   <PosPill pos={s.you.player.pos} />
                   <div style={{ minWidth: 0 }}>
-                    <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.you.player.name}</div>
+                    <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.you.player.name}<InjuryNow slug={s.you.player.id} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
                     <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{yMet?.name}</div>
                   </div>
                 </div>
@@ -243,7 +243,7 @@ export function MatchupFinal({ week }: { week: number }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexDirection: isMobile ? 'row' : 'row-reverse' }}>
                   <PosPill pos={s.their.player.pos} />
                   <div style={{ minWidth: 0, textAlign: isMobile ? 'left' : 'right' }}>
-                    <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.their.player.name}</div>
+                    <div className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.their.player.name}<InjuryNow slug={s.their.player.id} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
                     <div className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{tMet?.name}</div>
                   </div>
                 </div>

@@ -37,6 +37,7 @@ import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 import { NoGame } from './NoGame';
+import { InjuryNow } from './rosterGroup';
 import { Overlay } from './Overlay';
 import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
@@ -134,9 +135,12 @@ function SlateStrip({ chips, sel, onSel, locked }: {
                       ? <Mono size={8.5} tone="faint">—</Mono>
                       : ps.map((e) => (
                           <View key={e.slug} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, paddingVertical: 1 }}>
-                            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.text, flexShrink: 1 }}>
-                              {shortName(e.name)}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0 }}>
+                              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.text, flexShrink: 1 }}>
+                                {shortName(e.name)}
+                              </Text>
+                              <InjuryNow slug={e.slug} size={7} />
+                            </View>
                             <Mono size={9} weight="700" tone="dim">
                               {(locked ? e.live : e.proj).toFixed(1)}
                             </Mono>
@@ -1707,7 +1711,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
                   <Face slug={p.slug} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Display size={12.5}>{shortName(p.full)}</Display>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Display size={12.5}>{shortName(p.full)}</Display>
+                      <InjuryNow slug={p.slug} size={8} />
+                    </View>
                     {!!spotOf.get(p.slug) && (
                       <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
                     )}
@@ -1789,7 +1796,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 8 }}>BENCH</Mono>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           {bench.map((p) => (
-            <Chip key={p.slug} label={`${shortName(p.full)} · ${p.pos}${locked ? ` · ${r1(pts(p.slug))}` : ''}`} dim onPress={() => {}} />
+            <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Chip label={`${shortName(p.full)} · ${p.pos}${locked ? ` · ${r1(pts(p.slug))}` : ''}`} dim onPress={() => {}} />
+              <InjuryNow slug={p.slug} size={8} />
+            </View>
           ))}
           {!bench.length && <Mono size={10} tone="faint">everyone's starting</Mono>}
         </View>

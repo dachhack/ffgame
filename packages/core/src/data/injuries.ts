@@ -77,6 +77,36 @@ export function setLiveInjuries(week: number, rows: Record<string, InjuryRow>): 
   liveRows = rows;
 }
 
+// ── THE REPORT, FOR ANY SCREEN (v0.504.0) ──────────────────────────────────
+// Founder: "add injury tags to the rest of the app and web too." The week-bound
+// cache above is installed by the matchup boards, so a screen that is not a
+// board — the draft room, a trade, the waiver wire — had nothing to read, and
+// a manager who went straight there saw every player healthy. This is the same
+// ESPN snapshot kept apart from the board's week: it answers "what is he tagged
+// RIGHT NOW", which is the only question a draft or a trade asks. Loaded by
+// liveApi's ensureInjuryReport (at most every few minutes, any screen may
+// call it); every loadLiveInjuries refreshes it too.
+let reportRows: Record<string, InjuryRow> = {};
+let reportAt = 0;
+const reportListeners = new Set<() => void>();
+/** Install the current report (liveApi does this). */
+export function setInjuryReport(rows: Record<string, InjuryRow>, at: number = Date.now()): void {
+  reportRows = rows;
+  reportAt = at;
+  for (const fn of reportListeners) { try { fn(); } catch { /* a listener's problem */ } }
+}
+/** When the current report was installed (ms), 0 if never. */
+export function injuryReportAt(): number { return reportAt; }
+/** Hear when a new report lands — a screen repaints its badges. Returns the unsubscribe. */
+export function onInjuryReport(fn: () => void): () => void {
+  reportListeners.add(fn);
+  return () => { reportListeners.delete(fn); };
+}
+/** His designation right now, or null (healthy, or no report yet). */
+export function injuryNow(slug: string | null | undefined): InjuryStatus | null {
+  return slug ? reportRows[slug]?.status ?? null : null;
+}
+
 /** Drop the live report (league exit), reverting to the baked-season behavior. */
 export function clearLiveInjuries(): void {
   liveWeek = null;

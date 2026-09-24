@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminMatchupPicks, weekLivePlays, type MatchupPicks } from '@drip/core/data/liveApi';
 import { loadRealWeek, realPbpFor, realPointsFor, setLivePlays, liveRowsToPbp, type RealPlay } from '@drip/core/data/realPbp';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
-import { PlayerImg } from '../app/ui';
+import { PlayerImg, InjuryNow } from '../app/ui';
 import type { Pos } from '@drip/core/types';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--mono, monospace)' };
@@ -80,7 +80,7 @@ function PlayerCard({ f, clock }: { f: PlayerFeed; clock: number }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <PlayerImg playerId={f.slug} team={f.team} pos={f.pos} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtSlug(f.slug)}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtSlug(f.slug)}<InjuryNow slug={f.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} /></div>
           <div style={{ ...mono, fontSize: 11.5, color: 'var(--dim)' }}>{f.pos} {f.team} · {shown.length}/{f.evs.length} plays</div>
         </div>
         <div className="grotesk" style={{ fontSize: 20.5, fontWeight: 800, color: 'var(--you)', lineHeight: 1, textAlign: 'right' }}>

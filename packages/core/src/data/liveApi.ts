@@ -5,7 +5,7 @@ import { getSupabase } from './supabaseClient';
 import { platform, storeGet } from '../platform';
 import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
-import { setLiveInjuries, type InjuryRow } from './injuries';
+import { setLiveInjuries, setInjuryReport, injuryReportAt, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
@@ -572,6 +572,37 @@ export async function loadDepthChart(): Promise<number> {
   } catch { return 0; }
 }
 
+/** Make sure the any-screen injury report (injuries.ts injuryNow) is no older
+ *  than `maxAgeMs`, reading it if it is (v0.504.0). Screens call this on
+ *  mount and repaint on onInjuryReport. Concurrent callers share one read.
+ *  Never throws. */
+let reportLoad: Promise<number> | null = null;
+export function ensureInjuryReport(maxAgeMs = 10 * 60_000): Promise<number> {
+  if (Date.now() - injuryReportAt() < maxAgeMs) return Promise.resolve(-1);
+  if (!reportLoad) {
+    reportLoad = fetchInjuryRows()
+      .then((rows) => { setInjuryReport(rows); return Object.keys(rows).length; })
+      .catch(() => 0)
+      .finally(() => { reportLoad = null; });
+  }
+  return reportLoad;
+}
+
+async function fetchInjuryRows(): Promise<Record<string, InjuryRow>> {
+  const c = await client();
+  const data = await allRows<InjuryStatusRow>((from, to) => c.from('injury_status')
+    .select('player_slug, status, return_date, comment, team, updated_at')
+    .order('player_slug').range(from, to));
+  const rows: Record<string, InjuryRow> = {};
+  for (const r of data) {
+    // Trust the worker's normalizer, but never let an unexpected status
+    // through — a stray value would render as a mystery badge on a card.
+    if (r.status !== 'O' && r.status !== 'D' && r.status !== 'Q' && r.status !== 'IR') continue;
+    rows[r.player_slug] = { status: r.status, returnDate: r.return_date, comment: r.comment, team: r.team, updatedAt: r.updated_at };
+  }
+  return rows;
+}
+
 export async function loadLiveInjuries(week: number): Promise<number> {
   try {
     // PAGED (v0.489.4), for the same reason the pool loaders are: PostgREST
@@ -581,22 +612,10 @@ export async function loadLiveInjuries(week: number): Promise<number> {
     // truncated. It looks like the players past the cap are healthy, on every
     // card that asks. The prune keeps it small now; paging means a poll that
     // cannot prune does not quietly take the report back down to 1000 rows.
-    const c = await client();
-    const data = await allRows<InjuryStatusRow>((from, to) => c.from('injury_status')
-      .select('player_slug, status, return_date, comment, team, updated_at')
-      .order('player_slug').range(from, to));
-    const rows: Record<string, InjuryRow> = {};
-    for (const r of data) {
-      // Trust the worker's normalizer, but never let an unexpected status
-      // through — a stray value would render as a mystery badge on a card.
-      if (r.status !== 'O' && r.status !== 'D' && r.status !== 'Q' && r.status !== 'IR') continue;
-      rows[r.player_slug] = {
-        status: r.status,
-        returnDate: r.return_date, comment: r.comment,
-        team: r.team, updatedAt: r.updated_at,
-      };
-    }
+    const rows = await fetchInjuryRows();
     setLiveInjuries(week, rows);
+    // The any-screen report is the same snapshot (v0.504.0).
+    setInjuryReport(rows);
     return Object.keys(rows).length;
   } catch { return 0; }
 }

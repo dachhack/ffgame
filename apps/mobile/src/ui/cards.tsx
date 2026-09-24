@@ -34,6 +34,7 @@ import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { MONO, useTheme, alpha } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
+import { InjuryNow } from './rosterGroup';
 
 // True playing-card ratio (2.5:3.5). The web sets it as --ct-aspect so both
 // cards in a slot pair match height; here the same number keeps the pair square
@@ -288,7 +289,10 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
             : <Text style={{ fontFamily: MONO, fontSize: cs(16, sc), color: INK_DIM }}>{pos}</Text>}
         </View>
         <Text numberOfLines={1} style={{ fontSize: cs(13, sc), fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{name}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: cs(9.5, sc), color: INK_DIM }}>{pos}{team ? ` · ${team}` : ''}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontFamily: MONO, fontSize: cs(9.5, sc), color: INK_DIM }}>{pos}{team ? ` · ${team}` : ''}</Text>
+          <InjuryNow slug={slug} size={7} />
+        </View>
       </View>
 
       {metric ? (

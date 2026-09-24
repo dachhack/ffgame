@@ -15,6 +15,7 @@ import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PosPill, PrimaryButton } from './prims';
 import { Overlay } from './Overlay';
+import { InjuryNow } from './rosterGroup';
 import { LabelInfo } from './InfoChip';
 import { seedStart, seedsCustom, moveSeed } from '@drip/core/data/seeds';
 
@@ -237,9 +238,12 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                 return (
                   <View key={d.slug} style={{ paddingVertical: 3, paddingLeft: 10 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.dim }}>
-                        {d.tagged ? '🏷 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
-                      </Text>
+                      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11), color: t.dim }}>
+                          {d.tagged ? '🏷 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
+                        </Text>
+                        <InjuryNow slug={d.slug} size={7.5} />
+                      </View>
                       <Mono size={9} weight="700">${net}·{d.years}yr</Mono>
                       {/* the value read: the league's own market vs the deal */}
                       {d.mkt != null && <Mono size={7.5} tone={bargain ? 'you' : 'faint'}>mkt ${d.mkt}</Mono>}
@@ -317,9 +321,12 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
             return (
               <View key={x.slug} style={{ paddingVertical: 5 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
-                    {nameOf(x.slug)}
-                  </Text>
+                  <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: t.text }}>
+                      {nameOf(x.slug)}
+                    </Text>
+                    <InjuryNow slug={x.slug} size={7.5} />
+                  </View>
                   <Mono size={8.5} tone={x.offer_salary ? 'warn' : 'faint'}>
                     {x.offer_salary ? `best offer $${x.offer_salary}·${x.offer_years}yr` : 'no offers yet'}
                   </Mono>
@@ -484,7 +491,10 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
           <Mono size={9} tone="warn" weight="700" track={0.12}>💰 THE FRENZY — released to waivers</Mono>
           {frenzy.slice(0, 12).map((p) => (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.text }}>{p.full_name} · {p.pos}</Text>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11), color: t.text }}>{p.full_name} · {p.pos}</Text>
+                <InjuryNow slug={p.slug} size={7.5} />
+              </View>
               <Mono size={8} tone="faint">#{p.rank}</Mono>
             </View>
           ))}
@@ -575,13 +585,19 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
           <Mono size={8} tone="faint" style={{ marginTop: 5 }}>TAKE FROM THE BEATEN TEAM</Mono>
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
             {rosters.filter((r) => r.roster_id === myChair.victim).map((r) => (
-              <Chip key={r.slug} label={nameOf(r.slug)} on={take === r.slug} onPress={() => { tap(); setTake(r.slug); }} />
+              <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Chip label={nameOf(r.slug)} on={take === r.slug} onPress={() => { tap(); setTake(r.slug); }} />
+                <InjuryNow slug={r.slug} size={7.5} />
+              </View>
             ))}
           </View>
           <Mono size={8} tone="faint" style={{ marginTop: 5 }}>GIVE BACK</Mono>
           <View style={{ flexDirection: 'row', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
             {rosters.filter((r) => r.roster_id === myChair.seat).map((r) => (
-              <Chip key={r.slug} label={nameOf(r.slug)} on={give === r.slug} onPress={() => { tap(); setGive(r.slug); }} />
+              <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Chip label={nameOf(r.slug)} on={give === r.slug} onPress={() => { tap(); setGive(r.slug); }} />
+                <InjuryNow slug={r.slug} size={7.5} />
+              </View>
             ))}
           </View>
           <View style={{ marginTop: 8 }}>

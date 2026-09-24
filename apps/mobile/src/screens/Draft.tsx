@@ -35,7 +35,7 @@ import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { FlagChip } from '../ui/rosterGroup';
+import { FlagChip, InjuryNow } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
@@ -740,7 +740,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Face slug={lot.slug} pos={lp?.pos ?? '?'} size={40} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: t.text }}>{lp?.full_name ?? lot.slug}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, fontWeight: '700', color: t.text }}>{lp?.full_name ?? lot.slug}</Text>
+                      <InjuryNow slug={lot.slug} size={8} />
+                    </View>
                     <Mono size={9.5} style={{ marginTop: 2 }}>
                       ${lot.bid} — {teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}{iHold ? ' (you)' : ''}
                     </Mono>
@@ -1046,6 +1049,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                       {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
                       {own ? ` · ${own[p.slug] ?? 0}%` : ''}
                     </Mono>
+                    <InjuryNow slug={p.slug} size={7.5} />
                     <FlagChip slug={p.slug} size={7.5} />
                   </View>
                 </Pressable>
@@ -1102,7 +1106,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                         {cell ? (
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                              <Text style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: pc.fg }}>{pl?.pos ?? ''}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                                <Text style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: pc.fg }}>{pl?.pos ?? ''}</Text>
+                                <InjuryNow slug={cell.slug} size={6} />
+                              </View>
                               <Text style={{ fontFamily: MONO, fontSize: 7, color: pc.fg, opacity: 0.8 }}>
                                 {auction ? `$${cell.price ?? 1}` : `${cell.round}.${((cell.overall - 1) % teams) + 1}`}{cell.auto ? ' 🤖' : ''}
                               </Text>
@@ -1156,7 +1163,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   <PosPill pos={pl?.pos ?? '?'} size={8} />
                   <Pressable style={{ flex: 1, minWidth: 0 }} hitSlop={4}
                     onPress={() => { tap(); openPlayerCard({ slug, name: pl?.full_name ?? slug, pos: pl?.pos ?? '', team: pl?.team ?? '' }); }}>
-                    <Text numberOfLines={1} style={{ fontSize: 12, color: t.text }}>{pl?.full_name ?? slug}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12, color: t.text }}>{pl?.full_name ?? slug}</Text>
+                      <InjuryNow slug={slug} size={7.5} />
+                    </View>
                   </Pressable>
                   {/* Where he came from — kept on the spot rows, since the left
                       column now says WHERE HE PLAYS rather than which round. */}
@@ -1289,6 +1299,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                           {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
                           {own ? ` · ${own[slug] ?? 0}%` : ''}
                         </Mono>
+                        <InjuryNow slug={slug} size={7.5} />
                         <FlagChip slug={slug} size={7.5} />
                       </View>
                     );
@@ -1381,7 +1392,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
           <Face slug={won.slug} pos={wp?.pos ?? '?'} size={46} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Mono size={9} tone="you" track={0.16} weight="700">🔨 SOLD — HE'S YOURS</Mono>
-            <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text, marginTop: 2 }}>{wp?.full_name ?? won.slug}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: '700', color: t.text }}>{wp?.full_name ?? won.slug}</Text>
+              <InjuryNow slug={won.slug} size={8} />
+            </View>
           </View>
           <Text style={{ fontFamily: MONO, fontSize: 22, fontWeight: '700', color: t.you, fontVariant: ['tabular-nums'] }}>
             ${won.price}
@@ -1454,7 +1468,10 @@ function EditPickSheet({ leagueId, pick, player, teamName, available, busy, onCl
             onPress={() => { tap(); onDone(() => commishEditPick(leagueId, pick.overall, p.slug)); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
             <Face slug={p.slug} pos={p.pos} size={22} />
-            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, color: t.text }}>{p.full_name}</Text>
+              <InjuryNow slug={p.slug} size={7.5} />
+            </View>
             <PosPill pos={p.pos} size={8} />
             <Mono size={9} tone="faint">{p.team} · #{p.rank}</Mono>
           </Pressable>

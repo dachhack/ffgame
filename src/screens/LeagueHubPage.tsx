@@ -14,7 +14,7 @@ import { Ev, track } from '@drip/core/analytics';
 import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
-import { Img, Sheet } from '../app/ui';
+import { Img, Sheet, InjuryNow } from '../app/ui';
 import { useWide } from './adminUi';
 import { NotifPrefsCard } from './NativeLeague';
 import {
@@ -750,7 +750,7 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
               {g.players.map((p) => (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
                   <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', width: 28 }}>{p.pos}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{p.name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{p.name}<InjuryNow slug={p.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                   {deals.get(p.slug) != null && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>{deals.get(p.slug)}</span>}
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team}</span>
                 </div>

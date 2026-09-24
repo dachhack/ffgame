@@ -35,7 +35,7 @@ import {
   nativeRosters, loadLiveInjuries, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
-import { PlayerImg, PosPill, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
+import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
@@ -260,7 +260,10 @@ function SlateStrip({ chips, sel, onSel, locked }: {
                       ? <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>—</span>
                       : ps.map((e) => (
                           <div key={e.slug} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 9.5, padding: '1px 0' }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(e.name)}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(e.name)}</span>
+                              <InjuryNow slug={e.slug} />
+                            </span>
                             <span style={{ fontWeight: 700, color: 'var(--dim)' }}>{(locked ? e.live : e.proj).toFixed(1)}</span>
                           </div>
                         ))}
@@ -1907,6 +1910,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                   <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
                   <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>
                     {shortName(p.full)}
+                    <InjuryNow slug={p.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
                     {spotOf.get(p.slug) && (
                       <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
                         in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
@@ -1931,7 +1935,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {bench.map((p) => (
             <span key={p.slug} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, border: '1px solid var(--bd)', borderRadius: 999, padding: '3px 9px' }}>
-              {shortName(p.full)} <span style={{ color: 'var(--faint)', fontSize: 8.5 }}>{p.pos}</span>
+              {shortName(p.full)}<InjuryNow slug={p.slug} /> <span style={{ color: 'var(--faint)', fontSize: 8.5 }}>{p.pos}</span>
               {locked && <span style={{ color: 'var(--dim)', fontWeight: 700 }}>{r1(pts(p.slug))}</span>}
             </span>
           ))}
