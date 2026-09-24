@@ -128,7 +128,31 @@ jobs:
             exit 1
           fi
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # INSTALL flyctl, surviving a dropped download. Run 615 (v0.513.0) died
+      # here on `read ECONNRESET` before anything deployed, and a `uses:` step
+      # can't retry itself. So the action is attempt one and may fail; if it
+      # did, Fly's install script runs with retries; then flyctl must answer.
+      - name: Install flyctl (attempt 1, the action)
+        id: flyctl_action
+        continue-on-error: true
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Install flyctl (fallback, with retries)
+        if: ${{ steps.flyctl_action.outcome != 'success' }}
+        run: |
+          for i in 1 2 3 4; do
+            if curl -fsSL --retry 3 --retry-all-errors https://fly.io/install.sh -o "$RUNNER_TEMP/fly-install.sh" \
+               && sh "$RUNNER_TEMP/fly-install.sh" && [ -x "$HOME/.fly/bin/flyctl" ]; then
+              echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+              echo "flyctl installed (fallback attempt $i)"; exit 0
+            fi
+            echo "::warning::flyctl install attempt $i failed — retrying"
+            sleep $((i * 15))
+          done
+          echo "::error::could not install flyctl after the action and 4 more attempts"; exit 1
+
+      - name: flyctl is ready
+        run: flyctl version
 
       - name: What we're about to deploy
         run: |

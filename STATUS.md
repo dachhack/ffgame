@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### Worker deploy: flyctl install survives a dropped download
+
+Run 615 (v0.513.0) failed with `read ECONNRESET` inside
+`superfly/flyctl-actions/setup-flyctl` before anything deployed. The live
+worker stayed on v0.512.0, and v0.513.0 changed nothing it runs. A `uses:`
+step can't retry, so in `deploy-worker.yml` the action is now attempt one
+(`continue-on-error`). If it fails, Fly's install.sh runs with up to 4
+retries and puts `~/.fly/bin` on the PATH. Then `flyctl version` must
+answer before any deploy step. Merging this workflow change also re-runs the
+deploy, which brings the worker to current main.
+
 ### v0.513.0 — widgets wear the app theme; US English
 
 Founder: "Can we have the widgets inherit the color theme from the app? Also
