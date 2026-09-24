@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.522.0 — the lock-time auto-fill leaves a Ghost's spot alone
+
+Founder: "Do we have default logic that fills spots automatically even for
+teams managed by players?" Yes: at each window's lock, lock.js fills every
+empty card spot on a claimed seat with its best eligible player (the 8/16
+ruling), unless the league's policy is 'empty'. It counted a spot as taken
+only when it held a pick, though, and never looked at the seat's targeted
+plays. A Ghost or Bye Steal sits on an EMPTY spot, and the resolver scores
+the phantom only while nobody is fielded there. So a manager with a ghost on
+an empty spot AND an eligible player would have had the fill put the player
+in, wasting the card. The fill now reads the seat's applied_state and
+treats ghost / byeSteal spots as set. `hasPicks` (missed vs partial) still
+counts real picks only. Merged after the wk-3 TNF lock on purpose: the
+founder's own ghosted TNF spot had no eligible player, so it was never at
+risk.
+
 ### v0.521.0 — the ghost finds its slot (slots count from 0)
 
 Founder, on the app's leagues list on v0.520.0: Gridiron Gang still read
