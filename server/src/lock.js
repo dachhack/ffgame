@@ -721,8 +721,23 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       const { data: existing } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug')
         .eq('matchup_id', m.id).eq('app_user_id', seatUid).not('player_slug', 'is', null);
       const setSlots = new Set((existing ?? []).map((r) => `${r.game_window}#${r.roster_slot}`));
+      // A GHOST OR A BYE STEAL HOLDS ITS SPOT (v0.522.0). The resolver fills a
+      // spot with the phantom only while nobody is fielded there, so this fill
+      // landing a player on a ghosted spot quietly wasted the card the
+      // manager played on it (founder's Gridiron Gang TNF ghost, 2026 wk 3 —
+      // safe that night only because nobody on the roster was eligible).
+      // Read from the same applied_state row the worker scores; a failed read
+      // is no claim and the fill behaves as before.
+      {
+        const { data: ap } = await db().from('applied_state').select('payload_json')
+          .eq('matchup_id', m.id).eq('app_user_id', seatUid).maybeSingle();
+        const tg = ap?.payload_json?.targeted ?? {};
+        for (const k of Array.isArray(tg.ghost) ? tg.ghost : []) setSlots.add(String(k).replace('|', '#'));
+        if (tg.byeSteal?.win != null && tg.byeSteal?.slot != null) setSlots.add(`${tg.byeSteal.win}#${tg.byeSteal.slot}`);
+      }
       const fieldedSlugs = new Set((existing ?? []).map((r) => r.player_slug));
-      const hasPicks = setSlots.size > 0;
+      // Real picks only — a phantom spot is not a lineup the manager set.
+      const hasPicks = (existing ?? []).length > 0;
       // The 8/16 ruling: every claimed seat gets its empty slots filled if
       // possible — enrolled or not, actively managed or not. (Unclaimed seats
       // have no app_user to key sealed rows under; the resolve-time fallback
