@@ -284,7 +284,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
               borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
               borderLeftWidth: lg?.draft_status === 'live' ? 3 : StyleSheet.hairlineWidth,
               borderLeftColor: lg?.draft_status === 'live' ? t.opp : t.bd,
-              borderRadius: 12, padding: 14, gap: 4,
+              borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 2,
               opacity: pressed ? 0.85 : 1,
             })}
           >
@@ -310,7 +310,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                     GAME now (Drip/Classic, Guillotine, Vampire, Golf) as well
                     as the type, and a loaded league runs past one line on a
                     phone. Most read on one and look unchanged. */}
-                <Text numberOfLines={2} style={{ fontSize: 12, color: t.mid, lineHeight: 16 }}>{leagueTypeLine(e)}</Text>
+                <Text numberOfLines={2} style={{ fontSize: 13, color: t.mid, lineHeight: 17 }}>{leagueTypeLine(e)}</Text>
                 {lg?.draft_status === 'live' && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />
@@ -478,14 +478,14 @@ function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance
   const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'
     : v === 'leading' ? 'LEADING' : v === 'trailing' ? 'TRAILING' : v === 'level' ? 'LEVEL' : null;
   return (
-    <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, gap: 3 }}>
+    <View style={{ marginTop: 8, paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, gap: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Mono size={8.5} weight="700" track={0.14} tone="faint">
+        <Mono size={10.5} weight="700" track={0.12} tone="faint">
           {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
         </Mono>
-        {live && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.opp }} />}
+        {live && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
         <View style={{ flex: 1 }} />
-        {word && <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: tone }}>{word}</Text>}
+        {word && <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: tone }}>{word}</Text>}
       </View>
       <SlateLine side={g.me} mine points={g.me?.points} tone={tone} proj={proj ? proj.me.score : null} />
       <SlateLine side={g.opp} points={g.opp?.points} tone={t.mid} proj={proj && !proj.themLive ? proj.them!.score : null} />
@@ -502,7 +502,7 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   const r = lineupReport(snap);
   if (!r) return null;
   const { text, open } = lineupReportLine(r);
-  return <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', marginTop: 3, color: open ? t.warn : t.you }}>{text}</Text>;
+  return <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 12, lineHeight: 17, fontWeight: '700', marginTop: 3, color: open ? t.warn : t.you }}>{text}</Text>;
 }
 
 function SlateLine({ side, points, mine, tone, proj }: {
@@ -513,16 +513,21 @@ function SlateLine({ side, points, mine, tone, proj }: {
 }) {
   const t = useTheme();
   const rec = recordLabel(side?.record);
+  // Before a point is scored the score slot would only print a dash, so the
+  // projection takes it (v0.512.0, founder: "a lot of space in each card").
+  const projInSlot = points == null && proj != null;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-      <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: mine ? '700' : '400', color: mine ? t.text : t.mid }}>
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+      <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: mine ? '700' : '400', color: mine ? t.text : t.mid }}>
         {side?.team || sideLabel(side)}
       </Text>
-      {rec && <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{rec}</Text>}
-      {proj != null && <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>P {proj.toFixed(1)}</Text>}
-      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: mine ? tone : t.mid, minWidth: 58, textAlign: 'right' }}>
-        {scoreLabel(points)}
-      </Text>
+      {rec && <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim }}>{rec}</Text>}
+      {proj != null && !projInSlot && <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim }}>P {proj.toFixed(1)}</Text>}
+      {projInSlot
+        ? <Text style={{ fontFamily: MONO, fontSize: 14, fontWeight: '700', color: t.dim, textAlign: 'right' }}>P {proj!.toFixed(1)}</Text>
+        : <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: mine ? tone : t.mid, minWidth: points == null ? 0 : 60, textAlign: 'right' }}>
+            {scoreLabel(points)}
+          </Text>}
     </View>
   );
 }
