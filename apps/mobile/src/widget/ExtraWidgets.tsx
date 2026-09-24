@@ -256,6 +256,7 @@ const CAT_LABEL: Record<string, string> = { pass: 'PASS', rush: 'RUSH', rec: 'RE
  *  to close it. */
 function OpenedGame({ g }: { g: FieldGame }) {
   const recent = g.recent ?? [];
+  const proj = g.state === 'pre' ? g.projLeaders ?? [] : [];
   const byTeam = (t: string) => (g.leaders ?? []).filter((l) => l.team === t);
   const section = (t: string) => <TextWidget text={t} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.12, marginTop: 6 }} />;
   return (
@@ -280,7 +281,21 @@ function OpenedGame({ g }: { g: FieldGame }) {
           </FlexWidget>
         </FlexWidget>
       )))}
-      {!recent.length && !(g.leaders ?? []).length ? (
+      {/* Before kickoff (v0.514.0): who is projected to lead, in stock PPR,
+          in the projected grey the widget gives every unplayed number. */}
+      {proj.length ? section('PROJECTED LEADERS · PPR') : null}
+      {[g.away, g.home].flatMap((t) => proj.filter((l) => l.team === t).map((l) => (
+        <FlexWidget key={`p-${t}-${l.cat}`} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+          <TextWidget text={`${t} ${CAT_LABEL[l.cat] ?? ''}`} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', width: 52 }} />
+          {l.injury ? <TextWidget text={l.injury} maxLines={1}
+            style={{ fontSize: 7.5, color: C.onAccent, backgroundColor: injColor(l.injury), fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
+          <FlexWidget style={{ flex: 1 }}>
+            <TextWidget text={l.name} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: C.text, fontWeight: 'bold' }} />
+          </FlexWidget>
+          <TextWidget text={l.pts.toFixed(1)} maxLines={1} style={{ fontSize: 8.5, color: C.dim, fontWeight: 'bold' }} />
+        </FlexWidget>
+      )))}
+      {!recent.length && !(g.leaders ?? []).length && !proj.length ? (
         <TextWidget text={g.state === 'pre' ? 'Not kicked off yet — plays and leaders land here once it does.' : 'No plays on the feed yet.'} maxLines={2}
           style={{ fontSize: 8.5, color: C.dim, marginTop: 5 }} />
       ) : null}

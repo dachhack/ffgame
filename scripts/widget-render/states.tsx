@@ -77,6 +77,21 @@ for (const s of [{ kind: 'loading' }, { kind: 'empty' }, { kind: 'error', messag
 const opened = games.map((g) => ({ ...g, dd: g.state === 'live' ? '2nd & 7' : null, spot: g.state === 'live' ? 'BUF 34' : null,
   recent: g.state === 'pre' ? [] : [{ clock: 'Q2 6:40', txt: 'B.Young pass short right to X for 9 yards', big: null }, { clock: 'Q2 7:10', txt: 'TOUCHDOWN', big: 'score' as const }],
   leaders: g.state === 'pre' ? [] : [{ team: g.away, cat: 'pass' as const, name: 'A. Guy', line: '12/18, 140 YDS' }, { team: g.home, cat: 'rush' as const, name: 'B. Guy', line: '9 CAR, 61 YDS' }] }));
+// v0.514.0 — a game not kicked off, opened: its projected leaders in PPR.
+{
+  const pre = { ...(opened.find((g) => g.state === 'pre') ?? opened[0]), state: 'pre' as const, recent: [], leaders: [],
+    projLeaders: [
+      { team: opened[0].away, cat: 'pass' as const, name: 'P. Mahomes', pts: 20.4, injury: null },
+      { team: opened[0].away, cat: 'rec' as const, name: 'R. Rice', pts: 13.3, injury: 'Q' },
+      { team: opened[0].home, cat: 'rush' as const, name: 'J. Cook', pts: 17, injury: null },
+    ].map((l, i) => ({ ...l, team: i < 2 ? (opened.find((g) => g.state === 'pre') ?? opened[0]).away : (opened.find((g) => g.state === 'pre') ?? opened[0]).home })) };
+  tryIt('fields, pregame opened with projected leaders', <FieldsWidget state={{ kind: 'ok', week: 3, games: [pre], openKey: pre.key, current: 3 }} />);
+  n++;
+  const tree = JSON.stringify(buildWidgetTree(<FieldsWidget state={{ kind: 'ok', week: 3, games: [pre], openKey: pre.key, current: 3 }} />));
+  if (!tree.includes('PROJECTED LEADERS') || !tree.includes('20.4') || !tree.includes('R. Rice')) { fails++; console.log('FAIL pregame card: projected leaders missing'); }
+  else if (tree.includes('Not kicked off yet')) { fails++; console.log('FAIL pregame card: the empty notice shows beside projected leaders'); }
+  else console.log('ok   a pregame card lists its projected leaders');
+}
 for (const g of opened) tryIt(`fields, ${g.key} (${g.state}) opened`, <FieldsWidget state={{ kind: 'ok', week: 3, games: opened, openKey: g.key, current: 3 }} />);
 
 // v0.507.0 — the frames drawn while a tap is answered: busy, and INERT — they

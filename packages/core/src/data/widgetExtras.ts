@@ -21,7 +21,10 @@ import { setRuntimeSlate } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
 import { fieldsWeekFrom, slateWeekOrder } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
-import { normTeam } from './slugMeta';
+import { normTeam, stripSlugTag } from './slugMeta';
+import { projectedStarters } from '../engine/projectedBox';
+import { withPprProjections } from '../engine/projScoring';
+import { shortName } from './players';
 import type { WindowId } from '../types';
 
 // ── ALERTS ──────────────────────────────────────────────────────────────────
@@ -137,6 +140,32 @@ export interface FieldGame {
   recent?: { clock: string; txt: string; big: 'score' | 'turnover' | null }[];
   /** Each team's passing / rushing / receiving leader. */
   leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[];
+  /** Before kickoff (v0.514.0): each team's projected leaders, in stock PPR. */
+  projLeaders?: ProjLeader[];
+}
+
+/** A projected leader for a game not yet kicked off: the team's top
+ *  quarterback, running back and pass catcher by projection. */
+export interface ProjLeader { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; pts: number; injury: string | null }
+
+/** "josh-allen" → "J. Allen", the way the live leaders read. */
+const leaderName = (slug: string): string =>
+  shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+
+/** Each side's projected leaders before kickoff (v0.514.0), from the same
+ *  projected starters the app's pregame box score lists, so an OUT or IR
+ *  man is already off the sheet. STOCK PPR, whatever league was read last:
+ *  the widget speaks for no league. A team the projection cannot value
+ *  contributes nothing. */
+export function projectedLeaders(away: string, home: string, week: number): ProjLeader[] {
+  return withPprProjections(() => [away, home].flatMap((team) => {
+    const rows = projectedStarters(team, week).filter((r) => r.proj != null && r.proj > 0);
+    const top = (pos: string[]) => rows.filter((r) => pos.includes(r.pos)).sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0))[0];
+    const picks: [ProjLeader['cat'], ReturnType<typeof top>][] = [['pass', top(['QB'])], ['rush', top(['RB'])], ['rec', top(['WR', 'TE'])]];
+    return picks.filter(([, r]) => r).map(([cat, r]) => ({
+      team, cat, name: leaderName(r!.slug), pts: Math.round(r!.proj! * 10) / 10, injury: r!.injury ?? null,
+    }));
+  }));
 }
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
@@ -200,6 +229,7 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
         spot: live ? sit?.spot ?? null : null,
         recent: g.state === 'pre' ? [] : recent,
         leaders: g.feed?.status?.leaders ?? [],
+        projLeaders: g.state === 'pre' ? projectedLeaders(g.away, g.home, week) : [],
         key: g.key, away: g.away, home: g.home, state: g.state,
         as: last ? Number(last.as) || 0 : 0, hs: last ? Number(last.hs) || 0 : 0,
         clock: clockOf(g, last), kickoff: g.kickoff,

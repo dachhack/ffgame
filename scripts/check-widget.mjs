@@ -10,7 +10,9 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedLeaders } from '../packages/core/src/data/widgetExtras';
+import { setLeagueProjScoring, clearLeagueProjScoring, leagueProjScoring } from '../packages/core/src/engine/projScoring';
+import { setLeagueScoring, clearLeagueScoring, scoringLeague, leagueScoring } from '../packages/core/src/engine/leagueScoring';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
 import { takeTapLock, releaseTapLock } from '../apps/mobile/src/widget/inert';
 
@@ -537,6 +539,24 @@ const state = [
   ok('tap lock: released, the next tap is answered', takeTapLock(77, t0 + 900) === true);
   ok('tap lock: a lock left by a task that died is ignored after 20 s', takeTapLock(77, t0 + 900 + 20_001) === true);
   releaseTapLock(77); releaseTapLock(78);
+}
+
+// ── v0.514.0: projected leaders before kickoff, always stock PPR ──
+{
+  const stock = projectedLeaders('KC', 'BUF', WEEK);
+  ok('projected leaders: a QB, RB and pass catcher a side', ['KC', 'BUF'].every((t) => ['pass', 'rush', 'rec'].every((c) => stock.some((l) => l.team === t && l.cat === c))), stock);
+  ok('projected leaders: names read like the live leaders ("J. Allen")', stock.every((l) => /^[A-Z]\. \S/.test(l.name)), stock.map((l) => l.name));
+  ok('projected leaders: points are positive, one decimal', stock.every((l) => l.pts > 0 && Math.round(l.pts * 10) === l.pts * 10), stock.map((l) => l.pts));
+  // A league read last left its rules installed: the widget ignores them,
+  // and hands them back untouched.
+  setLeagueProjScoring({ ppr: 0 });
+  setLeagueScoring({ scoped: [{ mult: 3 }] }, 'LEAGUE-X');
+  const again = projectedLeaders('KC', 'BUF', WEEK);
+  ok('projected leaders: stock PPR whatever league was installed', JSON.stringify(again) === JSON.stringify(stock), again.map((l) => `${l.name} ${l.pts}`));
+  ok('projected leaders: the league\'s catalog is put back', leagueProjScoring().ppr === 0, leagueProjScoring().ppr);
+  ok('projected leaders: the league\'s scoped rules are put back', scoringLeague() === 'LEAGUE-X' && leagueScoring().scoped.length === 1, scoringLeague());
+  clearLeagueProjScoring(); clearLeagueScoring();
+  ok('projected leaders: the team code is the game\'s own', projectedLeaders('LAR', 'SEA', WEEK).some((l) => l.team === 'LAR'), projectedLeaders('LAR', 'SEA', WEEK).map((l) => l.team));
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }

@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.514.0 — fields widget: projected leaders before kickoff
+
+Founder: "Let's do projected leaders and their projected ppr points for the
+games in the widgets before kick off."
+- A game not yet kicked off now opens (tap) to PROJECTED LEADERS · PPR:
+  each side's top QB (PASS), RB (RUSH) and WR/TE (REC), with the injury tag
+  and the points in projected grey. Once it kicks off, the real leaders
+  replace them.
+- The rows come from `projectedStarters`, the same sheet the app's pregame
+  box score uses, so OUT/IR players are already gone. The points are the
+  per-game projection. Built by core `projectedLeaders()` in widgetExtras.
+- Always stock PPR. The widget reads leagues first, and a classic read
+  leaves its league's catalog and scoped bonuses installed, so the new
+  `withPprProjections()` (projScoring) runs with neither and restores both
+  exactly. check:widget pins the stock PPR, the restore and the team codes.
+  check:widgetrender builds the opened pregame card.
+
 ### Worker deploy: flyctl install survives a dropped download
 
 Run 615 (v0.513.0) failed with `read ECONNRESET` inside
