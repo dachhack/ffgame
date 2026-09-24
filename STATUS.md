@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.515.0 — aimed cards play in the app; Spy works before kickoff
+
+Founder, on the app board: "Why can't I use my spy or ghost?" The app's hand
+could only ARM whole-lineup buffs. Every card played on a spot or a window
+(Spy, Ghost, Jinx, DoN, Lead Change, Grudge, Red Herring, Underdog,
+Bye Steal, Rivalry, Mulligan, the two Swaps, Surge, Bunker, Cold Snap,
+Napalm and EMP) sat greyed with "Aimed cards play on the web for now". And
+on the web, Spy only lit spots where the opponent's pick was already known,
+which it never is before kickoff (sealed), so Spy could not be played at all.
+- Core `aimRules.ts` is one table for both hosts. It records which side
+  each card aims at (their spot / your filled spot / your empty spot / a
+  window), its moment (pre-lock / pre-kick for Spy / live) and its follow-up
+  (Spy's reveal, Bye Steal's player, a swap's metric or bench player,
+  Underdog's confirm). `windowFeedClock()` in gameFeed is the web's winMax
+  clock, shared, so live cards stamp the same clock.
+- App (LivePicks): tapping PLAY → PICK A TARGET in the hand opens an aim
+  bar with CANCEL. Dashed tap strips light up under each spot the card can
+  land on, on setup rows and on locked/live duels (Duel's new `slotExtra`
+  / `winExtra`), and under the window header for Rivalry and EMP. Playing
+  calls apply_targeted and then consume_inventory. Spy uses use_spy and
+  Underdog uses apply_underdog, which take their own card. A refused play
+  spends nothing and says why. Afterwards the app reads the hand and plays
+  back. A Spy's finding shows under the spot and re-reads free after a
+  reload. Jinx, Cold Snap and Napalm show under their spot; Rivalry and EMP
+  show under the window.
+- Web: Spy goes on blind before its window kicks off, which is use_spy's
+  own rule, and the hand counts locked-but-not-kicked windows for it.
+- check:aim (in check:parity) pins the table. It checks every aimed card
+  is covered and points the way its card does, the Spy and Ghost cases,
+  and that every card the app records is handled by the server's latest
+  apply_targeted.
+
 ### v0.514.0 — fields widget: projected starters before kickoff
 
 Founder: "Let's do projected leaders and their projected ppr points for the

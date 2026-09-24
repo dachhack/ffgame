@@ -391,6 +391,21 @@ export function feedPossFor(week: number, team?: string | null): number[][] {
   return possFromPlays(f.plays)[normTeam(team)] ?? [];
 }
 
+/** A window's "now" on a live board: the latest play clock across every game
+ *  it covers, 0 before the first snap (v0.515.0). What a live-timing card
+ *  (Surge, EMP, Mulligan…) fires from — the web board's winMax rule, shared so
+ *  the app's aimed cards stamp the same clock the web's do. */
+export function windowFeedClock(week: number, win: string): number {
+  let mx = 0;
+  for (const g of gamesInWindow(week, win as never)) {
+    for (const p of gameFeedFor(week, g.home)?.plays ?? []) {
+      const c = Number(p.c);
+      if (Number.isFinite(c) && c > mx) mx = c;
+    }
+  }
+  return mx;
+}
+
 export function gameFeedFor(week: number, team?: string | null): TeamGameFeed | null {
   if (!team) return null;
   const wk = liveFeeds.get(week) ?? cache.get(week);

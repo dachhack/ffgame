@@ -1323,7 +1323,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     const buff = isTeamBuff(p.id);
     let ok = false; let deadline = '';
     if (p.timing === 'pre') {
-      if (p.id === 'spy') { ok = preKickPhase || openWins.length > 0; deadline = 'Before a window locks'; }
+      // Spy's clock is KICKOFF, not lock (use_spy): a locked window still
+      // takes a peek until its first snap (v0.515.0).
+      if (p.id === 'spy') { ok = preKickPhase || (!!liveCtx && windowsForWeek(week).some((w) => { const st = winRt(w.id); return st === 'setup' || st === 'locked'; })); deadline = 'Before its window kicks off'; }
       else if (p.id === 'unlock-underdog') { ok = phase === 'setup' || preKickPhase || openWins.length > 0; deadline = 'Before its window locks'; }
       // Extra Slot is SCOPE 1 (founder ruling, 0260): it reshapes windows for
       // BOTH sides, so it closes with the week's first lock and never returns.
@@ -2699,7 +2701,7 @@ const POWERUP_HINT: Record<string, string> = {
   'grudge': 'Stake one of your spots below.',
   'jinx': 'Point at a spot below (blind) to hex the opponent there.',
   'red-herring': 'Attach to a decoy player below.',
-  'spy': 'Reveal a slot after lock-in, before kickoff.',
+  'spy': 'Tap any of their spots before its window kicks off.',
   'bye-steal': 'Field a bye player in the panel below.',
   'ghost': 'Tap an open spot below to conjure a ghost.',
   'mulligan': 'Re-roll a spot’s metric during LIVE.',
@@ -3013,7 +3015,12 @@ function WindowSectionInner(props: {
       : applyMode === 'rivalry' ? (phase === 'setup' && !rivalryArmed)
         : false;
   const spotEligible = (s: typeof rw.slots[number]) => {
-    if (applyMode === 'spy') return !!s.their;                          // reveal the opponent here (locked period)
+    // SPY GOES ON BLIND (v0.515.0, founder: "Why can't I use my spy?"). On the
+    // live board the opponent's pick is sealed until kickoff — the client
+    // never has it — so asking for `s.their` lit no spot in the only moment
+    // the card exists for. use_spy takes any slot before its window kicks off
+    // and does the peek server-side. The sim keeps its own rule.
+    if (applyMode === 'spy') return realtime ? realtime === 'setup' || realtime === 'locked' : !!s.their;
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
     if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
     if (applyMode === 'surge' || applyMode === 'bunker') return liveNow && !!s.you && !done; // live: boost/protect your slot

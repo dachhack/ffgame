@@ -186,9 +186,11 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
  *
  *  Still a separate overlay rather than expanding inline: an inline list
  *  balloons the card height and drags the paired sealed card with it. */
-function MetricModal({ visible, player, currentId, filter, onPick, onClose }: {
+export function MetricModal({ visible, player, currentId, filter, title, subtitle, onPick, onClose }: {
   visible: boolean; player: Player | null; currentId: string | null;
   filter?: (m: Metric) => boolean;
+  /** Mulligan (v0.515.0) reuses this sheet with its own words. */
+  title?: string; subtitle?: string;
   onPick: (id: string) => void; onClose: () => void;
 }) {
   const t = useTheme();
@@ -201,8 +203,8 @@ function MetricModal({ visible, player, currentId, filter, onPick, onClose }: {
   return (
     <Overlay
       visible={visible}
-      title="Pick how he scores"
-      subtitle={`${player.name.toUpperCase()} · ${player.pos} · SEALED FROM YOUR OPPONENT UNTIL KICKOFF`}
+      title={title ?? 'Pick how he scores'}
+      subtitle={subtitle ?? `${player.name.toUpperCase()} · ${player.pos} · SEALED FROM YOUR OPPONENT UNTIL KICKOFF`}
       titleLeft={logo ? <Image source={{ uri: logo }} style={{ width: 34, height: 34 }} resizeMode="contain" /> : undefined}
       onClose={onClose}
     >
