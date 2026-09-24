@@ -10,7 +10,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
+import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -28,7 +28,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, leagueMarket, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -698,6 +698,21 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // Cleared on the way out: this is a module global, and a screen that shows
   // projections outside a league must not inherit this one's rules.
   useEffect(() => { setLeagueProjScoring(sc); return () => clearLeagueProjScoring(); }, [sc]);
+  // THE LIVE SEASON RATE, INSTALLED BY THIS BOARD (v0.517.0). projectedPoints
+  // prices a player off the daily-refreshed rate when one is installed and
+  // off the baked 2026 table when not — and only MY TEAM / the draft room
+  // installed it, so this board's projections depended on which screen you
+  // had visited first, and the widget (which never did) disagreed with both
+  // (founder: Tate 10.1 on the widget, 15.2 here). The board asks for its
+  // own now; projVer re-prices the rows when it lands.
+  const [projVer, setProjVer] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    leagueMarket(leagueId).then((m) => {
+      if (alive && m?.proj && Object.keys(m.proj).length) { setLiveProjRate(m.proj); setProjVer((v) => v + 1); }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId]);
 
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
@@ -768,7 +783,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       // starts him at full value; a golf league prices the blank he might post.
       return st === 'O' || st === 'IR' ? true : playRisk(st);
     }),
-    [matchup, slate],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projVer: the live rate landed
+    [matchup, slate, projVer],
   );
   // THE NUMBER ON THE ROW: the projection itself — bye and O/IR at 0.0 —
   // never golf's expected score, which is the fill's business, not the row's.
@@ -777,7 +793,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       const st = injuryFor(matchup?.week ?? 1, slug);
       return st === 'O' || st === 'IR';
     }, { expected: false }),
-    [matchup, slate],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projVer: the live rate landed
+    [matchup, slate, projVer],
   );
 
 
@@ -867,7 +884,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams]);
+  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.

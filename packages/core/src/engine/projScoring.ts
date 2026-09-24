@@ -393,6 +393,10 @@ export function setLiveProjRate(m?: Record<string, number> | null): void {
   liveProj = m && Object.keys(m).length ? m : null;
 }
 export function clearLiveProjRate(): void { liveProj = null; }
+/** The installed live rate itself (v0.517.0) — so a reader that installs its
+ *  own league's rate for one read (the widget feed) can hand back exactly
+ *  what the screen underneath had. */
+export function liveProjRateMap(): Record<string, number> | null { return liveProj; }
 /** Is the projected column running on a live season rate? */
 export const projIsLive = (): boolean => liveProj != null;
 function liveProjRate(slug: string, sid?: string | null): number | undefined {

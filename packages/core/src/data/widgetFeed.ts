@@ -37,10 +37,11 @@ import type { Pos } from '../types';
 import { CLASSIC_WIN, slotAllows, slotDisplayNames, slotBadgeLabel, optimalLineup, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 import { zeroFill, setLeagueGolf, clearLeagueGolf } from '../engine/golf';
 import { winProbability } from '../engine/matchupBoard';
-import { setLeagueProjScoring, clearLeagueProjScoring } from '../engine/projScoring';
+import { setLeagueProjScoring, clearLeagueProjScoring, setLiveProjRate, clearLiveProjRate, liveProjRateMap, leagueCatalogOf } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool } from './liveApi';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet } from './liveApi';
+import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
 
@@ -810,6 +811,32 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     })));
   }
   let classicIn: ClassicWidgetInput | undefined;
+  // THE SAME PROJECTIONS AS THE BOARD (v0.517.0). Founder: "Projected score
+  // discrepancies across the matchup and widget view… my league projections
+  // change once you go into the matchup." projectedPoints runs on the live
+  // season rate when one is installed (league_market's `proj`, refreshed
+  // daily) and on the baked 2026 table when not — and only the league's own
+  // screens installed it. So the widget and the leagues list printed the
+  // baked number (Tate 10.1) while the matchup printed the live one (15.2),
+  // and the list flipped once a screen had installed the rate. The read
+  // installs its league's rate for itself now, cached, and hands back
+  // whatever the screen underneath had.
+  const priorRate = liveProjRateMap();
+  let rateIn = false;
+  // …and the league's SCOPED BONUSES (a "WR ×1.5" rule), which projectedPoints
+  // also applies and only the board installed. Same deal: this read's own,
+  // then back to what was there.
+  const priorRules = leagueScoring();
+  const priorRulesLeague = scoringLeague();
+  let rulesIn = false;
+  if (classic && gm?.ok) {
+    const [rate, rules] = await Promise.all([
+      cached(`proj:${league.id}`, 6 * 60 * MIN, fresh, () => leagueMarket(league.id).then((m) => m?.proj ?? null).catch(() => null)),
+      cached(`rules:${league.id}`, 6 * 60 * MIN, fresh, () => leagueScoringGet(league.id).then((x) => (x?.ok ? x : null)).catch(() => null)),
+    ]);
+    if (rate && Object.keys(rate).length) { setLiveProjRate(rate); rateIn = true; }
+    if (rules) { setLeagueScoring(parseScoring(rules), league.id); rulesIn = true; }
+  }
   if (classic && gm?.ok) {
     const slots = leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null });
     const tenure = (gm.slots ?? []).some((x) => x.min_exp != null || x.max_exp != null);
@@ -822,7 +849,11 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     const theirPicks = oppUser ? (revealed ?? []).filter((r) => r.app_user_id === oppUser) : [];
     // The league's own rules, installed for the projection and cleared below
     // (the headless task shares a module with the next league's paint).
-    setLeagueProjScoring(gm.scoring ?? {});
+    // THE BOARD'S CATALOG, ppr and all (v0.517.0): the boards install
+    // leagueCatalogOf({ scoring, ppr }) with ppr defaulting to 1, and this
+    // installed `scoring` alone — so a league whose per-catch value lives in
+    // settings (half-PPR) projected its receivers at a full point here.
+    setLeagueProjScoring(leagueCatalogOf({ scoring: gm.scoring ?? {}, ppr: gm.ppr != null ? Number(gm.ppr) : 1 }));
     setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm));
     setSlugSleeperIds(ids as Record<string, string>);
     const tags = injuries as Record<string, string>;
@@ -841,5 +872,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     return { leagues, snapshot };
   } finally {
     if (classicIn) { clearLeagueProjScoring(); clearLeagueGolf(); }
+    if (rateIn) { if (priorRate) setLiveProjRate(priorRate); else clearLiveProjRate(); }
+    if (rulesIn) { if (priorRulesLeague != null) setLeagueScoring(priorRules, priorRulesLeague); else clearLeagueScoring(); }
   }
 }

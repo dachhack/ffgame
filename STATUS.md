@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.517.0 — one projection everywhere (widget, leagues list, matchup)
+
+Founder, with screenshots: the Kickoff League matchup projected 174.5–172.7
+while the widget said 165.2–168.1 (C. Tate 15.2 vs 10.1), and "my league
+projections change once you go into the matchup in the app."
+projectedPoints prices off the LIVE season rate (league_market's `proj`,
+refreshed daily) when one is installed, else the baked 2026 table. Only
+MY TEAM and the draft room installed it, and never cleared it, so a number
+depended on which screen you had visited. The widget and leagues list never
+installed it at all.
+- Widget feed (classic): installs the league's live rate AND its scoped
+  bonus rules (league_scoring) for its own read, cached 6h, then restores
+  what the screen underneath had (`liveProjRateMap()` is the new getter).
+  It also installs the board's own catalog, `leagueCatalogOf({scoring,
+  ppr})` with ppr defaulting to 1. It used to install `scoring` alone, so a
+  settings-ppr league projected catches at a full point.
+- Both classic boards (app + web) fetch the live rate themselves on open,
+  and `projVer` re-prices the rows when it lands. entryFor now depends on
+  showValue, so the rows re-price at once rather than on the next tick.
+
 ### v0.516.0 — a Ghost looks like a ghost
 
 Founder: "Ghost loads but it still shows a blank card in the spot. Let's put
