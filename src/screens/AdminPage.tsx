@@ -1737,7 +1737,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
             <div style={subhead}>SCHEDULE</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={reschedule} disabled={busy === 'reschedule'} className="mono" style={btn(false)} title="move a not-yet-played schedule onto weeks that have not kicked off — a league made mid-season starts at week 1 by default, which it can never play">{busy === 'reschedule' ? 'moving…' : '📅 start the season on the next open week'}</button>
-              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>keeps the same fixtures, renumbers them forward; refuses once a week has been played</span>
+              <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>keeps the same matchups, renumbers them forward; refuses once a week has been played</span>
             </div>
           </div>
           )}
@@ -2859,7 +2859,7 @@ function PreseasonPractice({ on, leagueId, season, admin, reload }: { on: boolea
   const closed = win !== null && !win.open && !on && !admin;
   const closedWhy = win?.loaded
     ? `The ${season} preseason is over — its last game kicked off ${new Date(win.lastKickoff!).toLocaleDateString()}. Practice weeks opened now would never receive play-by-play.`
-    : `No ${season} preseason slate is loaded, so there are no games to practise on.`;
+    : `No ${season} preseason slate is loaded, so there are no games to practice on.`;
 
   return (
     <div>

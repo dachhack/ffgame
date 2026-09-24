@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.513.0 — widgets wear the app theme; US English
+
+Founder: "Can we have the widgets inherit the color theme from the app? Also
+let's use US English in the app and web not British".
+- The widget palette `C` (MatchupWidget.tsx) is now repointed by
+  `syncWidgetTheme()`, which reads the app's saved `gc-theme`. It runs at
+  the top of every widget task and every `refreshMatchupWidgets`, so the
+  body is the theme's surface, tiles are its bg, and accents are its
+  you/opp/warn. Injury tags use `onAccent`. Changing the theme in Settings
+  repaints the widgets. An unknown theme falls back to neon.
+  check:widgetrender now paints all three widgets in daylight.
+- US English in the visible text: "Color theme", "grayed out", "Sign-in was
+  canceled.", "games to practice on", and "matchups" (was "fixtures"). The
+  scan parses string literals and JSX text in src, apps/mobile, core and
+  server. Code comments were left alone.
+
 ### v0.512.0 — league cards: bigger type, less air (app + web)
 
 Founder, on the leagues list: "Font is really tiny and there is a lot of

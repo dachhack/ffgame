@@ -236,7 +236,7 @@ function MineLine({ m }: { m: FieldMine }) {
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
       <TextWidget text="★" style={{ fontSize: 8.5, color: C.you, marginRight: 3 }} />
       {m.injury ? <TextWidget text={m.injury} maxLines={1}
-        style={{ fontSize: 7.5, color: C.bg, backgroundColor: injColor(m.injury), fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
+        style={{ fontSize: 7.5, color: C.onAccent, backgroundColor: injColor(m.injury), fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
       <FlexWidget style={{ flex: 1 }}>
         <TextWidget text={m.name} truncate="END" maxLines={1} style={{ fontSize: 9, color: C.text, fontWeight: 'bold' }} />
       </FlexWidget>

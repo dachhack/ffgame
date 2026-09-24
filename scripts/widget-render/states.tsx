@@ -2,7 +2,9 @@
 // through the widget library's own tree builder (check-widget-render.mjs).
 import React from 'react';
 import { buildWidgetTree, FlexWidget, TextWidget } from 'react-native-android-widget';
-import { MatchupWidget } from '../../apps/mobile/src/widget/MatchupWidget';
+import { MatchupWidget, C, syncWidgetTheme } from '../../apps/mobile/src/widget/MatchupWidget';
+import { setPlatform } from '@drip/core/platform';
+import { THEMES } from '@drip/core/theme';
 import { AlertsWidget, FieldsWidget } from '../../apps/mobile/src/widget/ExtraWidgets';
 import { inert } from '../../apps/mobile/src/widget/inert';
 import { alertsSummary, fieldGames } from '@drip/core/data/widgetExtras';
@@ -98,6 +100,29 @@ inertIt('alerts ✓, busy', <AlertsWidget state={{ kind: 'ok', summary: alertsSu
 inertIt('alerts 2×1, busy', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3, busy: true }} widthDp={140} />);
 inertIt('alerts 2×1 ✓, busy', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 2, busy: true }} widthDp={140} />);
 inertIt('fields, busy', <FieldsWidget state={{ kind: 'ok', week: 2, games: starred, current: 3, hasPrev: true, hasNext: true, leagueLabel: 'X', busy: true }} />);
+
+// v0.513.0 — the widgets wear the app's theme: with 'daylight' saved under
+// the app's key, every widget paints in its colours, and all still build.
+{
+  const mem = new Map<string, string>([['gc-theme', 'daylight']]);
+  setPlatform({ storage: { get: (k: string) => mem.get(k) ?? null, set: (k: string, v: string) => { mem.set(k, v); }, remove: (k: string) => { mem.delete(k); } } as any });
+  syncWidgetTheme();
+  const d = THEMES.daylight;
+  const flat = (t: any): string => JSON.stringify(t);
+  n++;
+  if (C.card !== d.surface || C.bg !== d.bg || C.text !== d.text || C.you !== d.you) { fails++; console.log('FAIL theme: the palette did not follow the saved theme'); }
+  else {
+    const tree = flat(buildWidgetTree(<MatchupWidget state={{ kind: 'ok', snap: drip, leagues: 3 }} widthDp={330} />));
+    if (!tree.toLowerCase().includes(d.surface.toLowerCase())) { fails++; console.log('FAIL theme: the matchup picture does not wear the daylight surface'); }
+    else console.log('ok   the widgets follow the app theme (daylight)');
+  }
+  tryIt('matchup classic, daylight', <MatchupWidget state={{ kind: 'ok', snap: classic, leagues: 2 }} widthDp={330} />);
+  tryIt('alerts 2×1, daylight', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3 }} widthDp={140} />);
+  tryIt('fields, daylight', <FieldsWidget state={{ kind: 'ok', week: 2, games: starred, current: 3, hasPrev: true, hasNext: true, leagueLabel: 'X' }} />);
+  mem.set('gc-theme', 'nonsense'); syncWidgetTheme();
+  n++;
+  if (C.card !== THEMES.neon.surface) { fails++; console.log('FAIL theme: an unknown theme should fall back to neon'); } else console.log('ok   an unknown theme falls back to neon');
+}
 
 // The harness itself: the two shapes that blank a widget must still fail here.
 const mustThrow = (label: string, el: React.JSX.Element) => { n++; try { buildWidgetTree(el); fails++; console.log(`FAIL ${label}: built, but must throw`); } catch { console.log(`ok   ${label} throws, as it must`); } };

@@ -26,9 +26,14 @@ import React from 'react';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
 import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard, type SideLeft } from '@drip/core/data/widgetFeed';
 import { crestInitial } from '@drip/core/data/crest';
+import { THEMES, type Theme, type ThemeName } from '@drip/core/theme';
+import { storeGet } from '@drip/core/platform';
 
-/** The widgets' palette — the app's dark theme, fixed (exported v0.505.0 for
- *  the alerts and fields widgets). */
+/** The widgets' palette. Since v0.513.0 it follows the app's colour theme:
+ *  `syncWidgetTheme()` reads the theme the app saved (the same `gc-theme`
+ *  key) and repoints these values before each paint. Components read C while
+ *  the builder walks the tree, so a repaint after a theme change picks it up.
+ *  The defaults are the neon theme's, the app's own default. */
 export const C = {
   bg: '#0E1F22',
   card: '#163138',
@@ -41,7 +46,23 @@ export const C = {
   live: '#34E5D9',
   warn: '#FFB454',
   ok: '#36D399',
-} as const;
+  /** Text on a you/opp/warn fill: dark on the dark themes, white on the light. */
+  onAccent: '#0E1F22',
+} as Record<'bg' | 'card' | 'line' | 'text' | 'dim' | 'faint' | 'you' | 'opp' | 'live' | 'warn' | 'ok' | 'onAccent', ColorProp>;
+
+/** Point the widgets' palette at the app's chosen theme (v0.513.0). The
+ *  widget body (`card`) is the theme's surface and the tiles inside it
+ *  (`bg`) its page colour, so tiles sit one step darker, as they always have. */
+export function syncWidgetTheme(): void {
+  let name: string | null = null;
+  try { name = storeGet(THEME_KEY); } catch { /* no storage: keep the last palette */ }
+  const t: Theme = THEMES[(name && name in THEMES ? name : 'neon') as ThemeName];
+  Object.assign(C, {
+    bg: t.bg, card: t.surface, line: t.bd, text: t.text, dim: t.dim, faint: t.faint,
+    you: t.you, opp: t.opp, live: t.you, warn: t.warn, ok: t.you, onAccent: t.onAccent,
+  });
+}
+const THEME_KEY = 'gc-theme';
 
 export type WidgetState =
   | { kind: 'signed-out' }
@@ -373,7 +394,7 @@ function Tile({ c, last }: { c: WidgetCard; last: boolean }) {
         style={{ fontSize: 9, color: t.dim ? C.faint : placeholder ? C.warn : C.text, fontWeight: 'bold', marginTop: 2 }} />
       <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
         {inj ? <TextWidget text={inj.text} maxLines={1}
-          style={{ fontSize: 8, color: C.bg, backgroundColor: inj.color, fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
+          style={{ fontSize: 8, color: C.onAccent, backgroundColor: inj.color, fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
         <TextWidget text={t.foot} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: t.footColor, fontWeight: 'bold' }} />
       </FlexWidget>
     </FlexWidget>

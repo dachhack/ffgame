@@ -1268,9 +1268,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       <Overlay visible={!!fillFor}
         title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : 'Taxi squad'}`}
         subtitle={fillFor === 'ir'
-          ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is greyed out below.`
+          ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is grayed out below.`
           : fillFor === 'out'
-          ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report \u2014 the week-to-week shelf; your commissioner sets that list. Everyone else is greyed out below.`
+          ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report \u2014 the week-to-week shelf; your commissioner sets that list. Everyone else is grayed out below.`
           : stashRules?.taxiMaxExp != null
             ? `The taxi squad holds prospects off your active roster \u2014 your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer.`
             : 'The taxi squad holds prospects off your active roster. He can\u2019t be started while he\u2019s on it.'}

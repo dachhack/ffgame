@@ -3662,9 +3662,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             })()}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
               {fillFor === 'ir'
-                ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report — your commissioner sets that list. Everyone else is greyed out below.`
+                ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report — your commissioner sets that list. Everyone else is grayed out below.`
                 : fillFor === 'out'
-                ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report — the week-to-week shelf; your commissioner sets that list. Everyone else is greyed out below.`
+                ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report — the week-to-week shelf; your commissioner sets that list. Everyone else is grayed out below.`
                 : stashRules?.taxiMaxExp != null
                   ? `The taxi squad holds prospects off your active roster — your commissioner limits it to ${stashRules.taxiMaxExp} year${stashRules.taxiMaxExp === 1 ? '' : 's'} of experience or fewer. He can’t be started while he’s on it.`
                   : 'The taxi squad holds prospects off your active roster. He can’t be started while he’s on it.'}
