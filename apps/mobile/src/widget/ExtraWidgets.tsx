@@ -37,7 +37,7 @@ export const FIELDS_WIDGET_NAME = 'Fields';
 /** The deep link a fields tap opens: App.tsx shows ▦ All fields. */
 export const FIELDS_DEEP_LINK = 'dripfantasy://fields';
 /** The fields widget's own chips (v0.506.0): step the week, back to now, whose players. */
-export const FIELDS_CLICK = { prev: 'FIELDS_PREV', next: 'FIELDS_NEXT', now: 'FIELDS_NOW', league: 'FIELDS_LEAGUE' } as const;
+export const FIELDS_CLICK = { prev: 'FIELDS_PREV', next: 'FIELDS_NEXT', now: 'FIELDS_NOW', league: 'FIELDS_LEAGUE', toggle: 'FIELDS_TOGGLE' } as const;
 
 // ── ALERTS ──────────────────────────────────────────────────────────────────
 
@@ -128,7 +128,8 @@ export type FieldsState =
   | { kind: 'empty' }
   | { kind: 'error'; message: string }
   | ({ kind: 'ok'; week: number; games: FieldGame[]; offline?: boolean; stale?: boolean;
-      /** A tap is being answered (v0.507.0): the header says so, the frame is inert. */ busy?: boolean } & Partial<FieldsNav>);
+      /** A tap is being answered (v0.507.0): the header says so, the frame is inert. */ busy?: boolean;
+      /** The game opened in place (v0.508.0), by key. */ openKey?: string | null } & Partial<FieldsNav>);
 
 /** A small team logo — ESPN's resizer, so the widget fetches 36px, not 500. */
 const logo = (team: string) => `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/${team.toLowerCase()}.png&h=36&w=36`;
@@ -152,7 +153,7 @@ function FieldStrip({ g }: { g: FieldGame & { poss: string; toGo: number } }) {
   const gained = Math.max(1, 100 - g.toGo), left = Math.max(1, g.toGo);
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-      <TextWidget text={`● ${g.poss} · ${spotLabel(g.poss, opp, g.toGo)}`} maxLines={1} style={{ fontSize: 8.5, color: C.live, fontWeight: 'bold', marginRight: 6 }} />
+      <TextWidget text={`● ${g.poss}${g.dd ? ` · ${g.dd}` : ''} · ${g.spot ?? spotLabel(g.poss, opp, g.toGo)}`} maxLines={1} style={{ fontSize: 8.5, color: C.live, fontWeight: 'bold', marginRight: 6 }} />
       <FlexWidget style={{ flex: 1, height: 6, flexDirection: 'row', backgroundColor: C.line, borderRadius: 3 }}>
         <FlexWidget style={{ flex: gained, height: 6, backgroundColor: C.you, borderRadius: 3 }} />
         <FlexWidget style={{ width: 3, height: 6, backgroundColor: C.text }} />
@@ -185,7 +186,55 @@ function MineLine({ m }: { m: FieldMine }) {
   );
 }
 
-function GameRow({ g, last }: { g: FieldGame; last: boolean }) {
+const CAT_LABEL: Record<string, string> = { pass: 'PASS', rush: 'RUSH', rec: 'REC' };
+
+/** An OPENED game (v0.508.0). Founder: "Is click to expand a thing in
+ *  widgets? It would be cool to click a game and see the current player stats
+ *  or last couple play details." A widget cannot animate, but a tap can
+ *  redraw: the game's card grows the last three plays (newest first, the
+ *  clock beside each), each side's passing / rushing / receiving leader in
+ *  ESPN's own line, and a button for the app's full view. Tap the card again
+ *  to close it. */
+function OpenedGame({ g }: { g: FieldGame }) {
+  const recent = g.recent ?? [];
+  const byTeam = (t: string) => (g.leaders ?? []).filter((l) => l.team === t);
+  const section = (t: string) => <TextWidget text={t} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.12, marginTop: 6 }} />;
+  return (
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginTop: 4, borderTopWidth: 1, borderColor: C.line }}>
+      {recent.length ? section('LAST PLAYS') : null}
+      {recent.map((p, i) => (
+        <FlexWidget key={`p${i}`} style={{ width: 'match_parent', flexDirection: 'row', marginTop: 2 }}>
+          <TextWidget text={p.clock} maxLines={1} style={{ fontSize: 8, color: C.faint, fontWeight: 'bold', width: 52 }} />
+          <FlexWidget style={{ flex: 1 }}>
+            <TextWidget text={p.txt} truncate="END" maxLines={3} style={{ fontSize: 8.5, color: p.big === 'score' ? C.you : p.big === 'turnover' ? C.opp : C.text }} />
+          </FlexWidget>
+        </FlexWidget>
+      ))}
+      {(g.leaders ?? []).length ? section('LEADERS') : null}
+      {/* flatMap, not map-in-map: the tree builder flattens exactly one level. */}
+      {[g.away, g.home].flatMap((t) => byTeam(t).map((l) => (
+        <FlexWidget key={`${t}-${l.cat}`} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+          <TextWidget text={`${t} ${CAT_LABEL[l.cat] ?? ''}`} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', width: 52 }} />
+          <TextWidget text={l.name} maxLines={1} style={{ fontSize: 8.5, color: C.text, fontWeight: 'bold', marginRight: 5 }} />
+          <FlexWidget style={{ flex: 1 }}>
+            <TextWidget text={l.line} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: C.dim }} />
+          </FlexWidget>
+        </FlexWidget>
+      )))}
+      {!recent.length && !(g.leaders ?? []).length ? (
+        <TextWidget text={g.state === 'pre' ? 'Not kicked off yet — plays and leaders land here once it does.' : 'No plays on the feed yet.'} maxLines={2}
+          style={{ fontSize: 8.5, color: C.dim, marginTop: 5 }} />
+      ) : null}
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 7 }}>
+        <TextWidget text="▴ tap to close" maxLines={1} style={{ fontSize: 8, color: C.faint }} />
+        <TextWidget text="OPEN IN APP ↗" clickAction={WIDGET_CLICK.open} clickActionData={{ uri: FIELDS_DEEP_LINK }} maxLines={1}
+          style={{ fontSize: 9, color: C.you, fontWeight: 'bold', backgroundColor: C.card, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5 }} />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+function GameRow({ g, last, open }: { g: FieldGame; last: boolean; open: boolean }) {
   const live = g.state === 'live';
   const lead = (a: number, b: number) => g.state !== 'pre' && a > b;
   const clockText = g.state === 'pre' ? (g.kickoff != null ? lockWhen(g.kickoff) : 'TBD') : g.clock ?? '';
@@ -193,21 +242,24 @@ function GameRow({ g, last }: { g: FieldGame; last: boolean }) {
   const mine = g.mine.slice(0, 4);
   const more = g.mine.length - mine.length;
   return (
-    <FlexWidget clickAction={WIDGET_CLICK.open} clickActionData={{ uri: FIELDS_DEEP_LINK }}
+    // A tap opens or closes the game in place (v0.508.0); the app is one
+    // button away inside the opened card.
+    <FlexWidget clickAction={FIELDS_CLICK.toggle} clickActionData={{ key: g.key }}
       style={{ width: 'match_parent', flexDirection: 'column', backgroundColor: C.bg, borderRadius: 10, padding: 7, marginBottom: last ? 0 : 5,
-        borderWidth: 1, borderColor: live ? C.live : C.line }}>
+        borderWidth: 1, borderColor: open ? C.you : live ? C.live : C.line }}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <TeamSide team={g.away} score={g.as} lead={lead(g.as, g.hs)} align="left" showScore={g.state !== 'pre'} />
-        <TextWidget text={clockText} maxLines={1} style={{ fontSize: 9, color: clockColor, fontWeight: 'bold' }} />
+        <TextWidget text={`${clockText} ${open ? '▴' : '▾'}`} maxLines={1} style={{ fontSize: 9, color: clockColor, fontWeight: 'bold' }} />
         <TeamSide team={g.home} score={g.hs} lead={lead(g.hs, g.as)} align="right" showScore={g.state !== 'pre'} />
       </FlexWidget>
       {live && g.poss != null && g.toGo != null ? <FieldStrip g={g as FieldGame & { poss: string; toGo: number }} /> : null}
-      {g.last && g.state !== 'final' ? (
+      {!open && g.last && g.state !== 'final' ? (
         <TextWidget text={g.last} truncate="END" maxLines={2}
           style={{ fontSize: 8.5, color: g.big === 'score' ? C.you : g.big === 'turnover' ? C.opp : C.dim, marginTop: 3 }} />
       ) : null}
       {mine.map((m, i) => <MineLine key={`${m.name}-${i}`} m={m} />)}
       {more > 0 ? <TextWidget text={`+${more} more of yours`} style={{ fontSize: 8, color: C.faint, marginTop: 1 }} /> : null}
+      {open ? <OpenedGame g={g} /> : null}
     </FlexWidget>
   );
 }
@@ -274,7 +326,7 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
   );
   return frame(head,
     <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
-      {games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1} />)}
+      {games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1} open={state.openKey === g.key} />)}
     </ListWidget>,
   );
 }

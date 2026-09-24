@@ -58,6 +58,12 @@ tryIt('fields with nav, a picked league, stars in every state', <FieldsWidget st
 tryIt('fields at the slate\'s start, now', <FieldsWidget state={{ kind: 'ok', week: 3, games: [], current: 3, hasPrev: false, hasNext: true }} />);
 tryIt('fields offline', <FieldsWidget state={{ kind: 'ok', week: 3, games, offline: true }} />);
 for (const s of [{ kind: 'loading' }, { kind: 'empty' }, { kind: 'error', message: 'x' }] as const) tryIt(`fields ${s.kind}`, <FieldsWidget state={s as any} />);
+// v0.508.0 — a game opened in place: last plays, leaders, the app button.
+const opened = games.map((g) => ({ ...g, dd: g.state === 'live' ? '2nd & 7' : null, spot: g.state === 'live' ? 'BUF 34' : null,
+  recent: g.state === 'pre' ? [] : [{ clock: 'Q2 6:40', txt: 'B.Young pass short right to X for 9 yards', big: null }, { clock: 'Q2 7:10', txt: 'TOUCHDOWN', big: 'score' as const }],
+  leaders: g.state === 'pre' ? [] : [{ team: g.away, cat: 'pass' as const, name: 'A. Guy', line: '12/18, 140 YDS' }, { team: g.home, cat: 'rush' as const, name: 'B. Guy', line: '9 CAR, 61 YDS' }] }));
+for (const g of opened) tryIt(`fields, ${g.key} (${g.state}) opened`, <FieldsWidget state={{ kind: 'ok', week: 3, games: opened, openKey: g.key, current: 3 }} />);
+
 // v0.507.0 — the frames drawn while a tap is answered: busy, and INERT — they
 // must build, and no node in them may carry a tap.
 const taps = (t: any): number => ((t.props?.clickAction ? 1 : 0) + (t.children ?? []).reduce((k: number, c: any) => k + taps(c), 0));
@@ -83,5 +89,7 @@ const mustThrow = (label: string, el: React.JSX.Element) => { n++; try { buildWi
 const Nothing = () => null;
 mustThrow('a fragment', <FlexWidget><><TextWidget text="a" /></></FlexWidget>);
 mustThrow('a component returning null', <FlexWidget><Nothing /></FlexWidget>);
+const Two = () => <FlexWidget>{[['a', 'b'].map((t) => [<TextWidget key={t} text={t} />])]}</FlexWidget>;
+mustThrow('children nested two arrays deep (map inside map)', <FlexWidget><Two /></FlexWidget>);
 console.log(fails ? `\n${fails} of ${n} FAILED` : `\nall ${n} widget states build`);
 process.exit(fails ? 1 : 0);

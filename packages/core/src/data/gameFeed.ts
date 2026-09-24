@@ -43,6 +43,11 @@ export interface GameStatus {
   period?: number | null;
   /** The live display clock, "12:04". */
   clock?: string | null;
+  /** The situation after the latest play (v0.508.0, the worker's
+   *  gameSituation): "2nd & 7", the spot "BUF 34", the team with the ball. */
+  sit?: { dd: string; spot: string | null; poss: string | null; /** yards to the end zone, the offense's way */ ytg?: number | null } | null;
+  /** Each team's passing / rushing / receiving leader, ESPN's line (v0.508.0). */
+  leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[] | null;
 }
 /** A CLOCK STOPPAGE on the play-by-play (v0.434.3): a timeout, the two-minute
  *  warning, the end of a period, of the half, of the game, the coin toss —
