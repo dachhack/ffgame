@@ -14,7 +14,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupReport } from '@drip/core/data/widgetExtras';
+import { lineupReport, lineupReportLine } from '@drip/core/data/widgetExtras';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -501,21 +501,8 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   const t = useTheme();
   const r = lineupReport(snap);
   if (!r) return null;
-  const open = r.unset + r.none + r.noMetric;
-  const bits = [
-    r.unset ? `${r.unset} unset` : null,
-    r.none ? `${r.none} no one available` : null,
-    r.noMetric ? `${r.noMetric} no metric` : null,
-    r.missed ? `${r.missed} missed` : null,
-  ].filter(Boolean);
-  const lock = open && r.lockMs != null
-    ? ` · locks ${new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(r.lockMs))}`
-    : '';
-  return (
-    <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', marginTop: 3, color: open ? t.warn : t.you }}>
-      {open ? '⚠ ' : '✓ '}{r.set}/{r.total} set{bits.length ? ` · ${bits.join(' · ')}` : ''}{lock}
-    </Text>
-  );
+  const { text, open } = lineupReportLine(r);
+  return <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', marginTop: 3, color: open ? t.warn : t.you }}>{text}</Text>;
 }
 
 function SlateLine({ side, points, mine, tone, proj }: {

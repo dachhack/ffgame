@@ -65,6 +65,24 @@ export function lineupReport(snap: WidgetSnapshot): LineupReport | null {
   };
 }
 
+/** The report as one line, in the words both league lists print (v0.510.0):
+ *  "✓ 9/9 set", or "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric ·
+ *  locks Sun 1:00 PM". `open` says whether anything still needs a hand —
+ *  the warn colour. */
+export function lineupReportLine(r: LineupReport): { text: string; open: boolean } {
+  const open = r.unset + r.none + r.noMetric > 0;
+  const bits = [
+    r.unset ? `${r.unset} unset` : null,
+    r.none ? `${r.none} no one available` : null,
+    r.noMetric ? `${r.noMetric} no metric` : null,
+    r.missed ? `${r.missed} missed` : null,
+  ].filter(Boolean);
+  const lock = open && r.lockMs != null
+    ? ` · locks ${new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(r.lockMs))}`
+    : '';
+  return { text: `${open ? '⚠' : '✓'} ${r.set}/${r.total} set${bits.length ? ` · ${bits.join(' · ')}` : ''}${lock}`, open };
+}
+
 export interface AlertsSummary {
   /** Warnings across every league. */
   total: number;

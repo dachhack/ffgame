@@ -10,7 +10,7 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine } from '../packages/core/src/data/widgetExtras';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
 import { takeTapLock, releaseTapLock } from '../apps/mobile/src/widget/inert';
 
@@ -520,6 +520,10 @@ const state = [
   ok('lineup report: unset, nobody-available, no-metric and missed each counted apart', r.unset === 2 && r.none === 1 && r.noMetric === 1 && r.missed === 1, r);
   ok('lineup report: the next lock rides along', r.lockMs === 123);
   ok('lineup report: none for a classic league (its projections say it)', lineupReport({ ...snap, projected: true }) === null);
+  const line = lineupReportLine(r);
+  ok('lineup line: the words both lists print, warn while anything is open', line.open && /^⚠ 4\/9 set · 2 unset · 1 no one available · 1 no metric · 1 missed · locks /.test(line.text), line);
+  const done = lineupReportLine({ total: 9, set: 8, unset: 0, none: 0, noMetric: 0, missed: 1, lockMs: 5 });
+  ok('lineup line: nothing left to do reads ✓, no lock', !done.open && done.text === '✓ 8/9 set · 1 missed', done);
   ok('lineup report: none without picks read', lineupReport({ ...snap, assessable: false }) === null && lineupReport({ ...snap, cards: [] }) === null);
 }
 

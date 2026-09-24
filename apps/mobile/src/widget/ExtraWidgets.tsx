@@ -272,12 +272,22 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
     </FlexWidget>
   );
   // Header buttons big enough to hit (v0.507.0), dimmed with … while a tap is answered.
-  const button = (text: string, action: string, color: ColorProp, dim?: boolean) => (
-    <TextWidget text={text} clickAction={action} maxLines={1}
-      style={{ fontSize: 15, color: dim ? C.dim : color, fontWeight: 'bold', backgroundColor: dim ? C.line : C.bg, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginLeft: 4 }} />
-  );
+  // THE HEADER, ONE ROW (v0.510.0). Founder: "Let's make the league select a
+  // taller button on the top row. We don't need the '16 to come' text." Five
+  // blocks of one height — ‹, the week (tap for NOW), ›, ★ whose players, ⟳ —
+  // each big enough to hit (v0.507.0), dimmed while a tap is answered.
+  const BTN = 38;
   const busy = state.kind === 'ok' && state.busy;
-  const refresh = (offline?: boolean) => button(busy ? '…' : offline ? '⟳ !' : '⟳', WIDGET_CLICK.refresh, offline ? C.warn : C.you, !!busy);
+  // Widths sized so the week keeps ~55dp at the widget's 250dp minimum.
+  const block = (children: React.ReactNode, action: string, width: number | null, dim?: boolean, first?: boolean) => (
+    <FlexWidget clickAction={action}
+      style={{ ...(width != null ? { width } : { flex: 1 }), height: BTN, flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: dim ? C.line : C.bg, borderRadius: 10, marginLeft: first ? 0 : 4, paddingHorizontal: 3 }}>
+      {children}
+    </FlexWidget>
+  );
+  const glyph = (text: string, color: ColorProp, size = 16) => <TextWidget text={text} maxLines={1} style={{ fontSize: size, color, fontWeight: 'bold' }} />;
+  const refresh = (offline?: boolean) => block(glyph(busy ? '…' : offline ? '⟳ !' : '⟳', busy ? C.dim : offline ? C.warn : C.you), WIDGET_CLICK.refresh, 36, !!busy);
   if (state.kind !== 'ok') {
     const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? 'No games on the slate yet.' : state.message;
     return frame(
@@ -292,36 +302,23 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
     );
   }
   const { games, week, offline } = state;
-  const n = (s: FieldGame['state']) => games.filter((g) => g.state === s).length;
-  const live = n('live'), pre = n('pre'), fin = n('final');
-  const bits = [live ? `${live} live` : null, pre ? `${pre} to come` : null, fin ? `${fin} final` : null].filter(Boolean).join(' · ');
-  const minesLive = games.filter((g) => g.state === 'live').reduce((k, g) => k + g.mine.length, 0);
   const isNow = state.current == null || state.current === week;
-  // ‹ › step the week (a dim arrow at the slate's end still answers, and
-  // does nothing); the week's name taps back to NOW when it is not now.
-  const arrow = (text: string, action: string, can: boolean | undefined) => (
-    <TextWidget text={text} clickAction={action} maxLines={1}
-      style={{ fontSize: 17, color: can === false || busy ? C.line : C.you, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 5 }} />
-  );
+  const arrow = (text: string, action: string, can: boolean | undefined, first?: boolean) =>
+    block(glyph(text, can === false || busy ? C.line : C.you, 18), action, 30, false, first);
   const head = (
-    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginBottom: 6 }}>
-      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
-        {arrow('‹', FIELDS_CLICK.prev, state.hasPrev)}
-        <FlexWidget clickAction={FIELDS_CLICK.now} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          <TextWidget text={`▦ ${weekLabel(week).toUpperCase()}`} maxLines={1} style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }} />
-          <TextWidget text={busy ? '  LOADING…' : isNow ? '  NOW' : '  ↺ NOW'} maxLines={1} style={{ fontSize: 8.5, color: busy ? C.dim : isNow ? C.faint : C.you, fontWeight: 'bold' }} />
-        </FlexWidget>
-        <FlexWidget style={{ marginLeft: 4 }}>{arrow('›', FIELDS_CLICK.next, state.hasNext)}</FlexWidget>
-        {refresh(offline)}
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+      {arrow('‹', FIELDS_CLICK.prev, state.hasPrev, true)}
+      <FlexWidget clickAction={FIELDS_CLICK.now}
+        style={{ flex: 1, height: BTN, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}>
+        <TextWidget text={`▦ ${weekLabel(week).toUpperCase()}`} truncate="END" maxLines={1} style={{ fontSize: 11.5, color: C.text, fontWeight: 'bold' }} />
+        <TextWidget text={busy ? 'LOADING…' : isNow ? 'NOW' : '↺ NOW'} truncate="END" maxLines={1} style={{ fontSize: 8, color: busy ? C.dim : isNow ? C.faint : C.you, fontWeight: 'bold' }} />
       </FlexWidget>
-      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-        <FlexWidget style={{ flex: 1 }}>
-          <TextWidget text={`${bits || 'no games'}${minesLive ? ` · ★ ${minesLive} playing` : ''}`} truncate="END" maxLines={1}
-            style={{ fontSize: 9.5, color: live ? C.live : C.dim, fontWeight: 'bold' }} />
-        </FlexWidget>
-        <TextWidget text={`★ ${state.leagueLabel ?? 'All leagues'} ▸`} clickAction={FIELDS_CLICK.league} truncate="END" maxLines={1}
-          style={{ fontSize: 9, color: C.you, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 3, marginLeft: 6 }} />
-      </FlexWidget>
+      {arrow('›', FIELDS_CLICK.next, state.hasNext)}
+      {block([
+        <TextWidget key="s" text="★" maxLines={1} style={{ fontSize: 11, color: busy ? C.dim : C.you, fontWeight: 'bold' }} />,
+        <TextWidget key="l" text={state.leagueLabel ?? 'All leagues'} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: busy ? C.dim : C.you, fontWeight: 'bold' }} />,
+      ], FIELDS_CLICK.league, 64, !!busy)}
+      {refresh(offline)}
     </FlexWidget>
   );
   return frame(head,

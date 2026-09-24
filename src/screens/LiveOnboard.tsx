@@ -14,6 +14,8 @@ import {
   leagueTouch, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
+import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { lineupReport, lineupReportLine } from '@drip/core/data/widgetExtras';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
@@ -610,6 +612,37 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     return () => { dead = true; clearInterval(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollments, viewAs?.userId]);
+
+  // THE GLANCE (v0.510.0, the app's since v0.509.0). Founder: "add the lineup
+  // report to the web leagues page too." Each league's picture is the one the
+  // app's list and the home-screen widget draw (core widgetFeed): a classic
+  // league's projected finals, a drip league's lineup slot by slot. The
+  // remembered picture paints at once; fresh reads follow ONE LEAGUE AT A TIME
+  // (a classic read installs its league's scoring rules module-wide while it
+  // runs). Every five minutes while the tab is showing. Not under browse-as —
+  // the reads are the signed-in user's.
+  const [glance, setGlance] = useState<Record<string, WidgetSnapshot>>({});
+  useEffect(() => {
+    if (viewAs || !enrollments?.length) return;
+    const leagues = widgetLeagues(enrollments);
+    let dead = false;
+    const remembered: Record<string, WidgetSnapshot> = {};
+    for (const l of leagues) { const r = recallSnapshot(l.id); if (r) remembered[l.id] = r.snapshot; }
+    setGlance((g) => ({ ...remembered, ...g }));
+    const read = async (fresh: boolean) => {
+      for (const l of leagues) {
+        if (dead) return;
+        try {
+          const { snapshot } = await widgetSnapshot(l.id, session.user.id, fresh, { anyLeague: true });
+          if (!dead && snapshot && snapshot.leagueId === l.id) setGlance((g) => ({ ...g, [l.id]: snapshot }));
+        } catch { /* keep what the card had */ }
+      }
+    };
+    void read(false);
+    const t = setInterval(() => { if (!document.hidden) void read(true); }, 5 * 60_000);
+    return () => { dead = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrollments, viewAs?.userId, session.user.id]);
   // A commissioner's share link (?code=…) stashes dripInviteCode and promises
   // "just sign in and confirm — no code to type." Honor that by skipping the
   // role chooser and going straight to the pre-filled redeem form.
@@ -1019,7 +1052,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         // board that fails to build simply leaves you standing there.
         if (room === 'matchup') void openHeroBoard(e, viewAs?.userId ?? session.user.id, loadSimLeague, navigate);
       }}
-      unreads={unreads} slate={slate}
+      unreads={unreads} slate={slate} glance={glance}
       onAdd={guard(() => setView('add'))}
       onFind={guard(() => setView('board'))}
       onDeleted={refresh}
@@ -1046,7 +1079,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate }: {
+function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
@@ -1059,6 +1092,8 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   unreads: Record<string, { n: number; mention: boolean }>;
   /** league_id → this week's fixture (0347) — the card's matchup summary. */
   slate: Record<string, LeagueSlateRow>;
+  /** league_id → the league's widget picture (v0.510.0): projected finals, or the drip lineup. */
+  glance: Record<string, WidgetSnapshot>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
@@ -1154,11 +1189,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[e.league_id]} glance={glance[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[e.league_id]} glance={glance[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
       </div>
 
@@ -1333,9 +1368,13 @@ function MockLeagueCard({ e, onDraft, onDeleted }: { e: Enrollment; onDraft: () 
  *
  *  Renders nothing without a fixture: a bye, an odd league, a week not yet
  *  scheduled. A row that prints 0.00 is claiming a game was played. */
-function SlateStrip({ row }: { row?: LeagueSlateRow }) {
+function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnapshot }) {
   const g = row?.game;
   if (!g) return null;
+  // Classic: the projected finals beside the live scores until the week is
+  // final (v0.510.0); the opponent's only when their lineup could be read.
+  const proj = glance?.projected && glance.phase !== 'final' && glance.them ? glance : null;
+  const projOf = (mine: boolean) => (!proj ? null : mine ? proj.me.score : proj.themLive ? null : proj.them!.score);
   const v = verdictOf(g);
   const tone = v === 'won' || v === 'leading' ? 'var(--you)'
     : v === 'lost' || v === 'trailing' ? 'var(--opp)' : 'var(--mid)';
@@ -1351,6 +1390,7 @@ function SlateStrip({ row }: { row?: LeagueSlateRow }) {
           {side?.team || `Seat ${side?.roster_id}`}
         </span>
         {rec && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{rec}</span>}
+        {projOf(mine) != null && <span className="mono" title="projected final" style={{ fontSize: 9.5, color: 'var(--faint)' }}>P {projOf(mine)!.toFixed(1)}</span>}
         <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 56, textAlign: 'right', color: mine ? tone : 'var(--mid)' }}>
           {scoreLabel(side?.points)}
         </span>
@@ -1369,12 +1409,25 @@ function SlateStrip({ row }: { row?: LeagueSlateRow }) {
       </div>
       {line(g.me, true)}
       {line(g.opp, false)}
+      {glance ? <LineupLine snap={glance} /> : null}
     </div>
   );
 }
 
-function LeagueCard({ e, commish, slate, unread, onPodBuild, onOpen }: {
+/** A DRIP lineup in one line (v0.510.0, the app's LineupLine): how many of the
+ *  week's slots are set, what the rest need, and the next lock. Nothing for a
+ *  classic league — its projected totals say it. */
+function LineupLine({ snap }: { snap: WidgetSnapshot }) {
+  const r = lineupReport(snap);
+  if (!r) return null;
+  const { text, open } = lineupReportLine(r);
+  return <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
+}
+
+function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
   e: Enrollment; commish: boolean;
+  /** v0.510.0: the league's widget picture — projected finals, or the drip lineup. */
+  glance?: WidgetSnapshot;
   /** 0347: this league's current fixture, or undefined while the shelf loads. */
   slate?: LeagueSlateRow;
   unread?: { n: number; mention: boolean };
@@ -1434,7 +1487,7 @@ function LeagueCard({ e, commish, slate, unread, onPodBuild, onOpen }: {
           )}
         </div>
       </button>
-      <SlateStrip row={slate} />
+      <SlateStrip row={slate} glance={glance} />
       {/* The showdown's crown (0090) stays: it is a RESULT, not a signal chip,
           it renders only once the whole contest week is final, and no other
           surface reports it. */}
