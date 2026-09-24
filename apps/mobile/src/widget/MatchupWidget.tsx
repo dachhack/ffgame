@@ -353,6 +353,8 @@ function tileLook(c: WidgetCard): TileLook {
   switch (c.status) {
     case 'empty': return { face: '✕', name: 'Unset', foot: 'SET IT', footColor: C.warn, border: C.warn };
     case 'none': return { face: '∅', name: 'None', foot: 'AVAILABLE', footColor: C.warn, border: C.warn };
+    // A GHOST (or a Bye Steal) holds the slot (v0.520.0): filled, not a warning.
+    case 'ghost': return { face: c.phantom === 'bye-steal' ? '🛌' : '👻', name: c.name || 'Ghost', foot: c.points != null ? pts : c.phantom === 'bye-steal' ? 'BYE STEAL' : 'GHOST ✓', footColor: C.you, border: C.you };
     case 'missed': return { face: '—', name: 'Missed', foot: 'NO PICK', footColor: C.faint, border: C.line, dim: true };
     case 'unsealed': return { face: c.pos ?? '?', name: c.name, foot: 'NO METRIC', footColor: C.warn, border: C.warn };
     case 'set': case 'sealed':
@@ -431,6 +433,7 @@ function alertLine(snap: WidgetSnapshot): { text: string; color: ColorProp } {
   const unset = cards.filter((c) => c.status === 'empty').length;
   const none = cards.filter((c) => c.status === 'none').length;
   const metric = cards.filter((c) => c.status === 'unsealed').length;
+  const ghost = cards.filter((c) => c.status === 'ghost').length;
   const hurt = snap.fixes.filter((f) => f.kind === 'injury' || f.kind === 'bye').length;
   const bits: string[] = [];
   if (unset) bits.push(`${unset} unset`);
@@ -442,7 +445,8 @@ function alertLine(snap: WidgetSnapshot): { text: string; color: ColorProp } {
     return { text: `⚠ ${bits.join(' · ')}${lock}`, color: C.warn };
   }
   const color: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : C.ok;
-  return { text: snap.phase === 'pre' ? `✓ Lineup set · ${snap.line}` : snap.line, color };
+  const noted = ghost ? ` · ${ghost} 👻 ghost${ghost === 1 ? '' : 's'}` : '';
+  return { text: snap.phase === 'pre' ? `✓ Lineup set${noted} · ${snap.line}` : snap.line, color };
 }
 
 /** THE PINNED HEADER, both games (v0.500.0, shared v0.501.0): ▸ NEXT, the

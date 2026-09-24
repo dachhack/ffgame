@@ -26,7 +26,7 @@
 // never carries a score, so a stale push can never draw a stale number.
 
 import {
-  myEnrollments, myMatchupFrom, getMatchupState, matchupTeams, defaultOpenWeek, liveSlate, myPicks, myPool, injuryTags, leagueStandings,
+  myEnrollments, myMatchupFrom, getMatchupState, matchupTeams, defaultOpenWeek, liveSlate, myPicks, myPool, injuryTags, leagueStandings, myTargeted,
   type Enrollment, type LiveMatchup, type WindowScore, type PickRow, type PoolPlayer, type StandingsRow,
 } from './liveApi';
 import { nflGameForTeam, windowsForWeek, windowPhase, windowLockMs, windowKickoffMs, windowDateLabel, windowTimeLabel, weekLabel, setRuntimeSlate, windowForTeam, gamesInWindow, type WindowPhase } from './nflSlate';
@@ -122,8 +122,13 @@ export interface WidgetCard {
    *  set — player and metric in, window open;
    *  sealed — locked, not yet kicked off;
    *  live — on the field, `points` so far;
-   *  final — done, `points` banked. */
-  status: 'empty' | 'none' | 'missed' | 'unsealed' | 'set' | 'sealed' | 'live' | 'final';
+   *  final — done, `points` banked;
+   *  ghost — no player, but a Ghost Player (or a Bye Steal) holds the slot
+   *          (v0.520.0): the resolver scores it, so it counts as FILLED and
+   *          is noted as a ghost rather than warned about. */
+  status: 'empty' | 'none' | 'missed' | 'unsealed' | 'set' | 'sealed' | 'live' | 'final' | 'ghost';
+  /** Which card holds a `ghost` slot. */
+  phantom?: 'ghost' | 'bye-steal';
   points: number | null;
   hot: boolean;
 }
@@ -289,6 +294,10 @@ export interface SummarizeInput {
    *  the seat has none. True proves a bye; false or absent is no claim, and
    *  the card says there is no matchup rather than inventing a bye. */
   weekScheduled?: boolean;
+  /** THE PHANTOMS (v0.520.0): my played Ghost / Bye Steal cards, keyed
+   *  'win|slot' as applied_state records them. A slot one holds is filled —
+   *  the resolver fields the phantom there while nobody else is. */
+  phantoms?: Record<string, 'ghost' | 'bye-steal'>;
 }
 
 /** A rostered player as the classic summary sees him: the pool row plus what
@@ -329,7 +338,7 @@ const GAME_MS = 3.75 * 60 * 60 * 1000;
 /** The PURE half: rows in, the picture's words out. `nowMs` is a parameter
  *  so the check can stand at any moment of a week. */
 export function summarize(input: SummarizeInput): WidgetSnapshot {
-  const { league, week, matchup, state, teams, nowMs, picks, pool, injuries, images, standings } = input;
+  const { league, week, matchup, state, teams, nowMs, picks, pool, injuries, images, standings, phantoms } = input;
   const wl = weekLabel(week);
   const wins = windowsForWeek(week);
   // The header's record and place (v0.500.0): the table comes best first, so
@@ -410,6 +419,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
             && !['O', 'IR'].includes(injuries?.[pl.slug] ?? '')).length
         : Infinity;
       let noneHere = 0;
+      let ghostHere = 0;
       for (const slotId of slotIds) {
         const p = bySlot.get(slotId);
         const slug = p?.player_slug ?? null;
@@ -420,19 +430,25 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
           : open ? (p?.metric_id ? 'set' : 'unsealed')
           : w.phase === 'locked' ? 'sealed'
           : w.phase === 'live' ? 'live' : 'final';
+        // A GHOST HOLDS IT (v0.520.0). Founder: "if you filled a spot with a
+        // ghost, let's count it as filled and note it." Checked before the
+        // spare count, so a ghosted slot never spends a bench body either.
+        const phantom = !slug ? phantoms?.[`${winId}|${slotId}`] : undefined;
+        if (phantom && (status === 'empty' || status === 'missed')) { status = 'ghost'; ghostHere += 1; }
         if (status === 'empty') { if (spare > 0) spare -= 1; else { status = 'none'; noneHere += 1; } }
         const pos = pl && 'pos' in pl ? (pl as { pos?: string }).pos ?? null : null;
         const metric = p?.metric_id && pos ? metricById(pos as Pos, p.metric_id)?.name ?? null : null;
         cards.push({
           win: winId, winLabel: w.label, phase: w.phase, slot: slotId, slug,
-          name: slug ? (pl ? shortName(pl.full) : slug) : '',
+          name: slug ? (pl ? shortName(pl.full) : slug) : status === 'ghost' ? (phantom === 'bye-steal' ? 'Bye Steal' : 'Ghost') : '',
           pos, team: pl?.team ?? null, metric,
           image: slug ? images?.[slug] ?? null : null,
           metricId: p?.metric_id ?? null,
           kick: slug ? nflGameForTeam(week, pl?.team)?.kickoff ?? null : null,
           injury: slug ? injuries?.[slug] ?? null : null,
           status,
-          points: sc && (status === 'live' || status === 'final') ? round1(Number(sc.score) || 0) : null,
+          ...(phantom && status === 'ghost' ? { phantom } : {}),
+          points: sc && (status === 'live' || status === 'final' || (status === 'ghost' && w.phase !== 'setup' && w.phase !== 'locked')) ? round1(Number(sc.score) || 0) : null,
           hot: !!sc?.hot,
         });
       }
@@ -445,7 +461,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         themLeft.playing += theirRevealed;
       }
       if (w.phase !== 'setup') continue; // locked windows can't be fixed
-      const empty = Math.max(0, cap - filled.length);
+      const empty = Math.max(0, cap - filled.length - ghostHere);
       const lockMs = windowLockMs(week, winId as WindowId);
       if (!alarm && lockMs != null) alarm = { win: winId, winLabel: w.label, lockMs, empty };
       const fixable = empty - noneHere;
@@ -791,6 +807,15 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
       .then((r) => (Array.isArray(r) ? r : []))
       .catch(() => [] as StandingsRow[])) : Promise.resolve([] as StandingsRow[]),
   ]);
+  // THE PHANTOMS (v0.520.0): my Ghost / Bye Steal plays, from my own
+  // applied_state row — the record the worker scores. A failed read is no
+  // claim: the slot reads as it did before, empty.
+  const phantoms: Record<string, 'ghost' | 'bye-steal'> = {};
+  if (drip && pickUser) {
+    const tgt = await myTargeted(matchup!.id, pickUser).catch(() => null);
+    for (const k of tgt?.ghost ?? []) phantoms[k] = 'ghost';
+    if (tgt?.byeSteal) phantoms[`${tgt.byeSteal.win}|${tgt.byeSteal.slot}`] = 'bye-steal';
+  }
   let images: Record<string, string> | undefined;
   // Faces for the drip tiles and, since v0.503.0, the classic lineup cards.
   if (drip || classic) {
@@ -867,7 +892,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     };
   }
   try {
-    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, images, classic: classicIn, weekScheduled, standings });
+    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, images, classic: classicIn, weekScheduled, standings, phantoms });
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };
   } finally {

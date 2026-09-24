@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.520.0 — a Ghost fills the slot (app, web, widget)
+
+Founder: "if you filled a spot with a ghost, let's count it as filled and
+note it. On app, web, and widget." The league lists read "7/8 set · 1 no
+one available" for a drip slot a Ghost Player was holding. The widget feed
+now reads my own applied_state plays (`myTargeted`) and a slot a Ghost — or
+a Bye Steal, which fills an empty spot the same way — holds is a new card
+status, `ghost`: counted as SET, noted ("✓ 8/8 set · 1 👻 ghost"), no
+warning, no alert, and it spends no bench body in the none/unset count.
+The widget draws it as a 👻 (🛌 for Bye Steal) tile, "GHOST ✓" before the
+window and its points after. A play on a slot someone is fielded in
+changes nothing (the resolver stands the phantom down there). The app and
+web league lists and all widgets read the same snapshot, so one change
+covers all three. Pinned in `check:widget`.
+
 ### v0.519.0 — projections follow what players are actually doing
 
 Founder, with a screenshot: "Coker and Golden are really low." Coker (33.8,
