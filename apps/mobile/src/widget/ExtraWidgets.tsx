@@ -26,7 +26,7 @@
 // at the call site.
 import React from 'react';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
-import type { AlertsSummary, FieldGame } from '@drip/core/data/widgetExtras';
+import type { AlertsSummary, FieldGame, ProjCell } from '@drip/core/data/widgetExtras';
 import { spotLabel } from '@drip/core/data/widgetExtras';
 import { weekLabel } from '@drip/core/data/nflSlate';
 import { C, fmt, shortClock, matchupDeepLink, WIDGET_CLICK } from './MatchupWidget';
@@ -254,9 +254,25 @@ const CAT_LABEL: Record<string, string> = { pass: 'PASS', rush: 'RUSH', rec: 'RE
  *  clock beside each), each side's passing / rushing / receiving leader in
  *  ESPN's own line, and a button for the app's full view. Tap the card again
  *  to close it. */
+/** One half of a pregame sheet row: slot, injury tag, name, projected
+ *  points. An empty slot still draws, so the two sides stay in step. */
+function SheetCell({ pos, cell }: { pos: string; cell: ProjCell | null }) {
+  return (
+    <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+      <TextWidget text={pos} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', width: 22 }} />
+      {cell?.injury ? <TextWidget text={cell.injury} maxLines={1}
+        style={{ fontSize: 7.5, color: C.onAccent, backgroundColor: injColor(cell.injury), fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : <FlexWidget style={{ width: 0 }} />}
+      <FlexWidget style={{ flex: 1 }}>
+        <TextWidget text={cell?.name ?? '—'} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: cell ? C.text : C.faint, fontWeight: 'bold' }} />
+      </FlexWidget>
+      <TextWidget text={cell?.pts != null ? cell.pts.toFixed(1) : ''} maxLines={1} style={{ fontSize: 8.5, color: C.dim, fontWeight: 'bold', marginLeft: 3 }} />
+    </FlexWidget>
+  );
+}
+
 function OpenedGame({ g }: { g: FieldGame }) {
   const recent = g.recent ?? [];
-  const proj = g.state === 'pre' ? g.projLeaders ?? [] : [];
+  const proj = g.state === 'pre' ? g.projSheet ?? [] : [];
   const byTeam = (t: string) => (g.leaders ?? []).filter((l) => l.team === t);
   const section = (t: string) => <TextWidget text={t} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.12, marginTop: 6 }} />;
   return (
@@ -281,20 +297,25 @@ function OpenedGame({ g }: { g: FieldGame }) {
           </FlexWidget>
         </FlexWidget>
       )))}
-      {/* Before kickoff (v0.514.0): who is projected to lead, in stock PPR,
-          in the projected grey the widget gives every unplayed number. */}
-      {proj.length ? section('PROJECTED LEADERS · PPR') : null}
-      {[g.away, g.home].flatMap((t) => proj.filter((l) => l.team === t).map((l) => (
-        <FlexWidget key={`p-${t}-${l.cat}`} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-          <TextWidget text={`${t} ${CAT_LABEL[l.cat] ?? ''}`} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', width: 52 }} />
-          {l.injury ? <TextWidget text={l.injury} maxLines={1}
-            style={{ fontSize: 7.5, color: C.onAccent, backgroundColor: injColor(l.injury), fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
-          <FlexWidget style={{ flex: 1 }}>
-            <TextWidget text={l.name} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: C.text, fontWeight: 'bold' }} />
-          </FlexWidget>
-          <TextWidget text={l.pts.toFixed(1)} maxLines={1} style={{ fontSize: 8.5, color: C.dim, fontWeight: 'bold' }} />
+      {/* Before kickoff (v0.514.0): the projected starters, the away side
+          on the left and the home side on the right, slot by slot — QB, RB,
+          RB, WR, WR, WR, TE, K, DST — in stock PPR, the points in the
+          projected grey the widget gives every unplayed number. */}
+      {proj.length ? section('PROJECTED · PPR') : null}
+      {proj.length ? (
+        <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', marginTop: 2 }}>
+          <FlexWidget style={{ flex: 1 }}><TextWidget text={g.away} maxLines={1} style={{ fontSize: 8, color: C.dim, fontWeight: 'bold' }} /></FlexWidget>
+          <FlexWidget style={{ width: 8 }} />
+          <FlexWidget style={{ flex: 1 }}><TextWidget text={g.home} maxLines={1} style={{ fontSize: 8, color: C.dim, fontWeight: 'bold' }} /></FlexWidget>
         </FlexWidget>
-      )))}
+      ) : null}
+      {proj.map((row, i) => (
+        <FlexWidget key={`ps${i}`} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+          <SheetCell pos={row.pos} cell={row.away} />
+          <FlexWidget style={{ width: 8 }} />
+          <SheetCell pos={row.pos} cell={row.home} />
+        </FlexWidget>
+      ))}
       {!recent.length && !(g.leaders ?? []).length && !proj.length ? (
         <TextWidget text={g.state === 'pre' ? 'Not kicked off yet — plays and leaders land here once it does.' : 'No plays on the feed yet.'} maxLines={2}
           style={{ fontSize: 8.5, color: C.dim, marginTop: 5 }} />

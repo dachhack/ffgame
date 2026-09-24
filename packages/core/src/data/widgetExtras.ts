@@ -140,32 +140,48 @@ export interface FieldGame {
   recent?: { clock: string; txt: string; big: 'score' | 'turnover' | null }[];
   /** Each team's passing / rushing / receiving leader. */
   leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[];
-  /** Before kickoff (v0.514.0): each team's projected leaders, in stock PPR. */
-  projLeaders?: ProjLeader[];
+  /** Before kickoff (v0.514.0): both teams' projected starters, slot by
+   *  slot, in stock PPR. */
+  projSheet?: ProjSlot[];
 }
 
-/** A projected leader for a game not yet kicked off: the team's top
- *  quarterback, running back and pass catcher by projection. */
-export interface ProjLeader { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; pts: number; injury: string | null }
+/** One man on a projected sheet. `pts` is null for a man the chart names
+ *  and the projection does not value. */
+export interface ProjCell { name: string; pts: number | null; injury: string | null }
+/** One row of the pregame sheet: the slot, the away team's man and the home
+ *  team's, side by side. A side with nobody for the slot has null. */
+export interface ProjSlot { pos: string; away: ProjCell | null; home: ProjCell | null }
 
-/** "josh-allen" → "J. Allen", the way the live leaders read. */
-const leaderName = (slug: string): string =>
-  shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+/** The sheet's rows, in the order the founder asked for: QB, RB, RB, WR,
+ *  WR, WR, TE, K, DST — projectedStarters' own order, one lineup deep. */
+const SHEET: [string, string][] = [['QB', 'QB'], ['RB', 'RB'], ['RB', 'RB'], ['WR', 'WR'], ['WR', 'WR'], ['WR', 'WR'], ['TE', 'TE'], ['K', 'K'], ['DEF', 'DST']];
 
-/** Each side's projected leaders before kickoff (v0.514.0), from the same
- *  projected starters the app's pregame box score lists, so an OUT or IR
- *  man is already off the sheet. STOCK PPR, whatever league was read last:
- *  the widget speaks for no league. A team the projection cannot value
- *  contributes nothing. */
-export function projectedLeaders(away: string, home: string, week: number): ProjLeader[] {
-  return withPprProjections(() => [away, home].flatMap((team) => {
-    const rows = projectedStarters(team, week).filter((r) => r.proj != null && r.proj > 0);
-    const top = (pos: string[]) => rows.filter((r) => pos.includes(r.pos)).sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0))[0];
-    const picks: [ProjLeader['cat'], ReturnType<typeof top>][] = [['pass', top(['QB'])], ['rush', top(['RB'])], ['rec', top(['WR', 'TE'])]];
-    return picks.filter(([, r]) => r).map(([cat, r]) => ({
-      team, cat, name: leaderName(r!.slug), pts: Math.round(r!.proj! * 10) / 10, injury: r!.injury ?? null,
-    }));
-  }));
+/** "josh-allen" → "J. Allen", the way the live leaders read. A team unit
+ *  (`kc-k`, `kc-dst`) reads as its team. */
+const sheetName = (slug: string, team: string): string =>
+  /-(k|dst)$/.test(slug) ? team
+    : shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+
+/** Both sides' projected starters before kickoff (v0.514.0), slot by slot:
+ *  the same sheet the app's pregame box score lists, so an OUT or IR man is
+ *  already off it. STOCK PPR, whatever league was read last — the widget
+ *  speaks for no league. Empty when neither side can be projected. */
+export function projectedSheet(away: string, home: string, week: number): ProjSlot[] {
+  return withPprProjections(() => {
+    const side = (team: string) => {
+      const rows = projectedStarters(team, week);
+      const used = new Set<string>();
+      return SHEET.map(([pos]): ProjCell | null => {
+        const r = rows.find((x) => x.pos === pos && !used.has(x.slug));
+        if (!r) return null;
+        used.add(r.slug);
+        return { name: sheetName(r.slug, team), pts: r.proj != null ? Math.round(r.proj * 10) / 10 : null, injury: r.injury ?? null };
+      });
+    };
+    const a = side(away), h = side(home);
+    const slots = SHEET.map(([, label], i) => ({ pos: label, away: a[i], home: h[i] }));
+    return slots.some((x) => x.away || x.home) ? slots : [];
+  });
 }
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
@@ -229,7 +245,7 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
         spot: live ? sit?.spot ?? null : null,
         recent: g.state === 'pre' ? [] : recent,
         leaders: g.feed?.status?.leaders ?? [],
-        projLeaders: g.state === 'pre' ? projectedLeaders(g.away, g.home, week) : [],
+        projSheet: g.state === 'pre' ? projectedSheet(g.away, g.home, week) : [],
         key: g.key, away: g.away, home: g.home, state: g.state,
         as: last ? Number(last.as) || 0 : 0, hs: last ? Number(last.hs) || 0 : 0,
         clock: clockOf(g, last), kickoff: g.kickoff,

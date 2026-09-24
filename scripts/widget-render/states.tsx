@@ -77,20 +77,27 @@ for (const s of [{ kind: 'loading' }, { kind: 'empty' }, { kind: 'error', messag
 const opened = games.map((g) => ({ ...g, dd: g.state === 'live' ? '2nd & 7' : null, spot: g.state === 'live' ? 'BUF 34' : null,
   recent: g.state === 'pre' ? [] : [{ clock: 'Q2 6:40', txt: 'B.Young pass short right to X for 9 yards', big: null }, { clock: 'Q2 7:10', txt: 'TOUCHDOWN', big: 'score' as const }],
   leaders: g.state === 'pre' ? [] : [{ team: g.away, cat: 'pass' as const, name: 'A. Guy', line: '12/18, 140 YDS' }, { team: g.home, cat: 'rush' as const, name: 'B. Guy', line: '9 CAR, 61 YDS' }] }));
-// v0.514.0 — a game not kicked off, opened: its projected leaders in PPR.
+// v0.514.0 — a game not kicked off, opened: the projected sheet, away left
+// and home right, with an injury tag and an empty slot on one side.
 {
-  const pre = { ...(opened.find((g) => g.state === 'pre') ?? opened[0]), state: 'pre' as const, recent: [], leaders: [],
-    projLeaders: [
-      { team: opened[0].away, cat: 'pass' as const, name: 'P. Mahomes', pts: 20.4, injury: null },
-      { team: opened[0].away, cat: 'rec' as const, name: 'R. Rice', pts: 13.3, injury: 'Q' },
-      { team: opened[0].home, cat: 'rush' as const, name: 'J. Cook', pts: 17, injury: null },
-    ].map((l, i) => ({ ...l, team: i < 2 ? (opened.find((g) => g.state === 'pre') ?? opened[0]).away : (opened.find((g) => g.state === 'pre') ?? opened[0]).home })) };
-  tryIt('fields, pregame opened with projected leaders', <FieldsWidget state={{ kind: 'ok', week: 3, games: [pre], openKey: pre.key, current: 3 }} />);
+  const base0 = opened.find((g) => g.state === 'pre') ?? opened[0];
+  const cell = (name: string, pts: number | null, injury: string | null = null) => ({ name, pts, injury });
+  const projSheet = [
+    { pos: 'QB', away: cell('P. Mahomes', 14.5), home: cell('J. Allen', 20.4) },
+    { pos: 'RB', away: cell('K. Walker', 15.1), home: cell('J. Cook', 17) },
+    { pos: 'WR', away: cell('X. Worthy', 7.1, 'Q'), home: cell('K. Shakir', 11.2) },
+    { pos: 'TE', away: cell('T. Kelce', 12.8), home: null },
+    { pos: 'K', away: cell('KC', 8.1), home: cell('BUF', 8.4) },
+    { pos: 'DST', away: cell('KC', 6.2), home: cell('BUF', null) },
+  ];
+  const pre = { ...base0, state: 'pre' as const, recent: [], leaders: [], projSheet };
+  const el = <FieldsWidget state={{ kind: 'ok', week: 3, games: [pre], openKey: pre.key, current: 3 }} />;
+  tryIt('fields, pregame opened with the projected sheet', el);
   n++;
-  const tree = JSON.stringify(buildWidgetTree(<FieldsWidget state={{ kind: 'ok', week: 3, games: [pre], openKey: pre.key, current: 3 }} />));
-  if (!tree.includes('PROJECTED LEADERS') || !tree.includes('20.4') || !tree.includes('R. Rice')) { fails++; console.log('FAIL pregame card: projected leaders missing'); }
-  else if (tree.includes('Not kicked off yet')) { fails++; console.log('FAIL pregame card: the empty notice shows beside projected leaders'); }
-  else console.log('ok   a pregame card lists its projected leaders');
+  const tree = JSON.stringify(buildWidgetTree(el));
+  if (!tree.includes('PROJECTED') || !tree.includes('20.4') || !tree.includes('X. Worthy') || !tree.includes('"—"')) { fails++; console.log('FAIL pregame card: the projected sheet is missing a side, a number or the empty slot'); }
+  else if (tree.includes('Not kicked off yet') || tree.includes(' PASS')) { fails++; console.log('FAIL pregame card: the notice or the old PASS labels show beside the sheet'); }
+  else console.log('ok   a pregame card lays out the projected sheet, both sides');
 }
 for (const g of opened) tryIt(`fields, ${g.key} (${g.state}) opened`, <FieldsWidget state={{ kind: 'ok', week: 3, games: opened, openKey: g.key, current: 3 }} />);
 
