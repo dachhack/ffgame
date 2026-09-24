@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.509.0 — the app's league list: projected totals and drip lineup reports
+
+Founder, over the league list (every score reading "—" before kickoff):
+"Let's have projected totals in the leagues view or a report of slots you
+have set/unset for drip Leagues."
+
+- **Classic cards:** each team's line shows its projected final ("P 88.4",
+  faint) before the live score, until the week is final. The opponent's
+  shows only when their lineup could be read.
+- **Drip cards:** one line under the teams, "✓ 9/9 set" in teal or
+  "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric · locks Sun
+  1:00 PM" in amber, from core `lineupReport` (check:widget).
+- **Source:** the numbers come from the home-screen widget's own per-league
+  read (`widgetSnapshot`, which gained `{ anyLeague }` so a league hidden from
+  the widget still reads). The remembered picture paints at once, then fresh
+  reads go one league at a time (classic reads set scoring rules
+  module-wide). They refresh on pull-to-refresh and every 5 minutes. The
+  reads also refresh the widget's remembered pictures.
+- **App only.** The web leagues page is unchanged.
+
 ### v0.508.0 — fields widget: tap a game to open it; down, distance and the ball on every live game
 
 Founder: "Is click to expand a thing in widgets? It would be cool to click a
