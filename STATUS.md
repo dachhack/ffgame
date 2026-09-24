@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.510.0 — the web league list gets the glance; the fields header is one row
+
+Founder: "add the lineup report to the web leagues page too. Let's make the
+league select a taller button on the top row. We don't need the '16 to
+come' text."
+
+- **Web leagues page** (`src/screens/LiveOnboard.tsx`, Enroll → LeagueHome →
+  LeagueCard → SlateStrip) now matches the app. Drip cards get the lineup
+  line and classic cards get "P 88.4" projected finals. It uses the same
+  per-league `widgetSnapshot({ anyLeague })` read as the app, one league at
+  a time, remembered first, refreshed every 5 minutes while the tab shows.
+  It's skipped under browse-as.
+- **One wording:** core `lineupReportLine` builds the sentence both lists
+  print (check:widget).
+- **Fields widget header is one row** of 38dp blocks: ‹, the week (tap for
+  NOW), ›, ★ league (now a tall button), ⟳. The "16 to come / ★ N playing"
+  line is gone. Widths keep the week ~55dp wide at the widget's 250dp
+  minimum.
+
 ### v0.509.0 — the app's league list: projected totals and drip lineup reports
 
 Founder, over the league list (every score reading "—" before kickoff):
