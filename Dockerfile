@@ -28,4 +28,7 @@ COPY server/test ./server/test
 
 WORKDIR /app/server
 ENV NODE_ENV=production
+# Drop root for the running process (build steps above stay root-owned). The
+# worker never writes under /app; tsx's cache goes to the OS tmpdir.
+USER node
 CMD ["npx", "tsx", "src/index.js"]
