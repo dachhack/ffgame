@@ -10,6 +10,8 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam } from '../packages/core/src/data/widgetExtras';
+import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -414,6 +416,59 @@ const state = [
   // A drip league is untouched.
   const drip = summarize({ league, week: WEEK, matchup: matchup(), state, teams, nowMs: kick(0) + 30 * 60_000, classic: classic() });
   ok('a drip league ignores a classic input: live totals, not projected', drip.projected === undefined && drip.me.score === 42.6, drip);
+}
+
+// ── v0.505.0: the ALERTS (1×1) and FIELDS widgets ──
+{
+  // Alerts: warnings are what cost points left alone; a bench upgrade is advice.
+  const drip = { leagueId: 'D', leagueName: 'Drip One', rosterId: 4, projected: undefined, alarm: { lockMs: 2000 },
+    cards: [{ status: 'empty' }, { status: 'none' }, { status: 'unsealed' }, { status: 'set' }, { status: 'live' }],
+    fixes: [{ kind: 'empty' }, { kind: 'none' }, { kind: 'metric' }, { kind: 'injury' }, { kind: 'bye' }] };
+  ok('alerts: drip counts each empty / none / unsealed slot once, plus out and bye starters', alertCount(drip) === 5, alertCount(drip));
+  const classicSnap = { leagueId: 'C', leagueName: 'Classic', rosterId: 2, projected: true, alarm: { lockMs: 1000 },
+    cards: [{ status: 'empty' }], fixes: [{ kind: 'empty' }, { kind: 'injury' }, { kind: 'bye' }, { kind: 'swap' }, { kind: 'swap' }] };
+  ok('alerts: classic counts empty, out and bye spots — never an upgrade', alertCount(classicSnap) === 3, alertCount(classicSnap));
+  const clean = { leagueId: 'Z', leagueName: 'Clean', rosterId: 1, cards: [{ status: 'set' }], fixes: [], alarm: { lockMs: 500 } };
+  const sum = alertsSummary([clean, classicSnap, drip]);
+  ok('alerts: the total sums every league', sum.total === 8, sum);
+  ok('alerts: only leagues with warnings are listed, most first', sum.leagues.map((l) => l.leagueId).join() === 'D,C', sum.leagues);
+  ok('alerts: the deadline is the soonest lock among leagues WITH warnings (not the clean one)', sum.lockMs === 1000, sum.lockMs);
+  ok('alerts: all clean reads zero with no deadline', alertsSummary([clean]).total === 0 && alertsSummary([clean]).lockMs === null);
+  const holes = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+    picks: [], pool: [{ slug: 'a', full: 'Aaron Guy', team: 'BUF', pos: 'QB' }], injuries: {} });
+  ok('alerts: a real drip snapshot with nothing picked counts every slot', alertCount(holes) === wins.reduce((n, w) => n + w.slots, 0), alertCount(holes));
+
+  // Fields: the ball's spot in the offense's words.
+  ok('fields: in his own half the spot is his', spotLabel('KC', 'BUF', 70) === 'KC 30');
+  ok('fields: across midfield it is theirs', spotLabel('KC', 'BUF', 34) === 'BUF 34');
+  ok('fields: midfield is the 50', spotLabel('KC', 'BUF', 50) === '50');
+
+  // Fields: the week's games — live first, then to come by kickoff, then final.
+  const P = (c, tm, yl2, hs, as, txt, extra = {}) => ({ c, drv: 0, tm, dn: 1, dist: 10, yl: yl2 + 5, yl2, ty: 'Rush', txt, hs, as, ...extra });
+  setLiveGameFeed(WEEK, feedRowsToWeek([
+    { key: 'MIA@BUF', away: 'MIA', home: 'BUF', state: 'post', plays: [P(3590, 'BUF', 60, 31, 17, 'Kneel')] },
+    { key: 'ATL@CAR', away: 'ATL', home: 'CAR', state: 'in', plays: [P(1200, 'ATL', 80, 0, 7, 'Kick'), P(1500, 'CAR', 34, 3, 7, 'C.Hubbard left end for 9 yards')],
+      status: { name: 'STATUS_IN_PROGRESS', short: '5:00 - 2nd' } },
+    { key: 'KC@NYG', away: 'KC', home: 'NYG', state: 'in', plays: [P(2000, 'KC', 12, 7, 14, 'P.Mahomes pass to T.Kelce for 12 yards, TOUCHDOWN', { sc: 1 })] },
+  ]));
+  const mine = minesByTeam([{ cards: [
+    { slug: 'kelce', team: 'KC', name: 'T. Kelce', points: 14.2, status: 'live' },
+    { slug: 'hub', team: 'CAR', name: 'C. Hubbard', points: 6, status: 'live' },
+    { slug: 'kelce', team: 'KC', name: 'T. Kelce', points: 14.2, status: 'live' },   // same man, second league
+    { slug: null, team: 'DET', name: '', status: 'empty' },
+  ] }, { cards: [{ slug: 'lamar', team: 'BAL', name: 'L. Jackson', points: null, proj: 22.1, status: 'set' }] }]);
+  ok('fields: my players by team, each once, empties skipped', mine.get('KC')?.length === 1 && mine.get('CAR')?.[0].name === 'C. Hubbard' && !mine.has('DET') && mine.get('BAL')?.[0].proj === 22.1, [...mine.keys()]);
+  const games = fieldGames(WEEK, mine);
+  ok('fields: every game on the slate is listed', games.length === 5, games.map((g) => g.key));
+  ok('fields: live games first, then the ones to come by kickoff, then finals', games.map((g) => g.state).join() === 'live,live,pre,pre,final', games.map((g) => `${g.key}:${g.state}`));
+  const car = games.find((g) => g.key === 'ATL@CAR'), kc = games.find((g) => g.key === 'KC@NYG'), buf = games.find((g) => g.key === 'MIA@BUF'), bal = games.find((g) => g.key === 'DET@BAL');
+  ok('fields: a live game carries the score, who has the ball and where', car.hs === 3 && car.as === 7 && car.poss === 'CAR' && car.toGo === 34, car);
+  ok('fields: ESPN\'s own clock words win over the play clock', car.clock === '5:00 - 2nd', car.clock);
+  ok('fields: without them, the last play\'s quarter clock', kc.clock === 'Q3 11:40', kc.clock);
+  ok('fields: a scoring play is flagged', kc.big === 'score' && car.big === null);
+  ok('fields: my players ride with their game, from either side', kc.mine.map((m) => m.name).join() === 'T. Kelce' && car.mine[0].name === 'C. Hubbard' && bal.mine[0].name === 'L. Jackson');
+  ok('fields: a final reads FINAL with no ball', buf.clock === 'FINAL' && buf.poss === null && buf.hs === 31, buf);
+  ok('fields: a game to come has its kickoff and no score', bal.state === 'pre' && bal.kickoff === kick(4) && bal.clock === null && bal.last === null, bal);
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }

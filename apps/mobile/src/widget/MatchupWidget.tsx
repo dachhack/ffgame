@@ -27,7 +27,9 @@ import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 
 import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard, type SideLeft } from '@drip/core/data/widgetFeed';
 import { crestInitial } from '@drip/core/data/crest';
 
-const C = {
+/** The widgets' palette — the app's dark theme, fixed (exported v0.505.0 for
+ *  the alerts and fields widgets). */
+export const C = {
   bg: '#0E1F22',
   card: '#163138',
   line: '#24474D',
@@ -64,7 +66,7 @@ export const tierFor = (heightDp: number): Tier => (heightDp >= 250 ? 'tall' : h
 export const matchupDeepLink = (leagueId: string, rosterId: number) =>
   `dripfantasy://matchup?league=${encodeURIComponent(leagueId)}&roster=${rosterId}`;
 
-const fmt = (n: number) => (Number.isInteger(n) ? `${n}.0` : String(n));
+export const fmt = (n: number) => (Number.isInteger(n) ? `${n}.0` : String(n));
 const clock = (ms: number) => {
   const d = new Date(ms);
   const p = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(d);
@@ -101,7 +103,7 @@ function Side({ name, score, color, align }: { name: string; score: number; colo
   );
 }
 
-function Chip({ text, action, color = C.dim }: { text: string; action: string; color?: ColorProp }) {
+export function Chip({ text, action, color = C.dim }: { text: string; action: string; color?: ColorProp }) {
   return (
     <TextWidget
       text={text}
@@ -305,7 +307,7 @@ const ordinal = (n: number) => {
   return `${n}${n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'}`;
 };
 /** "1:00p" — the kickoff, ET, short enough for a tile. */
-const shortClock = (ms: number) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+export const shortClock = (ms: number) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
   .format(new Date(ms)).replace(/\s?([AP])M$/i, (_, m: string) => m.toLowerCase());
 
 interface TileLook { face: string; name: string; foot: string; footColor: ColorProp; border: ColorProp; dim?: boolean }

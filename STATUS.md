@@ -18,6 +18,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.505.0 — two more home-screen widgets: lineup alerts (1×1) and all fields
+
+Founder: "make a 1 by 1 widget that give you just line up warnings for all your
+selected leagues and a widget the same size as the current but with all fields
+view so you can track games and stats."
+
+- **Drip lineup alerts (1×1).** One number: the lineup warnings across every
+  league switched on in Settings → Home-screen widget. The subline is the
+  league name (or "N leagues") and the soonest lock among leagues with
+  warnings. It shows a green ✓ when all is set. A warning is empty/unset,
+  none-available, no-metric, or an out/bye starter; a classic bench upgrade is
+  advice and isn't counted (core `alertCount` / `alertsSummary`). A tap opens
+  the league with the most to fix (or refreshes the ✓). It reads each league
+  through the matchup widget's own feed, one at a time, so the numbers match
+  the matchup card.
+- **Drip all fields (4×2, resizable).** A pinned header (week, live / to come
+  / final counts, how many of yours are playing, ⟳) over a scrolling list of
+  every game. Live games come first, then upcoming by kickoff, then finals.
+  Each game shows team logos, the score, ESPN's clock ("5:00 - 2nd",
+  "Half"), the team with the ball and its spot on a field strip ("● KC ·
+  BUF 34"), and the last play (teal for a score, pink for a turnover). It
+  also shows ★ your players in the game with points or projections, taken
+  from the leagues' remembered snapshots at no extra read (core
+  `fieldGames` / `minesByTeam` / `loadFieldsWeek`). A tap opens ▦ All fields
+  in the app (new deep link `dripfantasy://fields`).
+- Both paint the remembered picture first, then read. A failed read keeps
+  the picture and marks it offline. The silent push, the app foreground and
+  the Settings picker repaint all three widgets.
+- The matchup widget now resizes vertically too (it scrolls, so taller shows
+  more).
+- **New check: `check:widgetrender` (in check:parity).** It builds every
+  state of all three widgets through the library's own tree builder in
+  Node. Fragments and components that return null blank a widget, and
+  TypeScript accepts both, so the check proves it catches them.
+  `check:widget` is now at 149 assertions.
+
 ### v0.504.0 — injury tags beside every player, web and app
 
 Founder: "add injury tags to the rest of the app and web too." About 85

@@ -33,6 +33,7 @@ import { platform } from '@drip/core/platform';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, nextWidgetLeague, recallSnapshot, recallLeagues } from '@drip/core/data/widgetFeed';
 import { MatchupWidget, MATCHUP_WIDGET_NAME, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
+import { extraHandler, isExtraWidget, refreshExtraWidgets } from './extraTasks';
 
 const PREF_LEAGUE = (widgetId: number) => `widget:league:${widgetId}`;
 /** The retired ⇄ flip's stored choice (v0.422.0–v0.499): read no more, only
@@ -103,6 +104,8 @@ async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void
 
 async function handler(props: WidgetTaskHandlerProps): Promise<void> {
   const { widgetInfo, widgetAction, clickAction } = props;
+  // The alerts and fields widgets (v0.505.0) have their own painter.
+  if (isExtraWidget(widgetInfo.widgetName)) { await extraHandler(props); return; }
   if (widgetInfo.widgetName !== MATCHUP_WIDGET_NAME) return;
   const render = (s: WidgetState) => props.renderWidget(el(s, widgetInfo));
   switch (widgetAction) {
@@ -136,8 +139,9 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
   }
 }
 
-/** Repaint every Matchup widget on the home screen. Cheap when there are
- *  none (one native call), so callers need not check first. `fresh` skips
+/** Repaint every Drip widget on the home screen — matchup, then alerts and
+ *  fields (v0.505.0). Cheap when there are none (one native call each), so
+ *  callers need not check first. `fresh` skips
  *  the caches — the app in the foreground knows things first. */
 export async function refreshMatchupWidgets(opts: { fresh?: boolean } = {}): Promise<void> {
   try {
@@ -162,6 +166,9 @@ export async function refreshMatchupWidgets(opts: { fresh?: boolean } = {}): Pro
       },
     });
   } catch { /* no widget host, or a build without the module — nothing to repaint */ }
+  // Then the alerts and fields widgets (v0.505.0): after, because the reads
+  // above leave the league snapshots they count and mark players from.
+  await refreshExtraWidgets(opts);
 }
 
 // ── the silent push ─────────────────────────────────────────────────────────
