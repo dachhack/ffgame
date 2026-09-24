@@ -74,13 +74,14 @@ export function lineupReport(snap: WidgetSnapshot): LineupReport | null {
 }
 
 /** The report as one line, in the words both league lists print (v0.510.0):
- *  "✓ 9/9 set", "✓ 9/9 set · 1 👻 ghost", or "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric ·
+ *  "✓ 9/9 set", "✓ 8/8 set · 1 Ghost fill", or "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric ·
  *  locks Sun 1:00 PM". `open` says whether anything still needs a hand —
  *  the warn colour. */
 export function lineupReportLine(r: LineupReport): { text: string; open: boolean } {
   const open = r.unset + r.none + r.noMetric > 0;
   const bits = [
-    r.ghost ? `${r.ghost} 👻 ghost${r.ghost === 1 ? '' : 's'}` : null,
+    // Founder's words (v0.521.0): "8/8 set · 1 Ghost fill".
+    r.ghost ? `${r.ghost} Ghost fill${r.ghost === 1 ? '' : 's'}` : null,
     r.unset ? `${r.unset} unset` : null,
     r.none ? `${r.none} no one available` : null,
     r.noMetric ? `${r.noMetric} no metric` : null,
