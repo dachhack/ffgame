@@ -1383,29 +1383,35 @@ function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnap
   const live = !!(g.me?.live || g.opp?.live);
   const line = (side: typeof g.me, mine: boolean) => {
     const rec = recordLabel(side?.record);
+    const p = projOf(mine);
+    // Before a point is scored the score slot would only print a dash, so the
+    // projection takes it (v0.512.0, the app's SlateLine).
+    const projInSlot = side?.points == null && p != null;
     return (
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          fontSize: 12, fontWeight: mine ? 700 : 400, color: mine ? 'var(--text)' : 'var(--mid)' }}>
+          fontSize: 15, fontWeight: mine ? 700 : 400, color: mine ? 'var(--text)' : 'var(--mid)' }}>
           {side?.team || `Seat ${side?.roster_id}`}
         </span>
-        {rec && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{rec}</span>}
-        {projOf(mine) != null && <span className="mono" title="projected final" style={{ fontSize: 9.5, color: 'var(--faint)' }}>P {projOf(mine)!.toFixed(1)}</span>}
-        <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, minWidth: 56, textAlign: 'right', color: mine ? tone : 'var(--mid)' }}>
-          {scoreLabel(side?.points)}
-        </span>
+        {rec && <span className="mono" style={{ fontSize: 12, color: 'var(--dim)' }}>{rec}</span>}
+        {p != null && !projInSlot && <span className="mono" title="projected final" style={{ fontSize: 12, color: 'var(--dim)' }}>P {p.toFixed(1)}</span>}
+        {projInSlot
+          ? <span className="mono" title="projected final" style={{ fontSize: 14, fontWeight: 700, textAlign: 'right', color: 'var(--dim)' }}>P {p!.toFixed(1)}</span>
+          : <span className="mono" style={{ fontSize: 15, fontWeight: 700, minWidth: side?.points == null ? 0 : 60, textAlign: 'right', color: mine ? tone : 'var(--mid)' }}>
+              {scoreLabel(side?.points)}
+            </span>}
       </div>
     );
   };
   return (
-    <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid var(--bd)', display: 'grid', gap: 3 }}>
+    <div style={{ marginTop: 8, paddingTop: 7, borderTop: '1px solid var(--bd)', display: 'grid', gap: 2 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)' }}>
+        <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>
           {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
         </span>
-        {live && <span aria-hidden style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--opp)' }} />}
+        {live && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--opp)' }} />}
         <span style={{ flex: 1 }} />
-        {word && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: tone }}>{word}</span>}
+        {word && <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: tone }}>{word}</span>}
       </div>
       {line(g.me, true)}
       {line(g.opp, false)}
@@ -1421,7 +1427,7 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   const r = lineupReport(snap);
   if (!r) return null;
   const { text, open } = lineupReportLine(r);
-  return <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
+  return <div className="mono" style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
 }
 
 function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
@@ -1449,7 +1455,7 @@ function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
     // re-reading them here to paint a border would undo that on purpose. It is
     // --opp rather than --you because the DRAFTING dot below is already --opp,
     // and one state should not speak in two colours.
-    <div style={{ ...card2, padding: 12, borderLeft: drafting ? '3px solid var(--opp)' : '1px solid var(--bd)' }}>
+    <div style={{ ...card2, padding: '11px 12px', borderLeft: drafting ? '3px solid var(--opp)' : '1px solid var(--bd)' }}>
       <button onClick={onOpen} aria-label={`Open ${e.league?.name ?? 'league'}`}
         style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
         {/* The LEAGUE's crest, falling to its own lettered box — this is a list
@@ -1457,9 +1463,9 @@ function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
         <Crest crest={crestFor({ teamAvatar: e.league?.avatar_url, leagueAvatar: e.avatar_url, teamName: e.league?.name, leagueName: e.team_name })}
           size={40} radius={8} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="grotesk" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, color: 'var(--text)', minWidth: 0 }}>
+          <div className="grotesk" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 16, fontWeight: 700, color: 'var(--text)', minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</span>
-            {commish && <span className="mono" title="you run this league" style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '1px 5px' }}>COMMISH</span>}
+            {commish && <span className="mono" title="you run this league" style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '1px 5px' }}>COMMISH</span>}
             {/* 0347: the unread badge rides the NAME. A count is a property of
                 this league and reads as one only while it sits beside it. */}
             {unread && (
@@ -1476,7 +1482,7 @@ function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
           {/* Wraps rather than clips (v0.357.2): the line carries the game
               now, and a clipped ellipsis would hide the very words the founder
               asked to see. */}
-          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2, lineHeight: 1.45 }}>
+          <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>
             {leagueTypeLine(e)}
           </div>
           {drafting && (

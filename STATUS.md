@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.512.0 — league cards: bigger type, less air (app + web)
+
+Founder, on the leagues list: "Font is really tiny and there is a lot of
+space in each league card". The matchup strip under each league was set in
+8.5–9.5px faint mono.
+- Team names are now 15, record/projection/lineup line 12 in `dim` (not
+  `faint`), score 15, and the week/verdict labels 10.5/11.
+- Before any points are scored, the projection takes the score slot
+  ("P 126.0") instead of a lone "—" pushed right by a 58px column.
+- Card padding goes 14 to 11 vertically, with tighter gaps. The web type
+  line is 12 (was 10) and the COMMISH pill 9.5 (was 8).
+App `Leagues.tsx` SlateLine/MatchupStrip; web `LiveOnboard.tsx` SlateStrip/LeagueCard.
+
 ### Release APK: the NDK is installed up front, with retries
 
 Run 131 (v0.511.0) failed in 2 minutes before compiling anything. Gradle
