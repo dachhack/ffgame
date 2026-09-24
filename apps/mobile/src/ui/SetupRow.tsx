@@ -15,12 +15,12 @@ import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player } from '@drip/core/types';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
-import { CardFace, CardBack, CardEmpty, loadCardSize, cs } from './cards';
+import { CardFace, CardBack, CardEmpty, CardPhantom, loadCardSize, cs } from './cards';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
 import { teamLogo } from '@drip/core/data/media';
 
-export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twin, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
+export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twin, phantom, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
   /** Power-ups attached to THIS slot — targeted plays plus armed team buffs
    *  that matter to it (v0.375.1). Worn on the card's shoulder as ONE gold
@@ -36,6 +36,9 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
    *  chip, because the whole point is knowing WHICH two are linked, and a
    *  chip you have to tap is not seeing it. */
   twin?: boolean;
+  /** A GHOST (or a Bye Steal) holds this otherwise-empty spot (v0.516.0) —
+   *  drawn as its own card instead of the blank "+ PICK A PLAYER". */
+  phantom?: { icon: string; title: string; sub: string } | null;
   /** Deal order within the window. */
   idx?: number;
   /** Opens the opponent's window pool. Absent when there is nothing to scout. */
@@ -145,7 +148,12 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
         )}
         </View>
       ) : (
-        <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
+        phantom
+          // Tapping it says what it is (the same sheet as the ⚡ chip). Not a
+          // picker: fielding a player here would stand the phantom down and
+          // waste the card (the resolver fills a spot with it only while empty).
+          ? <CardPhantom size={cardSize} idx={idx} icon={phantom.icon} title={phantom.title} sub={phantom.sub} onPress={applied?.length ? () => setPuOpen(true) : undefined} />
+          : <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
       <CardBack size={cardSize} idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />

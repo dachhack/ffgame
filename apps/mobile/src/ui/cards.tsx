@@ -344,6 +344,40 @@ export function CardBack({ label = 'SEALED', idx = 0, size, onPress, actionLabel
   );
 }
 
+/** A PHANTOM in a slot (v0.516.0, founder: "Ghost loads but it still shows a
+ *  blank card in the spot. Let's put a ghost there."). A Ghost Player or a
+ *  Bye Steal fills a spot nobody was fielded in; the resolver scores it
+ *  (liveResolve's GHOST_POINTS, the bye's projection) but it is not a lineup
+ *  pick, so the board had nothing to draw and the spot read as still empty.
+ *  Same shell as every card, so it deals and breathes with its row; the
+ *  colours come off the theme's accent so it reads on every palette. */
+export function CardPhantom({ icon, title, sub, bank, idx = 0, size, onPress }: {
+  icon: string; title: string; sub: string;
+  /** What it has banked, once the window scores. */
+  bank?: number | null;
+  idx?: number; size?: CardSize; onPress?: () => void;
+}) {
+  const sc = size ? sizeSpec(size).s : 1;
+  const t = useTheme();
+  return (
+    <CardShell
+      idx={idx}
+      size={size}
+      style={{
+        borderRadius: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: alpha(t.you, 80),
+        backgroundColor: alpha(t.you, 9),
+      }}
+    >
+      <Pressable onPress={onPress} disabled={!onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 6, gap: cs(4, sc) }}>
+        <Text style={{ fontSize: cs(34, sc), opacity: 0.85 }}>{icon}</Text>
+        <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: cs(10.5, sc), fontWeight: '700', letterSpacing: 1, textAlign: 'center', color: t.you }}>{title}</Text>
+        <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: cs(9, sc), fontWeight: '700', letterSpacing: 0.6, textAlign: 'center', color: t.dim }}>{sub}</Text>
+        {bank != null && <Text style={{ fontSize: cs(15, sc), fontWeight: '800', color: t.you, marginTop: cs(2, sc) }}>{bank.toFixed(1)}</Text>}
+      </Pressable>
+    </CardShell>
+  );
+}
+
 /** An unfilled slot — dashed, on the felt, and the same box as a card because it
  *  is literally the same shell. It deals and breathes too: a static dashed
  *  rectangle beside a wobbling card is what made the pair look mismatched. */
