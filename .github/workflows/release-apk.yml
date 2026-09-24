@@ -74,6 +74,30 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform android --no-install
 
+      # THE NDK, INSTALLED UP FRONT AND RETRIED (v0.511.1). Run 131 died in
+      # 2m: gradle auto-installs the NDK React Native pins the first time it
+      # configures :app, and that download came back truncated ("Archive is
+      # not a ZIP archive") — one bad fetch, no retry, no APK. The version is
+      # React Native's own (gradle/libs.versions.toml `ndkVersion`), read
+      # rather than hard-coded so an RN upgrade can't leave this step
+      # installing the wrong one. Already present (a runner image that ships
+      # it): nothing to do. Can't find the pin: leave it to gradle, as before.
+      - name: Install the NDK React Native pins (with retries)
+        working-directory: apps/mobile
+        run: |
+          rn=$(dirname "$(node -p "require.resolve('react-native/package.json')")")
+          v=$(grep -E '^ndkVersion *=' "$rn/gradle/libs.versions.toml" | grep -oE '[0-9]+(\.[0-9]+)+' | head -1 || true)
+          if [ -z "$v" ]; then echo "no ndkVersion pin found; gradle will install it"; exit 0; fi
+          if [ -f "$ANDROID_HOME/ndk/$v/source.properties" ]; then echo "NDK $v already installed"; exit 0; fi
+          for i in 1 2 3; do
+            if yes | sdkmanager --install "ndk;$v" > "$RUNNER_TEMP/ndk.log" 2>&1 && [ -f "$ANDROID_HOME/ndk/$v/source.properties" ]; then
+              echo "NDK $v installed (attempt $i)"; exit 0
+            fi
+            echo "::warning::NDK $v install attempt $i failed — retrying"; tail -5 "$RUNNER_TEMP/ndk.log"
+            rm -rf "$ANDROID_HOME/ndk/$v"; sleep $((i * 15))
+          done
+          echo "::error::could not install NDK $v after 3 attempts"; exit 1
+
       - name: Build the release APK (arm64)
         working-directory: apps/mobile/android
         run: |

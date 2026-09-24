@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### Release APK: the NDK is installed up front, with retries
+
+Run 131 (v0.511.0) failed in 2 minutes before compiling anything. Gradle
+auto-installs React Native's pinned NDK (27.1.12297006) while configuring
+`:app`, and that download came back truncated ("Archive is not a ZIP
+archive"). There's no retry in that path, so there was no APK.
+`release-apk.yml` now has a step after prebuild that reads the pin from
+React Native's `gradle/libs.versions.toml` and installs it with
+`sdkmanager`, retrying up to 3 times. It's a no-op if the NDK is already
+there or no pin is found. The session's GitHub integration can't re-run
+or dispatch workflows (403), so the merge of this change is what rebuilt
+the v0.511.0 APK.
+
 ### v0.511.0 — lineup alerts widget goes 2×1
 
 Founder: "Let's make the line up alert widget 2 by 1. Change the layout to
