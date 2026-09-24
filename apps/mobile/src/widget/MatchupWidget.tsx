@@ -53,7 +53,11 @@ export type WidgetState =
   | { kind: 'ok'; snap: WidgetSnapshot; leagues: number; /** True when this is the remembered picture and a fresh read is on its way. */ stale?: boolean;
       /** True when the read behind this wake FAILED and the remembered picture
        *  was kept (v0.433.1): the ⟳ chip says so, and a tap on it retries. */
-      offline?: boolean };
+      offline?: boolean;
+      /** A tap is being answered (v0.507.0): ▸ NEXT or ⟳ says so, and the
+       *  task draws this frame inert (inert.ts) so nothing answers a second
+       *  tap until the fresh picture lands. */
+      busy?: 'next' | 'refresh' };
 
 export const MATCHUP_WIDGET_NAME = 'Matchup';
 export const WIDGET_CLICK = { open: 'OPEN_URI', next: 'NEXT_LEAGUE', refresh: 'REFRESH' } as const;
@@ -100,16 +104,6 @@ function Side({ name, score, color, align }: { name: string; score: number; colo
       <TextWidget text={fmt(score)} maxLines={1} style={{ fontSize: 30, color, fontWeight: 'bold' }} />
       <TextWidget text={name} truncate="END" maxLines={1} style={{ fontSize: 11, color: C.text, fontWeight: 'bold', textAlign: align }} />
     </FlexWidget>
-  );
-}
-
-export function Chip({ text, action, color = C.dim }: { text: string; action: string; color?: ColorProp }) {
-  return (
-    <TextWidget
-      text={text}
-      clickAction={action}
-      style={{ fontSize: 11, color, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 4, marginLeft: 6 }}
-    />
   );
 }
 
@@ -167,11 +161,19 @@ function Notice({ title, body, retry }: { title: string; body: string; retry?: b
 /** `offline` (v0.433.1): the last read failed and this is the remembered
  *  picture — the ⟳ chip says so and is the retry, rather than the picture
  *  being replaced by an apology. */
-function Chips({ leagues, offline }: { leagues: number; offline?: boolean }) {
+function BigChip({ text, action, color, busy }: { text: string; action: string; color: ColorProp; busy: boolean }) {
   return (
+    <TextWidget text={text} clickAction={action} maxLines={1}
+      style={{ fontSize: 11, color: busy ? C.dim : color, fontWeight: 'bold', backgroundColor: busy ? C.line : C.bg, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, marginLeft: 6 }} />
+  );
+}
+
+function Chips({ leagues, offline, busy }: { leagues: number; offline?: boolean; busy?: 'next' | 'refresh' }) {
+  return (
+    // Big enough to hit (v0.507.0), and saying so while a tap is answered.
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
-      {leagues > 1 ? <Chip text="▸ next league" action={WIDGET_CLICK.next} /> : null}
-      {offline ? <Chip text="⟳ offline · retry" action={WIDGET_CLICK.refresh} color={C.warn} /> : <Chip text="⟳" action={WIDGET_CLICK.refresh} color={C.you} />}
+      {leagues > 1 ? <BigChip text={busy === 'next' ? '… LOADING' : '▸ NEXT LEAGUE'} action={WIDGET_CLICK.next} color={C.dim} busy={busy === 'next'} /> : null}
+      <BigChip text={busy === 'refresh' ? '…' : offline ? '⟳ RETRY' : '⟳'} action={WIDGET_CLICK.refresh} color={offline ? C.warn : C.you} busy={busy === 'refresh'} />
     </FlexWidget>
   );
 }
@@ -212,7 +214,7 @@ function ClassicFixes({ snap, tier }: { snap: WidgetSnapshot; tier: Tier }) {
   );
 }
 
-function ScoreView({ snap, leagues, tier, offline }: { snap: WidgetSnapshot; leagues: number; tier: Tier; offline?: boolean }) {
+function ScoreView({ snap, leagues, tier, offline, busy }: { snap: WidgetSnapshot; leagues: number; tier: Tier; offline?: boolean; busy?: 'next' | 'refresh' }) {
   const lineColor: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : snap.phase === 'bye' || snap.phase === 'idle' ? C.faint : C.warn;
   const leading = snap.them ? (snap.me.score > snap.them.score ? 'me' : snap.me.score < snap.them.score ? 'them' : null) : null;
   const left = leftLine(snap);
@@ -251,7 +253,7 @@ function ScoreView({ snap, leagues, tier, offline }: { snap: WidgetSnapshot; lea
           ))}
         </FlexWidget>
       ) : null}
-      <Chips leagues={leagues} offline={offline} />
+      <Chips leagues={leagues} offline={offline} busy={busy} />
     </Frame>
   );
 }
@@ -426,7 +428,23 @@ function alertLine(snap: WidgetSnapshot): { text: string; color: ColorProp } {
  *  league, my record and place, ⟳; the week, the opponent and the score
  *  (PROJ in a classic league, whose header scores are the projected finals);
  *  the alert line. It sits outside the list, so it never scrolls. */
-function LeagueHeader({ snap, leagues, offline, alert }: { snap: WidgetSnapshot; leagues: number; offline?: boolean; alert: { text: string; color: ColorProp } }) {
+/** THE HEADER'S TWO BUTTONS (v0.507.0). Founder: "Can we make the next button
+ *  two rows high instead of one? It's kinda hard to press because it's so
+ *  small... Same for the refresh button." Each is a block the height of the
+ *  header's two top rows — ▸ NEXT on the left, ⟳ on the right — and while its
+ *  tap is being answered it says so (LOADING / …) in a dimmed block. */
+const BTN_H = 42;
+function HeaderButton({ glyph, label, action, color, busy, width }: { glyph: string; label?: string; action: string; color: ColorProp; busy: boolean; width: number }) {
+  return (
+    <FlexWidget clickAction={action}
+      style={{ width, height: BTN_H, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: busy ? C.line : C.bg, borderRadius: 10 }}>
+      <TextWidget text={busy ? '…' : glyph} maxLines={1} style={{ fontSize: busy ? 14 : 16, color: busy ? C.dim : color, fontWeight: 'bold' }} />
+      {label || busy ? <TextWidget text={busy ? 'LOADING' : label ?? ''} maxLines={1} style={{ fontSize: 7.5, color: busy ? C.dim : color, fontWeight: 'bold', letterSpacing: 0.06 }} /> : null}
+    </FlexWidget>
+  );
+}
+
+function LeagueHeader({ snap, leagues, offline, alert, busy }: { snap: WidgetSnapshot; leagues: number; offline?: boolean; alert: { text: string; color: ColorProp }; busy?: 'next' | 'refresh' }) {
   const open = openMatchup(snap);
   const st = snap.standing;
   const record = st ? `${st.wins}-${st.losses}${st.ties ? `-${st.ties}` : ''} · ${ordinal(st.place)}` : '';
@@ -435,29 +453,30 @@ function LeagueHeader({ snap, leagues, offline, alert }: { snap: WidgetSnapshot;
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
-        {leagues > 1 ? <TextWidget text="▸ NEXT" clickAction={WIDGET_CLICK.next}
-          style={{ fontSize: 10, color: C.dim, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, marginRight: 6 }} /> : null}
-        <FlexWidget {...open} style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-          <TextWidget text={snap.leagueName} truncate="END" maxLines={1} style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }} />
-          {record ? <TextWidget text={`  ${record}`} maxLines={1} style={{ fontSize: 10, color: C.dim, fontWeight: 'bold' }} /> : null}
-        </FlexWidget>
-        {offline ? <Chip text="⟳ offline · retry" action={WIDGET_CLICK.refresh} color={C.warn} /> : <Chip text="⟳" action={WIDGET_CLICK.refresh} color={C.you} />}
-      </FlexWidget>
-      <FlexWidget {...open} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-        <FlexWidget style={{ flex: 1 }}>
-          <TextWidget text={`${snap.weekLabel.toUpperCase()} · vs ${snap.them?.name ?? 'nobody'}`} truncate="END" maxLines={1}
-            style={{ fontSize: 10.5, color: C.dim, fontWeight: 'bold' }} />
-        </FlexWidget>
-        {snap.them ? (
-          <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {proj ? <TextWidget text={snap.themLive ? 'PROJ · LIVE  ' : 'PROJ  '} maxLines={1} style={{ fontSize: 8.5, color: C.faint, fontWeight: 'bold' }} /> : null}
-            <TextWidget text={fmt(snap.me.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'them' ? C.dim : C.you, fontWeight: 'bold' }} />
-            <TextWidget text=" – " maxLines={1} style={{ fontSize: 12, color: C.faint }} />
-            <TextWidget text={fmt(snap.them.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'me' ? C.dim : C.opp, fontWeight: 'bold' }} />
+        {leagues > 1 ? <HeaderButton glyph="▸" label="NEXT" action={WIDGET_CLICK.next} color={C.dim} busy={busy === 'next'} width={48} /> : null}
+        <FlexWidget {...open} style={{ flex: 1, flexDirection: 'column', marginLeft: leagues > 1 ? 8 : 0, marginRight: 8 }}>
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+            <TextWidget text={snap.leagueName} truncate="END" maxLines={1} style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }} />
+            {record ? <TextWidget text={`  ${record}`} maxLines={1} style={{ fontSize: 10, color: C.dim, fontWeight: 'bold' }} /> : null}
           </FlexWidget>
-        ) : null}
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+            <FlexWidget style={{ flex: 1 }}>
+              <TextWidget text={`${snap.weekLabel.toUpperCase()} · vs ${snap.them?.name ?? 'nobody'}`} truncate="END" maxLines={1}
+                style={{ fontSize: 10.5, color: C.dim, fontWeight: 'bold' }} />
+            </FlexWidget>
+            {snap.them ? (
+              <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {proj ? <TextWidget text={snap.themLive ? 'PROJ · LIVE  ' : 'PROJ  '} maxLines={1} style={{ fontSize: 8.5, color: C.faint, fontWeight: 'bold' }} /> : null}
+                <TextWidget text={fmt(snap.me.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'them' ? C.dim : C.you, fontWeight: 'bold' }} />
+                <TextWidget text=" – " maxLines={1} style={{ fontSize: 12, color: C.faint }} />
+                <TextWidget text={fmt(snap.them.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'me' ? C.dim : C.opp, fontWeight: 'bold' }} />
+              </FlexWidget>
+            ) : null}
+          </FlexWidget>
+        </FlexWidget>
+        <HeaderButton glyph="⟳" label={offline ? 'RETRY' : undefined} action={WIDGET_CLICK.refresh} color={offline ? C.warn : C.you} busy={busy === 'refresh'} width={42} />
       </FlexWidget>
-      <TextWidget {...open} text={alert.text} truncate="END" maxLines={1} style={{ fontSize: 10, color: alert.color, fontWeight: 'bold', marginTop: 3, marginBottom: 6 }} />
+      <TextWidget {...open} text={alert.text} truncate="END" maxLines={1} style={{ fontSize: 10, color: alert.color, fontWeight: 'bold', marginTop: 5, marginBottom: 6 }} />
     </FlexWidget>
   );
 }
@@ -477,13 +496,13 @@ function PinnedFrame({ header, children }: { header: React.ReactNode; children: 
   );
 }
 
-function DripView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean }) {
+function DripView({ snap, leagues, widthDp, offline, busy }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean; busy?: 'next' | 'refresh' }) {
   const open = openMatchup(snap);
   const inner = widthDp - 2 * PAD;
   const rows = packWindows(snap.windows, snap.cards ?? [], inner);
   const perLine = tilesPerLine(inner);
   return (
-    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={alertLine(snap)} />}>
+    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={alertLine(snap)} busy={busy} />}>
       {rows.map((row, i) => (
         <FlexWidget key={row.map((r) => r.win.id).join('+')} {...open}
           style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-start', paddingBottom: i === rows.length - 1 ? 0 : 6 }}>
@@ -565,7 +584,7 @@ function classicAlert(snap: WidgetSnapshot): { text: string; color: ColorProp } 
   return { text: snap.phase === 'pre' ? `✓ Lineup set · ${snap.line}` : snap.line, color };
 }
 
-function ClassicView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean }) {
+function ClassicView({ snap, leagues, widthDp, offline, busy }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean; busy?: 'next' | 'refresh' }) {
   const open = openMatchup(snap);
   // THE LINEUP (v0.503.0): every starting spot as a card, best-ball spots
   // included, as many to a line as the width holds — one list item a line.
@@ -577,7 +596,7 @@ function ClassicView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot
   const live = snap.actual ?? { me: snap.me.score, them: them.score };
   const leading = live.me > live.them ? 'me' : live.me < live.them ? 'them' : null;
   return (
-    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={classicAlert(snap)} />}>
+    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={classicAlert(snap)} busy={busy} />}>
       <FlexWidget {...open} style={{ width: 'match_parent', flexDirection: 'column' }}>
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-start' }}>
           <TeamFace name={snap.me.name} avatar={snap.me.avatar} score={live.me} left={snap.left?.me} color={leading === 'them' ? C.dim : C.you} align="left" />
@@ -610,11 +629,11 @@ export function MatchupWidget({ state, heightDp = 110, widthDp = 320 }: { state:
   if (state.kind === 'no-leagues') return <Notice title="No league yet" body="Join or create a league and your matchup lands here." />;
   if (state.kind === 'error') return <Notice title="Couldn’t reach the league" body={state.message} retry />;
   if (state.kind === 'loading') return <Notice title={state.title} body={state.body} />;
-  const { snap, leagues, offline } = state;
+  const { snap, leagues, offline, busy } = state;
   // A drip seat with its picks read gets the drip card, a classic seat with
   // an opponent the classic card; everything else (a bye, no matchup, picks
   // unread) keeps the score card.
-  if (snap.assessable && (snap.cards ?? []).length > 0) return <DripView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />;
-  if (snap.projected && snap.them) return <ClassicView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />;
-  return <ScoreView snap={snap} leagues={leagues} tier={tierFor(heightDp)} offline={offline} />;
+  if (snap.assessable && (snap.cards ?? []).length > 0) return <DripView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} busy={busy} />;
+  if (snap.projected && snap.them) return <ClassicView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} busy={busy} />;
+  return <ScoreView snap={snap} leagues={leagues} tier={tierFor(heightDp)} offline={offline} busy={busy} />;
 }

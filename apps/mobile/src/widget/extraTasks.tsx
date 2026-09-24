@@ -19,6 +19,7 @@ import { widgetSnapshot, recallSnapshot, recallLeagues, allWidgetLeagues, shownW
 import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek } from '@drip/core/data/widgetExtras';
 import { AlertsWidget, FieldsWidget, ALERTS_WIDGET_NAME, FIELDS_WIDGET_NAME, FIELDS_CLICK, type AlertsState, type FieldsState } from './ExtraWidgets';
 import { platform } from '@drip/core/platform';
+import { inert, takeTapLock, releaseTapLock } from './inert';
 import { WIDGET_CLICK } from './MatchupWidget';
 
 const HOUR = 3_600_000;
@@ -120,7 +121,8 @@ export const isExtraWidget = (name: string) => name === ALERTS_WIDGET_NAME || na
 async function paint(name: string, widgetId: number, render: (el: React.JSX.Element) => void, opts: { fresh?: boolean; tapped?: boolean }) {
   if (name === ALERTS_WIDGET_NAME) {
     const now = rememberedAlerts();
-    if (now) render(<AlertsWidget state={now} />);
+    // A tap is answered visibly and inertly (v0.507.0).
+    if (now) render(opts.tapped && now.kind === 'ok' ? inert(<AlertsWidget state={{ ...now, busy: true }} />) : <AlertsWidget state={now} />);
     try {
       render(<AlertsWidget state={await alertsState(!!opts.fresh)} />);
     } catch {
@@ -129,8 +131,8 @@ async function paint(name: string, widgetId: number, render: (el: React.JSX.Elem
     return;
   }
   const now = rememberedFields(widgetId);
-  if (now) render(<FieldsWidget state={now} />);
-  else if (opts.tapped) render(<FieldsWidget state={{ kind: 'loading' }} />);
+  if (now) render(opts.tapped ? inert(<FieldsWidget state={{ ...now, busy: true }} />) : <FieldsWidget state={now} />);
+  else if (opts.tapped) render(inert(<FieldsWidget state={{ kind: 'loading' }} />));
   const fresh = await fieldsState(widgetId);
   if (fresh.kind === 'error' && now) { render(<FieldsWidget state={{ ...now, offline: true }} />); return; }
   render(<FieldsWidget state={fresh} />);
@@ -143,7 +145,17 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
   const id = widgetInfo.widgetId;
   if (widgetAction === 'WIDGET_DELETED') { write(PREF_OFFSET(id), null); write(PREF_STAR(id), null); return; }
   if (widgetAction === 'WIDGET_CLICK') {
-    // OPEN_URI / OPEN_APP are native; ⟳ (and the ✓ card) and the fields chips are ours.
+    // OPEN_URI / OPEN_APP are native; ⟳ (and the ✓ card) and the fields chips
+    // are ours — one at a time (v0.507.0): a tap while another is answered is
+    // dropped, and the frames in between are inert.
+    const ours = clickAction === WIDGET_CLICK.refresh || Object.values(FIELDS_CLICK).includes(clickAction as never);
+    if (!ours || !takeTapLock(id)) return;
+    try { await answer(clickAction as string); } finally { releaseTapLock(id); }
+    return;
+  }
+  await paint(widgetInfo.widgetName, id, render, {});
+
+  async function answer(clickAction: string): Promise<void> {
     if (clickAction === WIDGET_CLICK.refresh) { await paint(widgetInfo.widgetName, id, render, { fresh: true, tapped: true }); return; }
     if (clickAction === FIELDS_CLICK.prev || clickAction === FIELDS_CLICK.next || clickAction === FIELDS_CLICK.now) {
       // The remembered picture knows whether the slate ends here; an arrow at
@@ -153,8 +165,8 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       if (clickAction === FIELDS_CLICK.next && had?.hasNext === false) return;
       const off = clickAction === FIELDS_CLICK.now ? 0 : readNum(PREF_OFFSET(id)) + (clickAction === FIELDS_CLICK.prev ? -1 : 1);
       write(PREF_OFFSET(id), off ? String(off) : null);
-      render(<FieldsWidget state={{ kind: 'loading' }} />);
-      await paint(widgetInfo.widgetName, id, render, {});
+      // `tapped`: the remembered frame goes up busy and inert, never live.
+      await paint(widgetInfo.widgetName, id, render, { tapped: true });
       return;
     }
     if (clickAction === FIELDS_CLICK.league) {
@@ -165,12 +177,9 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       const at = cur ? leagues.findIndex((l) => l.id === cur) : -1;
       const nextId = at + 1 < leagues.length ? leagues[at + 1].id : null;
       write(PREF_STAR(id), nextId);
-      await paint(widgetInfo.widgetName, id, render, {});
-      return;
+      await paint(widgetInfo.widgetName, id, render, { tapped: true });
     }
-    return;
   }
-  await paint(widgetInfo.widgetName, id, render, {});
 }
 
 /** Repaint every alerts and fields widget on the home screen (the push and

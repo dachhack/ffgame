@@ -34,6 +34,7 @@ import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, nextWidgetLeague, recallSnapshot, recallLeagues } from '@drip/core/data/widgetFeed';
 import { MatchupWidget, MATCHUP_WIDGET_NAME, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
 import { extraHandler, isExtraWidget, refreshExtraWidgets } from './extraTasks';
+import { inert, takeTapLock, releaseTapLock } from './inert';
 
 const PREF_LEAGUE = (widgetId: number) => `widget:league:${widgetId}`;
 /** The retired ⇄ flip's stored choice (v0.422.0–v0.499): read no more, only
@@ -77,8 +78,13 @@ export async function widgetState(widgetId: number, opts: { fresh?: boolean } = 
   }
 }
 
-const el = (state: WidgetState, info: WidgetInfo) =>
-  React.createElement(MatchupWidget, { state, heightDp: info.height, widthDp: info.width });
+/** A frame drawn while a tap is answered (a `busy` picture, or the loading
+ *  notice) is drawn INERT (v0.507.0) — no tap on it does anything until the
+ *  fresh picture replaces it. */
+const el = (state: WidgetState, info: WidgetInfo) => {
+  const pic = React.createElement(MatchupWidget, { state, heightDp: info.height, widthDp: info.width });
+  return (state.kind === 'ok' && state.busy) || state.kind === 'loading' ? inert(pic) : pic;
+};
 
 /** The standard wake: the remembered frame now, the fresh one when it lands.
  *
@@ -92,7 +98,8 @@ const el = (state: WidgetState, info: WidgetInfo) =>
  *  seen before the read returns. */
 async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void, opts: { fresh?: boolean; tapped?: boolean } = {}) {
   const now = rememberedState(info.widgetId);
-  if (now) render(now);
+  // A tap is answered visibly: the picture with ⟳ reading LOADING, inert.
+  if (now) render(opts.tapped ? { ...now, busy: 'refresh' } : now);
   else if (opts.tapped) render({ kind: 'loading', title: 'Reconnecting…', body: 'Reading the matchup.' });
   const fresh = await widgetState(info.widgetId, opts);
   // An error after a good remembered frame would replace a real score with
@@ -115,23 +122,31 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
     case 'WIDGET_CLICK': {
       // OPEN_URI is handled natively (it opens the app); only our own actions
       // reach here.
-      if (clickAction === WIDGET_CLICK.next) {
-        // ▸: pick the next league off the remembered list, point the widget
-        // at it, and draw its remembered picture at once (or say we're
-        // switching); the fresh read follows.
-        const leagues = recallLeagues() ?? [];
-        const current = readLeague(widgetInfo.widgetId);
-        const next = nextWidgetLeague(leagues, current);
-        if (next) {
-          try { store().set(PREF_LEAGUE(widgetInfo.widgetId), next.id); } catch { /* ignore */ }
-          const r = recallSnapshot(next.id);
-          render(r ? { kind: 'ok', snap: r.snapshot, leagues: leagues.length, stale: true } : { kind: 'loading', title: `Switching to ${next.name}…`, body: 'Reading the matchup.' });
+      // ONE TAP AT A TIME (v0.507.0): a tap that lands while another is being
+      // answered is dropped (the lock), and the frames drawn meanwhile are
+      // inert (el), so a double tap is one tap.
+      const ours = clickAction === WIDGET_CLICK.next || clickAction === WIDGET_CLICK.refresh;
+      if (!ours) return;
+      if (!takeTapLock(widgetInfo.widgetId)) return;
+      try {
+        if (clickAction === WIDGET_CLICK.next) {
+          // ▸: pick the next league off the remembered list, point the widget
+          // at it, and draw its remembered picture at once (or say we're
+          // switching); the fresh read follows.
+          const leagues = recallLeagues() ?? [];
+          const current = readLeague(widgetInfo.widgetId);
+          const next = nextWidgetLeague(leagues, current);
+          if (next) {
+            try { store().set(PREF_LEAGUE(widgetInfo.widgetId), next.id); } catch { /* ignore */ }
+            const r = recallSnapshot(next.id);
+            render(r ? { kind: 'ok', snap: r.snapshot, leagues: leagues.length, stale: true, busy: 'next' } : { kind: 'loading', title: `Switching to ${next.name}…`, body: 'Reading the matchup.' });
+          }
+          render(await widgetState(widgetInfo.widgetId));
+          return;
         }
-        render(await widgetState(widgetInfo.widgetId));
+        await paintThenFetch(widgetInfo, render, { tapped: true });
         return;
-      }
-      if (clickAction === WIDGET_CLICK.refresh) { await paintThenFetch(widgetInfo, render, { tapped: true }); return; }
-      return;
+      } finally { releaseTapLock(widgetInfo.widgetId); }
     }
     default:
       // WIDGET_ADDED, WIDGET_UPDATE (the timer), WIDGET_RESIZED

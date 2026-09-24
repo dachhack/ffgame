@@ -12,6 +12,7 @@ import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam } from '../packages/core/src/data/widgetExtras';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
+import { takeTapLock, releaseTapLock } from '../apps/mobile/src/widget/inert';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -481,6 +482,18 @@ const state = [
   ok('fields: my players ride with their game, from either side', kc.mine.map((m) => m.name).join() === 'T. Kelce' && car.mine[0].name === 'C. Hubbard' && bal.mine[0].name === 'L. Jackson');
   ok('fields: a final reads FINAL with no ball', buf.clock === 'FINAL' && buf.poss === null && buf.hs === 31, buf);
   ok('fields: a game to come has its kickoff and no score', bal.state === 'pre' && bal.kickoff === kick(4) && bal.clock === null && bal.last === null, bal);
+}
+
+// ── v0.507.0: one tap at a time ──
+{
+  const t0 = 1_900_000_000_000;
+  ok('tap lock: the first tap takes it', takeTapLock(77, t0) === true);
+  ok('tap lock: a second tap while it is held is dropped', takeTapLock(77, t0 + 800) === false);
+  ok('tap lock: another widget is not blocked', takeTapLock(78, t0 + 800) === true);
+  releaseTapLock(77);
+  ok('tap lock: released, the next tap is answered', takeTapLock(77, t0 + 900) === true);
+  ok('tap lock: a lock left by a task that died is ignored after 20 s', takeTapLock(77, t0 + 900 + 20_001) === true);
+  releaseTapLock(77); releaseTapLock(78);
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }

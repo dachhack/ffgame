@@ -29,7 +29,7 @@ import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 
 import type { AlertsSummary, FieldGame } from '@drip/core/data/widgetExtras';
 import { spotLabel } from '@drip/core/data/widgetExtras';
 import { weekLabel } from '@drip/core/data/nflSlate';
-import { C, fmt, Chip, shortClock, matchupDeepLink, WIDGET_CLICK } from './MatchupWidget';
+import { C, fmt, shortClock, matchupDeepLink, WIDGET_CLICK } from './MatchupWidget';
 import type { LeagueAlert, FieldMine } from '@drip/core/data/widgetExtras';
 
 export const ALERTS_WIDGET_NAME = 'Alerts';
@@ -44,7 +44,7 @@ export const FIELDS_CLICK = { prev: 'FIELDS_PREV', next: 'FIELDS_NEXT', now: 'FI
 export type AlertsState =
   | { kind: 'signed-out' }
   | { kind: 'no-leagues' }
-  | { kind: 'ok'; summary: AlertsSummary; leagues: number; offline?: boolean; stale?: boolean };
+  | { kind: 'ok'; summary: AlertsSummary; leagues: number; offline?: boolean; stale?: boolean; /** A tap is being answered (v0.507.0). */ busy?: boolean };
 
 /** ET, as the matchup widget prints locks: "1:00p", or "Sun 1:00p" when the
  *  lock is not today. */
@@ -75,8 +75,8 @@ export function AlertsWidget({ state }: { state: AlertsState }) {
   const { summary, leagues, offline } = state;
   if (summary.total === 0) {
     return frame([
-      <TextWidget key="t" text="✓" style={{ fontSize: 26, color: C.ok, fontWeight: 'bold' }} />,
-      <TextWidget key="b" text={leagues === 1 ? 'lineup set' : `${leagues} set`} maxLines={1} style={{ fontSize: 8.5, color: C.dim, fontWeight: 'bold' }} />,
+      <TextWidget key="t" text={state.busy ? '…' : '✓'} style={{ fontSize: 26, color: state.busy ? C.dim : C.ok, fontWeight: 'bold' }} />,
+      <TextWidget key="b" text={state.busy ? 'checking' : leagues === 1 ? 'lineup set' : `${leagues} set`} maxLines={1} style={{ fontSize: 8.5, color: C.dim, fontWeight: 'bold' }} />,
       offline ? <TextWidget key="o" text="offline" style={{ fontSize: 7.5, color: C.warn }} /> : null,
     ], WIDGET_CLICK.refresh);
   }
@@ -127,7 +127,8 @@ export type FieldsState =
   | { kind: 'loading' }
   | { kind: 'empty' }
   | { kind: 'error'; message: string }
-  | ({ kind: 'ok'; week: number; games: FieldGame[]; offline?: boolean; stale?: boolean } & Partial<FieldsNav>);
+  | ({ kind: 'ok'; week: number; games: FieldGame[]; offline?: boolean; stale?: boolean;
+      /** A tap is being answered (v0.507.0): the header says so, the frame is inert. */ busy?: boolean } & Partial<FieldsNav>);
 
 /** A small team logo — ESPN's resizer, so the widget fetches 36px, not 500. */
 const logo = (team: string) => `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/${team.toLowerCase()}.png&h=36&w=36`;
@@ -218,9 +219,13 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
       <FlexWidget style={{ flex: 1, width: 'match_parent' }}>{body}</FlexWidget>
     </FlexWidget>
   );
-  const refresh = (offline?: boolean) => (offline
-    ? <Chip text="⟳ offline" action={WIDGET_CLICK.refresh} color={C.warn} />
-    : <Chip text="⟳" action={WIDGET_CLICK.refresh} color={C.you} />);
+  // Header buttons big enough to hit (v0.507.0), dimmed with … while a tap is answered.
+  const button = (text: string, action: string, color: ColorProp, dim?: boolean) => (
+    <TextWidget text={text} clickAction={action} maxLines={1}
+      style={{ fontSize: 15, color: dim ? C.dim : color, fontWeight: 'bold', backgroundColor: dim ? C.line : C.bg, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginLeft: 4 }} />
+  );
+  const busy = state.kind === 'ok' && state.busy;
+  const refresh = (offline?: boolean) => button(busy ? '…' : offline ? '⟳ !' : '⟳', WIDGET_CLICK.refresh, offline ? C.warn : C.you, !!busy);
   if (state.kind !== 'ok') {
     const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? 'No games on the slate yet.' : state.message;
     return frame(
@@ -243,8 +248,8 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
   // ‹ › step the week (a dim arrow at the slate's end still answers, and
   // does nothing); the week's name taps back to NOW when it is not now.
   const arrow = (text: string, action: string, can: boolean | undefined) => (
-    <TextWidget text={text} clickAction={action}
-      style={{ fontSize: 13, color: can === false ? C.line : C.you, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 2 }} />
+    <TextWidget text={text} clickAction={action} maxLines={1}
+      style={{ fontSize: 17, color: can === false || busy ? C.line : C.you, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 5 }} />
   );
   const head = (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginBottom: 6 }}>
@@ -252,9 +257,9 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
         {arrow('‹', FIELDS_CLICK.prev, state.hasPrev)}
         <FlexWidget clickAction={FIELDS_CLICK.now} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
           <TextWidget text={`▦ ${weekLabel(week).toUpperCase()}`} maxLines={1} style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }} />
-          <TextWidget text={isNow ? '  NOW' : '  ↺ NOW'} maxLines={1} style={{ fontSize: 8.5, color: isNow ? C.faint : C.you, fontWeight: 'bold' }} />
+          <TextWidget text={busy ? '  LOADING…' : isNow ? '  NOW' : '  ↺ NOW'} maxLines={1} style={{ fontSize: 8.5, color: busy ? C.dim : isNow ? C.faint : C.you, fontWeight: 'bold' }} />
         </FlexWidget>
-        {arrow('›', FIELDS_CLICK.next, state.hasNext)}
+        <FlexWidget style={{ marginLeft: 4 }}>{arrow('›', FIELDS_CLICK.next, state.hasNext)}</FlexWidget>
         {refresh(offline)}
       </FlexWidget>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>

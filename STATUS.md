@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.507.0 — widget buttons: big enough to hit, busy while loading, one tap at a time
+
+Founder: "Can we make the next button two rows high instead of one? It's kinda
+hard to press… it can take a couple seconds to load the next team so can we
+make sure to change the state of the widget or the button… inactive while
+loading so double taps and errant clicks don't do anything. Same for the
+refresh button."
+
+- **Tall buttons.** On the matchup widget's header, ▸ NEXT (left) and ⟳
+  (right) are 42dp blocks spanning the header's two top rows. The score
+  card's chips are larger, and so are the fields widget's ‹ › ⟳.
+- **Busy state.** On a tap, the next frame goes up at once. NEXT shows the
+  next league's remembered picture with the button reading "… LOADING"; ⟳
+  dims to "…"; the fields header reads LOADING…; the alerts ✓ reads
+  "checking".
+- **Inert while loading.** `widget/inert.ts` `inert()` walks the tree the way
+  the library's builder does and strips every clickAction, so no tap on a
+  busy frame does anything until the fresh picture replaces it.
+  check:widgetrender proves every busy frame builds and has 0 taps (31
+  states).
+- **Tap lock.** `takeTapLock` / `releaseTapLock`, per widget in storage,
+  drop a second tap that lands before the first frame is drawn. A lock older
+  than 20 s is ignored, so a task that died can't leave a widget deaf.
+  Covered in check:widget.
+
 ### v0.506.0 — alerts scroll, fields: Wednesday turnover, ‹ week ›, whose stars, point colours
 
 Founder, after the first morning with the new widgets:

@@ -4,6 +4,7 @@ import React from 'react';
 import { buildWidgetTree, FlexWidget, TextWidget } from 'react-native-android-widget';
 import { MatchupWidget } from '../../apps/mobile/src/widget/MatchupWidget';
 import { AlertsWidget, FieldsWidget } from '../../apps/mobile/src/widget/ExtraWidgets';
+import { inert } from '../../apps/mobile/src/widget/inert';
 import { alertsSummary, fieldGames } from '@drip/core/data/widgetExtras';
 import { setRuntimeSlate } from '@drip/core/data/nflSlate';
 import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
@@ -57,6 +58,26 @@ tryIt('fields with nav, a picked league, stars in every state', <FieldsWidget st
 tryIt('fields at the slate\'s start, now', <FieldsWidget state={{ kind: 'ok', week: 3, games: [], current: 3, hasPrev: false, hasNext: true }} />);
 tryIt('fields offline', <FieldsWidget state={{ kind: 'ok', week: 3, games, offline: true }} />);
 for (const s of [{ kind: 'loading' }, { kind: 'empty' }, { kind: 'error', message: 'x' }] as const) tryIt(`fields ${s.kind}`, <FieldsWidget state={s as any} />);
+// v0.507.0 — the frames drawn while a tap is answered: busy, and INERT — they
+// must build, and no node in them may carry a tap.
+const taps = (t: any): number => ((t.props?.clickAction ? 1 : 0) + (t.children ?? []).reduce((k: number, c: any) => k + taps(c), 0));
+const inertIt = (label: string, el: React.JSX.Element) => {
+  n++;
+  try {
+    const live = taps(buildWidgetTree(el)), dead = taps(buildWidgetTree(inert(el)));
+    if (live === 0) { fails++; console.log(`FAIL ${label}: the live picture has no taps to strip`); }
+    else if (dead !== 0) { fails++; console.log(`FAIL ${label}: ${dead} tap(s) survive inert`); }
+    else console.log(`ok   ${label}: ${live} taps live, 0 inert`);
+  } catch (e: any) { fails++; console.log(`FAIL ${label}: ${e.message}`); }
+};
+inertIt('matchup drip, NEXT loading', <MatchupWidget state={{ kind: 'ok', snap: drip, leagues: 3, busy: 'next' }} widthDp={330} />);
+inertIt('matchup classic, ⟳ loading', <MatchupWidget state={{ kind: 'ok', snap: classic, leagues: 2, busy: 'refresh' }} widthDp={330} />);
+inertIt('matchup score card, NEXT loading', <MatchupWidget state={{ kind: 'ok', snap: { ...base, them: null, cards: [], assessable: false, phase: 'bye' }, leagues: 2, busy: 'next' }} widthDp={250} />);
+inertIt('matchup switching notice', <MatchupWidget state={{ kind: 'loading', title: 'Switching…', body: 'x' }} />);
+inertIt('alerts list, busy', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3, busy: true }} />);
+inertIt('alerts ✓, busy', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 1, busy: true }} />);
+inertIt('fields, busy', <FieldsWidget state={{ kind: 'ok', week: 2, games: starred, current: 3, hasPrev: true, hasNext: true, leagueLabel: 'X', busy: true }} />);
+
 // The harness itself: the two shapes that blank a widget must still fail here.
 const mustThrow = (label: string, el: React.JSX.Element) => { n++; try { buildWidgetTree(el); fails++; console.log(`FAIL ${label}: built, but must throw`); } catch { console.log(`ok   ${label} throws, as it must`); } };
 const Nothing = () => null;
