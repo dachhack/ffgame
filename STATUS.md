@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.511.0 — lineup alerts widget goes 2×1
+
+Founder: "Let's make the line up alert widget 2 by 1. Change the layout to
+fit and still scroll."
+
+- **Default size 2×1** (app.json: minWidth 110dp, minHeight 40dp, target
+  2×1), with a new preview image.
+- **Wide layout** (`AlertsWide`, used at widths of 100dp and up): a 52dp
+  block on the left with ⚠ total and the soonest lock (a tap opens the
+  league with the most to fix), and beside it a ListWidget of leagues that
+  need attention (count, name, lock), scrolling past what fits. Each row
+  opens its league. When all is set it shows ✓ "Lineups set · N leagues",
+  and a tap re-checks.
+- A widget already placed at 1×1 keeps the stacked layout. The task now
+  passes each widget's width to every paint.
+- check:widgetrender builds 43 states and proves the 2×1 is a row while
+  the 1×1 stacks, and that busy 2×1 frames are inert.
+
 ### v0.510.0 — the web league list gets the glance; the fields header is one row
 
 Founder: "add the lineup report to the web leagues page too. Let's make the

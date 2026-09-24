@@ -53,7 +53,12 @@ const lockWhen = (ms: number) => {
   return day.format(new Date(ms)) === day.format(new Date()) ? shortClock(ms) : `${day.format(new Date(ms))} ${shortClock(ms)}`;
 };
 
-export function AlertsWidget({ state }: { state: AlertsState }) {
+/** Below this width the widget is the old 1×1 and stacks; at 2×1 (v0.511.0)
+ *  the total sits in a block on the left and the leagues scroll beside it. */
+const ALERTS_WIDE_DP = 100;
+
+export function AlertsWidget({ state, widthDp = 0 }: { state: AlertsState; widthDp?: number }) {
+  if (state.kind === 'ok' && widthDp >= ALERTS_WIDE_DP) return <AlertsWide state={state} />;
   const frame = (children: React.ReactNode[], clickAction: string, clickActionData?: Record<string, unknown>) => (
     <FlexWidget clickAction={clickAction} clickActionData={clickActionData}
       style={{ width: 'match_parent', height: 'match_parent', backgroundColor: C.card, borderRadius: 16, padding: 4, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
@@ -111,6 +116,60 @@ export function AlertsWidget({ state }: { state: AlertsState }) {
       </ListWidget>
     </FlexWidget>
   );
+}
+
+/** THE 2×1 (v0.511.0). Founder: "Let's make the line up alert widget 2 by 1.
+ *  Change the layout to fit and still scroll." One cell tall, two wide: the
+ *  total and the soonest lock in a block on the left (a tap opens the league
+ *  with the most to fix), and beside it the leagues that need attention, one
+ *  row each — count, name, lock — scrolling when there are more than fit,
+ *  each row opening its league. All set: ✓ and how many leagues, one tap to
+ *  re-check. */
+function AlertsWide({ state }: { state: Extract<AlertsState, { kind: 'ok' }> }) {
+  const { summary, leagues, offline, busy } = state;
+  const frame = (children: React.ReactNode[], clickAction?: string) => (
+    <FlexWidget clickAction={clickAction}
+      style={{ width: 'match_parent', height: 'match_parent', backgroundColor: C.card, borderRadius: 16, padding: 5, flexDirection: 'row', alignItems: 'center' }}>
+      {children}
+    </FlexWidget>
+  );
+  if (summary.total === 0) {
+    return frame([
+      <TextWidget key="t" text={busy ? '…' : '✓'} style={{ fontSize: 26, color: busy ? C.dim : C.ok, fontWeight: 'bold', marginHorizontal: 8 }} />,
+      <FlexWidget key="w" style={{ flex: 1, flexDirection: 'column' }}>
+        <TextWidget text={busy ? 'checking…' : 'Lineups set'} maxLines={1} style={{ fontSize: 11, color: C.text, fontWeight: 'bold' }} />
+        <TextWidget text={offline ? 'offline · tap to retry' : leagues === 1 ? '1 league' : `${leagues} leagues`} maxLines={1} style={{ fontSize: 8.5, color: offline ? C.warn : C.dim }} />
+      </FlexWidget>,
+    ], WIDGET_CLICK.refresh);
+  }
+  const top = summary.leagues[0];
+  const open = (l: LeagueAlert) => ({ clickAction: WIDGET_CLICK.open, clickActionData: { uri: matchupDeepLink(l.leagueId, l.rosterId) } });
+  return frame([
+    <FlexWidget key="n" {...open(top)}
+      style={{ width: 52, height: 'match_parent', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg, borderRadius: 11 }}>
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TextWidget text="⚠" style={{ fontSize: 10, color: C.warn, fontWeight: 'bold', marginRight: 1 }} />
+        <TextWidget text={String(summary.total)} maxLines={1} style={{ fontSize: 20, color: C.warn, fontWeight: 'bold' }} />
+      </FlexWidget>
+      <TextWidget text={offline ? 'offline' : summary.lockMs != null ? shortClock(summary.lockMs) : 'fix'} maxLines={1} style={{ fontSize: 7.5, color: offline ? C.warn : C.dim, fontWeight: 'bold' }} />
+    </FlexWidget>,
+    <FlexWidget key="l" style={{ flex: 1, height: 'match_parent', marginLeft: 5 }}>
+      <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
+        {summary.leagues.map((l, i) => (
+          <FlexWidget key={l.leagueId} {...open(l)}
+            style={{ width: 'match_parent', flexDirection: 'column', backgroundColor: C.bg, borderRadius: 7, paddingHorizontal: 5, paddingVertical: 2, marginTop: i ? 3 : 0 }}>
+            <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+              <TextWidget text={String(l.n)} maxLines={1} style={{ fontSize: 10, color: C.warn, fontWeight: 'bold', marginRight: 4 }} />
+              <FlexWidget style={{ flex: 1 }}>
+                <TextWidget text={l.name} truncate="END" maxLines={1} style={{ fontSize: 9, color: C.text, fontWeight: 'bold' }} />
+              </FlexWidget>
+            </FlexWidget>
+            {l.lockMs != null ? <TextWidget text={`locks ${lockWhen(l.lockMs)}`} truncate="END" maxLines={1} style={{ fontSize: 7.5, color: C.dim }} /> : null}
+          </FlexWidget>
+        ))}
+      </ListWidget>
+    </FlexWidget>,
+  ]);
 }
 
 // ── FIELDS ──────────────────────────────────────────────────────────────────

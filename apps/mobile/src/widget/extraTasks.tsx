@@ -120,15 +120,16 @@ async function fieldsState(widgetId: number): Promise<FieldsState> {
 
 export const isExtraWidget = (name: string) => name === ALERTS_WIDGET_NAME || name === FIELDS_WIDGET_NAME;
 
-async function paint(name: string, widgetId: number, render: (el: React.JSX.Element) => void, opts: { fresh?: boolean; tapped?: boolean }) {
+async function paint(name: string, widgetId: number, render: (el: React.JSX.Element) => void, opts: { fresh?: boolean; tapped?: boolean; widthDp?: number }) {
+  const w = opts.widthDp ?? 0;
   if (name === ALERTS_WIDGET_NAME) {
     const now = rememberedAlerts();
     // A tap is answered visibly and inertly (v0.507.0).
-    if (now) render(opts.tapped && now.kind === 'ok' ? inert(<AlertsWidget state={{ ...now, busy: true }} />) : <AlertsWidget state={now} />);
+    if (now) render(opts.tapped && now.kind === 'ok' ? inert(<AlertsWidget state={{ ...now, busy: true }} widthDp={w} />) : <AlertsWidget state={now} widthDp={w} />);
     try {
-      render(<AlertsWidget state={await alertsState(!!opts.fresh)} />);
+      render(<AlertsWidget state={await alertsState(!!opts.fresh)} widthDp={w} />);
     } catch {
-      if (now && now.kind === 'ok') render(<AlertsWidget state={{ ...now, offline: true }} />);
+      if (now && now.kind === 'ok') render(<AlertsWidget state={{ ...now, offline: true }} widthDp={w} />);
     }
     return;
   }
@@ -155,7 +156,7 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
     try { await answer(clickAction as string); } finally { releaseTapLock(id); }
     return;
   }
-  await paint(widgetInfo.widgetName, id, render, {});
+  await paint(widgetInfo.widgetName, id, render, { widthDp: widgetInfo.width });
 
   async function answer(clickAction: string): Promise<void> {
     if (clickAction === FIELDS_CLICK.toggle) {
@@ -167,10 +168,10 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       write(PREF_OPEN(id), readStr(PREF_OPEN(id)) === key ? null : key);
       const had = rememberedFields(id);
       if (had) render(<FieldsWidget state={{ ...had, stale: false }} />);
-      else await paint(widgetInfo.widgetName, id, render, {});
+      else await paint(widgetInfo.widgetName, id, render, { widthDp: widgetInfo.width });
       return;
     }
-    if (clickAction === WIDGET_CLICK.refresh) { await paint(widgetInfo.widgetName, id, render, { fresh: true, tapped: true }); return; }
+    if (clickAction === WIDGET_CLICK.refresh) { await paint(widgetInfo.widgetName, id, render, { fresh: true, tapped: true, widthDp: widgetInfo.width }); return; }
     if (clickAction === FIELDS_CLICK.prev || clickAction === FIELDS_CLICK.next || clickAction === FIELDS_CLICK.now) {
       // The remembered picture knows whether the slate ends here; an arrow at
       // the end is a no-op rather than a read that lands on the same week.
@@ -180,7 +181,7 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       const off = clickAction === FIELDS_CLICK.now ? 0 : readNum(PREF_OFFSET(id)) + (clickAction === FIELDS_CLICK.prev ? -1 : 1);
       write(PREF_OFFSET(id), off ? String(off) : null);
       // `tapped`: the remembered frame goes up busy and inert, never live.
-      await paint(widgetInfo.widgetName, id, render, { tapped: true });
+      await paint(widgetInfo.widgetName, id, render, { tapped: true, widthDp: widgetInfo.width });
       return;
     }
     if (clickAction === FIELDS_CLICK.league) {
@@ -191,7 +192,7 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       const at = cur ? leagues.findIndex((l) => l.id === cur) : -1;
       const nextId = at + 1 < leagues.length ? leagues[at + 1].id : null;
       write(PREF_STAR(id), nextId);
-      await paint(widgetInfo.widgetName, id, render, { tapped: true });
+      await paint(widgetInfo.widgetName, id, render, { tapped: true, widthDp: widgetInfo.width });
     }
   }
 }
@@ -203,10 +204,10 @@ export async function refreshExtraWidgets(opts: { fresh?: boolean } = {}): Promi
   try {
     await requestWidgetUpdate({
       widgetName: ALERTS_WIDGET_NAME,
-      renderWidget: async () => {
-        try { return <AlertsWidget state={await alertsState(!!opts.fresh)} />; } catch {
+      renderWidget: async (info) => {
+        try { return <AlertsWidget state={await alertsState(!!opts.fresh)} widthDp={info.width} />; } catch {
           const now = rememberedAlerts();
-          return <AlertsWidget state={now && now.kind === 'ok' ? { ...now, offline: true } : { kind: 'no-leagues' }} />;
+          return <AlertsWidget state={now && now.kind === 'ok' ? { ...now, offline: true } : { kind: 'no-leagues' }} widthDp={info.width} />;
         }
       },
     });
