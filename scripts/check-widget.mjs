@@ -10,7 +10,7 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport } from '../packages/core/src/data/widgetExtras';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
 import { takeTapLock, releaseTapLock } from '../apps/mobile/src/widget/inert';
 
@@ -510,6 +510,17 @@ const state = [
   ok('opened game: the last three plays, newest first, with their clocks', car.recent.map((p) => p.txt).join('|') === 'fourth|third|second, TD later' && car.recent[0].clock === 'Q2 8:20', car.recent);
   ok('opened game: the leaders ride along', car.leaders.length === 2 && car.leaders[0].line === '12/18, 140 YDS');
   ok('a game not yet kicked off has no situation, plays or leaders', bal.dd === null && bal.recent.length === 0 && bal.leaders.length === 0, bal);
+}
+
+// ── v0.509.0: a drip lineup at a glance, for the app's league list ──
+{
+  const snap = { assessable: true, alarm: { lockMs: 123 }, cards: ['set', 'sealed', 'live', 'final', 'empty', 'empty', 'none', 'unsealed', 'missed'].map((status) => ({ status })), fixes: [] };
+  const r = lineupReport(snap);
+  ok('lineup report: set counts set, sealed, playing and done', r.set === 4 && r.total === 9, r);
+  ok('lineup report: unset, nobody-available, no-metric and missed each counted apart', r.unset === 2 && r.none === 1 && r.noMetric === 1 && r.missed === 1, r);
+  ok('lineup report: the next lock rides along', r.lockMs === 123);
+  ok('lineup report: none for a classic league (its projections say it)', lineupReport({ ...snap, projected: true }) === null);
+  ok('lineup report: none without picks read', lineupReport({ ...snap, assessable: false }) === null && lineupReport({ ...snap, cards: [] }) === null);
 }
 
 // ── v0.507.0: one tap at a time ──

@@ -45,6 +45,26 @@ export function alertCount(snap: WidgetSnapshot): number {
   return slots + snap.fixes.filter((f) => f.kind === 'injury' || f.kind === 'bye').length;
 }
 
+/** A DRIP LINEUP AT A GLANCE (v0.509.0) — the app's league list. Founder:
+ *  "Let's have projected totals in the leagues view or a report of slots you
+ *  have set/unset for drip Leagues." Every slot of the week, counted by what
+ *  it needs: `set` has a player and a metric (or is sealed / playing / done);
+ *  `unset` is empty with someone on the roster who could fill it; `none` is
+ *  empty with nobody who can; `noMetric` has a player but no metric; `missed`
+ *  locked empty. `lockMs` is the next lock while anything is still open. */
+export interface LineupReport { total: number; set: number; unset: number; none: number; noMetric: number; missed: number; lockMs: number | null }
+export function lineupReport(snap: WidgetSnapshot): LineupReport | null {
+  const cards = snap.cards ?? [];
+  if (!snap.assessable || !cards.length || snap.projected) return null;
+  const n = (st: WidgetCard['status'][]) => cards.filter((c) => st.includes(c.status)).length;
+  return {
+    total: cards.length,
+    set: n(['set', 'sealed', 'live', 'final']),
+    unset: n(['empty']), none: n(['none']), noMetric: n(['unsealed']), missed: n(['missed']),
+    lockMs: snap.alarm?.lockMs ?? null,
+  };
+}
+
 export interface AlertsSummary {
   /** Warnings across every league. */
   total: number;

@@ -13,6 +13,8 @@ import {
   type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
+import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { lineupReport } from '@drip/core/data/widgetExtras';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -136,7 +138,40 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
     return () => { dead = true; clearInterval(id); };
   }, [userId]);
 
-  const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  // THE GLANCE (v0.509.0). Founder: "Let's have projected totals in the
+  // leagues view or a report of slots you have set/unset for drip Leagues."
+  // Each league's picture is the one the home-screen widget draws (core
+  // widgetFeed): a classic league's projected finals, a drip league's
+  // lineup, slot by slot. The remembered picture paints at once; the fresh
+  // reads follow ONE LEAGUE AT A TIME — a classic read installs its league's
+  // scoring rules module-wide while it runs, so two at once could score one
+  // league by the other's rules. Re-read on pull-to-refresh and every 5 min.
+  const [glance, setGlance] = useState<Record<string, WidgetSnapshot>>({});
+  const [glanceTick, setGlanceTick] = useState(0);
+  useEffect(() => {
+    const leagues = widgetLeagues(rows ?? []);
+    if (!leagues.length) return;
+    let dead = false;
+    const remembered: Record<string, WidgetSnapshot> = {};
+    for (const l of leagues) { const r = recallSnapshot(l.id); if (r) remembered[l.id] = r.snapshot; }
+    setGlance((g) => ({ ...remembered, ...g }));
+    (async () => {
+      for (const l of leagues) {
+        if (dead) return;
+        try {
+          const { snapshot } = await widgetSnapshot(l.id, userId, glanceTick > 0, { anyLeague: true });
+          if (!dead && snapshot && snapshot.leagueId === l.id) setGlance((g) => ({ ...g, [l.id]: snapshot }));
+        } catch { /* keep what the card had */ }
+      }
+    })();
+    return () => { dead = true; };
+  }, [rows, userId, glanceTick]);
+  useEffect(() => {
+    const id = setInterval(() => setGlanceTick((n) => n + 1), 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const refresh = async () => { setRefreshing(true); await load(); setGlanceTick((n) => n + 1); setRefreshing(false); };
 
   if (rows === null) {
     return (
@@ -300,7 +335,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                 );
               })()}
             </View>
-            <MatchupStrip row={slate[e.league_id]} />
+            <MatchupStrip row={slate[e.league_id]} glance={glance[e.league_id]} />
           </Pressable>
         );
       })}
@@ -427,10 +462,13 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
  *
  *  It renders NOTHING without a game: a bye, an odd league, a week not yet
  *  scheduled. A card that prints 0.00 is claiming a game was played. */
-function MatchupStrip({ row }: { row: LeagueSlateRow | undefined }) {
+function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance?: WidgetSnapshot }) {
   const t = useTheme();
   const g = row?.game;
   if (!g) return null;
+  // Classic: the projected finals beside the live scores, until the week is
+  // final (v0.509.0). The opponent's only when their lineup could be read.
+  const proj = glance?.projected && glance.phase !== 'final' && glance.them ? glance : null;
   const v = verdictOf(g);
   // A live game is LEADING, never winning — see verdictOf. The colour follows
   // the word rather than the arithmetic, so a 40-point first-quarter lead is
@@ -449,15 +487,42 @@ function MatchupStrip({ row }: { row: LeagueSlateRow | undefined }) {
         <View style={{ flex: 1 }} />
         {word && <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: tone }}>{word}</Text>}
       </View>
-      <SlateLine side={g.me} mine points={g.me?.points} tone={tone} />
-      <SlateLine side={g.opp} points={g.opp?.points} tone={t.mid} />
+      <SlateLine side={g.me} mine points={g.me?.points} tone={tone} proj={proj ? proj.me.score : null} />
+      <SlateLine side={g.opp} points={g.opp?.points} tone={t.mid} proj={proj && !proj.themLive ? proj.them!.score : null} />
+      {glance ? <LineupLine snap={glance} /> : null}
     </View>
   );
 }
 
-function SlateLine({ side, points, mine, tone }: {
+/** A DRIP lineup in one line (v0.509.0): how many of the week's slots are set,
+ *  and what the rest need — unset, nobody available, no metric — with the
+ *  next lock. Nothing for a classic league (its projected totals say it). */
+function LineupLine({ snap }: { snap: WidgetSnapshot }) {
+  const t = useTheme();
+  const r = lineupReport(snap);
+  if (!r) return null;
+  const open = r.unset + r.none + r.noMetric;
+  const bits = [
+    r.unset ? `${r.unset} unset` : null,
+    r.none ? `${r.none} no one available` : null,
+    r.noMetric ? `${r.noMetric} no metric` : null,
+    r.missed ? `${r.missed} missed` : null,
+  ].filter(Boolean);
+  const lock = open && r.lockMs != null
+    ? ` · locks ${new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(r.lockMs))}`
+    : '';
+  return (
+    <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', marginTop: 3, color: open ? t.warn : t.you }}>
+      {open ? '⚠ ' : '✓ '}{r.set}/{r.total} set{bits.length ? ` · ${bits.join(' · ')}` : ''}{lock}
+    </Text>
+  );
+}
+
+function SlateLine({ side, points, mine, tone, proj }: {
   side: LeagueSlateRow['game'] extends null ? never : NonNullable<LeagueSlateRow['game']>['me'];
   points: number | null | undefined; mine?: boolean; tone: string;
+  /** Classic: the projected final (v0.509.0), printed faint before the score. */
+  proj?: number | null;
 }) {
   const t = useTheme();
   const rec = recordLabel(side?.record);
@@ -467,6 +532,7 @@ function SlateLine({ side, points, mine, tone }: {
         {side?.team || sideLabel(side)}
       </Text>
       {rec && <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{rec}</Text>}
+      {proj != null && <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>P {proj.toFixed(1)}</Text>}
       <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: mine ? tone : t.mid, minWidth: 58, textAlign: 'right' }}>
         {scoreLabel(points)}
       </Text>

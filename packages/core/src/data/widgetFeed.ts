@@ -743,8 +743,12 @@ export async function allWidgetLeagues(fresh = false): Promise<WidgetLeague[]> {
  *  the session user, for the picks of a seat that has no owner override.
  *  `fresh` bypasses every cache (the app in the foreground knows things
  *  first: a league just joined, a lineup just saved). */
-export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null, fresh = false): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
-  const leagues = shownWidgetLeagues(await allWidgetLeagues(fresh));
+export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null, fresh = false,
+  /** v0.509.0: read `wantLeagueId` even when it is hidden from the widget —
+   *  the app's league list shows every league, whatever the widget picks. */
+  opts: { anyLeague?: boolean } = {}): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
+  const all = await allWidgetLeagues(fresh);
+  const leagues = opts.anyLeague ? all : shownWidgetLeagues(all);
   const league = pickWidgetLeague(leagues, wantLeagueId);
   if (!league) return { leagues, snapshot: null };
   const openWeek = await cached(`week:${league.id}`, 10 * MIN, fresh, () => defaultOpenWeek(league.id));
