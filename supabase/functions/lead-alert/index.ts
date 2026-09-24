@@ -73,6 +73,20 @@ async function getAccessToken(saEmail: string, privateKeyPem: string, sub: strin
 // ── Digest email ──────────────────────────────────────────────────────────────
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]!));
 
+// Lead fields are anon-supplied (request_code() only trims them), so anything
+// that lands in a MIME header must lose its CR/LF — otherwise an "email" of
+// "x\r\nBcc: …\r\n\r\n<body>" rewrites the recipients and body of a message we
+// send as our own domain. Strip control chars, cap, then RFC 2047-encode
+// non-ASCII (same encoding as send-invite).
+function headerSafe(s: string): string {
+  const clean = s.replace(/[\x00-\x1F\x7F]+/g, ' ').trim().slice(0, 200);
+  if (/^[\x20-\x7E]*$/.test(clean)) return clean;
+  const bytes = new TextEncoder().encode(clean);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return `=?UTF-8?B?${btoa(bin)}?=`;
+}
+
 interface Lead {
   id: string; created_at: string; email: string | null; sleeper_username: string | null;
   league_name: string | null; league_ref: string | null; note: string | null;
@@ -151,7 +165,7 @@ Deno.serve(async (req) => {
       const mime = [
         `From: ${fromName} <${fromAddr}>`,
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${headerSafe(subject)}`,
         'MIME-Version: 1.0',
         'Content-Type: text/html; charset="UTF-8"',
         'Content-Transfer-Encoding: 7bit',
