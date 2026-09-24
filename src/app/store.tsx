@@ -534,6 +534,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             swaps[`${w}#${i}`] = { atClock: s.atClock, atRt: s.atRt, toMetricId: s.toMetric, toPlayerId: s.toPlayer };
           }
           const lastSpy = tgt.spy?.length ? tgt.spy[tgt.spy.length - 1] : undefined;
+          // THE BATTLE PLAYS FROM THE SERVER TOO (v0.516.0). These came only
+          // from this device's working blob, so a Ghost (or any spot play)
+          // made on the APP scored — the worker reads applied_state — while
+          // the web drew the spot empty. Union the server's 'win|slot' record
+          // into the board's 'win#slot' keys; the blob still fills in plays
+          // older than the server record.
+          const hk = (k: string) => k.replace('|', '#');
+          const list = (srv: string[] | undefined, loc: string[] | undefined) =>
+            srv?.length || loc?.length ? [...new Set([...(loc ?? []), ...(srv ?? []).map(hk)])] : undefined;
+          const clocks = (srv: Record<string, number> | undefined, loc: Record<string, number> | undefined) =>
+            srv && Object.keys(srv).length ? { ...(loc ?? {}), ...Object.fromEntries(Object.entries(srv).map(([k, v]) => [hk(k), v])) } : loc;
+          const rivalry = tgt.rivalry?.length
+            ? { ...(b.rivalry ?? {}), ...Object.fromEntries(tgt.rivalry.map((w) => [w, true as const])) } as AppliedWeek['rivalry']
+            : b.rivalry;
           setApplied({ [wk]: {
             // Backups: the server's targeted record wins (0137 — it's the store
             // the worker scores and the only one writable post-lock), the
@@ -545,11 +559,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             doubleOrNothing: tgt.don ? sk(tgt.don) : b.doubleOrNothing,
             spy: lastSpy ? { slotKey: sk(lastSpy), reveal: lastSpy.reveal } : b.spy,
             byeSteal: tgt.byeSteal ? { slotKey: sk(tgt.byeSteal), playerId: tgt.byeSteal.slug } : b.byeSteal,
-            ghost: b.ghost,
+            ghost: list(tgt.ghost, b.ghost),
             emp: (tgt.emp && Object.keys(tgt.emp).length ? tgt.emp : b.emp) as AppliedWeek['emp'],
-            rivalry: b.rivalry, leadChange: b.leadChange, grudge: b.grudge, jinx: b.jinx, redHerring: b.redHerring, underdog: b.underdog,
-            surge: b.surge, coldSnap: b.coldSnap, napalm: b.napalm, bunker: b.bunker,
-            clutchDon: b.clutchDon, clutchEncore: b.clutchEncore, clutchCounter: b.clutchCounter,
+            rivalry, leadChange: list(tgt.leadChange, b.leadChange), grudge: list(tgt.grudge, b.grudge), jinx: list(tgt.jinx, b.jinx),
+            redHerring: list(tgt.redHerring, b.redHerring), underdog: list(tgt.underdog, b.underdog),
+            surge: clocks(tgt.surge, b.surge), coldSnap: clocks(tgt.coldSnap, b.coldSnap), napalm: clocks(tgt.napalm, b.napalm), bunker: clocks(tgt.bunker, b.bunker),
+            clutchDon: list(tgt.clutchDon, b.clutchDon), clutchEncore: clocks(tgt.clutchEncore, b.clutchEncore), clutchCounter: clocks(tgt.clutchCounter, b.clutchCounter),
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
         })

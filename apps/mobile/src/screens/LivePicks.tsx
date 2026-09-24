@@ -42,7 +42,7 @@ import { METRICS } from '@drip/core/data/metrics';
 import { projectedPoints } from '@drip/core/engine/projScoring';
 import { BYE_STEAL_CAP, swapMetricFor } from '@drip/core/engine/matchup';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
-import { statlineAt, metricDriver, realTimeAt } from '@drip/core/engine/sim';
+import { statlineAt, metricDriver, realTimeAt, GHOST_POINTS } from '@drip/core/engine/sim';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
@@ -967,6 +967,25 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       </Pressable>
     );
   };
+  /** A GHOST or a Bye Steal holding one of my spots (v0.516.0, founder:
+   *  "Ghost loads but it still shows a blank card in the spot. Let's put a
+   *  ghost there."). From the recorded plays — the resolver fills the spot
+   *  with it only while nobody is fielded there. */
+  const phantomOf = (win: string, slot: string): { icon: string; title: string; sub: string } | null => {
+    if (targeted.ghost?.includes(`${win}|${slot}`)) return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `BANKS ${GHOST_POINTS} FLAT` };
+    const bs = targeted.byeSteal;
+    if (bs && bs.win === win && bs.slot === slot) {
+      const pl = pool.find((p) => p.slug === bs.slug);
+      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${pl ? poolToPlayer(pl).name : bs.slug} · BYE`, sub: `BYE STEAL · ${Number(bs.pts ?? 0).toFixed(1)} FLAT` };
+    }
+    return null;
+  };
+  const myPhantoms = (win: string): Record<string, { icon: string; title: string; sub: string }> => {
+    const out: Record<string, { icon: string; title: string; sub: string }> = {};
+    for (const sl of slots.filter((x) => x.win === win)) { const ph = phantomOf(win, sl.slot); if (ph && !mineAt(win, sl.slot)) out[sl.slot] = ph; }
+    return out;
+  };
+
   /** Under a spot's pair: what a Spy found there, and the cards you played on
    *  THEIR side of it (Jinx, Cold Snap, Napalm) — your own spot wears its
    *  plays on the card's ⚡ chip, theirs has no card of yours to wear them. */
@@ -1578,6 +1597,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                 return a || sp ? <View style={{ gap: 6 }}>{a}{sp}</View> : null;
               }}
               winExtra={aimWinStrip}
+              myPhantom={myPhantoms}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
               // number the fielded metric is actually counting.
@@ -1658,6 +1678,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     metricFilter={(m) => !m.lock || unlocks.has(m.lock) || (inventory[m.lock] ?? 0) > 0}
                     applied={appliedFor(s.win, s.slot, pick ? playersBySlug[pick.playerId]?.pos : undefined, pick?.metricId, twinKeys.has(s.key))}
                     twin={twinKeys.has(s.key)}
+                    phantom={pick ? null : phantomOf(s.win, s.slot)}
                     hydrated={hydrated}
                     onOpenPicker={() => { if (!wLocked) setPickerSlot({ key: s.key, win: w.id as WindowId }); }}
                     onPickMetric={(mid) => { if (!wLocked) pickMetricWithCard(s.key, mid); }}

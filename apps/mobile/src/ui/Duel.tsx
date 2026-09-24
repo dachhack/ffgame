@@ -10,7 +10,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, windowPhase } from '@drip/core/data/nflSlate';
 import { WINDOW_WIN_BONUS } from '@drip/core/engine/matchup';
-import { srvSlotRow, srvSidePicks } from '@drip/core/engine/liveScore';
+import { srvSlotRow, srvSidePicks, PHANTOM_SLOT_METRICS } from '@drip/core/engine/liveScore';
+import { GHOST_POINTS } from '@drip/core/engine/sim';
+import { powerupById } from '@drip/core/data/powerups';
 import { teamLogo } from '@drip/core/data/media';
 import { metricById, isMetricSet } from '@drip/core/data/metrics';
 import { slugMeta } from '@drip/core/data/slugMeta';
@@ -21,7 +23,7 @@ import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core
 import type { Pos } from '@drip/core/types';
 import { useTheme, MONO } from "../theme.native";
 import { Card, Mono } from "./prims";
-import { CardFace, CardBack } from "./cards";
+import { CardFace, CardBack, CardPhantom } from "./cards";
 import { LiveCard } from "./LiveCard";
 import { LivePulse } from "./animations";
 import { WindowGameLog } from './PlayLog';
@@ -51,7 +53,7 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, liveExtras, userId, onOpenSlate }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, myPhantom, liveExtras, userId, onOpenSlate }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -78,6 +80,9 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   /** Under the window header (v0.515.0): the strip for a card aimed at the
    *  whole window (EMP). */
   winExtra?: (win: string) => ReactNode;
+  /** Your Ghost / Bye Steal spots BEFORE the window scores (v0.516.0) — once
+   *  it scores the resolver's own rows say it, for both sides. */
+  myPhantom?: (win: string) => Record<string, { icon: string; title: string; sub: string }>;
   /** Extra live-row text a caller can supply per side: the game and clock
    *  ("KC@LAC · Q1 9:00"), the statline, coin earned. Everything here needs data
    *  Duel doesn't have — a game feed, a StatLine — so it's the caller's to fill
@@ -212,6 +217,30 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
     );
   };
 
+  /** A GHOST or a Bye Steal on a seat (v0.516.0, founder: "it still shows a
+   *  blank card in the spot. Let's put a ghost there."). The resolver scores
+   *  them as rows the lineup never had (PHANTOM_SLOT_METRICS), so srvSidePicks
+   *  rightly skips them — and the seat drew as empty. Read the rows here,
+   *  for either side; before the window scores, the board hands in yours. */
+  const phantomFor = (win: string, slot: string, who: 'you' | 'their'): { icon: string; title: string; sub: string; bank: number | null } | null => {
+    const side = who === 'you' ? youSide : oppSide;
+    const row = scores.find((x) => x.game_window === win)?.slot_scores
+      ?.find((r) => r.side === side && String(r.slot) === slot && !!r.metric && PHANTOM_SLOT_METRICS.has(r.metric));
+    if (row) {
+      const bank = round1(Number(row.score));
+      if (row.metric === 'ghost') return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `banks a flat ${GHOST_POINTS}`, bank };
+      const nm = row.slug ? (pool[row.slug]?.full ?? nameFromSlug(row.slug)) : 'Bye player';
+      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${nm} · BYE`, sub: 'bye steal · his projection, flat', bank };
+    }
+    if (who === 'you') { const m = myPhantom?.(win)?.[slot]; if (m) return { ...m, bank: null }; }
+    return null;
+  };
+  const phantomSlotsOf = (win: string): string[] => {
+    const fromRows = (scores.find((x) => x.game_window === win)?.slot_scores ?? [])
+      .filter((r) => !!r.metric && PHANTOM_SLOT_METRICS.has(r.metric) && r.slot != null).map((r) => String(r.slot));
+    return [...fromRows, ...Object.keys(myPhantom?.(win) ?? {})];
+  };
+
   const faceFor = (p: RevealedPick, side: 'home' | 'away', accent: string, idx: number) => {
     const player = p.player_slug ? pool[p.player_slug] : null;
     const key = `${p.game_window}-${p.roster_slot}-${side}`;
@@ -276,7 +305,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         // him against Maye. The slot is the key the engine scores by, so it is
         // the key the cards pair by. A window with nothing but a score (or
         // nothing but sealed backs) still renders one pair.
-        const slotKeys = [...new Set([...my, ...th].map((p) => String(p.roster_slot)))]
+        const slotKeys = [...new Set([...my, ...th].map((p) => String(p.roster_slot)).concat(phantomSlotsOf(win)))]
           .sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
         if (!slotKeys.length && (sealedBacks > 0 || s)) slotKeys.push('0');
         // Done window (founder's call, 0182.2): the field + play log collapse
@@ -394,12 +423,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                         entirely, which is how the moment gets lost. */}
                     {hasRows ? (
                       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                        {liveFor(mp, youSide, 'you', win, slot, i, my)}
-                        {liveFor(tp, oppSide, 'their', win, slot, i, th)}
+                        {(() => { const ph = !mp ? phantomFor(win, slot, 'you') : null; return ph ? <LiveCard key={`${win}-${slot}-you`} side="you" idx={i} phantom={ph} bank={ph.bank} /> : liveFor(mp, youSide, 'you', win, slot, i, my); })()}
+                        {(() => { const ph = !tp ? phantomFor(win, slot, 'their') : null; return ph ? <LiveCard key={`${win}-${slot}-their`} side="their" idx={i} phantom={ph} bank={ph.bank} /> : liveFor(tp, oppSide, 'their', win, slot, i, th); })()}
                       </View>
                     ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                      {mp ? faceFor(mp, youSide, t.you, i) : <CardBack label="—" idx={i} />}
+                      {mp ? faceFor(mp, youSide, t.you, i) : (() => { const ph = phantomFor(win, slot, 'you'); return ph ? <CardPhantom idx={i} icon={ph.icon} title={ph.title} sub={ph.sub} bank={ph.bank} /> : <CardBack label="—" idx={i} />; })()}
                       {/* Post-kick, an empty opposing half is a fact: NO PICK,
                           not a SEALED back promising a flip that never comes
                           (the founder watched one promise all night). */}

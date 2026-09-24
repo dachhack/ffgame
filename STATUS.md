@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.516.0 — a Ghost looks like a ghost
+
+Founder: "Ghost loads but it still shows a blank card in the spot. Let's put
+a ghost there." The resolver scores a Ghost (and a Bye Steal) as a row the
+lineup never had (PHANTOM_SLOT_METRICS), so no host drew anything for it.
+- App: `CardPhantom` (cards.tsx) is a dashed accent card with the icon,
+  GHOST PLAYER, and BANKS 14 FLAT. A Bye Steal shows the player's name ·
+  BYE and his flat points. It appears on the setup spot (SetupRow's
+  `phantom`) and on the duel before scoring (Duel's `myPhantom`). Once the
+  window scores, Duel reads the resolver's phantom rows for BOTH sides, so an
+  opponent's ghost shows too, as LiveCard's new `phantom` variant with its
+  bank.
+- Web: an empty spot holding a Ghost or Bye Steal draws a ghost card
+  (boardParts). It is deliberately not a picker, because fielding a player
+  there stands the phantom down.
+- Web store: the battle plays (ghost, rivalry, lead change, grudge, jinx,
+  red herring, underdog, surge, cold snap, napalm, bunker, clutch) are now
+  unioned in from the server's applied_state, not only this device's blob.
+  A play made on the app was scoring but invisible on the web.
+
 ### v0.515.0 — aimed cards play in the app; Spy works before kickoff
 
 Founder, on the app board: "Why can't I use my spy or ghost?" The app's hand

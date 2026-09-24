@@ -11,6 +11,7 @@ import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { powerupById, buffAppliesToSpot } from '@drip/core/data/powerups';
+import { GHOST_POINTS } from '@drip/core/engine/sim';
 import { getPlayer } from '@drip/core/data/league';
 import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
@@ -372,6 +373,8 @@ export function SetupRow(props: {
   const applyDim = !!applyMode && !fillEligible && !emptyEligible;
   const cardTap = lockPlayer ? () => {} : applyMode ? (fillEligible ? onApplyToSpot : () => {}) : onOpenPicker;
   const applyPu = applyMode ? powerupById(applyMode) : null;
+  /** A phantom holding this EMPTY spot (v0.516.0). */
+  const phantomPu = !player ? powerupById(appliedPu.includes('ghost') ? 'ghost' : appliedPu.includes('bye-steal') ? 'bye-steal' : '') ?? null : null;
   // Metric selection lives in its own overlay modal (not inline in the card, which
   // would balloon its height and drag the sealed card with it). A freshly-placed
   // player with no metric auto-opens it; ↻ METRIC re-opens it to change.
@@ -474,6 +477,17 @@ export function SetupRow(props: {
             {pick?.metricId && !metricLocked && <button onClick={() => setMetricOpen(true)} className="mono mx-editmet" style={{ ...link, color: 'var(--warn)' }}>↻ METRIC</button>}
             {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
           </div>
+        </div>
+      ) : phantomPu ? (
+        // A GHOST or a Bye Steal holds this empty spot (v0.516.0, founder:
+        // "Ghost loads but it still shows a blank card in the spot. Let's put
+        // a ghost there."). Its own card, not a picker: fielding a player here
+        // would stand the phantom down and waste the card.
+        <div title={phantomPu.blurb} className="mx-empty mx-state"
+          style={{ minWidth: 0, minHeight: 78, background: 'color-mix(in srgb, var(--you) 9%, transparent)', border: '1px dashed color-mix(in srgb, var(--you) 70%, transparent)', borderLeft: '3px dashed var(--you)', borderRadius: 4, padding: '12px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+          <span style={{ fontSize: 30, lineHeight: 1, opacity: 0.85 }}><PuIcon id={phantomPu.id} emoji={phantomPu.icon} size={30} /></span>
+          <span className="mono" style={{ fontSize: fs(10), fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)' }}>{phantomPu.id === 'ghost' ? 'GHOST PLAYER' : 'BYE STEAL'}</span>
+          <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--dim)', letterSpacing: '0.06em' }}>{phantomPu.id === 'ghost' ? `BANKS ${GHOST_POINTS} FLAT` : 'HIS PROJECTION, FLAT'}</span>
         </div>
       ) : (
         <div

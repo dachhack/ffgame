@@ -157,7 +157,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }
 
 /** One side of a live duel: the mini card plus everything that changes. */
-export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
+export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, phantom, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
   side: 'you' | 'their';
   slug?: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's back at the mini footprint, no identity leaked. */
@@ -170,6 +170,9 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
    *  the facing player is a backup who can sub; otherwise he simply plays
    *  unopposed and banks his points here. */
   windowEmpty?: boolean;
+  /** A GHOST or a Bye Steal holds this seat (v0.516.0): the phantom in the
+   *  card's place, what it is, and what it has banked. */
+  phantom?: { icon: string; title: string; sub: string } | null;
   gameLabel?: string | null;
   metricName?: string | null;
   stat?: string | null;
@@ -187,6 +190,27 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   // `.ct-live.ct-opp { flex-direction: row-reverse }`.
   const mirror = side === 'their';
 
+  if (phantom) {
+    return (
+      <Pressable onPress={onPress} disabled={!onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
+        <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, zIndex: 2, borderRadius: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: alpha(accent, 80), backgroundColor: alpha(accent, 9), alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 34, opacity: 0.85 }}>{phantom.icon}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
+          <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%', minHeight: 36, justifyContent: 'center' }}>
+            <Text numberOfLines={2} style={{ fontSize: 11, fontWeight: '800', color: accent, textAlign: mirror ? 'right' : 'left' }}>{phantom.title}</Text>
+          </View>
+          {bank != null && (
+            <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={{ fontSize: 26, fontWeight: '800', lineHeight: 28, color: accent }}>{fmt(bank)}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
+            </View>
+          )}
+          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8, color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{phantom.sub}</Text>
+        </View>
+      </Pressable>
+    );
+  }
   if (unopposed) {
     return (
       <View style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
