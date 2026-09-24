@@ -14,7 +14,8 @@ import { resolveSlot, EMPTY_PLAYER } from '../../packages/core/src/engine/sim.ts
 import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
 import { resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball } from '../../packages/core/src/engine/classic.ts';
 import { assignSealedRows } from '../../packages/core/src/engine/seatPicks.ts';
-import { setSyntheticWeeks, clearSyntheticWeeks, realPbpFor } from '../../packages/core/src/data/realPbp.ts';
+import { setSyntheticWeeks, clearSyntheticWeeks, realPbpFor, LIVE_SEASON } from '../../packages/core/src/data/realPbp.ts';
+import { liveTeamFor } from '../../packages/core/src/data/slugMeta.ts';
 
 /** Diagnostic: how many plays the ENGINE would see for (week, slug) right now. */
 export function playsFor(week, slug) {
@@ -41,8 +42,15 @@ export { clearSyntheticWeeks, resolveLiveMatchup, aiLiveBuffs, resolveClassicMat
  *  Field-General read. With a `week` that has a known NFL slate, players are
  *  slate-gated into the window their team actually plays, exactly like a human's
  *  lineup. Returns [{ win, slot, slug, metric }] — the sealed-pick shape. */
-export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0, personaKey) {
-  return aiLineup(slugs ?? [], week, owned, extra, personaKey);
+/** The team a player is on NOW (v0.523.0) — the directory and the worker's
+ *  override, not the 2025 bake. The lock-time fill slotted Romeo Doubs (GB in
+ *  the bake, NE since) into the ATL@GB Thursday window, where he could only
+ *  score zero, over a Ghost. Every autoLineup caller is a live game; the sim
+ *  passes no week, and without a slate the fill never reads a team at all. */
+export const liveTeamOf = (slug) => liveTeamFor(slug, null, LIVE_SEASON) || null;
+
+export function autoLineup(slugs, week = 0, owned = new Set(), extra = 0, personaKey, teamOf = liveTeamOf) {
+  return aiLineup(slugs ?? [], week, owned, extra, personaKey, teamOf);
 }
 
 /** Inject a week's plays so the engine sees them via realPbpFor(week, slug).

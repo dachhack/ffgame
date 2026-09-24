@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.523.0 — the lock-time fill uses the team a player is on NOW
+
+Founder's wk-3 Thursday: the lock-time fill put Romeo Doubs into his
+ghosted TNF spot in Gridiron Gang. aiLineup placed players by slugMeta's
+team, which is the MAJORITY 2025 team from the play-by-play bake (GB), but
+Doubs is a Patriot and NE didn't play that night. The spot would have scored
+zero over a Ghost's 14. (Fixed by hand: the row was deleted in the SQL
+editor after v0.522.0 deployed.) aiLineup now takes an optional `teamOf`;
+server `autoLineup` defaults it to `liveTeamOf` (liveTeamFor: override, then
+the directory), so lock.js and resolve.js field players where they play now.
+The bare aiLineup keeps the bake for the replay and sims. check:liveteam
+(in parity) pins Doubs → NE's Sunday game and a unit keeping its own team.
+
 ### v0.522.0 — the lock-time auto-fill leaves a Ghost's spot alone
 
 Founder: "Do we have default logic that fills spots automatically even for

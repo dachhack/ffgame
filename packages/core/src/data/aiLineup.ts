@@ -277,9 +277,17 @@ interface Tagged { slug: string; pos: Pos; team: string; metric: string }
  *  personaKey (optional): a stable seat identity that opts this lineup into the
  *  deterministic persona draw (NUKER weeks flip the best fielded TE onto `td`).
  *  Omit it — the default — for human autofill and every existing caller. */
-export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set(), extraSlots = 0, personaKey?: string): AiPick[] {
+export function aiLineup(slugs: string[], week = 0, owned: Set<string> = new Set(), extraSlots = 0, personaKey?: string,
+  /** THE TEAM HE PLAYS FOR NOW (v0.523.0). slugMeta's team is the player's
+   *  MAJORITY 2025 team — right for the baked replay, wrong for a live week:
+   *  the lock-time fill slotted Romeo Doubs (GB in the bake, NE since) into
+   *  the ATL@GB Thursday window, where he could only score zero. A live caller
+   *  passes the current-team rule (liveTeamFor); omitted, the bake answers,
+   *  exactly as before, for the demo and every sim. */
+  teamOf?: (slug: string) => string | null | undefined): AiPick[] {
   const tagged: Tagged[] = (slugs ?? []).filter(Boolean).map((slug) => {
-    const { pos, team } = slugMeta(slug);
+    const { pos, team: baked } = slugMeta(slug);
+    const team = (teamOf ? teamOf(slug) : null) || baked;
     return { slug, pos, team, metric: aiMetric(slug, pos, owned) };
   });
   // Field the BEST players first: place/overflow in descending season projection so a
