@@ -135,6 +135,8 @@ export function App() {
     if (!session) return;
     let dead = false;
     const openFrom = async (url: string | null) => {
+      // The fields widget (v0.505.0): dripfantasy://fields opens ▦ All fields.
+      if (url && /\/\/fields\b/.test(url)) { setFieldsOpen(true); return; }
       if (!url || !/\/\/matchup\b/.test(url)) return;
       let league = '', roster = NaN;
       try { const u = Linking.parse(url); league = String(u.queryParams?.league ?? ''); roster = Number(u.queryParams?.roster); } catch { return; }
