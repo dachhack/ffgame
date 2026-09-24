@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.519.0 — projections follow what players are actually doing
+
+Founder, with a screenshot: "Coker and Golden are really low." Coker (33.8,
+14.6) showed 6.8; Golden (15.5, 9.8 on 18 targets) showed 4.4. The board was
+faithfully showing StatHead ppg × games ÷ 17, and two things were wrong:
+
+- **StatHead's in-season blend isn't happening.** Its feed carries actuals
+  (`act`) but its `ppg` ignores them — median weight 0.0 across the 65
+  players furthest off their August rate (Golden's even fell 7.0 → 5.0).
+  `seasonRows` now blends toward the 2026 games at the source's own K
+  (QB 5.5 / RB 3.5 / WR 4.5 / TE 5.0); null (DNP) never counts, 0 does.
+  Steps aside if the feed ever carries its own `inSeasonGames`.
+- **A season of injuries charged every week.** The games haircut exists to
+  sink one-game backups; it also took ~25% off Coker every healthy week. An
+  active non-backup who has played is now priced at his rate — this week's
+  risk is his designation. Backups, inactives and not-yet-played keep it.
+- **The worker now reads the live rate** (`installLiveProjRate`, each tick,
+  10-min cache). AI lineups and waivers had ranked on the August bake while
+  managers' boards showed the live number.
+
+Coker 6.8 → 13.6, Golden 4.4 → 7.4, St. Brown 20.1 → 23.8; mean change over
+491 skill players +0.4. Pinned in `check:boards`. Lands on the board at the
+next hourly season-board poll after deploy.
+
 ### v0.518.0 — AI teams manage like real managers (lineups + wire)
 
 Founder: AI-controlled teams should "make smart decisions about optimizing
