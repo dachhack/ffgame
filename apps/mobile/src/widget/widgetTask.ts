@@ -32,7 +32,7 @@ import { registerWidgetTaskHandler, requestWidgetUpdate, type WidgetTaskHandlerP
 import { platform } from '@drip/core/platform';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, nextWidgetLeague, recallSnapshot, recallLeagues } from '@drip/core/data/widgetFeed';
-import { MatchupWidget, MATCHUP_WIDGET_NAME, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
+import { MatchupWidget, MATCHUP_WIDGET_NAME, syncWidgetTheme, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
 import { extraHandler, isExtraWidget, refreshExtraWidgets } from './extraTasks';
 import { inert, takeTapLock, releaseTapLock } from './inert';
 
@@ -111,6 +111,8 @@ async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void
 
 async function handler(props: WidgetTaskHandlerProps): Promise<void> {
   const { widgetInfo, widgetAction, clickAction } = props;
+  // Every paint wears the app's current colour theme (v0.513.0).
+  syncWidgetTheme();
   // The alerts and fields widgets (v0.505.0) have their own painter.
   if (isExtraWidget(widgetInfo.widgetName)) { await extraHandler(props); return; }
   if (widgetInfo.widgetName !== MATCHUP_WIDGET_NAME) return;
@@ -159,6 +161,7 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
  *  callers need not check first. `fresh` skips
  *  the caches — the app in the foreground knows things first. */
 export async function refreshMatchupWidgets(opts: { fresh?: boolean } = {}): Promise<void> {
+  syncWidgetTheme();
   try {
     await requestWidgetUpdate({
       widgetName: MATCHUP_WIDGET_NAME,

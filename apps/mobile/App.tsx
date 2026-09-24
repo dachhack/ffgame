@@ -609,7 +609,7 @@ export function App() {
             skin={cardSkin}
             cardSize={cardSize}
             version={APP_VERSION}
-            onTheme={(name) => { saveTheme(name); setThemeName(name); }}
+            onTheme={(name) => { saveTheme(name); setThemeName(name); void refreshMatchupWidgets(); }}
             onSkin={(s) => { saveCardSkin(s); setCardSkin(s); }}
             onCardSize={(s) => { saveCardSize(s); setCardSize(s); }}
             isAdmin={admin}

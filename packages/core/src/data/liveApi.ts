@@ -181,7 +181,7 @@ export function authErrorMessage(e: AuthUrlError): string {
   if (/bad_oauth_state|flow_state_not_found|flow_state_expired/i.test(e.code)) {
     return 'Sign-in didn’t complete — the link was opened in a different browser, or it had already been used. Please try again.';
   }
-  if (/access_denied/i.test(e.code)) return 'Sign-in was cancelled.';
+  if (/access_denied/i.test(e.code)) return 'Sign-in was canceled.';
   if (/expired/i.test(e.code)) return 'That sign-in link has expired. Please request a new one.';
   return e.description || 'Sign-in didn’t complete. Please try again.';
 }

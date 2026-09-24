@@ -95,7 +95,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   const sizeName = CARD_SIZES.find((o) => o.id === cardSize)?.name ?? cardSize;
   const sections: { id: Section; icon: string; name: string; value: string }[] = [
     { id: 'notifications', icon: '🔔', name: 'Notifications', value: 'alerts, test push, recent pushes' },
-    { id: 'theme', icon: '🎨', name: 'Colour theme', value: themeName },
+    { id: 'theme', icon: '🎨', name: 'Color theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
     // A home-screen widget is Android's (react-native-android-widget).
@@ -114,7 +114,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
             {section === 'notifications' && <PushPrefs />}
             {section === 'theme' && (
               <View style={{ gap: 8 }}>
-                <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOUR THEME</Mono>
+                <Mono size={8.5} weight="700" track={0.16} tone="faint">COLOR THEME</Mono>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
                   {THEME_OPTS.map((o) => {
                     const on = theme === o.id;
