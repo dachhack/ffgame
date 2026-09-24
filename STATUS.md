@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.518.0 — AI teams manage like real managers (lineups + wire)
+
+Founder: AI-controlled teams should "make smart decisions about optimizing
+their lineups and making pickups that would strengthen their teams just
+like real players would." Review of the AI lineup + wire logic found four
+gaps; all four are closed, pinned in `check:seatwire` (sections 18–20).
+
+- **Lineups play the odds.** Agent/🤖 seats (lock.js auto-slot, the
+  resolver's unmanaged seat, and the wire's weekly value) now value a
+  designated player at projection × chance of playing (`slateAwareProj`
+  `discountRisk`, golfFloor.playRisk: D 25%, Q 80%). A Doubtful starter
+  yields to a healthy body. Human seats are unchanged — their Q/D call is
+  theirs.
+- **Positional value, not raw points.** A backup QB projecting 16 was never
+  droppable because no back "outscored" him. Drops are now ordered by hold
+  value (season value over half the next free body at the position, ×
+  `benchUse` — how many lineup spots can seat him, over two), and the
+  season rail also lets a player go when his double is free right now.
+- **Bench swaps.** A full roster whose lineup wanted nothing used to freeze
+  forever. It now trades its least useful bench body for a clear stash
+  (hold-value gain ≥ `BENCH_MIN_GAIN` 3), one per sweep; free agents only
+  in priority leagues, a priced half-value bid in FAAB. One backup at a
+  one-spot position is cover, a second is a hoard, and a position no spot
+  accepts is never stashed.
+
 ### v0.517.0 — one projection everywhere (widget, leagues list, matchup)
 
 Founder, with screenshots: the Kickoff League matchup projected 174.5–172.7

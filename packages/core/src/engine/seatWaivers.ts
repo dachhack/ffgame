@@ -90,8 +90,10 @@ export interface WireClaim {
   /** hole — a starting spot nobody legal (or nobody scoring) was in;
    *  upgrade — a starter displaced by a clearly better player;
    *  depth — an OPEN roster place filled with the best free body when the
-   *  lineup itself had nothing to gain (v0.425.0: a bot vampire's bench). */
-  kind: 'hole' | 'upgrade' | 'depth';
+   *  lineup itself had nothing to gain (v0.425.0: a bot vampire's bench);
+   *  bench — a full roster trading its least useful bench body for a clearly
+   *  better stash (v0.518.0). */
+  kind: 'hole' | 'upgrade' | 'depth' | 'bench';
   onWaivers: boolean;
 }
 
@@ -141,6 +143,28 @@ export const UPGRADE_MIN_GAIN = 2;
  *  spend a waiver claim. */
 export const HOLE_MIN_GAIN = 0.1;
 
+/** A BENCH swap must add this much POSITIONAL value (rest-of-season points
+ *  per week over the best free body at the player's position) before it is
+ *  worth a transaction. Deliberately above UPGRADE_MIN_GAIN: a bench move
+ *  scores nothing this week, so only a clear stash is worth the churn. */
+export const BENCH_MIN_GAIN = 3;
+
+/** Most bench swaps one sweep may make. One: a real manager tidies a bench a
+ *  player at a time, and the next sweep re-reads the wire before the next. */
+export const BENCH_MAX_PER_SWEEP = 1;
+
+/** How much of the next free body's value counts as "replaceable" when a
+ *  held body is valued (v0.518.0). Not all of it: a free agent is free only
+ *  until a rival takes him, so a player merely level with the wire is still
+ *  worth something to hold, and two good backs on the wire do not cancel
+ *  each other out. Not none of it either: a backup QB with his double on the
+ *  wire is worth far less than his raw points. */
+export const REPLACEMENT_WEIGHT = 0.5;
+
+/** Share of a bench stash's positional gain that counts toward what the seat
+ *  will pay for him — he is insurance, not points on Sunday. */
+export const BENCH_BID_SHARE = 0.5;
+
 /** FAAB per projected point per week, before the cap. A 5-point upgrade bids
  *  $15 of a $100 budget — enough to win a contested add, nowhere near enough
  *  to be the reason the seat is broke in November. */
@@ -162,6 +186,18 @@ export function positionNeed(slots: ClassicSlotDef[], roster: SpotPlayer[]): Map
   for (const d of slots) if (d.pos.length === 1) need.set(d.pos[0], (need.get(d.pos[0]) ?? 0) - 1);
   for (const p of roster) if (need.has(p.pos)) need.set(p.pos, (need.get(p.pos) ?? 0) + 1);
   return need;
+}
+
+/** How often a bench body at this position is ever CALLED ON, as a weight
+ *  on his stash value (v0.518.0): the starting spots that can seat him, over
+ *  two, capped at 1. A back or receiver behind two dedicated spots and a
+ *  flex fills in every bye week and every injury — full weight. The backup
+ *  quarterback in a one-QB league, a second kicker or defense, plays only
+ *  when the one starter cannot — half. A position no spot accepts, never —
+ *  zero. Exported for the assertion suite. */
+export function benchUse(slots: ClassicSlotDef[], pos: string): number {
+  const spots = slots.filter((d) => (d.pos as string[]).includes(pos)).length;
+  return Math.min(1, spots / 2);
 }
 
 /** The value of the best legal lineup this roster can field. */
@@ -267,12 +303,47 @@ export function seatWirePlan(
 
   const claims: WireClaim[] = [];
   let have = [...roster];
+  let benchSwaps = 0;
   let budget = opts.budget;
   let seats = opts.openSeats;
   const used = new Set<string>();   // added or dropped already this sweep
   // What a body is worth for the REST OF THE SEASON — the measure every drop
   // is judged by. Falls back to this week's value when the caller has none.
   const rosOf = opts.rosValueOf ?? valueOf;
+
+  // ── POSITIONAL VALUE (v0.518.0) ──────────────────────────────────────────
+  // Raw points do not compare across positions. A backup QB projecting 16 in
+  // a one-QB league is worth almost nothing to hold when a 15 sits on the
+  // wire, while an RB projecting 9 with nothing better than a 4 free is a
+  // real asset. Measured in raw points the bot hoarded the QB forever and
+  // could never add the back — no real manager does that. So what a body is
+  // worth TO HOLD is his season value over the best FREE body at his
+  // position (a player anyone can sign today is no loss to cut); the
+  // candidate is excluded from that level, because once he is signed he is
+  // not free any more. Only with a season value — without one there is no
+  // honest measure, and the planner keeps its pre-0.518 behaviour.
+  const freeByPos = new Map<string, { id: string; v: number }[]>();
+  if (opts.rosValueOf) {
+    for (const p of pool) {
+      if (p.held ?? p.onWaivers) continue;
+      if (!freeByPos.has(p.pos)) freeByPos.set(p.pos, []);
+      freeByPos.get(p.pos)!.push({ id: p.id, v: rosOf(p) });
+    }
+    for (const list of freeByPos.values()) list.sort((a, b) => b.v - a.v);
+  }
+  const nextFree = (pos: string, except?: string): number => {
+    const best = (freeByPos.get(pos) ?? []).find((q) => q.id !== except && !used.has(q.id));
+    return best ? Math.max(0, best.v) : 0;
+  };
+  const replacement = (pos: string, except?: string): number => nextFree(pos, except) * REPLACEMENT_WEIGHT;
+  // Season value over the body the wire would hand back TODAY, in full: what
+  // is actually lost by letting him go (the drop rail's measure).
+  const overWire = (p: SpotPlayer, except?: string): number => rosOf(p) - nextFree(p.pos, except);
+  // What a body is worth to KEEP: his season value over what the wire would
+  // give back at his position, weighed by how often the lineup can ever use
+  // him (benchUse) — the backup QB of a one-QB league at half.
+  const holdValue = (p: SpotPlayer, except?: string): number =>
+    (rosOf(p) - replacement(p.pos, except)) * benchUse(slots, p.pos);
 
   for (let n = 0; n < maxClaims; n++) {
     const base = lineupValue(slots, have, valueOf);
@@ -286,9 +357,13 @@ export function seatWirePlan(
     // so a star on his bye or a one-week Out is not the first man overboard.
     const starting = new Set(optimalLineup(slots, have, valueOf).spots
       .flatMap((r) => (r.player ? [r.player.id] : [])));
+    // Cheapest TO HOLD first (v0.518.0): positional value when the season
+    // is known, so a backup QB with his double on the wire goes before a
+    // running back nobody could replace.
+    const holdOf = (p: SpotPlayer) => (opts.rosValueOf ? holdValue(p) : rosOf(p));
     const droppable = have
       .filter((p) => !starting.has(p.id) && !used.has(p.id))
-      .sort((a, b) => (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
+      .sort((a, b) => (holdOf(a) - holdOf(b)) || (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
 
     // With a seat open the add costs nobody; otherwise the worst bench body
     // goes. A roster that is full AND has no droppable bench player cannot
@@ -306,7 +381,15 @@ export function seatWirePlan(
         // cheapest bench body is worth more for the rest of the season, the
         // hole stays open this week rather than costing the season. An open
         // seat (no drop) is never subject to it.
-        if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)) continue;
+        //
+        // "More valuable" is read either way (v0.518.0): he may go if he is
+        // worth no more in raw season points OR no more over the best body
+        // free at his position right now (overWire) — a player whose double
+        // sits on the wire costs nothing to cut. Same position, the two
+        // agree; across positions the second is what lets the hoarded backup
+        // QB go for a real back. It only ever loosens the raw rail.
+        if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)
+          && overWire(drop, cand.id) > overWire(cand, cand.id)) continue;
         const next = have.filter((p) => !drop || p.id !== drop.id).concat(cand);
         const gain = lineupValue(slots, next, valueOf) - base;
         // THE SEASON COUNTS TOO (v0.428.0). A chopped star on his bye adds
@@ -359,6 +442,35 @@ export function seatWirePlan(
           || (rosOf(b) - rosOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
       if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, rosGain: 0, kind: 'depth', onWaivers: body.onWaivers };
     }
+    // BENCH (v0.518.0). Founder: AI teams should make "pickups that would
+    // strengthen their teams just like real players would". A full roster
+    // whose lineup wants nothing used to stop here for good — a bench of cut
+    // players and zero projections sat untouched while a breakout back went
+    // unclaimed, because he would not START this week. A real manager cuts
+    // the dead weight for the stash. The bar is positional value: the stash's
+    // season value over the next free body at HIS position must beat the
+    // drop's over the best free body at HIS by BENCH_MIN_GAIN, each weighed
+    // by how often the lineup could use him (benchUse) — so a backup QB in a
+    // one-QB league is never "better" than a back just because QBs score
+    // more — and the swap is monotone: each one raises the bench, so it
+    // cannot cycle.
+    // One per sweep. A held player is a claim to win: fine in FAAB, where the
+    // bid is priced, but in a priority league the seat's place in line is
+    // worth more than a bench body, so there it takes free agents only.
+    if (!best && opts.rosValueOf && benchSwaps < BENCH_MAX_PER_SWEEP && droppable.length) {
+      const drop = droppable[0];
+      for (const cand of pool) {
+        if (used.has(cand.id) || have.some((p) => p.id === cand.id)) continue;
+        if (!benchUse(slots, cand.pos)) continue;   // a position no spot accepts is no stash
+        if ((cand.held ?? cand.onWaivers) && !opts.faab) continue;
+        // One backup at a one-spot position is cover; a second is a hoard.
+        if (benchUse(slots, cand.pos) < 1 && droppable.some((p) => p.pos === cand.pos && p.id !== drop.id)) continue;
+        const benchGain = holdValue(cand, cand.id) - holdValue(drop, cand.id);
+        if (benchGain < BENCH_MIN_GAIN) continue;
+        if (best && !(benchGain > best.rosGain + 1e-9)) continue;
+        best = { add: cand.id, drop: drop.id, bid: 0, gain: 0, rosGain: benchGain, kind: 'bench', onWaivers: cand.onWaivers };
+      }
+    }
     if (!best) break;
 
     // THE PRICE. With the room in hand (v0.428.0) a claim on a held player
@@ -370,7 +482,9 @@ export function seatWirePlan(
       : opts.market
         ? faabBid({
           surplus: rosOf(added) - opts.market.replacementOf(added.pos),
-          myGain: best.rosGain,
+          // A stash is insurance, not Sunday's points: half his gain is
+          // what he is worth to this roster (v0.518.0).
+          myGain: best.kind === 'bench' ? best.rosGain * BENCH_BID_SHARE : best.rosGain,
           gainNow: best.gain,
           hole: best.kind === 'hole',
           budget,
@@ -378,7 +492,8 @@ export function seatWirePlan(
           weeksLeft: opts.market.weeksLeft,
           history: opts.market.history,
         })
-        : wireBid(best.gain, budget, opts.faab);
+        : wireBid(best.kind === 'bench' ? best.rosGain * BENCH_BID_SHARE : best.gain, budget, opts.faab);
+    if (best.kind === 'bench') benchSwaps += 1;
     claims.push(best);
     used.add(best.add);
     if (best.drop) used.add(best.drop);
