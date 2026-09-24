@@ -3,8 +3,9 @@
 // This is the presentation people actually recognise as the game, so it is
 // worth being precise about what did and did not survive the port:
 //
-//   · Card BACKS are real .jpg art (public/cardbacks/*.jpg, bundled here under
-//     assets/). They port exactly — an <Image> with the same file.
+//   · Card BACKS are the web's art (public/cardbacks/*.jpg), bundled here
+//     under assets/ as WebP (v0.502.0 — ~40% smaller, same pixels to the eye,
+//     same dimensions). They port exactly — an <Image> with the same picture.
 //   · HEADSHOTS are plain remote URLs from core's media.ts, so <Image
 //     source={{uri}}> renders the same photo the web does. Falling back to the
 //     team logo when a player has no headshot mirrors the web.
@@ -99,15 +100,15 @@ export type CardSkin = 'emerald' | 'playbook' | 'blitz' | 'rivalry' | 'allstar' 
  *  playbook below — a real deck rather than a blank rectangle. Exported so the
  *  settings picker shows the actual art you're choosing. */
 export const CARD_BACKS: Partial<Record<CardSkin, ReturnType<typeof require>>> = {
-  playbook: require('../../assets/cardbacks/playbook.jpg'),
-  blitz: require('../../assets/cardbacks/blitz.jpg'),
-  rivalry: require('../../assets/cardbacks/rivalry.jpg'),
-  allstar: require('../../assets/cardbacks/allstar.jpg'),
-  heritage: require('../../assets/cardbacks/heritage.jpg'),
-  gilded: require('../../assets/cardbacks/gilded.jpg'),
-  cosmic: require('../../assets/cardbacks/cosmic.jpg'),
-  fireworks: require('../../assets/cardbacks/fireworks.jpg'),
-  battalion: require('../../assets/cardbacks/battalion.jpg'),
+  playbook: require('../../assets/cardbacks/playbook.webp'),
+  blitz: require('../../assets/cardbacks/blitz.webp'),
+  rivalry: require('../../assets/cardbacks/rivalry.webp'),
+  allstar: require('../../assets/cardbacks/allstar.webp'),
+  heritage: require('../../assets/cardbacks/heritage.webp'),
+  gilded: require('../../assets/cardbacks/gilded.webp'),
+  cosmic: require('../../assets/cardbacks/cosmic.webp'),
+  fireworks: require('../../assets/cardbacks/fireworks.webp'),
+  battalion: require('../../assets/cardbacks/battalion.webp'),
 };
 
 export const CARD_SKIN_KEY = 'gc-cardskin';

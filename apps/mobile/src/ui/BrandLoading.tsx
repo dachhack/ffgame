@@ -42,7 +42,7 @@ export function BrandLoading({ label, themed = false }: {
     <View style={{ flex: 1, backgroundColor: themed ? t.bg : SPLASH_BG, alignItems: 'center', justifyContent: 'center', gap: 26 }}>
       <View style={tile ? { backgroundColor: SPLASH_BG, borderRadius: 44, padding: 14 } : undefined}>
         <Image
-          source={require('../../assets/splash.png')}
+          source={require('../../assets/splash.webp')}
           style={{ width: tile ? 232 : 260, height: tile ? 232 : 260 }}
           resizeMode="contain"
         />

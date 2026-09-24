@@ -99,6 +99,19 @@ export interface WidgetCard {
   metricId?: string | null;
   /** His own game's kickoff (ms), when the slate knows it (v0.500.0). */
   kick?: number | null;
+  /** His injury designation off the hourly sheet — Q, D, O, IR, … — or null
+   *  (v0.503.0). Founder: "injury designations on each player across all
+   *  screens." */
+  injury?: string | null;
+  // ── CLASSIC cards (v0.503.0): one per starting spot, `win` is the spot id
+  //    and `winLabel` its name ("RB 2", "FLEX") ──
+  /** His projection for the spot (the board's slate-aware number). */
+  proj?: number | null;
+  /** A best-ball spot: filled at scoring time, so this is who the resolver
+   *  has put there, or who it is projected to. */
+  bestball?: boolean;
+  /** A starter whose team has no game this week. */
+  bye?: boolean;
   /** empty — nothing picked, window still open, and someone on the roster
    *          could fill it (THE WARNING);
    *  none — nothing picked, window still open, and NOBODY on the roster
@@ -205,6 +218,32 @@ export function widgetLeagues(enr: Enrollment[]): WidgetLeague[] {
 export function pickWidgetLeague(leagues: WidgetLeague[], wantId: string | null | undefined): WidgetLeague | null {
   if (!leagues.length) return null;
   return leagues.find((l) => l.id === wantId) ?? leagues[0];
+}
+
+// ── WHICH LEAGUES THE WIDGET SHOWS (v0.503.0) ───────────────────────────────
+// Founder: "we also need in the settings, the ability for users to pick which
+// leagues show up in the widget." Stored as the leagues HIDDEN, not the ones
+// shown, so a league joined later turns up on the widget without a trip to
+// Settings. One list for every widget on the home screen, in the app's own
+// storage, which the headless task reads too.
+const HIDDEN_KEY = 'widget:hidden';
+export function widgetHiddenLeagues(): Set<string> {
+  try {
+    const raw = platform().storage.get(HIDDEN_KEY);
+    const v = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch { return new Set(); }
+}
+export function setWidgetHiddenLeagues(ids: Iterable<string>): void {
+  try { platform().storage.set(HIDDEN_KEY, JSON.stringify([...new Set(ids)])); } catch { /* best-effort */ }
+}
+/** The leagues the widget may show: all of them minus the hidden. Hiding
+ *  every one would leave a widget with nothing to draw, so that reads as
+ *  "hide nothing" — Settings won't let the last one go, but storage can be
+ *  stale (a league left, another joined). */
+export function shownWidgetLeagues(all: WidgetLeague[], hidden: Set<string> = widgetHiddenLeagues()): WidgetLeague[] {
+  const shown = all.filter((l) => !hidden.has(l.id));
+  return shown.length ? shown : all;
 }
 
 /** The league after this one, wrapping — the ▸ tap on the widget. */
@@ -390,6 +429,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
           image: slug ? images?.[slug] ?? null : null,
           metricId: p?.metric_id ?? null,
           kick: slug ? nflGameForTeam(week, pl?.team)?.kickoff ?? null : null,
+          injury: slug ? injuries?.[slug] ?? null : null,
           status,
           points: sc && (status === 'live' || status === 'final') ? round1(Number(sc.score) || 0) : null,
           hot: !!sc?.hot,
@@ -489,11 +529,13 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       }
       let total = 0;
       const left = { waiting: 0, playing: 0, done: 0 };
+      const rows: { d: ClassicSlotDef; p: ClassicRosterPlayer | null; live: number; proj: number; st: 'pre' | 'live' | 'done' }[] = [];
       for (const d of c.slots) {
         const p = lineup.get(d.slot) ?? null;
         const live = liveOf.get(d.slot)?.score ?? 0;
         let v = 0;
         let settled = true;
+        rows.push({ d, p, live, proj: p ? c.projOf(spot(p), d) : 0, st: p ? stateOf(p.team) : final ? 'done' : 'pre' });
         if (p) {
           const st = stateOf(p.team);
           const proj = c.projOf(spot(p), d);
@@ -506,11 +548,31 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         // GOLF: an empty spot, or a settled zero, pays the spot's fill.
         total += c.golf ? zeroFill(v, d.zeroPts ?? null, settled) : v;
       }
-      return { lineup, total: round1(total), left };
+      return { lineup, total: round1(total), left, rows };
     };
 
     const mineSide = sideOf(c.picks, c.roster, mySide);
     me.score = mineSide.total;
+    // ── THE LINEUP AS CARDS (v0.503.0) ──
+    // Founder: "scroll down in classic leagues and see who is set or projected
+    // to fill best ball spots for each starting position as well. Like the
+    // cards in drip leagues." One card per starting spot, in the league's
+    // order: who is in it (a best-ball spot: who the resolver put there, or
+    // who it projects to), his projection, and once he plays, his points.
+    const slated = wins.some((w) => gamesInWindow(week, w.id as WindowId).length > 0);
+    mineSide.rows.forEach(({ d, p, live, proj, st }, i) => {
+      const status: WidgetCard['status'] = !p ? (final ? 'missed' : 'empty') : st === 'pre' ? 'set' : st === 'live' ? 'live' : 'final';
+      cards.push({
+        win: d.slot, winLabel: names[i], phase: st === 'pre' ? 'setup' : st === 'live' ? 'live' : 'final',
+        slot: d.slot, slug: p?.slug ?? null, name: p ? shortName(p.full) : '', pos: p?.pos ?? null, team: p?.team ?? null,
+        metric: null, metricId: null, image: p ? images?.[p.slug] ?? null : null,
+        kick: p ? nflGameForTeam(week, p.team)?.kickoff ?? null : null,
+        injury: p ? injuries?.[p.slug] ?? null : null,
+        status, points: p && st !== 'pre' ? round1(live) : null, hot: false,
+        proj: p ? round1(proj) : null, bestball: bb.has(d.slot),
+        bye: !!p && slated && !!p.team && !windowForTeam(week, p.team),
+      });
+    });
     const theirs = c.theirRoster?.length ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
     if (theirs) them.score = theirs.total; else themLive = true;
     left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0, done: 0 } };
@@ -666,7 +728,14 @@ export const recallSnapshot = (leagueId: string): RememberedSnapshot | null => c
 export const rememberSnapshot = (r: RememberedSnapshot): void => cacheSet(`snap:${r.snapshot.leagueId}`, r);
 /** The leagues list as last read, so ▸ can pick the next league without a
  *  network round-trip. */
-export const recallLeagues = (): WidgetLeague[] | null => cacheGet<WidgetLeague[]>('leagues', 24 * 60 * MIN);
+export const recallLeagues = (): WidgetLeague[] | null => {
+  const all = cacheGet<WidgetLeague[]>('leagues', 24 * 60 * MIN);
+  return all ? shownWidgetLeagues(all) : null;
+};
+/** Every league the seat could show, hidden ones included — for Settings. */
+export async function allWidgetLeagues(fresh = false): Promise<WidgetLeague[]> {
+  return cached('leagues', 5 * MIN, fresh, async () => widgetLeagues(await myEnrollments('')));
+}
 
 /** The whole feed for one widget: the leagues it could show, and the picture
  *  for the one it does. Null snapshot with an empty list means "signed in,
@@ -675,7 +744,7 @@ export const recallLeagues = (): WidgetLeague[] | null => cacheGet<WidgetLeague[
  *  `fresh` bypasses every cache (the app in the foreground knows things
  *  first: a league just joined, a lineup just saved). */
 export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null, fresh = false): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
-  const leagues = await cached('leagues', 5 * MIN, fresh, async () => widgetLeagues(await myEnrollments('')));
+  const leagues = shownWidgetLeagues(await allWidgetLeagues(fresh));
   const league = pickWidgetLeague(leagues, wantLeagueId);
   if (!league) return { leagues, snapshot: null };
   const openWeek = await cached(`week:${league.id}`, 10 * MIN, fresh, () => defaultOpenWeek(league.id));
@@ -708,7 +777,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     classic && oppId != null ? cached(`pool:${league.id}:${week}:${oppId}`, 30 * MIN, fresh, () => myPool(league.id, week, oppId).catch(() => [])) : Promise.resolve([]),
     // THE FACES (v0.433.9): the league pool's ESPN ids, for the headshots the
     // baked map lacks. A day is fine — a photo id does not change.
-    drip ? cached(`espn:${league.id}`, 24 * 60 * MIN, fresh, () => leaguePool(league.id)
+    drip || classic ? cached(`espn:${league.id}`, 24 * 60 * MIN, fresh, () => leaguePool(league.id)
       .then((rows) => Object.fromEntries(rows.filter((r) => r.espn_id).map((r) => [r.slug, r.espn_id as string])))
       .catch(() => ({} as Record<string, string>))) : Promise.resolve({} as Record<string, string>),
     // THE TABLE (v0.500.0), for the header's record and place. It moves once
@@ -718,7 +787,8 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
       .catch(() => [] as StandingsRow[])) : Promise.resolve([] as StandingsRow[]),
   ]);
   let images: Record<string, string> | undefined;
-  if (drip) {
+  // Faces for the drip tiles and, since v0.503.0, the classic lineup cards.
+  if (drip || classic) {
     images = {};
     for (const p of pool) {
       const url = headshot(p.slug) ?? espnHeadshot((espnIds as Record<string, string>)[p.slug]);

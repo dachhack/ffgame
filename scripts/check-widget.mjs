@@ -7,7 +7,7 @@
 // with no matchup row at all. The league-choice helpers that make the ▸ tap
 // cycle are pinned too, because a widget that outlives its league must fall
 // forward rather than draw a hole.
-import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows } from '../packages/core/src/data/widgetFeed';
+import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 
@@ -215,6 +215,22 @@ const state = [
   ok('the leagues list is remembered only by the feed (nothing wrote it here)', recallLeagues() === null);
 }
 
+// ── v0.503.0: the leagues the widget shows, picked in Settings ──
+{
+  const A = { id: 'A', name: 'A', rosterId: 1, gameMode: 'drip' }, B = { id: 'B', name: 'B', rosterId: 2, gameMode: 'classic' }, C3 = { id: 'C3', name: 'C', rosterId: 3, gameMode: 'drip' };
+  ok('shown: nothing hidden shows every league', shownWidgetLeagues([A, B, C3], new Set()).map((l) => l.id).join() === 'A,B,C3');
+  ok('shown: a hidden league is left out, order kept', shownWidgetLeagues([A, B, C3], new Set(['B'])).map((l) => l.id).join() === 'A,C3');
+  ok('shown: hiding every league hides none (a widget must draw something)', shownWidgetLeagues([A, B], new Set(['A', 'B'])).length === 2);
+  ok('shown: a stale hidden id (a league since left) is harmless', shownWidgetLeagues([A], new Set(['gone'])).map((l) => l.id).join() === 'A');
+  ok('hidden: nothing stored reads as an empty set', widgetHiddenLeagues().size === 0);
+  setWidgetHiddenLeagues(['B', 'B']);
+  ok('hidden: the list round-trips through storage, deduplicated', [...widgetHiddenLeagues()].join() === 'B');
+  cacheSet('leagues', [A, B, C3]);
+  ok('hidden: the remembered list ▸ NEXT walks leaves the hidden league out', recallLeagues()?.map((l) => l.id).join() === 'A,C3', recallLeagues());
+  setWidgetHiddenLeagues([]);
+  ok('hidden: switched back on, it is back', recallLeagues()?.map((l) => l.id).join() === 'A,B,C3');
+}
+
 // ── THE CARDS (v0.433.9): every slot of every window, empties as the warning ──
 // The check's slate carries one game per window, so every window holds one
 // slot here: TNF live, SUN 1PM a player without a metric, SUN 4PM nobody (the
@@ -229,8 +245,9 @@ const state = [
   ];
   const images = { a: 'https://a.espncdn.com/i/headshots/nfl/players/full/1.png' };
   const st = [{ game_window: wins[0].id, home_score: 9.1, away_score: 0, slot_scores: [{ side: 'home', slot: '1', slug: 'a', metric: 'pass_yd', score: 9.1, hot: true }] }];
-  const s = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) + 30 * 60_000, picks, pool, images });
+  const s = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) + 30 * 60_000, picks, pool, images, injuries: { z: 'Q' } });
   const card = (snap, i) => snap.cards.find((c) => c.win === wins[i].id);
+  ok('cards: a pick carries his injury designation (v0.503.0)', card(s, 3).injury === 'Q' && card(s, 0).injury === null && card(s, 2).injury === null, [card(s, 3).injury, card(s, 0).injury]);
   ok('cards: one per slot of every window, in kickoff order', s.cards.length === wins.length && s.cards.map((c) => c.win).join() === wins.map((w) => w.id).join(), s.cards.map((c) => `${c.win}:${c.slot}`));
   ok('cards: a live pick carries its points, its hot streak, its name and its photo', card(s, 0).status === 'live' && card(s, 0).points === 9.1 && card(s, 0).hot && card(s, 0).name === 'A. Guy' && card(s, 0).image === images.a, card(s, 0));
   ok('cards: an open slot with nobody in it is EMPTY — the warning', card(s, 2).status === 'empty' && card(s, 2).slug === null && card(s, 2).name === '', card(s, 2));
@@ -367,6 +384,21 @@ const state = [
   ok('classic card: at the final the win bar is the result', fin.winPct === 1, fin.winPct);
   ok('classic card: no opponent lineup, no win bar', noOpp.winPct === undefined, noOpp.winPct);
   const faces = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: { 4: { team_name: 'Steelers', avatar: 'https://sleepercdn.com/avatars/s' }, 7: { team_name: 'Ravens', avatar: null } }, injuries, nowMs: kick(0), classic: classic() });
+  // v0.503.0 — the lineup as cards: every starting spot, who is in it (or
+  // projected to it, for a best-ball spot), his projection, his points once
+  // he plays, his injury tag, and a bye.
+  const cc = (snap, slot) => snap.cards.find((c) => c.slot === slotOf(slot));
+  ok('lineup cards: one per starting spot, in the league\'s order, labelled', pre.cards.map((c) => c.winLabel).join() === 'QB,RB 1,RB 2,WR,FLEX', pre.cards.map((c) => c.winLabel));
+  ok('lineup cards: a starter before kickoff is SET with his projection and no points', cc(pre, 'QB').status === 'set' && cc(pre, 'QB').name === 'J. Allen' && cc(pre, 'QB').proj === 21.6 && cc(pre, 'QB').points === null, cc(pre, 'QB'));
+  ok('lineup cards: an empty spot is EMPTY', cc(pre, 'RB2').status === 'empty' && cc(pre, 'RB2').slug === null, cc(pre, 'RB2'));
+  ok('lineup cards: the IR receiver carries his tag', cc(pre, 'WR').injury === 'IR', cc(pre, 'WR'));
+  ok('lineup cards: the flex on a bye is marked BYE', cc(pre, 'FLEX').bye === true && cc(pre, 'QB').bye === false, cc(pre, 'FLEX'));
+  ok('lineup cards: on the field he is LIVE with his points', cc(live, 'QB').status === 'live' && cc(live, 'QB').points === 9.1, cc(live, 'QB'));
+  ok('lineup cards: at the final an empty spot reads MISSED', cc(fin, 'RB2').status === 'missed' && cc(fin, 'QB').status === 'final', [cc(fin, 'RB2').status, cc(fin, 'QB').status]);
+  const bbSnap = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+    classic: classic({ bestball: [slotOf('FLEX')], picks: myPicks.filter((p) => p.roster_slot !== slotOf('FLEX')) }) });
+  ok('lineup cards: a best-ball spot shows who it projects to (the best of the rest: Robinson 22.2)', cc(bbSnap, 'FLEX').bestball === true && cc(bbSnap, 'FLEX').slug === 'bijan-robinson' && cc(bbSnap, 'FLEX').proj === 22.2, cc(bbSnap, 'FLEX'));
+  ok('lineup cards: a regular spot is not best-ball', cc(bbSnap, 'QB').bestball === false);
   ok('classic card: each team carries its own avatar, or none', faces.me.avatar === 'https://sleepercdn.com/avatars/s' && faces.them.avatar === null, [faces.me.avatar, faces.them.avatar]);
 
   // Golf: better is lower-but-not-zero, an empty spot pays the fill.

@@ -313,6 +313,18 @@ function tileLook(c: WidgetCard): TileLook {
   const fg = c.metricId === 'fg';
   const pts = c.points != null ? fmt(c.points) : '0.0';
   const when = c.kick != null ? shortClock(c.kick) : null;
+  // A CLASSIC card (v0.503.0) carries a projection: before his game it is the
+  // number the tile shows, after it the points he scored.
+  const classic = c.proj != null || c.bestball != null;
+  if (classic) {
+    switch (c.status) {
+      case 'empty': return { face: '✕', name: 'Empty', foot: 'START ONE', footColor: C.warn, border: C.warn };
+      case 'missed': return { face: '—', name: 'Empty', foot: '0.0', footColor: C.faint, border: C.line, dim: true };
+      case 'set': return { face: c.pos ?? '?', name: c.name, foot: c.bye ? 'BYE' : `P ${fmt(c.proj ?? 0)}`, footColor: c.bye ? C.warn : C.dim, border: c.bye ? C.warn : C.line };
+      case 'live': return { face: c.pos ?? '?', name: c.name, foot: `● ${pts}`, footColor: C.live, border: C.live };
+      default: return { face: c.pos ?? '?', name: c.name, foot: pts, footColor: C.text, border: C.line };
+    }
+  }
   switch (c.status) {
     case 'empty': return { face: '✕', name: 'Unset', foot: 'SET IT', footColor: C.warn, border: C.warn };
     case 'none': return { face: '∅', name: 'None', foot: 'AVAILABLE', footColor: C.warn, border: C.warn };
@@ -327,19 +339,39 @@ function tileLook(c: WidgetCard): TileLook {
   }
 }
 
+/** THE INJURY TAG (v0.503.0). Founder: "We also need injury designations on
+ *  each player across all screens." The sheet's own letters, shortened to
+ *  fit a tile: Q in amber (he may play), anything that sits him — D, O, IR,
+ *  PUP, SUS — in the opponent's pink. */
+const INJ_SHORT: Record<string, string> = { QUESTIONABLE: 'Q', DOUBTFUL: 'D', OUT: 'O', PROBABLE: 'P' };
+function injuryTag(tag: string | null | undefined): { text: string; color: ColorProp } | null {
+  if (!tag) return null;
+  const t = INJ_SHORT[tag.toUpperCase()] ?? tag.toUpperCase().slice(0, 3);
+  return { text: t, color: t === 'Q' || t === 'P' ? C.warn : C.opp };
+}
+
 function Tile({ c, last }: { c: WidgetCard; last: boolean }) {
   const t = tileLook(c);
   const placeholder = c.status === 'empty' || c.status === 'none' || c.status === 'missed';
+  const inj = placeholder ? null : injuryTag(c.injury);
+  // A classic card names its spot on top: "RB 2", or "BB·FLEX" for a
+  // best-ball spot the resolver fills.
+  const spot = c.proj != null || c.bestball != null ? `${c.bestball ? 'BB·' : ''}${c.winLabel}` : null;
   return (
     <FlexWidget style={{ width: TILE_W, flexDirection: 'column', alignItems: 'center', backgroundColor: C.bg, borderRadius: 8, borderWidth: 1, borderColor: t.border,
       paddingVertical: 3, paddingHorizontal: 2, marginRight: last ? 0 : TILE_GAP }}>
+      {spot ? <TextWidget text={spot} truncate="END" maxLines={1} style={{ fontSize: 8, color: c.bestball ? C.you : C.faint, fontWeight: 'bold', marginBottom: 2 }} /> : null}
       {c.image && !placeholder
         ? <ImageWidget image={c.image as `https:${string}`} imageWidth={FACE_W} imageHeight={FACE} radius={7} />
         : <TextWidget text={t.face} maxLines={1}
             style={{ width: FACE, height: FACE, fontSize: placeholder ? 16 : 11, color: placeholder && !t.dim ? C.warn : C.faint, fontWeight: 'bold', textAlign: 'center', backgroundColor: C.card, borderRadius: 7 }} />}
       <TextWidget text={t.name} truncate="END" maxLines={1}
         style={{ fontSize: 9, color: t.dim ? C.faint : placeholder ? C.warn : C.text, fontWeight: 'bold', marginTop: 2 }} />
-      <TextWidget text={t.foot} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: t.footColor, fontWeight: 'bold' }} />
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {inj ? <TextWidget text={inj.text} maxLines={1}
+          style={{ fontSize: 8, color: C.bg, backgroundColor: inj.color, fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
+        <TextWidget text={t.foot} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: t.footColor, fontWeight: 'bold' }} />
+      </FlexWidget>
     </FlexWidget>
   );
 }
@@ -531,8 +563,14 @@ function classicAlert(snap: WidgetSnapshot): { text: string; color: ColorProp } 
   return { text: snap.phase === 'pre' ? `✓ Lineup set · ${snap.line}` : snap.line, color };
 }
 
-function ClassicView({ snap, leagues, offline }: { snap: WidgetSnapshot; leagues: number; offline?: boolean }) {
+function ClassicView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean }) {
   const open = openMatchup(snap);
+  // THE LINEUP (v0.503.0): every starting spot as a card, best-ball spots
+  // included, as many to a line as the width holds — one list item a line.
+  const perLine = tilesPerLine(widthDp - 2 * PAD + 2 * WIN_PAD + 2);
+  const cards = snap.cards ?? [];
+  const lines: WidgetCard[][] = [];
+  for (let i = 0; i < cards.length; i += perLine) lines.push(cards.slice(i, i + perLine));
   const them = snap.them!;
   const live = snap.actual ?? { me: snap.me.score, them: them.score };
   const leading = live.me > live.them ? 'me' : live.me < live.them ? 'them' : null;
@@ -551,6 +589,16 @@ function ClassicView({ snap, leagues, offline }: { snap: WidgetSnapshot; leagues
           <Line text={`${f.winLabel} · ${f.text}`} color={f.kind === 'swap' ? C.you : C.warn} />
         </FlexWidget>
       ))}
+      {lines.length ? (
+        <FlexWidget {...open} style={{ width: 'match_parent', marginTop: 10, marginBottom: 4 }}>
+          <TextWidget text="LINEUP" maxLines={1} style={{ fontSize: 9, color: C.faint, fontWeight: 'bold', letterSpacing: 0.12 }} />
+        </FlexWidget>
+      ) : null}
+      {lines.map((line, i) => (
+        <FlexWidget key={`line-${i}`} {...open} style={{ width: 'match_parent', flexDirection: 'row', paddingBottom: TILE_GAP }}>
+          {line.map((c, j) => <Tile key={c.slot} c={c} last={j === line.length - 1} />)}
+        </FlexWidget>
+      ))}
     </PinnedFrame>
   );
 }
@@ -565,6 +613,6 @@ export function MatchupWidget({ state, heightDp = 110, widthDp = 320 }: { state:
   // an opponent the classic card; everything else (a bye, no matchup, picks
   // unread) keeps the score card.
   if (snap.assessable && (snap.cards ?? []).length > 0) return <DripView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />;
-  if (snap.projected && snap.them) return <ClassicView snap={snap} leagues={leagues} offline={offline} />;
+  if (snap.projected && snap.them) return <ClassicView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />;
   return <ScoreView snap={snap} leagues={leagues} tier={tierFor(heightDp)} offline={offline} />;
 }
