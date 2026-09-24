@@ -458,6 +458,18 @@ const state = [
     { slug: null, team: 'DET', name: '', status: 'empty' },
   ] }, { cards: [{ slug: 'lamar', team: 'BAL', name: 'L. Jackson', points: null, proj: 22.1, status: 'set' }] }]);
   ok('fields: my players by team, each once, empties skipped', mine.get('KC')?.length === 1 && mine.get('CAR')?.[0].name === 'C. Hubbard' && !mine.has('DET') && mine.get('BAL')?.[0].proj === 22.1, [...mine.keys()]);
+  // v0.506.0 — only the week on show, only the picked league; state and injury ride along.
+  const snapsWk = [
+    { leagueId: 'A', week: WEEK, cards: [{ slug: 'p1', team: 'KC', name: 'P. One', points: null, proj: 12.3, status: 'set', injury: 'Q' }, { slug: 'p2', team: 'KC', name: 'P. Two', points: 20.1, status: 'final' }] },
+    { leagueId: 'B', week: WEEK, cards: [{ slug: 'p3', team: 'KC', name: 'P. Three', points: 4, status: 'live' }] },
+    { leagueId: 'C', week: WEEK + 1, cards: [{ slug: 'p4', team: 'KC', name: 'P. Four', points: null, proj: 9, status: 'set' }] },
+  ];
+  const kcNames = (m) => (m.get('KC') ?? []).map((x) => x.name).join();
+  ok('fields stars: a snapshot of another week is left off this week\'s games (the "P" on week 2 bug)', kcNames(minesByTeam(snapsWk, { week: WEEK })) === 'P. One,P. Two,P. Three', kcNames(minesByTeam(snapsWk, { week: WEEK })));
+  ok('fields stars: a picked league stars only its players', kcNames(minesByTeam(snapsWk, { week: WEEK, leagueId: 'B' })) === 'P. Three');
+  ok('fields stars: no league picked stars every league', kcNames(minesByTeam(snapsWk, { week: WEEK, leagueId: null })).split(',').length === 3);
+  const kcm = minesByTeam(snapsWk, { week: WEEK }).get('KC');
+  ok('fields stars: each carries his state — projected, final, live — and his injury tag', kcm.map((x) => x.state).join() === 'pre,final,live' && kcm[0].injury === 'Q' && kcm[0].proj === 12.3, kcm);
   const games = fieldGames(WEEK, mine);
   ok('fields: every game on the slate is listed', games.length === 5, games.map((g) => g.key));
   ok('fields: live games first, then the ones to come by kickoff, then finals', games.map((g) => g.state).join() === 'live,live,pre,pre,final', games.map((g) => `${g.key}:${g.state}`));

@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.506.0 — alerts scroll, fields: Wednesday turnover, ‹ week ›, whose stars, point colours
+
+Founder, after the first morning with the new widgets:
+- **Lineup alerts scrolls.** "Make the alert 1x1 scrollable so you can scroll
+  to see exactly which leagues need attention." The total stays on top.
+  Below it is one row per league (⚠ count, name, lock), most to fix first,
+  and each row opens its league.
+- **The week turns over Wednesday 3 AM ET.** "It should move to the next
+  week on Wednesday early AM." `fieldsWeekFrom` used to start a week at its
+  first kickoff, so the fields showed a finished week until Thursday night.
+  A week now starts at 3 AM ET on the Wednesday before its first kickoff
+  (`weekTurnBefore`, DST-safe). This changes the app's ▦ All fields sheet
+  and the web too. Pinned in check:fieldboard.
+- **‹ › step the weeks** on the fields widget, in the slate's order
+  (`slateWeekOrder`). The offset is stored relative to now, so a widget left
+  on NOW follows the turnover. Tapping the week name goes back to NOW.
+- **★ League ▸ chip** picks whose starters are starred: all leagues, or one
+  shown league at a time.
+- **The "P" bug.** Starred players came from each league's current-week
+  lineup, laid over whatever week was showing (week 2's games got week 3
+  projections). `minesByTeam` now takes `{ week, leagueId }` and only uses a
+  snapshot for its own week.
+- **Star lines:** one line per player (up to 4, then "+N more"), with the
+  injury tag, name, and a number coloured by state: projected grey, ● live
+  white, final blue.
+- check:widget has 157 assertions and check:widgetrender builds 24 states.
+
 ### v0.505.0 — two more home-screen widgets: lineup alerts (1×1) and all fields
 
 Founder: "make a 1 by 1 widget that give you just line up warnings for all your

@@ -176,6 +176,15 @@ const ENTRIES = [
   ok(fieldsWeekFrom(rows, D('2026-08-20T12:00:00Z')) === 102, 'late August: the last preseason week that kicked — by kickoff, not week number');
   ok(fieldsWeekFrom(rows, D('2026-07-01T12:00:00Z')) === 101, 'before any kickoff: the earliest week the slate knows');
   ok(fieldsWeekFrom([{ week: 3, kickoff: null }], D('2026-09-15T14:00:00Z')) === null, 'a slate with no kickoffs cannot answer');
+  // v0.506.0 — the week turns over at 3 AM ET on the Wednesday before its first kickoff.
+  ok(fieldsWeekFrom(rows, D('2026-09-16T06:59:00Z')) === 1, 'Wednesday 2:59 AM ET: still week 1');
+  ok(fieldsWeekFrom(rows, D('2026-09-16T07:01:00Z')) === 2, 'Wednesday 3:01 AM ET: week 2, a day before its TNF');
+  ok(fieldsWeekFrom(rows, D('2026-09-17T14:00:00Z')) === 2, 'Thursday morning before TNF (the founder\'s report): week 2, not week 1');
+  const { weekTurnBefore, slateWeekOrder } = await import('../packages/core/src/data/fieldsWeek.ts');
+  ok(weekTurnBefore(D('2026-09-18T00:15:00Z')) === D('2026-09-16T07:00:00Z'), 'the turn before a Thursday 8:15 PM ET kickoff is that Wednesday 3 AM ET');
+  ok(weekTurnBefore(D('2026-09-16T06:00:00Z')) === D('2026-09-09T07:00:00Z'), 'a Wednesday 2 AM ET moment belongs to the Wednesday before');
+  ok(weekTurnBefore(D('2026-11-04T08:30:00Z')) === D('2026-11-04T08:00:00Z'), 'after the clocks fall back, 3 AM ET is 08:00 UTC');
+  ok(slateWeekOrder(rows).join() === '101,102,1,2', 'the weeks in the order they are played, kickoff-less weeks left out');
 }
 
 clearLiveGameFeeds();
