@@ -274,11 +274,17 @@ function ScoreView({ snap, leagues, tier, offline }: { snap: WidgetSnapshot; lea
  *  its own and runs its tiles onto a second line inside its box — a window
  *  is never cut. */
 const PAD = 10;
-const TILE_W = 60;
+const TILE_W = 60;   // holds a FACE_W (50) headshot inside its padding and border
 const TILE_GAP = 4;
 const WIN_PAD = 4;
 const WIN_GAP = 6;
 const FACE = 36;
+/** A headshot's width at FACE tall (v0.501.1). Founder: "the player head shots
+ *  appear a little stretched out tall." The widget library scales a picture
+ *  to EXACTLY the box it is given (createScaledBitmap — resizeMode never gets
+ *  a say), and every headshot is ESPN's 600×436, so a square box squeezed
+ *  them narrow. The box now has their shape. */
+const FACE_W = Math.round(FACE * 600 / 436);
 
 /** The width a window's box takes with `n` tiles on one line, border included. */
 const boxWidth = (n: number) => n * TILE_W + Math.max(0, n - 1) * TILE_GAP + 2 * WIN_PAD + 2;
@@ -328,7 +334,7 @@ function Tile({ c, last }: { c: WidgetCard; last: boolean }) {
     <FlexWidget style={{ width: TILE_W, flexDirection: 'column', alignItems: 'center', backgroundColor: C.bg, borderRadius: 8, borderWidth: 1, borderColor: t.border,
       paddingVertical: 3, paddingHorizontal: 2, marginRight: last ? 0 : TILE_GAP }}>
       {c.image && !placeholder
-        ? <ImageWidget image={c.image as `https:${string}`} imageWidth={FACE} imageHeight={FACE} radius={7} resizeMode="cover" />
+        ? <ImageWidget image={c.image as `https:${string}`} imageWidth={FACE_W} imageHeight={FACE} radius={7} />
         : <TextWidget text={t.face} maxLines={1}
             style={{ width: FACE, height: FACE, fontSize: placeholder ? 16 : 11, color: placeholder && !t.dim ? C.warn : C.faint, fontWeight: 'bold', textAlign: 'center', backgroundColor: C.card, borderRadius: 7 }} />}
       <TextWidget text={t.name} truncate="END" maxLines={1}

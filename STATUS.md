@@ -18,6 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.501.1 — headshots keep their shape on the widget
+
+- Founder, from the first device test: "the player head shots appear a little
+  stretched out tall." The widget library scales an image to exactly the box
+  it's given and ignores `resizeMode`. Every headshot is ESPN's 600×436, so
+  the old 36×36 box squeezed them. Tiles now draw them at 50×36.
+
 ### v0.501.0 — the classic league widget
 
 - **Classic leagues get their own widget card.** It uses the same pinned
