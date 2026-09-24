@@ -411,8 +411,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     // agent seat's are; only LOCKED rows stand. The rows still live under the
     // human's uid, so the board reads them as before and a flip back to
     // 'human' hands them over as a lineup already set. (An AI seat with no
-    // app_user has nowhere to store rows; the board and the resolver compute
-    // its best healthy lineup live — classicLineup's unmanagedStart.)
+    // app_user holds a seat agent since v0.524.0 and takes the agent path.)
     const aiOf = new Set((mems ?? []).filter((x) => x.controller === 'ai' && x.app_user_id).map((x) => x.sleeper_roster_id));
     // SEAT AGENTS (0180): an unclaimed seat writes as its agent. The mapping
     // exists only for classic leagues, and the claim trigger retires it the
@@ -702,14 +701,16 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // windows: nothing was ever STORED, so nothing sealed, and a week with no
       // `sleeper_lineup` row had nothing to rebuild from either.
       //
-      // An AI seat keeps the old path deliberately. Its lineup comes from
-      // `aiSide` at resolve, and that is where its persona draw and its bought
-      // buffs live; writing rows here would send `sideLineup` down its
-      // sealed-first branch and silently strip both.
+      //
+      // AN AI SEAT WITH NO ACCOUNT WRITES AS ITS AGENT TOO (v0.524.0). It used
+      // to be skipped and rebuilt by `aiSide` at resolve, so its spots were
+      // never stored and every board (and Spy) read it as empty all week.
+      // It is filled with its persona key below, so the rows are the lineup
+      // aiSide would have computed.
       const isAi = mem?.controller === 'ai';
       const agentUid = agents.get(`${m.league_id}:${rosterId}`) ?? null;
-      const seatUid = mem?.app_user_id ?? (isAi ? null : agentUid);
-      if (!seatUid) continue;   // AI seat, or an agent the tick has yet to mint
+      const seatUid = mem?.app_user_id ?? agentUid;
+      if (!seatUid) continue;   // an agent the tick has yet to mint
       const isAgent = !mem?.app_user_id;
       // PER SLOT, not per matchup or even per window (founder's rule, refined
       // twice on live fire): any empty card spot with an eligible player
@@ -775,7 +776,9 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // Persona key ONLY for permanent AI seats: some weeks their TE hides an
       // 8-PT NUKE (EV-neutral drama, see aiPersonaNuker). A missed human's
       // autofill — even one flipped to AI policy for the week — stays vanilla.
-      const persona = fullRewrite ? `${m.league_id}:${rosterId}` : undefined;
+      // An account-less AI seat (agent-held, never a full rewrite) keeps its
+      // persona too — it is the key aiSide used for it at resolve (v0.524.0).
+      const persona = (fullRewrite || (isAi && isAgent)) ? `${m.league_id}:${rosterId}` : undefined;
       const rows = autoLineup(slugs, m.week, owned, extra, persona)
         // A partially-set human keeps every SLOT they touched — the fill
         // covers only the empty ones (an AI seat still rewrites in full; its

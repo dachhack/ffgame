@@ -104,12 +104,12 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
   const { data: agentRows } = await db().from('seat_agent').select('league_id,roster_id');
   const { data: aiRows } = await db().from('league_membership')
     .select('league_id,sleeper_roster_id').eq('controller', 'ai');
-  const seatRows = (agentRows ?? []).map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
-  const agented = new Set(seatRows.map((r) => `${r.league_id}:${r.roster_id}`));
-  for (const r of aiRows ?? []) {
-    if (agented.has(`${r.league_id}:${r.sleeper_roster_id}`)) continue;   // an agented seat is an agent seat
-    seatRows.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
-  }
+  // 🤖 wins over an agent row (v0.524.0): account-less AI seats now hold an
+  // agent so their lineups are stored, but the wire still judges them as AI.
+  const aiSeat = new Set((aiRows ?? []).map((r) => `${r.league_id}:${r.sleeper_roster_id}`));
+  const seatRows = (agentRows ?? []).filter((r) => !aiSeat.has(`${r.league_id}:${r.roster_id}`))
+    .map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
+  for (const r of aiRows ?? []) seatRows.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
   if (!seatRows.length) return 0;
   const leagueIds = [...new Set(seatRows.map((r) => r.league_id))];
 
