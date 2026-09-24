@@ -19,7 +19,7 @@ import type { WidgetSnapshot, WidgetCard } from './widgetFeed';
 import { liveSlate, slateWeeks, weekGameFeeds } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
-import { fieldsWeekFrom } from './fieldsWeek';
+import { fieldsWeekFrom, slateWeekOrder } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
 import { normTeam } from './slugMeta';
 import type { WindowId } from '../types';
@@ -66,8 +66,10 @@ export function alertsSummary(snaps: WidgetSnapshot[]): AlertsSummary {
 
 // ── FIELDS ──────────────────────────────────────────────────────────────────
 
-/** One of MY players in a game, from a league's remembered snapshot. */
-export interface FieldMine { name: string; pts: number | null; proj: number | null; live: boolean }
+/** One of MY players in a game, from a league's remembered snapshot.
+ *  `state` (v0.506.0) colours his number — projected grey, live, final blue —
+ *  and `injury` tags him. */
+export interface FieldMine { name: string; pts: number | null; proj: number | null; live: boolean; state?: 'pre' | 'live' | 'final'; injury?: string | null }
 
 export interface FieldGame {
   key: string;
@@ -136,33 +138,49 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
 
 /** My players by team, off the leagues' remembered snapshots — the cards the
  *  matchup widget already drew, so this costs no read. A player in two
- *  leagues is listed once. */
-export function minesByTeam(snaps: WidgetSnapshot[]): Map<string, FieldMine[]> {
+ *  leagues is listed once.
+ *
+ *  ONLY THE WEEK ON SHOW (v0.506.0). Founder: "Looks like the all fields
+ *  widget is showing week 2 and 'P' for projected points?" A snapshot is one
+ *  league's CURRENT matchup week; laid over another week's games it starred
+ *  this week's lineup on last week's box scores, projections and all. Now a
+ *  snapshot counts only for its own week, and `leagueId` narrows it to the
+ *  one league the manager picked (null = every league). */
+export function minesByTeam(snaps: WidgetSnapshot[], opts: { week?: number | null; leagueId?: string | null } = {}): Map<string, FieldMine[]> {
   const out = new Map<string, FieldMine[]>();
   const seen = new Set<string>();
   for (const s of snaps) {
+    if (opts.week != null && s.week !== opts.week) continue;
+    if (opts.leagueId && s.leagueId !== opts.leagueId) continue;
     for (const c of (s.cards ?? []) as WidgetCard[]) {
       if (!c.slug || !c.team || seen.has(c.slug)) continue;
       seen.add(c.slug);
       const t = normTeam(c.team);
       const list = out.get(t) ?? [];
-      list.push({ name: c.name, pts: c.points ?? null, proj: c.proj ?? null, live: c.status === 'live' });
+      const state = c.status === 'live' ? 'live' : c.status === 'final' ? 'final' : 'pre';
+      list.push({ name: c.name, pts: c.points ?? null, proj: c.proj ?? null, live: state === 'live', state, injury: c.injury ?? null });
       out.set(t, list);
     }
   }
   return out;
 }
 
-/** The fields read: which week (what's on now, or what just happened), its
- *  slate, and its game feeds installed where weekBoxGames reads them. Null
- *  when the slate knows no week. Throws on a failed read — the task keeps
- *  its last picture. */
-export async function loadFieldsWeek(nowMs: number = Date.now()): Promise<number | null> {
+/** The fields read: which week, its slate, and its game feeds installed
+ *  where weekBoxGames reads them. The week is the current one (fieldsWeekFrom
+ *  — it turns over Wednesday 3 AM ET) moved `offset` weeks along the slate's
+ *  order by the widget's ‹ › (v0.506.0), clamped to the weeks the slate
+ *  knows. Null when the slate knows no week. Throws on a failed read — the
+ *  task keeps its last picture. */
+export async function loadFieldsWeek(offset = 0, nowMs: number = Date.now()): Promise<{ week: number; current: number; hasPrev: boolean; hasNext: boolean } | null> {
   const rows = await slateWeeks(String(LIVE_SEASON));
-  const week = fieldsWeekFrom(rows, nowMs);
-  if (week == null) return null;
+  const current = fieldsWeekFrom(rows, nowMs);
+  if (current == null) return null;
+  const order = slateWeekOrder(rows);
+  const at = Math.max(0, order.indexOf(current));
+  const i = Math.max(0, Math.min(order.length - 1, at + offset));
+  const week = order[i] ?? current;
   const [slate, feeds] = await Promise.all([liveSlate(week, String(LIVE_SEASON)), weekGameFeeds(week)]);
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
   setLiveGameFeed(week, feedRowsToWeek(feeds));
-  return week;
+  return { week, current, hasPrev: i > 0, hasNext: i < order.length - 1 };
 }

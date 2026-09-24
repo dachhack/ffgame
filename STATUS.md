@@ -18,6 +18,58 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.507.0 — widget buttons: big enough to hit, busy while loading, one tap at a time
+
+Founder: "Can we make the next button two rows high instead of one? It's kinda
+hard to press… it can take a couple seconds to load the next team so can we
+make sure to change the state of the widget or the button… inactive while
+loading so double taps and errant clicks don't do anything. Same for the
+refresh button."
+
+- **Tall buttons.** On the matchup widget's header, ▸ NEXT (left) and ⟳
+  (right) are 42dp blocks spanning the header's two top rows. The score
+  card's chips are larger, and so are the fields widget's ‹ › ⟳.
+- **Busy state.** On a tap, the next frame goes up at once. NEXT shows the
+  next league's remembered picture with the button reading "… LOADING"; ⟳
+  dims to "…"; the fields header reads LOADING…; the alerts ✓ reads
+  "checking".
+- **Inert while loading.** `widget/inert.ts` `inert()` walks the tree the way
+  the library's builder does and strips every clickAction, so no tap on a
+  busy frame does anything until the fresh picture replaces it.
+  check:widgetrender proves every busy frame builds and has 0 taps (31
+  states).
+- **Tap lock.** `takeTapLock` / `releaseTapLock`, per widget in storage,
+  drop a second tap that lands before the first frame is drawn. A lock older
+  than 20 s is ignored, so a task that died can't leave a widget deaf.
+  Covered in check:widget.
+
+### v0.506.0 — alerts scroll, fields: Wednesday turnover, ‹ week ›, whose stars, point colours
+
+Founder, after the first morning with the new widgets:
+- **Lineup alerts scrolls.** "Make the alert 1x1 scrollable so you can scroll
+  to see exactly which leagues need attention." The total stays on top.
+  Below it is one row per league (⚠ count, name, lock), most to fix first,
+  and each row opens its league.
+- **The week turns over Wednesday 3 AM ET.** "It should move to the next
+  week on Wednesday early AM." `fieldsWeekFrom` used to start a week at its
+  first kickoff, so the fields showed a finished week until Thursday night.
+  A week now starts at 3 AM ET on the Wednesday before its first kickoff
+  (`weekTurnBefore`, DST-safe). This changes the app's ▦ All fields sheet
+  and the web too. Pinned in check:fieldboard.
+- **‹ › step the weeks** on the fields widget, in the slate's order
+  (`slateWeekOrder`). The offset is stored relative to now, so a widget left
+  on NOW follows the turnover. Tapping the week name goes back to NOW.
+- **★ League ▸ chip** picks whose starters are starred: all leagues, or one
+  shown league at a time.
+- **The "P" bug.** Starred players came from each league's current-week
+  lineup, laid over whatever week was showing (week 2's games got week 3
+  projections). `minesByTeam` now takes `{ week, leagueId }` and only uses a
+  snapshot for its own week.
+- **Star lines:** one line per player (up to 4, then "+N more"), with the
+  injury tag, name, and a number coloured by state: projected grey, ● live
+  white, final blue.
+- check:widget has 157 assertions and check:widgetrender builds 24 states.
+
 ### v0.505.0 — two more home-screen widgets: lineup alerts (1×1) and all fields
 
 Founder: "make a 1 by 1 widget that give you just line up warnings for all your
