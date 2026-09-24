@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.521.0 — the ghost finds its slot (slots count from 0)
+
+Founder, on the app's leagues list on v0.520.0: Gridiron Gang still read
+"7/8 set · 1 no one available" with a Ghost on the TNF spot. He wants it to
+say "8/8 set · 1 Ghost fill". The widget feed invented EMPTY slot ids from 1
+(`String(i + 1)`), but every writer stores roster_slot from 0: the app's
+slotsFor, the web's slotKey, and the aimed cards' `win|slot`. So the ghost
+on `tnf|0` never met the empty `tnf|1`, and v0.520.0's match by key missed.
+Stored slots keep their ids now, and empties fill in from 0 up to the cap.
+The line reads "N Ghost fill(s)" in the leagues lists and the widget header.
+check:widget pins 0-based empties, the ghost on `win|0`, and stored ids
+kept as-is.
+
 ### v0.520.0 — a Ghost fills the slot (app, web, widget)
 
 Founder: "if you filled a spot with a ghost, let's count it as filled and

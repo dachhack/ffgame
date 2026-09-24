@@ -445,7 +445,7 @@ function alertLine(snap: WidgetSnapshot): { text: string; color: ColorProp } {
     return { text: `⚠ ${bits.join(' · ')}${lock}`, color: C.warn };
   }
   const color: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : C.ok;
-  const noted = ghost ? ` · ${ghost} 👻 ghost${ghost === 1 ? '' : 's'}` : '';
+  const noted = ghost ? ` · ${ghost} Ghost fill${ghost === 1 ? '' : 's'}` : '';
   return { text: snap.phase === 'pre' ? `✓ Lineup set${noted} · ${snap.line}` : snap.line, color };
 }
 

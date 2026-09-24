@@ -527,7 +527,7 @@ const state = [
   const pre = kick(0) - LOCK_LEAD_MS - 2 * 3_600_000;
   const picks = [{ game_window: wins[0].id, roster_slot: '1', player_slug: 'a', metric_id: 'm' }];
   const base = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {} });
-  const g = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'snf|1': 'ghost' } });
+  const g = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'snf|0': 'ghost' } });
   const snf = g.cards.filter((c) => c.win === 'snf');
   ok('a ghosted slot reads GHOST, named, with its card', snf[0].status === 'ghost' && snf[0].phantom === 'ghost' && snf[0].name === 'Ghost', snf[0]);
   const noneFix = (s) => s.fixes.filter((f) => f.win === 'snf' && f.kind === 'none').map((f) => Number(f.text.split(' ')[0]))[0] ?? 0;
@@ -535,11 +535,24 @@ const state = [
   ok('a ghost is not a warning (one fewer than without it)', alertCount(g) === alertCount(base) - 1, [alertCount(base), alertCount(g)]);
   const r = lineupReport(g), r0 = lineupReport(base);
   ok('lineup report: the ghost counts as SET and is noted', r.set === r0.set + 1 && r.ghost === 1 && r.none === r0.none - 1, { r, r0 });
-  ok('lineup line: it says so', /· 1 👻 ghost/.test(lineupReportLine(r).text), lineupReportLine(r).text);
+  ok('lineup line: it says so', /· 1 Ghost fill/.test(lineupReportLine(r).text), lineupReportLine(r).text);
   const all = lineupReportLine({ total: 8, set: 8, unset: 0, none: 0, noMetric: 0, missed: 0, ghost: 1, lockMs: 5 });
-  ok('lineup line: a full lineup with a ghost reads ✓ and notes it', !all.open && all.text === '✓ 8/8 set · 1 👻 ghost', all);
+  ok('lineup line: a full lineup with a ghost reads ✓ and notes it', !all.open && all.text === '✓ 8/8 set · 1 Ghost fill', all);
+  // THE FOUNDER'S BOARD (v0.521.0): roster_slot counts from 0 everywhere it is
+  // written, and the ghost sits on `win|0` of a one-spot window with nobody
+  // pickable. The empty slot has to be '0' for the ghost to find it.
+  {
+    const w0 = wins[0].id;
+    const noTnf = picks.filter((p) => p.game_window !== w0);
+    const bare = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks: noTnf, pool, injuries: {} });
+    ok('an EMPTY slot counts from 0, like every writer stores it', bare.cards.filter((c) => c.win === w0)[0]?.slot === '0', bare.cards.filter((c) => c.win === w0).map((c) => c.slot));
+    const gh = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks: noTnf, pool, injuries: {}, phantoms: { [`${w0}|0`]: 'ghost' } });
+    const c0 = gh.cards.filter((c) => c.win === w0)[0];
+    ok('the ghost on `win|0` fills the empty spot — not "no one available"', c0?.status === 'ghost', c0);
+    ok('a stored pick keeps its own slot id (nothing is renumbered)', summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {} }).cards.some((c) => c.win === w0 && c.slot === '1' && c.slug === 'a'));
+  }
   // A Bye Steal holds a slot the same way; a play on a slot someone IS in changes nothing.
-  const bs = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'mnf|1': 'bye-steal' } });
+  const bs = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'mnf|0': 'bye-steal' } });
   ok('a Bye Steal holds its slot too', bs.cards.find((c) => c.win === 'mnf').status === 'ghost' && bs.cards.find((c) => c.win === 'mnf').phantom === 'bye-steal');
   const onPlayer = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { [`${wins[0].id}|1`]: 'ghost' } });
   ok('a ghost on a slot with a player in it changes nothing (the resolver stands it down)', onPlayer.cards.find((c) => c.win === wins[0].id && c.slot === '1').status === 'set');

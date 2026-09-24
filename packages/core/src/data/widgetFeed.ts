@@ -404,8 +404,16 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       // ── THE CARDS (v0.433.9): one per slot, in slot order, empties included ──
       const mineScored = new Map((s?.slot_scores ?? []).filter((r) => r.side === mySide).map((r) => [String(r.slot), r]));
       const bySlot = new Map(inWin.map((p) => [String(p.roster_slot), p]));
-      const slotIds = [...new Set([...bySlot.keys(), ...Array.from({ length: cap }, (_, i) => String(i + 1))])]
-        .sort((a, b) => Number(a) - Number(b)).slice(0, cap);
+      // SLOTS COUNT FROM 0 (v0.521.0). Every writer stores roster_slot as the
+      // index — the app's slotsFor (String(i)), the web's slotKey(win, i), the
+      // aimed cards' `win|slot` — and this invented EMPTY slots from 1. A
+      // stored pick still found its card, but an empty slot was "tnf|1" while
+      // the Ghost sat on "tnf|0", so the founder's ghosted TNF spot read
+      // "no one available" (v0.520.0 matched the ghost by that key). Stored
+      // slots keep their ids; the empties fill in from 0 up to the cap.
+      const slotIds = [...bySlot.keys()];
+      for (let i = 0; slotIds.length < cap && i < cap + bySlot.size; i++) if (!slotIds.includes(String(i))) slotIds.push(String(i));
+      slotIds.sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
       // WHO COULD FILL AN EMPTY SLOT (v0.500.0). Founder: an empty spot where
       // "no one on your roster would fit" is its own case — the fix is a
       // pickup, not a lineup change. A drip slot takes anyone whose game is in
