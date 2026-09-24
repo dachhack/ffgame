@@ -10,7 +10,7 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom } from '../packages/core/src/data/widgetExtras';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
 import { takeTapLock, releaseTapLock } from '../apps/mobile/src/widget/inert';
 
@@ -482,6 +482,34 @@ const state = [
   ok('fields: my players ride with their game, from either side', kc.mine.map((m) => m.name).join() === 'T. Kelce' && car.mine[0].name === 'C. Hubbard' && bal.mine[0].name === 'L. Jackson');
   ok('fields: a final reads FINAL with no ball', buf.clock === 'FINAL' && buf.poss === null && buf.hs === 31, buf);
   ok('fields: a game to come has its kickoff and no score', bal.state === 'pre' && bal.kickoff === kick(4) && bal.clock === null && bal.last === null, bal);
+}
+
+// ── v0.508.0: down, distance, the ball, and an opened game ──
+{
+  const pl = (o) => ({ c: 100, drv: 0, tm: 'KC', dn: 1, dist: 10, yl: 75, yl2: 75, ty: 'Rush', txt: '', hs: 0, as: 0, ...o });
+  ok('next down: a short gain is the next down with what is left', nextDownFrom(pl({ dn: 1, dist: 10, yl: 75, yl2: 72 })) === '2nd & 7');
+  ok('next down: gaining the distance is a first down', nextDownFrom(pl({ dn: 3, dist: 4, yl: 40, yl2: 33 })) === '1st & 10');
+  ok('next down: a first down inside the ten is 1st & Goal', nextDownFrom(pl({ dn: 2, dist: 8, yl: 15, yl2: 6 })) === '1st & Goal');
+  ok('next down: short of the line with the goal nearer than the sticks reads Goal', nextDownFrom(pl({ dn: 1, dist: 10, yl: 8, yl2: 5 })) === '2nd & Goal');
+  ok('next down: a change of possession is 1st & 10 for the new side', nextDownFrom(pl({ tm2: 'BUF', dn: 4, dist: 5, yl: 40, yl2: 70 })) === '1st & 10');
+  ok('next down: stopped on fourth, it is theirs from the other end', nextDownFrom(pl({ dn: 4, dist: 2, yl: 40, yl2: 39 })) === '1st & 10');
+  ok('next down: a kickoff (no down) is 1st & 10', nextDownFrom(pl({ dn: 0, yl: 65, yl2: 75 })) === '1st & 10');
+  ok('next down: a score has no next snap to describe', nextDownFrom(pl({ sc: 1 })) === null && nextDownFrom(null) === null);
+
+  const P2 = (c, tm, yl, yl2, dn, dist, txt, extra = {}) => ({ c, drv: 0, tm, dn, dist, yl, yl2, ty: 'Rush', txt, hs: 3, as: 7, ...extra });
+  setLiveGameFeed(WEEK, feedRowsToWeek([
+    { key: 'ATL@CAR', away: 'ATL', home: 'CAR', state: 'in', plays: [P2(1000, 'CAR', 75, 70, 1, 10, 'first'), P2(1100, 'CAR', 70, 64, 2, 5, 'second, TD later', {}), P2(1200, 'CAR', 64, 60, 1, 10, 'third'), P2(1300, 'CAR', 60, 52, 2, 6, 'fourth')],
+      status: { name: 'STATUS_IN_PROGRESS', short: '8:20 - 2nd', sit: { dd: '3rd & 1', spot: 'ATL 48', poss: 'CAR', ytg: 48 },
+        leaders: [{ team: 'CAR', cat: 'pass', name: 'B. Young', line: '12/18, 140 YDS' }, { team: 'ATL', cat: 'rush', name: 'B. Robinson', line: '9 CAR, 61 YDS' }] } },
+    { key: 'KC@NYG', away: 'KC', home: 'NYG', state: 'in', plays: [P2(2000, 'KC', 40, 36, 2, 9, 'short gain')] },
+  ]));
+  const gs = fieldGames(WEEK);
+  const car = gs.find((g) => g.key === 'ATL@CAR'), kc = gs.find((g) => g.key === 'KC@NYG'), bal = gs.find((g) => g.key === 'DET@BAL');
+  ok('situation: the worker\'s down, distance and spot win', car.dd === '3rd & 1' && car.spot === 'ATL 48' && car.poss === 'CAR' && car.toGo === 48, [car.dd, car.spot, car.poss, car.toGo]);
+  ok('situation: without it, worked out from the last play', kc.dd === '3rd & 5' && kc.spot === null && kc.poss === 'KC' && kc.toGo === 36, [kc.dd, kc.poss, kc.toGo]);
+  ok('opened game: the last three plays, newest first, with their clocks', car.recent.map((p) => p.txt).join('|') === 'fourth|third|second, TD later' && car.recent[0].clock === 'Q2 8:20', car.recent);
+  ok('opened game: the leaders ride along', car.leaders.length === 2 && car.leaders[0].line === '12/18, 140 YDS');
+  ok('a game not yet kicked off has no situation, plays or leaders', bal.dd === null && bal.recent.length === 0 && bal.leaders.length === 0, bal);
 }
 
 // ── v0.507.0: one tap at a time ──

@@ -507,7 +507,46 @@ export function gameStatus(summary) {
     short: st?.type?.shortDetail ?? null,
     period: Number.isFinite(period) && period > 0 ? period : null,
     clock: st?.displayClock ?? null,
+    ...gameSituation(summary),
   };
+}
+
+/** WHERE THE BALL IS, AND WHO IS HAVING A DAY (v0.508.0). Founder, on the
+ *  fields widget: "make sure to have the down, distance, field position and
+ *  team with possession on the view for each game", and "click a game and
+ *  see the current player stats". ESPN writes each play's END situation —
+ *  "2nd & 7", "BUF 34", the team with the ball — so the latest play that has
+ *  one is the situation now (a period's last rows, "END GAME", carry none).
+ *  And the summary names each team's passing / rushing / receiving leader
+ *  with his line already phrased. Both ride on the status: small, and read
+ *  wherever the header already is. */
+export function gameSituation(summary) {
+  const comp = summary?.header?.competitions?.[0];
+  const abbr = new Map();
+  for (const c of comp?.competitors ?? []) abbr.set(String(c?.id ?? c?.team?.id), fixTeam(c?.team?.abbreviation ?? ''));
+  const out = {};
+  const drives = [...(summary?.drives?.previous ?? [])];
+  if (summary?.drives?.current?.plays) drives.push(summary.drives.current);
+  let end = null;
+  for (const d of drives) for (const p of d?.plays ?? []) if (p?.end?.shortDownDistanceText) end = p.end;
+  if (end) {
+    const team = abbr.get(String(end?.team?.id)) ?? null;
+    const ytg = Number(end.yardsToEndzone);
+    out.sit = { dd: end.shortDownDistanceText, spot: end.possessionText ?? null, poss: team, ytg: Number.isFinite(ytg) ? ytg : null };
+  }
+  const CATS = { passingYards: 'pass', rushingYards: 'rush', receivingYards: 'rec' };
+  const leaders = [];
+  for (const t of summary?.leaders ?? []) {
+    const team = fixTeam(t?.team?.abbreviation ?? '');
+    for (const c of t?.leaders ?? []) {
+      const cat = CATS[c?.name];
+      const top = c?.leaders?.[0];
+      if (!cat || !top?.displayValue) continue;
+      leaders.push({ team, cat, name: top?.athlete?.shortName ?? top?.athlete?.displayName ?? '', line: top.displayValue });
+    }
+  }
+  if (leaders.length) out.leaders = leaders;
+  return out;
 }
 
 /** THE CLOCK-MANAGEMENT ROWS (v0.434.3) — the plays gameToFeed skips because

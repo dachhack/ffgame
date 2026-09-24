@@ -89,6 +89,35 @@ export interface FieldGame {
   /** A scoring play or a turnover, so the row can flash it. */
   big: 'score' | 'turnover' | null;
   mine: FieldMine[];
+  // ── v0.508.0 ──
+  /** Down and distance now — "2nd & 7" — ESPN's own when the worker sent it,
+   *  else worked out from the last play. Live games only. */
+  dd?: string | null;
+  /** The ball's spot in ESPN's words ("BUF 34"), when the worker sent it. */
+  spot?: string | null;
+  /** The last few plays, newest first — what an opened game lists. */
+  recent?: { clock: string; txt: string; big: 'score' | 'turnover' | null }[];
+  /** Each team's passing / rushing / receiving leader. */
+  leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[];
+}
+
+const ORD = ['', '1st', '2nd', '3rd', '4th'];
+/** Down and distance after the last play, from the play itself — the fallback
+ *  when the worker's status has no situation (an older row, the simulator).
+ *  A change of possession, a kickoff or a first down is 1st & 10 (1st & Goal
+ *  inside the ten); otherwise the next down with what is left to go. A score
+ *  has no next snap to describe. */
+export function nextDownFrom(p: GamePlay | null): string | null {
+  if (!p || p.sc) return null;
+  const toGo = Number(p.yl2);
+  const firstAt = (yl: number) => (yl <= 10 ? '1st & Goal' : '1st & 10');
+  if (p.tm2 && normTeam(p.tm2) !== normTeam(p.tm)) return firstAt(toGo);
+  if (!p.dn) return firstAt(toGo);
+  const gained = Number(p.yl) - toGo;
+  const left = Number(p.dist) - gained;
+  if (left <= 0) return firstAt(toGo);
+  if (p.dn >= 4) return firstAt(100 - toGo);   // turned over on downs: theirs, from the other end
+  return `${ORD[p.dn + 1]} & ${toGo <= left ? 'Goal' : left}`;
 }
 
 /** "DEN 34" / "KC 20" / "50" — the ball's spot, from the team in possession
@@ -120,11 +149,24 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
       const last = latestPlay(g.feed?.plays);
       const poss = last ? normTeam(last.tm2 ?? last.tm) : null;
       const toGo = last && Number.isFinite(Number(last.yl2)) ? Math.max(0, Math.min(100, Number(last.yl2))) : null;
+      const sit = g.feed?.status?.sit ?? null;
+      const live = g.state === 'live';
+      // The last three plays, newest first, for an opened game.
+      const recent = [...(g.feed?.plays ?? [])]
+        .filter((p) => p && Number.isFinite(Number(p.c)))
+        .sort((a, b) => Number(b.c) - Number(a.c)).slice(0, 3)
+        .map((p) => ({ clock: fmtQuarterClock(Number(p.c)), txt: p.txt, big: (p.sc ? 'score' : p.to ? 'turnover' : null) as FieldGame['big'] }));
+      const turnedOver = !!last && ((last.dn >= 4 && !last.sc && Number(last.yl) - Number(last.yl2) < Number(last.dist)) || (!!last.tm2 && normTeam(last.tm2) !== normTeam(last.tm)));
       return {
+        dd: live ? sit?.dd ?? nextDownFrom(last) : null,
+        spot: live ? sit?.spot ?? null : null,
+        recent: g.state === 'pre' ? [] : recent,
+        leaders: g.feed?.status?.leaders ?? [],
         key: g.key, away: g.away, home: g.home, state: g.state,
         as: last ? Number(last.as) || 0 : 0, hs: last ? Number(last.hs) || 0 : 0,
         clock: clockOf(g, last), kickoff: g.kickoff,
-        poss: g.state === 'live' ? poss : null, toGo: g.state === 'live' ? toGo : null,
+        poss: live ? (sit?.poss ? normTeam(sit.poss) : turnedOver && last && !last.tm2 ? (normTeam(last.tm) === g.home ? g.away : g.home) : poss) : null,
+        toGo: live ? (sit?.ytg != null ? sit.ytg : turnedOver && last && !last.tm2 && toGo != null ? 100 - toGo : toGo) : null,
         last: g.state === 'pre' ? null : last?.txt ?? null,
         big: last?.sc ? 'score' : last?.to ? 'turnover' : null,
         mine: [...(mine.get(g.away) ?? []), ...(mine.get(g.home) ?? [])],

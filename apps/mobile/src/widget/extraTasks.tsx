@@ -79,6 +79,8 @@ async function alertsState(fresh: boolean): Promise<AlertsState> {
 // stars (a league id, or nothing for every league).
 const PREF_OFFSET = (id: number) => `widget:fields:offset:${id}`;
 const PREF_STAR = (id: number) => `widget:fields:league:${id}`;
+/** The game opened in place (v0.508.0), by key. */
+const PREF_OPEN = (id: number) => `widget:fields:open:${id}`;
 const readNum = (k: string) => { try { const v = Number(platform().storage.get(k)); return Number.isFinite(v) ? v : 0; } catch { return 0; } };
 const readStr = (k: string) => { try { return platform().storage.get(k) || null; } catch { return null; } };
 const write = (k: string, v: string | null) => { try { if (v == null) platform().storage.remove(k); else platform().storage.set(k, v); } catch { /* best-effort */ } };
@@ -95,7 +97,7 @@ const FIELDS_KEY = (id: number) => `fields:${id}`;
 type FieldsOk = Extract<FieldsState, { kind: 'ok' }>;
 function rememberedFields(widgetId: number): FieldsOk | null {
   const r = cacheGet<Omit<FieldsOk, 'kind'>>(FIELDS_KEY(widgetId), 12 * HOUR);
-  return r ? { ...r, kind: 'ok', stale: true, leagueLabel: starOf(widgetId).label } : null;
+  return r ? { ...r, kind: 'ok', stale: true, leagueLabel: starOf(widgetId).label, openKey: readStr(PREF_OPEN(widgetId)) } : null;
 }
 
 async function fieldsState(widgetId: number): Promise<FieldsState> {
@@ -105,8 +107,8 @@ async function fieldsState(widgetId: number): Promise<FieldsState> {
     const star = starOf(widgetId);
     const mine = minesByTeam(rememberedSnaps()?.snaps ?? [], { week: at.week, leagueId: star.id });
     const games = fieldGames(at.week, mine);
-    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label };
-    const { kind: _k, ...keep } = ok;
+    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label, openKey: readStr(PREF_OPEN(widgetId)) };
+    const { kind: _k, openKey: _o, ...keep } = ok;
     cacheSet(FIELDS_KEY(widgetId), keep);
     return ok;
   } catch (e) {
@@ -140,10 +142,10 @@ async function paint(name: string, widgetId: number, render: (el: React.JSX.Elem
 
 /** The task handler for these two (widgetTask.ts hands them over). */
 export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void> {
-  const { widgetInfo, widgetAction, clickAction } = props;
+  const { widgetInfo, widgetAction, clickAction, clickActionData } = props;
   const render = (el: React.JSX.Element) => props.renderWidget(el);
   const id = widgetInfo.widgetId;
-  if (widgetAction === 'WIDGET_DELETED') { write(PREF_OFFSET(id), null); write(PREF_STAR(id), null); return; }
+  if (widgetAction === 'WIDGET_DELETED') { write(PREF_OFFSET(id), null); write(PREF_STAR(id), null); write(PREF_OPEN(id), null); return; }
   if (widgetAction === 'WIDGET_CLICK') {
     // OPEN_URI / OPEN_APP are native; ⟳ (and the ✓ card) and the fields chips
     // are ours — one at a time (v0.507.0): a tap while another is answered is
@@ -156,6 +158,18 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
   await paint(widgetInfo.widgetName, id, render, {});
 
   async function answer(clickAction: string): Promise<void> {
+    if (clickAction === FIELDS_CLICK.toggle) {
+      // Open or close a game in place (v0.508.0): a redraw of the remembered
+      // week with that card grown or shrunk — no read, so it is instant. The
+      // next timer or push repaints it with fresh plays, still open.
+      const key = typeof clickActionData?.key === 'string' ? clickActionData.key : null;
+      if (!key) return;
+      write(PREF_OPEN(id), readStr(PREF_OPEN(id)) === key ? null : key);
+      const had = rememberedFields(id);
+      if (had) render(<FieldsWidget state={{ ...had, stale: false }} />);
+      else await paint(widgetInfo.widgetName, id, render, {});
+      return;
+    }
     if (clickAction === WIDGET_CLICK.refresh) { await paint(widgetInfo.widgetName, id, render, { fresh: true, tapped: true }); return; }
     if (clickAction === FIELDS_CLICK.prev || clickAction === FIELDS_CLICK.next || clickAction === FIELDS_CLICK.now) {
       // The remembered picture knows whether the slate ends here; an arrow at

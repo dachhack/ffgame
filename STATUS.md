@@ -18,6 +18,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.508.0 — fields widget: tap a game to open it; down, distance and the ball on every live game
+
+Founder: "Is click to expand a thing in widgets? It would be cool to click a
+game and see the current player stats or last couple play details. Also we
+should make sure to have the down, distance, field position and team with
+possession on the view for each game."
+
+- **Tap to open a game in place.** Tapping a game card toggles it open.
+  The opened card shows the last three plays (newest first, with clocks;
+  scores teal, turnovers pink), each team's passing / rushing / receiving
+  leader with ESPN's stat line, and an OPEN IN APP ↗ button. Another tap
+  closes it. The toggle redraws from the remembered week, so it's instant.
+  It's stored per widget (`widget:fields:open:<id>`) and stays open through
+  refreshes.
+- **Every live game shows "● KC · 2nd & 7 · BUF 34"** above the field strip.
+- **Worker (`scripts/espn/espnAdapter.mjs`).** `gameStatus` now adds
+  `sit` (ESPN's end-of-play situation from the latest play that has one:
+  `dd`, `spot`, `poss`, `ytg`) and `leaders`. Both ride on the game_feed
+  status JSON, with no migration needed, and deploy with the worker (its
+  deploy watches scripts/espn). Covered in `server/test/espn-situation.mjs`.
+- **Client fallback** when a row has no `sit` (older rows, the simulator):
+  core `nextDownFrom(lastPlay)` works out the next down and distance
+  (first down, Goal, change of possession, stopped on 4th). Covered in
+  check:widget.
+- check:widgetrender builds 36 states, including every opened-game state,
+  and now also proves that arrays nested two deep (map-in-map) blank a
+  widget.
+- **Not mine:** `server/test/h2h-verify.mjs` prints one pre-existing FAIL
+  line ("coin totals are positive") without failing the suite. It does the
+  same on main.
+
 ### v0.507.0 — widget buttons: big enough to hit, busy while loading, one tap at a time
 
 Founder: "Can we make the next button two rows high instead of one? It's kinda
