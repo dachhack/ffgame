@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.524.0 — AI teams' spots are set at lock, like everyone else's
+
+Founder: "Let's set the slots for AI teams and any player who has not set
+their spot. We had it so all spots were optimally populated at lock time if
+not picked by humans or AI." Humans who missed spots, including unclaimed
+seats (agents), have been filled at lock since the 8/16 ruling. But an AI
+seat with no account was skipped on purpose and rebuilt by `aiSide` at
+resolve, so its lineup was never stored. Boards, widgets and Spy read it as
+empty all week. Now ensureSeatAgents mints an agent for those seats too.
+The lock fill (full pass + per-tick fillOnly) writes their optimal lineup
+under the agent WITH the persona key, so the rows are what aiSide would have
+built; such a seat has no wallet, so there are no bought buffs to lose.
+Classic AI seats take the agent re-plan path. seatWire keeps judging them as
+AI (🤖 wins over the agent row), as do the audit (0303), the wire gate (0308)
+and vampireBite. Server-only; no APK change.
+
 ### v0.523.0 — the lock-time fill uses the team a player is on NOW
 
 Founder's wk-3 Thursday: the lock-time fill put Romeo Doubs into his

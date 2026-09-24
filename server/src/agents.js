@@ -30,21 +30,27 @@ const agentEmail = (leagueId, rosterId) => `agent-${String(leagueId).slice(0, 8)
  *  0213's `agent_wire_seat` never asked either. Only this provisioning filter
  *  and the fill's skip were.
  *
- *  AI SEATS ARE DELIBERATELY EXCLUDED. A seat whose controller is 'ai' is
- *  rebuilt at resolve by `aiSide`, which is where its persona draw and its
- *  bought buffs come from. Give it an agent and the lock-time fill writes rows,
- *  `sideLineup` takes its sealed-first branch instead, and the seat quietly
- *  loses both. Those seats are not missing a manager — they ARE the manager.
+ *  AI SEATS TOO, SINCE v0.524.0. They were excluded so the lock-time fill
+ *  would leave them to `aiSide` at resolve (persona draw + bought buffs) — but
+ *  that meant an AI team's spots were never STORED: the boards, the widget and
+ *  Spy all read an AI opponent as "nobody there yet", all week. Founder: "We
+ *  had it so all spots were optimally populated at lock time if not picked by
+ *  humans or AI." The fill now writes an account-less AI seat's rows under its
+ *  agent WITH the persona key (lock.js), so the stored lineup is the one
+ *  aiSide would have built; such a seat holds no wallet, so it had no bought
+ *  buffs to lose. An AI seat WITH an account (a human on auto-pilot) keeps
+ *  writing under that account and gets no agent. Everything that classifies a
+ *  seat checks the 🤖 controller before the agent row (audit 0303, wire gate
+ *  0308, seatWire, vampireBite), so an agented AI seat still reads as AI.
  *
- *  (The WIRE is a different matter: since v0.425.0 seatWire.js walks AI seats
- *  nobody holds beside the agent seats, through the same widened gate — 0298
- *  agent_wire_seat — with no agent row involved. Lineups stay aiSide's.)
+ *  (The WIRE: since v0.425.0 seatWire.js walks AI seats nobody holds beside
+ *  the agent seats, through the same widened gate — 0298 agent_wire_seat.)
  *
  *  Returns the number of agents newly provisioned. */
 export async function ensureSeatAgents() {
   const { data: seats } = await db().from('league_membership')
     .select('league_id,sleeper_roster_id,controller').is('app_user_id', null);
-  const want = (seats ?? []).filter((s) => (s.controller ?? 'human') !== 'ai');
+  const want = seats ?? [];
   if (!want.length) return 0;
   const leagueIds = [...new Set(want.map((s) => s.league_id))];
   const { data: have } = await db().from('seat_agent')
