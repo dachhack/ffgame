@@ -383,7 +383,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // is now, after the installs above.
         const outs = await ruledOutSlugs();
         // Play risk rides along (v0.429.0): priced in golf, ignored elsewhere.
-        const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))));
+        // Odds-aware (v0.518.0), the same value the lineup fill now uses for
+        // this seat: a Doubtful starter is mostly a hole, and the wire sees it.
+        const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))), { discountRisk: true });
         // A FREE AGENT WHOSE GAME HAS ALREADY KICKED OFF (v0.432.4) is worth
         // nothing THIS week: the fill can never seat him (the late-swap rail),
         // so signing him to fill a hole wastes the seat and the add. His

@@ -12,8 +12,10 @@
 // Run: npx tsx scripts/check-seat-waivers.mjs
 import {
   seatWirePlan, wireBid, shortlistWire, positionNeed, wireInstrument, HUMANS_FIRST_MS,
-  UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE,
+  UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE, BENCH_MIN_GAIN, benchUse,
 } from '../packages/core/src/engine/seatWaivers.ts';
+import { slateAwareProj } from '../packages/core/src/engine/classic.ts';
+import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { clearLeagueFlags, setLeagueFlags } from '../packages/core/src/data/commish.ts';
 
 let fails = 0;
@@ -343,6 +345,93 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   const legacy = seatWirePlan(SLOTS, starters, [{ ...rb('body'), onWaivers: true }], proj,
     { faab: true, budget: 50, openSeats: 1, rosValueOf: proj, maxClaims: 1 });
   ok(legacy.length === 0, 'without `held` the flag keeps its old meaning: a claim is never a depth body');
+}
+
+// ── 18. BENCH SWAPS: a full roster cuts dead weight for a stash (v0.518.0) ─
+// Founder: AI teams should make "pickups that would strengthen their teams
+// just like real players would". A lineup that wants nothing used to freeze
+// the whole roster; a real manager cuts the zero-projection body for the
+// breakout back even though the back will not start this week.
+{
+  const starters = [rb('s1'), rb('s2'), wr('s3')];
+  const roster = [...starters, wr('dead')];
+  // Hold values (season over half the next free body, × benchUse): stash RB
+  // 9 − 1 = 8; the dead WR (0.5 − 1) × ½ (only the flex seats a WR here) =
+  // −0.25. Gain 8.25, well over the bar.
+  const ros = projOf({ s1: 12, s2: 11, s3: 10, dead: 0.5, stash: 9, rb2: 2, wr2: 2 });
+  const pool = [free(rb('stash'), false), free(rb('rb2'), false), free(wr('wr2'), false)];
+  const plan = seatWirePlan(SLOTS, roster, pool, ros, { ...OPTS, rosValueOf: ros });
+  ok(plan.length === 1 && plan[0].kind === 'bench' && plan[0].add === 'stash' && plan[0].drop === 'dead',
+    'a full roster swaps its dead-weight bench body for the clear stash');
+  ok(plan[0]?.bid === 0 && plan[0]?.gain === 0, 'a free-agent stash costs nothing and adds nothing this week');
+  // Below the bar: a stash only a little better than what is free stays put.
+  const close = projOf({ s1: 12, s2: 11, s3: 10, dead: 2, stash: 4, rb2: 2, wr2: 2 });
+  ok(seatWirePlan(SLOTS, roster, pool, close, { ...OPTS, rosValueOf: close }).length === 0,
+    `a stash under ${BENCH_MIN_GAIN} positional points is not worth the churn`);
+  // Without a season value there is no honest bench measure: the old freeze.
+  ok(seatWirePlan(SLOTS, roster, pool, ros, OPTS).length === 0, 'no season value → no bench swaps (pre-0.518 behaviour)');
+  // One per sweep, even with two dead bodies and two stashes — and two good
+  // backs on the wire do not cancel each other out (REPLACEMENT_WEIGHT).
+  const t2 = projOf({ s1: 12, s2: 11, s3: 10, dead: 0.5, dead2: 0.4, stash: 9, stash2: 8.5, rb2: 2, wr2: 2 });
+  const two = seatWirePlan(SLOTS, [...roster, wr('dead2')], [...pool, free(rb('stash2'), false)], t2, { ...OPTS, rosValueOf: t2 });
+  ok(two.length === 1 && two[0].add === 'stash' && two[0].drop === 'dead2',
+    'one bench swap per sweep, the best stash for the least useful body');
+  // A held stash in a PRIORITY league is not worth the seat's place in line…
+  const heldPool = [{ ...rb('stash'), onWaivers: true, held: true }, free(rb('rb2'), false), free(wr('wr2'), false)];
+  ok(seatWirePlan(SLOTS, roster, heldPool, ros, { ...OPTS, rosValueOf: ros }).length === 0,
+    'a priority league never spends its claim on a bench stash');
+  // …but in FAAB it is claimed, for a priced, modest bid.
+  const fb = seatWirePlan(SLOTS, roster, heldPool, ros, { faab: true, budget: 100, openSeats: 0, rosValueOf: ros });
+  ok(fb.length === 1 && fb[0].kind === 'bench' && fb[0].onWaivers && fb[0].bid >= 1 && fb[0].bid <= 25,
+    `a FAAB league claims the held stash for a modest bid ($${fb[0]?.bid})`);
+  // A position no spot accepts is never a stash, however it projects.
+  ok(seatWirePlan(SLOTS, roster, [{ id: 'k1', pos: 'K', onWaivers: false }], projOf({ s1: 12, s2: 11, s3: 10, dead: 0, k1: 30 }),
+    { ...OPTS, rosValueOf: projOf({ s1: 12, s2: 11, s3: 10, dead: 0, k1: 30 }) }).length === 0,
+    'a kicker in a league with no K spot is never stashed');
+}
+
+// ── 19. POSITIONAL VALUE: raw points do not compare across positions ──────
+// A backup QB projecting 16 in a one-QB league, with a 15 on the wire, is
+// worth almost nothing to hold; the bot used to hoard him forever because
+// no back ever "outscored" him.
+{
+  const QSLOTS = [{ slot: 'Q', type: 'QB', pos: ['QB'] }, ...SLOTS];
+  const qb = (id) => ({ id, pos: 'QB' });
+  ok(benchUse(QSLOTS, 'QB') === 0.5 && benchUse(QSLOTS, 'RB') === 1 && benchUse(QSLOTS, 'K') === 0,
+    'benchUse: a one-spot position is half as useful on the bench; no spot, not at all');
+  const roster = [qb('q1'), rb('s1'), rb('hurt'), wr('s3'), qb('q2')];
+  const week = projOf({ q1: 20, s1: 12, hurt: 0, s3: 10, q2: 16, rbA: 9, qfree: 15, rbB: 4 });
+  const ros = projOf({ q1: 20, s1: 12, hurt: 11, s3: 10, q2: 16, rbA: 9, qfree: 15, rbB: 4 });
+  const pool = [free(rb('rbA'), false), free(qb('qfree'), false), free(rb('rbB'), false)];
+  const plan = seatWirePlan(QSLOTS, roster, pool, week, { ...OPTS, rosValueOf: ros });
+  ok(plan[0]?.kind === 'hole' && plan[0]?.add === 'rbA' && plan[0]?.drop === 'q2',
+    'the hole is filled by cutting the backup QB, whose double is free — raw points alone refused it');
+  // …but not for a mere streamer when the backup QB is genuinely scarce.
+  const sw = projOf({ q1: 20, s1: 12, hurt: 0, s3: 10, q2: 16, rbA: 5, qjunk: 4, rbB: 4 });
+  const scarce = seatWirePlan(QSLOTS, roster, [free(rb('rbA'), false), free(qb('qjunk'), false), free(rb('rbB'), false)], sw,
+    { ...OPTS, rosValueOf: projOf({ q1: 20, s1: 12, hurt: 11, s3: 10, q2: 16, rbA: 5, qjunk: 4, rbB: 4 }) });
+  ok(scarce.length === 0, 'a backup QB with nothing like him on the wire is kept over a streamer');
+  // And the bench never fills up with QBs: one backup at a one-spot position
+  // is cover, a second is a hoard.
+  const hq = projOf({ q1: 20, s1: 12, s2: 11, s3: 10, q2: 9, dead: 1, qa: 18, qb2: 14, w2: 2 });
+  const noHoard = seatWirePlan(QSLOTS, [qb('q1'), rb('s1'), rb('s2'), wr('s3'), qb('q2'), wr('dead')],
+    [free(qb('qa'), false), free(qb('qb2'), false), free(wr('w2'), false)], hq, { ...OPTS, rosValueOf: hq });
+  ok(noHoard.every((c) => c.add !== 'qa' || c.drop === 'q2'), 'a second backup QB is never stashed beside the first');
+}
+
+// ── 20. AI LINEUPS PLAY THE ODDS (v0.518.0) ──────────────────────────────
+// A Doubtful starter is worth his projection times his chance of playing on
+// a seat the AI manages; a human seat keeps him at full value.
+{
+  // A real baked player, so the projection is not a vacuous zero.
+  const [slug, pts] = [...PROJ_2026.entries()].find(([, v]) => v > 5);
+  const p = { id: slug, pos: 'RB', team: null };
+  const doubtful = () => 0.75;
+  const plain = slateAwareProj(1, [], doubtful)(p);
+  const odds = slateAwareProj(1, [], doubtful, { discountRisk: true })(p);
+  ok(plain > 0 && Math.abs(odds - plain * 0.25) < 1e-9, `the AI values a Doubtful player at a quarter (${plain.toFixed(1)} → ${odds.toFixed(1)}; bake ${pts})`);
+  ok(slateAwareProj(1, [], () => 0, { discountRisk: true })(p) === plain, 'a healthy player is untouched');
+  ok(slateAwareProj(1, [], () => true, { discountRisk: true })(p) === 0, 'ruled out is still zero');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');

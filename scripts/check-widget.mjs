@@ -514,6 +514,37 @@ const state = [
   ok('a game not yet kicked off has no situation, plays or leaders', bal.dd === null && bal.recent.length === 0 && bal.leaders.length === 0, bal);
 }
 
+// ── v0.520.0: a Ghost fills the slot, and says so ──
+// Founder: "if you filled a spot with a ghost, let's count it as filled and
+// note it." SNF has nobody on the roster (NONE above); a Ghost played there
+// holds the slot — filled, noted, no warning, and it spends no bench body.
+{
+  const pool = [
+    { slug: 'a', full: 'Josh Jacobs', team: 'BUF' }, { slug: 'b', full: 'Tyreek Hill', team: 'MIA' },
+    { slug: 'c', full: 'CeeDee Lamb', team: 'CAR' }, { slug: 'x', full: 'Bye Guy', team: 'NYJ' },
+    { slug: 'd', full: 'Dan Denver', team: 'DEN' },
+  ];
+  const pre = kick(0) - LOCK_LEAD_MS - 2 * 3_600_000;
+  const picks = [{ game_window: wins[0].id, roster_slot: '1', player_slug: 'a', metric_id: 'm' }];
+  const base = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {} });
+  const g = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'snf|1': 'ghost' } });
+  const snf = g.cards.filter((c) => c.win === 'snf');
+  ok('a ghosted slot reads GHOST, named, with its card', snf[0].status === 'ghost' && snf[0].phantom === 'ghost' && snf[0].name === 'Ghost', snf[0]);
+  const noneFix = (s) => s.fixes.filter((f) => f.win === 'snf' && f.kind === 'none').map((f) => Number(f.text.split(' ')[0]))[0] ?? 0;
+  ok('…and is no longer a slot nobody can fill', noneFix(g) === noneFix(base) - 1, [noneFix(base), noneFix(g)]);
+  ok('a ghost is not a warning (one fewer than without it)', alertCount(g) === alertCount(base) - 1, [alertCount(base), alertCount(g)]);
+  const r = lineupReport(g), r0 = lineupReport(base);
+  ok('lineup report: the ghost counts as SET and is noted', r.set === r0.set + 1 && r.ghost === 1 && r.none === r0.none - 1, { r, r0 });
+  ok('lineup line: it says so', /· 1 👻 ghost/.test(lineupReportLine(r).text), lineupReportLine(r).text);
+  const all = lineupReportLine({ total: 8, set: 8, unset: 0, none: 0, noMetric: 0, missed: 0, ghost: 1, lockMs: 5 });
+  ok('lineup line: a full lineup with a ghost reads ✓ and notes it', !all.open && all.text === '✓ 8/8 set · 1 👻 ghost', all);
+  // A Bye Steal holds a slot the same way; a play on a slot someone IS in changes nothing.
+  const bs = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'mnf|1': 'bye-steal' } });
+  ok('a Bye Steal holds its slot too', bs.cards.find((c) => c.win === 'mnf').status === 'ghost' && bs.cards.find((c) => c.win === 'mnf').phantom === 'bye-steal');
+  const onPlayer = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { [`${wins[0].id}|1`]: 'ghost' } });
+  ok('a ghost on a slot with a player in it changes nothing (the resolver stands it down)', onPlayer.cards.find((c) => c.win === wins[0].id && c.slot === '1').status === 'set');
+}
+
 // ── v0.509.0: a drip lineup at a glance, for the app's league list ──
 {
   const snap = { assessable: true, alarm: { lockMs: 123 }, cards: ['set', 'sealed', 'live', 'final', 'empty', 'empty', 'none', 'unsealed', 'missed'].map((status) => ({ status })), fixes: [] };
@@ -524,7 +555,7 @@ const state = [
   ok('lineup report: none for a classic league (its projections say it)', lineupReport({ ...snap, projected: true }) === null);
   const line = lineupReportLine(r);
   ok('lineup line: the words both lists print, warn while anything is open', line.open && /^⚠ 4\/9 set · 2 unset · 1 no one available · 1 no metric · 1 missed · locks /.test(line.text), line);
-  const done = lineupReportLine({ total: 9, set: 8, unset: 0, none: 0, noMetric: 0, missed: 1, lockMs: 5 });
+  const done = lineupReportLine({ total: 9, set: 8, unset: 0, none: 0, noMetric: 0, missed: 1, ghost: 0, lockMs: 5 });
   ok('lineup line: nothing left to do reads ✓, no lock', !done.open && done.text === '✓ 8/9 set · 1 missed', done);
   ok('lineup report: none without picks read', lineupReport({ ...snap, assessable: false }) === null && lineupReport({ ...snap, cards: [] }) === null);
 }

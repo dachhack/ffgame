@@ -30,6 +30,7 @@
 // the athlete id (league_pool.espn_id, 0066). Names drift between sources,
 // ids do not, and the one thing worse than no projection is somebody else's.
 import { db } from '../supabase.js';
+import { setLiveProjRate } from '../../../packages/core/src/engine/projScoring.ts';
 
 // ── StatHead: one public JSON, rebuilt about every two hours ─────────────
 // The same file the `stathead` Python client reads (public/data/weekly-
@@ -94,6 +95,50 @@ export function statheadRows(feed, week) {
  *  ratio against its own baked rate and applies it to the LEAGUE-SCORED
  *  number, which is the only way to move the level without throwing the
  *  league's own catalog away. */
+// ── WHAT HE IS ACTUALLY DOING (v0.519.0) ─────────────────────────────────
+// Founder, with a screenshot: "our projections need some work. Coker and
+// Golden are really low." Coker had 33.8 and 14.6 and the board said 6.8;
+// Golden 15.5 and 9.8 on 18 targets, and the board said 4.4. Two causes:
+//
+//   1. THE SOURCE IS NOT BLENDING. StatHead documents an in-season blend of
+//      each line toward what the player is doing, at games/(games+K), and
+//      its feed carries the actuals (`act`) — but its `ppg` does not move:
+//      across the 65 players whose first two weeks sat 6+ points off their
+//      August rate, the median weight the rate put on them was 0.0. So the
+//      blend is done here, with the source's own fitted K per position, the
+//      source's ppg as the prior. `act` is null for a game he did not play
+//      and a number (0 included) for one he did, so a DNP never drags him.
+//      If the feed ever starts carrying its own `inSeasonGames`, it has
+//      blended already and this steps aside rather than counting twice.
+//
+//   2. A SEASON'S INJURIES CHARGED EVERY WEEK. per_week was ppg × gp ÷ 17 —
+//      the games haircut, there so a one-game backup's inflated rate lands
+//      near zero (see proj2026.ts). For Coker (13 of 17) that took a quarter
+//      off every week he is healthy and playing. So an ACTIVE, non-backup
+//      player who has been on the field this season is priced at his rate;
+//      this week's own risk is his injury designation, which the boards show
+//      and the AI prices (slateAwareProj discountRisk). Backups, inactive
+//      players and anyone yet to play keep the haircut.
+export const BLEND_K = { QB: 5.5, RB: 3.5, WR: 4.5, TE: 5.0 };
+const BLEND_K_DEFAULT = 4.5;
+
+/** One feed row's per-game rate, blended toward his 2026 games, and the
+ *  share of a week he is expected to be worth it. Pure; exported for the
+ *  assertion suite. */
+export function inSeasonRate(p) {
+  const ppg = Number(p?.ppg);
+  if (!Number.isFinite(ppg) || ppg <= 0) return null;
+  const played = (Array.isArray(p.act) ? p.act : []).filter((x) => x != null && Number.isFinite(Number(x))).map(Number);
+  const k = BLEND_K[p.pos] ?? BLEND_K_DEFAULT;
+  const blended = played.length && p.inSeasonGames == null
+    ? (k * ppg + played.reduce((a, b) => a + b, 0)) / (k + played.length)
+    : ppg;
+  const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
+  const playing = p.active !== false && !p.backup && played.length > 0;
+  const avail = playing ? 1 : Math.min(1, gp / 17);
+  return { rate: blended, avail, perWeek: blended * avail, games: played.length };
+}
+
 export function seasonRows(feed, playerIndex = null) {
   const rows = [];
   for (const p of feed?.players ?? []) {
@@ -101,21 +146,53 @@ export function seasonRows(feed, playerIndex = null) {
     const ppg = Number(p?.ppg);
     if (!sid || !Number.isFinite(ppg) || ppg <= 0) continue;
     const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
+    const r = inSeasonRate(p);
     rows.push({
       sleeper_id: String(sid),
       // OUR SLUG (v0.456.0). `league_market` keys the map by it; without it
       // the board upserted fine and served an empty map to every screen —
       // the whole projection half of 0335 shipped inert. The audit caught it.
       slug: playerIndex?.sleeper?.(String(sid))?.slug ?? null,
-      ppg: Math.round(ppg * 100) / 100,
+      ppg: Math.round(r.rate * 100) / 100,
       gp: Math.round(gp * 100) / 100,
-      per_week: Math.round(((ppg * gp) / 17) * 1000) / 1000,
+      per_week: Math.round(r.perWeek * 1000) / 1000,
       ros_ppg: Number.isFinite(Number(p.rosPPG)) ? Math.round(Number(p.rosPPG) * 100) / 100 : null,
       games_left: Number.isFinite(Number(p.gamesRemaining)) ? Number(p.gamesRemaining) : null,
       source: 'stathead',
     });
   }
   return rows;
+}
+
+// ── THE WORKER READS THE SAME LEVEL THE BOARDS SHOW (v0.519.0) ───────────
+// The boards install `proj_board` through league_market; the worker never
+// did, so every AI decision — the lineup fill, the waiver sweep, the drop
+// rail — ranked on the August bake while the manager's screen showed the
+// live number. Installed once per tick from the table this file writes,
+// cached so the 25-second tick costs one read every few minutes.
+const LIVE_TTL_MS = Number(process.env.PROJ_LIVE_TTL_MS || 600000);
+let liveAt = 0;
+export async function installLiveProjRate(log = () => {}) {
+  if (Date.now() - liveAt < LIVE_TTL_MS) return;
+  liveAt = Date.now();
+  try {
+    const map = {};
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db().from('proj_board')
+        .select('slug,sleeper_id,per_week').not('per_week', 'is', null).range(from, from + 999);
+      if (error) throw new Error(error.message);
+      for (const r of data ?? []) {
+        // Keyed as league_market keys it: our slug, else the sleeper id —
+        // and both, so the id fallback in projectedPoints finds him either way.
+        const v = Number(r.per_week);
+        if (!(v > 0)) continue;
+        if (r.slug) map[r.slug] = v;
+        if (r.sleeper_id) map[r.sleeper_id] = v;
+      }
+      if ((data ?? []).length < 1000) break;
+    }
+    setLiveProjRate(map);
+  } catch (e) { log('live projection rate', e.message); }
 }
 
 const PROJ_HOST = 'https://lm-api-reads.fantasy.espn.com';

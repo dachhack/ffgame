@@ -1274,6 +1274,15 @@ export function slateAwareProj(
      *  bodies who most often post nothing. Default on; a board printing the
      *  projection itself passes false. No effect outside golf. */
     expected?: boolean;
+    /** PLAY THE ODDS (v0.518.0) — for a seat the AI manages, value a player by
+     *  what he is EXPECTED to score: the projection times his chance of
+     *  suiting up (1 − the fractional risk). Founder: AI teams should set
+     *  lineups "just like real players would", and a real manager benches a
+     *  Doubtful back for a healthy one of similar value. Off by default: on a
+     *  human's seat Q and D stay at full value, because benching them by rule
+     *  would overrule a decision the manager may already have made. No effect
+     *  in golf, which prices the same risk its own way below. */
+    discountRisk?: boolean;
   },
 ): (p: { id: string; pos?: string | null; team?: string | null; sleeperId?: string | null }, d?: ClassicSlotDef) => number {
   const onBye = (team: string | null | undefined): boolean => {
@@ -1311,6 +1320,7 @@ export function slateAwareProj(
     if (leagueIsGolf() && opts?.expected !== false && v > 0) {
       return golfExpectedScore(p, v, d?.zeroPts ?? leagueGolfZeroPts(), risk);
     }
+    if (opts?.discountRisk && !leagueIsGolf() && v > 0) return v * (1 - risk);
     return v > 0 ? v : banked;
   };
 }
@@ -1352,10 +1362,13 @@ function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>
   // Ruled out is out; a designation short of that is a play risk, which only
   // golf prices (v0.429.1 — the resolver used to hand this fill a Q at no
   // risk while the lock-time fill priced him).
+  // Nobody manages this seat, so nobody's Q/D call can be overruled: the AI
+  // plays the odds (v0.518.0) — a Doubtful starter yields to a healthy body.
   const value = slateAwareProj(week, undefined,
     s.ruledOut || s.playRisk
       ? (slug) => (s.ruledOut?.has(slug) ? true : (s.playRisk?.(slug) ?? 0))
-      : undefined);
+      : undefined,
+    { discountRisk: true });
   return optimalLineup(open, cands, value)
     .spots.flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
 }

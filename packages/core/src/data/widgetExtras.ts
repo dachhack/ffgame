@@ -55,26 +55,32 @@ export function alertCount(snap: WidgetSnapshot): number {
  *  `unset` is empty with someone on the roster who could fill it; `none` is
  *  empty with nobody who can; `noMetric` has a player but no metric; `missed`
  *  locked empty. `lockMs` is the next lock while anything is still open. */
-export interface LineupReport { total: number; set: number; unset: number; none: number; noMetric: number; missed: number; lockMs: number | null }
+export interface LineupReport { total: number; set: number; unset: number; none: number; noMetric: number; missed: number; lockMs: number | null;
+  /** Of `set`, the slots a Ghost / Bye Steal holds (v0.520.0) — filled, and noted. */
+  ghost: number }
 export function lineupReport(snap: WidgetSnapshot): LineupReport | null {
   const cards = snap.cards ?? [];
   if (!snap.assessable || !cards.length || snap.projected) return null;
   const n = (st: WidgetCard['status'][]) => cards.filter((c) => st.includes(c.status)).length;
   return {
     total: cards.length,
-    set: n(['set', 'sealed', 'live', 'final']),
+    // A GHOSTED slot is filled (v0.520.0): it counts toward `set`, and the
+    // line notes it rather than warning about it.
+    set: n(['set', 'sealed', 'live', 'final', 'ghost']),
     unset: n(['empty']), none: n(['none']), noMetric: n(['unsealed']), missed: n(['missed']),
+    ghost: n(['ghost']),
     lockMs: snap.alarm?.lockMs ?? null,
   };
 }
 
 /** The report as one line, in the words both league lists print (v0.510.0):
- *  "✓ 9/9 set", or "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric ·
+ *  "✓ 9/9 set", "✓ 9/9 set · 1 👻 ghost", or "⚠ 5/9 set · 2 unset · 1 no one available · 1 no metric ·
  *  locks Sun 1:00 PM". `open` says whether anything still needs a hand —
  *  the warn colour. */
 export function lineupReportLine(r: LineupReport): { text: string; open: boolean } {
   const open = r.unset + r.none + r.noMetric > 0;
   const bits = [
+    r.ghost ? `${r.ghost} 👻 ghost${r.ghost === 1 ? '' : 's'}` : null,
     r.unset ? `${r.unset} unset` : null,
     r.none ? `${r.none} no one available` : null,
     r.noMetric ? `${r.noMetric} no metric` : null,

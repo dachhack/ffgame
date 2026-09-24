@@ -20,7 +20,7 @@ import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
 import { sweepAdp } from './poll/adp.js';
 import { sweepTrending } from './poll/trending.js';
-import { sweepProjections } from './poll/projections.js';
+import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
@@ -490,6 +490,9 @@ async function tickContext(ctx, season) {
     const agents = await ensureSeatAgents();
     if (agents) log(`[${ctx.tag}] provisioned`, agents, 'seat agents');
   } catch (e) { log(`[${ctx.tag}] seat agents`, e.message); }
+  // The live season rate (v0.519.0): every AI ranking below reads the same
+  // projection the manager's board shows, not the August bake.
+  await installLiveProjRate(log);
   try {
     // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
     // injuries come from injury_status inside.

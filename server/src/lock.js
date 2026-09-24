@@ -314,7 +314,13 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
   // A designation's PLAY RISK rides along (v0.429.0): a normal league still
   // starts a Q at full value; a golf league prices the blank he might post.
   const statuses = await injuryStatusMap();
-  const valueOf = slateAwareProj(week, slate, (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug))));
+  const riskOf = (slug) => (outs.has(slug) ? true : playRisk(statuses.get(slug)));
+  const valueOf = slateAwareProj(week, slate, riskOf);
+  // THE SEATS THE AI MANAGES PLAY THE ODDS (v0.518.0). A human's Q/D call is
+  // theirs, so their fill keeps a designated player at full value; an agent
+  // or 🤖 seat has no call to overrule, and a real manager would not start a
+  // Doubtful back over a healthy one of similar value.
+  const aiValueOf = slateAwareProj(week, slate, riskOf, { discountRisk: true });
   const { data: lgs } = await db().from('league')
     .select('id,settings_json,lineup_policy').in('id', [...new Set(ms.map((m) => m.league_id))]);
   // Through modeOfSettings, never raw: settings_json calls the builder spec
@@ -485,7 +491,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
           }
           cands = roster.filter((p) => !kickedOff(p.team));
         }
-        for (const p of autoSlotPlan(slots, bestball, lockedMap, cands, valueOf)) {
+        for (const p of autoSlotPlan(slots, bestball, lockedMap, cands, aiValueOf)) {
           if (current[p.slot] === p.player) continue;   // already right — no churn
           agentPayload.push({
             matchup_id: m.id, app_user_id: agent, game_window: CLASSIC_WIN,

@@ -15,7 +15,7 @@
 // the bug v0.308.0 existed to kill.
 import { readFileSync } from 'node:fs';
 import { rescaledValue, dynRows } from '../server/src/poll/dynasty.js';
-import { seasonRows } from '../server/src/poll/projections.js';
+import { seasonRows, inSeasonRate, BLEND_K } from '../server/src/poll/projections.js';
 import { setLiveProjRate, clearLiveProjRate, projectedPoints, setLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
@@ -77,6 +77,27 @@ ok(srows.length === 2, 'a zero rate and a row with no id are not season lines');
 ok(srows[0].per_week === 17, 'a full season at 17.0 a game is 17.0 a week');
 ok(srows[1].per_week === 10, 'and 20.0 a game over 8.5 games is 10.0 a week — the games ride in the rate');
 ok(srows[0].ros_ppg === 16.4 && srows[0].games_left === 15, 'rest-of-season rides along');
+
+// ── WHAT HE IS ACTUALLY DOING (v0.519.0) ──────────────────────────────────
+// Founder: "Coker and Golden are really low." The feed's ppg ignored their
+// games; the rate now blends toward them at the source's own K, and an
+// active starter who is playing is not charged a season of injuries a week.
+{
+  const coker = { pos: 'WR', ppg: 8.92, gp: 13, active: true, backup: false, act: [33.8, 14.6, null] };
+  const c = inSeasonRate(coker);
+  const want = (BLEND_K.WR * 8.92 + 48.4) / (BLEND_K.WR + 2);
+  ok(Math.abs(c.rate - want) < 1e-9 && c.games === 2, `two big games move the rate (8.92 → ${c.rate.toFixed(2)})`);
+  ok(c.avail === 1 && c.perWeek === c.rate, 'an active starter who is playing carries no games haircut');
+  const r = seasonRows({ players: [{ sleeper: 'c', ...coker }] })[0];
+  ok(r.per_week > 13 && r.per_week < 14, `Coker's week is ${r.per_week}, not 6.8`);
+  ok(inSeasonRate({ pos: 'WR', ppg: 10, gp: 17, act: [null, null] }).rate === 10, 'games he did not play (null) never drag him');
+  ok(inSeasonRate({ pos: 'WR', ppg: 10, gp: 17, act: [0, null] }).rate < 10, 'a game he played and scored nothing in does count');
+  const bk = inSeasonRate({ pos: 'QB', ppg: 21, gp: 1, backup: true, act: [0.4] });
+  ok(bk.avail < 0.1 && bk.perWeek < 2, 'a backup keeps the games haircut — the one-game rate stays near zero');
+  ok(inSeasonRate({ pos: 'RB', ppg: 12, gp: 12, active: false, act: [15] }).avail === 12 / 17, 'an inactive player keeps it too');
+  ok(inSeasonRate({ pos: 'RB', ppg: 12, gp: 12 }).perWeek === 12 * 12 / 17, 'no games yet: the preseason shape, unchanged');
+  ok(inSeasonRate({ pos: 'WR', ppg: 10, gp: 17, act: [30], inSeasonGames: 1 }).rate === 10, 'a feed that blends for itself is not blended twice');
+}
 
 // ── THE LEVEL IS LIVE; THE RULES STAY THE LEAGUE'S ────────────────────────
 setLeagueProjScoring(null);
