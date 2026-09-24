@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
-import { PlayerImg, InjuryBadge, FlagChip, useIsMobile, ModalBackdrop } from '../app/ui';
+import { PlayerImg, InjuryBadge, InjuryNow, FlagChip, useIsMobile, ModalBackdrop } from '../app/ui';
 import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
@@ -279,6 +279,7 @@ export function RosterAside({ side, pools, picks, onPlayer, phase, winEditable, 
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 3, padding: '6px 9px' }}>
               <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={16} />
               <span className="grotesk" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <InjuryNow slug={p.id} />
               <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>BYE</span>
             </div>
           ))}

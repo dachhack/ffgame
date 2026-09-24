@@ -9,6 +9,7 @@ import {
   POD_SALARY_CAP, type PodSalaryRow,
 } from '@drip/core/data/liveApi';
 import { track, Ev } from '@drip/core/analytics';
+import { InjuryNow } from '../app/ui';
 
 const SLOTS: { pos: string; label: string }[] = [
   { pos: 'QB', label: 'QB' },
@@ -134,7 +135,7 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
                 <button key={r.slug} onClick={() => afford && pickFor(active, r.slug)} disabled={!afford}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'none', border: 'none', borderBottom: '1px solid var(--bd)', padding: '9px 4px', cursor: afford ? 'pointer' : 'default', opacity: afford ? 1 : 0.35 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}<InjuryNow slug={r.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                     <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{r.team} · proj {r.proj.toFixed(1)}</span>
                   </span>
                   <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: afford ? 'var(--you)' : 'var(--dim)', fontVariantNumeric: 'tabular-nums' }}>{fmt$(r.salary)}</span>
@@ -175,7 +176,7 @@ export function PodBuilder({ leagueId, rosterId, week: weekProp, leagueName, onB
             {r ? (
               <>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}<InjuryNow slug={r.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                   <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{r.team} · proj {r.proj.toFixed(1)}</span>
                 </span>
                 <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums' }}>{fmt$(r.salary)}</span>

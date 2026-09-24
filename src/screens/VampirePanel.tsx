@@ -12,6 +12,7 @@
 // commissioner's controls now sit at the top of the vampire's own room: who is
 // in the coven, the wire lock, and whether steals need a ruling.
 import { useEffect, useState } from 'react';
+import { InjuryNow } from '../app/ui';
 import {
   vampireState, vampireSteal, commishRuleSteal, leaguePool, nativeRosters, friendlyError,
   setVampires, leagueStandings,
@@ -148,13 +149,13 @@ export function VampirePanel({ leagueId, myRoster, commish }: { leagueId: string
           <div className="mono" style={faintLabel}>TAKE FROM THE BEATEN TEAM</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {rosters.filter((r) => r.roster_id === myChair.victim).map((r) => (
-              <button key={r.slug} className="mono" disabled={busy} style={chip(take === r.slug, busy)} onClick={() => setTake(r.slug)}>{nameOf(r.slug)}</button>
+              <button key={r.slug} className="mono" disabled={busy} style={chip(take === r.slug, busy)} onClick={() => setTake(r.slug)}>{nameOf(r.slug)}<InjuryNow slug={r.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></button>
             ))}
           </div>
           <div className="mono" style={faintLabel}>GIVE BACK</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {rosters.filter((r) => r.roster_id === myChair.seat).map((r) => (
-              <button key={r.slug} className="mono" disabled={busy} style={chip(give === r.slug, busy)} onClick={() => setGive(r.slug)}>{nameOf(r.slug)}</button>
+              <button key={r.slug} className="mono" disabled={busy} style={chip(give === r.slug, busy)} onClick={() => setGive(r.slug)}>{nameOf(r.slug)}<InjuryNow slug={r.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></button>
             ))}
           </div>
           <button className="mono" disabled={busy || !take || !give}
@@ -208,7 +209,7 @@ export function VampirePanel({ leagueId, myRoster, commish }: { leagueId: string
                 </div>
                 {s && (
                   <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 2, marginLeft: 46 }}>
-                    🧛 took {nameOf(s.take)} · gave {nameOf(s.give)}{s.status === 'pending' ? ' (awaiting the ruling)' : ''}
+                    🧛 took {nameOf(s.take)}<InjuryNow slug={s.take} style={{ marginLeft: 4, verticalAlign: 'middle' }} /> · gave {nameOf(s.give)}<InjuryNow slug={s.give} style={{ marginLeft: 4, verticalAlign: 'middle' }} />{s.status === 'pending' ? ' (awaiting the ruling)' : ''}
                   </div>
                 )}
                 {!s && vetoed && (

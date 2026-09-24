@@ -3,7 +3,7 @@ import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useStore } from '../app/store';
 import { ClassicBoard } from './ClassicBoard';
 import type { Phase, LiveCtx, Route } from '../app/store';
-import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
+import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, InjuryNow, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
 import { leagueGameMode, myEnrollments, type Enrollment } from '@drip/core/data/liveApi';
@@ -2312,10 +2312,11 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           // not offer it. Same rule on the sim/demo board, which the kicked
           // filter above skips.
           .filter((s) => { const o = windowsForWeek(week).map((w) => w.id); const rb = o.indexOf(b.win), rs = o.indexOf(s.win); return rb < 0 || rs < 0 || rs >= rb; })
-          .map((s) => ({ key: slotKey(s.win, s.slotIndex), name: s.you!.player.name, score: liveOf(s), win: s.win }));
+          .map((s) => ({ key: slotKey(s.win, s.slotIndex), slug: s.you!.player.id, name: s.you!.player.name, score: liveOf(s), win: s.win }));
         return (
           <BackupMenu
             backupName={b.you?.player.name ?? '—'}
+            backupSlug={b.you?.player.id}
             backupScore={liveOf(b)}
             live={phase !== 'final'}
             required={backupMenu.required}
@@ -2580,9 +2581,9 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupScore, live, required, current, starters, onPick, onClose }: {
-  backupName: string; backupScore: number; live: boolean; required?: boolean; current?: string;
-  starters: { key: string; name: string; score: number; win: WindowId }[];
+function BackupMenu({ backupName, backupSlug, backupScore, live, required, current, starters, onPick, onClose }: {
+  backupName: string; backupSlug?: string; backupScore: number; live: boolean; required?: boolean; current?: string;
+  starters: { key: string; slug: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
   const scoreTag = live ? 'so far' : 'final';
@@ -2591,7 +2592,7 @@ function BackupMenu({ backupName, backupScore, live, required, current, starters
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName} <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName}<InjuryNow slug={backupSlug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /> <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
           </div>
           {!required && <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>}
@@ -2609,7 +2610,7 @@ function BackupMenu({ backupName, backupScore, live, required, current, starters
             return (
               <button key={s.key} onClick={() => onPick(s.key)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: sel ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sel ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 4, padding: '8px 10px', color: 'var(--text)', textAlign: 'left', cursor: 'pointer' }}>
                 <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', width: 34 }}>{s.win.toUpperCase()}</span>
-                <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{s.name}</span>
+                <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{s.name}<InjuryNow slug={s.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                 <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }} title={`points ${scoreTag}`}>{s.score.toFixed(1)}</span>
                 {sel && <span style={{ fontSize: 9, color: 'var(--you)' }}>✓</span>}
               </button>
@@ -2631,7 +2632,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚡ Power-Up · {player.name}</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>⚡ Power-Up · {player.name}<InjuryNow slug={player.id} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>LOCKS IN AT {fmtClock(atClock)} (REAL TIME) · PLAYS ALREADY FINAL DON’T COUNT</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
@@ -2655,7 +2656,7 @@ function SwapMenu({ player, metricId, atClock, bench, metricQty, playerQty, onMe
               {bench.map((p) => (
                 <button key={p.id} onClick={() => onPlayer(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '7px 9px', color: 'var(--text)', textAlign: 'left' }}>
                   <PlayerImg playerId={p.id} team={p.team} pos={p.pos} size={18} />
-                  <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{p.name}</span>
+                  <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{p.name}<InjuryNow slug={p.id} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                   <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team}</span>
                 </button>
               ))}

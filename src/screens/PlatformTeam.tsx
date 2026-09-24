@@ -21,7 +21,7 @@
 import { useEffect, useState } from 'react';
 import { myEnrollments, myLatestPool, type PoolPlayer } from '@drip/core/data/liveApi';
 import { openPlayerCard } from '../app/playerCard';
-import { Img } from '../app/ui';
+import { Img, InjuryNow } from '../app/ui';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 };
@@ -105,6 +105,7 @@ export function PlatformTeam({ leagueId, rosterId, userId }: {
                     style={{ display: 'flex', alignItems: 'baseline', gap: 9, width: '100%', textAlign: 'left', padding: '6px 0', marginTop: 5, borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', background: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
                     <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', width: 32, flexShrink: 0 }}>{p.pos === 'DEF' ? 'DST' : p.pos}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full}</span>
+                    <InjuryNow slug={p.slug} style={{ alignSelf: 'center' }} />
                     <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>{p.team}</span>
                   </button>
                 ))}

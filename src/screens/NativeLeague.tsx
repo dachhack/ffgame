@@ -7,7 +7,7 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag } from '../app/ui';
+import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
 import { setCardLeague, openPlayerCard } from '../app/playerCard';
 import { AvatarPicker } from '../app/AvatarPicker';
@@ -638,6 +638,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
               <PosPill pos={p.pos as Pos} />
               <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{p.team}</span>
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>pool #{p.rank}</span>
+              <InjuryNow slug={p.slug} />
             </div>
           </div>
           <button onClick={onClose} className="mono" style={{ ...linkBtn, fontSize: 14 }}>✕</button>
@@ -1569,7 +1570,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <PlayerImg playerId={lot.slug} espnId={lp?.espn_id} team={lp?.team} pos={(lp?.pos ?? 'WR') as Pos} size={44} />
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lp?.full_name ?? lot.slug}</div>
+                    <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lp?.full_name ?? lot.slug}<InjuryNow slug={lot.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
                     <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
                       ${lot.bid} — {teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}
                       {iHold && <span style={{ color: 'var(--you)', fontWeight: 700 }}> (you)</span>}
@@ -1806,6 +1807,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   <span className="mono" title={tag} style={{ fontSize: 8.5, color: 'var(--faint)', width: 72, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>
                   <PlayerImg playerId={slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={22} />
                   <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl?.full_name ?? slug}</span>
+                  <InjuryNow slug={slug} />
                   <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>${pk?.price ?? 1}</span>
                 </div>
               );
@@ -1878,7 +1880,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                     {cell ? (
                       <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                          <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: fg }}>{posLabel(pl?.pos ?? '')}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.06em', color: fg }}>{posLabel(pl?.pos ?? '')}</span>
+                            <InjuryNow slug={cell.slug} />
+                          </span>
                           <span className="mono" style={{ fontSize: 7.5, color: fg, opacity: 0.8 }}>
                             {auction ? `$${cell.price ?? 1}` : `${cell.round}.${((cell.overall - 1) % teams) + 1}`}{cell.auto ? ' 🤖' : ''}
                           </span>
@@ -1974,6 +1979,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <InjuryNow slug={p.slug} />
                         <FlagChip slug={p.slug} />
                       </div>
                     </div>
@@ -2030,7 +2036,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   <span className="mono" title={tag} style={{ fontSize: 9, color: 'var(--faint)', width: spotDefs ? 92 : 30, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>
                   <PlayerImg playerId={slug} espnId={pl?.espn_id} team={pl?.team} pos={(pl?.pos ?? 'WR') as Pos} size={24} />
                   <PosPill pos={(pl?.pos ?? 'WR') as Pos} />
-                  <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{pl?.full_name ?? slug}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>{pl?.full_name ?? slug}<InjuryNow slug={slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                   {/* Where he came from — kept on the spot rows, since the left
                       column now says WHERE HE PLAYS rather than which round. */}
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{pl?.team}{withCost && pk ? ` · ${cost(pk)}` : ''}{pk?.auto ? ' 🤖' : ''}</span>
@@ -2152,6 +2158,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <InjuryNow slug={slug} />
                         <FlagChip slug={slug} />
                       </div>
                     )}
@@ -2252,7 +2259,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             <PlayerImg playerId={won.slug} espnId={wp?.espn_id} team={wp?.team} pos={(wp?.pos ?? 'WR') as Pos} size={46} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--you)' }}>🔨 SOLD — HE'S YOURS</div>
-              <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wp?.full_name ?? won.slug}</div>
+              <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wp?.full_name ?? won.slug}<InjuryNow slug={won.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
             </div>
             <div className="grotesk" style={{ fontSize: 24, fontWeight: 700, color: 'var(--you)', fontVariantNumeric: 'tabular-nums' }}>${won.price}</div>
           </div>
@@ -2354,7 +2361,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {carried.map((k) => (
               <span key={k.slug} className="mono" style={{ fontSize: 10.5, border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 8px', color: 'var(--text)' }}>
-                {k.declared ? '' : ''}{mine.find((p) => p.slug === k.slug)?.full_name ?? k.slug}
+                {k.declared ? '' : ''}{mine.find((p) => p.slug === k.slug)?.full_name ?? k.slug}<InjuryNow slug={k.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
               </span>
             ))}
           </div>
@@ -2375,7 +2382,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
                     background: on ? 'var(--you)' : 'var(--bg)',
                     border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
                   }}>
-                  {on ? '' : ''}{p.full_name}
+                  {on ? '' : ''}{p.full_name}<InjuryNow slug={p.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
                 </button>
               );
             })}
@@ -2574,6 +2581,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
                       <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {d.tagged ? '🏷 ' : ''}{nameOf(d.slug)}{names[d.slug]?.pos ? ` · ${names[d.slug].pos}` : ''}
                       </span>
+                      <InjuryNow slug={d.slug} />
                       <span className="mono" style={{ fontSize: 9.5, fontWeight: 700 }}>${net}·{d.years}yr</span>
                       {d.mkt != null && <span className="mono" style={{ fontSize: 8, color: bargain ? 'var(--you)' : 'var(--faint)' }}>mkt ${d.mkt}</span>}
                       <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', width: 70, textAlign: 'right' }}>{HOW[d.acquired] ?? d.acquired}</span>
@@ -2640,7 +2648,7 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
             return (
               <div key={x.slug} style={{ padding: '5px 0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text)' }}>{nameOf(x.slug)}</span>
+                  <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text)' }}>{nameOf(x.slug)}<InjuryNow slug={x.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                   <span className="mono" style={{ fontSize: 9, color: x.offer_salary ? 'var(--warn)' : 'var(--faint)' }}>
                     {x.offer_salary ? `best offer $${x.offer_salary}·${x.offer_years}yr` : 'no offers yet'}
                   </span>
@@ -3380,8 +3388,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               )}
               <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>
                 {g.id && <span className="mono" style={{ fontSize: 9, color: 'var(--warn)' }}>{ordinal(i + 1)} choice · </span>}
-                ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
-                {c.drop_slug && <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}> · dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</span>}
+                ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}<InjuryNow slug={c.add_slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
+                {c.drop_slug && <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}> · dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}<InjuryNow slug={c.drop_slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>}
               </span>
               {/* 0289: PENDING UNTIL WHEN. Without this the card says a claim is
                   pending and stops, which is the same silence that made a claim
@@ -3398,7 +3406,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ))}
           {recentClaims.map((c) => (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
-              <span style={{ fontSize: 12, color: 'var(--dim)', flex: 1 }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}{c.note ? ` — ${c.note}` : ''}</span>
+              <span style={{ fontSize: 12, color: 'var(--dim)', flex: 1 }}>＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}<InjuryNow slug={c.add_slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />{c.note ? ` — ${c.note}` : ''}</span>
               <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: c.status === 'won' ? 'var(--you)' : 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 5px' }}>{c.status.toUpperCase()}</span>
             </div>
           ))}
@@ -3487,6 +3495,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</span>
+                <InjuryNow slug={p.slug} />
                 <FlagChip slug={p.slug} />
                 {clears && (
                   <span className="mono" title={`On waivers — clears ${clears.day}${left != null ? ` (in ${fmtLeft(left)})` : ''}`}
@@ -3602,7 +3611,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       {claimFor && (
         <div onClick={() => setClaimFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 360 }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Claim {claimFor.p.full_name}</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Claim {claimFor.p.full_name}<InjuryNow slug={claimFor.p.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
             {claimFor.drop && (
               <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 6 }}>dropping {poolBySlug.get(claimFor.drop)?.full_name ?? claimFor.drop}</div>
             )}
@@ -3720,7 +3729,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6 }}>
                 <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={24} />
                 <PosPill pos={p.pos as Pos} />
-                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{p.full_name}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{p.full_name}<InjuryNow slug={p.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></span>
                 {p.spot !== 'active' && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.spot.toUpperCase()}</span>}
                 <button onClick={() => doAdd(pendingAdd, p.slug)} disabled={busy} className="mono" style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: 'var(--opp)' }}>DROP</button>
               </div>
@@ -4048,6 +4057,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           <button key={r.slug} onClick={() => toggle(sel, set, r.slug)} className="mono"
             style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
             <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '☑' : '☐'} {p?.full_name ?? r.slug}</span>
+            <InjuryNow slug={r.slug} />
             <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}</span>
             {dealTag(r.slug) != null && <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>{dealTag(r.slug)}</span>}
             {wantable && myRoster != null && (
@@ -4215,6 +4225,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
               <button key={r.slug} onClick={() => toggleSignal(r.slug, 'block', !on)} disabled={busy} className="mono"
                 style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--warn) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
                 <span style={{ fontSize: 11, color: on ? 'var(--warn)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '🔁' : '☐'} {p?.full_name ?? r.slug}</span>
+                <InjuryNow slug={r.slug} />
                 <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}{on ? ' · ON THE BLOCK' : ''}</span>
               </button>
             );
@@ -4233,7 +4244,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
         return (
           <div key={`blk-${s.roster_id}-${s.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
             <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <b>{pname(s.slug)}</b>
+              <b>{pname(s.slug)}</b><InjuryNow slug={s.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
               <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> {p?.pos}{dealTag(s.slug) ? ` · ${dealTag(s.slug)}` : ''} · {mineRow ? 'your player' : teamName(s.roster_id)}</span>
             </span>
             {n > 0 && <span className="mono" title={`${n} team${n === 1 ? '' : 's'} interested`} style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)' }}>👀 {n}</span>}
@@ -4259,7 +4270,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           {interestInMine.map((w) => (
             <div key={`in-${w.roster_id}-${w.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
               <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0 }}>
-                <b style={{ color: 'var(--you)' }}>{teamName(w.roster_id)}</b> is interested in your <b>{pname(w.slug)}</b>
+                <b style={{ color: 'var(--you)' }}>{teamName(w.roster_id)}</b> is interested in your <b>{pname(w.slug)}</b><InjuryNow slug={w.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
               </span>
               {myRoster != null && (
                 <button onClick={() => openPreset(w.roster_id, [w.slug], [])} className="mono" style={{ ...ghostBtn, padding: '5px 9px', fontSize: 9 }}>⇄ TALK</button>
@@ -4269,7 +4280,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
           {wants.filter((w) => w.roster_id === myRoster).map((w) => (
             <div key={`my-${w.slug}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', marginTop: 5 }}>
               <span style={{ fontSize: 11.5, color: 'var(--text)', flex: 1, minWidth: 0 }}>
-                You 👀 <b>{pname(w.slug)}</b>
+                You 👀 <b>{pname(w.slug)}</b><InjuryNow slug={w.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
                 <span className="mono" style={{ fontSize: 9, color: 'var(--dim)' }}> ({teamName(w.holder_roster)})</span>
               </span>
               <button onClick={() => toggleSignal(w.slug, 'want', false)} disabled={busy} className="mono" style={{ ...linkBtn, color: 'var(--opp)' }}>✕</button>
@@ -4351,6 +4362,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                           <span style={{ fontSize: 11, color: to != null ? 'var(--you)' : 'var(--text)', fontWeight: to != null ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {to != null ? '☑' : '☐'} {p?.full_name ?? r.slug}
                           </span>
+                          <InjuryNow slug={r.slug} />
                           <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p?.pos}</span>
                         </button>
                         {to != null && teamsIn.filter((x) => x !== rid).map((x) => (
@@ -4416,7 +4428,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                   return (
                     <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
                       <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text)' }}>
-                        {pname(s)} <span style={{ color: 'var(--dim)', fontSize: 10 }}>${d.salary}·{d.years}yr</span>
+                        {pname(s)}<InjuryNow slug={s} style={{ marginLeft: 4, verticalAlign: 'middle' }} /> <span style={{ color: 'var(--dim)', fontSize: 10 }}>${d.salary}·{d.years}yr</span>
                       </span>
                       <button onClick={() => setRetain((r) => ({ ...r, [s]: Math.max(0, cur - 1) }))} disabled={cur <= 0} className="mono" style={{ ...ghostBtn, padding: '2px 8px' }}>−</button>
                       <span className="mono" style={{ fontSize: 11, fontWeight: 700, minWidth: 30, textAlign: 'center', color: cur > 0 ? 'var(--warn)' : 'var(--faint)' }}>${cur}</span>
@@ -4753,7 +4765,7 @@ function EditPickModal({ leagueId, pick, player, teamName, available, busy, onCl
           PICK {pick.round}.{pick.overall} · {teamName}
         </div>
         <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginTop: 3 }}>
-          {player?.full_name ?? pick.slug}
+          {player?.full_name ?? pick.slug}<InjuryNow slug={pick.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>
           {player ? `${posLabel(player.pos)} · ${player.team}` : 'not in the pool any more'}
@@ -4790,6 +4802,7 @@ function EditPickModal({ leagueId, pick, player, teamName, available, busy, onCl
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', padding: '7px 2px', cursor: 'pointer' }}>
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
+                <InjuryNow slug={p.slug} />
                 <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
               </button>
             ))}
