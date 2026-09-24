@@ -39,6 +39,19 @@ tryIt(`alerts ${sum.total}`, <AlertsWidget state={{ kind: 'ok', summary: sum, le
 tryIt('alerts clean offline', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 1, offline: true }} />);
 tryIt('alerts one league no lock', <AlertsWidget state={{ kind: 'ok', summary: { total: 2, leagues: [{ leagueId: 'L', rosterId: 1, name: 'X', n: 2, lockMs: null }], lockMs: null }, leagues: 1 }} />);
 for (const k of ['signed-out', 'no-leagues'] as const) tryIt(`alerts ${k}`, <AlertsWidget state={{ kind: k }} />);
+// v0.511.0 — the 2×1: total block + scrolling leagues; ✓ row; a narrow widget still stacks.
+tryIt('alerts 2×1 list', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3 }} widthDp={140} />);
+tryIt('alerts 2×1 offline, no lock', <AlertsWidget state={{ kind: 'ok', summary: { total: 2, leagues: [{ leagueId: 'L', rosterId: 1, name: 'X', n: 2, lockMs: null }], lockMs: null }, leagues: 1, offline: true }} widthDp={140} />);
+tryIt('alerts 2×1 all set', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 4 }} widthDp={140} />);
+tryIt('alerts 1×1 still stacks', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3 }} widthDp={70} />);
+{
+  n++;
+  const wide = JSON.stringify(buildWidgetTree(<AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3 }} widthDp={140} />));
+  const narrow = JSON.stringify(buildWidgetTree(<AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3 }} widthDp={70} />));
+  const rowRoot = /"orientation":"HORIZONTAL"/.test(wide.slice(0, 400)) && !/"orientation":"HORIZONTAL"/.test(narrow.slice(0, 400));  // the builder spells a row HORIZONTAL
+  if (wide === narrow || !rowRoot) { fails++; console.log('FAIL alerts: the 2×1 must lay out as a row, not the 1×1 stack'); }
+  else console.log('ok   alerts: 2×1 lays out as a row, 1×1 stacks');
+}
 
 setRuntimeSlate(3, [{ away: 'MIA', home: 'BUF', aScore: 0, hScore: 0, win: 'tnf', kickoff: Date.now() - 864e5 }, { away: 'ATL', home: 'CAR', aScore: 0, hScore: 0, win: 'early', kickoff: Date.now() - 3600e3 }, { away: 'DET', home: 'BAL', aScore: 0, hScore: 0, win: 'mnf', kickoff: Date.now() + 864e5 }]);
 const P = (c: number, tm: string, yl2: number, hs: number, as: number, txt: string, x: any = {}) => ({ c, drv: 0, tm, dn: 1, dist: 10, yl: yl2, yl2, ty: 'Rush', txt, hs, as, ...x });
@@ -82,6 +95,8 @@ inertIt('matchup score card, NEXT loading', <MatchupWidget state={{ kind: 'ok', 
 inertIt('matchup switching notice', <MatchupWidget state={{ kind: 'loading', title: 'Switching…', body: 'x' }} />);
 inertIt('alerts list, busy', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3, busy: true }} />);
 inertIt('alerts ✓, busy', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 1, busy: true }} />);
+inertIt('alerts 2×1, busy', <AlertsWidget state={{ kind: 'ok', summary: sum, leagues: 3, busy: true }} widthDp={140} />);
+inertIt('alerts 2×1 ✓, busy', <AlertsWidget state={{ kind: 'ok', summary: alertsSummary([]), leagues: 2, busy: true }} widthDp={140} />);
 inertIt('fields, busy', <FieldsWidget state={{ kind: 'ok', week: 2, games: starred, current: 3, hasPrev: true, hasNext: true, leagueLabel: 'X', busy: true }} />);
 
 // The harness itself: the two shapes that blank a widget must still fail here.

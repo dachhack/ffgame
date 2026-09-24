@@ -49,10 +49,10 @@
             {
               "name": "Alerts",
               "label": "Drip lineup alerts",
-              "description": "Lineup warnings across your leagues, in one tile.",
-              "minWidth": "40dp",
+              "description": "Lineup warnings across your leagues — the total, and each league that needs you.",
+              "minWidth": "110dp",
               "minHeight": "40dp",
-              "targetCellWidth": 1,
+              "targetCellWidth": 2,
               "targetCellHeight": 1,
               "previewImage": "./assets/widget-alerts-preview.png",
               "updatePeriodMillis": 1800000,
