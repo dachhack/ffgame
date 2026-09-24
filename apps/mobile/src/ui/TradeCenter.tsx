@@ -29,6 +29,7 @@ import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
+import { InjuryNow } from './rosterGroup';
 
 export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview,
                               reviewHours, vetoNeed, offerDays, faabTrading, myFaab,
@@ -312,9 +313,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         return (
           <Pressable key={r.slug} onPress={() => toggle(sel, set, r.slug)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
-              {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
-            </Text>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
+                {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
+              </Text>
+              <InjuryNow slug={r.slug} size={7.5} />
+            </View>
             {/* ⓘ rather than the name itself: the whole row is the CHECKBOX
                 here, and stealing the name from it would make picking players
                 for a trade harder to hit. */}
@@ -523,9 +527,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             return (
               <Pressable key={r.slug} disabled={busy} onPress={() => toggleSignal(r.slug, 'block', !on)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.warn, 14) : 'transparent' }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.warn : t.text, fontWeight: on ? '700' : '400' }}>
-                  {on ? '🔁' : '☐'} {p?.full_name ?? r.slug}
-                </Text>
+                <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: on ? t.warn : t.text, fontWeight: on ? '700' : '400' }}>
+                    {on ? '🔁' : '☐'} {p?.full_name ?? r.slug}
+                  </Text>
+                  <InjuryNow slug={r.slug} size={7.5} />
+                </View>
                 <Mono size={8} tone="faint">{p?.pos}{on ? ' · ON THE BLOCK' : ''}</Mono>
               </Pressable>
             );
@@ -544,7 +551,10 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         return (
           <View key={`blk-${s.roster_id}-${s.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: fs(12), fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(12), fontWeight: '700', color: t.text }}>{pname(s.slug)}</Text>
+                <InjuryNow slug={s.slug} size={7.5} />
+              </View>
               <Mono size={8.5} tone="faint">{p?.pos}{dealTag(s.slug) ? ` · ${dealTag(s.slug)}` : ''} · {mineRow ? 'your player' : teamName(s.roster_id)}</Mono>
             </View>
             {n > 0 && <Mono size={9} tone="you" weight="700">👀 {n}</Mono>}
@@ -568,17 +578,23 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>👀 TRADE INTEREST</Mono>
           {interestInMine.map((w) => (
             <View key={`in-${w.roster_id}-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-              <Text numberOfLines={2} style={{ flex: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(16) }}>
-                <Text style={{ fontWeight: '700', color: t.you }}>{teamName(w.roster_id)}</Text> is interested in your <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text>
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={2} style={{ flexShrink: 1, fontSize: fs(11.5), color: t.text, lineHeight: fs(16) }}>
+                  <Text style={{ fontWeight: '700', color: t.you }}>{teamName(w.roster_id)}</Text> is interested in your <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text>
+                </Text>
+                <InjuryNow slug={w.slug} size={7.5} />
+              </View>
               {myRoster != null && <Chip label="⇄ TALK" onPress={() => openPreset(w.roster_id, [w.slug], [])} />}
             </View>
           ))}
           {wants.filter((w) => w.roster_id === myRoster).map((w) => (
             <View key={`my-${w.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
-                You 👀 <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text> <Text style={{ color: t.dim, fontSize: fs(10) }}>({teamName(w.holder_roster)})</Text>
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: t.text }}>
+                  You 👀 <Text style={{ fontWeight: '700' }}>{pname(w.slug)}</Text> <Text style={{ color: t.dim, fontSize: fs(10) }}>({teamName(w.holder_roster)})</Text>
+                </Text>
+                <InjuryNow slug={w.slug} size={7.5} />
+              </View>
               <Chip label="✕" disabled={busy} onPress={() => toggleSignal(w.slug, 'want', false)} />
               <Chip label="⇄ OFFER" onPress={() => openPreset(w.holder_roster, [], [w.slug])} />
             </View>
@@ -661,9 +677,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
                         if (n[r.slug] != null) delete n[r.slug]; else n[r.slug] = nextSeat(rid);
                         return n;
                       }); }}>
-                      <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: to != null ? t.you : t.text, fontWeight: to != null ? '700' : '400' }}>
-                        {to != null ? '☑' : '☐'} {p?.full_name ?? r.slug}
-                      </Text>
+                      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11), color: to != null ? t.you : t.text, fontWeight: to != null ? '700' : '400' }}>
+                          {to != null ? '☑' : '☐'} {p?.full_name ?? r.slug}
+                        </Text>
+                        <InjuryNow slug={r.slug} size={7.5} />
+                      </View>
                     </Pressable>
                     {to != null && teamsIn.filter((x) => x !== rid).map((x) => (
                       <Chip key={x} label={`→ ${teams.find((y) => y.roster_id === x)?.team ?? `Team ${x}`}`} on={to === x}
@@ -722,9 +741,12 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               const cur = retain[s] ?? 0;
               return (
                 <View key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: t.text }}>
-                    {pname(s)} <Text style={{ color: t.dim, fontSize: fs(9.5) }}>${d.salary}·{d.years}yr</Text>
-                  </Text>
+                  <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11), color: t.text }}>
+                      {pname(s)} <Text style={{ color: t.dim, fontSize: fs(9.5) }}>${d.salary}·{d.years}yr</Text>
+                    </Text>
+                    <InjuryNow slug={s} size={7.5} />
+                  </View>
                   <Pressable hitSlop={6} disabled={cur <= 0} onPress={() => { tap(); setRetain((r) => ({ ...r, [s]: Math.max(0, cur - 1) })); }}>
                     <Text style={{ fontFamily: MONO, fontSize: fs(15), color: t.dim }}>−</Text>
                   </Pressable>

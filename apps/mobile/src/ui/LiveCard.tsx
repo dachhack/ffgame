@@ -24,6 +24,7 @@ import type { Pos } from '@drip/core/theme';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { useWobble, HotGlow } from './animations';
 import { cardBackArt } from './cards';
+import { InjuryNow } from './rosterGroup';
 
 const STOCK = '#F4EDDA';
 const STOCK_TILE = require('../../assets/card-stock.png');
@@ -103,8 +104,11 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 
           <View style={{ padding: 5, paddingBottom: 6, gap: 3 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
-              <View style={{ borderWidth: 1, borderColor: suit.bd, backgroundColor: suit.bg, borderRadius: 3, paddingHorizontal: 3.5, paddingVertical: 1.5 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: suit.fg }}>{pos === 'DEF' ? 'DST' : pos}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <View style={{ borderWidth: 1, borderColor: suit.bd, backgroundColor: suit.bg, borderRadius: 3, paddingHorizontal: 3.5, paddingVertical: 1.5 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: suit.fg }}>{pos === 'DEF' ? 'DST' : pos}</Text>
+                </View>
+                <InjuryNow slug={slug} size={6.5} />
               </View>
               {!!team && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2.5 }}>

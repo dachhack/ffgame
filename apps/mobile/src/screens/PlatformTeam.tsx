@@ -15,6 +15,7 @@ import { myEnrollments, myLatestPool, type PoolPlayer } from '@drip/core/data/li
 import { useTheme, MONO, fs } from '../theme.native';
 import { Card, Display, Mono } from '../ui/prims';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
+import { InjuryNow } from '../ui/rosterGroup';
 import { Pressable } from 'react-native';
 import { tap } from '../ui/feedback';
 import { useLeagueScroll } from '../ui/scrollChrome';
@@ -89,7 +90,10 @@ export function PlatformTeam({ leagueId, rosterId }: { leagueId: string; rosterI
                     onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.full, pos: p.pos, team: p.team }); }}
                     style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
                     <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim, width: 30 }}>{p.pos === 'DEF' ? 'DST' : p.pos}</Text>
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full}</Text>
+                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(12.5), color: t.text }}>{p.full}</Text>
+                      <InjuryNow slug={p.slug} size={7.5} />
+                    </View>
                     <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}>{p.team}</Text>
                   </Pressable>
                 ))}

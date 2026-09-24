@@ -43,7 +43,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
-import { FlagChip, InjuryBadge } from '../ui/rosterGroup';
+import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -133,8 +133,9 @@ function KeepersCard({ leagueId, myRoster, mine }: {
           </Mono>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {carried.map((k) => (
-              <View key={k.slug} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
+              <View key={k.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 8, paddingVertical: 4 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.text }}>{k.declared ? '★ ' : ''}{nameOf(k.slug)}</Text>
+                <InjuryNow slug={k.slug} size={7.5} />
               </View>
             ))}
           </View>
@@ -149,8 +150,9 @@ function KeepersCard({ leagueId, myRoster, mine }: {
               const on = sel.has(p.slug);
               return (
                 <Pressable key={p.slug} disabled={busy} onPress={() => toggle(p.slug)}
-                  style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.6 : 1 }}>
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5, opacity: busy ? 0.6 : 1 }}>
                   <Text style={{ fontFamily: MONO, fontSize: fs(10.5), fontWeight: '700', color: on ? t.onAccent : t.dim }}>{on ? '★ ' : ''}{p.full_name}</Text>
+                  <InjuryNow slug={p.slug} size={7.5} />
                 </Pressable>
               );
             })}
@@ -983,9 +985,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                     ? (v ?? []).filter((x) => x !== c.id) : [...(v ?? []), c.id]); }} />
               )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>
-                  {g.id ? `${i + 1}. ` : ''}＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(12), color: t.text }}>
+                    {g.id ? `${i + 1}. ` : ''}＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}
+                  </Text>
+                  <InjuryNow slug={c.add_slug} size={7.5} />
+                </View>
                 {c.drop_slug && <Mono size={9} tone="faint">dropping {poolBySlug.get(c.drop_slug)?.full_name ?? c.drop_slug}</Mono>}
                 {/* 0289: PENDING UNTIL WHEN — the web twin. A card that says
                     "pending" and stops is the same silence that made a claim
@@ -1003,9 +1008,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           ))}
           {recentClaims.map((c) => (
             <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12), color: t.dim }}>
-                ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}{c.note ? ` — ${c.note}` : ''}
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(12), color: t.dim }}>
+                  ＋ {poolBySlug.get(c.add_slug)?.full_name ?? c.add_slug}{c.note ? ` — ${c.note}` : ''}
+                </Text>
+                <InjuryNow slug={c.add_slug} size={7.5} />
+              </View>
               <Mono size={8} tone={c.status === 'won' ? 'you' : 'faint'} track={0.06}>{c.status.toUpperCase()}</Mono>
             </View>
           ))}
@@ -1107,6 +1115,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{p.team}</Mono>
+                  <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />
                   {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
                   {showOwned && ownRid != null && (
@@ -1236,7 +1245,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
               <Face slug={p.slug} pos={p.pos} />
               <PosPill pos={p.pos} size={8} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
+                <InjuryNow slug={p.slug} size={7.5} />
+              </View>
               {p.spot !== 'active' && <Mono size={8.5} tone="faint">{p.spot.toUpperCase()}</Mono>}
               <Pressable disabled={busy} onPress={() => { tap(); pendingAdd && doAdd(pendingAdd, p.slug); }}
                 style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 9, paddingVertical: 5 }}>

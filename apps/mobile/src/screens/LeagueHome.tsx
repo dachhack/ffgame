@@ -12,6 +12,7 @@ import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
+import { InjuryNow } from '../ui/rosterGroup';
 import { PushPrefs } from '../ui/SettingsModal';
 import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView, ApiKeysView } from '../ui/LeagueInfo';
@@ -657,7 +658,10 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }
                   <Pressable key={p.slug} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, leagueId }); }}
                     style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 3 }}>
                     <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim, width: 30 }}>{p.pos === 'DEF' ? 'DST' : p.pos}</Text>
-                    <Text style={{ flex: 1, fontSize: 12.5, color: t.text }}>{p.name}</Text>
+                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ flexShrink: 1, fontSize: 12.5, color: t.text }}>{p.name}</Text>
+                      <InjuryNow slug={p.slug} size={7.5} />
+                    </View>
                     {deals.get(p.slug) != null && <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.dim }}>{deals.get(p.slug)}</Text>}
                     <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{p.team}</Text>
                   </Pressable>

@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.504.0 — injury tags beside every player, web and app
+
+Founder: "add injury tags to the rest of the app and web too." About 85
+places that list a player now show his designation (Q / D / O / IR) next to
+his name.
+
+- **Core: a report for any screen.** The board's injury cache is keyed to the
+  matchup week and only the boards load it, so the draft room, trades and
+  waivers had nothing to read. `injuries.ts` now also keeps the same ESPN
+  snapshot independent of the week (`setInjuryReport` / `injuryNow` /
+  `onInjuryReport`). `liveApi.ensureInjuryReport()` does one shared read at
+  most every 10 minutes, and `loadLiveInjuries` refreshes it too. Covered in
+  check:injuries.
+- **`InjuryNow` badge** (web `src/app/ui.tsx`, app `ui/rosterGroup.tsx`). It
+  loads the report itself and repaints when the report lands, so each call
+  site is one element beside a name.
+- **Web (49 sites, 11 files)** and **app (37 sites, 9 files).** Covers the
+  draft room (lot, available list, board, queue, SOLD, edit pick), keepers,
+  cap sheet, waivers (claims, free agents, drop-for-add), trade center,
+  league and platform rosters, guillotine and vampire panels, the pod
+  builder, the classic board's slate strip, picker and bench chips, the swap
+  and backup menus, the final recap and the feed header. On the app it also
+  covers the drip cards (MiniCard/LiveCard and CardFace, so Duel and
+  SetupRow get it too).
+- **Skipped:** demo/sim boards, and names inside composed text lines (chat,
+  activity, trade offer summaries, "dropping X" sublines).
+- **Check on a device:** the draft board cell and the MiniCard top row are
+  the tightest fits.
+
 ### v0.503.0 — classic lineup cards, injury tags, and picking the widget's leagues
 
 - **Classic widget: the lineup as cards.** Founder: "scroll down in classic
