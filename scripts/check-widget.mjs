@@ -355,6 +355,20 @@ const state = [
   const noOpp = summarize({ league: cl, week: WEEK, matchup: cmatch('live'), state: liveState, teams: cteams, injuries, nowMs: kick(0) + 30 * 60_000, classic: classic({ theirRoster: null }) });
   ok('classic: an unreadable opponent keeps the live total and is flagged', noOpp.themLive === true && noOpp.them.score === 0, noOpp);
 
+  // v0.501.0 — the classic card: live totals beside the projections, done /
+  // live / up counts per team, the win bar, and the teams' avatars.
+  ok('classic card: the live totals ride along with the projections', sun.actual?.me === 13.1 && sun.actual?.them === 0 && sun.me.score === 13.1, sun.actual);
+  ok('classic card: done / live / up by team (QB done, RB1 on the field, WR still to come)', sun.left?.me.done === 1 && sun.left?.me.playing === 1 && sun.left?.me.waiting === 1, sun.left);
+  ok('classic card: before kickoff nobody is done', pre.left?.me.done === 0 && pre.left?.them.done === 0, pre.left);
+  ok('classic card: the win chance is the board\'s — 22.2 projected against 73 is long odds, never 0', pre.winPct > 0 && pre.winPct < 0.2, pre.winPct);
+  ok('classic card: the win chance moves with the margin (swap the sides, the odds flip)',
+    Math.abs(summarize({ league: { ...cl, rosterId: 7 }, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,
+      classic: classic({ picks: [], roster: theirRoster, theirPicks: myPicks, theirRoster: roster }) }).winPct - (1 - pre.winPct)) < 1e-9);
+  ok('classic card: at the final the win bar is the result', fin.winPct === 1, fin.winPct);
+  ok('classic card: no opponent lineup, no win bar', noOpp.winPct === undefined, noOpp.winPct);
+  const faces = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: { 4: { team_name: 'Steelers', avatar: 'https://sleepercdn.com/avatars/s' }, 7: { team_name: 'Ravens', avatar: null } }, injuries, nowMs: kick(0), classic: classic() });
+  ok('classic card: each team carries its own avatar, or none', faces.me.avatar === 'https://sleepercdn.com/avatars/s' && faces.them.avatar === null, [faces.me.avatar, faces.them.avatar]);
+
   // Golf: better is lower-but-not-zero, an empty spot pays the fill.
   const gslots = slots.map((d) => ({ ...d, zeroPts: 10 }));
   const golf = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: cteams, injuries, nowMs: kick(0) - LOCK_LEAD_MS - 3_600_000,

@@ -4,14 +4,18 @@
 // a lot more info in that widget… a lineup assessment widget would be a
 // second add or make it a selection in the current widget."
 //
-// Two cards, by the league on show.
-//   DRIP (v0.500.0) — a pinned header (league, record and place, the week's
-//            score, the roster alerts, ⟳) over a scrolling list of the week's
-//            windows, each a box of player tiles, packed into rows by the
-//            widget's width. It replaced the score/lineup pair and its ⇄ flip.
-//   SCORE  — classic leagues, and any seat with no picks to show: league and
-//            week, both teams and scores, the state line, who is still to
-//            play. Height picks the tier: a 4×2 shows the essentials, taller
+// Three cards, by the league on show. The first two share a pinned header
+// (▸ next, league, record and place, ⟳; the week, the opponent, the score;
+// the roster alerts) over a list that scrolls.
+//   DRIP (v0.500.0) — the week's windows, each a box of player tiles, packed
+//            into rows by the widget's width. It replaced the score/lineup
+//            pair and its ⇄ flip.
+//   CLASSIC (v0.501.0) — projected finals in the header; the two teams face
+//            to face (avatar, live score, done / live / up), the win bar, and
+//            the spots that want attention.
+//   SCORE  — any seat with nothing else to show (a bye, no matchup, picks
+//            unread): league and week, both teams and scores, the state line.
+//            Height picks the tier: a 4×2 shows the essentials, taller
 //            widgets add rows — Android tells the task the height.
 //
 // It is RemoteViews under the hood, so what can be drawn is what
@@ -20,7 +24,8 @@
 // a widget has no ThemeCtx, and a home screen is not the app.
 import React from 'react';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
-import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard } from '@drip/core/data/widgetFeed';
+import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard, type SideLeft } from '@drip/core/data/widgetFeed';
+import { crestInitial } from '@drip/core/data/crest';
 
 const C = {
   bg: '#0E1F22',
@@ -377,18 +382,18 @@ function alertLine(snap: WidgetSnapshot): { text: string; color: ColorProp } {
   return { text: snap.phase === 'pre' ? `✓ Lineup set · ${snap.line}` : snap.line, color };
 }
 
-function DripView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean }) {
-  const open = { clickAction: WIDGET_CLICK.open, clickActionData: { uri: matchupDeepLink(snap.leagueId, snap.rosterId) } };
-  const inner = widthDp - 2 * PAD;
-  const rows = packWindows(snap.windows, snap.cards ?? [], inner);
-  const perLine = tilesPerLine(inner);
+/** THE PINNED HEADER, both games (v0.500.0, shared v0.501.0): ▸ NEXT, the
+ *  league, my record and place, ⟳; the week, the opponent and the score
+ *  (PROJ in a classic league, whose header scores are the projected finals);
+ *  the alert line. It sits outside the list, so it never scrolls. */
+function LeagueHeader({ snap, leagues, offline, alert }: { snap: WidgetSnapshot; leagues: number; offline?: boolean; alert: { text: string; color: ColorProp } }) {
+  const open = openMatchup(snap);
   const st = snap.standing;
   const record = st ? `${st.wins}-${st.losses}${st.ties ? `-${st.ties}` : ''} · ${ordinal(st.place)}` : '';
   const leading = snap.them ? (snap.me.score > snap.them.score ? 'me' : snap.me.score < snap.them.score ? 'them' : null) : null;
-  const alert = alertLine(snap);
+  const proj = snap.projected === true && snap.phase !== 'final';
   return (
-    <FlexWidget style={{ width: 'match_parent', height: 'match_parent', backgroundColor: C.card, borderRadius: 18, padding: PAD, flexDirection: 'column' }}>
-      {/* ── the header: pinned, never scrolls ── */}
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
         {leagues > 1 ? <TextWidget text="▸ NEXT" clickAction={WIDGET_CLICK.next}
           style={{ fontSize: 10, color: C.dim, fontWeight: 'bold', backgroundColor: C.bg, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, marginRight: 6 }} /> : null}
@@ -405,6 +410,7 @@ function DripView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; l
         </FlexWidget>
         {snap.them ? (
           <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {proj ? <TextWidget text={snap.themLive ? 'PROJ · LIVE  ' : 'PROJ  '} maxLines={1} style={{ fontSize: 8.5, color: C.faint, fontWeight: 'bold' }} /> : null}
             <TextWidget text={fmt(snap.me.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'them' ? C.dim : C.you, fontWeight: 'bold' }} />
             <TextWidget text=" – " maxLines={1} style={{ fontSize: 12, color: C.faint }} />
             <TextWidget text={fmt(snap.them.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'me' ? C.dim : C.opp, fontWeight: 'bold' }} />
@@ -412,18 +418,134 @@ function DripView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; l
         ) : null}
       </FlexWidget>
       <TextWidget {...open} text={alert.text} truncate="END" maxLines={1} style={{ fontSize: 10, color: alert.color, fontWeight: 'bold', marginTop: 3, marginBottom: 6 }} />
-      {/* ── the windows: the one part that scrolls ── */}
+    </FlexWidget>
+  );
+}
+
+const openMatchup = (snap: WidgetSnapshot) => ({ clickAction: WIDGET_CLICK.open, clickActionData: { uri: matchupDeepLink(snap.leagueId, snap.rosterId) } });
+
+/** The card's frame: the header on top, and under it the one part that
+ *  scrolls — a ListWidget, each child one item. */
+function PinnedFrame({ header, children }: { header: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <FlexWidget style={{ width: 'match_parent', height: 'match_parent', backgroundColor: C.card, borderRadius: 18, padding: PAD, flexDirection: 'column' }}>
+      {header}
       <FlexWidget style={{ flex: 1, width: 'match_parent' }}>
-        <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
-          {rows.map((row, i) => (
-            <FlexWidget key={row.map((r) => r.win.id).join('+')} {...open}
-              style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-start', paddingBottom: i === rows.length - 1 ? 0 : 6 }}>
-              {row.map((r, j) => <WindowBox key={r.win.id} win={r.win} cards={r.cards} perLine={perLine} last={j === row.length - 1} />)}
-            </FlexWidget>
-          ))}
-        </ListWidget>
+        <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>{children}</ListWidget>
       </FlexWidget>
     </FlexWidget>
+  );
+}
+
+function DripView({ snap, leagues, widthDp, offline }: { snap: WidgetSnapshot; leagues: number; widthDp: number; offline?: boolean }) {
+  const open = openMatchup(snap);
+  const inner = widthDp - 2 * PAD;
+  const rows = packWindows(snap.windows, snap.cards ?? [], inner);
+  const perLine = tilesPerLine(inner);
+  return (
+    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={alertLine(snap)} />}>
+      {rows.map((row, i) => (
+        <FlexWidget key={row.map((r) => r.win.id).join('+')} {...open}
+          style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-start', paddingBottom: i === rows.length - 1 ? 0 : 6 }}>
+          {row.map((r, j) => <WindowBox key={r.win.id} win={r.win} cards={r.cards} perLine={perLine} last={j === row.length - 1} />)}
+        </FlexWidget>
+      ))}
+    </PinnedFrame>
+  );
+}
+
+/** THE CLASSIC LEAGUE CARD (v0.501.0). Founder: "The header is pretty much
+ *  the same except it shows projected score rather than the actual. Instead
+ *  of cards, just have the avatar for the user vs the avatar for the user's
+ *  opponent with the current score and number of players finished, in
+ *  progress, upcoming by team." Then: "win probability bar would be good."
+ *
+ *  Under the shared header (projected finals there), the list holds: the two
+ *  teams face to face — avatar, name, the LIVE score, and DONE / LIVE / UP
+ *  counts — then the win bar, then the spots that want attention (empty,
+ *  out/bye, a bench upgrade), one line each. It scrolls, so a 4×2 shows the
+ *  faces and a thumb reaches the rest. */
+const AVATAR = 42;
+
+function TeamFace({ name, avatar, score, left, color, align }: { name: string; avatar?: string | null; score: number; left?: SideLeft | null; color: ColorProp; align: 'left' | 'right' }) {
+  const counts: [string, number | null][] = [['DONE', left?.done ?? null], ['LIVE', left?.playing ?? null], ['UP', left?.waiting ?? null]];
+  const face = avatar
+    ? <ImageWidget image={avatar as `https:${string}`} imageWidth={AVATAR} imageHeight={AVATAR} radius={AVATAR / 2} resizeMode="cover" />
+    : <TextWidget text={crestInitial(name)} maxLines={1}
+        style={{ width: AVATAR, height: AVATAR, fontSize: 18, color, fontWeight: 'bold', textAlign: 'center', backgroundColor: C.bg, borderRadius: AVATAR / 2 }} />;
+  return (
+    <FlexWidget style={{ flex: 1, flexDirection: 'column', alignItems: align === 'left' ? 'flex-start' : 'flex-end' }}>
+      {/* The face on the outside edge, the score toward the middle. */}
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {align === 'left' ? face : null}
+        <TextWidget text={fmt(score)} maxLines={1} style={{ fontSize: 24, color, fontWeight: 'bold', marginLeft: align === 'left' ? 8 : 0, marginRight: align === 'right' ? 8 : 0 }} />
+        {align === 'right' ? face : null}
+      </FlexWidget>
+      <TextWidget text={name} truncate="END" maxLines={1} style={{ fontSize: 10, color: C.text, fontWeight: 'bold', marginTop: 3, textAlign: align }} />
+      <FlexWidget style={{ flexDirection: 'row', marginTop: 3 }}>
+        {counts.map(([label, n], i) => (
+          <FlexWidget key={label} style={{ flexDirection: 'column', alignItems: 'center', marginLeft: i ? 8 : 0 }}>
+            <TextWidget text={n == null ? '–' : String(n)} maxLines={1} style={{ fontSize: 12, color: label === 'LIVE' && n ? C.live : C.text, fontWeight: 'bold' }} />
+            <TextWidget text={label} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.08 }} />
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+/** The win bar: my share in my colour, theirs in theirs, the numbers under it. */
+function WinBar({ pct }: { pct: number }) {
+  const me = Math.round(pct * 100);
+  // A sliver either side, so a 99% still shows the other colour.
+  const a = Math.max(2, Math.min(98, me));
+  return (
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginTop: 8 }}>
+      <FlexWidget style={{ width: 'match_parent', height: 7, flexDirection: 'row' }}>
+        <FlexWidget style={{ flex: a, height: 7, backgroundColor: C.you, borderRadius: 3, marginRight: 2 }} />
+        <FlexWidget style={{ flex: 100 - a, height: 7, backgroundColor: C.opp, borderRadius: 3 }} />
+      </FlexWidget>
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+        <TextWidget text={`${me}% WIN`} maxLines={1} style={{ fontSize: 9, color: C.you, fontWeight: 'bold' }} />
+        <TextWidget text={`${100 - me}%`} maxLines={1} style={{ fontSize: 9, color: C.opp, fontWeight: 'bold' }} />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+function classicAlert(snap: WidgetSnapshot): { text: string; color: ColorProp } {
+  const n = (k: string) => snap.fixes.filter((f) => f.kind === k).length;
+  const empty = n('empty'), hurt = n('injury') + n('bye'), swap = n('swap');
+  const bits: string[] = [];
+  if (empty) bits.push(`${empty} empty`);
+  if (hurt) bits.push(`${hurt} out/bye`);
+  if (swap) bits.push(`${swap} upgrade${swap === 1 ? '' : 's'}`);
+  if (bits.length) return { text: `⚠ ${bits.join(' · ')}`, color: empty || hurt ? C.warn : C.you };
+  const color: ColorProp = snap.phase === 'live' ? C.live : snap.phase === 'final' ? C.dim : C.ok;
+  return { text: snap.phase === 'pre' ? `✓ Lineup set · ${snap.line}` : snap.line, color };
+}
+
+function ClassicView({ snap, leagues, offline }: { snap: WidgetSnapshot; leagues: number; offline?: boolean }) {
+  const open = openMatchup(snap);
+  const them = snap.them!;
+  const live = snap.actual ?? { me: snap.me.score, them: them.score };
+  const leading = live.me > live.them ? 'me' : live.me < live.them ? 'them' : null;
+  return (
+    <PinnedFrame header={<LeagueHeader snap={snap} leagues={leagues} offline={offline} alert={classicAlert(snap)} />}>
+      <FlexWidget {...open} style={{ width: 'match_parent', flexDirection: 'column' }}>
+        <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'flex-start' }}>
+          <TeamFace name={snap.me.name} avatar={snap.me.avatar} score={live.me} left={snap.left?.me} color={leading === 'them' ? C.dim : C.you} align="left" />
+          <TextWidget text="vs" maxLines={1} style={{ fontSize: 10, color: C.faint, paddingHorizontal: 6, marginTop: 14 }} />
+          <TeamFace name={them.name} avatar={them.avatar} score={live.them} left={snap.themLive ? null : snap.left?.them} color={leading === 'me' ? C.dim : C.opp} align="right" />
+        </FlexWidget>
+        {snap.winPct != null ? <WinBar pct={snap.winPct} /> : null}
+      </FlexWidget>
+      {snap.fixes.map((f, i) => (
+        <FlexWidget key={`${f.win}-${f.kind}-${i}`} {...open} style={{ width: 'match_parent', marginTop: i ? 2 : 8 }}>
+          <Line text={`${f.winLabel} · ${f.text}`} color={f.kind === 'swap' ? C.you : C.warn} />
+        </FlexWidget>
+      ))}
+    </PinnedFrame>
   );
 }
 
@@ -433,9 +555,10 @@ export function MatchupWidget({ state, heightDp = 110, widthDp = 320 }: { state:
   if (state.kind === 'error') return <Notice title="Couldn’t reach the league" body={state.message} retry />;
   if (state.kind === 'loading') return <Notice title={state.title} body={state.body} />;
   const { snap, leagues, offline } = state;
-  // A drip seat with its picks read gets the league card; everything else
-  // (classic, a bye, no matchup) keeps the score card.
-  return snap.assessable && (snap.cards ?? []).length > 0
-    ? <DripView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />
-    : <ScoreView snap={snap} leagues={leagues} tier={tierFor(heightDp)} offline={offline} />;
+  // A drip seat with its picks read gets the drip card, a classic seat with
+  // an opponent the classic card; everything else (a bye, no matchup, picks
+  // unread) keeps the score card.
+  if (snap.assessable && (snap.cards ?? []).length > 0) return <DripView snap={snap} leagues={leagues} widthDp={widthDp} offline={offline} />;
+  if (snap.projected && snap.them) return <ClassicView snap={snap} leagues={leagues} offline={offline} />;
+  return <ScoreView snap={snap} leagues={leagues} tier={tierFor(heightDp)} offline={offline} />;
 }

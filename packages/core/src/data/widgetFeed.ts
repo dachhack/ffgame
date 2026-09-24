@@ -36,6 +36,7 @@ import { headshot, espnHeadshot } from './media';
 import type { Pos } from '../types';
 import { CLASSIC_WIN, slotAllows, slotDisplayNames, slotBadgeLabel, optimalLineup, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 import { zeroFill, setLeagueGolf, clearLeagueGolf } from '../engine/golf';
+import { winProbability } from '../engine/matchupBoard';
 import { setLeagueProjScoring, clearLeagueProjScoring } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
@@ -113,6 +114,10 @@ export interface WidgetCard {
   hot: boolean;
 }
 
+/** Starters still to play and on the field; `done` (v0.501.0, classic) the
+ *  ones whose game is over. */
+export interface SideLeft { waiting: number; playing: number; done?: number }
+
 export interface WidgetSnapshot {
   leagueId: string;
   leagueName: string;
@@ -120,9 +125,10 @@ export interface WidgetSnapshot {
   week: number;
   /** "WK 3", or the preseason label the slate gives. */
   weekLabel: string;
-  me: { name: string; score: number };
+  /** `avatar` (v0.501.0): the team's own avatar URL, when it has one. */
+  me: { name: string; score: number; avatar?: string | null };
   /** Null on a bye. */
-  them: { name: string; score: number } | null;
+  them: { name: string; score: number; avatar?: string | null } | null;
   phase: WidgetPhase;
   /** The state line: "LIVE · SUN 1PM", "Locks Sun, Sep 21 1:00 PM", "FINAL · W". */
   line: string;
@@ -133,7 +139,7 @@ export interface WidgetSnapshot {
   windows: WidgetWindow[];
   /** Starters still to play (sealed windows not yet kicked) and in play now,
    *  per side. Null when the seat's picks aren't readable (a classic league). */
-  left: { me: { waiting: number; playing: number }; them: { waiting: number; playing: number } } | null;
+  left: { me: SideLeft; them: SideLeft } | null;
   /** My slots currently on a hot streak. */
   hot: number;
   /** The next window still open, with how many of my slots are empty in it. */
@@ -154,6 +160,13 @@ export interface WidgetSnapshot {
   /** CLASSIC: the opponent's lineup could not be read (or they have nobody),
    *  so `them.score` is their live total, not a projection. */
   themLive?: boolean;
+  /** CLASSIC (v0.501.0): the live totals, when `me.score`/`them.score` are
+   *  the projections — the widget prints both. */
+  actual?: { me: number; them: number };
+  /** CLASSIC (v0.501.0): my chance to win, 0..1 — the board's own
+   *  winProbability on the projected finals, so the two never disagree.
+   *  Absent when the opponent's lineup could not be read. */
+  winPct?: number;
   // ── v0.433.9 ──
   /** DRIP: my picks as cards, every slot of every window in kickoff order,
    *  empty slots included. Empty when the seat is not assessable. */
@@ -218,7 +231,7 @@ export interface SummarizeInput {
   week: number;
   matchup: LiveMatchup | null;
   state: WindowScore[];
-  teams: Record<number, { team_name: string | null }>;
+  teams: Record<number, { team_name: string | null; avatar?: string | null }>;
   nowMs: number;
   /** The seat's sealed picks (drip). Undefined = not readable → no assessment. */
   picks?: PickRow[];
@@ -291,6 +304,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     cards: [] as WidgetCard[],
   };
   const myName = teams[league.rosterId]?.team_name || 'Your team';
+  const myAvatar = teams[league.rosterId]?.avatar ?? null;
   if (!matchup) {
     // A bye needs evidence (v0.433.6): the week is scheduled and this seat
     // is not in it. Otherwise there is simply no matchup to show — the
@@ -316,8 +330,9 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     mine += home ? Number(s.home_score) || 0 : Number(s.away_score) || 0;
     theirs += home ? Number(s.away_score) || 0 : Number(s.home_score) || 0;
   }
-  const me = { name: myName, score: round1(mine) };
-  const them = { name: oppName, score: round1(theirs) };
+  const me = { name: myName, score: round1(mine), avatar: myAvatar };
+  const them = { name: oppName, score: round1(theirs), avatar: teams[oppId]?.avatar ?? null };
+  const actual = { me: me.score, them: them.score };
   const hot = state.reduce((n, s) => n + (s.slot_scores ?? []).filter((r) => r.side === mySide && r.hot).length, 0);
 
   // ── the assessment (sealed picks: drip) ──
@@ -417,6 +432,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   const final = matchup.status === 'final';
   let projected = false;
   let themLive = false;
+  let winPct: number | undefined;
   const c = input.classic;
   if (c && league.gameMode === 'classic') {
     projected = true;
@@ -472,7 +488,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         }
       }
       let total = 0;
-      const left = { waiting: 0, playing: 0 };
+      const left = { waiting: 0, playing: 0, done: 0 };
       for (const d of c.slots) {
         const p = lineup.get(d.slot) ?? null;
         const live = liveOf.get(d.slot)?.score ?? 0;
@@ -485,6 +501,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
           settled = st === 'done';
           if (st === 'pre' && windowForTeam(week, p.team)) left.waiting += 1;
           if (st === 'live') left.playing += 1;
+          if (st === 'done' && windowForTeam(week, p.team)) left.done += 1;
         }
         // GOLF: an empty spot, or a settled zero, pays the spot's fill.
         total += c.golf ? zeroFill(v, d.zeroPts ?? null, settled) : v;
@@ -496,7 +513,16 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     me.score = mineSide.total;
     const theirs = c.theirRoster?.length ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
     if (theirs) them.score = theirs.total; else themLive = true;
-    left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0 } };
+    left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0, done: 0 } };
+    // THE WIN BAR (v0.501.0). Founder: "win probability bar would be good."
+    // At the final it is the result; before that, the board's number. Golf
+    // reads the module flag the feed installs for this league, as the board does.
+    if (theirs) {
+      const togo = (l: SideLeft) => l.waiting + l.playing;
+      winPct = final
+        ? (me.score === them.score ? 0.5 : (c.golf ? me.score < them.score : me.score > them.score) ? 1 : 0)
+        : winProbability(me.score, them.score, togo(mineSide.left), togo(theirs.left));
+    }
 
     // ── the spots that want attention (mine) ──
     const starting = new Set([...mineSide.lineup.values()].filter(Boolean).map((p) => (p as ClassicRosterPlayer).slug));
@@ -562,7 +588,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   // ── the state line, and which view leads ──
   const openWindow = windows.some((w) => w.phase === 'setup');
   const lead: WidgetView = assessable && openWindow && (fixes.length > 0 || !windows.some((w) => w.phase !== 'setup')) ? 'lineup' : 'score';
-  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, cards, ...(projected ? { projected, themLive } : {}) };
+  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, cards, ...(projected ? { projected, themLive, actual, ...(winPct != null ? { winPct } : {}) } : {}) };
   if (final) {
     const r = me.score > them.score ? 'W' : me.score < them.score ? 'L' : 'T';
     return { ...common, phase: 'final', line: `FINAL · ${r} ${me.score}–${them.score}`, lead: 'score' };
@@ -687,7 +713,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
       .catch(() => ({} as Record<string, string>))) : Promise.resolve({} as Record<string, string>),
     // THE TABLE (v0.500.0), for the header's record and place. It moves once
     // a week; a failed read leaves the header without it.
-    drip ? cached(`standings:${league.id}`, 30 * MIN, fresh, () => leagueStandings(league.id)
+    drip || classic ? cached(`standings:${league.id}`, 30 * MIN, fresh, () => leagueStandings(league.id)
       .then((r) => (Array.isArray(r) ? r : []))
       .catch(() => [] as StandingsRow[])) : Promise.resolve([] as StandingsRow[]),
   ]);

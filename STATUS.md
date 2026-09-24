@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.501.0 — the classic league widget
+
+- **Classic leagues get their own widget card.** It uses the same pinned
+  header as the drip card (the header is now shared), with two differences:
+  the header scores are the **projected** finals, marked PROJ, and the alert
+  line counts empty spots, out/bye starters and bench upgrades.
+- **Scrolling list under the header:**
+  - Both teams face to face: team avatar (or an initial when there is none),
+    the **live** score (`actual` on the snapshot), and DONE / LIVE / UP
+    counts per team (`left.*.done` is new).
+  - A **win probability bar** (`winPct`), using the classic board's own
+    `winProbability`, so the widget and the board always agree. At the final
+    it shows the result. It is hidden when the opponent's lineup can't be
+    read.
+  - The fix lines (empty spot, out/bye, upgrade, each with who to start).
+- The snapshot's `me` and `them` now carry `avatar`. Classic leagues fetch
+  standings too.
+- The old score card now shows only for a bye, no matchup, or unread picks.
+  Pinned in check:widget (111 assertions).
+
 ### v0.500.0 — the drip league widget
 
 - **The home-screen widget has a new drip-league card**, drawn from the
