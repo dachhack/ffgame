@@ -46,10 +46,15 @@ const readLeague = (widgetId: number): string | null => { try { return store().g
  *  instant frame: no session check, no network. */
 function rememberedState(widgetId: number): Extract<WidgetState, { kind: 'ok' }> | null {
   const leagues = recallLeagues();
-  const want = readLeague(widgetId) ?? leagues?.[0]?.id ?? null;
+  // A stored league the manager has since hidden in Settings is not drawn,
+  // not even for the instant frame (v0.503.0).
+  const stored = readLeague(widgetId);
+  const want = (stored && (!leagues || leagues.some((l) => l.id === stored)) ? stored : null) ?? leagues?.[0]?.id ?? null;
   if (!want) return null;
   const r = recallSnapshot(want);
-  return r ? { kind: 'ok', snap: r.snapshot, leagues: r.leagues.length, stale: true } : null;
+  // The league COUNT is today's (hiding one drops ▸ NEXT at two), not the
+  // count remembered with the picture.
+  return r ? { kind: 'ok', snap: r.snapshot, leagues: (leagues ?? r.leagues).length, stale: true } : null;
 }
 
 /** Build the picture for one widget, reading the world. Never throws: a

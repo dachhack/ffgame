@@ -13,7 +13,7 @@
 // The demo board (a scripted 2025 week) lived in here until v0.502.0, when the
 // 2025 bake left the app with it.
 
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
@@ -24,6 +24,8 @@ import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTe
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
 import { Overlay } from './Overlay';
+import { allWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues, type WidgetLeague } from '@drip/core/data/widgetFeed';
+import { refreshMatchupWidgets } from '../widget/widgetTask';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
 
 /** Theme ids with the web's display names. Order matches the web menu. */
@@ -96,6 +98,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     { id: 'theme', icon: '🎨', name: 'Colour theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
+    // A home-screen widget is Android's (react-native-android-widget).
+    ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'which leagues it shows' }] : []),
     ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
   ];
   const current = sections.find((x) => x.id === section);
@@ -205,6 +209,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               </View>
             )}
             {section === 'voice' && <VoicePicker />}
+            {section === 'widget' && <WidgetLeaguesPicker />}
             {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
           </>
         ) : (
@@ -237,7 +242,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
-type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'rehearsal';
+type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'widget' | 'rehearsal';
 
 /** One compact line in the menu's lower half: an action, not a category. */
 function ActionRow({ icon, label, hint, strong, onPress }: {
@@ -254,6 +259,57 @@ function ActionRow({ icon, label, hint, strong, onPress }: {
   );
 }
 
+// 📱 THE WIDGET'S LEAGUES (v0.503.0). Founder: "we also need in the settings,
+// the ability for users to pick which leagues show up in the widget." One
+// switch per league; ▸ NEXT on the widget then walks only the ones left on.
+// What is stored is the HIDDEN list (core widgetFeed), so a league joined
+// later shows up without a visit here. The last league on can't be switched
+// off — a widget has to show something. Every change repaints the widgets.
+function WidgetLeaguesPicker() {
+  const t = useTheme();
+  const [leagues, setLeagues] = useState<WidgetLeague[] | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(() => widgetHiddenLeagues());
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    allWidgetLeagues(true).then((l) => { if (alive) setLeagues(l); }).catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+  const shown = (leagues ?? []).filter((l) => !hidden.has(l.id)).length;
+  const flip = (id: string) => {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else if (shown <= 1) return;
+    else next.add(id);
+    tap();
+    setHidden(next);
+    setWidgetHiddenLeagues(next);
+    void refreshMatchupWidgets();
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <Mono size={8.5} weight="700" track={0.16} tone="faint">📱 LEAGUES ON THE WIDGET</Mono>
+      {err && <Mono size={10} tone="opp">Couldn't load your leagues.</Mono>}
+      {!err && leagues === null && <Mono size={10} tone="faint">Loading your leagues…</Mono>}
+      {leagues?.length === 0 && <Mono size={10} tone="faint">No leagues yet — join one and it appears here.</Mono>}
+      {leagues?.map((l) => {
+        const on = !hidden.has(l.id);
+        const locked = on && shown <= 1;
+        return (
+          <Pressable key={l.id} onPress={() => flip(l.id)} disabled={locked}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: on ? alpha(t.you, 8) : 'transparent' }}>
+            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: on ? t.you : t.faint, width: 18 }}>{on ? '✓' : '○'}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: on ? t.text : t.dim }}>{l.name}</Text>
+              <Mono size={8.5} tone="faint">{l.gameMode === 'classic' ? 'classic' : 'drip'}{locked ? ' · the widget needs one' : ''}</Mono>
+            </View>
+          </Pressable>
+        );
+      })}
+      <Mono size={8.5} tone="faint">Applies to every Drip widget on your home screen. ▸ NEXT cycles through the leagues switched on.</Mono>
+    </View>
+  );
+}
 
 // 🧪 REHEARSAL TOOLS (v0.393.5) — admin-only, per device, off by default.
 // Founder: "let's get rid of all these rehearsals or make them just for me."

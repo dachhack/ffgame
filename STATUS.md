@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.503.0 — classic lineup cards, injury tags, and picking the widget's leagues
+
+- **Classic widget: the lineup as cards.** Founder: "scroll down in classic
+  leagues and see who is set or projected to fill best ball spots for each
+  starting position as well. Like the cards in drip leagues." Below the fix
+  lines, a LINEUP section shows one tile per starting spot, in league order.
+  Each tile has the spot label ("RB 2", or "BB·FLEX" in teal for a best-ball
+  spot), the headshot, the name, and the projection ("P 14.2") before his game.
+  During the game it shows ● live points, and after it the final points. A
+  bye reads BYE and an empty spot reads START ONE (0.0 once the week is final).
+  A best-ball spot shows who the resolver placed there, or who it projects to.
+  Classic leagues now fetch headshots too. Feed: classic `cards` now carry
+  `proj`, `bestball` and `bye`.
+- **Injury tags on every widget tile, drip and classic.** Q is amber;
+  D, O and IR are pink (`WidgetCard.injury`, from the hourly sheet).
+- **Settings → Home-screen widget (Android only):** one switch per league.
+  ▸ NEXT cycles only through the leagues switched on. What's stored is the
+  hidden list (`widget:hidden`, core `widgetHiddenLeagues` /
+  `shownWidgetLeagues`), so newly joined leagues show up automatically.
+  The last league can't be switched off. Changes repaint every widget, and a
+  widget pointed at a hidden league moves to the first shown league, even for
+  the instant frame.
+- **Not yet:** injury tags inside the app on drip matchup cards, the draft
+  room, trades and waivers. The player card, classic board, rosters, picker
+  and Team screen already show them.
+
 ### v0.502.0 — a lighter APK (about 2.4 MB off)
 
 Founder: "Any bloat in the shipped APK?" The APK was 21.2 MB. The native side

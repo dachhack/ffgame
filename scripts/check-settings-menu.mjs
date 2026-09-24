@@ -28,6 +28,9 @@ ok(/‹ ALL SETTINGS/.test(src), 'every options page has a way back to the menu'
 for (const a of ['Admin', "What's new", 'Sign out']) {
   ok(src.includes(`label="${a}"`), `the "${a}" action is on the menu`);
 }
+// v0.503.0: the widget's league picker — Android only, where the widget is.
+ok(/section === 'widget' && <WidgetLeaguesPicker \/>/.test(src) && /Platform\.OS === 'android' \? \[\{ id: 'widget'/.test(src),
+  'the widget league picker is on the menu, on Android only');
 // v0.502.0: the demo board left with the 2025 bake it replayed.
 ok(!src.includes('label="Demo board"'), 'the retired "Demo board" action is gone');
 
