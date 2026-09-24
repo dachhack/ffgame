@@ -7,7 +7,7 @@
 // with no matchup row at all. The league-choice helpers that make the ▸ tap
 // cycle are pinned too, because a widget that outlives its league must fall
 // forward rather than draw a hole.
-import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN } from '../packages/core/src/data/widgetFeed';
+import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 
@@ -121,6 +121,7 @@ const state = [
   const pool = [
     { slug: 'a', full: 'Josh Jacobs', team: 'BUF' }, { slug: 'b', full: 'Tyreek Hill', team: 'MIA' },
     { slug: 'c', full: 'CeeDee Lamb', team: 'CAR' }, { slug: 'x', full: 'Bye Guy', team: 'NYJ' },
+    { slug: 'd', full: 'Dan Denver', team: 'DEN' },   // SUN 4PM: can fill that window's hole
   ];
   const pre = kick(0) - LOCK_LEAD_MS - 2 * 3_600_000; // two hours before the first lock
   const cap = (i) => wins[i].slots;
@@ -146,9 +147,22 @@ const state = [
   ok('a starter on bye is a fix', b.fixes.some((f) => f.kind === 'bye' && f.text === 'B. Guy is on BYE'), b.fixes.filter((f) => f.kind === 'bye'));
   // Expected empties per window: capacity minus what `broken` filled there.
   const filledIn = (id) => broken.filter((p) => p.game_window === id && p.player_slug).length;
-  const expectEmpty = wins.map((w, i) => [w.id, Math.max(0, cap(i) - filledIn(w.id))]).filter(([, n]) => n > 0);
-  const gotEmpty = b.fixes.filter((f) => f.kind === 'empty').map((f) => [f.win, Number(f.text.split(' ')[0])]);
-  ok('empty slots are counted per window, capacity minus filled', JSON.stringify(gotEmpty) === JSON.stringify(expectEmpty), { gotEmpty, expectEmpty });
+  const expectHoles = wins.map((w, i) => [w.id, Math.max(0, cap(i) - filledIn(w.id))]).filter(([, n]) => n > 0);
+  const gotHoles = b.fixes.filter((f) => f.kind === 'empty' || f.kind === 'none').map((f) => [f.win, Number(f.text.split(' ')[0])]);
+  ok('empty slots are counted per window, capacity minus filled', JSON.stringify(gotHoles) === JSON.stringify(expectHoles), { gotHoles, expectHoles });
+  // v0.500.0: a hole someone on the roster can fill is EMPTY; a hole in a
+  // window nobody rostered plays in is NONE (SNF: KC/NYG, MNF: DET/BAL).
+  const kindOf = (id) => b.fixes.filter((f) => f.win === id && (f.kind === 'empty' || f.kind === 'none')).map((f) => f.kind).join();
+  ok('a hole the roster can fill is EMPTY', kindOf('late') === 'empty', kindOf('late'));
+  ok('a hole nobody on the roster plays in is NONE', kindOf('snf') === 'none' && kindOf('mnf') === 'none', [kindOf('snf'), kindOf('mnf')]);
+  ok('the NONE wording names the roster', b.fixes.filter((f) => f.kind === 'none').every((f) => /^\d+ slots? nobody on the roster can fill$/.test(f.text)), b.fixes.filter((f) => f.kind === 'none'));
+  ok('the NONE cards match the NONE fixes', b.cards.filter((c) => c.status === 'none').map((c) => c.win).join() === 'snf,mnf', b.cards.filter((c) => c.status === 'none'));
+  // An OUT man cannot fill a hole: rule Dan Denver out and SUN 4PM is NONE too.
+  const outD = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks: broken, pool, injuries: { d: 'O' } });
+  ok('a player ruled OUT is no candidate for a hole', outD.cards.find((c) => c.win === 'late').status === 'none', outD.cards.find((c) => c.win === 'late'));
+  // No roster read at all is no claim: every hole stays EMPTY.
+  const blind = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks: broken, pool: [], injuries: {} });
+  ok('with no roster read, a hole is EMPTY, never NONE', !blind.cards.some((c) => c.status === 'none'), blind.cards.map((c) => c.status));
   ok('the empty-slot wording pluralises', b.fixes.filter((f) => f.kind === 'empty').every((f) => /^\d+ empty slots?$/.test(f.text) && (f.text.startsWith('1 ') ? f.text.endsWith('slot') : f.text.endsWith('slots'))));
   ok('the LINEUP view leads while there is something to fix', b.lead === 'lineup');
   ok('the alarm carries the first open window\'s empties', b.alarm.win === wins[0].id && b.alarm.empty === cap(0) - 1, b.alarm);
@@ -206,7 +220,8 @@ const state = [
 // slot here: TNF live, SUN 1PM a player without a metric, SUN 4PM nobody (the
 // warning), SNF set.
 {
-  const pool = [{ slug: 'a', full: 'Aaron Guy', team: 'BUF', pos: 'QB' }, { slug: 'x', full: 'Xavier Guy', team: 'ATL', pos: 'RB' }, { slug: 'z', full: 'Zed Guy', team: 'KC', pos: 'WR' }];
+  const pool = [{ slug: 'a', full: 'Aaron Guy', team: 'BUF', pos: 'QB' }, { slug: 'x', full: 'Xavier Guy', team: 'ATL', pos: 'RB' }, { slug: 'z', full: 'Zed Guy', team: 'KC', pos: 'WR' },
+    { slug: 'd', full: 'Dan Denver', team: 'DEN', pos: 'TE' }];   // benched: he could fill SUN 4PM
   const picks = [
     { game_window: wins[0].id, roster_slot: '1', player_slug: 'a', metric_id: 'pass_yd' },   // TNF: live
     { game_window: wins[1].id, roster_slot: '1', player_slug: 'x', metric_id: null },        // SUN 1PM: no metric
@@ -229,7 +244,36 @@ const state = [
   ok('cards: once its window locks a pick is SEALED with no points', card(sealed, 3).status === 'sealed' && card(sealed, 3).points === null, card(sealed, 3));
   const fin = summarize({ league, week: WEEK, matchup: matchup('final'), state: st, teams, nowMs: kick(4) + 5 * 3_600_000, picks, pool, images });
   ok('cards: at the final a scored pick is FINAL with its points', card(fin, 0).status === 'final' && card(fin, 0).points === 9.1, card(fin, 0));
+  // v0.500.0: each pick carries his own game's kickoff and his metric id.
+  ok('cards: a pick carries his game\'s kickoff', card(s, 3).kick === kick(3) && card(s, 2).kick === null, [card(s, 3).kick, card(s, 2).kick]);
+  ok('cards: a pick carries his metric id', card(s, 0).metricId === 'pass_yd' && card(s, 1).metricId === null, [card(s, 0).metricId, card(s, 1).metricId]);
+  const fgPicks = picks.map((p) => (p.player_slug === 'a' ? { ...p, metric_id: 'fg' } : p));
+  ok('cards: a Field General is marked by his metric id', card(summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) + 30 * 60_000, picks: fgPicks, pool, images }), 0).metricId === 'fg');
   ok('cards: a classic seat (not assessable) has none', summarize({ league: { ...league, gameMode: 'classic' }, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) }).cards.length === 0);
+}
+
+// ── THE STANDING (v0.500.0): my record and place, off the league table ──
+{
+  const table = [
+    { roster_id: 7, team: 'Beach Day Ballers', wins: 3, losses: 0, ties: 0, pf: 300, pa: 200 },
+    { roster_id: 4, team: 'Taco Time Titans', wins: 2, losses: 1, ties: 0, pf: 280, pa: 250 },
+    { roster_id: 9, team: 'Third Wheel', wins: 0, losses: 3, ties: 0, pf: 150, pa: 300 },
+  ];
+  const s = summarize({ league, week: WEEK, matchup: matchup(), state, teams, nowMs: kick(0) + 30 * 60_000, standings: table });
+  ok('standing: my record and my place in the table, out of how many', JSON.stringify(s.standing) === JSON.stringify({ wins: 2, losses: 1, ties: 0, place: 2, of: 3 }), s.standing);
+  ok('standing: no table, no claim', summarize({ league, week: WEEK, matchup: matchup(), state, teams, nowMs: kick(0) }).standing === null);
+  ok('standing: a seat missing from the table has none', summarize({ league: { ...league, rosterId: 99 }, week: WEEK, matchup: null, state: [], teams, nowMs: kick(0), standings: table }).standing === null);
+}
+
+// ── ROWS OF WINDOWS (v0.500.0): fit side by side, else a new row, never cut ──
+{
+  const j = (x) => JSON.stringify(x);
+  ok('rows: windows that fit share a row, in order', j(packRows([50, 100, 60], 300, 6)) === j([[0, 1, 2]]), packRows([50, 100, 60], 300, 6));
+  ok('rows: the gap counts — a window that fits only without it starts a new row', j(packRows([100, 100], 204, 6)) === j([[0], [1]]) && j(packRows([100, 100], 206, 6)) === j([[0, 1]]));
+  ok('rows: a window that will not fit starts the next row, and later ones follow it', j(packRows([80, 210, 70, 140, 70], 300, 6)) === j([[0, 1], [2, 3, 4]]), packRows([80, 210, 70, 140, 70], 300, 6));
+  ok('rows: order is kept — no window jumps back to fill an earlier gap', j(packRows([200, 150, 50], 300, 6)) === j([[0], [1, 2]]), packRows([200, 150, 50], 300, 6));
+  ok('rows: a window wider than a row takes a row of its own', j(packRows([80, 400, 80], 300, 6)) === j([[0], [1], [2]]), packRows([80, 400, 80], 300, 6));
+  ok('rows: nothing to pack, no rows', j(packRows([], 300, 6)) === '[]');
 }
 
 // ── CLASSIC (v0.433.2): projected finals and the spots that want attention ──

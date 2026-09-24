@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.500.0 — the drip league widget
+
+- **The home-screen widget has a new drip-league card**, drawn from the
+  founder's sketch. It replaces the score/lineup pair and its ⇄ flip. Classic
+  leagues still get the score card; they're next.
+  - **Pinned header** (doesn't scroll): ▸ NEXT, the league name, my record and
+    place (league table, `standing` on the snapshot), and ⟳. Below that, the
+    week, the opponent and the live score, then the alert line: unset slots,
+    slots with none available, missing metrics, out/bye starters, and the next
+    lock. With nothing to fix it shows "✓ Lineup set" or the live state.
+  - **Scrolling windows:** a `ListWidget` under the header. Each window is a
+    box of player tiles (headshot, name, and points with 🔥 when hot, or
+    kickoff time). Windows are packed into rows by the widget's reported
+    width: a window joins a row if it fits beside the others, otherwise it
+    starts a new row. A window too wide for any row gets its own row and wraps
+    its tiles inside its box (core `packRows`, pinned in check:widget).
+  - **Field General** tiles show FG instead of a score, since he scores
+    nothing himself.
+  - **Empty slots split in two.** UNSET means someone on the roster could fill
+    it. NONE AVAILABLE means nobody rostered (and not ruled out) plays in that
+    window: card status `none`, fix kind `none`. With no roster read, the slot
+    stays plain empty.
+- **Not yet:** Field General's live multiplier (`slot_scores` doesn't carry
+  it), and a deep link from NONE AVAILABLE to free agents. Every tap still
+  opens the matchup board. Needs a device check for the tile sizes and the
+  scroll.
+
 ### v0.499.0 — fix it mid-week, see what's left, and a green harness
 
 - **Mid-week fixes.** Any classic week that has started now gets the "✏️ fix"

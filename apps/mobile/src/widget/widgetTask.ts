@@ -5,7 +5,7 @@
 // four reasons, all of which end in a repaint:
 //   • Android's own timer (updatePeriodMillis in app.json; 30 min is the
 //     floor Android allows),
-//   • a tap on the card's chips (WIDGET_CLICK: next league, refresh, flip),
+//   • a tap on the card's chips (WIDGET_CLICK: next league, refresh),
 //   • the app coming to the foreground or a board saving (App.tsx calls
 //     refreshMatchupWidgets),
 //   • the worker's SILENT push (kind 'widget'), which expo-notifications hands
@@ -16,32 +16,30 @@
 // PAINT FIRST, FETCH SECOND (v0.422.1). Founder: "There's a lot of lag when
 // you press the buttons. Almost unusable." A tap used to wake a cold task
 // that made nine reads before it drew a pixel. Now every wake draws the last
-// remembered picture at once — a flip needs nothing else and never fetches;
-// a ▸ draws the next league's remembered picture, or a "switching" card —
+// remembered picture at once — a ▸ draws the next league's remembered
+// picture, or a "switching" card —
 // and only then reads, and draws again if anything changed. The cold start
 // of the JS context itself is Android's and stays; what we control is that
 // nothing waits on the network to show a frame.
 //
-// Two per-widget preferences live in the app's own storage (MMKV through
+// One per-widget preference lives in the app's own storage (MMKV through
 // core's platform seam), keyed by the widget id Android gives it: which
-// league it shows, and whether the manager flipped it to the score or the
-// lineup view. Unflipped, the feed decides which view leads.
+// league it shows. (The ⇄ score/lineup flip went with v0.500.0's drip card.)
 import React from 'react';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { registerWidgetTaskHandler, requestWidgetUpdate, type WidgetTaskHandlerProps, type WidgetInfo } from 'react-native-android-widget';
 import { platform } from '@drip/core/platform';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
-import { widgetSnapshot, nextWidgetLeague, recallSnapshot, recallLeagues, type WidgetView } from '@drip/core/data/widgetFeed';
+import { widgetSnapshot, nextWidgetLeague, recallSnapshot, recallLeagues } from '@drip/core/data/widgetFeed';
 import { MatchupWidget, MATCHUP_WIDGET_NAME, WIDGET_CLICK, type WidgetState } from './MatchupWidget';
 
 const PREF_LEAGUE = (widgetId: number) => `widget:league:${widgetId}`;
+/** The retired ⇄ flip's stored choice (v0.422.0–v0.499): read no more, only
+ *  cleared when its widget goes. */
 const PREF_VIEW = (widgetId: number) => `widget:view:${widgetId}`;
 
 const store = () => platform().storage;
-const readView = (widgetId: number): WidgetView | undefined => {
-  try { const v = store().get(PREF_VIEW(widgetId)); return v === 'score' || v === 'lineup' ? v : undefined; } catch { return undefined; }
-};
 const readLeague = (widgetId: number): string | null => { try { return store().get(PREF_LEAGUE(widgetId)); } catch { return null; } };
 
 /** The remembered picture for what this widget shows, if there is one. The
@@ -73,8 +71,8 @@ export async function widgetState(widgetId: number, opts: { fresh?: boolean } = 
   }
 }
 
-const el = (state: WidgetState, info: WidgetInfo, view?: WidgetView) =>
-  React.createElement(MatchupWidget, { state, heightDp: info.height, view: view ?? readView(info.widgetId) });
+const el = (state: WidgetState, info: WidgetInfo) =>
+  React.createElement(MatchupWidget, { state, heightDp: info.height, widthDp: info.width });
 
 /** The standard wake: the remembered frame now, the fresh one when it lands.
  *
@@ -101,7 +99,7 @@ async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void
 async function handler(props: WidgetTaskHandlerProps): Promise<void> {
   const { widgetInfo, widgetAction, clickAction } = props;
   if (widgetInfo.widgetName !== MATCHUP_WIDGET_NAME) return;
-  const render = (s: WidgetState, view?: WidgetView) => props.renderWidget(el(s, widgetInfo, view));
+  const render = (s: WidgetState) => props.renderWidget(el(s, widgetInfo));
   switch (widgetAction) {
     case 'WIDGET_DELETED':
       try { store().remove(PREF_LEAGUE(widgetInfo.widgetId)); store().remove(PREF_VIEW(widgetInfo.widgetId)); } catch { /* ignore */ }
@@ -109,18 +107,6 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
     case 'WIDGET_CLICK': {
       // OPEN_URI is handled natively (it opens the app); only our own actions
       // reach here.
-      if (clickAction === WIDGET_CLICK.flip) {
-        // A flip is a redraw of what we already have. Relative to what is
-        // SHOWING — the stored flip if any, else the feed's lead — so the
-        // first tap always changes the picture. No network.
-        const now = rememberedState(widgetInfo.widgetId);
-        const showing = readView(widgetInfo.widgetId) ?? (now?.kind === 'ok' ? now.snap.lead : 'score');
-        const next: WidgetView = showing === 'score' ? 'lineup' : 'score';
-        try { store().set(PREF_VIEW(widgetInfo.widgetId), next); } catch { /* ignore */ }
-        if (now && now.kind === 'ok') { render({ ...now, stale: false }, next); return; }
-        render(await widgetState(widgetInfo.widgetId), next);
-        return;
-      }
       if (clickAction === WIDGET_CLICK.next) {
         // ▸: pick the next league off the remembered list, point the widget
         // at it, and draw its remembered picture at once (or say we're
@@ -129,7 +115,7 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
         const current = readLeague(widgetInfo.widgetId);
         const next = nextWidgetLeague(leagues, current);
         if (next) {
-          try { store().set(PREF_LEAGUE(widgetInfo.widgetId), next.id); store().remove(PREF_VIEW(widgetInfo.widgetId)); } catch { /* ignore */ }
+          try { store().set(PREF_LEAGUE(widgetInfo.widgetId), next.id); } catch { /* ignore */ }
           const r = recallSnapshot(next.id);
           render(r ? { kind: 'ok', snap: r.snapshot, leagues: leagues.length, stale: true } : { kind: 'loading', title: `Switching to ${next.name}…`, body: 'Reading the matchup.' });
         }
