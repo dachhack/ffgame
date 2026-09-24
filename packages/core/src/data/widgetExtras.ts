@@ -21,7 +21,10 @@ import { setRuntimeSlate } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
 import { fieldsWeekFrom, slateWeekOrder } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
-import { normTeam } from './slugMeta';
+import { normTeam, stripSlugTag } from './slugMeta';
+import { projectedStarters } from '../engine/projectedBox';
+import { withPprProjections } from '../engine/projScoring';
+import { shortName } from './players';
 import type { WindowId } from '../types';
 
 // ── ALERTS ──────────────────────────────────────────────────────────────────
@@ -137,6 +140,48 @@ export interface FieldGame {
   recent?: { clock: string; txt: string; big: 'score' | 'turnover' | null }[];
   /** Each team's passing / rushing / receiving leader. */
   leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[];
+  /** Before kickoff (v0.514.0): both teams' projected starters, slot by
+   *  slot, in stock PPR. */
+  projSheet?: ProjSlot[];
+}
+
+/** One man on a projected sheet. `pts` is null for a man the chart names
+ *  and the projection does not value. */
+export interface ProjCell { name: string; pts: number | null; injury: string | null }
+/** One row of the pregame sheet: the slot, the away team's man and the home
+ *  team's, side by side. A side with nobody for the slot has null. */
+export interface ProjSlot { pos: string; away: ProjCell | null; home: ProjCell | null }
+
+/** The sheet's rows, in the order the founder asked for: QB, RB, RB, WR,
+ *  WR, WR, TE, K, DST — projectedStarters' own order, one lineup deep. */
+const SHEET: [string, string][] = [['QB', 'QB'], ['RB', 'RB'], ['RB', 'RB'], ['WR', 'WR'], ['WR', 'WR'], ['WR', 'WR'], ['TE', 'TE'], ['K', 'K'], ['DEF', 'DST']];
+
+/** "josh-allen" → "J. Allen", the way the live leaders read. A team unit
+ *  (`kc-k`, `kc-dst`) reads as its team. */
+const sheetName = (slug: string, team: string): string =>
+  /-(k|dst)$/.test(slug) ? team
+    : shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
+
+/** Both sides' projected starters before kickoff (v0.514.0), slot by slot:
+ *  the same sheet the app's pregame box score lists, so an OUT or IR man is
+ *  already off it. STOCK PPR, whatever league was read last — the widget
+ *  speaks for no league. Empty when neither side can be projected. */
+export function projectedSheet(away: string, home: string, week: number): ProjSlot[] {
+  return withPprProjections(() => {
+    const side = (team: string) => {
+      const rows = projectedStarters(team, week);
+      const used = new Set<string>();
+      return SHEET.map(([pos]): ProjCell | null => {
+        const r = rows.find((x) => x.pos === pos && !used.has(x.slug));
+        if (!r) return null;
+        used.add(r.slug);
+        return { name: sheetName(r.slug, team), pts: r.proj != null ? Math.round(r.proj * 10) / 10 : null, injury: r.injury ?? null };
+      });
+    };
+    const a = side(away), h = side(home);
+    const slots = SHEET.map(([, label], i) => ({ pos: label, away: a[i], home: h[i] }));
+    return slots.some((x) => x.away || x.home) ? slots : [];
+  });
 }
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
@@ -200,6 +245,7 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
         spot: live ? sit?.spot ?? null : null,
         recent: g.state === 'pre' ? [] : recent,
         leaders: g.feed?.status?.leaders ?? [],
+        projSheet: g.state === 'pre' ? projectedSheet(g.away, g.home, week) : [],
         key: g.key, away: g.away, home: g.home, state: g.state,
         as: last ? Number(last.as) || 0 : 0, hs: last ? Number(last.hs) || 0 : 0,
         clock: clockOf(g, last), kickoff: g.kickoff,

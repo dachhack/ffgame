@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.514.0 — fields widget: projected starters before kickoff
+
+Founder: "Let's do projected leaders and their projected ppr points for the
+games in the widgets before kick off", then, on the first cut (KC PASS / KC
+RUSH rows): "we don't need the KC PASS etc. Lets have one team on the left:
+QB P. Mahomes 14.5, then RB, RB, WR, WR, WR TE, K DST then the other team on
+the right."
+- Tapping a game not yet kicked off opens PROJECTED · PPR. The away team is
+  on the left and the home team on the right, each under its team code,
+  with rows QB, RB, RB, WR, WR, WR, TE, K, DST. Each row shows the slot,
+  injury tag, name and points in projected grey. An empty slot draws "—" so
+  the sides stay in step. K and DST read as the team. Once the game kicks
+  off, the real leaders replace them.
+- Core `projectedSheet()` (widgetExtras) builds the rows from
+  `projectedStarters`, the app's pregame box-score sheet, so OUT/IR players
+  are already gone. The points are the per-game projection.
+- Always stock PPR. The widget reads leagues first, and a classic read
+  leaves its league's catalog and scoped bonuses installed, so
+  `withPprProjections()` (projScoring) runs with neither and restores both
+  exactly. check:widget pins the slot order, both sides, the names, stock PPR
+  and the restore. check:widgetrender builds the opened pregame card.
+
 ### Worker deploy: flyctl install survives a dropped download
 
 Run 615 (v0.513.0) failed with `read ECONNRESET` inside

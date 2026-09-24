@@ -54,7 +54,7 @@ import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, type ProjHcLine, type ProjPuntLine 
 import { PROJ_FB } from '../data/projFb2026';
 import { idpLineFor, type ProjIdpLine } from '../data/projIdp2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
-import { scopedAdjustFor } from './leagueScoring';
+import { scopedAdjustFor, leagueScoring, scoringLeague, clearLeagueScoring, setLeagueScoring } from './leagueScoring';
 import { slugSleeperId } from '../data/slugMeta';
 
 export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine, ProjHcLine, ProjPuntLine };
@@ -409,6 +409,28 @@ export function setLeagueProjScoring(sc?: number | Partial<ClassicScoring> | nul
   catalog = normalizeClassicScoring(sc);
 }
 export function clearLeagueProjScoring(): void { catalog = null; }
+
+/** Run `fn` with STOCK PPR projections — no league's catalog, no league's
+ *  scoped bonuses — and put back exactly what was installed (v0.514.0). For
+ *  surfaces that speak for no league, like the fields widget's projected
+ *  leaders, which ride along after a league's read has installed its rules.
+ *  Synchronous, so nothing else can score in between. */
+export function withPprProjections<T>(fn: () => T): T {
+  const savedCatalog = catalog;
+  const savedScoring = leagueScoring();
+  const savedLeague = scoringLeague();
+  catalog = null;
+  clearLeagueScoring();
+  const defaults = leagueScoring();
+  try { return fn(); }
+  finally {
+    catalog = savedCatalog;
+    // The defaults object itself when that is what was in force, so a check
+    // that compares against it still sees defaults.
+    if (savedScoring === defaults && savedLeague == null) clearLeagueScoring();
+    else setLeagueScoring(savedScoring, savedLeague);
+  }
+}
 export function leagueProjScoring(): ClassicScoring { return cat(); }
 
 /** THE CATALOG A LEAGUE ACTUALLY SCORES BY (v0.310.0). A league stores its
