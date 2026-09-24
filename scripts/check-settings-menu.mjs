@@ -25,9 +25,11 @@ ok(/THEME_OPTS\.map/.test(src) && /CARD_SIZES\.map/.test(src) && /SKIN_OPTS\.map
 ok(/isAdmin \? \[\{ id: 'rehearsal'/.test(src) && /section === 'rehearsal' && isAdmin/.test(src),
   'rehearsal tools stay admin-only');
 ok(/‹ ALL SETTINGS/.test(src), 'every options page has a way back to the menu');
-for (const a of ['Admin', "What's new", 'Demo board', 'Sign out']) {
+for (const a of ['Admin', "What's new", 'Sign out']) {
   ok(src.includes(`label="${a}"`), `the "${a}" action is on the menu`);
 }
+// v0.502.0: the demo board left with the 2025 bake it replayed.
+ok(!src.includes('label="Demo board"'), 'the retired "Demo board" action is gone');
 
 console.log(fails ? `\n${fails} SETTINGS-MENU ASSERTION(S) FAILED` : '\nALL SETTINGS-MENU ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

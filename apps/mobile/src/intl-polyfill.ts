@@ -13,10 +13,12 @@
 // exactly what happened: sign in, LivePicks renders, `windowForTeam()` derives
 // the week inside a useMemo, Intl throws, the process dies with no message.
 //
-// So the app installs a complete Intl before anything else runs. `add-golden-tz`
-// carries the common IANA zones (America/New_York among them) rather than
-// `add-all-tz`, which is several hundred KB of zones a football app will never
-// ask for.
+// So the app installs a complete Intl before anything else runs. The zones are
+// `./intl-tz-data` (v0.502.0): formatjs's `add-golden-tz` — every common IANA
+// zone, America/New_York among them — with each zone's history trimmed to
+// 2020–2040 by scripts/gen-tz-data.mjs. The golden file was 794 KB of an
+// uncompressed bundle, nearly all of it offset changes from the 1880s; the
+// trimmed one is ~100 KB and formats every zone identically across those years.
 //
 // ORDER IS LOAD-BEARING — each polyfill builds on the previous one, and this is
 // the sequence formatjs documents. Do not reorder or tree-shake it.
@@ -28,7 +30,7 @@ import '@formatjs/intl-getcanonicallocales/polyfill';
 import '@formatjs/intl-locale/polyfill';
 import '@formatjs/intl-datetimeformat/polyfill';
 import '@formatjs/intl-datetimeformat/locale-data/en';
-import '@formatjs/intl-datetimeformat/add-golden-tz';
+import './intl-tz-data';
 
 // The polyfilled DateTimeFormat defaults to UTC unless told the device's zone,
 // and anything formatted WITHOUT an explicit timeZone then renders as UTC. That

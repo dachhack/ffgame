@@ -3,16 +3,15 @@
 // Same six themes and same ten card decks, under the same names, because they
 // are the same product and a player who picks "Night Rider" on the web should
 // find it here. The tokens are literally shared (@drip/core/theme); the decks
-// are the same .jpg art, bundled under assets/cardbacks.
+// are the same art, bundled under assets/cardbacks (as WebP since v0.502.0).
 //
 // The card skin was already half-wired before this existed: cards.tsx reads
 // `gc-cardskin` out of storage on every render and picks a back from it. Nothing
 // in the app ever WROTE that key, so every deck but the default was unreachable.
 // This is the writer.
 //
-// The demo lives in here rather than on a tab. It is a founder's tool — a
-// scripted 2025 week for showing the game to someone — and a permanent third of
-// the tab bar is a lot of screen to spend on a button one person presses.
+// The demo board (a scripted 2025 week) lived in here until v0.502.0, when the
+// 2025 bake left the app with it.
 
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
@@ -57,7 +56,7 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onDemo, onAdmin, onSignOut, onWhatsNew, behind = 0, onClose }: {
+export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onAdmin, onSignOut, onWhatsNew, behind = 0, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
@@ -72,7 +71,6 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   onTheme: (t: ThemeName) => void;
   onSkin: (s: CardSkin) => void;
   onCardSize: (s: CardSize) => void;
-  onDemo: () => void;
   onAdmin: () => void;
   onSignOut: () => void;
   onClose: () => void;
@@ -230,7 +228,6 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                 <ActionRow icon="🆕" label="What's new" onPress={() => { onClose(); onWhatsNew(); }}
                   hint={behind > 0 ? `${behind} behind — update` : version} strong={behind > 0} />
               )}
-              <ActionRow icon="▶" label="Demo board" hint="a real 2025 week" onPress={() => { onClose(); onDemo(); }} />
               <ActionRow icon="⎋" label="Sign out" onPress={() => { onClose(); onSignOut(); }} />
             </View>
           </>

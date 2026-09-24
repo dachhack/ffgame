@@ -28,7 +28,6 @@ import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, 
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
-import { DemoBoard } from './src/screens/DemoBoard';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
 import { LeagueHome, LeagueSettingsHost, openLeagueSettings, setLeagueSettingsCtx } from './src/screens/LeagueHome';
@@ -115,7 +114,7 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'home' | 'picks' | 'demo' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
+  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
   const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
@@ -507,16 +506,6 @@ export function App() {
             // Vacating your own seat invalidates open.rosterId — leave the
             // league view entirely; Leagues remounts with the fresh shape.
             onSelfUnassigned={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
-        ) : view === 'demo' ? (
-          <View style={{ flex: 1 }}>
-            <Pressable onPress={() => setView('picks')} hitSlop={8} style={{ alignSelf: 'flex-start', marginHorizontal: 12, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
-              {/* Where "back" actually goes depends on whether a league is open,
-                  so the label has to say which — otherwise it promises a
-                  matchup and delivers the leagues list. */}
-              <Text style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>{open ? '← back to my matchup' : '← back to my leagues'}</Text>
-            </Pressable>
-            <DemoBoard />
-          </View>
         ) : view === 'home' && open ? (
           <View style={{ flex: 1 }}>
             <LeagueHome leagueId={open.leagueId} teamName={undefined}
@@ -622,7 +611,6 @@ export function App() {
             onSkin={(s) => { saveCardSkin(s); setCardSkin(s); }}
             onCardSize={(s) => { saveCardSize(s); setCardSize(s); }}
             isAdmin={admin}
-            onDemo={() => setView('demo')}
             onAdmin={() => setView('admin')}
             onSignOut={() => { void signOut(); }}
             onWhatsNew={() => setWhatsNewOpen(true)}

@@ -30,12 +30,12 @@
 //
 // Usage: node scripts/pbp/genSeasonLog.mjs
 //   Reads public/pbp/w*.json (genRealPbp.mjs's output) and writes
-//   public/pbp/season.json + apps/mobile/assets/pbp/season.json.
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
+//   public/pbp/season.json. (The app's own copy, apps/mobile/assets/pbp/,
+//   went in v0.502.0 with its game log tab — the 2025 bake was for playtesting.)
+import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url);
 const pubDir = new URL('../../public/pbp/', here);
-const nativeDir = new URL('../../apps/mobile/assets/pbp/', here);
 
 // Fields a scorer or a statline actually reads. `c` (game-elapsed clock) stays
 // because rawPlaysFrom sorts on it; `t` and `pid` are for real-time power-up
@@ -66,11 +66,9 @@ for (const w of weeks) {
 }
 
 const out = JSON.stringify({ v: 1, weeks, pbp });
-mkdirSync(new URL(nativeDir), { recursive: true });
 writeFileSync(new URL('season.json', pubDir), out);
-writeFileSync(new URL('season.json', nativeDir), out);
 
 const raw = weeks.reduce((n, w) => n + statSync(new URL(`w${w}.json`, pubDir)).size, 0);
 console.log(`season log: ${Object.keys(pbp).length} players · ${plays} plays · weeks ${weeks.join(',')}`);
 console.log(`  ${(raw / 1048576).toFixed(2)} MB of week files → ${(out.length / 1048576).toFixed(2)} MB`);
-console.log('  wrote public/pbp/season.json + apps/mobile/assets/pbp/season.json');
+console.log('  wrote public/pbp/season.json');
