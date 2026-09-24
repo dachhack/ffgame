@@ -10,7 +10,10 @@
 // Starters get NO badge on purpose. They are the overwhelming majority and the
 // unmarked default; badging them would put a label on every row and make the
 // three that matter harder to spot, not easier.
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { injuryNow, onInjuryReport } from '@drip/core/data/injuries';
+import { ensureInjuryReport } from '@drip/core/data/liveApi';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { flagFor } from '@drip/core/data/commish';
 import { useTheme, MONO } from '../theme.native';
@@ -68,6 +71,22 @@ export function InjuryBadge({ status, size = 8 }: { status: string | null; size?
       <Text style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: fg }}>{status}</Text>
     </View>
   );
+}
+
+/** HIS TAG RIGHT NOW, ON ANY SCREEN (v0.504.0). Founder: "add injury tags to
+ *  the rest of the app and web too." The draft room, trades, waivers and the
+ *  rest are not boards, so the board's week-keyed cache is not theirs to read
+ *  and was often not loaded at all. This badge loads the any-screen report
+ *  itself (ensureInjuryReport — one shared read, at most every few minutes)
+ *  and repaints when it lands, so a call site is one element beside a name. */
+export function InjuryNow({ slug, size = 8 }: { slug: string | null | undefined; size?: number }) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const off = onInjuryReport(() => bump((n) => n + 1));
+    void ensureInjuryReport();
+    return off;
+  }, []);
+  return <InjuryBadge status={injuryNow(slug)} size={size} />;
 }
 
 /** The commissioner's flag on a player (0141), or nothing. Same anatomy as

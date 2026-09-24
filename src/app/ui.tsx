@@ -4,7 +4,8 @@ import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '@drip/core/theme';
 import { useStore, type CardSkin } from './store';
 import { headshot, espnHeadshot, teamLogo } from '@drip/core/data/media';
-import { injuryFor } from '@drip/core/data/injuries';
+import { injuryFor, injuryNow, onInjuryReport } from '@drip/core/data/injuries';
+import { ensureInjuryReport } from '@drip/core/data/liveApi';
 import { flagFor } from '@drip/core/data/commish';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
@@ -270,6 +271,22 @@ export function InjuryTag({ status, style }: { status: string | null | undefined
 /** Info-only weekly injury / IR badge for a player slug, or nothing. */
 export function InjuryBadge({ week, slug, style }: { week: number; slug: string; style?: CSSProperties }) {
   return <InjuryTag status={injuryFor(week, slug)} style={style} />;
+}
+
+/** HIS TAG RIGHT NOW, ON ANY SCREEN (v0.504.0). Founder: "add injury tags to
+ *  the rest of the app and web too." The draft room, trades, waivers and the
+ *  rest are not boards, so the board's week-keyed cache is not theirs to read
+ *  and was often not loaded at all. This badge loads the any-screen report
+ *  itself (ensureInjuryReport — one shared read, at most every few minutes)
+ *  and repaints when it lands, so a call site is one element beside a name. */
+export function InjuryNow({ slug, style }: { slug: string | null | undefined; style?: CSSProperties }) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const off = onInjuryReport(() => bump((n) => n + 1));
+    void ensureInjuryReport();
+    return off;
+  }, []);
+  return <InjuryTag status={injuryNow(slug)} style={style} />;
 }
 
 /** The commissioner's flag on a player (0141), or nothing. Same anatomy as

@@ -10,7 +10,7 @@
 // Run: npx tsx scripts/check-injuries.mjs
 import {
   injuryFor, setLiveInjuries, clearLiveInjuries, hasLiveInjuries, injuryRowFor,
-  setInjurySeason,
+  setInjurySeason, setInjuryReport, injuryNow, injuryReportAt, onInjuryReport,
 } from '../packages/core/src/data/injuries.ts';
 
 let fails = 0;
@@ -122,6 +122,25 @@ eq('feed: team stored', rows['michael-pittman-jr']?.team, 'PIT');
 eq('feed: return date', rows['michael-pittman-jr']?.returnDate, '2026-09-27');
 eq('feed: the old shape resolves with its id', JSON.stringify(seen[1]), JSON.stringify({ name: 'Old Shape', espnId: '111', team: 'LA' }));
 eq('feed: nothing invented', JSON.stringify(seen[2]), JSON.stringify({ name: 'No Link', espnId: null, team: '' }));
+
+// ── THE ANY-SCREEN REPORT (v0.504.0): week-free, for the draft room, trades,
+// waivers — every screen that is not a board ──
+eq('now: before any report, nobody is tagged', injuryNow('a-guy'), null);
+eq('now: and it was never installed', injuryReportAt(), 0);
+let heard = 0;
+const off = onInjuryReport(() => { heard++; });
+setInjuryReport({ 'a-guy': { status: 'Q' }, 'b-guy': { status: 'IR' } }, 1_800_000_000_000);
+eq('now: a tagged player reads his tag', injuryNow('a-guy'), 'Q');
+eq('now: IR reads IR', injuryNow('b-guy'), 'IR');
+eq('now: a player not on the sheet is healthy', injuryNow('c-guy'), null);
+eq('now: no slug, no tag', injuryNow(null), null);
+eq('now: the install time is kept', injuryReportAt(), 1_800_000_000_000);
+eq('now: listeners hear a new report', heard, 1);
+off();
+setInjuryReport({});
+eq('now: an unsubscribed listener hears nothing', heard, 1);
+eq('now: a newer sheet clears an old tag', injuryNow('a-guy'), null);
+eq('now: it is independent of the board\'s week-keyed cache', injuryFor(99, 'a-guy'), null);
 
 console.log(fails ? `FAIL  ${fails} injury assertion(s) failed` : 'OK    injury report precedence');
 process.exit(fails ? 1 : 0);
