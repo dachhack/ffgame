@@ -51,7 +51,7 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, liveExtras, userId, onOpenSlate }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, liveExtras, userId, onOpenSlate }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
   pool: Record<string, PoolPlayer>;
@@ -72,6 +72,12 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  events in hand, while the board would have to read published feeds.
    *  Returning null (the board's current answer) simply renders nothing. */
   slotDetail?: (win: string, slot: string) => ReactNode;
+  /** Under a slot's pair, ABOVE its field (v0.515.0): the board's tap strips
+   *  while an aimed card waits for a target, and what a Spy found. */
+  slotExtra?: (win: string, slot: string) => ReactNode;
+  /** Under the window header (v0.515.0): the strip for a card aimed at the
+   *  whole window (EMP). */
+  winExtra?: (win: string) => ReactNode;
   /** Extra live-row text a caller can supply per side: the game and clock
    *  ("KC@LAC · Q1 9:00"), the statline, coin earned. Everything here needs data
    *  Duel doesn't have — a game feed, a StatLine — so it's the caller's to fill
@@ -331,6 +337,8 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
             {/* WINDOW BATTLE — the web's bar, not a bare "x VS y". The bar is
                 the point: a window is a head-to-head worth a bonus, and the
                 proportional fill says who is winning it at a glance. */}
+            {winExtra?.(win)}
+
             {(you != null || them != null) && (() => {
               const yTot = you ?? 0, tTot = them ?? 0;
               const total = yTot + tTot;
@@ -403,6 +411,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                         it's here rather than in a panel below the board: the
                         field only means anything next to the cards whose score
                         it explains. */}
+                    {slotExtra?.(win, slot)}
                     {showDetail && slotDetail?.(win, slot)}
                   </View>
                 );

@@ -48,6 +48,9 @@ export interface HandCard {
   usable: boolean;
   /** Why not, or when it can be — shown on the tip. */
   note?: string;
+  /** 'aim' (v0.515.0): an AIMED card — played on a spot or a window. The tip's
+   *  button starts the tap-a-target step instead of arming it for the week. */
+  action?: 'arm' | 'aim';
   /** Always false since v0.431.0: a played card leaves the hand for good
    *  ("if you use a power up you can't take it back"). Kept optional so the
    *  fan's tint code reads the same; nothing sets it. */
@@ -250,7 +253,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
               style={{ backgroundColor: tip.usable ? t.you : t.sh, borderRadius: 8, paddingVertical: 14, alignItems: 'center' }}
             >
               <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: tip.usable ? t.onAccent : t.faint }}>
-                {tip.usable ? 'ARM · NO TAKE-BACKS' : 'CAN’T PLAY YET'}
+                {!tip.usable ? 'CAN’T PLAY YET' : tip.action === 'aim' ? 'PLAY → PICK A TARGET' : 'ARM · NO TAKE-BACKS'}
               </Text>
             </Pressable>
         ) : undefined}

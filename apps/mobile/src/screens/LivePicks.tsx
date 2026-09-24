@@ -33,11 +33,16 @@ import {
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
   myEnrollments, type Enrollment, applyExtraSlotCard,
+  applyTargeted, applyUnderdog, useSpy as spyPeek,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
-import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
+import { AIM_RULES, AIM_SELF_CONSUMING, aimPrompt, aimSpotOk, aimWindowOk, isAimed, type AimPhase } from '@drip/core/data/aimRules';
+import { METRICS } from '@drip/core/data/metrics';
+import { projectedPoints } from '@drip/core/engine/projScoring';
+import { BYE_STEAL_CAP, swapMetricFor } from '@drip/core/engine/matchup';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
-import { statlineAt, metricDriver } from '@drip/core/engine/sim';
+import { statlineAt, metricDriver, realTimeAt } from '@drip/core/engine/sim';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { Ev, track } from '@drip/core/analytics';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
@@ -46,7 +51,7 @@ import { useTheme, MONO, alpha } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice } from '../ui/prims';
-import { SetupRow } from '../ui/SetupRow';
+import { SetupRow, MetricModal } from '../ui/SetupRow';
 import { SimStrip } from '../ui/SimStrip';
 import { PlayerPicker } from '../ui/PlayerPicker';
 import { RosterPanel } from '../ui/RosterPanel';
@@ -160,6 +165,18 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState(0);
   const [buffBusy, setBuffBusy] = useState<string | null>(null);
+  // AIMED CARDS (v0.515.0, founder: "Why can't I use my spy or ghost?"). The
+  // card waiting for its target, and the follow-up sheets a few of them need
+  // once a target is tapped (Spy's reveal, Bye Steal's player, a swap's
+  // metric or bench player). Rules: core aimRules — one table with the web.
+  const [aiming, setAiming] = useState<string | null>(null);
+  const [aimBusy, setAimBusy] = useState(false);
+  const [spyAt, setSpyAt] = useState<{ win: string; slot: string } | null>(null);
+  const [byeAt, setByeAt] = useState<{ win: string; slot: string } | null>(null);
+  const [metricAt, setMetricAt] = useState<{ win: string; slot: string; id: string } | null>(null);
+  const [benchAt, setBenchAt] = useState<{ win: string; slot: string } | null>(null);
+  /** What each Spy uncovered, "win|slot" → the words ("J. Allen", "Rush Yards"). */
+  const [spyIntel, setSpyIntel] = useState<Record<string, string>>({});
   // THE MATCHUP SWITCHER (v0.431.0): your other seats, read when the sheet
   // opens (my_teams is the leagues page's own call), never on the board's
   // hot path. Null until the first open.
@@ -759,6 +776,217 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   };
 
 
+  // ── AIMED CARDS (v0.515.0) ──────────────────────────────────────────────
+  // Play a card on a spot or a window: tap PLAY in the hand, the board lights
+  // the spots it can land on, tap one. The server is the authority on every
+  // rule (apply_targeted / use_spy / apply_underdog); aimRules only decides
+  // what the board offers, and it is the same table the web reads.
+
+  /** A window's phase for aiming: core's windowPhase, with the server's own
+   *  lock (sealed rows) counted as locked. */
+  const aimPhase = (win: string): AimPhase => {
+    if (matchup?.status === 'final') return 'final';
+    const ph = windowPhase(week, win as never, nowTs) as AimPhase;
+    return ph === 'setup' && winLocked(win) ? 'locked' : ph;
+  };
+  /** My player on a spot: the saved/edited pick, else the revealed row. */
+  const mineAt = (win: string, slot: string): { slug: string; metric: string | null } | null => {
+    const p = picks[`${win}-${slot}`];
+    if (p?.player_slug) return { slug: p.player_slug, metric: p.metric_id ?? null };
+    const rp = revealedAll.find((x) => x.app_user_id === userId && x.game_window === win && String(x.roster_slot) === slot && x.player_slug);
+    return rp?.player_slug ? { slug: rp.player_slug, metric: rp.metric_id ?? null } : null;
+  };
+  const theirsAt = (win: string, slot: string): boolean =>
+    revealedAll.some((x) => x.app_user_id !== userId && x.game_window === win && String(x.roster_slot) === slot && !!x.player_slug);
+  /** Does this card have anywhere to land right now? */
+  const aimAny = (id: string): boolean => {
+    for (const w of winsX) {
+      const ph = aimPhase(w.id);
+      if (aimWindowOk(id, ph)) return true;
+      for (let i = 0; i < w.slots; i++) {
+        const slot = String(i);
+        const spot = { mine: !!mineAt(w.id, slot), theirs: theirsAt(w.id, slot) };
+        if (aimSpotOk(id, ph, 'you', spot) || aimSpotOk(id, ph, 'their', spot)) return true;
+      }
+    }
+    return false;
+  };
+
+  const startAim = (id: string) => {
+    if (!matchup || aimBusy) return;
+    if (AIM_RULES[id]?.when === 'live' && !liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
+    if ((inventory[id] ?? 0) <= 0) { setErr('You don’t own that card — buy it in the shop.'); return; }
+    setErr(null);
+    setAiming(id);
+  };
+  const endAim = () => { setAiming(null); setSpyAt(null); setByeAt(null); setMetricAt(null); setBenchAt(null); };
+  /** A refused play is LOUD: the tap happened down by the hand, and the
+   *  board's error line sits at the foot of a long scroll. */
+  const aimFail = (msg: string) => { setErr(msg); Alert.alert('Didn’t play', msg); };
+
+  /** Read the hand and the attached plays back after a play, so the board and
+   *  the hand agree with the server rather than with a local guess. */
+  const afterPlay = async () => {
+    if (!matchup) return;
+    const [inv, tg] = await Promise.all([myInventory(matchup.id).catch(() => null), myTargeted(matchup.id, userId).catch(() => null)]);
+    if (inv) setInventory(inv);
+    if (tg) { setTargeted(tg); setExtraSlots(tg.extraSlots ?? {}); }
+  };
+
+  /** Record the play (apply_targeted), then spend the card. Refused → nothing
+   *  is spent and the board says why. */
+  const playAimed = async (id: string, payload: Record<string, unknown>) => {
+    if (!matchup) return;
+    const name = powerupById(id)?.name ?? id;
+    setAimBusy(true); setErr(null);
+    try {
+      const r = await applyTargeted(matchup.id, id, payload);
+      if (!r?.ok) { aimFail(`${name} didn’t play: ${friendlyError(r?.error ?? 'refused')}`); return; }
+      if (!AIM_SELF_CONSUMING.has(id)) await consumeInventory(matchup.id, id).catch(() => null);
+      commit();
+      await afterPlay();
+    } catch (e) {
+      aimFail(`${name} didn’t play: ${friendlyError(e)}`);
+    } finally { setAimBusy(false); endAim(); }
+  };
+
+  /** A metric's name from its id, whatever the position. */
+  const metricName = (mid: string | null | undefined): string | null => {
+    if (!mid) return null;
+    for (const list of Object.values(METRICS)) { const m = list.find((x) => x.id === mid); if (m) return m.name; }
+    return mid;
+  };
+
+  /** Spy: the peek itself (use_spy takes the card). Re-reading a spot you
+   *  already paid for is free, which is how the intel survives a reload. */
+  const runSpy = async (win: string, slot: string, reveal: 'player' | 'metric', opts: { quiet?: boolean } = {}) => {
+    if (!matchup) return;
+    if (!opts.quiet) { setAimBusy(true); setErr(null); }
+    try {
+      const r = await spyPeek(matchup.id, win, slot, reveal);
+      if (!r?.ok) { if (!opts.quiet) aimFail(`Spy didn’t play: ${friendlyError(r?.error ?? 'refused')}`); return; }
+      const v = r.reveal ?? null;
+      const who = v && reveal === 'player' ? (oppPool.find((p) => p.slug === v) ? poolToPlayer(oppPool.find((p) => p.slug === v)!).name : v) : null;
+      const text = !r.present ? 'nobody there yet' : reveal === 'player' ? (who ?? 'hidden') : (metricName(v) ?? 'no metric yet');
+      setSpyIntel((cur) => ({ ...cur, [`${win}|${slot}`]: `${reveal === 'player' ? 'player' : 'metric'}: ${text}` }));
+      if (!opts.quiet) {
+        commit();
+        Alert.alert('👁️ Spy', `Their ${winLabelFor(win)} spot ${Number(slot) + 1} — ${reveal === 'player' ? 'player' : 'metric'}: ${text}.\n\nThey can still change it until kickoff; checking this spot again is free.`);
+        await afterPlay();
+      }
+    } catch (e) {
+      if (!opts.quiet) aimFail(`Spy didn’t play: ${friendlyError(e)}`);
+    } finally { if (!opts.quiet) { setAimBusy(false); endAim(); } }
+  };
+
+  // A Spy you already played re-reads for free (use_spy only charges a new
+  // spot/reveal), so the intel comes back after a reload — until kickoff,
+  // when the card itself turns over and the peek has nothing left to say.
+  const spyEntries = (targeted.spy ?? []).map((e) => `${e.win}|${e.slot}|${e.reveal}`).join(',');
+  useEffect(() => {
+    if (!matchup || !spyEntries) return;
+    for (const e of targeted.spy ?? []) {
+      if (spyIntel[`${e.win}|${e.slot}`]) continue;
+      const ph = windowPhase(matchup.week, e.win as never, Date.now());
+      if (ph === 'live' || ph === 'final') continue;
+      void runSpy(e.win, e.slot, e.reveal, { quiet: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchup?.id, spyEntries]);
+
+  /** A target was tapped: play it, or open the one question it still needs. */
+  const onAimSlot = (win: string, slot: string) => {
+    const id = aiming;
+    if (!id || !matchup || aimBusy) return;
+    const rule = AIM_RULES[id];
+    if (rule.follow === 'spy-reveal') { setSpyAt({ win, slot }); return; }
+    if (rule.follow === 'bye-player') { setByeAt({ win, slot }); return; }
+    if (rule.follow === 'metric') { setMetricAt({ win, slot, id }); return; }
+    if (rule.follow === 'bench-player') { setBenchAt({ win, slot }); return; }
+    if (rule.follow === 'confirm') {
+      Alert.alert('Attach Underdog?', 'While he trails his duel, every score he banks counts ×1.5. Uses 1 card. No take-backs.', [
+        { text: 'Cancel', style: 'cancel', onPress: endAim },
+        { text: 'Attach', onPress: () => { void (async () => {
+          setAimBusy(true); setErr(null);
+          try {
+            const r = await applyUnderdog(matchup.id, win, slot);
+            if (!r?.ok) aimFail(`Underdog didn’t attach: ${friendlyError(r?.error ?? 'refused')}`);
+            else { commit(); await afterPlay(); }
+          } catch (e) { aimFail(`Underdog didn’t attach: ${friendlyError(e)}`); }
+          finally { setAimBusy(false); endAim(); }
+        })(); } },
+      ]);
+      return;
+    }
+    const live = rule.when === 'live';
+    void playAimed(id, live ? { win, slot, clock: windowFeedClock(week, win) } : { win, slot });
+  };
+  const onAimWindow = (win: string) => {
+    const id = aiming;
+    if (!id) return;
+    void playAimed(id, id === 'emp' ? { win, clock: windowFeedClock(week, win) } : { win });
+  };
+
+  /** The tap strips for one spot — one per side the card can land on. */
+  const aimStrips = (win: string, slot: string) => {
+    if (!aiming) return null;
+    const ph = aimPhase(win);
+    const spot = { mine: !!mineAt(win, slot), theirs: theirsAt(win, slot) };
+    const sides = (['you', 'their'] as const).filter((sd) => aimSpotOk(aiming, ph, sd, spot));
+    if (!sides.length) return null;
+    const pu = powerupById(aiming);
+    return (
+      <View style={{ gap: 6 }}>
+        {sides.map((sd) => (
+          <Pressable key={sd} disabled={aimBusy} onPress={() => { tap(); onAimSlot(win, slot); }}
+            style={({ pressed }) => ({ borderWidth: 1, borderStyle: 'dashed', borderColor: t.warn, backgroundColor: alpha(t.warn, pressed ? 22 : 12), borderRadius: 8, paddingVertical: 11, alignItems: 'center', opacity: aimBusy ? 0.5 : 1 })}>
+            <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: t.warn }}>
+              {pu?.icon} TAP TO {AIM_RULES[aiming].verb} · {sd === 'you' ? 'YOUR' : 'THEIR'} SPOT {Number(slot) + 1}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  };
+  /** The tap strip for a whole window (Rivalry, EMP) — or, when no card is
+   *  waiting, the window cards already played here. */
+  const aimWinStrip = (win: string) => {
+    if (!aiming || !aimWindowOk(aiming, aimPhase(win))) {
+      const played = [targeted.rivalry?.includes(win) ? 'rivalry' : null, targeted.emp && win in targeted.emp ? 'emp' : null].filter(Boolean) as string[];
+      return played.length
+        ? <Mono size={10} tone="warn" style={{ marginBottom: 8 }}>{played.map((id) => `${powerupById(id)?.icon ?? '✦'} ${powerupById(id)?.name ?? id}`).join(' · ')} on this window</Mono>
+        : null;
+    }
+    const pu = powerupById(aiming);
+    return (
+      <Pressable disabled={aimBusy} onPress={() => { tap(); onAimWindow(win); }}
+        style={({ pressed }) => ({ borderWidth: 1, borderStyle: 'dashed', borderColor: t.warn, backgroundColor: alpha(t.warn, pressed ? 22 : 12), borderRadius: 8, paddingVertical: 11, alignItems: 'center', marginBottom: 10, opacity: aimBusy ? 0.5 : 1 })}>
+        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: t.warn }}>
+          {pu?.icon} TAP TO {AIM_RULES[aiming].verb} · {winLabelFor(win)}
+        </Text>
+      </Pressable>
+    );
+  };
+  /** Under a spot's pair: what a Spy found there, and the cards you played on
+   *  THEIR side of it (Jinx, Cold Snap, Napalm) — your own spot wears its
+   *  plays on the card's ⚡ chip, theirs has no card of yours to wear them. */
+  const spyLine = (win: string, slot: string) => {
+    const k = `${win}|${slot}`;
+    const v = spyIntel[k];
+    const onTheirs = [
+      targeted.jinx?.includes(k) ? 'jinx' : null,
+      targeted.coldSnap && k in targeted.coldSnap ? 'cold-snap' : null,
+      targeted.napalm && k in targeted.napalm ? 'napalm' : null,
+    ].filter(Boolean) as string[];
+    if (!v && !onTheirs.length) return null;
+    return (
+      <View style={{ alignItems: 'center', gap: 2 }}>
+        {!!v && <Mono size={10} tone="warn">👁️ SPY · THEIR {v}</Mono>}
+        {!!onTheirs.length && <Mono size={10} tone="opp">{onTheirs.map((id) => `${powerupById(id)?.icon ?? '✦'} ${powerupById(id)?.name ?? id}`).join(' · ')} on their spot</Mono>}
+      </View>
+    );
+  };
+
   /** The hand: what you OWN and have not played (v0.431.0). An armed card
    *  used to stay fanned here, painted ARMED, so it could be disarmed — and
    *  the founder read that as the card never having left: "if I used
@@ -774,9 +1002,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     // not the hand — played from here they'd arm into `buffs`, which nothing
     // reads for them. Underdog (0257, a slot-targeted modifier) is likewise
     // excluded until the app grows targeted applies: playable on web meanwhile.
-    .filter((p) => p.kind !== 'metric' && p.id !== 'unlock-underdog')
+    .filter((p) => p.kind !== 'metric' || p.id === 'unlock-underdog')
     .filter((p) => (inventory[p.id] ?? 0) > 0 && !buffs.has(p.id))
-    .map((p) => {
+    .map((p): HandCard => {
+      // AIMED (v0.515.0): played on a spot or a window through the board's
+      // tap-a-target step. Usable whenever the board has somewhere for it.
+      if (isAimed(p.id)) {
+        const any = aimAny(p.id);
+        const liveOff = AIM_RULES[p.id].when === 'live' && !liveBuffsOn;
+        return {
+          id: p.id, qty: inventory[p.id] ?? 0, armed: false, action: 'aim',
+          usable: any && !liveOff,
+          note: liveOff ? "Real-time power-ups are off in this league (commissioner's setting)."
+            : any ? aimPrompt(p.id)
+            : `Nowhere to play it right now. ${aimPrompt(p.id)}`,
+        };
+      }
       const pre = p.timing === 'pre';
       // A TARGETED card (a window or a spot) is not a whole-field buff: ARM
       // used to file it into the buff list, which nothing reads, and eat the
@@ -1173,6 +1414,91 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           ))}
         </View>
       </Overlay>
+      {/* AIMED CARDS' follow-ups (v0.515.0). */}
+      <Overlay visible={!!spyAt} title="👁️ Spy · what to uncover" subtitle={spyAt ? `THEIR ${winLabelFor(spyAt.win).toUpperCase()} SPOT ${Number(spyAt.slot) + 1} · USES 1 SPY` : ''}
+        onClose={endAim}>
+        <View style={{ padding: 12, gap: 8 }}>
+          {([['player', 'Their player', 'Who they sealed in this spot.'], ['metric', 'Their metric', 'How that player scores.']] as const).map(([rv, label, sub]) => (
+            <Pressable key={rv} disabled={aimBusy} onPress={() => { tap(); if (spyAt) void runSpy(spyAt.win, spyAt.slot, rv); }}
+              android_ripple={{ color: alpha(t.warn, 16) }}
+              style={({ pressed }) => ({ backgroundColor: t.bg, opacity: pressed || aimBusy ? 0.7 : 1, borderWidth: 1, borderColor: t.warn, borderRadius: 8, padding: 12, gap: 3 })}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{label}</Text>
+              <Mono size={9.5}>{sub}</Mono>
+            </Pressable>
+          ))}
+          <Mono size={9.5} tone="faint">They can still change it until kickoff — checking this spot again is free.</Mono>
+        </View>
+      </Overlay>
+      {byeAt && (
+        <PlayerPicker
+          visible
+          players={pool.filter((p) => winBySlug[p.slug] === null).map(poolToPlayer)}
+          week={week}
+          userId={userId}
+          windowLabel={`${winLabelFor(byeAt.win)} · Bye Steal`}
+          groupOf={(id) => grpBySlug[id] ?? 'start'}
+          onPick={(slug) => {
+            const pl = pool.find((p) => p.slug === slug);
+            let pts = 0;
+            try { pts = Math.min(BYE_STEAL_CAP, Math.round(projectedPoints({ id: slug, pos: pl?.pos ?? '' }) * 10) / 10); } catch { /* the server clamps; 0 is safe */ }
+            const at = byeAt; setByeAt(null);
+            void playAimed('bye-steal', { win: at.win, slot: at.slot, slug, pts });
+          }}
+          onRemove={endAim}
+          onClose={endAim}
+        />
+      )}
+      {metricAt && (() => {
+        const mine = mineAt(metricAt.win, metricAt.slot);
+        const pl = mine ? playersBySlug[mine.slug] ?? (duelPool[mine.slug] ? poolToPlayer(duelPool[mine.slug]) : null) : null;
+        if (!pl || !mine) return null;
+        const name = powerupById(metricAt.id)?.name ?? metricAt.id;
+        return (
+          <MetricModal
+            visible
+            player={pl}
+            currentId={mine.metric}
+            filter={(m) => !m.lock || unlocks.has(m.lock)}
+            title={`${name} · pick the new metric`}
+            subtitle={`${pl.name.toUpperCase()} · COUNTS ONLY PLAYS FROM NOW · NO TAKE-BACKS`}
+            onPick={(mid) => {
+              const at = metricAt; setMetricAt(null);
+              const atClock = windowFeedClock(week, at.win);
+              let atRt: number | undefined;
+              try { atRt = realTimeAt(pl, week, atClock, mine.metric ?? undefined); } catch { atRt = undefined; }
+              void playAimed(at.id, { win: at.win, slot: at.slot, toMetric: mid, atClock, ...(atRt != null ? { atRt } : {}) });
+            }}
+            onClose={endAim}
+          />
+        );
+      })()}
+      {benchAt && (() => {
+        const mine = mineAt(benchAt.win, benchAt.slot);
+        const cur = mine ? playersBySlug[mine.slug] ?? null : null;
+        const inWin = new Set(slots.filter((x) => x.win === benchAt.win).map((x) => mineAt(x.win, x.slot)?.slug).filter(Boolean) as string[]);
+        const bench = eligibleFor(benchAt.win, null).filter((p) => !inWin.has(p.slug)).map(poolToPlayer);
+        return (
+          <PlayerPicker
+            visible
+            players={bench}
+            week={week}
+            userId={userId}
+            windowLabel={`${winLabelFor(benchAt.win)} · Player Swap`}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
+            onPick={(slug) => {
+              const at = benchAt; setBenchAt(null);
+              const np = playersBySlug[slug];
+              const toMetric = np ? swapMetricFor(np, mine?.metric ?? null) : undefined;
+              const atClock = windowFeedClock(week, at.win);
+              let atRt: number | undefined;
+              try { atRt = cur ? realTimeAt(cur, week, atClock, mine?.metric ?? undefined) : undefined; } catch { atRt = undefined; }
+              void playAimed('player-swap', { win: at.win, slot: at.slot, toPlayer: slug, ...(toMetric ? { toMetric } : {}), atClock, ...(atRt != null ? { atRt } : {}) });
+            }}
+            onRemove={endAim}
+            onClose={endAim}
+          />
+        );
+      })()}
       {/* "Your matchups" — the switcher's sheet (v0.431.0). */}
       <Overlay visible={switchOpen} title="Your matchups" subtitle={`NOW · ${(myTeam?.team_name ?? 'YOU').toUpperCase()}`} onClose={() => setSwitchOpen(false)}>
         <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
@@ -1246,6 +1572,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               // web's slate popup, now on the app too).
               onOpenSlate={(id) => setSlateWin(wins.find((x) => String(x.id) === id) ?? null)}
               slotDetail={slotDetail}
+              // Aimed cards on a locked or live window (v0.515.0).
+              slotExtra={(win, slot) => {
+                const a = aimStrips(win, slot); const sp = spyLine(win, slot);
+                return a || sp ? <View style={{ gap: 6 }}>{a}{sp}</View> : null;
+              }}
+              winExtra={aimWinStrip}
               // The stat DRIVING the metric ("127 pass yd"), in the card's stat
               // slot. No full statline on the app (founder's call) — just the
               // number the fielded metric is actually counting.
@@ -1305,6 +1637,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               {gateOn && <Mono size={9} tone={elig ? 'faint' : 'opp'}>{elig} eligible</Mono>}
             </View>
 
+            {aimWinStrip(w.id)}
+
             {/* Felt under the pair, so the cards read as dealt onto a table
                 rather than floating on the app background. */}
             <View style={{ gap: 10 }}>
@@ -1312,8 +1646,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                 const p = picks[s.key];
                 const pick = p?.player_slug ? { playerId: p.player_slug, metricId: p.metric_id ?? null } : undefined;
                 return (
+                  <View key={s.key} style={{ gap: 6 }}>
                   <SetupRow
-                    key={s.key}
                     idx={si}
                     pick={pick}
                     resolve={(id) => playersBySlug[id]}
@@ -1330,6 +1664,11 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                     onClearSlot={() => { if (!wLocked) setSlot(s.key, { player_slug: null, metric_id: null }); }}
                     onScout={oppPool.length ? () => setScoutWin(w) : undefined}
                   />
+                  {/* Aimed cards (v0.515.0): the spot's tap strips while a
+                      card waits for its target, and what a Spy found here. */}
+                  {aimStrips(s.win, s.slot)}
+                  {spyLine(s.win, s.slot)}
+                  </View>
                 );
               })}
             </View>
@@ -1612,13 +1951,31 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       })()}
     </ScrollView>
 
+    {/* The aim bar (v0.515.0): which card is waiting, where it can land,
+        and the way out. Sits above the hand, where the PLAY tap was. */}
+    {!!aiming && (
+      <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, bottom: 50 + HAND_TAB_H + 10, zIndex: 80, elevation: 80 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.surface, borderWidth: 1, borderColor: t.warn, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
+          <Text style={{ fontSize: 20 }}>{powerupById(aiming)?.icon}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{powerupById(aiming)?.name}{aimBusy ? ' · playing…' : ''}</Text>
+            <Mono size={9.5} tone="warn" numberOfLines={2}>{aimPrompt(aiming)} The spots light up on the board.</Mono>
+          </View>
+          <Pressable hitSlop={8} disabled={aimBusy} onPress={() => { tap(); endAim(); }}
+            style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 8 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.dim }}>CANCEL</Text>
+          </Pressable>
+        </View>
+      </View>
+    )}
+
     <PowerupHand
       // BAR_H: the fan's base tucks just behind the room bar's top edge so
       // the card feet hide under the rail (v0.375.1 — at 58 it floated).
       lift={50}
       cards={hand}
       busyId={buffBusy}
-      onArm={armFromHand}
+      onArm={(id) => (isAimed(id) ? startAim(id) : armFromHand(id))}
     />
     </View>
   );
