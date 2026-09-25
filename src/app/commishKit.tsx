@@ -35,6 +35,11 @@ const prettify = (slug: string) =>
 // Directory-filter axes for bulk flagging + scoped bonuses (0145): position
 // and team straight off the bio bake, tenure from accrued seasons.
 const FILTER_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+/** Scoped rules can also aim at the defenders and the team units (v0.536.0):
+ *  the scorer matches on the player's own position, so "every LB ×1.5" or
+ *  "+2 to any HC" means exactly what it says in a league that rosters them.
+ *  A rule stores at most 8 positions (0145), so the picker stops at 8. */
+const SCOPE_POS = [...FILTER_POS, 'DL', 'LB', 'DB', 'HC', 'P'] as const;
 const TENURES = [
   { id: 'rookie', label: 'ROOKIES' },
   { id: 'y2_3', label: '2ND–3RD YR' },
@@ -287,10 +292,10 @@ export function ScoringEditor({ leagueId, initial, onDone, onClose, inline = fal
           </div>
         ))}
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
-          {FILTER_POS.map((p) => {
+          {SCOPE_POS.map((p) => {
             const on = dPos.has(p);
             return (
-              <button key={p} onClick={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })} className="mono"
+              <button key={p} onClick={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else if (n.size < 8) n.add(p); return n; })} className="mono"
                 style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 3, padding: '3px 8px', color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>{p}</button>
             );
           })}

@@ -64,6 +64,11 @@ const prettify = (slug: string) =>
 // commishKit constants; the team pick is a horizontal chip strip here since
 // RN has no <select>.
 const FILTER_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+/** Scoped rules can also aim at the defenders and the team units (v0.536.0):
+ *  the scorer matches on the player's own position, so "every LB ×1.5" or
+ *  "+2 to any HC" means exactly what it says in a league that rosters them.
+ *  A rule stores at most 8 positions (0145), so the picker stops at 8. */
+const SCOPE_POS = [...FILTER_POS, 'DL', 'LB', 'DB', 'HC', 'P'] as const;
 const TENURES = [
   { id: 'rookie', label: 'ROOKIES' },
   { id: 'y2_3', label: '2ND–3RD YR' },
@@ -316,9 +321,9 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
           </View>
         ))}
         <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
-          {FILTER_POS.map((p) => (
+          {SCOPE_POS.map((p) => (
             <FilterChip key={p} label={p} on={dPos.has(p)} tone={t.you}
-              onPress={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })} />
+              onPress={() => setDPos((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else if (n.size < 8) n.add(p); return n; })} />
           ))}
           {TENURES.map((tn) => (
             <FilterChip key={tn.id} label={tn.label} on={dTen === tn.id} tone={t.warn}

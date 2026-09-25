@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.536.0 — scoped rules reach IDP, head coaches and punters
+
+Founder: "yes, widen scoped rules to IDP, HC and P". The scorer already
+matched a rule on the player's own position and the server (0145) already
+kept any 1-3 letter code, so only the editors were narrow.
+- **Editors (web + app):** the Adjustments scoped-rule picker now offers DL,
+  LB, DB, HC and P beside QB/RB/WR/TE/K/DEF. It stops at 8 positions, the
+  stored rule's limit, instead of dropping extras on save.
+- **Test:** check:scoped covers an LB rule hitting LBs and missing DBs, HC
+  and P rules on team units, HC + team scope, and lower-case stored codes.
+
 ### v0.535.0 — QB hits and passes defended score live, then get confirmed
 
 Founder: "there is no defender on incomplete passes?" There is. ESPN names
