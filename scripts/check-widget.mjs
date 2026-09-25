@@ -529,7 +529,7 @@ const state = [
   const base = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {} });
   const g = summarize({ league, week: WEEK, matchup: matchup('open'), state: [], teams, nowMs: pre, picks, pool, injuries: {}, phantoms: { 'snf|0': 'ghost' } });
   const snf = g.cards.filter((c) => c.win === 'snf');
-  ok('a ghosted slot reads GHOST, named, with its card', snf[0].status === 'ghost' && snf[0].phantom === 'ghost' && snf[0].name === 'Ghost', snf[0]);
+  ok('a ghosted slot reads GHOST, named, with its card', snf[0].status === 'ghost' && snf[0].phantom === 'ghost' && snf[0].name === 'G. Host', snf[0]);
   const noneFix = (s) => s.fixes.filter((f) => f.win === 'snf' && f.kind === 'none').map((f) => Number(f.text.split(' ')[0]))[0] ?? 0;
   ok('…and is no longer a slot nobody can fill', noneFix(g) === noneFix(base) - 1, [noneFix(base), noneFix(g)]);
   ok('a ghost is not a warning (one fewer than without it)', alertCount(g) === alertCount(base) - 1, [alertCount(base), alertCount(g)]);

@@ -25,6 +25,7 @@
 // side — and the worker's silent push (kind 'widget') only says "repaint",
 // never carries a score, so a stale push can never draw a stale number.
 
+import { GHOST_CARD } from './ghostCard';
 import {
   myEnrollments, myMatchupFrom, getMatchupState, matchupTeams, defaultOpenWeek, liveSlate, myPicks, myPool, injuryTags, leagueStandings, myTargeted,
   type Enrollment, type LiveMatchup, type WindowScore, type PickRow, type PoolPlayer, type StandingsRow,
@@ -448,7 +449,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         const metric = p?.metric_id && pos ? metricById(pos as Pos, p.metric_id)?.name ?? null : null;
         cards.push({
           win: winId, winLabel: w.label, phase: w.phase, slot: slotId, slug,
-          name: slug ? (pl ? shortName(pl.full) : slug) : status === 'ghost' ? (phantom === 'bye-steal' ? 'Bye Steal' : 'Ghost') : '',
+          name: slug ? (pl ? shortName(pl.full) : slug) : status === 'ghost' ? (phantom === 'bye-steal' ? 'Bye Steal' : GHOST_CARD.name) : '',
           pos, team: pl?.team ?? null, metric,
           image: slug ? images?.[slug] ?? null : null,
           metricId: p?.metric_id ?? null,

@@ -27,6 +27,7 @@
 // pays for itself on gestures and on animations that must read values back
 // mid-flight; this board has neither. See the header of animations.tsx.
 import { type ReactNode } from 'react';
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -351,14 +352,43 @@ export function CardBack({ label = 'SEALED', idx = 0, size, onPress, actionLabel
  *  pick, so the board had nothing to draw and the spot read as still empty.
  *  Same shell as every card, so it deals and breathes with its row; the
  *  colours come off the theme's accent so it reads on every palette. */
-export function CardPhantom({ icon, title, sub, bank, idx = 0, size, onPress }: {
+export function CardPhantom({ icon, title, sub, bank, kind, idx = 0, size, onPress }: {
   icon: string; title: string; sub: string;
+  /** 'ghost' deals him as a PLAYER card (v0.527.0). */
+  kind?: 'ghost' | 'bye';
   /** What it has banked, once the window scores. */
   bank?: number | null;
   idx?: number; size?: CardSize; onPress?: () => void;
 }) {
   const sc = size ? sizeSpec(size).s : 1;
   const t = useTheme();
+  // THE GHOST SIGNS A CONTRACT (v0.527.0). Founder: "let's put the ghost on a
+  // card like he is an actual player. That would be humorous." CardFace's
+  // stock and layout, a ghost in the headshot frame, a pun for a name.
+  if (kind === 'ghost') {
+    return (
+      <CardShell idx={idx} size={size}>
+        <Pressable onPress={onPress} disabled={!onPress} style={{ flex: 1 }}>
+          <ImageBackground source={STOCK_TILE} resizeMode="repeat" imageStyle={{ borderRadius: 8 }}
+            style={{ flex: 1, backgroundColor: STOCK, borderWidth: StyleSheet.hairlineWidth, borderColor: STOCK_EDGE, borderTopWidth: 3, borderTopColor: t.you, borderRadius: 8, padding: cs(8, sc), alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' }}>
+            <View style={{ alignItems: 'center', gap: cs(4, sc), marginTop: cs(6, sc) }}>
+              <View style={{ width: cs(60, sc), height: cs(60, sc), borderRadius: 7, borderWidth: 1.5, borderColor: t.you, backgroundColor: '#1D3540', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <Text style={{ fontSize: cs(36, sc) }}>👻</Text>
+              </View>
+              <Text numberOfLines={1} style={{ fontSize: cs(13, sc), fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{GHOST_CARD.name}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: cs(9.5, sc), color: INK_DIM }}>{GHOST_CARD.pos} · {GHOST_CARD.team}</Text>
+            </View>
+            <View style={{ backgroundColor: '#3A2E14', borderRadius: 5, paddingHorizontal: cs(8, sc), paddingVertical: cs(4, sc), maxWidth: '100%' }}>
+              <Text numberOfLines={1} style={{ fontSize: cs(11, sc), fontWeight: '700', color: '#F2D79A' }}>{GHOST_CARD.metric}</Text>
+            </View>
+            {bank != null
+              ? <Text style={{ fontFamily: MONO, fontSize: cs(15, sc), fontWeight: '800', color: INK }}>{bank.toFixed(1)}</Text>
+              : <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: cs(8, sc), fontWeight: '700', letterSpacing: 0.8, color: INK_DIM }}>{GHOST_CARD.line}</Text>}
+          </ImageBackground>
+        </Pressable>
+      </CardShell>
+    );
+  }
   return (
     <CardShell
       idx={idx}

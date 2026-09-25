@@ -82,7 +82,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
   winExtra?: (win: string) => ReactNode;
   /** Your Ghost / Bye Steal spots BEFORE the window scores (v0.516.0) — once
    *  it scores the resolver's own rows say it, for both sides. */
-  myPhantom?: (win: string) => Record<string, { icon: string; title: string; sub: string }>;
+  myPhantom?: (win: string) => Record<string, { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' }>;
   /** Extra live-row text a caller can supply per side: the game and clock
    *  ("KC@LAC · Q1 9:00"), the statline, coin earned. Everything here needs data
    *  Duel doesn't have — a game feed, a StatLine — so it's the caller's to fill
@@ -222,15 +222,15 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
    *  them as rows the lineup never had (PHANTOM_SLOT_METRICS), so srvSidePicks
    *  rightly skips them — and the seat drew as empty. Read the rows here,
    *  for either side; before the window scores, the board hands in yours. */
-  const phantomFor = (win: string, slot: string, who: 'you' | 'their'): { icon: string; title: string; sub: string; bank: number | null } | null => {
+  const phantomFor = (win: string, slot: string, who: 'you' | 'their'): { icon: string; title: string; sub: string; bank: number | null; kind?: 'ghost' | 'bye' } | null => {
     const side = who === 'you' ? youSide : oppSide;
     const row = scores.find((x) => x.game_window === win)?.slot_scores
       ?.find((r) => r.side === side && String(r.slot) === slot && !!r.metric && PHANTOM_SLOT_METRICS.has(r.metric));
     if (row) {
       const bank = round1(Number(row.score));
-      if (row.metric === 'ghost') return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `banks a flat ${GHOST_POINTS}`, bank };
+      if (row.metric === 'ghost') return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `banks a flat ${GHOST_POINTS}`, bank, kind: 'ghost' as const };
       const nm = row.slug ? (pool[row.slug]?.full ?? nameFromSlug(row.slug)) : 'Bye player';
-      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${nm} · BYE`, sub: 'bye steal · his projection, flat', bank };
+      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${nm} · BYE`, sub: 'bye steal · his projection, flat', bank, kind: 'bye' as const };
     }
     if (who === 'you') { const m = myPhantom?.(win)?.[slot]; if (m) return { ...m, bank: null }; }
     return null;
@@ -428,7 +428,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                       </View>
                     ) : (
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                      {mp ? faceFor(mp, youSide, t.you, i) : (() => { const ph = phantomFor(win, slot, 'you'); return ph ? <CardPhantom idx={i} icon={ph.icon} title={ph.title} sub={ph.sub} bank={ph.bank} /> : <CardBack label="—" idx={i} />; })()}
+                      {mp ? faceFor(mp, youSide, t.you, i) : (() => { const ph = phantomFor(win, slot, 'you'); return ph ? <CardPhantom idx={i} icon={ph.icon} title={ph.title} sub={ph.sub} bank={ph.bank} kind={ph.kind} /> : <CardBack label="—" idx={i} />; })()}
                       {/* Post-kick, an empty opposing half is a fact: NO PICK,
                           not a SEALED back promising a flip that never comes
                           (the founder watched one promise all night). */}

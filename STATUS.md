@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.527.0 — the Ghost gets a player card (G. Host · SPIRIT · BOO)
+
+Founder: "in all versions, let's put the ghost on a card like he is an
+actual player. That would be humorous." One source (core/data/ghostCard,
+fed by sim's GHOST_PLAYER, now named "G. Host", team "BOO"):
+- **Web board** (boardParts): a Ghost-held spot is a real .mx-spot card, so
+  the card table dresses it like a player. It has a ghost headshot, a
+  "Flat 14 Pts" metric plate and "UNDRAFTED · UNDEAD" small print.
+- **Web live** (Matchup / cardTable): the mini card and player card draw 👻
+  art with a SPIRIT suit, and the metric chip reads "Flat 14 Pts". It used
+  to read "NO METRIC · scores 0" over his 14.
+- **App**: CardPhantom kind 'ghost' deals a CardFace-style card, and
+  LiveCard's ghost uses MiniCard with ghost art.
+- **Widget**: the name is "G. Host" and the foot reads "FLAT 14 PTS".
+
 ### v0.526.0 — wrong-window auto-fills are re-placed; web Spy re-reads
 
 The Gridiron Gang TNF spy (TheRFM) read "— no player —" though the lock fill

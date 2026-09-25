@@ -38,7 +38,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
   twin?: boolean;
   /** A GHOST (or a Bye Steal) holds this otherwise-empty spot (v0.516.0) —
    *  drawn as its own card instead of the blank "+ PICK A PLAYER". */
-  phantom?: { icon: string; title: string; sub: string } | null;
+  phantom?: { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' } | null;
   /** Deal order within the window. */
   idx?: number;
   /** Opens the opponent's window pool. Absent when there is nothing to scout. */
@@ -152,7 +152,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
           // Tapping it says what it is (the same sheet as the ⚡ chip). Not a
           // picker: fielding a player here would stand the phantom down and
           // waste the card (the resolver fills a spot with it only while empty).
-          ? <CardPhantom size={cardSize} idx={idx} icon={phantom.icon} title={phantom.title} sub={phantom.sub} onPress={applied?.length ? () => setPuOpen(true) : undefined} />
+          ? <CardPhantom size={cardSize} idx={idx} icon={phantom.icon} title={phantom.title} sub={phantom.sub} kind={phantom.kind} onPress={applied?.length ? () => setPuOpen(true) : undefined} />
           : <CardEmpty size={cardSize} idx={idx} label={lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'} onPress={lockPlayer ? undefined : onOpenPicker} />
       )}
 
