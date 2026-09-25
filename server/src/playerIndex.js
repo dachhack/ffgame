@@ -9,6 +9,7 @@
 import { slugOf, normName } from '../../scripts/espn/espnAdapter.mjs';
 import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { getPlayers } from './sleeper.js';
+import { fantasyPos } from '../../packages/core/src/data/sleeperPlayers.ts';
 
 export { slugOf, normName };
 
@@ -100,7 +101,7 @@ export async function buildPlayerIndex(directory) {
         slug = posSfx && !used.has(posSfx) ? posSfx : `${base}-${e.sid}`;
       }
       used.add(slug);
-      bySleeperId.set(e.sid, { slug, full: e.full, pos: e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null });
+      bySleeperId.set(e.sid, { slug, full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null });
       if (e.p.espn_id) byEspnId.set(String(e.p.espn_id), slug);
       if (e.p.gsis_id && String(e.p.gsis_id).trim()) byGsis.set(String(e.p.gsis_id).trim(), slug);
       // depth (v0.416.0): Sleeper's own depth_chart_order, which is adjusted
@@ -109,7 +110,10 @@ export async function buildPlayerIndex(directory) {
       // opinion (roughly a third of the pool, mostly deep bench), which the
       // consumer treats as "no rank" rather than "last".
       bySlug.set(slug, {
-        full: e.full, pos: e.p.position, team: e.p.team, sid: e.sid,
+        // THE GAME'S POSITION, not Sleeper's (v0.531.0): DE/DT → DL,
+        // ILB/OLB → LB, CB/S → DB. The classic scorer branches on DL/LB/DB,
+        // so a raw "CB" scored every tackle as 0.
+        full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team: e.p.team, sid: e.sid,
         depth: Number.isFinite(Number(e.p.depth_chart_order)) ? Number(e.p.depth_chart_order) : null,
       });
       const cand = { slug, team: normTeam(e.p.team ?? ''), rank: liveRank(e.p) };

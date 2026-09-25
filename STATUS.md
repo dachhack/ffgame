@@ -18,6 +18,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.531.0 — HC, punter and IDP score on the server; the position audit
+
+Founder: "Do we have all the wiring in place for IDP positions? HC? Punter?
+Others? … audit position and player mismatches and unexpected gaps in
+scoring or data." The engine was right. The worker was not: it resolved
+classic players through Sleeper's RAW position and the slug, so `kc-hc` and
+`kc-p` were WRs and a CB or DE was neither DB nor DL. All of them scored 0 in
+stored finals while the boards, which read league_pool, showed points.
+- **Positions:** slugMeta knows the -hc/-p team units (real team codes only),
+  the worker index stores fantasyPos (DE→DL, CB→DB, …), and the classic
+  resolver prefers league_pool.pos.
+- **Return TDs:** a defender's return TD paid twice (the live dst_td plus the
+  true-up's). The true-up skips INT and fumble returns and retires the
+  duplicates it wrote. The scoped per-TD counter no longer counts the
+  takeaway row's td flag as a second TD.
+- **RET spots:** optimalLineup fills them from what's left, priced by
+  returns, so auto-slot and the unmanaged seat stop seating the best
+  receiver there.
+- **Box score:** HC (W/L margin, conversions) and P (punts, yards, average)
+  get lines, and IDP lines add TFL/QBH/PD/FF. A split sack is half. DEF
+  shows BLK. HC/P/FB/RET cards wear their own colors on web.
+- **Smaller fixes:** a penalty or no-play snap no longer credits a coach
+  with a 3rd/4th-down conversion. 0361 makes the server's league_pos_cap count
+  a RET spot as a home for RB/WR/TE/FB.
+- **Tests:** check:positions pins all of it.
+- **Left as is:** a tenure-filtered pool still drops HC/P/K/DST, which is the
+  founder's earlier call. Eight FBs and Velus Jones read as RB in the 2025
+  play bake, which only matters off the pool path.
+
 ### v0.530.0 — the bench shows (x/x) and every spot, open ones included
 
 Founder: "Let's have bench still show (x/x) and show all spots. (If bench

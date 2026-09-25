@@ -132,6 +132,12 @@ export function liveTeamFor(
   return normTeam(poolTeam ?? '') || slugMeta(slug).team;
 }
 
+/** The 32 team-unit slug prefixes (kdst.ts's NFL_CODES; kept here because
+ *  kdst imports this module). */
+const TEAM_UNIT_CODES = new Set(['ari', 'atl', 'bal', 'buf', 'car', 'chi', 'cin', 'cle', 'dal', 'den', 'det',
+  'gb', 'hou', 'ind', 'jax', 'kc', 'la', 'lac', 'lv', 'mia', 'min', 'ne', 'no',
+  'nyg', 'nyj', 'phi', 'pit', 'sea', 'sf', 'tb', 'ten', 'was']);
+
 export function slugMeta(slug: string): { pos: Pos; team: string } {
   // A missing slug resolves to the same neutral answer as an unknown one.
   // This is a pure lookup on the render path of every board, and callers reach
@@ -142,6 +148,12 @@ export function slugMeta(slug: string): { pos: Pos; team: string } {
   if (!slug) return { pos: 'WR', team: '' };
   if (slug.endsWith('-dst')) return { pos: 'DEF', team: normTeam(slug.slice(0, -4)) };
   if (slug.endsWith('-k')) return { pos: 'K', team: normTeam(slug.slice(0, -2)) };
+  // HEAD COACH AND PUNTER are team units too (0171: `kc-hc`, `kc-p`). Without
+  // these the worker read both as the WR default below, and the classic scorer
+  // gave every coaching and punting stat 0 (v0.531.0). Only a real team code
+  // counts: a Sleeper name collision can also end `-p` (`john-smith-p`).
+  const unit = /^([a-z]{2,3})-(hc|p)$/.exec(slug);
+  if (unit && TEAM_UNIT_CODES.has(unit[1])) return { pos: unit[2] === 'hc' ? 'HC' : 'P', team: normTeam(unit[1]) };
   const o = overlay.get(slug);
   if (o) return o;
   const b = BAKED_SLUGS[slug];

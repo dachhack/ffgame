@@ -88,14 +88,18 @@ export interface GameBox {
 function weigh(s: StatLine): number {
   const yards = s.passYds * 0.4 + s.rushYds + s.recYds + s.retYds;
   const tds = s.passTds + s.rushTds + s.recTds + s.retTds + s.dtd;
-  const def = s.sacks * 12 + s.ints * 20 + s.fumrec * 15 + s.tackles * 2 + s.safety * 20;
-  return yards + tds * 25 + def;
+  const def = s.sacks * 12 + s.ints * 20 + s.fumrec * 15 + s.tackles * 2 + s.safety * 20
+    + ((s.tfl ?? 0) + (s.ff ?? 0) + (s.qbhit ?? 0) + (s.pd ?? 0) + (s.blk ?? 0)) * 4 + (s.stTkl ?? 0) * 2;
+  // A punter and a head coach are involved too (v0.531.0) — they were weighed
+  // at zero and so dropped from the box score by hasStats below.
+  const other = (s.puntYds ?? 0) * 0.2 + ((s.hc3dc ?? 0) + (s.hc4dc ?? 0) + (s.hc2pt ?? 0)) * 3 + (s.hcMargin != null ? 1 : 0);
+  return yards + tds * 25 + def + other;
 }
 
 /** True when a line has any counting stat at all. */
 export function hasStats(s: StatLine): boolean {
   return weigh(s) !== 0
-    || s.carries > 0 || s.targets > 0 || s.rec > 0 || s.fg > 0 || s.xp > 0;
+    || s.carries > 0 || s.targets > 0 || s.rec > 0 || s.fg > 0 || s.xp > 0 || (s.punts ?? 0) > 0;
 }
 
 /** Everyone with stats in one game, split by team and ordered by involvement.

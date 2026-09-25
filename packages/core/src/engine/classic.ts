@@ -722,7 +722,10 @@ export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number 
   let tds = 0;
   for (const p of plays) {
     raw += classicScorePlay(p, pos, s);
-    if (p.td || p.kind === 'dst_td') tds++;
+    // A defender's return TD arrives as TWO rows — the 'int'/'fumrec' (td flag
+    // set, for the 50+ return bonus) and its own 'dst_td' — so the flag on
+    // the takeaway row is not a second touchdown (v0.531.0).
+    if (p.kind === 'dst_td' || (p.td && p.kind !== 'int' && p.kind !== 'fumrec')) tds++;
     if (p.kind === 'pass') passYds += p.yards;
     if (p.kind === 'rush') { rushYds += p.yards; carries++; }
     if (p.catch && p.kind !== 'tp_rec') recYds += p.yards;
@@ -1087,8 +1090,34 @@ export function assignSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): Spo
 export function optimalLineup<T extends SpotPlayer>(
   slots: ClassicSlotDef[],
   players: T[],
-  valueOf: (p: T) => number,
+  valueOf: (p: T, d?: ClassicSlotDef) => number,
 ): { spots: { def: ClassicSlotDef; player: T | null }[]; bench: T[] } {
+  // RETURN SPOTS ARE PRICED AS RETURN SPOTS (v0.531.0). The matching below
+  // gives each player ONE value, which for a RET spot is the wrong number: it
+  // banks only his returns, so the best receiver on the roster is not the best
+  // returner. Fill every other spot first on full value, then the RET spots
+  // from whoever is left, each priced for the spot (valueOf(p, d) — the same
+  // question bestballFill has always asked). A starter who also returns stays
+  // in the spot where his whole line counts.
+  const retIdx = slots.map((d, i) => (isRetSlot(d.pos) ? i : -1)).filter((i) => i >= 0);
+  if (retIdx.length && retIdx.length < slots.length) {
+    const rest = optimalLineup(slots.filter((d) => !isRetSlot(d.pos)), players, (p) => valueOf(p));
+    const left = rest.bench;
+    const retSlots = retIdx.map((i) => slots[i]);
+    const ret = optimalLineup(retSlots, left, (p) => valueOf(p, retSlots[0]));
+    const bySlot = new Map([...rest.spots, ...ret.spots].map((r) => [r.def, r.player]));
+    const started = new Set([...bySlot.values()].filter(Boolean) as T[]);
+    return {
+      spots: slots.map((d) => ({ def: d, player: bySlot.get(d) ?? null })),
+      bench: players.filter((p) => !started.has(p)),
+    };
+  }
+  if (retIdx.length) {
+    // Only RET spots: price everyone for one.
+    const d0 = slots[retIdx[0]];
+    const inner = valueOf;
+    valueOf = (p) => inner(p, d0);
+  }
   // Value once per player: `matchSpots` is called on the sorted list, and a
   // comparator that re-derives a projection per comparison is the expensive
   // half of this on a full roster.
@@ -1132,7 +1161,7 @@ export function autoSlotPlan(
   bestball: string[],
   stored: Record<string, string | null | undefined>,
   roster: SpotPlayer[],
-  valueOf: (p: SpotPlayer) => number,
+  valueOf: (p: SpotPlayer, d?: ClassicSlotDef) => number,
 ): { slot: string; player: string }[] {
   const bb = new Set(bestball);
   const open = slots.filter((d) => !bb.has(d.slot) && !Object.prototype.hasOwnProperty.call(stored, d.slot));
