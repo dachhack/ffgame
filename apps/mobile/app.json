@@ -98,7 +98,8 @@
       "expo-web-browser",
       "./plugins/withCoreBundleInput",
       "./plugins/withPlaytestSigning",
-      "./plugins/withReleaseShrink"
+      "./plugins/withReleaseShrink",
+      "./plugins/withSceneLifecycle"
     ]
   }
 }
