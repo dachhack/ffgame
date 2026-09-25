@@ -150,6 +150,30 @@ export async function trueupTick(season, weeks, playerIndex) {
       .upsert(uniq.slice(i, i + 500), { onConflict: 'week,game_id,pid,player_slug,k' });
     if (error) throw new Error(`true-up upsert: ${error.message}`);
   }
+  // THE OFFICIAL CREDITS REPLACE THE LIVE ESTIMATES (v0.535.0). The poller
+  // writes QB hits and passes defended live from ESPN's text under the ESPN
+  // game id; for every game this pass now covers, those estimates are retired
+  // (and pollGame stops re-emitting them once it sees these rows). Games are
+  // matched on week + away/home through game_feed, whose codes are the same
+  // nflverse vocabulary (espnAdapter fixTeam).
+  {
+    const gids = [...new Set(uniq.filter((r) => r.k === 'qbhit' || r.k === 'pd').map((r) => `${r.week}|${r.game_id}`))];
+    let retired = 0;
+    for (const key of gids) {
+      const [wk, gid] = key.split('|');
+      const parts = gid.split('_');                     // 2026_03_AWAY_HOME
+      if (parts.length < 4) continue;
+      const away = parts[2], home = parts[3];
+      const { data: gf } = await db().from('game_feed').select('game_id').eq('week', Number(wk)).eq('away', away).eq('home', home);
+      for (const g of gf ?? []) {
+        const { data: del, error } = await db().from('live_play').delete()
+          .eq('week', Number(wk)).eq('game_id', g.game_id).in('k', ['qbhit', 'pd']).select('id');
+        if (error) log(`true-up retire live ${g.game_id}: ${error.message}`);
+        else retired += (del ?? []).length;
+      }
+    }
+    if (retired) log(`true-up ${season}: replaced ${retired} live QB-hit/PD estimates with official credits`);
+  }
   // RETIRE WHAT THIS PASS NO LONGER CLAIMS (v0.531.0). An upsert only adds,
   // so the individual return-TD rows earlier passes wrote for INT and fumble
   // returns — the live feed's own dst_td already pays those — would stay and
