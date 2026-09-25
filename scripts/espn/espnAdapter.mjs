@@ -402,6 +402,23 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       }
     }
   }
+  // TACKLES ON AN INTERCEPTION RETURN (v0.532.0). The returner is brought down
+  // by the team that threw it — a QB, a receiver — and the text names them in
+  // the same trailing parentheses. The scrimmage block above never looked at
+  // an interception play, so those tackles went uncredited; a league paying
+  // an offensive tackle (offTackle, per position) needs them. Strict on team:
+  // only a man on the passing side is credited.
+  if (isInt && !isTD) {
+    const pm = /\(([^()]+)\)\s*\.?\s*$/.exec(text);
+    if (pm) {
+      const start = text.lastIndexOf(pm[1]);
+      const hits = names.filter((n) => n.idx >= start && n.idx < start + pm[1].length);
+      for (const h of hits) {
+        const oo = resolve(h.abbr, offTeam, 'off');
+        if (oo && oo.team === offTeam) out.push({ slug: oo.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: hits.length === 1 ? 's' : 'a' }) });
+      }
+    }
+  }
   // Forced fumble — the name inside "FUMBLES (…)".
   const ffm = /FUMBLES\s*\(([^()]+)\)/.exec(text);
   if (ffm) {

@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.532.0 — scoring by position (classic leagues)
+
+Founder: "very fine grained scoring options. Like a tackle for QB at 50
+points and a tackle for a WR at 20 points … scope it as per position
+specific metric bonuses", and "not for drip leagues".
+- **Overrides:** `scoring_classic.byPos` is a sparse { POS: { key: value } }
+  layer over the catalog. core's `scoringFor(table, pos)` merges it, and the
+  live scorer (classicPointsFrom) and the projections (leagueProjRatio, the
+  RET/HC/P direct paths) both read it, so they cannot disagree.
+- **Clamping:** parseByPos keeps only the keys that mean something for a
+  position (BYPOS_SECTIONS). Per-yard values clamp to [-1, 2], everything else
+  to [-50, 100].
+- **Offensive tackles:** `offTackle` is a new catalog knob for a tackle by an
+  offensive player, default 0, so no league moves. The ESPN adapter now
+  credits the passing side's tacklers on an interception return; fumble plays
+  already could credit them.
+- **Server:** 0362 is set_league_classic_scoring (0209 verbatim) plus
+  offTackle and a cleaned byPos, checked against a scratch Postgres.
+- **Editors:** a BY POSITION tab on web (CommishDash) and app (CommishTools).
+  You pick a position and type only what differs; the league value is each
+  box's hint. League Info lists the overrides on both hosts.
+- **Tests:** check:bypos.
+
 ### v0.531.0 — HC, punter and IDP score on the server; the position audit
 
 Founder: "Do we have all the wiring in place for IDP positions? HC? Punter?

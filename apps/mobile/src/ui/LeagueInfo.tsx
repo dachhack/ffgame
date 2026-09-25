@@ -16,7 +16,7 @@ import {
 import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
 import { waiverDaysOf, waiverScheduleLine, holdLine } from '@drip/core/data/waiverDays';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
-import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
+import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, byPosSummary, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
@@ -122,6 +122,15 @@ export function ScoringView({ leagueId }: { leagueId: string }) {
               </View>
             );
           })}
+          {/* BY POSITION (v0.532.0): per-position overrides of the table above. */}
+          {byPosSummary(sc.byPos).length > 0 && (
+            <View>
+              <Head>BY POSITION</Head>
+              {byPosSummary(sc.byPos).map((r) => (
+                <Row key={`${r.pos}-${String(r.key)}`} k={`${r.pos} · ${r.label}`} v={`${r.value > 0 ? '+' : ''}${r.value}`} />
+              ))}
+            </View>
+          )}
           <Mono size={9} tone="faint" style={{ marginTop: 14, lineHeight: fs(14) }}>
             Anything not listed scores 0 in this league.
           </Mono>
