@@ -867,11 +867,16 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       if (!r?.ok) { if (!opts.quiet) aimFail(`Spy didn’t play: ${friendlyError(r?.error ?? 'refused')}`); return; }
       const v = r.reveal ?? null;
       const who = v && reveal === 'player' ? (oppPool.find((p) => p.slug === v) ? poolToPlayer(oppPool.find((p) => p.slug === v)!).name : v) : null;
-      const text = !r.present ? 'nobody there yet' : reveal === 'player' ? (who ?? 'hidden') : (metricName(v) ?? 'no metric yet');
+      // NOBODY CAN PLAY THERE (v0.529.0): none of their players' teams play
+      // in this window (IR/taxi excluded), so the spot can never be filled —
+      // "nobody there yet" promised a pick that could not come.
+      const noEligible = oppPool.length > 0 && !Object.entries(oppWinBySlug)
+        .some(([s, w]) => (w === win || w === 'any') && oppGrpBySlug[s] !== 'ir' && oppGrpBySlug[s] !== 'taxi');
+      const text = !r.present ? (noEligible ? 'no eligible player' : 'nobody there yet') : reveal === 'player' ? (who ?? 'hidden') : (metricName(v) ?? 'no metric yet');
       setSpyIntel((cur) => ({ ...cur, [`${win}|${slot}`]: `${reveal === 'player' ? 'player' : 'metric'}: ${text}` }));
       if (!opts.quiet) {
         commit();
-        Alert.alert('👁️ Spy', `Their ${winLabelFor(win)} spot ${Number(slot) + 1} — ${reveal === 'player' ? 'player' : 'metric'}: ${text}.\n\nThey can still change it until kickoff; checking this spot again is free.`);
+        Alert.alert('👁️ Spy', `Their ${winLabelFor(win)} spot ${Number(slot) + 1} — ${reveal === 'player' ? 'player' : 'metric'}: ${text}.\n\n${!r.present && noEligible ? 'None of their players are in this window’s games, so this spot stays empty.' : 'They can still change it until kickoff; checking this spot again is free.'}`);
         await afterPlay();
       }
     } catch (e) {

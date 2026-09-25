@@ -18,6 +18,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.529.0 — Spy says "no eligible player" when nobody can play there
+
+Founder: "Change Spy to say 'no eligible player' when nobody can play there."
+An empty spot whose window holds none of the opponent's players, by current
+team, can never be filled, so "nobody there yet" / "no pick sealed yet"
+promised a pick that could not come.
+- **Web:** TargetPanel checks oppPools[win], claimed only once the roster has
+  loaded.
+- **App:** runSpy checks oppWinBySlug, excluding IR and taxi, and the alert
+  drops "they can still change it".
+
 ### v0.528.0 — the worker reads its own team-override table
 
 Founder: "It's 2025 data leaking." The worker writes player_team_override
