@@ -2417,7 +2417,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
  *  labels FIT the box rather than being cut to fit it; a longer custom name
  *  wraps inside the same width.
  */
-function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
+function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emptyLabel }: {
   badge: string;
   badgePos?: string;
   /** A CSS colour for the badge on IR/taxi lines; starters take their position's. */
@@ -2426,6 +2426,8 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
   busy: boolean;
   /** IR/OUT/taxi only: open this place's picker. Absent on starters + bench. */
   onSlot?: () => void;
+  /** What a spot with nobody in it says (v0.530.0: an open bench spot is "Open"). */
+  emptyLabel?: string;
   slotVerb?: string;
   /** The NFL report's designation (v0.424.0) — O/D/Q/IR, or nothing. */
   inj?: string | null;
@@ -2468,7 +2470,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj }: {
           ＋ move someone to the {slotVerb ?? 'squad'}
         </button>
       ) : (
-        <span className="mono" style={{ flex: 1, fontSize: 10.5, color: 'var(--faint)' }}>Empty</span>
+        <span className="mono" style={{ flex: 1, fontSize: 10.5, color: 'var(--faint)' }}>{emptyLabel ?? 'Empty'}</span>
       )}
     </div>
   );
@@ -3272,9 +3274,16 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         </>)}
 
         {/* BENCH */}
-        {bySpot.bench.length > 0 && (<>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>BENCH ({bySpot.bench.length})</div>
+        {/* Every bench spot, open ones too (v0.530.0, founder: "have bench
+            still show (x/x) and show all spots"), the way IR draws its. */}
+        {(bySpot.bench.length > 0 || !!gm?.shape?.bench) && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
+            BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
+          </div>
           {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} inj={injTags[p.slug]} />)}
+          {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
+            <RosterLine key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} emptyLabel="Open" />
+          ))}
         </>)}
 
         {/* INJURED RESERVE — the empty places are drawn too, up to the

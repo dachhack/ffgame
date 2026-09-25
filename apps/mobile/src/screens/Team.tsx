@@ -211,7 +211,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
  *      player, two taps to confirm, and the same button wherever you found him.
  */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj }: {
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj, emptyLabel }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -222,6 +222,8 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
   /** IR/OUT/taxi only: open this place's picker. Absent on starters + bench. */
   onSlot?: () => void;
   /** What an empty one is offering — "TAXI SQUAD", "INJURED RESERVE". */
+  /** What a spot with nobody in it says (v0.530.0: an open bench spot is "Open"). */
+  emptyLabel?: string;
   slotVerb?: string;
   /** Contract leagues (v0.352.0): the player's deal, shown on the row —
    *  a roster in a cap league is a payroll, and hiding the money made a
@@ -278,7 +280,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
           <Mono size={10.5} tone="dim">＋ move someone to the {slotVerb ?? 'squad'}</Mono>
         </Pressable>
       ) : (
-        <Text style={{ flex: 1, fontFamily: MONO, fontSize: fs(11), color: t.faint }}>Empty</Text>
+        <Text style={{ flex: 1, fontFamily: MONO, fontSize: fs(11), color: t.faint }}>{emptyLabel ?? 'Empty'}</Text>
       )}
     </View>
   );
@@ -864,10 +866,18 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         </>)}
 
         {/* ── BENCH ───────────────────────────────────────────────────────── */}
-        {bySpot.bench.length > 0 && (<>
-          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>BENCH ({bySpot.bench.length})</Mono>
+        {/* Every bench spot, open ones too (v0.530.0, founder: "have bench
+            still show (x/x) and show all spots. If bench spots are open,
+            just have the spot with no player name. Could say 'open'"). */}
+        {(bySpot.bench.length > 0 || !!gm?.shape?.bench) && (<>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
+            BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
+          </Mono>
           {bySpot.bench.map((p) => (
             <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
+          ))}
+          {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
+            <RosterRow key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} t={t} emptyLabel="Open" />
           ))}
         </>)}
 

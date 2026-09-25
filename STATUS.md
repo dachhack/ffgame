@@ -18,6 +18,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.530.0 — the bench shows (x/x) and every spot, open ones included
+
+Founder: "Let's have bench still show (x/x) and show all spots. (If bench
+spots are open, just have the spot with no player name. Could say 'open')".
+The team roster (app Team.tsx, web NativeLeague.tsx) now heads the bench
+"BENCH (10/12)" from the league's shape.bench and draws each unfilled bench
+spot as a BN row reading "Open", the way IR/OUT/taxi already drew theirs.
+
 ### v0.529.0 — Spy says "no eligible player" when nobody can play there
 
 Founder: "Change Spy to say 'no eligible player' when nobody can play there."
