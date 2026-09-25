@@ -535,7 +535,8 @@ function wobbleVars(seed: string): React.CSSProperties {
 }
 
 const posVars = (pos: string) => {
-  const p = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].includes(pos) ? pos : 'DEF';
+  // Every position the theme colours (v0.531.0: HC/P/FB/RET wore DEF's).
+  const p = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P', 'RET'].includes(pos) ? pos : 'DEF';
   return { background: `var(--pos-${p}-bg)`, color: `var(--pos-${p}-fg)`, borderColor: `var(--pos-${p}-bd)` };
 };
 

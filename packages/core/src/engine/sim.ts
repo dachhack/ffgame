@@ -438,6 +438,15 @@ export interface StatLine {
   fg: number; xp: number;
   sacks: number; ints: number; fumrec: number; dtd: number; safety: number;
   tackles: number;
+  // THE REST OF THE CLASSIC POSITIONS (v0.531.0): the box score dropped a
+  // head coach and a punter entirely (no field counted anything they do) and
+  // gave an IDP line only tkl/sk/INT. Optional so a hand-built line (checks,
+  // fixtures) keeps type-checking; statlineFrom always sets them.
+  tfl?: number; ff?: number; qbhit?: number; pd?: number; blk?: number; stTkl?: number;
+  punts?: number; puntYds?: number;
+  hc3dc?: number; hc4dc?: number; hc2pt?: number;
+  /** Head coach: the game's signed margin (win > 0) once final; null before. */
+  hcMargin?: number | null;
 }
 export function statlineAt(player: Player, week: number, clock: number, metricId?: string): StatLine {
   const { plays } = playsForPlayer(player, week, metricId);
@@ -448,7 +457,8 @@ export function statlineAt(player: Player, week: number, clock: number, metricId
  *  log's half of the same split as `rawPlaysFrom`: the numbers a card prints
  *  come from the same accumulation the board's do. */
 export function statlineFrom(plays: RawPlay[], clock: number): StatLine {
-  const s: StatLine = { passYds: 0, passTds: 0, comp: 0, att: 0, sacked: 0, passInts: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0 };
+  const s: StatLine = { passYds: 0, passTds: 0, comp: 0, att: 0, sacked: 0, passInts: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, rec: 0, recYds: 0, recTds: 0, retYds: 0, retTds: 0, fg: 0, xp: 0, sacks: 0, ints: 0, fumrec: 0, dtd: 0, safety: 0, tackles: 0,
+    tfl: 0, ff: 0, qbhit: 0, pd: 0, blk: 0, stTkl: 0, punts: 0, puntYds: 0, hc3dc: 0, hc4dc: 0, hc2pt: 0, hcMargin: null };
   for (const p of plays) {
     if (p.clock > clock) break; // plays are sorted ascending by clock
     switch (p.kind) {
@@ -468,12 +478,24 @@ export function statlineFrom(plays: RawPlay[], clock: number): StatLine {
       case 'return': s.retYds += p.yards; if (p.td) s.retTds++; break;
       case 'fg': s.fg++; break;
       case 'xp': s.xp++; break;
-      case 'sack': s.sacks++; break;
+      // A split sack is half a sack (hf), as the scorer pays it (v0.531.0).
+      case 'sack': s.sacks += p.hf ? 0.5 : 1; break;
       case 'int': s.ints++; break;
       case 'fumrec': s.fumrec++; break;
       case 'dst_td': s.dtd++; break;
       case 'safety': s.safety++; break;
       case 'tackle': s.tackles++; break;
+      case 'tfl': s.tfl = (s.tfl ?? 0) + 1; break;
+      case 'ff': s.ff = (s.ff ?? 0) + 1; break;
+      case 'qbhit': s.qbhit = (s.qbhit ?? 0) + 1; break;
+      case 'pd': s.pd = (s.pd ?? 0) + 1; break;
+      case 'blk': s.blk = (s.blk ?? 0) + 1; break;
+      case 'st_tkl': s.stTkl = (s.stTkl ?? 0) + 1; break;
+      case 'punt': s.punts = (s.punts ?? 0) + 1; s.puntYds = (s.puntYds ?? 0) + p.yards; break;
+      case 'hc_3dc': s.hc3dc = (s.hc3dc ?? 0) + 1; break;
+      case 'hc_4dc': s.hc4dc = (s.hc4dc ?? 0) + 1; break;
+      case 'hc_2pt': s.hc2pt = (s.hc2pt ?? 0) + 1; break;
+      case 'hc_res': s.hcMargin = p.yards; break;
     }
   }
   return s;
@@ -1426,16 +1448,35 @@ export function fmtStat(pos: Pos, s: StatLine, compact = false): string {
     if (s.fumrec) p.push(`${s.fumrec} FR`);
     if (s.dtd) p.push(`${s.dtd} TD`);
     if (s.safety) p.push(`${s.safety} SF`);
+    if (s.blk) p.push(`${s.blk} BLK`);
     return p.length ? p.join(' · ') : 'no splash';
   }
   if (pos === 'DL' || pos === 'LB' || pos === 'DB') {
     const p: string[] = [];
     if (s.tackles) p.push(`${s.tackles} tkl`);
+    if (s.tfl) p.push(`${s.tfl} TFL`);
     if (s.sacks) p.push(`${s.sacks} sk`);
+    if (s.qbhit) p.push(`${s.qbhit} QBH`);
+    if (s.pd) p.push(`${s.pd} PD`);
+    if (s.ff) p.push(`${s.ff} FF`);
     if (s.ints) p.push(`${s.ints} INT`);
     if (s.fumrec) p.push(`${s.fumrec} FR`);
     if (s.dtd) p.push(`${s.dtd} TD`);
     if (s.safety) p.push(`${s.safety} SF`);
+    return p.length ? p.join(' · ') : '—';
+  }
+  // Punter and head coach (v0.531.0): they score, so they get a line.
+  if (pos === 'P') {
+    if (!s.punts) return '—';
+    const avg = Math.round(((s.puntYds ?? 0) / s.punts) * 10) / 10;
+    return compact ? `${s.punts}-${s.puntYds} punt` : `${s.punts} punts · ${s.puntYds} yd · ${avg} avg`;
+  }
+  if (pos === 'HC') {
+    const p: string[] = [];
+    if (s.hcMargin != null) p.push(s.hcMargin > 0 ? `W +${s.hcMargin}` : s.hcMargin < 0 ? `L ${s.hcMargin}` : 'T');
+    if (s.hc3dc) p.push(`${s.hc3dc} 3rd-dn conv`);
+    if (s.hc4dc) p.push(`${s.hc4dc} 4th-dn conv`);
+    if (s.hc2pt) p.push(`${s.hc2pt} 2-pt`);
     return p.length ? p.join(' · ') : '—';
   }
   return '—';

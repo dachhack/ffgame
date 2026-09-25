@@ -64,6 +64,14 @@ const FANTASY: Record<string, Pos> = {
   DB: 'DB', CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
 };
 
+/** Sleeper's raw `position` → the game's position (DE→DL, CB→DB, …), or null
+ *  for a position the game does not roster. Exported for the worker's own
+ *  directory index (v0.531.0): it stored the RAW position, so a DE or a CB
+ *  reached the classic scorer as neither DL nor DB and every tackle scored 0. */
+export function fantasyPos(raw: unknown): Pos | null {
+  return FANTASY[String(raw ?? '').toUpperCase()] ?? null;
+}
+
 function parse(raw: Record<string, Record<string, unknown>>): Map<string, PlayerMeta> {
   const out = new Map<string, PlayerMeta>();
   for (const [id, p] of Object.entries(raw)) {

@@ -351,7 +351,14 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   // makePlayer's 'WR' — to ask whether a drip week's stored finals are exactly
   // what that rule produced. Never passed on a writing path.
   const meta = (slug) => playerIndex?.metaForSlug(slug) ?? (slug && !(opts.legacyTeamUnits && opts.dryRun) ? slugMeta(slug) : null);
-  const player = (slug) => { const m = meta(slug); return makePlayer(slug, m?.pos, m?.team, m?.full); };
+  // THE LEAGUE'S POOL SAYS WHAT POSITION HE PLAYS HERE (v0.531.0). The boards
+  // take a native league's positions from league_pool; this resolver took them
+  // from the Sleeper index and the slug, and the two disagreed exactly where it
+  // hurt — a head coach, a punter, a CB or a DE scored 0 in the stored final
+  // while the board showed his points. Filled by the classic branch below
+  // before any lineup is built; empty (no effect) for drip.
+  const poolPos = new Map();
+  const player = (slug) => { const m = meta(slug); return makePlayer(slug, poolPos.get(slug) ?? m?.pos, m?.team, m?.full); };
 
   const ctx = opts.ctx;
   let members;
@@ -596,9 +603,9 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       // seat's computed lineup must price a player the same way the fill does.
       const poolBySlug = new Map();
       {
-        const { data: lp } = await db().from('league_pool').select('slug,exp,sleeper_id')
+        const { data: lp } = await db().from('league_pool').select('slug,pos,exp,sleeper_id')
           .eq('league_id', matchup.league_id).range(0, 1999);
-        for (const r of lp ?? []) poolBySlug.set(r.slug, r);
+        for (const r of lp ?? []) { poolBySlug.set(r.slug, r); if (r.pos) poolPos.set(r.slug, r.pos); }
       }
       // A PICKUP COUNTS FROM THE GAME HE WAS OWNED FOR (v0.434.4). A player
       // added after his team's kickoff this week does not enter the fills:

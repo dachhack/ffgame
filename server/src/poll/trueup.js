@@ -79,8 +79,14 @@ export function extractCredits(csvText) {
     // text can't attribute to a person. Individual rows ONLY: the ESPN poller
     // already emits the team dst_td/safety rows, so a team credit here would
     // double-count across the two game-id namespaces.
+    // …and NOT an interception or fumble return (v0.531.0): the live feed
+    // already credits that returner with his own dst_td row (espnAdapter,
+    // 0170), and the two game-id namespaces never collide, so the TD paid
+    // twice a day after the game. What is left here is what live text cannot
+    // attribute — blocked-kick and other defensive returns.
     const tdTeam = g('td_team').trim();
-    if (tdTeam && tdTeam === base.defteam) {
+    const takeawayReturn = g('interception') === '1' || g('fumble_lost') === '1';
+    if (tdTeam && tdTeam === base.defteam && !takeawayReturn) {
       const gsis = g('td_player_id').trim();
       if (gsis) out.push({ ...base, k: 'dst_td', gsis, name: g('td_player_name').trim() });
     }
@@ -138,6 +144,23 @@ export async function trueupTick(season, weeks, playerIndex) {
     const { error } = await db().from('live_play')
       .upsert(uniq.slice(i, i + 500), { onConflict: 'week,game_id,pid,player_slug,k' });
     if (error) throw new Error(`true-up upsert: ${error.message}`);
+  }
+  // RETIRE WHAT THIS PASS NO LONGER CLAIMS (v0.531.0). An upsert only adds,
+  // so the individual return-TD rows earlier passes wrote for INT and fumble
+  // returns — the live feed's own dst_td already pays those — would stay and
+  // keep paying twice. Scoped to this pass's own namespace (nflverse game ids
+  // carry underscores, ESPN's are numeric), its own weeks and dst_td only.
+  {
+    const { data: mine } = await db().from('live_play').select('week,game_id,pid,player_slug,k')
+      .in('week', [...wanted]).eq('k', 'dst_td').like('game_id', '%\\_%');
+    const stale = (mine ?? []).filter((r) => r.player_slug && !r.player_slug.endsWith('-dst')
+      && !byKey.has(`${r.week}|${r.game_id}|${r.pid}|${r.player_slug}|${r.k}`));
+    for (const r of stale) {
+      const { error } = await db().from('live_play').delete()
+        .eq('week', r.week).eq('game_id', r.game_id).eq('pid', r.pid).eq('player_slug', r.player_slug).eq('k', 'dst_td');
+      if (error) log(`true-up retire ${r.game_id}/${r.pid}/${r.player_slug}: ${error.message}`);
+    }
+    if (stale.length) log(`true-up ${season}: retired ${stale.length} duplicate return-TD rows`);
   }
   log(`true-up ${season}: ${uniq.length} qbhit/pd rows across weeks [${[...wanted]}], ${dropped} unresolvable defenders dropped`);
   return { rows: uniq.length, dropped };

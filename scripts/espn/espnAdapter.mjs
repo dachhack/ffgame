@@ -271,7 +271,9 @@ export function playToRows(p, roster, eventId, gameStartMs) {
 
   // Head coach conversions (0171): a converted 3rd/4th down is the offense
   // coach's play — rows on the "xxx-hc" pseudo-player.
-  if (fd && (dn === 3 || dn === 4) && offTeam) {
+  // A penalty or a no-play is not a conversion the offense ran (v0.531.0):
+  // "yards >= distance" on a defensive-penalty snap credited the coach.
+  if (fd && (dn === 3 || dn === 4) && offTeam && typeText !== 'Penalty' && !/\bNo Play\b/i.test(text)) {
     out.push({ slug: `${offTeam.toLowerCase()}-hc`, play: row(c, ride, dn === 3 ? 'hc_3dc' : 'hc_4dc', 0, 0, 0, 0, 0) });
   }
 
