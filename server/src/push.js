@@ -244,7 +244,7 @@ async function detectChat() {
       // drops, and turning it into a move-by-move feed would be a change
       // nobody asked for made to a setting they already set. The lines are in
       // chat for anyone who opens it.
-      if (m.kind === 'poll' || m.kind === 'report' || m.kind === 'txn') continue;
+      if (m.kind === 'poll' || m.kind === 'report' || m.kind === 'txn' || m.kind === 'computer') continue;
       const mentioned = new Set(m.mentions ?? []);
       for (const uid of wanted.get(m.league_id) ?? []) {
         if (uid === m.author_id) continue;   // you wrote it

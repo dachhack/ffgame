@@ -18,6 +18,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.538.0 — the computer answers back in chat
+
+Founder: "Could it paste in the chat a generic response that the message was
+received? Maybe have 20 or so snarky responses banked with a computer icon?"
+- **Reply:** once a league chat line is filed, the worker posts a house line in
+  that chat: author "💻 Computer", one of 20 banked snarks (picked by message
+  id), and the issue number. A DM gets no reply (a DM line needs a human
+  author), so its receipt stays the push.
+- **0364:** new league_message kind 'computer' (kind check re-added by name),
+  and `_chat_message_json` v7 names the author "💻 Computer". Old clients show
+  it as a plain line under that name, with nothing to update.
+- **Pushes:** the every-message subscription skips it, like the other house
+  lines.
+
 ### v0.537.0 — @computer files a chat line as a GitHub issue
 
 Founder: "I want to tag @computer in any chat and have you read it and address

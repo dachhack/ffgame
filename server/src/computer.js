@@ -47,6 +47,33 @@ export function issueBody({ body, caption, image, where, at }) {
   return lines.join('\n');
 }
 
+/** The house reply in league chat (0364, founder: "20 or so snarky responses
+ *  banked with a computer icon"). Picked by message id, so a retry of the same
+ *  line would say the same thing. */
+export const SNARK = [
+  'Received. Filed under "things I will get to after I finish calculating your playoff odds (0%)."',
+  'Beep boop. Your concern has been logged, weighted, and projected for 4.2 points.',
+  'Message received. Have you tried turning your roster off and on again?',
+  'Noted. I have alerted the relevant department, which is also me.',
+  'Your ticket is important to us. Please hold while I pretend to care about your kicker.',
+  'Copy that. Processing… processing… still processing your trade logic.',
+  'Got it. I have added it to the queue, right behind "why does my WR1 hate me."',
+  'Acknowledged. My circuits are warm and my judgment is cold.',
+  'Received loud and clear. Unlike your bench, this will actually be used.',
+  'On it. I was going to take the week off like your RB, but fine.',
+  'Logged. I ran the numbers and the numbers asked me to run.',
+  'Understood. Filing this with the same urgency you set your lineup: eventually.',
+  'Roger. I have escalated this to a higher power (a slightly bigger computer).',
+  'Message in. Excuses out. Answer pending.',
+  'Affirmative. This has been saved somewhere safer than your waiver priority.',
+  'Heard. I will look into it with the focus of a Monday-night desperation start.',
+  'Received. Estimated response time: sooner than your team makes the playoffs.',
+  'Ticket opened. The algorithm has been consulted. The algorithm sighed.',
+  'Copy. Stand by while I read this in a disappointed robot voice.',
+  'Got your message. I would say "great question," but I am programmed not to lie.',
+];
+export const snarkFor = (id) => SNARK[Math.abs(Number(id) || 0) % SNARK.length];
+
 const askers = () => (process.env.COMPUTER_USERS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const looksLikeUrl = (s) => typeof s === 'string' && /^https?:\/\/\S+$/.test(s.trim());
 
@@ -118,6 +145,15 @@ export async function sweepComputer() {
       );
       await db().from('computer_ask').update({ issue: n }).eq('source', a.source).eq('message_id', a.id);
       log('filed', `#${n}`, 'from', a.source, a.id);
+      // League chat gets the house reply in the thread it was asked in. A DM
+      // cannot: every DM line needs a human author, so the push is its receipt.
+      if (a.source === 'league') {
+        const { error: rErr } = await db().from('league_message').insert({
+          league_id: a.league_id, author_id: null, kind: 'computer',
+          body: `${snarkFor(a.id)} (#${n})`, mentions: [],
+        });
+        if (rErr) log('reply failed', a.id, rErr.message);
+      }
       receipts.push({
         app_user_id: a.author_id, kind: 'chat',
         title: `Sent to Computer · #${n}`,

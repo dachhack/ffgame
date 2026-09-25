@@ -1,5 +1,5 @@
 // @computer (v0.537.0): which chat lines become issues, and what they say.
-import { isComputerAsk, issueTitle, issueBody } from '../src/computer.js';
+import { isComputerAsk, issueTitle, issueBody, SNARK, snarkFor } from '../src/computer.js';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -21,6 +21,12 @@ ok('…names where it was asked', b.includes('Kickoff League (abc)'));
 const img = issueBody({ body: 'look', image: 'https://x/y.png', where: 'L', at: 't' });
 ok('an untagged line gets the phrase so the Action fires', img.split('\n')[2].startsWith('@computer '));
 ok('…and the picture is embedded', img.includes('![attached](https://x/y.png)'));
+
+ok('twenty lines in the bank', SNARK.length === 20, SNARK.length);
+ok('no two alike', new Set(SNARK).size === SNARK.length);
+ok('the same line always gets the same reply', snarkFor(12345) === snarkFor(12345));
+ok('neighbouring lines get different ones', snarkFor(1) !== snarkFor(2));
+ok('every reply fits a chat line', SNARK.every((l) => l.length + 8 <= 500));
 
 if (fails) { console.log(`\n${fails} @COMPUTER ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL @COMPUTER ASSERTIONS PASSED');
