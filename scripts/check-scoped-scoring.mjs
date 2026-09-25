@@ -134,6 +134,27 @@ setLeagueScoring(parsed);
 ok('the stored snake-case rule scores identically to the camel one',
   near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb * 1.5 + 2));
 
+// ── defenders and team units (v0.536.0) ────────────────────────────────────
+// The editors now offer DL/LB/DB/HC/P; the scorer matches on the player's own
+// position, so each has to hit its own kind and nothing else.
+setLeagueScoring({ scoped: [{ pos: ['LB'], bonusMult: 1.5 }, { pos: ['HC'], bonusPts: 2 }, { pos: ['P'], tdBonus: 1 }] });
+const lb = scopedAdjustFor({ id: 'fred-warner', pos: 'LB', team: 'SF' });
+ok('an LB rule hits an LB', lb.mult === 1.5 && lb.pts === 0, lb);
+const db = scopedAdjustFor({ id: 'some-db', pos: 'DB', team: 'SF' });
+ok('…and misses a DB', db.mult === 1 && db.pts === 0 && db.td === 0, db);
+const hc = scopedAdjustFor({ id: 'kc-hc', pos: 'HC', team: 'KC' });
+ok('an HC rule hits a head coach unit', hc.pts === 2 && hc.mult === 1, hc);
+const pu = scopedAdjustFor({ id: 'kc-p', pos: 'P', team: 'KC' });
+ok('a P rule hits a punter unit', pu.td === 1 && pu.pts === 0, pu);
+ok('none of them touch an offensive player', near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
+setLeagueScoring({ scoped: [{ pos: ['HC'], team: ['KC'], bonusPts: 3 }] });
+ok('HC + team scope: the right team pays',
+  scopedAdjustFor({ id: 'kc-hc', pos: 'HC', team: 'KC' }).pts === 3);
+ok('…another team\'s coach does not',
+  scopedAdjustFor({ id: 'buf-hc', pos: 'HC', team: 'BUF' }).pts === 0);
+const lowered = parseScoring({ scoped: [{ pos: ['dl', 'db'], bonus_pts: 1 }] });
+ok('stored lower-case IDP codes parse up', JSON.stringify(lowered.scoped[0].pos) === '["DL","DB"]', lowered.scoped[0]);
+
 clearLeagueScoring();
 ok('cleared → back to the base number', near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
 
