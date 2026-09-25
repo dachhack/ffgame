@@ -2163,7 +2163,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 <span>· {clockMode === 'real' ? 'log order & effects resolve by real time' : clockMode === 'feed' ? 'reveals live; order & effects on game clock' : 'all games lockstep on game time'}</span>
               </div>
             )}
-            <TargetPanel aw={aw} oppPicks={oppPicks} preKick={preKickPhase && !liveCtx} onClearSpy={() => clearSpy(week)} />
+            <TargetPanel aw={aw} oppPicks={oppPicks} oppPools={oppPools} preKick={preKickPhase && !liveCtx} onClearSpy={() => clearSpy(week)} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -2864,12 +2864,20 @@ function MulliganModal({ player, curMetric, inventory, unlocks, comboOpen, onPic
 // Spy intel: once a Spy reveal lands, surface what it uncovered (the opponent's
 // player or chosen metric in that slot). Applying Spy now happens by tapping a
 // slot in apply-mode; this panel is just the payoff readout.
-function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
+function TargetPanel({ aw, oppPicks, oppPools, preKick, onClearSpy }: {
   aw?: { spy?: { slotKey: string; reveal: 'player' | 'metric'; value?: string | null } };
-  oppPicks: Record<string, Pick>; preKick: boolean; onClearSpy: () => void;
+  oppPicks: Record<string, Pick>; oppPools: Record<string, Player[]>; preKick: boolean; onClearSpy: () => void;
 }) {
   if (!aw?.spy) return null;
   const sp = aw.spy;
+  // NOBODY CAN PLAY THERE (v0.529.0). Founder: "Change Spy to say 'no
+  // eligible player' when nobody can play there." An empty spot whose window
+  // holds none of their players can never be filled, so "no pick sealed yet"
+  // promised something that could not come. Only claimed when the roster has
+  // loaded at all — an empty board is not an empty roster.
+  const spyWin = sp.slotKey.split('#')[0];
+  const oppLoaded = Object.values(oppPools).some((ps) => ps.length > 0);
+  const noEligible = oppLoaded && (oppPools[spyWin]?.length ?? 0) === 0;
   const op = oppPicks[sp.slotKey];
   const oppPlayer = op ? getPlayer(op.playerId) : null;
   const [win, idx] = sp.slotKey.split('#');
@@ -2880,10 +2888,10 @@ function TargetPanel({ aw, oppPicks, preKick, onClearSpy }: {
   const pretty = (s: string) => stripSlugTag(s).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
   const metricName = (id: string) => { for (const list of Object.values(METRICS)) { const m = list.find((x) => x.id === id); if (m) return m.name; } return id; };
   const val = sp.value !== undefined
-    ? (sp.value === null ? '— no pick sealed yet —' : sp.reveal === 'player' ? pretty(sp.value) : metricName(sp.value))
+    ? (sp.value === null ? (noEligible ? '— no eligible player —' : '— no pick sealed yet —') : sp.reveal === 'player' ? pretty(sp.value) : metricName(sp.value))
     : sp.reveal === 'player'
-      ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : '— no player —')
-      : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : '— no player —');
+      ? (oppPlayer ? `${oppPlayer.name} (${oppPlayer.pos} · ${oppPlayer.team})` : noEligible ? '— no eligible player —' : '— no player —')
+      : (oppPlayer ? (metricById(oppPlayer.pos, op!.metricId)?.name ?? '—') : noEligible ? '— no eligible player —' : '— no player —');
   return (
     <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 6, padding: '9px 11px' }}>
       <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)' }}>👁️ SPY INTEL</span>
