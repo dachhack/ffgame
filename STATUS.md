@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.534.0 — QB hits and passes defended are marked "next day" in scoring
+
+Founder: "let's run an audit on how accurate we could calculate QB hits. We
+could include those as optional metrics but make a note that they are delayed
+in the scoring set up."
+- **Audit:** 2025 weeks 1-3, 7,622 plays, ESPN live text vs nflverse's
+  qb_hit_1/2 credits. ESPN's bracket names ("(tackler) [K.Mack]") plus the
+  sacker on sacks, skipping nullified, no-play, "sacked ob" and offsetting-penalty
+  plays, gives precision 97.8% and recall 97.4%. Per player-game it is exact
+  93.6% of the time and within one hit 99.7%. Brackets alone catch 97% of
+  non-sack hits and ~6% of sack hits; nflverse counts every contact sack as a
+  hit. Passes defended are not in the live text, so they stay next-day only.
+- **Shipped:** QB HIT / PASS DEFENDED (IDP and team DEF, plus the 3+ PD game
+  bonus) carry ⏱ in the web and app scoring editors, including BY POSITION,
+  and in League Info, with the note that they post about a day after the game.
+  core: DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, scoresDelayedStats.
+- **Not built yet:** a live QB-hit estimate that the true-up then replaces.
+
 ### v0.533.0 — the feed captures what the scoring reads
 
 Founder: "how is our feed ingest for these metrics? do we capture all these

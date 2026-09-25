@@ -16,7 +16,7 @@ import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
 import { waiverDaysOf, waiverScheduleLine, holdLine } from '@drip/core/data/waiverDays';
 import { CopyId } from './CommishDesk';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
-import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, byPosSummary, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
+import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, scoresDelayedStats as CLASSIC_SCORING_FIELDS_DELAYED, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { shortName } from '@drip/core/data/players';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
@@ -112,7 +112,7 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
               <div key={s.section}>
                 <Head>{s.section}</Head>
                 {live.map((f) => (
-                  <Row key={String(f.key)} k={f.label}
+                  <Row key={String(f.key)} k={`${f.label}${DELAYED_SCORING_KEYS.has(f.key) ? ' ⏱' : ''}`}
                     v={`${Number(sc[f.key]) > 0 ? '+' : ''}${Number(sc[f.key])}${f.perYard ? ' / yd' : ''}`} />
                 ))}
               </div>
@@ -126,6 +126,10 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
                 <Row key={`${r.pos}-${String(r.key)}`} k={`${r.pos} · ${r.label}`} v={`${r.value > 0 ? '+' : ''}${r.value}`} />
               ))}
             </div>
+          )}
+          {/* ⏱ (v0.534.0): a scored stat that lands the day after the game. */}
+          {CLASSIC_SCORING_FIELDS_DELAYED(sc) && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--warn)', marginTop: 10, lineHeight: 1.5 }}>⏱ {DELAYED_SCORING_NOTE}</div>
           )}
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12 }}>Anything not listed scores 0 in this league.</div>
         </>

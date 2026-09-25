@@ -35,7 +35,7 @@ import {
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, type SlotSpec } from '@drip/core/engine/classic';
+import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
@@ -2582,7 +2582,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                         const set = (cur[f.key] ?? '').trim() !== '';
                         return (
                           <View key={f.key} style={{ width: '22%', minWidth: 74 }}>
-                            <Mono size={7} tone={set ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}</Mono>
+                            <Mono size={7} tone={set ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}{DELAYED_SCORING_KEYS.has(f.key) ? ' ⏱' : ''}</Mono>
                             <TextInput value={cur[f.key] ?? ''} keyboardType="numbers-and-punctuation"
                               placeholder={scDraft[f.key] ?? String(DEFAULT_CLASSIC_SCORING[f.key])} placeholderTextColor={t.faint}
                               onChangeText={(v) => setBpDraft((d) => ({ ...d, [bpPos]: { ...(d[bpPos] ?? {}), [f.key]: v } }))}
@@ -2608,12 +2608,15 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               {CLASSIC_SCORING_SECTIONS.filter((sec) => (SCORING_TABS.find((tb) => tb.id === scTab)?.sections ?? []).includes(sec.section)).map((sec) => (
                 <View key={sec.section} style={{ marginTop: 8 }}>
                   <Mono size={7.5} tone="dim" weight="700" track={0.1}>{sec.section}</Mono>
+                  {sec.fields.some((f) => DELAYED_SCORING_KEYS.has(f.key)) && (
+                    <Mono size={7.5} tone="warn" style={{ marginTop: 2 }}>⏱ {DELAYED_SCORING_NOTE}</Mono>
+                  )}
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                     {sec.fields.map((f) => {
                       const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
                       return (
                         <View key={f.key} style={{ width: '22%', minWidth: 74 }}>
-                          <Mono size={7} tone={changed ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}</Mono>
+                          <Mono size={7} tone={changed ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}{DELAYED_SCORING_KEYS.has(f.key) ? ' ⏱' : ''}</Mono>
                           <TextInput value={scDraft[f.key] ?? ''} keyboardType="numbers-and-punctuation"
                             onChangeText={(v) => setScDraft((d) => ({ ...d, [f.key]: v }))}
                             style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: changed ? t.you : t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 5, marginTop: 2 }} />

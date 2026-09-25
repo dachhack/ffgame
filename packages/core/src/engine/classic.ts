@@ -506,6 +506,22 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'idpTackle10', label: '10+ TACKLE GAME' }, { key: 'idpSack2', label: '2+ SACK GAME' }, { key: 'idpPd3', label: '3+ PD GAME' },
   ] },
 ];
+/** STATS THAT ARRIVE THE NEXT DAY (v0.534.0). QB hits and passes defended are
+ *  not in the live play text reliably, so they come from the nflverse true-up
+ *  (~a day after the game, every 6h, regular season and playoffs only). Leagues
+ *  can score them; the editors and League Info say so beside each one. */
+export const DELAYED_SCORING_KEYS: ReadonlySet<keyof ClassicScoring> = new Set<keyof ClassicScoring>([
+  'idpQbHit', 'idpPd', 'idpPd3', 'dstQbHit', 'dstPd',
+]);
+export const DELAYED_SCORING_NOTE =
+  'QB hits and passes defended post about a day after the game (official play-by-play via nflverse, regular season and playoffs only) — live scores tick up when they land.';
+
+/** Does this table (or any position override) pay a next-day stat? */
+export function scoresDelayedStats(sc: Partial<ClassicScoringTable>): boolean {
+  const pays = (t?: Partial<Record<string, unknown>> | null) => !!t && [...DELAYED_SCORING_KEYS].some((k) => Number(t[k]) !== 0 && t[k] != null);
+  return pays(sc) || Object.values(sc.byPos ?? {}).some((r) => pays(r));
+}
+
 /** Flat field list — the 0160 editors and the SQL sanitizer key off it. */
 export const CLASSIC_SCORING_FIELDS: { key: keyof ClassicScoring; label: string; perYard?: boolean }[] =
   CLASSIC_SCORING_SECTIONS.flatMap((s) => s.fields);

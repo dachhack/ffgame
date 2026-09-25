@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import {
   parseByPos, scoringFor, normalizeClassicScoring, classicPointsFrom, byPosKeys, byPosSummary,
-  DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS,
+  DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, DELAYED_SCORING_KEYS, scoresDelayedStats,
 } from '../packages/core/src/engine/classic';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueProjRatio, leagueCatalogOf } from '../packages/core/src/engine/projScoring';
 import { gameToRealPlays } from './espn/espnAdapter.mjs';
@@ -90,6 +90,12 @@ const allen = (pbp['josh-allen'] ?? []).map((r) => r.k ?? r.kind);
 ok('the QB who made the tackle on the return gets a tackle row', allen.includes('tackle'), allen);
 const gardner = (pbp['sauce-gardner'] ?? []).map((r) => r.k ?? r.kind);
 ok('…and the returner is not credited with tackling himself', !gardner.includes('tackle'), gardner);
+
+// ── next-day stats are flagged (v0.534.0) ─────────────────────────────────
+ok('QB hits and passes defended are marked as next-day stats', ['idpQbHit', 'idpPd', 'dstQbHit', 'dstPd'].every((k) => DELAYED_SCORING_KEYS.has(k)));
+ok('the default table is flagged exactly when it pays a next-day stat',
+  scoresDelayedStats(DEFAULT_CLASSIC_SCORING) === [...DELAYED_SCORING_KEYS].some((k) => DEFAULT_CLASSIC_SCORING[k] !== 0));
+ok('a position override paying QB hits counts', scoresDelayedStats({ ...Object.fromEntries([...DELAYED_SCORING_KEYS].map((k) => [k, 0])), byPos: { LB: { idpQbHit: 1 } } }));
 
 // ── the server keeps what the editors send ────────────────────────────────
 const mig = readFileSync(new URL('../supabase/migrations/0362_scoring_by_position.sql', import.meta.url), 'utf8');
