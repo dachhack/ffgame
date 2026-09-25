@@ -558,6 +558,50 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       if (dd && dd.team === defTeam) out.push({ slug: dd.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: hits.length === 1 ? 's' : 'a' }) });
     }
   }
+  // ── QB HITS AND PASSES DEFENDED, LIVE (v0.535.0) ─────────────────────────
+  // These used to arrive only with the nflverse true-up, a day later. The live
+  // text carries both, measured against nflverse's official credits over 2025
+  // wks 1-3 (7,622 plays):
+  //   • QB hit — the "[Name]" bracket ESPN writes after the tackler, plus the
+  //     sacker(s) on a sack (nflverse counts a contact sack as a hit; a
+  //     "sacked ob" is not one). 97.8% precision, 97.4% recall.
+  //   • Pass defended — the "(Name)" right after "incomplete", and on an
+  //     interception the intercepter plus any "(Name)" who tipped it.
+  //     99.8% precision, 95.2% recall.
+  // Nothing on a play wiped out (No Play / NULLIFIED / REVERSED / offsetting).
+  // The true-up REPLACES these with the official credits for a game once its
+  // data lands (trueup.js retires the live rows; pollGame stops re-emitting).
+  const deadPlay = /\bNo Play\b|NULLIFIED|REVERSED|offsetting/i.test(text);
+  if (!deadPlay && defTeam) {
+    const hitNames = [];
+    for (const m of text.matchAll(/\[([^\]]+)\]/g)) {
+      const st = text.indexOf(m[1], m.index);
+      hitNames.push(...names.filter((n) => n.idx >= st && n.idx < st + m[1].length));
+    }
+    if (isSackPlay && !/\bsacked ob\b/.test(text)) {
+      const sm = /\bsacked\b[^()]*?\(([^()]+)\)/.exec(text);
+      if (sm) { const st = text.indexOf(sm[1], sm.index); hitNames.push(...names.filter((n) => n.idx >= st && n.idx < st + sm[1].length)); }
+    }
+    const hitSlugs = [...new Set(hitNames.map((h) => resolve(h.abbr, defTeam, 'def')).filter((d) => d && d.team === defTeam).map((d) => d.slug))];
+    for (const slug of hitSlugs) out.push({ slug, play: row(c, ride, 'qbhit', 0, 0, 0, 0, 0) });
+    if (hitSlugs.length) out.push({ slug: `${defTeam.toLowerCase()}-dst`, play: row(c, ride, 'qbhit', 0, 0, 0, 0, 0) });
+
+    const pdNames = [];
+    if (typeText === 'Pass Incompletion') {
+      const im = /incomplete[^()\[\]]*?\(([^()]+)\)/.exec(text);
+      if (im && !/Shotgun|Huddle/.test(im[1])) { const st = text.indexOf(im[1], im.index); pdNames.push(...names.filter((n) => n.idx >= st && n.idx < st + im[1].length)); }
+    }
+    if (isInt) {
+      const at = text.indexOf('INTERCEPTED by');
+      const first = names.find((n) => n.idx > at);
+      if (at >= 0 && first) pdNames.push(first);
+      const tip = /INTERCEPTED by [^()]*?\(([^()]+)\) at/.exec(text);
+      if (tip) { const st = text.indexOf(tip[1], tip.index); pdNames.push(...names.filter((n) => n.idx >= st && n.idx < st + tip[1].length)); }
+    }
+    const pdSlugs = [...new Set(pdNames.map((h) => resolve(h.abbr, defTeam, 'def')).filter((d) => d && d.team === defTeam).map((d) => d.slug))];
+    for (const slug of pdSlugs) out.push({ slug, play: row(c, ride, 'pd', 0, 0, 0, 0, 0) });
+    if (pdSlugs.length) out.push({ slug: `${defTeam.toLowerCase()}-dst`, play: row(c, ride, 'pd', 0, 0, 0, 0, 0) });
+  }
   // Forced fumble — the name inside "FUMBLES (…)".
   const ffm = /FUMBLES\s*\(([^()]+)\)/.exec(text);
   if (ffm && !/^Aborted$/i.test(ffm[1].trim())) {

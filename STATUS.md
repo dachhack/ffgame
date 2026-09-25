@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.535.0 — QB hits and passes defended score live, then get confirmed
+
+Founder: "there is no defender on incomplete passes?" There is. ESPN names
+the pass defender in "(…)" on an incompletion. Audited against nflverse (2025
+wks 1-3, 7,622 plays): the "(…)" after "incomplete", plus the intercepter and
+any tipper on an INT, gives precision 99.8% and recall 95.2%. Per player-game
+it is exact 93.8% and within one 100%. For QB hits (v0.534.0's audit):
+precision 97.8%, recall 97.4%. Then: "yes, build live then confirmed".
+- **Adapter:** emits qbhit/pd per defender plus one team row per play. Hits
+  come from the "[Name]" brackets and the sacker ("sacked ob" is not a hit);
+  passes defended from the incompletion "(Name)" and the intercepter/tipper.
+  Nothing is emitted on No Play, NULLIFIED, REVERSED or offsetting plays.
+  Team totals over the 48 games: qbhit 511 vs nflverse 521, pd 379 vs 401;
+  98% of team-games are within one.
+- **Confirmation:**
+  - trueup.js retires a game's live qbhit/pd rows once its official credits
+    land, matching games on week + away/home through game_feed.
+  - pollGame drops the estimates for a completed game already confirmed, so a
+    re-poll cannot bring them back. The lookup only runs for finished games.
+  - A preseason game (no nflverse coverage) keeps its live estimate.
+- **Note:** DELAYED_SCORING_NOTE now says "live, confirmed next day, can move
+  by one".
+- **Tests:** check:feedingest covers every case.
+
 ### v0.534.0 — QB hits and passes defended are marked "next day" in scoring
 
 Founder: "let's run an audit on how accurate we could calculate QB hits. We

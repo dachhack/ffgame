@@ -110,6 +110,39 @@ const rowOf = (pbp, slug, k) => (pbp[slug] ?? []).find((r) => r.k === k);
     text: 'B.Pinion punts 46 yards to MIN 42, Center-L.McCullough. M.Price MUFFS catch, RECOVERED by ATL-M.Ford at MIN 44.', people: [] });
   ok('a muffed punt is a punt and the kicking team\'s recovery', kinds(muff, 'atl-p').includes('punt') && kinds(muff, 'atl-dst').includes('fumrec'), { p: muff['atl-p'], d: muff['atl-dst'] });
 }
+// ── QB hits and passes defended, live (v0.535.0) ──────────────────────────
+{
+  const hit = game({ type: 'Pass Reception', off: 'KC', def: 'LAC', yds: 6,
+    text: '(Shotgun) P.Mahomes pass short right to T.Kelce to LAC 30 for 6 yards (D.James) [K.Mack].',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Travis Kelce', team: 'KC', cat: 'receiving' }, { name: 'Derwin James', team: 'LAC', cat: 'defensive' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
+  ok('a bracketed name is a live QB hit, for him and his defense', kinds(hit, 'khalil-mack').includes('qbhit') && kinds(hit, 'lac-dst').includes('qbhit'), { mack: hit['khalil-mack'], d: hit['lac-dst'] });
+  ok('…and the tackler is not', !kinds(hit, 'derwin-james').includes('qbhit'));
+  const sack = game({ type: 'Sack', off: 'KC', def: 'LAC', yds: -7,
+    text: '(Shotgun) P.Mahomes sacked at KC 24 for -7 yards (K.Mack).',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
+  ok('a sacker is credited a QB hit', kinds(sack, 'khalil-mack').includes('qbhit'), sack['khalil-mack']);
+  const ob = game({ type: 'Sack', off: 'KC', def: 'LAC', yds: -1,
+    text: '(Shotgun) P.Mahomes sacked ob at KC 30 for -1 yards (K.Mack).',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
+  ok('a "sacked ob" is not a hit', !kinds(ob, 'khalil-mack').includes('qbhit'), ob['khalil-mack']);
+  const inc = game({ type: 'Pass Incompletion', off: 'KC', def: 'LAC',
+    text: '(Shotgun) P.Mahomes pass incomplete deep left to T.Kelce (D.James).',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Travis Kelce', team: 'KC', cat: 'receiving' }, { name: 'Derwin James', team: 'LAC', cat: 'defensive' }] });
+  ok('the defender named on an incompletion has a pass defended', kinds(inc, 'derwin-james').includes('pd') && kinds(inc, 'lac-dst').includes('pd'), inc['derwin-james']);
+  const pick = game({ type: 'Pass Interception Return', off: 'KC', def: 'LAC', turnover: true,
+    text: '(Shotgun) P.Mahomes pass short left intended for T.Kelce INTERCEPTED by D.James (K.Mack) at LAC 25. D.James to LAC 40 for 15 yards (T.Kelce).',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Travis Kelce', team: 'KC', cat: 'receiving' }, { name: 'Derwin James', team: 'LAC', cat: 'defensive' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
+  ok('an interception is a pass defended for the intercepter and the tipper', kinds(pick, 'derwin-james').includes('pd') && kinds(pick, 'khalil-mack').includes('pd'), { james: pick['derwin-james'], mack: pick['khalil-mack'] });
+  const nul = game({ type: 'Penalty', off: 'KC', def: 'LAC',
+    text: '(Shotgun) P.Mahomes pass incomplete short right to T.Kelce [K.Mack].PENALTY on LAC-D.James, Illegal Contact, 5 yards, enforced at KC 31 - No Play.',
+    people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Travis Kelce', team: 'KC', cat: 'receiving' }, { name: 'Derwin James', team: 'LAC', cat: 'defensive' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
+  ok('nothing on a play wiped out by a penalty', !kinds(nul, 'khalil-mack').includes('qbhit'), nul['khalil-mack']);
+}
+const plays = readFileSync(new URL('../server/src/poll/plays.js', import.meta.url), 'utf8');
+const trueup = readFileSync(new URL('../server/src/poll/trueup.js', import.meta.url), 'utf8');
+ok('the true-up retires a game\'s live estimates when the official credits land', /replaced .* live QB-hit\/PD estimates/.test(trueup));
+ok('…and the poller stops re-emitting them for a confirmed game', /confirmed && \(p\.k === 'qbhit' \|\| p\.k === 'pd'\)/.test(plays));
+
 // ── the scorer reads every flag the feed writes ───────────────────────────
 const resolveSrc = readFileSync(new URL('../server/src/resolve.js', import.meta.url), 'utf8');
 ok('official finals read fd/cp/ic/sk/rk/tt/hf/p6', /select\('player_slug,c,t,pid,k,y,td,ca,tg,"to",fd,cp,ic,sk,rk,tt,hf,p6'\)/.test(resolveSrc));

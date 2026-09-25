@@ -506,15 +506,18 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
     { key: 'idpTackle10', label: '10+ TACKLE GAME' }, { key: 'idpSack2', label: '2+ SACK GAME' }, { key: 'idpPd3', label: '3+ PD GAME' },
   ] },
 ];
-/** STATS THAT ARRIVE THE NEXT DAY (v0.534.0). QB hits and passes defended are
- *  not in the live play text reliably, so they come from the nflverse true-up
- *  (~a day after the game, every 6h, regular season and playoffs only). Leagues
- *  can score them; the editors and League Info say so beside each one. */
+/** STATS CONFIRMED THE NEXT DAY (v0.534.0; live since v0.535.0). QB hits and
+ *  passes defended score live from ESPN's text and are replaced by nflverse's
+ *  official credits ~a day after the game (regular season and playoffs; a
+ *  preseason game keeps its live estimate). The editors and League Info say so
+ *  beside each one. */
 export const DELAYED_SCORING_KEYS: ReadonlySet<keyof ClassicScoring> = new Set<keyof ClassicScoring>([
   'idpQbHit', 'idpPd', 'idpPd3', 'dstQbHit', 'dstPd',
 ]);
+// v0.535.0: estimated live from the play text (~98% accurate), then replaced
+// by the official credits about a day after the game.
 export const DELAYED_SCORING_NOTE =
-  'QB hits and passes defended post about a day after the game (official play-by-play via nflverse, regular season and playoffs only) — live scores tick up when they land.';
+  'QB hits and passes defended score live from the play-by-play text (about 98% accurate), then are confirmed with the official credits about a day after the game — a player can move by one either way when they land.';
 
 /** Does this table (or any position override) pay a next-day stat? */
 export function scoresDelayedStats(sc: Partial<ClassicScoringTable>): boolean {

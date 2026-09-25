@@ -29,9 +29,25 @@ export async function pollGame(eventId, week, playerIndex) {
   const resolveSlug = (name, espnId, team) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name, team);
   const pbp = gameToRealPlays(sum, resolveSlug);
 
+  // LIVE QB HITS / PASSES DEFENDED STAND DOWN ONCE CONFIRMED (v0.535.0). The
+  // adapter estimates both from the play text; the nflverse true-up writes the
+  // official credits under its own game id (2026_03_AWAY_HOME) a day later and
+  // retires these. Once it has, a re-poll must not put the estimates back —
+  // and dropping them from the set lets the reconcile below delete any left.
+  const feedEarly = gameToFeed(sum);
+  let confirmed = false;
+  // Only a finished game can have been confirmed — skip the lookup while one
+  // is being played (it would run on every 25-second poll).
+  if (feedEarly && sum?.header?.competitions?.[0]?.status?.type?.completed) {
+    const [, [awayT, homeT]] = feedEarly;
+    const { data: nv } = await db().from('live_play').select('id')
+      .eq('week', week).in('k', ['qbhit', 'pd']).like('game_id', `%\\_${awayT}\\_${homeT}`).limit(1);
+    confirmed = (nv ?? []).length > 0;
+  }
   const rows = [];
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const p of plays) {
+      if (confirmed && (p.k === 'qbhit' || p.k === 'pd')) continue;
       rows.push({
         week, game_id: eventId, player_slug: slug,
         c: p.c, t: p.t ?? null, pid: p.pid ?? null,
@@ -79,7 +95,7 @@ export async function pollGame(eventId, week, playerIndex) {
   // normalized to GamePlay[] by the adapter. Whole-doc upsert per game: each
   // poll carries the full current play set, so ESPN mid-game revisions
   // reconcile by replacement, no row-level diffing.
-  const feed = gameToFeed(sum);
+  const feed = feedEarly;
   if (feed) {
     const [key, [away, home], plays] = feed;
     // Real game state (pre|in|post) so clients never have to infer FINAL from
