@@ -35,7 +35,7 @@ import {
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
+import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
@@ -1687,6 +1687,8 @@ const SCORING_TABS: { id: string; label: string; sections: string[] }[] = [
   { id: 'defense', label: 'DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
   { id: 'idp', label: 'IDP', sections: ['IDP'] },
   { id: 'coach', label: 'HEAD COACH', sections: ['HEAD COACH'] },
+  // BY POSITION (v0.532.0): per-position overrides, as on the web.
+  { id: 'bypos', label: 'BY POSITION', sections: [] },
 ];
 const SCORING_PRESETS: { id: string; label: string; ppr: number; over: Record<string, number> }[] = [
   { id: 'std', label: 'STANDARD', ppr: 0, over: {} },
@@ -1930,10 +1932,16 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   };
   const [armed, setArmed] = useState<string | null>(null);
   const [scDraft, setScDraft] = useState<Record<string, string>>({});
-  const scInit = (over: Record<string, number>) => {
+  // Per-position overrides (v0.532.0): { POS: { key: "typed value" } }; an
+  // empty box means the league's value stands.
+  const [bpDraft, setBpDraft] = useState<Record<string, Record<string, string>>>({});
+  const [bpPos, setBpPos] = useState('QB');
+  const scInit = (over: Record<string, unknown>) => {
     const d: Record<string, string> = {};
-    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String(over[f.key] ?? DEFAULT_CLASSIC_SCORING[f.key]);
+    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String((over[f.key] as number | undefined) ?? DEFAULT_CLASSIC_SCORING[f.key]);
     setScDraft(d);
+    const bp = parseByPos(over.byPos) ?? {};
+    setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
@@ -1955,15 +1963,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   const saveScoring = async (reset = false) => {
     if (busy) return;
     setBusy(true); setNote(null);
-    const over: Record<string, number> = {};
+    const over: Record<string, unknown> = {};
     if (!reset) {
       for (const f of CLASSIC_SCORING_FIELDS) {
         const v = Number(scDraft[f.key]);
         if (Number.isFinite(v) && v !== DEFAULT_CLASSIC_SCORING[f.key]) over[f.key] = v;
       }
+      // Same save as the table: the RPC replaces the whole catalog.
+      const bp = parseByPos(bpDraft);
+      if (bp) over.byPos = bp;
     }
     try {
-      const r = await setLeagueClassicScoring(leagueId, over);
+      const r = await setLeagueClassicScoring(leagueId, over as Record<string, number>);
       if (r.ok) { commit(); scInit(r.scoring ?? {}); setNote('✓ scoring saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
@@ -2547,7 +2558,52 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               </Pressable>
             ))}
           </View>
-          {(
+          {scTab === 'bypos' && (() => {
+            const cur = bpDraft[bpPos] ?? {};
+            const secs = new Set(BYPOS_SECTIONS[bpPos] ?? []);
+            const count = (pos: string) => Object.values(bpDraft[pos] ?? {}).filter((v) => v.trim() !== '').length;
+            const summary = byPosSummary(parseByPos(bpDraft));
+            return (
+              <View style={{ marginTop: 8 }}>
+                <Mono size={8} tone="dim">A value set here replaces the league's for players scored at that position. Leave a box empty to use the league's value.</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                  {Object.keys(BYPOS_SECTIONS).map((pos) => (
+                    <Pressable key={pos} onPress={() => { tap(); setBpPos(pos); }}
+                      style={{ borderRadius: 3, paddingHorizontal: 7, paddingVertical: 4, backgroundColor: bpPos === pos ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: bpPos === pos ? t.you : t.bd }}>
+                      <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: bpPos === pos ? t.onAccent : t.dim }}>{pos}{count(pos) ? ` · ${count(pos)}` : ''}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {CLASSIC_SCORING_SECTIONS.filter((sec) => secs.has(sec.section)).map((sec) => (
+                  <View key={sec.section} style={{ marginTop: 8 }}>
+                    <Mono size={7.5} tone="dim" weight="700" track={0.1}>{bpPos} · {sec.section}</Mono>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                      {sec.fields.map((f) => {
+                        const set = (cur[f.key] ?? '').trim() !== '';
+                        return (
+                          <View key={f.key} style={{ width: '22%', minWidth: 74 }}>
+                            <Mono size={7} tone={set ? 'you' : 'faint'} weight="700">{f.label}{f.perYard ? ' /YD' : ''}</Mono>
+                            <TextInput value={cur[f.key] ?? ''} keyboardType="numbers-and-punctuation"
+                              placeholder={scDraft[f.key] ?? String(DEFAULT_CLASSIC_SCORING[f.key])} placeholderTextColor={t.faint}
+                              onChangeText={(v) => setBpDraft((d) => ({ ...d, [bpPos]: { ...(d[bpPos] ?? {}), [f.key]: v } }))}
+                              style={{ fontFamily: MONO, fontSize: fs(11), color: t.text, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: set ? t.you : t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 5, marginTop: 2 }} />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+                {summary.length > 0 && (
+                  <Mono size={8} tone="dim" style={{ marginTop: 8 }}>OVERRIDES: {summary.map((r) => `${r.pos} ${r.label} ${r.value}`).join(' · ')}</Mono>
+                )}
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                  <Pill on label="SAVE SCORING" onPress={() => void saveScoring()} />
+                  <Pill on={false} label={`CLEAR ${bpPos}`} onPress={() => setBpDraft((d) => ({ ...d, [bpPos]: {} }))} />
+                </View>
+              </View>
+            );
+          })()}
+          {scTab !== 'bypos' && (
             <>
               {CLASSIC_SCORING_SECTIONS.filter((sec) => (SCORING_TABS.find((tb) => tb.id === scTab)?.sections ?? []).includes(sec.section)).map((sec) => (
                 <View key={sec.section} style={{ marginTop: 8 }}>

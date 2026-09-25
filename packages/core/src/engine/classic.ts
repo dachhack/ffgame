@@ -346,6 +346,10 @@ export interface ClassicScoring {
   idpSackYd: number; idpIntRetYd: number; idpFumRetYd: number;
   idpIntRetTd50: number; idpFumRetTd50: number; idpSack2: number; idpPd3: number;
   stTackle: number; stFf: number; stFr: number;
+  /** A tackle made by an OFFENSIVE player (v0.532.0) — a QB bringing down the
+   *  man who picked him off. 0 by default, so no league's score moves; the
+   *  per-position overrides are where it earns its keep ("QB tackle 50"). */
+  offTackle: number;
   hcWin: number; hcLoss: number; hcTie: number; hcPts: number;
   hcWm1: number; hcWm5: number; hcWm10: number; hcWm15: number; hcWm20: number; hcWm25: number;
   hcLm1: number; hcLm5: number; hcLm10: number; hcLm15: number; hcLm20: number; hcLm25: number;
@@ -397,6 +401,7 @@ export const DEFAULT_CLASSIC_SCORING: ClassicScoring = {
   hcWin: 0, hcLoss: 0, hcTie: 0, hcPts: 0,
   hcWm1: 0, hcWm5: 0, hcWm10: 0, hcWm15: 0, hcWm20: 0, hcWm25: 0,
   hcLm1: 0, hcLm5: 0, hcLm10: 0, hcLm15: 0, hcLm20: 0, hcLm25: 0,
+  offTackle: 0,
   hc3dc: 0, hc4dc: 0, hc2pt: 0,
   puntPt: 0, puntYd: 0,
   pta44: 0, pta42: 0, pta40: 0, pta38: 0, pta36: 0, pta34: 0, pta33: 0,
@@ -447,6 +452,7 @@ export const CLASSIC_SCORING_SECTIONS: { section: string; fields: { key: keyof C
   ] },
   { section: 'SPECIAL TEAMS PLAYER', fields: [
     { key: 'stTackle', label: 'SOLO TACKLE' }, { key: 'stFf', label: 'FORCED FUMBLE' }, { key: 'stFr', label: 'FUM RECOVERY' },
+    { key: 'offTackle', label: 'TACKLE (OFFENSE)' },
   ] },
   { section: 'KICKING', fields: [
     { key: 'fg0', label: 'FG 0-19' }, { key: 'fg20', label: 'FG 20-29' }, { key: 'fg30', label: 'FG 30-39' },
@@ -506,9 +512,98 @@ export const CLASSIC_SCORING_FIELDS: { key: keyof ClassicScoring; label: string;
 
 /** Accepts the legacy bare-PPR shorthand, a partial override object, or
  *  nothing — always answers with the full scoring table. */
-export function normalizeClassicScoring(x?: number | Partial<ClassicScoring> | null): ClassicScoring {
+// ── PER-POSITION OVERRIDES (v0.532.0) ───────────────────────────────────────
+// Founder: "very fine grained scoring options. Like a tackle for QB at 50
+// points and a tackle for a WR at 20 points … scope it as per position
+// specific metric bonuses." The catalog above is ONE table for the league;
+// `byPos` is a sparse layer on top of it — `{ QB: { offTackle: 50 }, WR: {
+// offTackle: 20 } }` — that replaces a value for players scored AT that
+// position (the spot's identity for RET). Classic only. Everything that turns
+// a stat into points reads the merged table through `scoringFor`, the live
+// scorer and the projections alike, so the two can never disagree.
+export type ClassicByPos = Partial<Record<string, Partial<Record<keyof ClassicScoring, number>>>>;
+export type ClassicScoringTable = ClassicScoring & { byPos?: ClassicByPos };
+
+/** Positions an override can name, and the catalog sections that mean
+ *  something for each — what the editors offer, and what the parser keeps. */
+export const BYPOS_SECTIONS: Record<string, string[]> = {
+  QB: ['PASSING', 'RUSHING', 'RECEIVING', 'COMBINED RUSH + REC', 'TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'],
+  RB: ['RUSHING', 'RECEIVING', 'PASSING', 'COMBINED RUSH + REC', 'TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'],
+  WR: ['RECEIVING', 'RUSHING', 'PASSING', 'COMBINED RUSH + REC', 'TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'],
+  TE: ['RECEIVING', 'RUSHING', 'PASSING', 'COMBINED RUSH + REC', 'TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'],
+  FB: ['RUSHING', 'RECEIVING', 'COMBINED RUSH + REC', 'TURNOVERS & RETURNS', 'SPECIAL TEAMS PLAYER'],
+  K: ['KICKING'],
+  DEF: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'],
+  DL: ['IDP'], LB: ['IDP'], DB: ['IDP'],
+  HC: ['HEAD COACH'],
+  P: ['PUNTING'],
+  RET: ['TURNOVERS & RETURNS'],
+};
+/** The keys an override may set for a position. */
+export function byPosKeys(pos: string): Set<keyof ClassicScoring> {
+  const secs = new Set(BYPOS_SECTIONS[pos] ?? []);
+  return new Set(CLASSIC_SCORING_SECTIONS.filter((x) => secs.has(x.section)).flatMap((x) => x.fields.map((f) => f.key)));
+}
+/** Bounds an override value may take (wider than the league table's: the
+ *  point of an override is a number the table would never hold). */
+export const BYPOS_BOUNDS = { min: -50, max: 100 } as const;
+export const BYPOS_YARD_BOUNDS = { min: -1, max: 2 } as const;
+
+/** Clamp raw settings into a clean override map (unknown positions, keys a
+ *  position cannot earn, and non-numbers are dropped). Null when empty. */
+export function parseByPos(raw: unknown): ClassicByPos | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const yard = new Set(CLASSIC_SCORING_FIELDS.filter((f) => f.perYard).map((f) => f.key));
+  const out: ClassicByPos = {};
+  for (const [pos, vals] of Object.entries(raw as Record<string, unknown>)) {
+    const P = pos.toUpperCase();
+    if (!(P in BYPOS_SECTIONS) || !vals || typeof vals !== 'object') continue;
+    const allowed = byPosKeys(P);
+    const row: Partial<Record<keyof ClassicScoring, number>> = {};
+    for (const [k, v] of Object.entries(vals as Record<string, unknown>)) {
+      const key = k as keyof ClassicScoring;
+      const n = Number(v);
+      if (!allowed.has(key) || v == null || v === '' || !Number.isFinite(n)) continue;
+      const b = yard.has(key) ? BYPOS_YARD_BOUNDS : BYPOS_BOUNDS;
+      row[key] = Math.round(Math.min(b.max, Math.max(b.min, n)) * 1000) / 1000;
+    }
+    if (Object.keys(row).length) out[P] = row;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** The overrides as readable rows — the editors' summary and League Info. */
+export function byPosSummary(bp?: ClassicByPos | null): { pos: string; key: keyof ClassicScoring; label: string; value: number }[] {
+  const out: { pos: string; key: keyof ClassicScoring; label: string; value: number }[] = [];
+  for (const pos of Object.keys(BYPOS_SECTIONS)) {
+    const row = bp?.[pos]; if (!row) continue;
+    for (const f of CLASSIC_SCORING_FIELDS) {
+      const v = row[f.key];
+      if (v != null) out.push({ pos, key: f.key, label: `${f.label}${f.perYard ? ' /YD' : ''}`, value: v });
+    }
+  }
+  return out;
+}
+
+const byPosMemo = new WeakMap<object, Map<string, ClassicScoring>>();
+/** The table a player at `pos` is scored by: the league's, with that
+ *  position's overrides laid over it. Memoised per table object, so the hot
+ *  path (every play of every player) pays one Map lookup. */
+export function scoringFor(sc: ClassicScoringTable, pos: string): ClassicScoring {
+  const o = sc.byPos?.[pos];
+  if (!o) return sc;
+  let m = byPosMemo.get(sc);
+  if (!m) { m = new Map(); byPosMemo.set(sc, m); }
+  let t = m.get(pos);
+  if (!t) { t = { ...sc, ...o } as ClassicScoring; m.set(pos, t); }
+  return t;
+}
+
+export function normalizeClassicScoring(x?: number | Partial<ClassicScoringTable> | null): ClassicScoringTable {
   if (typeof x === 'number') return { ...DEFAULT_CLASSIC_SCORING, ppr: x };
-  const out = { ...DEFAULT_CLASSIC_SCORING };
+  const out: ClassicScoringTable = { ...DEFAULT_CLASSIC_SCORING };
+  const bp = parseByPos((x as Partial<ClassicScoringTable> | null | undefined)?.byPos);
+  if (bp) out.byPos = bp;
   for (const f of CLASSIC_SCORING_FIELDS) {
     const v = Number((x as Partial<ClassicScoring> | null | undefined)?.[f.key]);
     if (Number.isFinite(v)) out[f.key] = v;
@@ -663,6 +758,7 @@ export function classicScorePlay(play: RawPlay, pos: Pos, sc: ClassicScoring): n
   if (play.kind === 'fum') pts += sc.fumbleAny;              // any fumble, kept or lost
   if (play.kind === 'frtd') pts += sc.fumRecTd;              // own-team recovery TD
   if (play.kind === 'st_tkl' && play.tt === 's') pts += sc.stTackle;
+  if (play.kind === 'tackle') pts += sc.offTackle;           // offense making a tackle (v0.532.0)
   if (play.kind === 'ff') pts += sc.stFf;                    // ST/coverage forced fumble
   if (play.kind === 'fumrec') pts += sc.stFr;                // ST recovery (muffed punt)
   // ESPN-style per-target points (founder's ask) — pays on every target,
@@ -711,9 +807,11 @@ export function classicPoints(player: Player, week: number, sc?: number | Partia
  *  Deliberately the same body, not a second implementation: a game log that
  *  disagreed with the board about what a week was worth would be worse than no
  *  game log at all. `classicPoints` is now a two-line wrapper over it. */
-export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number | Partial<ClassicScoring>, scoreAs?: Pos, slot?: string | null): number {
-  const s = normalizeClassicScoring(sc);
+export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number | Partial<ClassicScoringTable>, scoreAs?: Pos, slot?: string | null): number {
   const pos = scoreAs ?? player.pos;
+  // The position's own table (v0.532.0) — the league's, with any per-position
+  // overrides laid over it.
+  const s = scoringFor(normalizeClassicScoring(sc), pos);
   let raw = 0, passYds = 0, rushYds = 0, recYds = 0, carries = 0, tackles = 0, cmps = 0, sacks = 0, pds = 0;
   let punts = 0, puntYds = 0;
   // Touchdowns he actually scored — only for a scoped rule's per-TD bonus

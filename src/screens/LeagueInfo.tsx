@@ -16,7 +16,7 @@ import { inviteLink, inviteMessage, previewLink } from '@drip/core/data/invite';
 import { waiverDaysOf, waiverScheduleLine, holdLine } from '@drip/core/data/waiverDays';
 import { CopyId } from './CommishDesk';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
-import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
+import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, byPosSummary, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { shortName } from '@drip/core/data/players';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
@@ -118,6 +118,15 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
               </div>
             );
           })}
+          {/* BY POSITION (v0.532.0): per-position overrides of the table above. */}
+          {byPosSummary(sc.byPos).length > 0 && (
+            <div>
+              <Head>BY POSITION</Head>
+              {byPosSummary(sc.byPos).map((r) => (
+                <Row key={`${r.pos}-${String(r.key)}`} k={`${r.pos} · ${r.label}`} v={`${r.value > 0 ? '+' : ''}${r.value}`} />
+              ))}
+            </div>
+          )}
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12 }}>Anything not listed scores 0 in this league.</div>
         </>
       )}

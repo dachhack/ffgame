@@ -53,7 +53,7 @@ import { PROJ_RETURN, type ProjReturnLine } from '../data/projReturns2026';
 import { PROJ_HC, PROJ_PUNT, MARGIN_GAME_SD, type ProjHcLine, type ProjPuntLine } from '../data/projTeamRoles2026';
 import { PROJ_FB } from '../data/projFb2026';
 import { idpLineFor, type ProjIdpLine } from '../data/projIdp2026';
-import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, type ClassicScoring } from './classic';
+import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, scoringFor, type ClassicScoring } from './classic';
 import { scopedAdjustFor, leagueScoring, scoringLeague, clearLeagueScoring, setLeagueScoring } from './leagueScoring';
 import { slugSleeperId } from '../data/slugMeta';
 
@@ -473,7 +473,9 @@ export function leagueCatalogOf(
 export function leagueProjRatio(
   slug: string, pos: string, sc?: ClassicScoring, sleeperId?: string | null,
 ): number {
-  const cur = sc ?? cat();
+  // The POSITION's table (v0.532.0): the league catalog with that
+  // position's overrides laid over it — the same merge the live scorer runs.
+  const cur = sc ?? scoringFor(cat(), pos);
   // A kicker or a defence is priced from its OWN components, not the skill
   // line — which it doesn't have, and which would otherwise fall straight
   // through to the `return 1` below and leave both positions unadjustable.
@@ -552,7 +554,7 @@ export function projectedPoints(
   if (slotPos && isRetSlot(slotPos)) {
     const rl = PROJ_RETURN[player.id];
     if (!rl) return 0;
-    const perWeek = scoreReturnLine(rl, cat()) / SEASON_GAMES;
+    const perWeek = scoreReturnLine(rl, scoringFor(cat(), 'RET')) / SEASON_GAMES;
     const radj = scopedAdjustFor(player, { slot });
     // The scoped layers apply here exactly as they do anywhere else NOW that
     // the value is known — v0.311.2 withheld them only because a flat bonus on
@@ -567,7 +569,7 @@ export function projectedPoints(
   // OWN scoring of their line, with no standard to compare against, because
   // there is no standard coach or punter scoring anywhere in fantasy.
   if (isZeroDefaultRole(player.id)) {
-    const raw = scoreKdst(player.id, cat(), sid) ?? 0;
+    const raw = scoreKdst(player.id, scoringFor(cat(), player.pos), sid) ?? 0;
     if (!raw) return 0;                          // a league that pays them nothing
     const zadj = scopedAdjustFor(player, { slot });
     return Math.round((raw / SEASON_GAMES * zadj.mult + zadj.pts) * 10) / 10;

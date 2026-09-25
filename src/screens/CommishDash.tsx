@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
-import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, type SlotSpec } from '@drip/core/engine/classic';
+import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
 import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar } from '@drip/core/data/liveApi';
@@ -252,6 +252,8 @@ const SCORING_TABS: { id: string; label: string; sections: string[] }[] = [
   { id: 'defense', label: 'DEFENSE', sections: ['TEAM DEFENSE', 'POINTS ALLOWED', 'YARDAGE ALLOWED'] },
   { id: 'idp', label: 'IDP', sections: ['IDP'] },
   { id: 'coach', label: 'HEAD COACH', sections: ['HEAD COACH'] },
+  // BY POSITION (v0.532.0): per-position overrides laid over every tab above.
+  { id: 'bypos', label: 'BY POSITION', sections: [] },
 ];
 const KNOWN_SECTIONS = new Set(SCORING_TABS.flatMap((t) => t.sections));
 
@@ -465,10 +467,16 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // Full classic scoring (0160): drafts are strings so partial typing never
   // fights the keyboard; parse + diff against the engine defaults on save.
   const [scDraft, setScDraft] = useState<Record<string, string>>({});
-  const scInit = (over: Record<string, number>) => {
+  // Per-position overrides (v0.532.0): { POS: { key: "typed value" } }. An
+  // empty box is "no override" — the league's value stands.
+  const [bpDraft, setBpDraft] = useState<Record<string, Record<string, string>>>({});
+  const [bpPos, setBpPos] = useState('QB');
+  const scInit = (over: Record<string, unknown>) => {
     const d: Record<string, string> = {};
-    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String(over[f.key] ?? DEFAULT_CLASSIC_SCORING[f.key]);
+    for (const f of CLASSIC_SCORING_FIELDS) d[f.key] = String((over[f.key] as number | undefined) ?? DEFAULT_CLASSIC_SCORING[f.key]);
     setScDraft(d);
+    const bp = parseByPos(over.byPos) ?? {};
+    setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
@@ -506,15 +514,19 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const saveScoring = async (reset = false) => {
     if (busy) return;
     setBusy(true); setNote(null);
-    const over: Record<string, number> = {};
+    const over: Record<string, unknown> = {};
     if (!reset) {
       for (const f of CLASSIC_SCORING_FIELDS) {
         const v = Number(scDraft[f.key]);
         if (Number.isFinite(v) && v !== DEFAULT_CLASSIC_SCORING[f.key]) over[f.key] = v;
       }
+      // The overrides ride in the same save — the RPC replaces the whole
+      // catalog, so leaving them out would erase them.
+      const bp = parseByPos(bpDraft);
+      if (bp) over.byPos = bp;
     }
     try {
-      const r = await setLeagueClassicScoring(leagueId, over);
+      const r = await setLeagueClassicScoring(leagueId, over as Record<string, number>);
       if (r.ok) { scInit(r.scoring ?? {}); setNote('✓ scoring saved'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
@@ -943,7 +955,56 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             style={{ margin: '8px 0 0' }} />
         </div>
       )}
-      {view === 'scoring' && mode === 'classic' && scTab !== 'adjust' && (
+      {view === 'scoring' && mode === 'classic' && scTab === 'bypos' && (() => {
+        // BY POSITION (v0.532.0, founder: "a tackle for QB at 50 points and a
+        // tackle for a WR at 20"). Pick a position, then type only the values
+        // that differ for it; each box shows the league's value as its hint.
+        const cur = bpDraft[bpPos] ?? {};
+        const secs = new Set(BYPOS_SECTIONS[bpPos] ?? []);
+        const count = (pos: string) => Object.values(bpDraft[pos] ?? {}).filter((v) => v.trim() !== '').length;
+        const summary = byPosSummary(parseByPos(bpDraft));
+        return (
+          <div style={{ marginTop: 8 }}>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5 }}>
+              A value set here replaces the league's for players scored at that position. Leave a box empty to use the league's value.
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+              {Object.keys(BYPOS_SECTIONS).map((pos) => (
+                <button key={pos} onClick={() => setBpPos(pos)} className="mono"
+                  style={{ ...pill(pos === bpPos), padding: '5px 9px' }}>{pos}{count(pos) ? ` · ${count(pos)}` : ''}</button>
+              ))}
+            </div>
+            {CLASSIC_SCORING_SECTIONS.filter((sec) => secs.has(sec.section)).map((sec) => (
+              <div key={sec.section} style={{ marginTop: 8 }}>
+                <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{bpPos} · {sec.section}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(124px, 1fr))', gap: 6 }}>
+                  {sec.fields.map((f) => {
+                    const set = (cur[f.key] ?? '').trim() !== '';
+                    return (
+                      <label key={f.key} className="mono" style={{ fontSize: 10, fontWeight: 700, color: set ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
+                        {f.label}{f.perYard ? ' /YD' : ''}
+                        <input value={cur[f.key] ?? ''} inputMode="decimal" placeholder={scDraft[f.key] ?? String(DEFAULT_CLASSIC_SCORING[f.key])}
+                          onChange={(e) => setBpDraft((d) => ({ ...d, [bpPos]: { ...(d[bpPos] ?? {}), [f.key]: e.target.value } }))}
+                          style={{ fontFamily: 'inherit', fontSize: 13.5, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${set ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, width: '100%', boxSizing: 'border-box' }} />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {summary.length > 0 && (
+              <div className="mono" style={{ marginTop: 10, fontSize: 10, color: 'var(--dim)', lineHeight: 1.6 }}>
+                OVERRIDES: {summary.map((r) => `${r.pos} ${r.label} ${r.value}`).join(' · ')}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button onClick={() => void saveScoring()} disabled={busy} className="mono" style={pill(true)}>SAVE SCORING</button>
+              <button onClick={() => setBpDraft((d) => ({ ...d, [bpPos]: {} }))} disabled={busy || !count(bpPos)} className="mono" style={pill(false)}>CLEAR {bpPos}</button>
+            </div>
+          </div>
+        );
+      })()}
+      {view === 'scoring' && mode === 'classic' && scTab !== 'adjust' && scTab !== 'bypos' && (
         <div>
           <>
               {CLASSIC_SCORING_SECTIONS.filter((sec) =>
