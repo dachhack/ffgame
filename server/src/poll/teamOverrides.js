@@ -16,6 +16,7 @@
 // no surface renders, growing the table for nothing.
 import { PLAYER_BIO } from '../../../packages/core/src/data/playerBio.ts';
 import { db } from '../supabase.js';
+import { setTeamOverrides } from '../../../packages/core/src/data/playerTeam.ts';
 
 /** Diff the (already-built) player index against the bake and reconcile the
  *  override table. Returns { changed, cleared } for the log line. */
@@ -69,4 +70,21 @@ export async function reconcileTeamOverrides(liveTeams, full = true) {
     if (error) throw new Error(`override prune (${stale.length}): ${error.message}`);
   }
   return { changed: upserts.length, cleared: stale.length, standing: want.size };
+}
+
+/** INSTALL THE OVERRIDES IN THE WORKER TOO (v0.528.0).
+ *
+ *  The worker WROTE this table and never READ it: teamFor() on the server
+ *  answered from the bake alone, so every server-side "where does he play
+ *  now" (the lock-time fill's liveTeamOf, the wrong-window re-plan) missed any
+ *  move since the last re-bake. Founder, week 3: "It's 2025 data leaking."
+ *  Refreshed at most every few minutes; a failed read keeps the last cache. */
+const OVERRIDE_TTL_MS = 5 * 60 * 1000;
+let overridesAt = 0;
+export async function installTeamOverrides(log = () => {}) {
+  if (Date.now() - overridesAt < OVERRIDE_TTL_MS) return;
+  const { data, error } = await db().from('player_team_override').select('slug,team').range(0, 4999);
+  if (error) { log('team overrides', error.message); return; }
+  setTeamOverrides(data ?? []);
+  overridesAt = Date.now();
 }

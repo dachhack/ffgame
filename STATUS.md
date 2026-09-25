@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.528.0 — the worker reads its own team-override table
+
+Founder: "It's 2025 data leaking." The worker writes player_team_override
+(trades, cuts and signings since the directory bake) but never loaded it, so
+server-side teamFor answered from the bake alone. That fed the lock fill's
+liveTeamOf and the v0.526.0 wrong-window re-plan. index.js now installs the
+overrides each tick, at most every 5 minutes (installTeamOverrides). Also:
+TheRFM's Gridiron Gang TNF Allgeier (ARI) was swapped to MarShawn Lloyd (GB)
+by hand in SQL.
+
 ### v0.527.0 — the Ghost gets a player card (G. Host · SPIRIT · BOO)
 
 Founder: "in all versions, let's put the ghost on a card like he is an
