@@ -195,8 +195,33 @@ What differs from Android, on purpose:
 - **No home-screen widget.** `react-native-android-widget` is Android's; its
   registration and repaints are skipped on iOS and Settings hides the entry.
 
-A real iPhone or TestFlight needs the $99/yr Apple Developer enrollment — see
-`docs/store-listing.md` for that path and what the App Store will ask for.
+### iOS on playtesters' iPhones (TestFlight)
+
+Needs the Apple Developer Program membership. From `apps/mobile`:
+
+```bash
+npx eas login                                        # Expo account
+npx eas build --profile production --platform ios    # signs in to Apple; EAS creates the certs + profile
+npx eas submit --profile production --platform ios --latest   # uploads to App Store Connect
+```
+
+The first `eas submit` can create the app record in App Store Connect; put the
+numeric Apple ID it gets (App Store Connect → the app → App Information) in
+`eas.json` → `submit.production.ios.ascAppId`, and your Team ID in
+`appleTeamId`, so later submits don't ask. Build numbers auto-increment
+(`appVersionSource: remote`).
+
+After processing (~10–30 min) the build appears under TestFlight. Internal
+testers (your App Store Connect team, up to 100) can install at once; external
+testers (a public link, up to 10,000) need the first build through Beta App
+Review. Builds expire after 90 days.
+
+`ios.infoPlist.ITSAppUsesNonExemptEncryption` is `false` in app.json: the app's
+only cryptography is the OS's HTTPS, which is exempt, and declaring it stops
+every upload waiting at "Missing Compliance". If the app ever ships its own
+encryption, that answer changes.
+
+See `docs/store-listing.md` for the full App Store path.
 
 ### Google sign-in without the browser
 
