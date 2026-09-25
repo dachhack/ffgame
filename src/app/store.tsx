@@ -14,7 +14,7 @@ import { powerupById, isAmplifier, ampCapacity, capAmplifiers } from '@drip/core
 import { DEMO_WEEK } from '@drip/core/config';
 import { type ProviderUser, type ProviderId } from '@drip/core/data/providers';
 import { track, setTraits, Ev } from '@drip/core/analytics';
-import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, loadTeamOverrides, loadDepthChart, leagueNote, playerFlags, leagueScoringGet, type TargetedState } from '@drip/core/data/liveApi';
+import { myInventory, consumeInventory, refundInventory, myBuffs, heroSetBuffs, myHeroApplied, heroSetApplied, myTargeted, useSpy as spyPeek, setBackupAssign, hasAuthTokensInUrl, loadLiveInjuries, loadTeamOverrides, loadDepthChart, leagueNote, playerFlags, leagueScoringGet, type TargetedState } from '@drip/core/data/liveApi';
 
 import type { SlotSwap } from '@drip/core/engine/matchup';
 export type { SlotSwap };
@@ -567,6 +567,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             clutchDon: list(tgt.clutchDon, b.clutchDon), clutchEncore: clocks(tgt.clutchEncore, b.clutchEncore), clutchCounter: clocks(tgt.clutchCounter, b.clutchCounter),
             buffs: Object.fromEntries((buffs ?? []).map((x) => [x, true as const])),
           } });
+          // RE-READ THE SPY (v0.526.0). Hydration kept only WHICH spot was
+          // spied, not what the server said, so a reload fell back to the
+          // local board — which never has a sealed opponent pick — and read
+          // "— no player —" even after the lock fill had put someone there.
+          // use_spy re-reads a spot you already paid for free, up to kickoff.
+          if (lastSpy) {
+            spyPeek(liveCtx.matchupId, lastSpy.win, lastSpy.slot, lastSpy.reveal)
+              .then((r) => {
+                if (!r?.ok) return;
+                setApplied((prev) => {
+                  const cur = prev[wk];
+                  if (!cur?.spy || cur.spy.slotKey !== sk(lastSpy)) return prev;
+                  return { ...prev, [wk]: { ...cur, spy: { ...cur.spy, value: (r.reveal as string | null) ?? null } } };
+                });
+              })
+              .catch(() => {});
+          }
         })
         .catch(() => setApplied({}))
         .finally(() => { appliedHydrated.current = true; });
