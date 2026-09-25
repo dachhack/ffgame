@@ -12,8 +12,8 @@ exercise the whole stack — Supabase auth and reads/writes, the slate and
 per-window lock rules, the metric catalogue, the premium gate, the coin wallet.
 
 Release APKs are built locally (`android/gradlew assembleRelease`) and signed
-with the committed playtest key — see **Signing** below. iOS has never been
-built or run.
+with the committed playtest key — see **Signing** below. iOS is prepared for
+the Simulator (see **iOS (Simulator)**) but has not yet been built on a Mac.
 
 ## Running it
 
@@ -162,17 +162,41 @@ repo before. `withCoreBundleInput` is the fix and this is the check that the fix
 is still working — an unchanged hash after a change to `packages/core` means the
 bundle is stale, not that the build was fast.
 
-### iOS
+### iOS (Simulator)
 
-Needs macOS with Xcode — there is no way to run or emulate iOS elsewhere.
+Needs macOS with Xcode — there is no way to run or emulate iOS elsewhere. No
+paid Apple Developer account is needed for the Simulator.
+
+One-time setup: install Xcode, open it once so it installs an iOS Simulator
+runtime, then `sudo xcode-select -s /Applications/Xcode.app` and
+`brew install cocoapods`.
 
 ```bash
-npm run ios            # expo run:ios — builds and boots the Simulator
+npm install            # from the REPO ROOT
+cd apps/mobile
+npm run ios            # expo run:ios — prebuilds ios/, installs pods, builds, boots the Simulator
+npm start              # later sessions: Metro for the dev build already installed
 ```
 
-No paid Apple Developer account is needed for the Simulator. For a build you
-can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
-and TestFlight distribution needs the $99/yr enrollment.
+The first build takes a while (pods + a full native compile). `ios/` is
+generated and gitignored, like `android/`; `npm run prebuild` regenerates both.
+
+No Mac build handy? `npm run ios:simulator` builds a Simulator `.app` on EAS
+(free Expo account); drag it onto a booted Simulator to install. It still needs
+a Mac to run.
+
+What differs from Android, on purpose:
+
+- **Sign in by email or the browser Google flow.** Native Google sign-in is
+  Android-only (`src/auth/googleNative.ts`) until an iOS OAuth client exists —
+  without one GIDSignIn crashes the app rather than failing.
+- **No push.** `src/ui/push.ts` registers on Android only; the worker sends
+  through FCM, which needs an APNs key before it can reach an iPhone.
+- **No home-screen widget.** `react-native-android-widget` is Android's; its
+  registration and repaints are skipped on iOS and Settings hides the entry.
+
+A real iPhone or TestFlight needs the $99/yr Apple Developer enrollment — see
+`docs/store-listing.md` for that path and what the App Store will ask for.
 
 ### Google sign-in without the browser
 
@@ -339,7 +363,8 @@ In rough order of how much they'll cost:
   the system sans.
 - **Card face gradient.** The dot texture is faithful (a real tiled PNG); the
   radial gradient's centre highlight has no RN equivalent and is still missing.
-- **iOS.** Never built or run. Needs a Mac; TestFlight needs the $99 enrolment.
+- **iOS.** Prepared for the Simulator, not yet built on a Mac; no push, widget or
+  native Google sign-in there. TestFlight needs the $99 enrolment.
 
 Sign-in is done (magic link + Google OAuth, `src/screens/SignIn.tsx`); invite
 codes, commish codes and solo passes still live on the web's `LiveOnboard`.
