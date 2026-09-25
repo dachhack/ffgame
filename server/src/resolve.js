@@ -59,7 +59,13 @@ async function weekPlayRows(week) {
   const rows = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await db().from('live_play')
-      .select('player_slug,c,t,pid,k,y,td,ca,tg,"to"')
+      // EVERY FLAG THE FEED WRITES (v0.533.0). This read stopped at "to", so
+      // the first-down, completion/incompletion, sack-taken, kick-vs-punt
+      // return, solo/assist, split-sack and pick-six flags never reached the
+      // scorer that stamps official finals — every knob keyed on them scored 0
+      // there (and a split sack scored whole) while the boards, whose read
+      // (liveApi weekLivePlays) has always taken them, showed the points.
+      .select('player_slug,c,t,pid,k,y,td,ca,tg,"to",fd,cp,ic,sk,rk,tt,hf,p6')
       .eq('week', week)
       .order('id', { ascending: true }) // stable total order (bigint PK) for paging
       .range(from, from + PAGE - 1);

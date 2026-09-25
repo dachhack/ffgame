@@ -107,7 +107,9 @@ ok('a RET-only lineup is priced for returns too', only.spots[0].player?.id === '
 
 // ── 6. smaller holes the audit found ────────────────────────────────────────
 const adapter = readFileSync(new URL('./espn/espnAdapter.mjs', import.meta.url), 'utf8');
-ok('a penalty snap is not a coach\'s 3rd/4th-down conversion', /typeText !== 'Penalty' && !\/\\bNo Play\\b\/i\.test\(text\)/.test(adapter));
+// (v0.533.0 narrowed it further — only a run or a catch converts; the play
+// itself is exercised in check:feedingest.)
+ok('a penalty snap is not a coach\'s 3rd/4th-down conversion', /const ranPlay = typeText === 'Rush'/.test(adapter) && /fd && ranPlay/.test(adapter));
 const mig = readFileSync(new URL('../supabase/migrations/0361_a_return_spot_takes_ball_carriers.sql', import.meta.url), 'utf8');
 ok('the server roster cap counts a RET spot as a home for RB/WR/TE/FB', /\["RET"\]/.test(mig));
 

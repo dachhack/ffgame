@@ -18,6 +18,51 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.533.0 — the feed captures what the scoring reads
+
+Founder: "how is our feed ingest for these metrics? do we capture all these
+actions?" Audited, then fixed in his order, each checked before/after on 48
+real 2025 ESPN games and against the nflverse bake (validate.mjs weeks 1-2
+PASS, play match 96.5% → 97.0%).
+1. **Finals read every flag.** resolve.js's live_play read stopped at "to",
+   so fd/cp/ic/sk/rk/tt/hf/p6 never reached the scorer that stamps finals.
+   Completions, attempts, sacks taken, every first-down knob, KR/PR yards,
+   solo/assist, special-teams tackles and pick-sixes scored 0 there, and a
+   split sack scored whole, while the boards counted them.
+2. **Lost fumbles.** ESPN types a fumbled run or catch "Fumble Recovery
+   (Opponent/Own)" / "Fumble Return Touchdown", and no branch read those. The
+   carry or catch now counts with yards to the recovery spot (a forward bounce
+   adds nothing, as the official books keep it), and the carrier is charged
+   `to` (default −2). The fumbler is the carrier, not the tackler named just
+   before FUMBLES: 64 of 88 `fum` rows had been on defenders. A returner who
+   fumbles away is charged too. `to` means LOST only.
+3. **Safeties, kickoff-return TDs, head coaches.**
+   - "Safety"-typed plays credit the defense, and NULLIFIED/REVERSED ones don't.
+   - A kickoff-return TD goes to the receiving side: on a kickoff ESPN's
+     start team and "defense" are both the kicker.
+   - HC 3rd/4th-down conversions count only on runs and catches. A 4th-down FG
+     read as one: 350 → 90 across the 48 games.
+4. **Polling.**
+   - A closing week re-polls its finals until the report goes out, so the last
+     game can't miss its summary rows.
+   - `cli repoll-week <wk>` (ops-run mode "repoll") re-ingests a played week
+     through the same reconciling pollGame.
+5. **Tacklers and the rest.**
+   - Tacklers are read from the parentheses right after the gain, not only at
+     the end of the text: +595 tackles, +47 TFL, +89 coverage tackles.
+   - Sacks are recognised whatever the type (+56), with the right sacker on a
+     sack-fumble.
+   - Team INT/fumble return yards are recorded.
+   - Blocked-kick TDs and muffed punts (a punt row plus the kicking team's
+     recovery) are handled.
+   - Offensive tackles are credited on lost-fumble returns, and defensive ones
+     after an own recovery.
+   - Negative returns count, and "(Aborted)" is no forced fumble.
+   - The true-up no longer adds a dst_td to a kick or punt returner.
+   - validate.mjs keeps every row per (slug, pid), since a sacker's tackle
+     and sack are both real.
+   - **Tests:** check:feedingest.
+
 ### v0.532.0 — scoring by position (classic leagues)
 
 Founder: "very fine grained scoring options. Like a tackle for QB at 50

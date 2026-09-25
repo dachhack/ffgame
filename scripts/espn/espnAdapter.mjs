@@ -202,6 +202,13 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   const fd = dn > 0 && dist > 0 && yds >= dist && !p?.isTurnover ? { fd: 1 } : undefined;
   const offTeam = fixTeam(offenseAbbr(p, summaryTeamCache));
   const defTeam = fixTeam(defenseAbbr(p, summaryTeamCache));
+  // ON A KICKOFF ESPN's "start" team and its "defense" participant are BOTH
+  // the kicking team; the receiving team is the "offense" participant
+  // (v0.533.0). A kickoff-return TD was credited to the defense that got
+  // scored on (NE@MIA 2025 wk 2: Gibson's 90-yarder paid mia-dst).
+  const kickRecv = /^Kickoff/.test(typeText)
+    ? fixTeam(summaryTeamCache.get(String(p?.teamParticipants?.find((x) => x.type === 'offense')?.id)) ?? '')
+    : '';
   const names = findNames(text, roster);
   // ROLE-AWARE RESOLUTION (v0.369.6). An abbreviation can name several men in
   // one game; the play knows which TEAM the role belongs to (offense for the
@@ -231,23 +238,79 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // Whoever fumbled: the roster name immediately before "FUMBLES". No team
   // preference — the fumbler is the ball CARRIER, who is the offense on a
   // scrimmage play but the returner (defense side) on a kick.
-  const fumblerR = nameBefore('FUMBLES');
+  // WHEN THE TACKLERS COME FIRST (v0.533.0): "A.Gibson up the middle for 1
+  // yard (T.Watt; J.Peppers). FUMBLES (T.Watt)" — the name just before
+  // FUMBLES is a TACKLER, and he was being charged with the fumble (and the
+  // runner never was). A "(…)." right before FUMBLES means the ball carrier
+  // fumbled: the returner on a kick, the receiver on a catch, the passer on a
+  // sack, otherwise the runner (the first name).
+  const fumblerR = (() => {
+    const i = text.indexOf('FUMBLES');
+    if (i < 0) return null;
+    const before = text.slice(0, i).trimEnd();
+    if (!/\)\s*\.?$/.test(before)) return nameBefore('FUMBLES');
+    const inBefore = names.filter((n) => n.idx < before.length);
+    if (/^(Kickoff|Punt)/.test(typeText)) {
+      const rm = [...before.matchAll(/\bfor -?\d+ yards?/g)].pop();
+      let h = null; for (const n of inBefore) if (!rm || n.idx < rm.index) h = n;
+      return h ? resolve(h.abbr, defTeam) : null;
+    }
+    if (/\bsacked\b/.test(before)) return nameBefore(' sacked', offTeam, 'off');
+    if (before.includes(' pass')) return nameAfter(' to ', offTeam, 'off');
+    return inBefore[0] ? resolve(inBefore[0].abbr, offTeam, 'off') : null;
+  })();
   const fumbler = fumblerR ? fumblerR.slug : null;
   // Trust the play TYPE, not the text, for interceptions: reversed-on-replay picks
   // and 2-point-conversion picks still say "INTERCEPTED" in the text but are typed
   // "Pass Incompletion" / "… Touchdown" and are NOT defensive turnovers.
   const isInt = typeText.includes('Interception');
+  // A SACK IS A SACK WHATEVER ESPN FILES IT UNDER (v0.533.0): a sack the
+  // offense fumbles and keeps is typed "Fumble Recovery (Own)", one in the end
+  // zone "Safety" — ~40 across fourteen weeks lost the team and the sacker.
+  const isSackPlay = typeText.startsWith('Sack')
+    || ((/^Fumble Recovery/.test(typeText) || typeText === 'Safety') && /\bsacked\b/.test(text));
+  // Fumble-typed plays (v0.533.0): the part of the text before "FUMBLES" is
+  // the run, catch or sack that was fumbled, with its own "for N yards".
+  const isFumbleTyped = typeText.startsWith('Fumble Recovery') || typeText === 'Fumble Return Touchdown';
+  const fumAt = text.indexOf('FUMBLES');
+  const fumPre = fumAt >= 0 ? text.slice(0, fumAt) : text;
+  const fumGain = (() => {
+    if (/\bfor no gain\b/.test(fumPre)) return 0;
+    const m = [...fumPre.matchAll(/\bfor (-?\d+) yards?/g)];
+    return m.length ? Number(m[m.length - 1][1]) || 0 : 0;
+  })();
+  // THE PLAY'S YARDS RUN TO WHERE THE BALL WAS RECOVERED (v0.533.0), as the
+  // official books (and the nflverse bake) keep them: "Stroud to Ogunbowale to
+  // LA 18 for 7 yards … FUMBLES, RECOVERED by LA at LA 24" is a 1-yard catch.
+  // Own recovery: ESPN's statYardage already says it. Lost: the gain, less the
+  // distance from the spot of the gain back to the first spot after FUMBLES
+  // ("touched at" / "RECOVERED by … at"), measured toward the offense's goal —
+  // a spot on the RECOVERING team's side is yards-to-goal N, else 100 − N.
+  const fumPreYds = (() => {
+    if (!isFumbleTyped || fumAt < 0) return fumGain;
+    if (!p?.isTurnover) return Number(p?.statYardage) ? Number(p.statYardage) : fumGain;
+    const rec = /RECOVERED by ([A-Z]{2,3})-/.exec(text)?.[1];
+    const gainSpot = [...fumPre.matchAll(/\bto ([A-Z]{2,3}) (-?\d+)/g)].pop();
+    const after = text.slice(fumAt);
+    const recSpot = /\bat ([A-Z]{2,3}) (-?\d+)/.exec(after);
+    if (!rec || !gainSpot || !recSpot) return fumGain;
+    const ytg = (team, n) => (team === rec ? Number(n) : 100 - Number(n));
+    const delta = ytg(gainSpot[1], gainSpot[2]) - ytg(recSpot[1], recSpot[2]);
+    // A fumble that bounces FORWARD adds nothing — the offense is never
+    // credited the advance (official rule; nflverse agrees).
+    return Math.abs(delta) > 99 ? fumGain : fumGain + Math.min(0, delta);
+  })();
 
   // Truth flags (0166) ride on the QB row — the adapter is branch-aware here,
   // so cp/ic/sk are exact: exactly one of them on every flag-aware dropback.
   if (typeText === 'Rush' || typeText === 'Rushing Touchdown') {
     const r = names[0] && resolve(names[0].abbr, offTeam, 'off'); // ball-carrier is the first name
-    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', yds, isTD ? 1 : 0, 0, 0, fumbler === r.slug ? 1 : 0, fd) });
+    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', yds, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === r.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Reception' || typeText === 'Passing Touchdown') {
     const passer = nameBefore(' pass', offTeam, 'off');
     const recv = nameAfter(' to ', offTeam, 'off');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', yds, isTD ? 1 : 0, 0, 0, fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
-    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', yds, isTD ? 1 : 0, 1, 1, fumbler === recv.slug ? 1 : 0, fd) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', yds, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
+    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', yds, isTD ? 1 : 0, 1, 1, p?.isTurnover && fumbler === recv.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Incompletion') {
     const passer = nameBefore(' pass', offTeam, 'off');
     const recv = nameAfter(' to ', offTeam, 'off'); // absent on a throwaway
@@ -264,16 +327,45 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     const p6 = /Return Touchdown$/.test(typeText) ? { ic: 1, p6: 1 } : { ic: 1 };
     if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1, p6) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
-  } else if (typeText.startsWith('Sack')) {
+  } else if (isFumbleTyped && fumAt >= 0 && !/\bAborted\b/.test(text) && !/\bsacked\b/.test(fumPre)) {
+    // A LOST (OR KEPT) FUMBLE IS STILL THE PLAY THAT CAME BEFORE IT (v0.533.0).
+    // ESPN types a fumbled run or catch "Fumble Recovery (Opponent/Own)" or
+    // "Fumble Return Touchdown", and none of the branches above looked at
+    // those types — the carry, the catch, the yards and, on a lost one, the
+    // turnover itself (default −2) all vanished; ~7 a week. The text before
+    // "FUMBLES" is the ordinary run or catch; it scores as one, with the
+    // pre-fumble yards, and `to` on whoever fumbled it away. No first down on
+    // a turnover (as above), and the TD on a return is the defense's.
+    const lost = !!p?.isTurnover;
+    const pre = fumPre;
+    const fdPre = !lost && dn > 0 && dist > 0 && fumPreYds >= dist ? { fd: 1 } : undefined;
+    const passI = pre.indexOf(' pass');
+    if (passI >= 0) {
+      const passer = nameBefore(' pass', offTeam, 'off');
+      const recv = nameAfter(' to ', offTeam, 'off');
+      if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', fumPreYds, 0, 0, 0, lost && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fdPre }) });
+      if (recv && recv.slug !== passer?.slug) out.push({ slug: recv.slug, play: row(c, ride, 'rec', fumPreYds, 0, 1, 1, lost && fumbler === recv.slug ? 1 : 0, fdPre) });
+    } else {
+      const firstIn = names.find((n) => n.idx < pre.length);
+      const r = firstIn && resolve(firstIn.abbr, offTeam, 'off');
+      if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', fumPreYds, 0, 0, 0, lost && fumbler === r.slug ? 1 : 0, fdPre) });
+    }
+  } else if (isSackPlay) {
+    // `to` is a LOST fumble only (v0.533.0) — a sack fumbled and recovered by
+    // the offense is not a turnover.
     const passer = nameBefore(' sacked', offTeam, 'off');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, fumbler === passer.slug ? 1 : 0, { sk: 1 }) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, p?.isTurnover && fumbler === passer.slug ? 1 : 0, { sk: 1 }) });
   }
 
   // Head coach conversions (0171): a converted 3rd/4th down is the offense
   // coach's play — rows on the "xxx-hc" pseudo-player.
   // A penalty or a no-play is not a conversion the offense ran (v0.531.0):
   // "yards >= distance" on a defensive-penalty snap credited the coach.
-  if (fd && (dn === 3 || dn === 4) && offTeam && typeText !== 'Penalty' && !/\bNo Play\b/i.test(text)) {
+  // …and only on a RUN or a CATCH (v0.533.0): ESPN's statYardage on a field
+  // goal is the kick's distance, so every 4th-down field goal (and some punts)
+  // read as "gained the distance" — ~7 phantom conversions a game.
+  const ranPlay = typeText === 'Rush' || typeText === 'Rushing Touchdown' || typeText === 'Pass Reception' || typeText === 'Passing Touchdown';
+  if (fd && ranPlay && (dn === 3 || dn === 4) && offTeam && !/\bNo Play\b/i.test(text)) {
     out.push({ slug: `${offTeam.toLowerCase()}-hc`, play: row(c, ride, dn === 3 ? 'hc_3dc' : 'hc_4dc', 0, 0, 0, 0, 0) });
   }
 
@@ -336,7 +428,7 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // catches have none. Returner is the last roster name before that "for".
   if (typeText === 'Kickoff' || typeText === 'Punt' ||
       typeText === 'Punt Return Touchdown' || typeText === 'Kickoff Return Touchdown') {
-    const rm = /\bfor (\d+) yards?/.exec(text);
+    const rm = /\bfor (-?\d+) yards?/.exec(text);   // a return can lose yards (v0.533.0)
     if (rm) {
       // Returner = last roster name before the "for N yards" return clause. The
       // kicker is named earlier ("X kicks/punts ..."), so the later name wins.
@@ -344,33 +436,57 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       let h = null; for (const n of names) if (n.idx < rm.index) h = n; else break;
       const returner = h ? resolve(h.abbr, defTeam) : null;
       const rk = typeText.startsWith('Kickoff') ? 'kr' : 'pr';
-      if (returner) out.push({ slug: returner.slug, play: row(c, ride, 'return', Number(rm[1]) || 0, /TOUCHDOWN/i.test(text) ? 1 : 0, 0, 0, 0, { rk }) });
+      // A returner who fumbles it away is charged the turnover (v0.533.0).
+      const lostRet = returner && p?.isTurnover && fumbler === returner.slug ? 1 : 0;
+      if (returner) out.push({ slug: returner.slug, play: row(c, ride, 'return', Number(rm[1]) || 0, /TOUCHDOWN/i.test(text) ? 1 : 0, 0, 0, lostRet, { rk }) });
     }
   }
 
   // Punter rows (0167 groundwork): distance-keyed like the kicker's FG rows,
   // on the team pseudo-player "xxx-p". No knob scores them until position P
   // exists — the data just starts accumulating now.
-  if (typeText === 'Punt' || typeText === 'Blocked Punt' || typeText === 'Punt Return Touchdown') {
+  // A punt the returner muffs is still a punt (v0.533.0).
+  if (typeText === 'Punt' || typeText === 'Blocked Punt' || typeText === 'Punt Return Touchdown' || typeText === 'Muffed Punt Recovery (Opponent)') {
     const pm = /\bpunts (\d+) yards?/.exec(text);
     if (pm && offTeam) out.push({ slug: `${offTeam.toLowerCase()}-p`, play: row(c, ride, 'punt', Number(pm[1]) || 0, 0, 0, 0, 0) });
   }
 
+  // Return yards after a takeaway (0170): the "for N yards" clause AFTER the
+  // takeaway marker — never the scrimmage clause earlier in the text.
+  const retYdsAfter = (marker) => {
+    const i = text.indexOf(marker); if (i < 0) return 0;
+    const ms = [...text.matchAll(/\bfor (-?\d+) yards?/g)].filter((m) => m.index > i);
+    return ms.length ? Number(ms[ms.length - 1][1]) || 0 : 0;
+  };
   // Team defense — sack / INT / fumble recovery / def(+ST) TD / safety, keyed by
   // the DEFENSE (the team NOT on offense for this play).
   if (defTeam) {
     const d = `${defTeam.toLowerCase()}-dst`;
-    if (typeText.startsWith('Sack')) out.push({ slug: d, play: row(c, ride, 'sack', 0, 0, 0, 0, 0) });
-    if (isInt) out.push({ slug: d, play: row(c, ride, 'int', 0, 0, 0, 0, 0) });
-    if (p?.isTurnover && /FUMBLE/i.test(text) && /RECOVERED by/i.test(text)) out.push({ slug: d, play: row(c, ride, 'fumrec', 0, 0, 0, 0, 0) });
-    if (typeText !== 'Penalty' && /\bSAFETY\b/.test(text)) out.push({ slug: d, play: row(c, ride, 'safety', 0, 0, 0, 0, 0) });
-    // Defensive / special-teams TD (INT-return, fumble-return, punt/kick-return):
-    // scored by the team on defense for this play (matches the baker's td_team===defteam).
-    if (/Return Touchdown$/.test(typeText)) out.push({ slug: d, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
+    if (isSackPlay) out.push({ slug: d, play: row(c, ride, 'sack', 0, 0, 0, 0, 0) });
+    // Return yards ride the TEAM rows too (v0.533.0) — dstIntRetYd and
+    // dstFumRetYd read them and they were always written as 0.
+    if (isInt) out.push({ slug: d, play: row(c, ride, 'int', retYdsAfter('INTERCEPTED by'), 0, 0, 0, 0) });
+    if (p?.isTurnover && /FUMBLE/i.test(text) && /RECOVERED by/i.test(text)) out.push({ slug: d, play: row(c, ride, 'fumrec', retYdsAfter('RECOVERED by'), 0, 0, 0, 0) });
+    // A muffed punt the kicking team recovers is its fumble recovery
+    // (v0.533.0): the text says MUFFS, not FUMBLE. On a punt the "defense"
+    // participant is the RECEIVING side, so the recovering team is offTeam.
+    if (typeText === 'Muffed Punt Recovery (Opponent)' && offTeam) out.push({ slug: `${offTeam.toLowerCase()}-dst`, play: row(c, ride, 'fumrec', 0, 0, 0, 0, 0) });
+    // SAFETY (v0.533.0): ESPN types most of them "Safety" and rewrites the
+    // text ("D.Ezeiruaku Safety"), which the all-caps match never saw; and a
+    // "SAFETY NULLIFIED" / reversed call is not one.
+    const safetyText = /\bSAFETY\b/.test(text) && !/NULLIFIED|REVERSED|\bNo Play\b/i.test(text);
+    if (typeText !== 'Penalty' && (typeText === 'Safety' || safetyText)) out.push({ slug: d, play: row(c, ride, 'safety', 0, 0, 0, 0, 0) });
+    // Defensive / special-teams TD (INT-return, fumble-return, punt/kick-return,
+    // and now blocked kicks and missed-FG returns): scored by the team on
+    // defense for this play — except a KICKOFF, where that is the kicking team
+    // and the TD belongs to the receiving side (kickRecv).
+    const dTd = /^Kickoff/.test(typeText) && kickRecv ? `${kickRecv.toLowerCase()}-dst` : d;
+    if (/Return Touchdown$/.test(typeText) || /^Blocked .*Touchdown$/.test(typeText)) out.push({ slug: dTd, play: row(c, ride, 'dst_td', 0, 0, 0, 0, 0) });
     // Blocked punt / PAT / FG (0167) — the blocking defense's play.
     if (typeText.startsWith('Blocked') || /is BLOCKED/i.test(text)) out.push({ slug: d, play: row(c, ride, 'blk', 0, 0, 0, 0, 0) });
     // Team forced fumble (0168): "FUMBLES (M.Parsons)" names the forcer.
-    if (/FUMBLES\s*\(/.test(text)) out.push({ slug: d, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
+    // (An aborted snap is not a forced fumble — v0.533.0.)
+    if (/FUMBLES\s*\((?!Aborted)/.test(text)) out.push({ slug: d, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
   }
 
   // ── Individual defender attribution (0168) ─────────────────────────────────
@@ -382,59 +498,75 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // live text doesn't carry them reliably; those knobs wait for the nflverse
   // true-up loop (docs/play-feed-enrichment-scope.md, Phase 3 decision).
   const isScrim = typeText === 'Rush' || typeText === 'Rushing Touchdown'
-    || typeText === 'Pass Reception' || typeText === 'Passing Touchdown' || typeText.startsWith('Sack');
+    || typeText === 'Pass Reception' || typeText === 'Passing Touchdown' || isSackPlay;
   const isStPlay = typeText === 'Kickoff' || typeText === 'Punt'
     || typeText === 'Punt Return Touchdown' || typeText === 'Kickoff Return Touchdown';
-  if ((isScrim || isStPlay) && !isTD) {
-    const pm = /\(([^()]+)\)\s*\.?\s*$/.exec(text);
-    if (pm) {
-      const start = text.lastIndexOf(pm[1]);
-      const hits = names.filter((n) => n.idx >= start && n.idx < start + pm[1].length);
-      const solo = hits.length === 1;
-      for (const h of hits) {
-        const dd = resolve(h.abbr, isStPlay ? offTeam : defTeam, isStPlay ? undefined : 'def'); if (!dd) continue;
-        // Coverage tackles (0170) are their own kind — they must not inflate
-        // scrimmage tackle counts or the 10+ tackle game bonus.
-        out.push({ slug: dd.slug, play: row(c, ride, isStPlay ? 'st_tkl' : 'tackle', 0, 0, 0, 0, 0, { tt: solo ? 's' : 'a' }) });
-        if (isScrim && yds < 0 && !typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'tfl', 0, 0, 0, 0, 0) });
-        // Sack yards (0170) ride `y` — split credit halves the yardage too.
-        if (typeText.startsWith('Sack')) out.push({ slug: dd.slug, play: row(c, ride, 'sack', solo ? Math.abs(yds) : Math.round(Math.abs(yds) / 2), 0, 0, 0, 0, solo ? undefined : { hf: 1 }) });
-      }
+  // THE TACKLERS ARE THE PARENTHESES RIGHT AFTER A GAIN (v0.533.0). This read
+  // only a "(…)" at the very END of the text, and ~9% of tackles were not at
+  // the end — a trailing "[QB hit]" bracket, a PENALTY sentence, an injury
+  // note — so they were dropped; on a fumbled play it read the RETURN's
+  // tacklers as the sacker. Now: the group immediately after the first
+  // "for N yards" / "for no gain" at or after `from`, before `until`.
+  const tacklersAfter = (from = 0, until = text.length) => {
+    const re = /\bfor (?:-?\d+ yards?|no gain)\b[^()]{0,40}?\(([^()]+)\)/g;
+    re.lastIndex = from;
+    const m = re.exec(text);
+    if (!m || m.index >= until) return [];
+    const gStart = m.index + m[0].length - m[1].length - 1;
+    // A formation note is never a tackler list.
+    if (/Shotgun|Huddle|kick is|Center-|Holder-/.test(m[1])) return [];
+    return names.filter((n) => n.idx >= gStart && n.idx < gStart + m[1].length);
+  };
+  const lostFumble = isFumbleTyped && !!p?.isTurnover;
+  const ownFumble = isFumbleTyped && !p?.isTurnover;
+  if ((isScrim || isStPlay || (isFumbleTyped && fumAt >= 0)) && !isTD) {
+    // A fumbled play's defensive tacklers are the ones on the play BEFORE the
+    // fumble; what comes after RECOVERED is the return (handled below).
+    const hits = tacklersAfter(0, isFumbleTyped && fumAt >= 0 ? fumAt : text.length);
+    const solo = hits.length === 1;
+    const gain = isFumbleTyped ? fumPreYds : yds;
+    for (const h of hits) {
+      const dd = resolve(h.abbr, isStPlay ? offTeam : defTeam, isStPlay ? undefined : 'def'); if (!dd) continue;
+      // Coverage tackles (0170) are their own kind — they must not inflate
+      // scrimmage tackle counts or the 10+ tackle game bonus.
+      out.push({ slug: dd.slug, play: row(c, ride, isStPlay ? 'st_tkl' : 'tackle', 0, 0, 0, 0, 0, { tt: solo ? 's' : 'a' }) });
+      if (!isStPlay && gain < 0 && !isSackPlay) out.push({ slug: dd.slug, play: row(c, ride, 'tfl', 0, 0, 0, 0, 0) });
+      // Sack yards (0170) ride `y` — split credit halves the yardage too.
+      if (isSackPlay) out.push({ slug: dd.slug, play: row(c, ride, 'sack', solo ? Math.abs(gain) : Math.round(Math.abs(gain) / 2), 0, 0, 0, 0, solo ? undefined : { hf: 1 }) });
     }
   }
-  // TACKLES ON AN INTERCEPTION RETURN (v0.532.0). The returner is brought down
-  // by the team that threw it — a QB, a receiver — and the text names them in
-  // the same trailing parentheses. The scrimmage block above never looked at
-  // an interception play, so those tackles went uncredited; a league paying
-  // an offensive tackle (offTackle, per position) needs them. Strict on team:
-  // only a man on the passing side is credited.
-  if (isInt && !isTD) {
-    const pm = /\(([^()]+)\)\s*\.?\s*$/.exec(text);
-    if (pm) {
-      const start = text.lastIndexOf(pm[1]);
-      const hits = names.filter((n) => n.idx >= start && n.idx < start + pm[1].length);
-      for (const h of hits) {
-        const oo = resolve(h.abbr, offTeam, 'off');
-        if (oo && oo.team === offTeam) out.push({ slug: oo.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: hits.length === 1 ? 's' : 'a' }) });
-      }
+  // TACKLES ON A TURNOVER RETURN (v0.532.0 interceptions; v0.533.0 lost
+  // fumbles too). The returner is brought down by the team that gave the ball
+  // up — a QB, a receiver — named in the parentheses after the return. A
+  // league paying an offensive tackle (offTackle, per position) needs them.
+  // Strict on team: only a man on the side that lost the ball is credited.
+  if ((isInt || lostFumble) && !isTD) {
+    const mark = isInt ? text.indexOf('INTERCEPTED by') : text.indexOf('RECOVERED by');
+    const hits = mark >= 0 ? tacklersAfter(mark) : [];
+    for (const h of hits) {
+      const oo = resolve(h.abbr, offTeam, 'off');
+      if (oo && oo.team === offTeam) out.push({ slug: oo.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: hits.length === 1 ? 's' : 'a' }) });
+    }
+  }
+  // …and after an OWN recovery the recoverer's run-back is tackled by the
+  // defense, a normal defensive tackle.
+  if (ownFumble && !isTD) {
+    const mark = text.search(/recovered by|and recovers/i);
+    const hits = mark >= 0 ? tacklersAfter(mark) : [];
+    for (const h of hits) {
+      const dd = resolve(h.abbr, defTeam, 'def');
+      if (dd && dd.team === defTeam) out.push({ slug: dd.slug, play: row(c, ride, 'tackle', 0, 0, 0, 0, 0, { tt: hits.length === 1 ? 's' : 'a' }) });
     }
   }
   // Forced fumble — the name inside "FUMBLES (…)".
   const ffm = /FUMBLES\s*\(([^()]+)\)/.exec(text);
-  if (ffm) {
+  if (ffm && !/^Aborted$/i.test(ffm[1].trim())) {
     const start = text.indexOf(ffm[1], ffm.index);
     for (const h of names.filter((n) => n.idx >= start && n.idx < start + ffm[1].length)) {
       const dd = resolve(h.abbr, defTeam, 'def');
       if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'ff', 0, 0, 0, 0, 0) });
     }
   }
-  // Return yards after a takeaway (0170): the "for N yards" clause AFTER the
-  // takeaway marker — never the scrimmage clause earlier in the text.
-  const retYdsAfter = (marker) => {
-    const i = text.indexOf(marker); if (i < 0) return 0;
-    const ms = [...text.matchAll(/\bfor (\d+) yards?/g)].filter((m) => m.index > i);
-    return ms.length ? Number(ms[ms.length - 1][1]) || 0 : 0;
-  };
   const retTd = /Return Touchdown$/.test(typeText);
   // Individual INT + fumble recovery credit — with return yards, the return-TD
   // flag, and (0170) the individual defensive TD row for the scorer.
