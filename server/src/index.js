@@ -14,7 +14,7 @@ import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './po
 import { pollGame } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
-import { syncTeamOverrides } from './poll/teamOverrides.js';
+import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
@@ -492,6 +492,9 @@ async function tickContext(ctx, season) {
   } catch (e) { log(`[${ctx.tag}] seat agents`, e.message); }
   // The live season rate (v0.519.0): every AI ranking below reads the same
   // projection the manager's board shows, not the August bake.
+  // Current teams (v0.528.0): the fill and its wrong-window re-plan place
+  // players by where they play NOW, trades since the bake included.
+  try { await installTeamOverrides(log); } catch (e) { log(`[${ctx.tag}] team overrides`, e.message); }
   await installLiveProjRate(log);
   try {
     // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
