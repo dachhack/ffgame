@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.537.0 — @computer files a chat line as a GitHub issue
+
+Founder: "I want to tag @computer in any chat and have you read it and address
+my questions", then "just the me to you GitHub issue route" and "I'll add the
+action".
+- **Worker (`server/src/computer.js`):** each push sweep looks for "@computer"
+  in league chat and DM lines from COMPUTER_USERS (app_user ids). Each line is
+  filed once as an issue on dachhack/ffgame, labeled `computer`, with
+  "@computer" in the body for the founder's Action to pick up. Only the tagged
+  line goes in, never other members' messages. The asker gets a "Sent to
+  Computer · #N" push.
+- **0363 `computer_ask`:** the once-only claim, taken before the issue opens
+  and released if GitHub refuses, so the next sweep retries.
+- **Off until configured:** the repo secrets GH_ISSUES_TOKEN (fine-grained PAT,
+  this repo, Issues read+write) and COMPUTER_USERS are staged to Fly by
+  deploy-worker. The answering Action is the founder's own workflow.
+
 ### v0.536.0 — scoped rules reach IDP, head coaches and punters
 
 Founder: "yes, widen scoped rules to IDP, HC and P". The scorer already

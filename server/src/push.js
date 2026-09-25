@@ -27,6 +27,7 @@
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
+import { sweepComputer } from './computer.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
@@ -664,6 +665,9 @@ export { flush as __flushForTest };
 
 export async function sweepPush() {
   await detectChat().catch((e) => log('chat detector error', e.message));
+  // @computer (v0.537.0): file the founder's tagged lines as GitHub issues; the
+  // receipt push rides the same outbox as everything else.
+  await sweepComputer().then(enqueue).catch((e) => log('computer sweep error', e.message));
   await detectMembers().catch((e) => log('members detector error', e.message));
   await detectTrades().catch((e) => log('trades detector error', e.message));
   await detectDraft().catch((e) => log('draft detector error', e.message));

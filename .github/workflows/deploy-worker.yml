@@ -195,6 +195,21 @@ jobs:
           fi
           flyctl secrets set --stage VAPID_PRIVATE_KEY="$VAPID"
 
+      # @computer (v0.537.0): a fine-grained PAT (this repo, Issues read+write)
+      # and the app_user ids allowed to file. Either missing → skipped, and the
+      # worker leaves @computer off. Same timing gotcha as above.
+      - name: stage @computer credentials
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          GH_ISSUES_TOKEN: ${{ secrets.GH_ISSUES_TOKEN }}
+          COMPUTER_USERS: ${{ secrets.COMPUTER_USERS }}
+        run: |
+          if [ -z "$GH_ISSUES_TOKEN" ] || [ -z "$COMPUTER_USERS" ]; then
+            echo "GH_ISSUES_TOKEN / COMPUTER_USERS not set — skipping (@computer stays off)"
+            exit 0
+          fi
+          flyctl secrets set --stage GH_ISSUES_TOKEN="$GH_ISSUES_TOKEN" COMPUTER_USERS="$COMPUTER_USERS"
+
       - name: fly deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
