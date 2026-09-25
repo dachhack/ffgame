@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.525.0 — a refused auto-fill row no longer empties the whole seat
+
+Founder, after v0.524.0: "Spy still says no one there yet." The lock fill
+wrote each seat's lineup as ONE upsert and never read its error (supabase-js
+returns errors, it doesn't throw). If a trigger refused any single row (slot
+cap, locked metric, stash, flag), none of the seat's spots landed and nothing
+was logged. Now a refused batch retries row by row, so the rest land, and
+each refusal is logged ("[lock] auto-fill row refused"). Server-only.
+
 ### v0.524.0 — AI teams' spots are set at lock, like everyone else's
 
 Founder: "Let's set the slots for AI teams and any player who has not set

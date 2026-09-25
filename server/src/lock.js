@@ -791,7 +791,26 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
           player_slug: p.slug, metric_id: p.metric, locked: sealNow, revealed_at: sealNow ? iso : null,
         };
       });
-      if (rows.length) { await db().from('sealed_pick').upsert(rows, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' }); n++; }
+      // NEVER SILENT (v0.525.0): supabase-js returns an error rather than
+      // throwing, and one refused row (a trigger: slot cap, locked metric,
+      // stash) fails the whole batch — every spot of the seat stayed empty
+      // with nothing in the log. Retry row by row so the rest still land, and
+      // name each refusal.
+      if (rows.length) {
+        const onConflict = 'matchup_id,app_user_id,game_window,roster_slot';
+        const { error } = await db().from('sealed_pick').upsert(rows, { onConflict });
+        if (!error) n++;
+        else {
+          console.error('[lock] auto-fill batch refused', m.id, rosterId, error.message);
+          let landed = 0;
+          for (const r of rows) {
+            const { error: e1 } = await db().from('sealed_pick').upsert([r], { onConflict });
+            if (e1) console.error('[lock] auto-fill row refused', m.id, rosterId, `${r.game_window}#${r.roster_slot}`, r.player_slug, e1.message);
+            else landed++;
+          }
+          if (landed) n++;
+        }
+      }
     }
   }
   return n;
