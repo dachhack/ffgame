@@ -1,0 +1,6 @@
+{
+  "mode": "repoll",
+  "week": 1,
+  "season": "2026",
+  "why": "Re-ingest week 1's plays through the v0.533-0.535 parser (lost fumbles, sacks on fumble/safety types, tacklers after the gain, safeties, kickoff-return TDs, HC conversions, live QB hits / passes defended). Play data only — no finals are rewritten, and week 1 is NOT re-stamped (Kickoff League never played it; see 001)."
+}
