@@ -13,12 +13,12 @@ import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slat
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
-import { autoLineup } from './engine.js';
+import { autoLineup, liveTeamOf } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
-import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
+import { LOCK_LEAD_MS, hasSlate, windowForTeam } from '../../packages/core/src/data/nflSlate.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
 
@@ -719,8 +719,36 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // picks" and was skipped wholesale), then its little sibling (a window
       // with 2 of 3 slots set kept its empty slot). A slot counts as set only
       // if it holds a pick; the fill below targets exactly the empty ones.
-      const { data: existing } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug')
+      const { data: existingAll } = await db().from('sealed_pick').select('game_window,roster_slot,player_slug,locked')
         .eq('matchup_id', m.id).eq('app_user_id', seatUid).not('player_slug', 'is', null);
+      // A PLAYER IN A WINDOW HIS TEAM DOESN'T PLAY IS NO PICK (v0.526.0). Fills
+      // written before v0.523.0 placed players by their 2025 team (Tyler
+      // Allgeier into Gridiron Gang's ATL@GB TNF spot, though he's a Cardinal
+      // now) and a fill never revisits a filled spot, so those rows would sit
+      // there scoring zero. An UNLOCKED row whose player's current team plays
+      // in a DIFFERENT window of this week's slate is cleared here and the
+      // spot re-filled below like any empty one. Conservative on purpose: a
+      // team the slate can't place (bye, a DST slug, an unknown player) is
+      // left alone, and a locked row or a due window is never touched.
+      const stale = hasSlate(m.week) ? (existingAll ?? []).filter((r) => {
+        if (r.locked || (dueWins && dueWins.has(r.game_window))) return false;
+        // Only a seat the fill below will refill ('empty' opts a human out),
+        // and only a plain slate spot — an extra slot ('x0') rides the
+        // deepest window whatever the player's game.
+        if (!(isAi || policy !== 'empty') || !/^\d+$/.test(String(r.roster_slot))) return false;
+        const t = liveTeamOf(r.player_slug);
+        const w = t ? windowForTeam(m.week, t) : null;
+        return !!w && w !== r.game_window;
+      }) : [];
+      for (const r of stale) {
+        const { error } = await db().from('sealed_pick').delete()
+          .eq('matchup_id', m.id).eq('app_user_id', seatUid).eq('game_window', r.game_window)
+          .eq('roster_slot', r.roster_slot).eq('locked', false);
+        if (error) console.error('[lock] stale pick clear', m.id, rosterId, `${r.game_window}#${r.roster_slot}`, error.message);
+        else console.log('[lock] cleared wrong-window pick', m.id, rosterId, `${r.game_window}#${r.roster_slot}`, r.player_slug);
+      }
+      const staleKeys = new Set(stale.map((r) => `${r.game_window}#${r.roster_slot}`));
+      const existing = (existingAll ?? []).filter((r) => !staleKeys.has(`${r.game_window}#${r.roster_slot}`));
       const setSlots = new Set((existing ?? []).map((r) => `${r.game_window}#${r.roster_slot}`));
       // A GHOST OR A BYE STEAL HOLDS ITS SPOT (v0.522.0). The resolver fills a
       // spot with the phantom only while nobody is fielded there, so this fill

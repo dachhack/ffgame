@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.526.0 — wrong-window auto-fills are re-placed; web Spy re-reads
+
+The Gridiron Gang TNF spy (TheRFM) read "— no player —" though the lock fill
+had put Tyler Allgeier there. Two faults:
+- **Web Spy was stale.** Hydration kept only which spot was spied, not the
+  server's answer, so a reload fell back to the local board, which never has
+  a sealed opponent pick. The store now re-reads use_spy (free for a spot you
+  already paid for, up to kickoff) and stores the value.
+- **The fill used 2025 teams.** The TNF lock fill ran before v0.523.0, so it
+  placed players by their 2025 team: Allgeier (ATL in the bake, ARI now) into
+  ATL@GB. A fill never revisits a filled spot. Now an UNLOCKED row whose
+  player's current team plays a different window of this week's slate is
+  cleared and re-filled. It skips locked rows, due windows, extra slots,
+  byes, team-keyed K/DST slugs and 'empty'-policy human seats.
+
 ### v0.525.0 — a refused auto-fill row no longer empties the whole seat
 
 Founder, after v0.524.0: "Spy still says no one there yet." The lock fill
