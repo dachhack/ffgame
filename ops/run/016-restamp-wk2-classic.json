@@ -1,0 +1,7 @@
+{
+  "mode": "restamp",
+  "week": 2,
+  "season": "2026",
+  "confirm": "RESTAMP",
+  "why": "Re-resolve week 2's CLASSIC finals against the re-ingested plays (drip leagues are skipped by design — a drip week cannot be re-resolved faithfully). Offline check for Kickoff League: no result changes; roster 3 -1.8, roster 7 -2.0, roster 8 +2.5, roster 2 -1.4 on the manual spots (8 vs 2 widens from 2.0 to ~5.9). Prints every matchup it moves."
+}

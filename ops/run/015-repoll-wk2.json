@@ -1,0 +1,6 @@
+{
+  "mode": "repoll",
+  "week": 2,
+  "season": "2026",
+  "why": "Re-ingest week 2's plays through the v0.533-0.535 parser, ahead of 016's re-stamp."
+}
