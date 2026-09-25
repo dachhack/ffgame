@@ -12,6 +12,7 @@ import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { powerupById, buffAppliesToSpot } from '@drip/core/data/powerups';
 import { GHOST_POINTS } from '@drip/core/engine/sim';
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { getPlayer } from '@drip/core/data/league';
 import { PlayerCard } from '../app/cardTable';
 import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
@@ -478,6 +479,32 @@ export function SetupRow(props: {
             {!lockPlayer && <button onClick={onOpenPicker} className="mono mx-editplr" style={{ ...link, color: 'var(--opp)' }}>⇄ PLAYER</button>}
           </div>
         </div>
+      ) : phantomPu?.id === 'ghost' ? (
+        // THE GHOST SIGNS A CONTRACT (v0.527.0). Founder: "let's put the ghost
+        // on a card like he is an actual player. That would be humorous." Same
+        // .mx-spot markup as a fielded player, so the card table dresses him
+        // exactly like one (cream stock, centered headshot, metric plate) —
+        // a headshot that is a ghost, a name that is a pun, a stat line that
+        // is his flat 14. No ✕ and no ⇄: fielding a player here would stand
+        // him down and waste the card.
+        <div title={phantomPu.blurb} className="mx-spot"
+          style={{ position: 'relative', minWidth: 0, background: 'var(--surface)', border: '1px solid var(--bd)', borderLeft: '3px solid var(--you)', borderRadius: 4, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div className="mx-id" style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+            <div className="mx-idbtn" style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
+              <GhostHeadshot size={isMobile ? 40 : 48} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{GHOST_CARD.name}</span>
+                <div><span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{GHOST_CARD.pos} · {GHOST_CARD.team}</span></div>
+              </div>
+            </div>
+          </div>
+          <div className="mx-met" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span className="grotesk" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{GHOST_CARD.metric}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'auto', paddingTop: 4 }}>
+            <span className="mono" style={{ fontSize: fs(8.5), fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{GHOST_CARD.line}</span>
+          </div>
+        </div>
       ) : phantomPu ? (
         // A GHOST or a Bye Steal holds this empty spot (v0.516.0, founder:
         // "Ghost loads but it still shows a blank card in the spot. Let's put
@@ -741,5 +768,15 @@ export function ScoutModal({ win, week, pool, oppName, onClose }: {
         </div>
       </div>
     </ModalBackdrop>
+  );
+}
+
+/** The Ghost's "headshot" (v0.527.0): a photo frame with nobody in it but a
+ *  ghost — the same footprint PlayerImg takes, so the card lays out alike. */
+function GhostHeadshot({ size }: { size: number }) {
+  return (
+    <div aria-label="Ghost" style={{ width: size, height: size, borderRadius: Math.round(size * 0.22), flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 50% 40%, #2B4A55, #13232B)', fontSize: Math.round(size * 0.62), lineHeight: 1 }}>
+      <span style={{ filter: 'drop-shadow(0 0 6px rgba(160,240,255,0.55))' }}>👻</span>
+    </div>
   );
 }

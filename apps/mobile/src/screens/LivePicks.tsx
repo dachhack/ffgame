@@ -971,17 +971,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  "Ghost loads but it still shows a blank card in the spot. Let's put a
    *  ghost there."). From the recorded plays — the resolver fills the spot
    *  with it only while nobody is fielded there. */
-  const phantomOf = (win: string, slot: string): { icon: string; title: string; sub: string } | null => {
-    if (targeted.ghost?.includes(`${win}|${slot}`)) return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `BANKS ${GHOST_POINTS} FLAT` };
+  const phantomOf = (win: string, slot: string): { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' } | null => {
+    if (targeted.ghost?.includes(`${win}|${slot}`)) return { icon: powerupById('ghost')?.icon ?? '👻', title: 'GHOST PLAYER', sub: `BANKS ${GHOST_POINTS} FLAT`, kind: 'ghost' as const };
     const bs = targeted.byeSteal;
     if (bs && bs.win === win && bs.slot === slot) {
       const pl = pool.find((p) => p.slug === bs.slug);
-      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${pl ? poolToPlayer(pl).name : bs.slug} · BYE`, sub: `BYE STEAL · ${Number(bs.pts ?? 0).toFixed(1)} FLAT` };
+      return { icon: powerupById('bye-steal')?.icon ?? '🛌', title: `${pl ? poolToPlayer(pl).name : bs.slug} · BYE`, sub: `BYE STEAL · ${Number(bs.pts ?? 0).toFixed(1)} FLAT`, kind: 'bye' as const };
     }
     return null;
   };
-  const myPhantoms = (win: string): Record<string, { icon: string; title: string; sub: string }> => {
-    const out: Record<string, { icon: string; title: string; sub: string }> = {};
+  const myPhantoms = (win: string): Record<string, { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' }> => {
+    const out: Record<string, { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' }> = {};
     for (const sl of slots.filter((x) => x.win === win)) { const ph = phantomOf(win, sl.slot); if (ph && !mineAt(win, sl.slot)) out[sl.slot] = ph; }
     return out;
   };

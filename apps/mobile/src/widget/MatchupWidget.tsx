@@ -22,6 +22,7 @@
 // react-native-android-widget can express: flex boxes and text, no fonts we
 // ship, no animation, no clock. Colours are fixed to the app's dark palette:
 // a widget has no ThemeCtx, and a home screen is not the app.
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import React from 'react';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
 import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard, type SideLeft } from '@drip/core/data/widgetFeed';
@@ -354,7 +355,7 @@ function tileLook(c: WidgetCard): TileLook {
     case 'empty': return { face: '✕', name: 'Unset', foot: 'SET IT', footColor: C.warn, border: C.warn };
     case 'none': return { face: '∅', name: 'None', foot: 'AVAILABLE', footColor: C.warn, border: C.warn };
     // A GHOST (or a Bye Steal) holds the slot (v0.520.0): filled, not a warning.
-    case 'ghost': return { face: c.phantom === 'bye-steal' ? '🛌' : '👻', name: c.name || 'Ghost', foot: c.points != null ? pts : c.phantom === 'bye-steal' ? 'BYE STEAL' : 'GHOST ✓', footColor: C.you, border: C.you };
+    case 'ghost': return { face: c.phantom === 'bye-steal' ? '🛌' : '👻', name: c.name || GHOST_CARD.name, foot: c.points != null ? pts : c.phantom === 'bye-steal' ? 'BYE STEAL' : GHOST_CARD.metric.toUpperCase(), footColor: C.you, border: C.you };
     case 'missed': return { face: '—', name: 'Missed', foot: 'NO PICK', footColor: C.faint, border: C.line, dim: true };
     case 'unsealed': return { face: c.pos ?? '?', name: c.name, foot: 'NO METRIC', footColor: C.warn, border: C.warn };
     case 'set': case 'sealed':

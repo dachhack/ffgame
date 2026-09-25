@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
+import { GHOST_CARD, isGhostSlug } from '@drip/core/data/ghostCard';
 // liveCardFlags moved to core (engine/matchup) when the native demo needed the
 // same flags off the same play-by-play. Re-exported here so this stays the
 // import site the board screens already use.
@@ -578,6 +579,8 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
 }) {
   const art = useCardArt(slug, team);
   const suit = posVars(pos);
+  // The Ghost (v0.527.0): a ghost where the headshot goes.
+  const ghost = isGhostSlug(slug);
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
     <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : flip ? 'ct-flip' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
@@ -586,7 +589,7 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
         <div className="ct-side ct-face" style={locked ? { filter: 'grayscale(.55) brightness(.75)' } : undefined}>
           <div className="ct-fill" style={{ height: `${fillPct}%` }} />
           <div className="ct-facehead">
-            <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+            <span className="ct-suit" style={suit}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               {/* header crest — skipped while the art box itself shows the logo */}
               {art.logo && art.stage !== 'logo' && <CornerLogo src={art.logo} />}
@@ -594,7 +597,9 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
             </span>
           </div>
           <div className="ct-art" style={{ borderColor: suit.color as string }}>
-            {art.stage === 'head'
+            {ghost
+              ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'radial-gradient(circle at 50% 40%, #2B4A55, #13232B)', fontSize: 34 }}>👻</span>
+              : art.stage === 'head'
               ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
               : art.stage === 'logo'
                 ? <img className="ct-artlogo" src={art.logo!} alt="" draggable={false} onError={art.fail} />
@@ -641,6 +646,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }) {
   const art = useCardArt(slug, team);
   const suit = posVars(pos);
+  const ghost = isGhostSlug(slug);   // v0.527.0: the Ghost's own card
   const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
   return (
@@ -648,7 +654,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
       style={wobbleVars(slug)}>
       <div className="ct-fill" style={{ height: `${fillPct}%` }} />
       <div className="ct-lhead">
-        <span className="ct-suit" style={suit}>{pos === 'DEF' ? 'DST' : pos}</span>
+        <span className="ct-suit" style={suit}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</span>
         {team && (
           <span className="ct-lteam" style={{ display: 'inline-flex', alignItems: 'center', gap: 2.5 }}>
             {art.logo && art.stage !== 'logo' && <CornerLogo src={art.logo} size={9} />}
@@ -657,7 +663,9 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
         )}
       </div>
       <div className="ct-lart" style={{ borderColor: suit.color as string }}>
-        {art.stage === 'head'
+        {ghost
+          ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'radial-gradient(circle at 50% 40%, #2B4A55, #13232B)', fontSize: 26 }}>👻</span>
+          : art.stage === 'head'
           ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
           : art.stage === 'logo'
             ? <img className="ct-artlogo" src={art.logo!} alt="" draggable={false} onError={art.fail} />

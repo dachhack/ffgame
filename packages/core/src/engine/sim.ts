@@ -361,7 +361,9 @@ export const UNDERDOG_MULT = 1.5;
  *  than a Bye Steal, but needs no benched bye player and its floor is certain. */
 export const GHOST_POINTS = 14;
 export const GHOST_PLAYER: Player = {
-  id: '__ghost__', name: 'Ghost', full: 'Ghost Player', pos: 'WR', team: 'GHOST',
+  // Named like a signed player since v0.527.0 (GHOST_CARD reads these), so
+  // every board that draws him as a card deals "G. Host · BOO".
+  id: '__ghost__', name: 'G. Host', full: 'G. Host', pos: 'WR', team: 'BOO',
   stats: { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 },
 };
 

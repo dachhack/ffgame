@@ -13,6 +13,7 @@ import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringR
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase, hasSlate, scheduledGamesFor } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
+import { GHOST_CARD, isGhostSlug } from '@drip/core/data/ghostCard';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
 import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
@@ -3772,8 +3773,11 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
     ? slot.events
     : slot.events.filter((e) => e.clock <= (e.side === 'you' ? youClock : theirClock));
   const lastEffect = [...visibleEvents].reverse().find((e) => e.effect)?.effect;
-  const yMet = metricById(slot.you.player.pos, slot.you.metricId);
-  const tMet = metricById(slot.their.player.pos, slot.their.metricId);
+  // The Ghost's metric is his flat bank (v0.527.0) — metricById knows no
+  // 'ghost', and the chip read "NO METRIC · scores 0" over his 14.
+  const ghostMet = { name: GHOST_CARD.metric, tag: 'FLAT' };
+  const yMet = isGhostSlug(slot.you.player.id) ? ghostMet : metricById(slot.you.player.pos, slot.you.metricId);
+  const tMet = isGhostSlug(slot.their.player.id) ? ghostMet : metricById(slot.their.player.pos, slot.their.metricId);
   // Card theme, window not kicked yet: your card face-up (your own pick — no
   // score to show), the opponent's still the deck's sealed back. Flips live.
   if (cards && !kicked) {

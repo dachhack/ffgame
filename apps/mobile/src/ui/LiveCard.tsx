@@ -25,6 +25,7 @@ import { useTheme, MONO, alpha } from '../theme.native';
 import { useWobble, HotGlow } from './animations';
 import { cardBackArt } from './cards';
 import { InjuryNow } from './rosterGroup';
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 
 const STOCK = '#F4EDDA';
 const STOCK_TILE = require('../../assets/card-stock.png');
@@ -58,10 +59,13 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).join('').s
 /** The mini physical card: identity, the liquid bank fill, and the hot/nuked
  *  states. Same stock and texture as the full card — it should read as the same
  *  object seen smaller, not as a different component. */
-export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, idx = 0, float = false }: {
+export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked = false, idx = 0, float = false, ghost = false }: {
   side: 'you' | 'their';
   slug: string; name: string; pos: string; team?: string | null;
   bank?: number | null; hot?: boolean; nuked?: boolean; idx?: number;
+  /** The Ghost's own card (v0.527.0): a ghost where the headshot goes, his
+   *  made-up position on the suit chip. */
+  ghost?: boolean;
   /** Overhang the container, as the web's `.ct-float` does on a score strip. */
   float?: boolean;
 }) {
@@ -106,7 +110,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <View style={{ borderWidth: 1, borderColor: suit.bd, backgroundColor: suit.bg, borderRadius: 3, paddingHorizontal: 3.5, paddingVertical: 1.5 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: suit.fg }}>{pos === 'DEF' ? 'DST' : pos}</Text>
+                  <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: suit.fg }}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</Text>
                 </View>
                 <InjuryNow slug={slug} size={6.5} />
               </View>
@@ -119,7 +123,9 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
             </View>
 
             <View style={{ height: float ? 46 : 50, borderRadius: 5, borderWidth: 1.5, borderColor: suit.fg, overflow: 'hidden', backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center' }}>
-              {photo
+              {ghost
+                ? <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1D3540', alignItems: 'center', justifyContent: 'center' }]}><Text style={{ fontSize: 30 }}>👻</Text></View>
+                : photo
                 ? <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                 : logo
                   ? <Image source={{ uri: logo }} style={{ width: '70%', height: '70%' }} resizeMode="contain" />
@@ -172,7 +178,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   windowEmpty?: boolean;
   /** A GHOST or a Bye Steal holds this seat (v0.516.0): the phantom in the
    *  card's place, what it is, and what it has banked. */
-  phantom?: { icon: string; title: string; sub: string } | null;
+  phantom?: { icon: string; title: string; sub: string; kind?: 'ghost' | 'bye' } | null;
   gameLabel?: string | null;
   metricName?: string | null;
   stat?: string | null;
@@ -190,6 +196,28 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   // `.ct-live.ct-opp { flex-direction: row-reverse }`.
   const mirror = side === 'their';
 
+  // THE GHOST PLAYS AS A PLAYER (v0.527.0, founder: "put the ghost on a card
+  // like he is an actual player"). A real mini card — stock, suit chip, team,
+  // a ghost for a headshot — with his one stat on the metric chip.
+  if (phantom?.kind === 'ghost') {
+    return (
+      <Pressable onPress={onPress} disabled={!onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
+        <MiniCard float ghost side={side} slug="" name={GHOST_CARD.name} pos="DEF" team={GHOST_CARD.team} bank={bank} idx={idx} />
+        <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
+          <View style={{ backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 55), borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, maxWidth: '100%', minHeight: 36, justifyContent: 'center' }}>
+            <Text numberOfLines={2} style={{ fontSize: 11, fontWeight: '800', color: accent, textAlign: mirror ? 'right' : 'left' }}>{GHOST_CARD.metric}</Text>
+          </View>
+          {bank != null && (
+            <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={{ fontSize: 26, fontWeight: '800', lineHeight: 28, color: accent }}>{fmt(bank)}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
+            </View>
+          )}
+          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8, color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{GHOST_CARD.line}</Text>
+        </View>
+      </Pressable>
+    );
+  }
   if (phantom) {
     return (
       <Pressable onPress={onPress} disabled={!onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
