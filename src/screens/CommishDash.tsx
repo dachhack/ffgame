@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
-import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, type SlotSpec } from '@drip/core/engine/classic';
+import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
 import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar } from '@drip/core/data/liveApi';
@@ -982,7 +982,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                     const set = (cur[f.key] ?? '').trim() !== '';
                     return (
                       <label key={f.key} className="mono" style={{ fontSize: 10, fontWeight: 700, color: set ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
-                        {f.label}{f.perYard ? ' /YD' : ''}
+                        {f.label}{f.perYard ? ' /YD' : ''}{DELAYED_SCORING_KEYS.has(f.key) ? ' ⏱' : ''}
                         <input value={cur[f.key] ?? ''} inputMode="decimal" placeholder={scDraft[f.key] ?? String(DEFAULT_CLASSIC_SCORING[f.key])}
                           onChange={(e) => setBpDraft((d) => ({ ...d, [bpPos]: { ...(d[bpPos] ?? {}), [f.key]: e.target.value } }))}
                           style={{ fontFamily: 'inherit', fontSize: 13.5, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${set ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, width: '100%', boxSizing: 'border-box' }} />
@@ -1013,12 +1013,15 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               ).map((sec) => (
                 <div key={sec.section} style={{ marginTop: 8 }}>
                   <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{sec.section}</div>
+                  {sec.fields.some((f) => DELAYED_SCORING_KEYS.has(f.key)) && (
+                    <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>⏱ {DELAYED_SCORING_NOTE}</div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(124px, 1fr))', gap: 6 }}>
                     {sec.fields.map((f) => {
                       const changed = Number(scDraft[f.key]) !== DEFAULT_CLASSIC_SCORING[f.key];
                       return (
                         <label key={f.key} className="mono" style={{ fontSize: 10, fontWeight: 700, color: changed ? 'var(--you)' : 'var(--faint)', display: 'grid', gap: 3 }}>
-                          {f.label}{f.perYard ? ' /YD' : ''}
+                          {f.label}{f.perYard ? ' /YD' : ''}{DELAYED_SCORING_KEYS.has(f.key) ? ' ⏱' : ''}
                           <input value={scDraft[f.key] ?? ''} inputMode="decimal"
                             onChange={(e) => setScDraft((d) => ({ ...d, [f.key]: e.target.value }))}
                             style={{ fontFamily: 'inherit', fontSize: 13.5, padding: '5px 6px', background: 'var(--bg)', color: 'var(--text)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, width: '100%', boxSizing: 'border-box' }} />
