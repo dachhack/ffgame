@@ -86,7 +86,12 @@ export function extractCredits(csvText) {
     // attribute — blocked-kick and other defensive returns.
     const tdTeam = g('td_team').trim();
     const takeawayReturn = g('interception') === '1' || g('fumble_lost') === '1';
-    if (tdTeam && tdTeam === base.defteam && !takeawayReturn) {
+    // …nor a kick or punt RETURN TD (v0.533.0): the returner's own return row
+    // already carries it, and a dst_td on an offensive player made a scoped
+    // per-TD rule count the same touchdown twice. A BLOCKED punt returned for
+    // six is the defense's and stays.
+    const kickReturn = g('kickoff_attempt') === '1' || (g('punt_attempt') === '1' && g('punt_blocked') !== '1');
+    if (tdTeam && tdTeam === base.defteam && !takeawayReturn && !kickReturn) {
       const gsis = g('td_player_id').trim();
       if (gsis) out.push({ ...base, k: 'dst_td', gsis, name: g('td_player_name').trim() });
     }

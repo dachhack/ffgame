@@ -15,7 +15,8 @@ import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { pollInjuries } from './poll/injuries.js';
-import { gamesToPoll, espnCurrentWeek } from './poll/scoreboard.js';
+import { gamesToPoll, espnCurrentWeek, getGames } from './poll/scoreboard.js';
+import { REGULAR_SEASON as REGULAR_SEASON_TYPE } from './seasonType.js';
 import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
 import { simulate } from './simulate.js';
@@ -100,6 +101,29 @@ async function main() {
       let wrote = 0;
       for (const id of ids) wrote += await pollGame(id, week, idx);
       console.log('polled', ids.length, 'games,', wrote, 'rows at board week', week);
+      break;
+    }
+    case 'repoll-week': {
+      // ⟳ RE-INGEST A WEEK'S PLAYS (v0.533.0). The poller only reaches games
+      // while their week is live, so a feed-parser fix (or an NFL stat
+      // correction) never touched a week already played. This re-polls every
+      // game of the week — completed or not — through the SAME pollGame the
+      // worker runs, which reconciles (adds what is new, removes what the
+      // parser no longer emits). Scores are NOT rewritten here: re-stamp the
+      // week afterwards if its finals should move.
+      //   node src/cli.js repoll-week <week> [season]
+      const week = Number(args[0]);
+      if (!Number.isFinite(week) || week < 1) { console.error('usage: repoll-week <week> [season]'); process.exitCode = 1; break; }
+      const season = args[1] ? Number(args[1]) : config.season;
+      const idx = await buildPlayerIndex();
+      const games = await getGames(season, week, REGULAR_SEASON_TYPE);
+      let wrote = 0, failed = 0;
+      for (const g of games) {
+        try { wrote += await pollGame(g.eventId, week, idx); }
+        catch (e) { failed++; console.error('poll', g.eventId, e.message); }
+      }
+      console.log(`repolled week ${week} (${season}): ${games.length} games, ${wrote} rows, ${failed} failed`);
+      if (failed) process.exitCode = 1;
       break;
     }
     case 'leagues': {
@@ -628,13 +652,16 @@ async function main() {
         // Paths in a request are repo-relative, like everywhere else in the
         // repo; the CLI runs from server/, so they are resolved one level up.
         argv.push('restore-week', `../${need('file')}`);
+      } else if (req.mode === 'repoll') {
+        argv.push('repoll-week', need('week'));
+        if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'refinalize') {
         argv.push('refinalize-week', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.dry === true) argv.push('--dry');
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });

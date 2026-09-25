@@ -363,6 +363,24 @@ async function closeWeek(tag, week, games, season, regular) {
     log(`[${tag}] NOT closing: scoreboard has ${games.length} of ${slateGames} scheduled games`);
     return;
   }
+  // THE LAST GAME GETS ITS FINAL PASS TOO (v0.533.0). Finals are re-polled
+  // only from the live loop, which a week stops reaching the moment every game
+  // reads completed — so Monday night's last plays and its game-summary rows
+  // (points/yards allowed, the coaches' result) could be missed for good.
+  // Until the report goes out, every final is re-polled here on the same
+  // FINAL_REPOLL_MS cadence; after release the week is frozen anyway.
+  {
+    const due0 = regular ? await reportReleaseAt(week, season) : 0;
+    if (due0 > 0 && Date.now() < due0) {
+      const finals = games.filter((g) => g.completed && (finalPolled.get(g.eventId) ?? 0) <= Date.now() - FINAL_REPOLL_MS);
+      let wrote = 0;
+      for (const g of finals) {
+        finalPolled.set(g.eventId, Date.now());
+        try { wrote += await pollGame(g.eventId, week, playerIndex); } catch (e) { log(`[${tag}] final pass`, g.eventId, e.message); }
+      }
+      if (finals.length) log(`[${tag}] final pass:`, finals.length, 'games,', wrote, 'rows');
+    }
+  }
   const f = await finalizeMatchups(week, true);
   if (f) log(`[${tag}] finalized`, f, 'matchups');
   try {

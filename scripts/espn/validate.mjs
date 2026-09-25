@@ -95,15 +95,27 @@ const missExamples = [];
 
 // index plays by (slug,pid). `return` plays aren't in wN.json (they live in
 // src/data/returns.ts) — exclude them here and validate them separately below.
+// ONE PLAYER CAN HOLD SEVERAL ROWS ON ONE PLAY (v0.533.0): a sacker's `tackle`
+// and `sack`, a QB's `pass` and the `tackle` he made on the return. Keyed on
+// (slug, pid) alone the last row written won, so adding a legitimate second
+// row read as a kind mismatch. Keep every row per key; compare against the one
+// whose kind matches the baked row, else the first.
 function indexByPid(obj) {
   const m = new Map();
-  for (const [slug, plays] of Object.entries(obj)) for (const p of plays) if (p.pid != null && p.k !== 'return') m.set(`${slug}|${p.pid}`, p);
+  for (const [slug, plays] of Object.entries(obj)) for (const p of plays) {
+    if (p.pid == null || p.k === 'return') continue;
+    const key = `${slug}|${p.pid}`;
+    if (!m.has(key)) m.set(key, []);
+    m.get(key).push(p);
+  }
   return m;
 }
-const bIdx = indexByPid(baked), eIdx = indexByPid(espn);
+const bIdxAll = indexByPid(baked), eIdx = indexByPid(espn);
+const bIdx = new Map([...bIdxAll].map(([k, v]) => [k, v[0]]));
 
 for (const [key, bp] of bIdx) {
-  const ep = eIdx.get(key);
+  const eRows = eIdx.get(key);
+  const ep = eRows ? (eRows.find((r) => r.k === bp.k) ?? eRows[0]) : undefined;
   if (!ep) { bakedOnly++; if (missExamples.length < 8) missExamples.push(`baked-only ${key} k=${bp.k} y=${bp.y}`); continue; }
   matched++;
   let ok = true;
