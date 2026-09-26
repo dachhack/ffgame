@@ -122,6 +122,25 @@ begin
   perform mx_true(mixed_leagues_exist() and college_calendar_in_use(), 'mx5 the worker sees a mixed league');
   perform mx_true('94333' = any(college_live_schools()), 'mx5a and polls his school');
 
+  -- ══ mx7. PROJECTIONS FOR THE AI (0373) ═══════════════════════════════════
+  perform upsert_college_players(jsonb_build_array(
+    jsonb_build_object('espn_id', '94003', 'full_name', 'Mx Idle Back', 'pos', 'RB', 'school_abbr', 'MXNONE')));
+  perform mx_ok(seed_league_pool(lid, '[{"slug":"c-94001","full":"Mx Tide Back","pos":"RB"},{"slug":"c-94002","full":"Mx Dawg Wideout","pos":"WR"},{"slug":"c-94003","full":"Mx Idle Back","pos":"RB"}]'::jsonb), 'mx7 pool');
+  insert into native_roster (league_id, roster_id, slug) values (lid, 2, 'c-94002'), (lid, 2, 'c-94003') on conflict do nothing;
+  perform upsert_college_stats(2031, jsonb_build_array(
+    jsonb_build_object('espn_id', '94001', 'gp', 10, 'rush_yds', 1000, 'rush_td', 10, 'rec', 20, 'rec_yds', 200),
+    jsonb_build_object('espn_id', '94002', 'gp', 2, 'rec', 10, 'rec_yds', 150)));
+  r := college_proj_lines(5);
+  perform mx_true((select (e -> 'line' ->> 'rushYd')::numeric = 100 and (e -> 'line' ->> 'rushTd')::numeric = 1
+                     and (e ->> 'has_game')::boolean from jsonb_array_elements(r) e where e ->> 'slug' = 'c-94001'),
+    'mx7a a per-game line (1000 yds / 10 games = 100) and a game this week');
+  perform mx_true((select e -> 'line' = 'null'::jsonb and (e ->> 'has_game')::boolean from jsonb_array_elements(r) e where e ->> 'slug' = 'c-94002'),
+    'mx7b a two-game season is no line; his later game still counts');
+  perform mx_true((select not (e ->> 'has_game')::boolean from jsonb_array_elements(r) e where e ->> 'slug' = 'c-94003'),
+    'mx7c a school with no game this week: has_game false (benched like a bye)');
+  perform mx_true(has_function_privilege('authenticated', 'college_proj_lines(int)', 'execute'), 'mx7d the boards can read it');
+  delete from college_player_stats where espn_id in ('94001', '94002');
+
   -- ══ mx6. A DEVY LEAGUE IS NOT MIXED ══════════════════════════════════════
   r := create_native_league('Devy Not Mixed', '2032', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   dv := (r ->> 'league_id')::uuid;
@@ -130,7 +149,7 @@ begin
   perform mx_true(not league_is_mixed(dv), 'mx6b devy leagues keep college players on the shelf');
 
   delete from league_pool where league_id in (lid, dv);
-  delete from college_player where espn_id in ('94001', '94002');
+  delete from college_player where espn_id in ('94001', '94002', '94003');
   delete from nfl_slate where season = '2032';
   raise notice 'mixed probes done';
 end $$;

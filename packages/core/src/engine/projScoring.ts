@@ -56,6 +56,7 @@ import { idpLineFor, type ProjIdpLine } from '../data/projIdp2026';
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, scoringFor, type ClassicScoring } from './classic';
 import { scopedAdjustFor, leagueScoring, scoringLeague, clearLeagueScoring, setLeagueScoring } from './leagueScoring';
 import { slugSleeperId } from '../data/slugMeta';
+import { isCollegeSlug } from '../data/college';
 
 export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine, ProjHcLine, ProjPuntLine };
 
@@ -536,6 +537,8 @@ export function projectedPoints(
   // pool both are absent and the bake still resolves 960 of its 963 defenders
   // by name — only the three colliding slugs go unpriced, which is the honest
   // answer to "which Byron Young is this".
+  // A college player (c-<espn_id>) is priced from his own per-game line (0373).
+  if (isCollegeSlug(player.id)) return slotPos && isRetSlot(slotPos) ? 0 : collegeProjected(player, slot);
   const sid = player.sleeperId ?? slugSleeperId(player.id);
   // A RETURN-ONLY SPOT PROJECTS NOTHING (v0.311.2). `RET` is a SLOT identity,
   // not a position: a player scored there banks return production ONLY, and
@@ -598,6 +601,45 @@ export function projectedPoints(
   const adj = scopedAdjustFor(player, { slot });
   const out = scaled * adj.mult + adj.pts + adj.td * projTdsPerWeek(player.id, sid);
   return Math.round(out * 10) / 10;
+}
+
+// ── COLLEGE PLAYERS (0373) ──────────────────────────────────────────────────
+// No feed projects a college player, so every AI lineup used to rank them at
+// zero. What there is: his per-game line from his last full season (4+ games,
+// the season college_directory ranks by), installed by the host from
+// college_proj_lines. It is scored under the league's catalog exactly as an
+// NFL line is, so a TE-premium or a 6-point passing TD moves it the same way.
+// Plus, per board week, which college players have a game — no game (a bye,
+// or a mixed league's week after the college season) is scored like a bye.
+const COLLEGE_LINES = new Map<string, ProjStatLine>();
+const COLLEGE_GAMES = new Map<number, Map<string, boolean>>();
+
+/** Install college per-game lines (replacing all) and, optionally, one board
+ *  week's has-a-game answers. `hasGame` null means "no slate to judge by". */
+export function setCollegeProjections(rows: { slug: string; line?: ProjStatLine | null; has_game?: boolean | null }[], week?: number): void {
+  COLLEGE_LINES.clear();
+  const games = new Map<string, boolean>();
+  for (const r of rows ?? []) {
+    if (!isCollegeSlug(r.slug)) continue;
+    if (r.line) COLLEGE_LINES.set(r.slug, r.line);
+    if (r.has_game != null) games.set(r.slug, r.has_game);
+  }
+  if (week != null) COLLEGE_GAMES.set(week, games);
+}
+
+/** Does this college player have a game in this board week? true / false, or
+ *  null when nothing was installed for the week (no claim — like an NFL
+ *  player whose team is unknown). */
+export function collegeHasGame(week: number, slug: string): boolean | null {
+  return COLLEGE_GAMES.get(week)?.get(slug) ?? null;
+}
+
+function collegeProjected(player: { id: string; pos: string; team?: string | null }, slot?: string | null): number {
+  const line = COLLEGE_LINES.get(player.id);
+  if (!line) return 0;
+  const perGame = scoreProjLine(line, player.pos, scoringFor(cat(), player.pos));
+  const adj = scopedAdjustFor(player, { slot });
+  return Math.round((perGame * adj.mult + adj.pts + adj.td * (line.passTd + line.rushTd + line.recTd)) * 10) / 10;
 }
 
 /** Convenience for callers that hold a slug and a position rather than a

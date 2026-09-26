@@ -12,6 +12,8 @@ import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
+import { setCollegeProjections } from '../engine/projScoring';
+import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
@@ -3553,6 +3555,17 @@ export const commishResolveGraduation = (leagueId: string, espnId: string, keep:
   tracked(rpc<{ ok: boolean; error?: string; kept?: string; status?: string }>('commish_resolve_graduation',
     { p_league_id: leagueId, p_espn_id: espnId, p_keep: keep }),
     Ev.commishAction, { tool: 'graduation_conflict' });
+
+/** College players' projections for a board week (0373): per-game lines
+ *  (scored under the league's catalog by projectedPoints) and who has a game.
+ *  Installs them and returns how many lines arrived; 0 when the league has no
+ *  college players — nothing to re-price. */
+export async function installCollegeProjections(week: number): Promise<number> {
+  const rows = await rpc<{ slug: string; line?: ProjStatLine | null; has_game?: boolean | null }[]>('college_proj_lines', { p_week: week });
+  const list = Array.isArray(rows) ? rows : [];
+  setCollegeProjections(list, week);
+  return list.filter((r) => r.line).length;
+}
 
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });

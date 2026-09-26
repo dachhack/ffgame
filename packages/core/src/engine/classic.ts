@@ -26,7 +26,7 @@ import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
 import { scopedAdjustFor } from './leagueScoring';
-import { projectedPoints } from './projScoring';
+import { projectedPoints, collegeHasGame } from './projScoring';
 import { normTeam } from '../data/slugMeta';
 import { hasSlate, nflGameForTeam } from '../data/nflSlate';
 import { isCollegeSlug } from '../data/college';
@@ -1473,6 +1473,8 @@ export function slateAwareProj(
     const banked = leagueIsGolf() && opts?.expected !== false && z != null && z > 0 ? z : 0;
     if (risk >= 1) return banked;
     if (onBye(p.team)) return banked;
+    // A college player with no game this week (0373) is on bye by another name.
+    if (isCollegeSlug(p.id) && collegeHasGame(week, p.id) === false) return banked;
     const v = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? null }, d?.slot, d?.pos);
     if (leagueIsGolf() && opts?.expected !== false && v > 0) {
       return golfExpectedScore(p, v, d?.zeroPts ?? leagueGolfZeroPts(), risk);

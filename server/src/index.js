@@ -25,6 +25,7 @@ import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
 import { sweepGraduation } from './poll/graduate.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS } from './poll/collegeSlate.js';
+import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
@@ -413,6 +414,9 @@ async function reportReleaseAt(week, season) {
  *  to belong to a week nobody ticked any more. Week 1's report never posted
  *  for exactly that reason. */
 async function closeWeek(tag, week, games, season, regular) {
+  // Unmanaged seats resolved at the close rank college players too (0373) —
+  // even on a cold start, before any live tick installed their lines.
+  await installCollegeProj(week);
   const slate = slateFromGames(games);
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
   // A SHORT SCOREBOARD IS NOT A FINISHED WEEK (v0.457.0). Both callers gate on
@@ -488,6 +492,18 @@ async function closePriorWeek(regWeek, season) {
   const games = await getGames(season, prior, REGULAR_SEASON);
   if (!games.length || !games.every((g) => g.completed)) return;
   await closeWeek(`wk ${prior}`, prior, games, season, true);
+}
+
+// 0373: college projections, per board week, refreshed every 15 minutes.
+const collegeProjAt = new Map();
+async function installCollegeProj(week) {
+  if (Date.now() - (collegeProjAt.get(week) ?? 0) < 15 * 60e3) return;
+  collegeProjAt.set(week, Date.now());
+  try {
+    const { data, error } = await db().rpc('college_proj_lines', { p_week: week });
+    if (error) { log('college projections', error.message); return; }
+    setCollegeProjections(Array.isArray(data) ? data : [], week);
+  } catch (e) { log('college projections', e.message); }
 }
 
 /** The college twin of closePriorWeek (0371): ESPN rolls its college week
@@ -593,6 +609,9 @@ async function tickContext(ctx, season) {
   // players by where they play NOW, trades since the bake included.
   try { await installTeamOverrides(log); } catch (e) { log(`[${ctx.tag}] team overrides`, e.message); }
   await installLiveProjRate(log);
+  // College players' per-game lines and this week's has-a-game (0373), so the
+  // fill, the AI seats and the seat wire rank them instead of seeing zeros.
+  await installCollegeProj(week);
   try {
     // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
     // injuries come from injury_status inside.

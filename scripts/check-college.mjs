@@ -10,7 +10,8 @@ import { readFileSync } from 'node:fs';
 import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
-import { slotAllows, classicSlotsFromSpec, slotFilterLabel } from '../packages/core/src/engine/classic.ts';
+import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
+import { setCollegeProjections, collegeHasGame, projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -68,6 +69,31 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   ok(slotFilterLabel(cfbOnly.flt) === 'CFB ONLY' && slotFilterLabel(nflOnly.flt) === 'NFL ONLY', 'levels read on the spot');
   const mixed = readFileSync(new URL('../supabase/migrations/0372_mixed_leagues.sql', import.meta.url), 'utf8');
   ok(/lvl not in \('nfl', 'college'\)/.test(mixed) && /jsonb_build_object\('level', lvl\)/.test(mixed), 'the SQL builder stores the same two levels');
+}
+
+// ── 7. college projections for the AI (0373) ──
+{
+  const line = (o) => ({ passYd: 0, passTd: 0, int: 0, rushYd: 0, rushTd: 0, rec: 0, recYd: 0, recTd: 0, ...o });
+  setCollegeProjections([
+    { slug: 'c-1', line: line({ rushYd: 100, rushTd: 1, rec: 2, recYd: 20 }), has_game: true },   // 10+6+2+2 = 20 PPR
+    { slug: 'c-2', line: line({ rushYd: 60, rec: 1, recYd: 10 }), has_game: true },               // 6+1+1 = 8
+    { slug: 'c-3', line: line({ rushYd: 150, rushTd: 2 }), has_game: false },                     // 27, but no game
+    { slug: 'c-4', line: null, has_game: true },                                                  // no season yet
+    { slug: 'c-5', line: line({ rec: 5, recYd: 50 }), has_game: true },                           // a TE: 5+5 = 10
+  ], 7);
+  const P = (id, pos = 'RB') => ({ id, pos, team: '' });
+  ok(projectedPoints(P('c-1')) === 20 && projectedPoints(P('c-2')) === 8, 'a college line projects its PPR points per game');
+  ok(projectedPoints(P('c-4')) === 0, 'no qualifying season → no projection');
+  setLeagueProjScoring({ teRec: 1 });
+  ok(projectedPoints(P('c-5', 'TE')) === 15, 'the league\'s own catalog applies (TE premium: 10 → 15)');
+  clearLeagueProjScoring();
+  ok(collegeHasGame(7, 'c-3') === false && collegeHasGame(7, 'c-1') === true && collegeHasGame(8, 'c-1') === null, 'has-a-game is per week, unknown elsewhere');
+  const val = slateAwareProj(7);
+  ok(val(P('c-3')) === 0 && val(P('c-1')) === 20, 'no game this week is a bye: 27 → 0');
+  const [flex] = classicSlotsFromSpec([{ pos: ['RB', 'WR', 'TE'] }]);
+  const lu = optimalLineup([flex], [P('c-4'), P('c-3'), P('c-2'), P('c-1')], val);
+  ok(lu.spots[0].player?.id === 'c-1', `THE POINT: the AI starts the best college player with a game (got ${lu.spots[0].player?.id})`);
+  setCollegeProjections([], 7);
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
