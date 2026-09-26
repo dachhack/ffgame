@@ -18,6 +18,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.550.1 — college read-back
+
+A read-only report of what the worker stored for rostered college players, to
+check the college code against live games. It covers every league with a
+college player on a roster (or one league with `--league=`): the league's kind
+(college calendar / mixed / devy), its first matchups, and each college
+player's plays for each requested week, by game. Ask for the college board week
+(205 = college Week 5) and the NFL week the games fall in (4), because mixed
+leagues copy college plays into the NFL week.
+- Run: `npx tsx src/cli.js college-report 205,4`, or add a new ops request
+  under `ops/run/`: `{ "mode": "college-report", "weeks": [205, 4] }`.
+- Test: `server/test/college-report.mjs`.
+- Note: a league built now schedules from the first week that hasn't kicked
+  off (college Week 6 / NFL Week 5), so this weekend shows polling only;
+  scoring starts next weekend.
+
 ### v0.550.0 — bowl games
 
 College-calendar leagues can now run their playoffs through bowl season.

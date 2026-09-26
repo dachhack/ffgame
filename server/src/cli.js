@@ -660,8 +660,12 @@ async function main() {
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.dry === true) argv.push('--dry');
+      } else if (req.mode === 'college-report') {
+        // v0.550.1: read-only — plays stored for rostered college players.
+        argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
+        if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -717,6 +721,16 @@ async function main() {
         if (up?.length) n++; else console.log('    skipped — it moved since the read');
       }
       console.log(`refinalize-week: ${dry ? 'nothing written' : `${n} matchup(s) set final`}. Scores untouched.`);
+      break;
+    }
+    case 'college-report': {
+      // ▶ WHAT THE WORKER STORED FOR COLLEGE PLAYERS (v0.550.1), read-only.
+      //   node src/cli.js college-report <weeks, e.g. 205,4> [--league=<uuid>]
+      //   Every league with a college player rostered, unless --league names one.
+      const { collegeReport } = await import('./collegeReport.js');
+      const weeks = String(args[0] ?? '').split(',').map(Number).filter(Number.isFinite).filter(Boolean);
+      const league = args.find((a) => a.startsWith('--league='))?.slice(9);
+      await collegeReport({ weeks, leagues: league ? [league] : null });
       break;
     }
     case 'seed-test-users': {
