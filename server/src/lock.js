@@ -18,6 +18,7 @@ import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
+import { setCollegeMeta } from '../../packages/core/src/data/college.ts';
 import { LOCK_LEAD_MS, hasSlate, windowForTeam } from '../../packages/core/src/data/nflSlate.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { powerupById } from '../../packages/core/src/data/powerups.ts';
@@ -259,6 +260,19 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
   return (data ?? []).length;
 }
 
+/** 0383: install college conference / tier / class for a pool's college
+ *  players, so slotAllows can apply conference and class spot rules here as
+ *  it does on the clients. Best-effort: without it a rule spot stays empty
+ *  (no facts, no pass) rather than seating the wrong player. */
+export async function installCollegeMetaFor(slugs) {
+  const college = [...new Set(slugs)].filter((s) => /^c-\d+$/.test(s));
+  if (!college.length) return 0;
+  const { data, error } = await db().rpc('college_meta_for', { p_slugs: college });
+  if (error || !data) return 0;
+  setCollegeMeta(data);
+  return Object.keys(data).length;
+}
+
 /** AUTO-SLOT (v0.247.0): give every classic team the best projected lineup its
  *  roster can field, for this week, before anyone touches it.
  *
@@ -377,6 +391,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
       .select('slug,pos,team,exp,sleeper_id').eq('league_id', leagueId).range(0, 1999);
     if (!pool?.length) continue;
     const meta = new Map(pool.map((p) => [p.slug, p]));
+    await installCollegeMetaFor(pool.map((p) => p.slug));
 
     const rosterIds = [...new Set(matchups.flatMap((m) => [m.home_roster_id, m.away_roster_id]))];
     const { data: ros } = await db().from('native_roster')

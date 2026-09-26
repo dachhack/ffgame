@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
@@ -11,6 +12,38 @@ import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScorin
 // The builder's position chips (0163) — base positions only; combos are made by
 // lighting several chips on one spot.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const;
+
+/** COLLEGE RULES (0383): conferences / tiers and classes, as chips. Used by a
+ *  spot's 🔎 filter (that spot takes only these college players) and by the
+ *  league's PLAYER FILTERS (only these college players are seeded). */
+const TIER_NAME: Record<string, string> = { FBS: 'ALL FBS (D-I)', P4: 'POWER 4', G5: 'GROUP OF 5', IND: 'INDEPENDENTS' };
+function CollegeRuleChips({ confs, classes, onConfs, onClasses, disabled, pill }: {
+  confs: string[]; classes: number[]; onConfs: (c: string[]) => void; onClasses: (c: number[]) => void; disabled?: boolean;
+  pill: (on: boolean) => React.CSSProperties;
+}) {
+  const flip = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const chip = (on: boolean): React.CSSProperties => ({ ...pill(on), padding: '3px 8px', fontSize: 11 });
+  return (
+    <div style={{ flexBasis: '100%', display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>🎓 CONFERENCE</span>
+        {[...COLLEGE_TIERS, ...COLLEGE_CONFERENCES].map((c) => (
+          <button key={c} type="button" disabled={disabled} onClick={() => onConfs(flip(confs, c))} className="mono" style={chip(confs.includes(c))}>
+            {TIER_NAME[c] ?? c.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>🎓 CLASS</span>
+        {[1, 2, 3, 4].map((c) => (
+          <button key={c} type="button" disabled={disabled} onClick={() => onClasses(flip(classes, c).sort())} className="mono" style={chip(classes.includes(c))}>
+            {collegeClassLabel(c)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** A spot's eligible positions as one control (v0.554.0): the button reads
  *  what the spot takes ("RB · WR · TE") and opens a checklist. Position order
@@ -252,7 +285,8 @@ export function LastSeenPanel({ leagueId }: { leagueId: string }) {
 // (0172) as raw input strings, so partial typing never fights the keyboard.
 // v0.300.0: the filter also carries FLAGS — the commissioner's own labels as a
 // condition on who may stand in the spot.
-type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college' };
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college';
+  /** 0383 */ fConfs?: string[]; fClasses?: number[] };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
@@ -261,6 +295,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fFlags: [...(x.flags ?? [])],
   zero: x.zero_pts != null ? String(x.zero_pts) : '',
   ...(x.level ? { level: x.level } : {}),
+  fConfs: [...(x.confs ?? [])], fClasses: [...(x.classes ?? [])],
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -274,12 +309,14 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
     ...(s.level ? { level: s.level } : {}),   // 0372: mixed leagues
+    ...(s.fConfs?.length ? { confs: s.fConfs } : {}),       // 0383
+    ...(s.fClasses?.length ? { classes: s.fClasses } : {}),
     // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the toggle below can't produce it either.
     ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
-const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length);
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length || s.fConfs?.length || s.fClasses?.length);
 
 // ── The scoring page's tabs (v0.213.0) ──────────────────────────────────────
 // 14 catalog sections in one endless column made "find the IDP knobs" a scroll
@@ -515,6 +552,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   useEffect(() => { leagueIsCollegeCalendar(leagueId).then((r) => setCollegeCal(r === true)).catch(() => {}); }, [leagueId]);
   const mixed = extraPos.includes('COLLEGE') && !collegeCal && shape.devy === 0;
   const [fltTeams, setFltTeams] = useState('');
+  // 0383: the league's college rules, and the stored level kept on save.
+  const [fltConfs, setFltConfs] = useState<string[]>([]);
+  const [fltClasses, setFltClasses] = useState<number[]>([]);
+  const [fltLevel, setFltLevel] = useState<'nfl' | 'college' | null>(null);
   const [fltMin, setFltMin] = useState('');
   const [fltMax, setFltMax] = useState('');
   const [busy, setBusy] = useState(false);
@@ -545,7 +586,8 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       setExtraPos(r.positions ?? []);
       setFltTeams((r.pool_filter?.teams ?? []).join(', '));
       setFltMin(r.pool_filter?.min_exp != null ? String(r.pool_filter.min_exp) : '');
-      setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : ''); } }).catch(() => {});
+      setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : '');
+      setFltConfs(r.pool_filter?.confs ?? []); setFltClasses(r.pool_filter?.classes ?? []); setFltLevel(r.pool_filter?.level ?? null); } }).catch(() => {});
   }, [leagueId]);
   const saveFilter = async (clear = false) => {
     if (busy) return;
@@ -554,8 +596,15 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       const teams = fltTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
       const mn = fltMin.trim() === '' ? null : Number(fltMin);
       const mx = fltMax.trim() === '' ? null : Number(fltMax);
-      const r = await setLeaguePoolFilter(leagueId, clear || (!teams.length && mn == null && mx == null)
-        ? null : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx });
+      // The level (a college calendar's, 0371) rides along — a save must not drop it.
+      const keepLevel = fltLevel ? { level: fltLevel } : {};
+      const r = await setLeaguePoolFilter(leagueId, clear
+        ? (fltLevel ? keepLevel : null)
+        : (!teams.length && mn == null && mx == null && !fltConfs.length && !fltClasses.length)
+          ? (fltLevel ? keepLevel : null)
+          : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx, ...keepLevel,
+              ...(fltConfs.length ? { confs: fltConfs } : {}), ...(fltClasses.length ? { classes: fltClasses } : {}) });
+      if (r.ok && clear) { setFltConfs([]); setFltClasses([]); }
       if (r.ok) setNote(clear ? '✓ filter cleared — REFRESH PLAYER POOL to re-open the universe' : '✓ filter saved — REFRESH PLAYER POOL to apply it');
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
@@ -720,7 +769,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => (
               <div key={i} data-spot={i}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: fltOpen === i ? 'wrap' : 'nowrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
                 {/* DRAG HANDLE, ON POINTER EVENTS (v0.297.1). It was HTML5 drag
                     — `draggable` + dragstart/drop — which a touch screen never
                     fires: the finger scrolled the page instead, and once the
@@ -827,6 +876,11 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                         })}
                         {sp.fFlags.length > 0 && <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>only a flagged player may fill this spot</span>}
                       </div>
+                    )}
+                    {extraPos.includes('COLLEGE') && (
+                      <CollegeRuleChips confs={sp.fConfs ?? []} classes={sp.fClasses ?? []} disabled={busy} pill={pill}
+                        onConfs={(c) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fConfs: c })); setSpotsDirty(true); }}
+                        onClasses={(c) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fClasses: c })); setSpotsDirty(true); }} />
                     )}
                     <TeamChips value={sp.fTeams} disabled={busy}
                       onChange={(next) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fTeams: next })); setSpotsDirty(true); }} />
@@ -967,6 +1021,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               <button onClick={() => void saveFilter()} disabled={busy} className="mono" style={pill(true)}>SAVE FILTER</button>
               <button onClick={() => void saveFilter(true)} disabled={busy} className="mono" style={pill(false)}>CLEAR</button>
               <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
+              {extraPos.includes('COLLEGE') && (
+                <CollegeRuleChips confs={fltConfs} classes={fltClasses} onConfs={setFltConfs} onClasses={setFltClasses} disabled={busy} pill={pill} />
+              )}
             </div>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
               Rookies only → max 0. Vets with 8+ years → min 8. One-team league → list the team. Players whose tenure Sleeper doesn't know are excluded while a tenure filter is set. Filters bite when the pool is (re)seeded — pre-draft only.

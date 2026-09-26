@@ -29,7 +29,7 @@ import { scopedAdjustFor } from './leagueScoring';
 import { projectedPoints, collegeHasGame } from './projScoring';
 import { normTeam } from '../data/slugMeta';
 import { hasSlate, nflGameForTeam } from '../data/nflSlate';
-import { isCollegeSlug } from '../data/college';
+import { isCollegeSlug, collegeMetaFor, collegeRuleAllows, collegeClassLabel } from '../data/college';
 
 export const CLASSIC_WIN = 'wk';
 
@@ -81,6 +81,11 @@ export interface SlotFilter {
   /** MIXED LEAGUES (0372): 'nfl' takes NFL players only, 'college' college
    *  players only (c-<espn_id>); absent takes either. */
   level?: 'nfl' | 'college' | null;
+  /** COLLEGE RULES (0383): a spot for college players from these conferences
+   *  or tiers ('SEC', 'MAC', 'P4', 'FBS' …) and/or these classes (1 = FR …
+   *  4 = SR+). Either makes the spot college-only. */
+  confs?: string[] | null;
+  classes?: number[] | null;
 }
 /** `label` (0174) is the commissioner's own name for the spot ("Only NFC
  *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
@@ -115,11 +120,13 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // The zero-fill rule (v0.303.0) rides along to the resolver and the board —
     // best-ball spots included (v0.430.2, see SlotSpec).
     if (s.zero_pts != null) d.zeroPts = s.zero_pts;
-    if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length || s.level) {
+    if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length || s.level || s.confs?.length || s.classes?.length) {
       d.flt = {
         teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null,
         flags: s.flags ?? null,
         ...(s.level ? { level: s.level } : {}),
+        ...(s.confs?.length ? { confs: s.confs } : {}),
+        ...(s.classes?.length ? { classes: s.classes } : {}),
       };
     }
     return d;
@@ -205,6 +212,11 @@ export function slotAllows(
   // player, so a college-only spot refuses him and an NFL-only one takes him.
   if (f.level === 'college' && !isCollegeSlug(p.id)) return false;
   if (f.level === 'nfl' && isCollegeSlug(p.id)) return false;
+  // COLLEGE RULES (0383): a college player whose school and class qualify.
+  if (f.confs?.length || f.classes?.length) {
+    if (!isCollegeSlug(p.id)) return false;
+    if (!collegeRuleAllows(collegeMetaFor(p.id), f.confs, f.classes)) return false;
+  }
   if (f.teams?.length && !f.teams.some((t) => t.toUpperCase() === (p.team ?? '').toUpperCase())) return false;
   // A FLAG CONDITION (v0.300.0). Same no-guess rule as tenure: without an id
   // there is no flag to read, so the player cannot prove he qualifies.
@@ -264,6 +276,8 @@ export function slotFilterLabel(f?: SlotFilter | null): string {
   if (f.flags?.length) parts.push(`⚑ ${f.flags.join('/')}`);
   if (f.level === 'college') parts.push('CFB ONLY');
   if (f.level === 'nfl') parts.push('NFL ONLY');
+  if (f.confs?.length) parts.push(f.confs.map((c) => (c === 'FBS' ? 'FBS' : c)).join('/').toUpperCase());
+  if (f.classes?.length) parts.push([...f.classes].sort().map(collegeClassLabel).join('/'));
   return parts.join(' · ');
 }
 
