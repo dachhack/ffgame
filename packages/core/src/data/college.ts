@@ -72,6 +72,13 @@ export function setCollegeNames(rows: { slug: string; full?: string | null; full
 export const collegeNameFor = (slug: string | null | undefined): { full: string; school: string | null } | null =>
   (slug ? COLLEGE_NAMES.get(slug) ?? null : null);
 
+/** The team a board matches a player's GAME by. A college player carries no
+ *  NFL team (school codes collide with NFL ones — Miami, Houston), so on a
+ *  college-calendar week (board week 201+, whose slate holds only college
+ *  games) his school stands in; anywhere else, his team as before. */
+export const boardTeamFor = (slug: string, team: string | null | undefined, week: number | null | undefined): string =>
+  (isCollegeSlug(slug) && (week ?? 0) > 200 ? collegeNameFor(slug)?.school ?? team ?? '' : team ?? '');
+
 export type CollegeMeta = { conf?: string | null; tier?: string | null; cls?: number | null };
 const COLLEGE_META = new Map<string, CollegeMeta>();
 /** Merge (not replace): several leagues' pools may be installed in one session. */

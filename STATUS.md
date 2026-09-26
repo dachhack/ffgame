@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.5 — the college slate on the matchup board
+
+The founder: "yes, build the college slate for the board." On a college
+week every row read "no game listed" and the slate chip counted 0 games: the
+board reads the week's slate (nfl_slate at 200 + N, school codes, already
+written by the worker) and matches a row's game by its NFL team, which a
+college player doesn't have. core `boardTeamFor(slug, team, week)`: on a
+board week over 200 a college player's school (from v0.556.4's name cache)
+stands in. Both boards use it for the game, state, clock, opponent and bye
+claim, so kickoffs, opponents, chips and the FIELDS tap-through follow. The
+projection keeps the real team. No roof mark for a college game (school
+codes collide with NFL ones). The chip and sheet read COLLEGE SLATE.
+Still open: a devy player in an NFL-calendar league shows no game in NFL
+weeks (his game sits at 201+; the worker already scores it there).
+
 ### v0.556.4 — college players' names on the matchup board
 
 The founder, on a devy matchup: "Can we get the player names in this?" The
