@@ -35,6 +35,7 @@ import { ensureSeatAgents } from './agents.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
 import { sweepRescores } from './rescore.js';
 import { postWeekReports, sweepRequests } from './report.js';
+import { sweepScoreAsIs } from './scoreAsIs.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
 import { regularWeekFrom } from '../../packages/core/src/data/seasonWeek.ts';
@@ -828,6 +829,8 @@ async function tick() {
   // doing — the queue is almost always empty, which is one SELECT.
   try { const rs = await sweepRescores(playerIndex, log); if (rs) log('rescore:', rs, 'request(s) closed'); }
   catch (e) { log('rescore sweep error', e.message); }
+  try { const sa = await sweepScoreAsIs(playerIndex, log); if (sa) log('score-as-is:', sa, 'request(s) closed'); }
+  catch (e) { log('score-as-is error', e.message); }
 
   // Week-agnostic work, once per tick regardless of how many contexts ran.
   //

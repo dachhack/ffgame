@@ -1664,6 +1664,34 @@ export interface RescoreState {
     result: import('./rescore').RescoreResult | null;
   } | null;
 }
+// ── Weeks already played (0378) ──────────────────────────────────────────────
+// A new classic league can backdate its season to a week already under way,
+// and the commissioner scores each such week with the rosters as they stand.
+export type ScoreAsIsResult = { over?: boolean; polled?: number; seats?: number; copied?: number; planned?: number;
+  finals?: { home: string; away: string; home_final: number | null; away_final: number | null }[] };
+export type ScoreAsIsWeek = { week: number; name: string; final: boolean;
+  request: { id: number; requested_at: string; done_at: string | null; error: string | null; result: ScoreAsIsResult | null } | null };
+export type ScoreAsIsState = { ok: boolean; error?: string; classic?: boolean; drafted?: boolean; first_week?: number | null;
+  backdate?: number | null; can_backdate?: boolean; earliest?: number; natural_open?: number | null; weeks?: ScoreAsIsWeek[] };
+export const scoreAsIsState = (leagueId: string) =>
+  rpc<ScoreAsIsState>('score_as_is_state', { p_league_id: leagueId });
+export const commishBackdateSeason = (leagueId: string, week: number | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; week?: number | null }>('commish_backdate_season', { p_league_id: leagueId, p_week: week }),
+    Ev.commishAction, { tool: 'backdate_season' });
+export const commishScoreAsIs = (leagueId: string, week: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; id?: number }>('commish_score_as_is', { p_league_id: leagueId, p_week: week }),
+    Ev.commishAction, { tool: 'score_as_is' });
+/** "Week 3" / "Week 5" for a college board week (205) — the pickers' label. */
+export const playedWeekName = (w: number) => (w > 215 ? `Bowl week ${w - 215}` : w > 200 ? `Week ${w - 200}` : `Week ${w}`);
+/** One line for a finished request. */
+export const scoreAsIsLine = (r: ScoreAsIsWeek['request']) => {
+  if (!r) return '';
+  if (r.error) return `✗ ${r.error}`;
+  if (!r.done_at) return '⏳ scoring…';
+  const x = r.result ?? {};
+  return x.over ? `✓ scored — ${x.seats ?? 0} lineups set (${x.copied ?? 0} kept from saved, ${x.planned ?? 0} filled)`
+    : `✓ lineups set (${x.copied ?? 0} kept, ${x.planned ?? 0} filled) — the rest of the week plays out live`;
+};
 export const commishRequestRescore = (leagueId: string, week: number, apply = false) =>
   tracked(rpc<{ ok: boolean; error?: string; id?: number; note?: string }>('commish_request_rescore',
     { p_league_id: leagueId, p_week: week, p_apply: apply }), Ev.commishAction, { tool: apply ? 'rescore_apply' : 'rescore_preview' });

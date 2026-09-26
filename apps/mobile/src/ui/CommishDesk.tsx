@@ -21,6 +21,7 @@ import {
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
+  scoreAsIsState, commishBackdateSeason, commishScoreAsIs, playedWeekName, scoreAsIsLine, type ScoreAsIsState,
   leagueTxnLimits, commishSetTxnLimits,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
   friendlyError,
@@ -1108,6 +1109,84 @@ export function ScheduleCard({ leagueId }: { leagueId: string }) {
           <Row><Chip label="SWAP" on disabled={busy || !why.trim()} onPress={() => { tap(); void swap(); }} /></Row>
         </View>
       )}
+      <Note msg={msg} />
+    </Card>
+  );
+}
+
+// ── ⏮ WEEKS ALREADY PLAYED (0378) — the web's PlayedWeeksPanel ───────────────
+export function PlayedWeeksCard({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<ScoreAsIsState | null>(null);
+  const [start, setStart] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => scoreAsIsState(leagueId).then((r) => { setSt(r); setStart(r.first_week ?? null); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const pending = st?.weeks?.some((w) => w.request && !w.request.done_at);
+  useEffect(() => {
+    if (!pending) return;
+    const t = setInterval(() => void load(), 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+  if (!st?.ok || !st.classic) return null;
+  const lo = st.earliest ?? 1;
+  const open = st.natural_open ?? null;
+  const choices = open != null ? Array.from({ length: Math.max(0, open - lo) }, (_, i) => lo + i) : [];
+  const backdate = async () => {
+    if (busy || start == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishBackdateSeason(leagueId, open != null && start >= open ? null : start);
+      if (r.ok) { commit(); setMsg(`✓ the season starts in ${playedWeekName(start)}`); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const run = async (w: number) => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishScoreAsIs(leagueId, w);
+      if (r.ok) { commit(); setMsg(`✓ ${playedWeekName(w)} is with the worker — this updates in a moment`); } else { warn(); setMsg(friendlyError(r.error ?? 'failed')); }
+    } catch (e) { warn(); setMsg(friendlyError(e)); }
+    finally { setBusy(false); void load(); }
+  };
+  const score = (w: number) => {
+    if (busy) return;
+    Alert.alert(`Score ${playedWeekName(w)} as-is?`,
+      'Each team keeps the lineup it saved; a team that saved none takes the lineup it saved for its next week, and empty spots are filled by projection. A week that\u2019s over is final once scored; a week still being played keeps going. The league hears about it in chat.',
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Score', onPress: () => void run(w) }]);
+  };
+  return (
+    <Card>
+      <LabelInfo label="WEEKS ALREADY PLAYED" info="A league made mid-week starts next week. Move its start back to a week already played, then score each of those weeks with the rosters as they stand: every team keeps its saved lineup (or the one saved for its next week), and empty spots are filled by projection. The start can move only before any week is scored." />
+      {st.can_backdate && choices.length > 0 && (
+        <View style={{ marginTop: 8, gap: 6 }}>
+          <Mono size={9} tone="dim">SEASON STARTS</Mono>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {[...choices, ...(open != null ? [open] : [])].map((w) => (
+              <Chip key={w} label={w === open ? `${playedWeekName(w).toUpperCase()} (NEXT)` : playedWeekName(w).toUpperCase()}
+                on={start === w} onPress={() => { tap(); setStart(w); }} />
+            ))}
+          </View>
+          <Row><Chip label="SET START" on disabled={busy || start == null || start === st.first_week} onPress={() => { tap(); void backdate(); }} /></Row>
+        </View>
+      )}
+      {!st.drafted && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Scoring opens once the draft is done.</Mono>}
+      {st.weeks?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No week of this league has kicked off yet.</Mono>}
+      <View style={{ gap: 6, marginTop: 8 }}>
+        {st.weeks?.map((w) => {
+          const req = w.request;
+          return (
+            <View key={w.week} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Mono size={10} weight="700">{w.name}</Mono>
+              <Mono size={9} tone={req?.error ? 'opp' : 'dim'} style={{ flex: 1 }}>{w.final ? '✓ final' : scoreAsIsLine(req)}</Mono>
+              {!w.final && st.drafted && (
+                <Chip label="SCORE AS-IS" on disabled={busy || (!!req && !req.done_at)} onPress={() => { tap(); score(w.week); }} />
+              )}
+            </View>
+          );
+        })}
+      </View>
       <Note msg={msg} />
     </Card>
   );

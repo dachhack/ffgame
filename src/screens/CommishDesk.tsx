@@ -32,6 +32,7 @@ import {
   leaguePlayerAdjustments, commishSetPlayerAdjustment, type PlayerAdjustment, type AdjustCandidate,
   commishWeekLineup, commishSetWeekLineup, type LineupFixCandidate,
   commishOpenSchedule, commishSwapOpponents, type RedrawWeek, type RedrawTeam,
+  scoreAsIsState, commishBackdateSeason, commishScoreAsIs, playedWeekName, scoreAsIsLine, type ScoreAsIsState,
   leagueTxnLimits, commishSetTxnLimits,
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
@@ -1154,6 +1155,86 @@ export function SchedulePanel({ leagueId }: { leagueId: string }) {
           <button onClick={() => void swap()} disabled={busy || !why.trim()} className="mono" style={btn(true)}>swap</button>
         </div>
       )}
+      {note(msg)}
+    </div>
+  );
+}
+
+// ── Weeks already played (0378) ──────────────────────────────────────────────
+export function PlayedWeeksPanel({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<ScoreAsIsState | null>(null);
+  const [start, setStart] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => scoreAsIsState(leagueId).then((r) => { setSt(r); setStart(r.first_week ?? null); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  // While a request is with the worker, look again every few seconds.
+  const pending = st?.weeks?.some((w) => w.request && !w.request.done_at);
+  useEffect(() => {
+    if (!pending) return;
+    const t = setInterval(() => void load(), 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [pending]);
+  if (!st?.ok || !st.classic) return null;
+  const lo = st.earliest ?? 1;
+  const open = st.natural_open ?? null;
+  const choices = open != null ? Array.from({ length: Math.max(0, open - lo) }, (_, i) => lo + i) : [];
+  const backdate = async () => {
+    if (busy || start == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishBackdateSeason(leagueId, open != null && start >= open ? null : start);
+      setMsg(r.ok ? `✓ the season starts in ${playedWeekName(start)}` : (r.error ?? 'failed'));
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  const score = async (w: number) => {
+    if (busy) return;
+    if (!window.confirm(`Score ${playedWeekName(w)} with the rosters as they stand?\n\nEach team keeps the lineup it saved; a team that saved none takes the lineup it saved for its next week, and empty spots are filled by projection. A week that's over is final once scored; a week still being played keeps going. The league hears about it in chat.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishScoreAsIs(leagueId, w);
+      setMsg(r.ok ? `✓ ${playedWeekName(w)} is with the worker — this updates in a moment` : (r.error ?? 'failed'));
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); void load(); }
+  };
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div className="mono" style={subhead}>⏮ WEEKS ALREADY PLAYED</div>
+      <div style={{ ...small, marginBottom: 6 }}>
+        A league made mid-week starts next week. Move its start back to a week already played, then score each of
+        those weeks with the rosters as they stand: every team keeps its saved lineup (or the one saved for its next week),
+        and empty spots are filled by projection. Only before any week is scored.
+      </div>
+      {st.can_backdate && choices.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <span className="mono" style={{ ...cell, flex: 'none' }}>Season starts</span>
+          <select value={start ?? ''} onChange={(e) => setStart(Number(e.target.value))}
+            style={{ ...inp, padding: '5px 8px', fontSize: 12.5 }}>
+            {choices.map((w) => <option key={w} value={w}>{playedWeekName(w)} (already played)</option>)}
+            {open != null && <option value={open}>{playedWeekName(open)} (next week — no backdate)</option>}
+          </select>
+          <button onClick={() => void backdate()} disabled={busy || start == null || start === st.first_week} className="mono" style={btn(true)}>set</button>
+        </div>
+      )}
+      {!st.drafted && <div style={small}>Scoring opens once the draft is done.</div>}
+      {st.weeks?.length === 0 && <div style={small}>No week of this league has kicked off yet.</div>}
+      {st.weeks?.map((w) => {
+        const req = w.request;
+        const busyReq = !!req && !req.done_at;
+        return (
+          <div key={w.week} style={row}>
+            <span className="mono" style={{ ...cell, flex: 'none', minWidth: 90, fontWeight: 700 }}>{w.name}</span>
+            <span className="mono" style={{ ...cell, fontSize: 11.5, color: req?.error ? 'var(--opp)' : 'var(--dim)' }}>
+              {w.final ? '✓ final' : scoreAsIsLine(req)}
+            </span>
+            {!w.final && st.drafted && (
+              <button onClick={() => void score(w.week)} disabled={busy || busyReq} className="mono" style={btn(true)}>score as-is</button>
+            )}
+          </div>
+        );
+      })}
       {note(msg)}
     </div>
   );
