@@ -209,6 +209,17 @@ begin
             and (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93612')
                 < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93613'),
     'cp10c the directory ranks by it: producer, then the freshman who has played, then the cameo');
+  -- 0381: VALUE OVER REPLACEMENT. A lone QB at 30 a game is the only QB, so
+  -- he is his own replacement (value 0) — the 24.5 back who beats other backs
+  -- by 8.5 ranks first, though his raw number is lower.
+  perform upsert_college_players(jsonb_build_array(
+    jsonb_build_object('espn_id', '93614', 'full_name', 'Rank Passer', 'pos', 'QB', 'class_year', 3)));
+  perform upsert_college_stats(2026, jsonb_build_array(jsonb_build_object('espn_id', '93614', 'gp', 4, 'pass_yds', 1500, 'pass_td', 15)));
+  r := college_directory(array['QB', 'RB'], 2000);
+  perform cp_true((select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611')
+                < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93614')
+            and (select (e ->> 'vor')::numeric from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611') = 8.5,
+    'cp10g THE POINT: ranked by value over his position, not raw points — the back before the 30-a-game QB');
   perform cp_ok(set_league_position_access(lid, '["COLLEGE"]'::jsonb), 'cp10d COLLEGE back on (cp8 turned it off)');
   perform cp_ok(seed_league_pool(lid, '[{"slug":"c-93611","full":"Rank Producer","pos":"RB"},{"slug":"c-93613","full":"Rank Cameo","pos":"RB"}]'::jsonb), 'cp10d pool');
   r := college_pool_lines(lid);
