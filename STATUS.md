@@ -18,6 +18,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.3 — sheets appear again on Android
+
+The founder: "I still can't click anything in the header besides 'my
+leagues'." Every dead control opens a sheet (Overlay): ⚙ app settings, ⚙
+league SETTINGS, the What's-new banner. "my leagues" only navigates, and it
+works. The breakage followed the RN 0.86.3 / Expo upgrade (v0.539.0). The
+Overlay started its slide in the same effect that made the Modal visible, on
+the native driver; under the new architecture that animation can be lost
+before the Modal's window exists. The Modal was up, but the sheet sat a
+screen-height down and the backdrop at opacity 0, an invisible layer that
+closed itself on the next tap. The slide now starts on the Modal's `onShow`,
+with a 120 ms timer as a backstop, on the JS driver (and the drag spring
+with it, since both feed one transform). This is a diagnosis from the
+symptoms: it hasn't been reproduced on a device here.
+
 ### v0.556.2 — the league ⚙ SETTINGS chip opens its sheet directly
 
 The founder reported the league ⚙ SETTINGS chip "still not clickable. Does
