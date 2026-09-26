@@ -30,7 +30,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myRoster, myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, leagueMarket, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -859,6 +859,16 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     }).catch(() => {});
     return () => { alive = false; };
   }, [rateLeague]);
+
+  // College players' projections (0373) for this matchup's week — their
+  // per-game lines and who has a game — so the board prices them like anyone.
+  const projWeek = matchup?.week ?? null;
+  useEffect(() => {
+    if (projWeek == null) return;
+    let alive = true;
+    installCollegeProjections(projWeek).then((n) => { if (alive && n) setProjVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [projWeek]);
 
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);

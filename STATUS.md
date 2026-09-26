@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.548.0 — AI lineups rank college players
+
+Every AI lineup (auto-slot, unmanaged seats, best-ball fills, the seat wire)
+ranks by `projectedPoints`, and college players had none — all zero, so AI
+seats in college-only and mixed leagues started them in whatever order they
+came.
+- **0373 `college_proj_lines(week)`:** every rostered college player's
+  PER-GAME line from his last 4+ game season (the season `college_directory`
+  ranks by), in the NFL projection's own shape, plus `has_game` for that
+  board week by `classic_kickoff_for` — the rule the locks use.
+- **Core:** `setCollegeProjections` installs them; `projectedPoints` scores a
+  college line under the league's catalog exactly as an NFL line (a TE
+  premium or 6-point passing TD moves it the same way); `slateAwareProj`
+  treats "no game this week" as a bye — a bye, or in a mixed league any week
+  after the college season.
+- **Worker:** installed per board week (15-minute refresh) before auto-slot,
+  and at the week close so cold-start finals rank them too. **Boards** (web +
+  app) install them for the matchup's week, so the projection column prices
+  college players as well.
+
 ### v0.547.0 — college players, phase 4: NFL and college players in one lineup
 
 A MIXED league — COLLEGE on, NFL calendar, no devy spots — starts college
