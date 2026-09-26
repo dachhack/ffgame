@@ -12,7 +12,7 @@ import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
-import { setCollegeMeta } from './college';
+import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug } from './college';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
@@ -4010,8 +4010,21 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
       const by = col?.ok ? col.players ?? {} : {};
       // 0383: the facts a conference / class spot rule checks, for slotAllows.
       setCollegeMeta(Object.fromEntries(Object.entries(by).map(([slug, m]) => [slug, { conf: m.conference ?? null, tier: m.tier ?? null, cls: m.class_year }])));
+      setCollegeNames(rows.filter((r) => /^c-\d+$/.test(r.slug)).map((r) => ({ slug: r.slug, full_name: r.full_name, school: by[r.slug]?.school_abbr ?? null })));
       return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year, conf: by[r.slug].conference ?? null, tier: by[r.slug].tier ?? null } : r));
     });
+}
+/** Make sure the college players among `slugs` have names installed
+ *  (collegeNameFor) — a board holds only slugs, and a college slug is an ESPN
+ *  id. One leaguePool read per league, and only when a name is missing.
+ *  Resolves true when it installed anything, so the caller can re-render. */
+const collegeNamesAsked = new Set<string>();
+export async function ensureCollegeNames(leagueId: string, slugs: (string | null | undefined)[]): Promise<boolean> {
+  if (!slugs.some((s) => isCollegeSlug(s) && !collegeNameFor(s))) return false;
+  if (collegeNamesAsked.has(leagueId)) return false;
+  collegeNamesAsked.add(leagueId);
+  try { await leaguePool(leagueId); return true; }
+  catch { collegeNamesAsked.delete(leagueId); return false; }
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at
  *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't

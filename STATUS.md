@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.4 — college players' names on the matchup board
+
+The founder, on a devy matchup: "Can we get the player names in this?" The
+board holds only slugs and prettified them, and a college slug is an ESPN id,
+so every row read "C. 5105849". Core now keeps a college name cache
+(`setCollegeNames` / `collegeNameFor` in college.ts), filled by `leaguePool`
+from league_pool.full_name with the school. `ensureCollegeNames(league,
+slugs)` reads the pool once per league, only when a name is missing; both
+boards (web and app) call it for my pool and the opponent's, and re-render.
+`prettySlug` asks the cache first; the cell's team line shows the school.
+Still open: the board matches games by NFL team, so a college week's rows
+read "no game listed" and the slate chip counts 0 games.
+
 ### v0.556.3 — sheets appear again on Android
 
 The founder: "I still can't click anything in the header besides 'my

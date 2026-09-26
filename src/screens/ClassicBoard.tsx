@@ -24,6 +24,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
+import { collegeNameFor } from '@drip/core/data/college';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel } from '@drip/core/data/gameFeed';
 import { boardStatline } from '@drip/core/engine/sim';
@@ -40,7 +41,7 @@ import { VampirePanel } from './VampirePanel';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
@@ -132,6 +133,9 @@ const card: React.CSSProperties = { background: 'var(--surface)', border: '1px s
 // Display name straight from the slug (the opponent's side arrives as bare
 // slugs). Team units read as units, not as capitalized slug fragments.
 const prettySlug = (slug: string): string => {
+  // A college slug is an ESPN id — its name comes from the league's pool.
+  const cn = collegeNameFor(slug);
+  if (cn) return shortName(cn.full);
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
@@ -421,7 +425,7 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
       <div className="mono" style={{ fontSize: 9.5, marginTop: 2, color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5, flexDirection: right ? 'row-reverse' : 'row' }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
-          {e.team ? ` · ${e.team}` : ''}
+          {(e.team || collegeNameFor(e.slug)?.school) ? ` · ${e.team || collegeNameFor(e.slug)?.school}` : ''}
           {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
         </span>
         {action}
@@ -713,6 +717,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // Best-effort — a Sleeper-mirror league has no native pool and answers
         // with an empty map, which costs nothing and resolves the other 960.
         leaguePoolIds(r.leagueId).then((r2) => setSlugSleeperIds(r2?.ids ?? {})).catch(() => {});
+        // College players are ESPN ids until the league's names are in (v0.556.4).
+        ensureCollegeNames(r.leagueId, pl.map((x) => x.slug)).then((got) => { if (got) setFlagsVer((v) => v + 1); }).catch(() => {});
         const map: Record<string, string | null> = {};
         const seal: Record<string, boolean> = {};
         for (const p of pk) {
@@ -775,7 +781,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     // store a lineup) fields its best projected lineup from its roster, and
     // without this the board would show that seat empty while the resolver
     // scored it. In the founder's own leagues that is seven seats in eight.
-    myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
+    myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(ros.leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows, gf] = await Promise.all([
