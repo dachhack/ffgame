@@ -18,6 +18,7 @@ import {
 import { useTheme, fs } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 const pts = (n: number) => Math.round(n * 10) / 10;
 
@@ -95,7 +96,7 @@ export function LeagueHistoryView({ leagueId }: { leagueId: string }) {
           <Mono size={9} tone="faint" track={0.12}>🏅 AWARDS</Mono>
           {(aw?.weeks ?? []).slice(0, 3).map((w) => (
             <View key={w.week} style={{ paddingTop: 6 }}>
-              <Mono size={7.5} tone="faint" track={0.1}>WEEK {w.week}</Mono>
+              <Mono size={7.5} tone="faint" track={0.1}>{weekTitle(w.week)}</Mono>
               {(w.wins ?? []).map((x) => (
                 <View key={`${x.key}-${x.roster_id}`} style={row}>
                   <Text style={{ fontSize: fs(13), width: 22 }}>{x.icon}</Text>

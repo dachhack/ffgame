@@ -33,6 +33,7 @@ import { Card, Chip, Mono, PrimaryButton } from './prims';
 import { LabelInfo } from './InfoChip';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
 import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
+import { weekTitle, weekLabel, weekName } from '@drip/core/data/nflSlate';
 
 function inputStyle(t: ReturnType<typeof useTheme>, width = 90) {
   return { width, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg } as const;
@@ -537,7 +538,7 @@ export function ScoresCard({ leagueId }: { leagueId: string }) {
     <Card>
       <LabelInfo label="EDIT SCORES" info={'Only a final week\'s scores can be edited. Standings follow at once and the league chat is told. A playoff round already drawn is not re-drawn.'} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-        {weeks.map((w) => <Chip key={w} label={`WK ${w}`} on={week === w} onPress={() => { tap(); setWeek(w); void load(w); }} />)}
+        {weeks.map((w) => <Chip key={w} label={`${weekLabel(w)}`} on={week === w} onPress={() => { tap(); setWeek(w); void load(w); }} />)}
       </View>
       {rows.map((m) => {
         const final = m.status === 'final';
@@ -652,7 +653,7 @@ export function WeeklyReportCard({ leagueId }: { leagueId: string }) {
         return (
           <View key={w.week} style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Mono size={10} weight="700">WEEK {w.week}</Mono>
+              <Mono size={10} weight="700">{weekTitle(w.week)}</Mono>
               <View style={{ flex: 1 }} />
               {canFix && (
                 <Chip label={canRescore ? '⟳ RE-SCORE · ✏️' : '✏️ FIX'} on={rescoreWeek === w.week}
@@ -775,7 +776,7 @@ function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   return (
     <View style={{ marginTop: 8, padding: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, gap: 6 }}>
       <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
-        {`Week ${week} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it. Re-scoring opens once every game is final.`}
+        {`${weekName(week)} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it. Re-scoring opens once every game is final.`}
       </Mono>
       <AdjustBox leagueId={leagueId} week={week} />
       <LineupFixBox leagueId={leagueId} week={week} />
@@ -851,7 +852,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         <Chip label={req && !req.apply && req.done_at ? '⟳ PREVIEW AGAIN' : '⟳ PREVIEW'} on={false}
           disabled={busy || running} onPress={() => { tap(); ask(false); }} />
         {st?.can_apply && !running && (
-          <Chip label={`✓ APPLY — REWRITE WEEK ${week}`} on disabled={busy} onPress={() => { tap(); ask(true); }} />
+          <Chip label={`✓ APPLY — REWRITE ${weekTitle(week)}`} on disabled={busy} onPress={() => { tap(); ask(true); }} />
         )}
       </Row>
       <Note msg={msg} />
@@ -894,7 +895,7 @@ function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
   const input = { borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: fs(12.5), color: t.text } as const;
   return (
     <View style={{ gap: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
-      <Mono size={9.5} weight="700" tone="dim">{`✏️ POINT ADJUSTMENTS · WEEK ${week}`}</Mono>
+      <Mono size={9.5} weight="700" tone="dim">{`✏️ POINT ADJUSTMENTS · ${weekTitle(week)}`}</Mono>
       <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
         Add or take points from one player for this week — a stat correction, a ruling. It counts wherever his points count (a starting spot, not the bench), every board shows it with your reason, and the league chat is told.
       </Mono>
@@ -993,7 +994,7 @@ function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   const changed = fixChanged(slots, stored, chosen);
   return (
     <View style={{ gap: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
-      <Mono size={9.5} weight="700" tone="dim">{`🧾 FIX A LINEUP · WEEK ${week}`}</Mono>
+      <Mono size={9.5} weight="700" tone="dim">{`🧾 FIX A LINEUP · ${weekTitle(week)}`}</Mono>
       <Mono size={8.5} tone="faint" style={{ lineHeight: fs(13) }}>
         Set a team's lineup for this week past the kickoff locks — the start an app never saved, a ruling your league made. Only that team's own players that week are offered. The league sees who came in, who went out, and your reason.
       </Mono>
@@ -1086,7 +1087,7 @@ export function ScheduleCard({ leagueId }: { leagueId: string }) {
       {weeks?.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No week is open to redraw — every scheduled week has started, or there's no schedule yet.</Mono>}
       {!!weeks?.length && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {weeks.map((w) => <Chip key={w.week} label={`WK ${w.week}`} on={w.week === week} onPress={() => { tap(); setWeek(w.week); setPick([]); }} />)}
+          {weeks.map((w) => <Chip key={w.week} label={`${weekLabel(w.week)}`} on={w.week === week} onPress={() => { tap(); setWeek(w.week); setPick([]); }} />)}
         </View>
       )}
       <View style={{ gap: 6, marginTop: 8 }}>

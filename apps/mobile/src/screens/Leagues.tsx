@@ -19,6 +19,7 @@ import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
 import { BrandLoading } from '../ui/BrandLoading';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 /** A league or team crest.
  *
@@ -481,7 +482,7 @@ function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance
     <View style={{ marginTop: 8, paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, gap: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Mono size={10.5} weight="700" track={0.12} tone="faint">
-          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
+          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `${weekTitle(row.week)}` : 'THIS WEEK')}
         </Mono>
         {live && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
         <View style={{ flex: 1 }} />

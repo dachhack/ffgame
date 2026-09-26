@@ -372,9 +372,63 @@ export const isBowlWeek = (week: number): boolean => week > BOWL_BASE;
 /** A board week as a heading: "PRESEASON WK 2", "CFB WK 3", "WEEK 5". */
 export const weekTitle = (week: number): string =>
   (isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}`
+    : isCollegeWeek(week) && collegeWeekOf(week) ? `WEEK OF ${collegeWeekOf(week)}`
     : isBowlWeek(week) ? `BOWL WK ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB WK ${collegeWeekNum(week)}`
     : `WEEK ${week}`);
+
+// ── "Week of 9/28/2026" (v0.556.9) ───────────────────────────────────────────
+// Founder: "The week 205 thing is throwing me off. Can we do 'week of
+// 9/16/2026' … with the weekly date instead?" A college week is named by the
+// MONDAY of the Eastern week its first game is played in — Week 5 of 2026
+// (Thu Oct 1 – Sat Oct 3) is the week of 9/28/2026. The dates come off the
+// college slate (201..223); the host installs them once (loadCollegeWeekDates)
+// and every label below reads them synchronously. Unknown → the old name.
+const COLLEGE_WEEK_OF = new Map<number, { full: string; short: string }>();
+
+/** The Eastern calendar date of an instant, as UTC-midnight ms (for day math). */
+function easternDay(ms: number): number | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date(ms));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const y = get('year'), m = get('month'), d = get('day');
+    return [y, m, d].every(Number.isFinite) ? Date.UTC(y, m - 1, d) : null;
+  } catch {
+    // No tz database: Eastern is UTC-4 for the whole college regular season.
+    const e = new Date(ms - 4 * 3600_000);
+    return Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate());
+  }
+}
+
+/** Install the college weeks' dates from slate rows ({week, kickoff}). */
+export function setCollegeWeekDates(rows: { week: number; kickoff?: string | null }[]): void {
+  const first = new Map<number, number>();
+  for (const r of rows) {
+    if (!isCollegeWeek(r.week)) continue;
+    const t = r.kickoff ? Date.parse(r.kickoff) : NaN;
+    if (!Number.isFinite(t)) continue;
+    if (!first.has(r.week) || t < first.get(r.week)!) first.set(r.week, t);
+  }
+  for (const [week, t] of first) {
+    const day = easternDay(t);
+    if (day == null) continue;
+    const dow = new Date(day).getUTCDay();                  // 0 = Sunday
+    const mon = new Date(day - ((dow + 6) % 7) * 86_400_000);
+    const m = mon.getUTCMonth() + 1, d = mon.getUTCDate();
+    COLLEGE_WEEK_OF.set(week, { full: `${m}/${d}/${mon.getUTCFullYear()}`, short: `${m}/${d}` });
+  }
+}
+/** A week in a sentence: "Week of 9/28/2026" for a college week with its
+ *  dates installed, "Bowl week 2", "Week 5". */
+export const weekName = (week: number): string =>
+  (isCollegeWeek(week) && COLLEGE_WEEK_OF.get(week) ? `Week of ${COLLEGE_WEEK_OF.get(week)!.full}`
+    : isBowlWeek(week) ? `Bowl week ${week - BOWL_BASE}`
+    : isCollegeWeek(week) ? `Week ${collegeWeekNum(week)}`
+    : `Week ${week}`);
+/** "9/28/2026" for a college board week whose dates are installed, else null. */
+export const collegeWeekOf = (week: number): string | null => COLLEGE_WEEK_OF.get(week)?.full ?? null;
+/** "9/28" — the same, for a narrow column. */
+export const collegeWeekOfShort = (week: number): string | null => COLLEGE_WEEK_OF.get(week)?.short ?? null;
 /** The 1-based preseason week number for an offset board week (101 → 1). */
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
 /** The POSTSEASON weeks, as nflverse numbers them and the bake carries them
@@ -390,6 +444,7 @@ export const isPostseasonWeek = (week: number): boolean => week >= 19 && week <=
  *  outside this file, and neither does "WK 22". */
 export const weekLabel = (week: number): string =>
   (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
+    : isCollegeWeek(week) && collegeWeekOfShort(week) ? `WK ${collegeWeekOfShort(week)}`
     : isBowlWeek(week) ? `BOWL ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB ${collegeWeekNum(week)}`
     : POSTSEASON_LABEL[week] ? POSTSEASON_LABEL[week]
@@ -403,6 +458,10 @@ export const weekLabel = (week: number): string =>
  *  "WEEK n". */
 export function boardWeekTitle(week: number, kickoffs: (string | null | undefined)[] = []): string {
   if (!isCollegeWeek(week)) return `WEEK ${week}`;
+  // v0.556.9: "WEEK OF 9/28/2026" — from the installed dates, or this week's
+  // own kickoffs when they haven't been installed yet.
+  if (!collegeWeekOf(week) && kickoffs.length) setCollegeWeekDates(kickoffs.map((kickoff) => ({ week, kickoff })));
+  if (collegeWeekOf(week)) return `WEEK OF ${collegeWeekOf(week)}`;
   const name = isBowlWeek(week) ? `BOWL WEEK ${week - BOWL_BASE}` : `WEEK ${collegeWeekNum(week)}`;
   const days = new Map<string, number>();
   for (const k of kickoffs) {
@@ -422,7 +481,7 @@ export function boardWeekTitle(week: number, kickoffs: (string | null | undefine
 export const weekTick = (week: number): string =>
   (isPreseasonWeek(week) ? `P${preseasonWeekNum(week)}`
     : isBowlWeek(week) ? `B${week - BOWL_BASE}`
-    : isCollegeWeek(week) ? `C${collegeWeekNum(week)}`
+    : isCollegeWeek(week) ? (collegeWeekOfShort(week) ?? `C${collegeWeekNum(week)}`)
     : POSTSEASON_LABEL[week] ?? String(week));
 
 /** How many preseason weeks a preseason league carries. FOUR for 2026: ESPN's

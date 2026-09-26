@@ -24,7 +24,7 @@ import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
-import { nflGameForTeam, kickoffLabel, weekTick } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, kickoffLabel, weekTick, weekLabel } from '@drip/core/data/nflSlate';
 import { projFor } from '@drip/core/data/poolSort';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { Ev, track } from '@drip/core/analytics';
@@ -263,7 +263,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             // the August bake beside it cannot. 0330 puts the OPPONENT under
             // it, because a weekly projection without the matchup it came
             // from is half an answer.
-            [week != null ? `WK ${week}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
+            [week != null ? `${weekLabel(week)}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
               wkProj != null ? wkProj.pts.toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ flex: 1, textAlign: 'center' }}>

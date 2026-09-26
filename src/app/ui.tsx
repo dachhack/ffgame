@@ -18,6 +18,7 @@ import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { webVoice, hasVoice, listVoices, onVoicesChanged, chosenVoice, chooseVoice, type VoiceOption } from './voice';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 /** A league/team crest: the image when there is one, a lettered box when there
  *  is not (v0.324.0). The RULE lives in core (`crestFor`) so both platforms and
@@ -849,7 +850,7 @@ export function NoGameScreen({ week, bye, onBack, backLabel = '\u2190 LEAGUE', c
   return (
     <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 240, color: 'var(--dim)', fontSize: 12, letterSpacing: '0.06em', textAlign: 'center', padding: 20 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-        {bye ? `WEEK ${week} \u00b7 BYE` : `NO WEEK ${week} MATCHUP YET`}
+        {bye ? `${weekTitle(week)} \u00b7 BYE` : `NO ${weekTitle(week)} MATCHUP YET`}
       </div>
       <div style={{ color: 'var(--faint)', fontSize: 10.5, maxWidth: 330, lineHeight: 1.6, letterSpacing: 0 }}>
         {bye

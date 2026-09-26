@@ -18,6 +18,7 @@ import { Overlay } from './Overlay';
 import { InjuryNow } from './rosterGroup';
 import { LabelInfo } from './InfoChip';
 import { seedStart, seedsCustom, moveSeed } from '@drip/core/data/seeds';
+import { weekLabel } from '@drip/core/data/nflSlate';
 
 // ── Standings: wins, points, differential ────────────────────────────────────
 type StandSort = 'record' | 'pf' | 'diff';
@@ -418,7 +419,7 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
           <Chip label="NOW" on={showNow} onPress={() => { tap(); setWeek(null); }} />
           {history.map((h) => (
-            <Chip key={h.week} label={`WK ${h.week}`} on={!showNow && week === h.week}
+            <Chip key={h.week} label={`${weekLabel(h.week)}`} on={!showNow && week === h.week}
               onPress={() => { tap(); setWeek(h.week); }} />
           ))}
         </View>
@@ -509,7 +510,7 @@ export function GuillotineCard({ leagueId, myRoster }: { leagueId: string; myRos
           {[...fallen].reverse().map((f) => (
             <Pressable key={f.roster_id} onPress={() => { tap(); setWeek(f.week); }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
-              <Mono size={8.5} tone="faint" style={{ width: 38 }}>WK {f.week}</Mono>
+              <Mono size={8.5} tone="faint" style={{ width: 38 }}>{weekLabel(f.week)}</Mono>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: f.roster_id === myRoster ? t.you : t.text }}>
                 {f.team ?? `Roster ${f.roster_id}`}
               </Text>
@@ -638,7 +639,7 @@ export function VampireCard({ leagueId, myRoster, isCommish }: { leagueId: strin
             return (
               <View key={w.week} style={{ paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Mono size={8.5} tone="faint" style={{ width: 38 }}>WK {w.week}</Mono>
+                  <Mono size={8.5} tone="faint" style={{ width: 38 }}>{weekLabel(w.week)}</Mono>
                   <Mono size={9.5} weight="700" tone={w.won ? 'you' : 'opp'}>{w.won ? 'W' : 'L'}</Mono>
                   <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: t.text }}>
                     {Math.round(w.for * 10) / 10}–{Math.round(w.against * 10) / 10} vs {w.opp_team ?? `Roster ${w.opp}`}

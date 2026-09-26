@@ -11,7 +11,7 @@ import { setDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
-import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
+import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE, setCollegeWeekDates, weekName } from './nflSlate';
 import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug } from './college';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
@@ -1221,6 +1221,21 @@ export async function slateWeeks(season: string): Promise<{ week: number; kickof
   return (data ?? []) as { week: number; kickoff: string | null }[];
 }
 
+/** Install the college weeks' "week of" dates (v0.556.9) for every label
+ *  that names a college week — once per season, best-effort. Resolves true
+ *  when it installed any, so a host can re-render. */
+const collegeDatesLoaded = new Set<string>();
+export async function loadCollegeWeekDates(season: string): Promise<boolean> {
+  if (collegeDatesLoaded.has(season)) return false;
+  collegeDatesLoaded.add(season);
+  try {
+    const { data } = await (await client()).from('nfl_slate').select('week, kickoff').eq('season', season).gt('week', 200);
+    const rows = (data ?? []) as { week: number; kickoff: string | null }[];
+    setCollegeWeekDates(rows);
+    return rows.length > 0;
+  } catch { collegeDatesLoaded.delete(season); return false; }
+}
+
 /** Both teams' display identity (name + avatar) for a matchup — league members can
  *  read all memberships (RLS), so this drives the live board's team headers. */
 export interface TeamInfo {
@@ -1700,7 +1715,7 @@ export const commishScoreAsIs = (leagueId: string, week: number) =>
   tracked(rpc<{ ok: boolean; error?: string; id?: number }>('commish_score_as_is', { p_league_id: leagueId, p_week: week }),
     Ev.commishAction, { tool: 'score_as_is' });
 /** "Week 3" / "Week 5" for a college board week (205) — the pickers' label. */
-export const playedWeekName = (w: number) => (w > 215 ? `Bowl week ${w - 215}` : w > 200 ? `Week ${w - 200}` : `Week ${w}`);
+export const playedWeekName = (w: number) => weekName(w);  // v0.556.9: "Week of 9/28/2026" for a college week
 /** One line for a finished request. */
 export const scoreAsIsLine = (r: ScoreAsIsWeek['request']) => {
   if (!r) return '';

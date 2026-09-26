@@ -37,6 +37,7 @@ import {
   leagueWaiverHolds, commishSetWaiverHold, type HeldPlayer,
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
+import { weekTitle, weekName } from '@drip/core/data/nflSlate';
 
 const note = (msg: string | null) => msg && (
   <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>
@@ -686,7 +687,7 @@ export function WeeklyReportPanel({ leagueId }: { leagueId: string }) {
         return (
           <div key={w.week}>
           <div style={row}>
-            <span className="mono" style={{ ...mono, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', width: 64 }}>WEEK {w.week}</span>
+            <span className="mono" style={{ ...mono, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', minWidth: 64 }}>{weekTitle(w.week)}</span>
             <span style={{ ...cell, fontSize: 11.5, color: 'var(--faint)' }}>
               {w.stamped}/{w.matchups} stamped
               {w.posted_at
@@ -821,7 +822,7 @@ function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   return (
     <div style={{ margin: '4px 0 10px', padding: '10px 12px', border: '1px solid var(--bd)', borderRadius: 8, background: 'var(--bg)' }}>
       <div style={{ ...small, maxWidth: 'none', marginBottom: 8 }}>
-        Week {week} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it.
+        {weekName(week)} is still being scored: a fix here counts on the next scoring pass, within a minute or two, and the week's final score keeps it.
         Re-scoring opens once every game is final.
       </div>
       <AdjustBox leagueId={leagueId} week={week} />
@@ -941,7 +942,7 @@ function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
   const n = Number(pts);
   return (
     <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
-      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>✏️ POINT ADJUSTMENTS · WEEK {week}</div>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>✏️ POINT ADJUSTMENTS · {weekTitle(week)}</div>
       <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
         Add or take points from one player for this week — a stat correction, a ruling. It counts wherever his points count
         (a starting spot, not the bench), every board shows it with your reason, and the league chat is told.
@@ -1033,7 +1034,7 @@ function LineupFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   const changed = fixChanged(slots, stored, chosen);
   return (
     <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
-      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>🧾 FIX A LINEUP · WEEK {week}</div>
+      <div className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>🧾 FIX A LINEUP · {weekTitle(week)}</div>
       <div style={{ ...small, maxWidth: 'none', marginBottom: 6 }}>
         Set a team's lineup for this week past the kickoff locks — the start an app never saved, a ruling your league made.
         Only that team's own players that week are offered. The league sees who came in, who went out, and your reason.
@@ -1134,7 +1135,7 @@ export function SchedulePanel({ leagueId }: { leagueId: string }) {
       {!!weeks?.length && (
         <select value={week ?? ''} onChange={(e) => { setWeek(Number(e.target.value)); setPick([]); }}
           style={{ ...inp, padding: '5px 8px', fontSize: 12.5, marginBottom: 8 }}>
-          {weeks.map((w) => <option key={w.week} value={w.week}>Week {w.week}</option>)}
+          {weeks.map((w) => <option key={w.week} value={w.week}>{weekName(w.week)}</option>)}
         </select>
       )}
       {wk?.games.map((g) => (

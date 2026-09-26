@@ -1,4 +1,6 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { loadCollegeWeekDates } from '@drip/core/data/liveApi';
+import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from '@drip/core/theme';
 import { DemoBoard } from './screens/DemoBoard';
@@ -40,6 +42,12 @@ export function App() {
   // through liveCtx, and clearing it on the way out keeps a card opened from
   // the demo or the leagues list from claiming the last league's owner.
   useEffect(() => { setCardLeague(liveCtx?.leagueId ?? null); }, [liveCtx?.leagueId]);
+  // COLLEGE WEEKS BY DATE (v0.556.9): "WEEK OF 9/28/2026", not "WEEK 205".
+  const [, setWeekDatesVer] = useState(0);
+  useEffect(() => {
+    if (!loggedIn) return;
+    void loadCollegeWeekDates(String(LIVE_SEASON)).then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
+  }, [loggedIn, liveCtx?.leagueId]);
 
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
