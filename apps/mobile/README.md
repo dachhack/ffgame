@@ -47,7 +47,8 @@ number it is. Same recipe and same checks as the manual ritual below.
 ### An Android APK (no Mac needed)
 
 ```bash
-npx eas login          # a free Expo account
+npm install -g eas-cli # once; `npx eas` does NOT work — the package is eas-cli
+eas login              # a free Expo account
 npm run apk            # eas build --profile preview --platform android
 ```
 
@@ -209,15 +210,28 @@ What differs from Android, on purpose:
 Needs the Apple Developer Program membership. From `apps/mobile`:
 
 ```bash
-npx eas login                                        # Expo account
-npx eas build --profile production --platform ios    # signs in to Apple; EAS creates the certs + profile
-npx eas submit --profile production --platform ios --latest   # uploads to App Store Connect
+npm install -g eas-cli
+eas login
+eas build --profile production --platform ios
+eas submit --profile production --platform ios --latest
 ```
+
+(No trailing `# comments` here on purpose: macOS zsh doesn't treat `#` as a
+comment when pasted, and runs the text. `eas build` signs in to Apple and lets
+EAS create the certificate and profile; `eas submit` uploads to App Store
+Connect.)
 
 The first `eas submit` can create the app record in App Store Connect; put the
 numeric Apple ID it gets (App Store Connect → the app → App Information) in
 `eas.json` → `submit.production.ios.ascAppId`, and your Team ID in
-`appleTeamId`, so later submits don't ask. Build numbers auto-increment
+`appleTeamId`, so later submits don't ask. Add those keys only with real
+values: **eas.json is schema-checked** — an empty string, or any unknown key
+(so no `"//"` comment keys), fails every `eas build` with "eas.json is not
+valid". Notes about its profiles live here instead: `preview` is the
+playtester profile (`buildType: apk`, sideloadable; its `env` block can point a
+build at another Supabase project or set `VITE_POSTHOG_KEY` — read at build
+time), `preview-simulator` is a Simulator-only iOS build, and `production`
+is the store build (`.aab` on Android, which Play requires). Build numbers auto-increment
 (`appVersionSource: remote`).
 
 After processing (~10–30 min) the build appears under TestFlight. Internal
