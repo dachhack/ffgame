@@ -2,7 +2,7 @@
 // Supabase client. All table access is RLS-guarded; enrollment goes through the
 // redeem_invite RPC (migration 0002), never a direct membership write.
 import { getSupabase } from './supabaseClient';
-import { platform, storeGet } from '../platform';
+import { platform, storeGet, storeRemove } from '../platform';
 import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, setInjuryReport, injuryReportAt, type InjuryRow } from './injuries';
@@ -323,7 +323,18 @@ export function onAuth(cb: (s: Session | null, event?: string) => void): () => v
   return () => { dead = true; unsub?.(); };
 }
 
+/** Invite codes a shared link stashes so they survive the sign-in round trip
+ *  (src/App.tsx: ?code= / ?commish= / ?dfs= / a SOLO- pass). They belong to
+ *  whoever opened the link, not to the device. */
+export const STASHED_INVITE_KEYS = ['dripInviteCode', 'dripSoloPass', 'dripCommishCode', 'dripDfsCode'] as const;
+
 export async function signOut(): Promise<void> {
+  // A STASHED INVITE DIES WITH THE SESSION. It used to outlive sign-out, so the
+  // next account to sign up in the same browser opened on the last person's
+  // pre-filled join form — which is how a fresh review account landed on the
+  // waiting list of a full league it was never invited to. Cleared first and
+  // synchronously, so a failed or slow SDK call can't leave it behind.
+  for (const k of STASHED_INVITE_KEYS) storeRemove(k);
   await (await client()).auth.signOut();
 }
 
