@@ -29,8 +29,12 @@ const CORE_TEAMS = (season) =>
   `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
 const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
 
-const STATS = (season, page) =>
-  `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/statistics/byathlete?season=${season}&seasontype=2&limit=1000&page=${page}&category=offense&isqualified=false&group=80`;
+// ESPN fills only the category a request names (a plain `offense` page came
+// back with every stat blank), so each season is three walks — passing,
+// rushing, receiving — merged per athlete before anything is written.
+const STAT_CATS = [['passing', 'passingYards'], ['rushing', 'rushingYards'], ['receiving', 'receivingYards']];
+const STATS = (season, page, cat, sort) =>
+  `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/statistics/byathlete?season=${season}&seasontype=2&limit=1000&page=${page}&category=offense:${cat}&sort=${cat}.${sort}:desc&isqualified=false&group=80`;
 
 const DAY = 86400000;
 const CHUNK = 500;
@@ -111,18 +115,34 @@ export function statRows(page) {
   return out;
 }
 
-/** Every page of one season's offensive lines → upsert_college_stats. */
+/** Merge per-category rows into one line per athlete: a value from any
+ *  category beats a null, so a WR's receiving survives the rushing walk. */
+export function mergeStatRows(lists) {
+  const by = new Map();
+  for (const r of lists.flat()) {
+    const cur = by.get(r.espn_id) ?? { espn_id: r.espn_id };
+    for (const [k, v] of Object.entries(r)) if (v != null && cur[k] == null) cur[k] = v;
+    by.set(r.espn_id, cur);
+  }
+  return [...by.values()];
+}
+
+/** One season's passing, rushing and receiving lines → upsert_college_stats. */
 export async function runStatsSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args)) {
-  let rows = 0;
-  for (let page = 1, pages = 1; page <= pages && page <= 10; page++) {
-    const d = await fetchJson(STATS(season, page));
-    pages = Number(d?.pagination?.pages ?? 1);
-    const batch = statRows(d);
-    for (let i = 0; i < batch.length; i += CHUNK) {
-      const { data, error } = await rpc('upsert_college_stats', { p_season: season, p_rows: batch.slice(i, i + CHUNK) });
-      if (error) { log('college stats', season, error.message); return rows; }
-      rows += Number(data?.rows ?? 0);
+  const lists = [];
+  for (const [cat, sort] of STAT_CATS) {
+    for (let page = 1, pages = 1; page <= pages && page <= 10; page++) {
+      const d = await fetchJson(STATS(season, page, cat, sort));
+      pages = Number(d?.pagination?.pages ?? 1);
+      lists.push(statRows(d));
     }
+  }
+  const merged = mergeStatRows(lists);
+  let rows = 0;
+  for (let i = 0; i < merged.length; i += CHUNK) {
+    const { data, error } = await rpc('upsert_college_stats', { p_season: season, p_rows: merged.slice(i, i + CHUNK) });
+    if (error) { log('college stats', season, error.message); return rows; }
+    rows += Number(data?.rows ?? 0);
   }
   return rows;
 }

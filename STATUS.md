@@ -18,6 +18,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.544.0 — college players, phase 2: devy spots
+
+NFL classic leagues can hold devy spots: college players sit there, never
+start, carry across seasons and move to their NFL identity when drafted.
+Needs the admin's COLLEGE switch (v0.543.0).
+- **0366 devy spots:** `native_roster.spot` gains `devy`; `roster_shape.devy`
+  is drafted like bench/taxi and locks at the draft. `pos_cap_error` and
+  `trade_cap_error` split the roster: college players need an open devy spot,
+  NFL players one of the other (rounds − devy); devy spots carry no position
+  caps. A college player lands in devy (trigger) and can't leave it; nobody
+  moves an NFL player in. `roster_illegal_reason` knows the shelf. Autopick
+  fills NFL spots first, devy last. The pool filter takes a `level`. Every
+  patch is gated on the league having devy spots, so no existing league moves.
+- **0367 graduation:** the worker (`server/src/poll/graduate.js`, daily) takes
+  college slugs whose ESPN id has a Sleeper id in the crosswalk, confirms ESPN
+  lists him on an NFL team, and calls `graduate_college_player`: per league,
+  live rows (roster, keeper marks, contracts, flags, queues, pending claims and
+  trades, auction lot) move to the NFL slug; history keeps the college slug;
+  `player_alias` maps old to new. If another team already rosters the NFL row,
+  that league is left alone and the conflict recorded in `college_graduation`.
+  The probe suite fails on any slug column not classified live/history/feed.
+- **0368 rollover:** devy college players always carry, outside the keeper
+  count; the new draft counts devy spots as pre-filled, so the annual draft
+  stays an NFL draft. Empty devy spots refill from college free agency.
+- **0369 ranking:** the college poll also stores ESPN's season lines (the
+  `byathlete` feed, by athlete id). `college_directory` ranks by standard PPR
+  per game from the latest 4+ game season, then class year. Stathead has no
+  college projections; this is an estimate, not a projection.
+- **Apps:** pool seeding adds college players after the NFL ones when COLLEGE
+  is on (not into a tenure-filtered rookie pool); DEVY control in the roster
+  shape (web + app); a DEVY section on the team screen with school and class,
+  and a graduate's chip moves him to active.
+
 ### v0.543.0 — college players, phase 1: the directory and the gates
 
 Founder: devy leagues, college-only leagues, and leagues where NFL and college

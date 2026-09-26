@@ -2,7 +2,7 @@
 // retirement rule — a sweep with ANY failed roster must not retire anybody.
 // Fixtures are cut from real 2026 ESPN responses (Alabama's roster shape, the
 // core API's $ref list); no network.
-import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows } from '../src/poll/college.js';
+import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows, mergeStatRows } from '../src/poll/college.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -121,6 +121,17 @@ const teamsFeed = { items: [
   ok(r.espn_id === '4918103' && r.gp === 13 && r.rush_yds === 1659 && r.rush_td === 16, 'columns found by name, thousands separator read');
   ok(r.rec === 30 && r.rec_yds === 286 && r.rec_td === 0, 'receiving read past the targets column');
   ok(r.pass_yds === null && r.ints === null, "'-' is none, not zero");
+}
+
+// ── 6. ESPN fills one category per request: merge them (0369) ──
+{
+  const m = mergeStatRows([
+    [{ espn_id: '1', gp: 12, rush_yds: 900, rec_yds: null }],
+    [{ espn_id: '1', gp: 12, rush_yds: null, rec_yds: 400 }, { espn_id: '2', gp: 5, rec_yds: 80 }],
+  ]);
+  const one = m.find((r) => r.espn_id === '1');
+  ok(m.length === 2 && one.rush_yds === 900 && one.rec_yds === 400 && one.gp === 12,
+    'a back\'s rushing and receiving walks become one line');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
