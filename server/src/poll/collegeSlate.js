@@ -23,7 +23,7 @@ const EVERY_MS = Number(process.env.COLLEGE_SLATE_MS || 86400000);
 export function collegeSlateRows(season, espnWeek, games) {
   return slateFromGames(games).map((g) => ({
     season: String(season), week: COLLEGE_BASE + espnWeek, home: g.home, away: g.away,
-    win: g.win, kickoff: g.kickoff, game_id: g.gameId ?? null,
+    win: g.win, kickoff: g.kickoff, game_id: g.gameId ?? null, time_tbd: !!g.timeTbd,
   }));
 }
 
@@ -66,7 +66,7 @@ export function bowlSlateRows(season, games) {
   const rows = [];
   for (const g of bowlSchedule(games, { withTbd: true })) {
     const [r] = slateFromGames([{ ...g, home: isTbd(g) ? `TBD-${g.eventId}` : g.home, away: isTbd(g) ? 'TBD' : g.away }]);
-    if (r) rows.push({ season: String(season), week: g.boardWeek, home: r.home, away: r.away, win: r.win, kickoff: r.kickoff, game_id: r.gameId ?? null });
+    if (r) rows.push({ season: String(season), week: g.boardWeek, home: r.home, away: r.away, win: r.win, kickoff: r.kickoff, game_id: r.gameId ?? null, time_tbd: !!r.timeTbd });
   }
   return rows;
 }

@@ -395,6 +395,29 @@ export const weekLabel = (week: number): string =>
     : POSTSEASON_LABEL[week] ? POSTSEASON_LABEL[week]
     : `WK ${week}`);
 
+/** The board's week title. A college week says which Saturday it is —
+ *  "WEEK 5 · OCT 3" — because "WEEK 205" is a storage number, and a league
+ *  that started mid-week can't tell from it that it is looking at NEXT
+ *  Saturday (v0.556.8, founder: "GT has a game this week"). The date is the
+ *  Eastern day most of the week's games are played on. Other weeks keep
+ *  "WEEK n". */
+export function boardWeekTitle(week: number, kickoffs: (string | null | undefined)[] = []): string {
+  if (!isCollegeWeek(week)) return `WEEK ${week}`;
+  const name = isBowlWeek(week) ? `BOWL WEEK ${week - BOWL_BASE}` : `WEEK ${collegeWeekNum(week)}`;
+  const days = new Map<string, number>();
+  for (const k of kickoffs) {
+    const t = k ? Date.parse(k) : NaN;
+    if (!Number.isFinite(t)) continue;
+    let day: string;
+    try { day = new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }); }
+    catch { return name; }
+    days.set(day, (days.get(day) ?? 0) + 1);
+  }
+  let best = '', n = 0;
+  for (const [d, c] of days) if (c > n) { best = d; n = c; }
+  return best ? `${name} · ${best.toUpperCase()}` : name;
+}
+
 /** The same, stripped for a narrow column: "P2" / "WC" / "5". */
 export const weekTick = (week: number): string =>
   (isPreseasonWeek(week) ? `P${preseasonWeekNum(week)}`
