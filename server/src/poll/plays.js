@@ -20,8 +20,39 @@ async function getJson(url, tries = 3) {
   throw new Error(`summary fetch failed: ${url}`);
 }
 
+/** THE NFL WEEK A COLLEGE KICKOFF BELONGS TO (0372): the week whose window —
+ *  contiguous windows of nflWeekWindows, nfl_week_window's rule
+ *  in SQL — holds it. Null outside every window (college Week 0/1, bowls). */
+/** THE NFL WEEK WINDOWS (0372), contiguous: week N runs from 12h after week
+ *  N−1's last kickoff (Tuesday morning) to 12h after its own last — so a
+ *  Tuesday-night college game belongs to the week ahead and none fall between.
+ *  Week 1 (no predecessor) opens at midnight Eastern on the day before its
+ *  opener. SQL nfl_week_window states the same rule.
+ *  `spans`: [{ week, first, last }] in epoch ms. */
+export function nflWeekWindows(spans) {
+  const byWeek = new Map((spans ?? []).map((s) => [s.week, s]));
+  return [...byWeek.values()].sort((a, b) => a.week - b.week).map((s) => {
+    const prev = byWeek.get(s.week - 1);
+    return { week: s.week, lo: prev ? prev.last + 12 * 3600e3 : etMidnight(s.first - 24 * 3600e3), hi: s.last + 12 * 3600e3 };
+  });
+}
+
+// Midnight Eastern of the day holding `ms`.
+function etMidnight(ms) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false })
+    .formatToParts(new Date(ms));
+  const n = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0) % 24;
+  return ms - ((n('hour') * 60 + n('minute')) * 60 + n('second')) * 1000 - (ms % 1000);
+}
+
+export function nflWeekForKickoff(ms, windows) {
+  if (!Number.isFinite(ms)) return null;
+  for (const w of windows ?? []) if (ms >= w.lo && ms <= w.hi) return w.week;
+  return null;
+}
+
 /** Poll one game and upsert its normalized plays. Returns rows written. */
-export async function pollGame(eventId, week, playerIndex, sport = 'nfl') {
+export async function pollGame(eventId, week, playerIndex, sport = 'nfl', opts = {}) {
   const sum = await getJson(SUM(eventId, sport));
   // ID-FIRST (0200): buildRoster hands us each boxscore athlete's ESPN id
   // alongside the display name — the id names the athlete actually in THIS
@@ -75,27 +106,14 @@ export async function pollGame(eventId, week, playerIndex, sport = 'nfl') {
   const byKey = new Map();
   for (const r of rows) byKey.set(`${r.pid}|${r.player_slug}|${r.k}`, r);
   const uniq = [...byKey.values()];
-  if (uniq.length) {
-    // RECONCILE — each poll carries the game's FULL current play set, and ESPN
-    // revises plays mid-game (yardage corrections, a TD overturned on review, a
-    // fumble added, a catch ruled incomplete). So:
-    //   1) upsert by the unique key (week,game_id,pid,player_slug,k) — UPDATE on
-    //      conflict, NOT ignore, so corrected values overwrite the stale row;
-    //   2) delete any rows for this game no longer in the current set — a play
-    //      reclassified to a different kind, or removed, so it can't double-count.
-    // Re-polling unchanged plays is still a no-op (same key + same values).
-    // supabase-js does NOT throw on write errors — surface them so the tick's
-    // per-game catch logs the real failure instead of a healthy-looking count.
-    const { error: upErr } = await db().from('live_play').upsert(uniq, { onConflict: 'week,game_id,pid,player_slug,k' });
-    if (upErr) throw new Error(`live_play upsert (${uniq.length} rows): ${upErr.message}`);
-    const present = new Set(uniq.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
-    const { data: existing, error: exErr } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
-    if (exErr) throw new Error(`live_play stale scan: ${exErr.message}`);
-    const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
-    if (staleIds.length) {
-      const { error: delErr } = await db().from('live_play').delete().in('id', staleIds);
-      if (delErr) throw new Error(`live_play stale delete (${staleIds.length}): ${delErr.message}`);
-    }
+  await writeGamePlays(week, eventId, uniq);
+  // MIXED LEAGUES (0372): a college game's college-player rows also land in
+  // the NFL week that holds its kickoff, so a mixed league's week N scores
+  // them by slug and week like everyone else. c- slugs only: the adapter's
+  // team units (mia-dst, buf-k…) would collide with the NFL's own.
+  if (opts.mirrorWeek != null) {
+    const mirror = uniq.filter((r) => /^c-\d+$/.test(r.player_slug)).map((r) => ({ ...r, week: opts.mirrorWeek }));
+    await writeGamePlays(opts.mirrorWeek, eventId, mirror);
   }
 
   // Game feed for the field visuals (FieldView/FieldBoard) — the SAME summary,
@@ -121,4 +139,30 @@ export async function pollGame(eventId, week, playerIndex, sport = 'nfl') {
     if (feedErr) console.error(`[plays] game_feed upsert ${eventId}:`, feedErr.message);
   }
   return uniq.length;
+}
+
+/** Upsert one game's rows at one week and delete that game's rows the current
+ *  set no longer holds. Shared by the poll and the mixed-league mirror. */
+async function writeGamePlays(week, eventId, uniq) {
+  if (!uniq.length) return;
+  // RECONCILE — each poll carries the game's FULL current play set, and ESPN
+  // revises plays mid-game (yardage corrections, a TD overturned on review, a
+  // fumble added, a catch ruled incomplete). So:
+  //   1) upsert by the unique key (week,game_id,pid,player_slug,k) — UPDATE on
+  //      conflict, NOT ignore, so corrected values overwrite the stale row;
+  //   2) delete any rows for this game no longer in the current set — a play
+  //      reclassified to a different kind, or removed, so it can't double-count.
+  // Re-polling unchanged plays is still a no-op (same key + same values).
+  // supabase-js does NOT throw on write errors — surface them so the tick's
+  // per-game catch logs the real failure instead of a healthy-looking count.
+  const { error: upErr } = await db().from('live_play').upsert(uniq, { onConflict: 'week,game_id,pid,player_slug,k' });
+  if (upErr) throw new Error(`live_play upsert (${uniq.length} rows): ${upErr.message}`);
+  const present = new Set(uniq.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
+  const { data: existing, error: exErr } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
+  if (exErr) throw new Error(`live_play stale scan: ${exErr.message}`);
+  const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
+  if (staleIds.length) {
+    const { error: delErr } = await db().from('live_play').delete().in('id', staleIds);
+    if (delErr) throw new Error(`live_play stale delete (${staleIds.length}): ${delErr.message}`);
+  }
 }

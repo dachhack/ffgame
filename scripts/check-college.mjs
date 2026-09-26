@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
+import { slotAllows, classicSlotsFromSpec, slotFilterLabel } from '../packages/core/src/engine/classic.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -52,6 +53,22 @@ ok(weekLabel(102) === 'PRE 2' && weekTitle(5) === 'WEEK 5', 'preseason and NFL l
 const cal = readFileSync(new URL('../supabase/migrations/0371_college_calendar.sql', import.meta.url), 'utf8')
   .split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
 ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal), 'SQL practice weeks match isPreseasonWeek (101..199)');
+
+// ── 6. spot levels in a mixed league (0372) ──
+{
+  const [nflOnly, cfbOnly, either] = classicSlotsFromSpec([
+    { pos: ['RB', 'WR', 'TE'], level: 'nfl' }, { pos: ['RB', 'WR', 'TE'], level: 'college' }, { pos: ['RB', 'WR', 'TE'] }]);
+  const college = { id: 'c-4890973', pos: 'RB', team: '' };
+  const pro = { id: 'bijan-robinson', pos: 'RB', team: 'ATL' };
+  ok(nflOnly.flt?.level === 'nfl' && cfbOnly.flt?.level === 'college' && either.flt == null, 'the spec carries each spot\'s level');
+  ok(slotAllows(cfbOnly, college) && !slotAllows(cfbOnly, pro), 'a college spot takes college players only');
+  ok(slotAllows(nflOnly, pro) && !slotAllows(nflOnly, college), 'an NFL spot takes NFL players only');
+  ok(slotAllows(either, pro) && slotAllows(either, college), 'a spot with no level takes either');
+  ok(!slotAllows(cfbOnly, { pos: 'RB', team: '' }), 'no id cannot prove a college player');
+  ok(slotFilterLabel(cfbOnly.flt) === 'CFB ONLY' && slotFilterLabel(nflOnly.flt) === 'NFL ONLY', 'levels read on the spot');
+  const mixed = readFileSync(new URL('../supabase/migrations/0372_mixed_leagues.sql', import.meta.url), 'utf8');
+  ok(/lvl not in \('nfl', 'college'\)/.test(mixed) && /jsonb_build_object\('level', lvl\)/.test(mixed), 'the SQL builder stores the same two levels');
+}
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL COLLEGE CHECKS PASS');

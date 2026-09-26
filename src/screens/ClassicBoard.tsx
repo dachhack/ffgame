@@ -1305,7 +1305,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       (target, cand) => {
         const d = slotDefs.find((x) => x.slot === target);
         const p = pool.find((x) => x.slug === cand);
-        return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
+        return !!d && !!p && slotAllows(d, { id: cand, pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
       }, bestball));
 
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
@@ -1888,7 +1888,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
         const eligible = pool
           .filter((p) => !stashed.has(p.slug))                       // taxi/IR can't start
-          .filter((p) => d && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+          .filter((p) => d && slotAllows(d, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
           .filter((p) => !kickedOff(p.slug))
           .filter((p) => spotOf.get(p.slug) !== pickerSlot)          // already here
           // If he is starting somewhere his game has locked, he cannot leave —

@@ -29,6 +29,7 @@ import { scopedAdjustFor } from './leagueScoring';
 import { projectedPoints } from './projScoring';
 import { normTeam } from '../data/slugMeta';
 import { hasSlate, nflGameForTeam } from '../data/nflSlate';
+import { isCollegeSlug } from '../data/college';
 
 export const CLASSIC_WIN = 'wk';
 
@@ -77,6 +78,9 @@ export interface SlotFilter {
    *  scope, and the thing that makes "a spot only your franchise tag can
    *  stand in" expressible. Matched on the label, case-insensitively. */
   flags?: string[] | null;
+  /** MIXED LEAGUES (0372): 'nfl' takes NFL players only, 'college' college
+   *  players only (c-<espn_id>); absent takes either. */
+  level?: 'nfl' | 'college' | null;
 }
 /** `label` (0174) is the commissioner's own name for the spot ("Only NFC
  *  Players") — PRESENTATION ONLY. Eligibility is still pos + the filter, so a
@@ -111,10 +115,11 @@ export function classicSlotsFromSpec(spec?: SlotSpec[] | null): ClassicSlotDef[]
     // The zero-fill rule (v0.303.0) rides along to the resolver and the board —
     // best-ball spots included (v0.430.2, see SlotSpec).
     if (s.zero_pts != null) d.zeroPts = s.zero_pts;
-    if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length) {
+    if (s.teams?.length || s.min_exp != null || s.max_exp != null || s.flags?.length || s.level) {
       d.flt = {
         teams: s.teams ?? null, min_exp: s.min_exp ?? null, max_exp: s.max_exp ?? null,
         flags: s.flags ?? null,
+        ...(s.level ? { level: s.level } : {}),
       };
     }
     return d;
@@ -196,6 +201,10 @@ export function slotAllows(
   if (!slotEligiblePos(d.pos).includes(p.pos)) return false;
   const f = d.flt;
   if (!f) return true;
+  // THE LEVEL (0372). Without an id a player cannot prove he is a college
+  // player, so a college-only spot refuses him and an NFL-only one takes him.
+  if (f.level === 'college' && !isCollegeSlug(p.id)) return false;
+  if (f.level === 'nfl' && isCollegeSlug(p.id)) return false;
   if (f.teams?.length && !f.teams.some((t) => t.toUpperCase() === (p.team ?? '').toUpperCase())) return false;
   // A FLAG CONDITION (v0.300.0). Same no-guess rule as tenure: without an id
   // there is no flag to read, so the player cannot prove he qualifies.
@@ -253,6 +262,8 @@ export function slotFilterLabel(f?: SlotFilter | null): string {
     parts.push(f.max_exp === 0 ? 'ROOKIES ONLY' : `${f.min_exp ?? 0}–${f.max_exp ?? '30'} YRS`);
   }
   if (f.flags?.length) parts.push(`⚑ ${f.flags.join('/')}`);
+  if (f.level === 'college') parts.push('CFB ONLY');
+  if (f.level === 'nfl') parts.push('NFL ONLY');
   return parts.join(' · ');
 }
 

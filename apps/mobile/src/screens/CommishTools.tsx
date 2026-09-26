@@ -33,7 +33,7 @@ import {
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
-  leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict,
+  leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -1644,7 +1644,7 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // `k` is a client-only stable key: drag-to-reorder (v0.267.0) needs row views
 // that SURVIVE a reorder — index keys would remount the row mid-gesture and
 // kill the pan responder. Never sent to the server (fromSpotDraft ignores it).
-type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string };
+type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college' };
 let spotKeySeq = 1;
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   k: spotKeySeq++,
@@ -1654,6 +1654,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fMax: x.max_exp != null ? String(x.max_exp) : '',
   fFlags: [...(x.flags ?? [])],
   zero: x.zero_pts != null ? String(x.zero_pts) : '',
+  ...(x.level ? { level: x.level } : {}),
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -1668,6 +1669,7 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     // FLAGS (v0.301.0) — the app collected them and never sent them; the web
     // twin has carried them since the day they landed.
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
+    ...(s.level ? { level: s.level } : {}),   // 0372: mixed leagues
     // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the control below can't produce it either.
     ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
@@ -1916,6 +1918,11 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
+  // MIXED (0372): COLLEGE on, NFL calendar, no devy spots — the only league
+  // whose spots may carry a level.
+  const [collegeCal, setCollegeCal] = useState(false);
+  useEffect(() => { leagueIsCollegeCalendar(leagueId).then((r) => setCollegeCal(r === true)).catch(() => {}); }, [leagueId]);
+  const mixed = extraPos.includes('COLLEGE') && !collegeCal && shape.devy === 0;
   const [fltTeams, setFltTeams] = useState('');
   const [fltMin, setFltMin] = useState('');
   const [fltMax, setFltMax] = useState('');
@@ -2237,6 +2244,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     style={{ borderRadius: 999, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: sp.bb ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.bb ? t.you : t.bd }}>
                     <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.bb ? t.onAccent : t.dim }}>🎯</Text>
                   </Pressable>
+                  {/* LEVEL (0372), mixed leagues: ANY → NFL → CFB, the web's cycle. */}
+                  {mixed && (
+                    <Pressable disabled={busy}
+                      onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, level: !x.level ? 'nfl' : x.level === 'nfl' ? 'college' : undefined })); setSpotsDirty(true); }}
+                      style={{ borderRadius: 999, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: sp.level ? t.you : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: sp.level ? t.you : t.bd }}>
+                      <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: sp.level ? t.onAccent : t.dim }}>{sp.level === 'college' ? 'CFB' : sp.level === 'nfl' ? 'NFL' : 'ANY'}</Text>
+                    </Pressable>
+                  )}
                   {/* the spot EDITOR (v0.267.0): label, filters, remove — one
                       button popping a sheet, instead of three inline controls */}
                   <Pressable disabled={busy} onPress={() => { tap(); setEditIdx(i); }}
