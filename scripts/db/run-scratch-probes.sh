@@ -237,3 +237,4 @@ $RUN -f scripts/db/seed-override-probes.sql | grep -E "PROBE FAIL|ALL SEED-OVERR
 $RUN -f scripts/db/roster-legal-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-LEGAL PROBES" || { echo "ROSTER-LEGAL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE PROBES" || { echo "COLLEGE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-probes.sql | grep -E "PROBE FAIL|ALL DEVY PROBES" || { echo "DEVY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/graduation-probes.sql | grep -E "PROBE FAIL|ALL GRADUATION PROBES" || { echo "GRADUATION PROBES FAILED"; exit 1; }
