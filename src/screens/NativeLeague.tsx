@@ -57,7 +57,7 @@ import {
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
 } from '@drip/core/data/liveApi';
-import { isCollegeSlug } from '@drip/core/data/college';
+import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
@@ -638,7 +638,7 @@ function PlayerCard({ p, onClose, action, queued, onQueue }: {
             <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{p.full_name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <PosPill pos={p.pos as Pos} />
-              <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{p.team}</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--dim)' }}>{teamLabel(p)}</span>
               <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>pool #{p.rank}</span>
               <InjuryNow slug={p.slug} />
             </div>
@@ -1980,7 +1980,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</div>
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
-                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{teamLabel(p)} · #{p.rank}</span>
                         <InjuryNow slug={p.slug} />
                         <FlagChip slug={p.slug} />
                       </div>
@@ -2159,7 +2159,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                     {p && (
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
-                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{teamLabel(p)} · #{p.rank}</span>
                         <InjuryNow slug={slug} />
                         <FlagChip slug={slug} />
                       </div>
@@ -2464,7 +2464,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emp
           <button onClick={() => openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team })}
             style={{ background: 'none', border: 0, padding: 0, flex: 1, minWidth: 0, textAlign: 'left', cursor: 'pointer' }}>
             <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{sub ?? `${p.pos} · ${p.team}`}</span>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{sub ?? `${p.pos} · ${teamLabel(p)}`}</span>
           </button>
           <InjuryTag status={inj} />
           <FlagChip slug={p.slug} />
@@ -3561,7 +3561,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                     ↗{adds >= 1_000_000 ? `${(adds / 1_000_000).toFixed(1)}M` : adds >= 1000 ? `${Math.round(adds / 1000)}K` : adds}
                   </span>
                 )}
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{p.team}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{teamLabel(p)}</span>
                 {ownRid != null ? (
                   // AN OWNED PLAYER IS NOT AN ADD. The button in his row is the
                   // move that is actually available — an offer to whoever holds
@@ -3734,7 +3734,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 {fillFor !== 'taxi' && injTags[p.slug] && (
                   <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)' }}>{injTags[p.slug]}</span>
                 )}
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{p.team}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{teamLabel(p)}</span>
                 <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy || !!why} title={why ?? ''} className="mono"
                   style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{fillFor === 'ir' ? '→IR' : fillFor === 'out' ? '→OUT' : '→TX'}</button>
                 {why && <span className="mono" style={{ flexBasis: '100%', fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.4 }}>{why}</span>}
@@ -4843,7 +4843,7 @@ function EditPickModal({ leagueId, pick, player, teamName, available, busy, onCl
                 <PosPill pos={p.pos as Pos} />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
                 <InjuryNow slug={p.slug} />
-                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{p.team} · #{p.rank}</span>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{teamLabel(p)} · #{p.rank}</span>
               </button>
             ))}
           </div>

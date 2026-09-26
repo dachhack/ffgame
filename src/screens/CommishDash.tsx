@@ -3,7 +3,7 @@ import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeag
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
-import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar } from '@drip/core/data/liveApi';
+import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar, leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict } from '@drip/core/data/liveApi';
 import { Avatar } from '../app/ui';
 import { AvatarPicker } from '../app/AvatarPicker';
 import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScoring';
@@ -819,6 +819,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
             You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. Bench and taxi lock at the draft; IR spots can be added (or taken away, once empty) at any time.
           </div>
+          {extraPos.includes('COLLEGE') && <GraduationConflictsPanel leagueId={leagueId} />}
 
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────────
               Founder: "only injured guys can be put on IR (commish chooses
@@ -1053,6 +1054,43 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         </div>
       )}
       {note && <div className="mono" style={{ fontSize: 11.5, color: note.startsWith('✓') ? 'var(--faint)' : 'var(--warn, #c66)', marginTop: 8 }}>{note}</div>}
+    </div>
+  );
+}
+
+/** GRADUATION CONFLICTS (0370). A devy player reached the NFL while another
+ *  team already rosters him as an NFL player; the league waits for the
+ *  commissioner to say whose he is. Silent when there is nothing to settle. */
+function GraduationConflictsPanel({ leagueId }: { leagueId: string }) {
+  const [rows, setRows] = useState<GraduationConflict[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => leagueGraduationConflicts(leagueId).then((r) => setRows(r.ok ? r.conflicts ?? [] : [])).catch(() => {});
+  useEffect(() => { void load(); }, [leagueId]);
+  if (!rows.length && !note) return null;
+  const settle = async (espnId: string, keep: 'devy' | 'nfl') => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishResolveGraduation(leagueId, espnId, keep);
+      setNote(r.ok ? '✓ settled' : r.error ?? 'failed');
+      await load();
+    } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 10, border: '1px solid var(--warn, #c66)', borderRadius: RADIUS, padding: '8px 10px' }}>
+      <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--warn, #c66)' }}>🎓 GRADUATION CONFLICTS · one player, two teams</div>
+      {rows.map((c) => (
+        <div key={c.espn_id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          <span style={{ fontSize: 12.5, flex: '1 1 180px', minWidth: 0 }}>
+            <b>{c.full_name ?? c.nfl_slug}</b>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}> — Team {c.devy_roster} holds him as devy, Team {c.nfl_roster} as an NFL player</span>
+          </span>
+          <button disabled={busy} onClick={() => void settle(c.espn_id, 'devy')} className="mono" style={btn(false)}>Keep Team {c.devy_roster}</button>
+          <button disabled={busy} onClick={() => void settle(c.espn_id, 'nfl')} className="mono" style={btn(false)}>Keep Team {c.nfl_roster}</button>
+        </div>
+      ))}
+      {note && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>{note}</div>}
     </div>
   );
 }

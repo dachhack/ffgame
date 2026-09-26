@@ -159,6 +159,24 @@ begin
   r := graduate_college_player('93801', 'future-star', 'Future Star', 'WR', 'NYG', 's93801');
   perform gr_true((r ->> 'leagues')::int = 0, 'gr4 re-running is harmless');
 
+  -- ══ gr5. THE COMMISSIONER SETTLES C (0370) ═══════════════════════════════
+  r := league_graduation_conflicts(c);
+  perform gr_ok(r, 'gr5 conflicts read');
+  perform gr_true(jsonb_array_length(r -> 'conflicts') = 1
+    and (r -> 'conflicts' -> 0 ->> 'devy_roster')::int = 1 and (r -> 'conflicts' -> 0 ->> 'nfl_roster')::int = 2,
+    'gr5a one conflict, naming both teams: ' || r::text);
+  perform gr_as('02');
+  r := commish_resolve_graduation(c, '93801', 'devy');
+  perform gr_true((r ->> 'ok')::boolean is false and r ->> 'error' = 'commissioner only', 'gr5b a manager cannot settle it');
+  perform gr_as('01');
+  r := commish_resolve_graduation(c, '93801', 'devy');
+  perform gr_ok(r, 'gr5c the commissioner keeps the devy holder');
+  perform gr_true(r ->> 'status' = 'done', 'gr5d and the graduation completes');
+  perform gr_true((select roster_id from native_roster where league_id = c and slug = 'future-star') = 1
+    and not exists (select 1 from native_roster where league_id = c and slug = 'c-93801'),
+    'gr5e team 1 now holds the NFL player; team 2 released him');
+  perform gr_true(jsonb_array_length(league_graduation_conflicts(c) -> 'conflicts') = 0, 'gr5f nothing left open');
+
   delete from league_pool where league_id in (a, b, c);
   delete from favorite_player where player_slug = 'future-star';
   raise notice 'graduation probes done';

@@ -46,3 +46,9 @@ export const collegePos = (espnAbbr: string | null | undefined): Pos | null =>
 
 /** The positions a college_player row may carry (mirrors 0365's upsert filter). */
 export const COLLEGE_POSITIONS: readonly Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', 'P', 'FB', 'DL', 'LB', 'DB'];
+
+/** What to print where a player's NFL team goes: a college player's school
+ *  (0365 — his `team` stays blank on purpose, since school codes collide with
+ *  NFL ones), everyone else's team. */
+export const teamLabel = (p: { team: string; school?: string | null }): string =>
+  p.school || p.team;

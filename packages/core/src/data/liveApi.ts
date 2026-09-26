@@ -3531,6 +3531,20 @@ export type CollegeDirectoryRow = {
   class_label: string | null; class_year: number | null;
   season: number | null; gp: number | null; ppg: number | null; ord: number;
 };
+// ── Graduation conflicts (0370) ───────────────────────────────────────────
+// A devy player who graduated while another team rosters him as an NFL player.
+// The league waits for the commissioner: keep the devy holder or the NFL one.
+export type GraduationConflict = {
+  espn_id: string; nfl_slug: string; full_name: string | null; note: string | null; at: string;
+  devy_roster: number | null; nfl_roster: number | null;
+};
+export const leagueGraduationConflicts = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; conflicts?: GraduationConflict[] }>('league_graduation_conflicts', { p_league_id: leagueId });
+export const commishResolveGraduation = (leagueId: string, espnId: string, keep: 'devy' | 'nfl') =>
+  tracked(rpc<{ ok: boolean; error?: string; kept?: string; status?: string }>('commish_resolve_graduation',
+    { p_league_id: leagueId, p_espn_id: espnId, p_keep: keep }),
+    Ev.commishAction, { tool: 'graduation_conflict' });
+
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
@@ -3875,7 +3889,9 @@ export const makeDraftPick = (leagueId: string, slug: string) =>
  *  awards + auto-nominations. Idempotent — any member's poll may call it. */
 export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string; autopicks?: number; lots_awarded?: number }>('draft_tick', { p_league_id: leagueId });
 
-export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; sleeper_id?: string | null; }
+export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; sleeper_id?: string | null;
+  /** A college player's school (0365), filled by `leaguePool` — print it with `teamLabel`. */
+  school?: string | null; }
 /** EVERY ROW, NOT THE FIRST THOUSAND (v0.489.3).
  *
  *  PostgREST answers any select with at most its max-rows (1000 here) — a
@@ -3907,7 +3923,15 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
     .select('slug, full_name, pos, team, rank, waived_until, espn_id, sleeper_id')
     // slug breaks rank ties: paging needs a TOTAL order, or a row can sit on
     // the boundary and be served twice or never.
-    .eq('league_id', leagueId).order('rank').order('slug').range(from, to));
+    .eq('league_id', leagueId).order('rank').order('slug').range(from, to))
+    // College players (0365) carry no NFL team; their school rides along from
+    // the directory, one extra call and only when the pool holds any.
+    .then(async (rows) => {
+      if (!rows.some((r) => /^c-\d+$/.test(r.slug))) return rows;
+      const col = await leaguePoolCollege(leagueId).catch(() => null);
+      const by = col?.ok ? col.players ?? {} : {};
+      return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr } : r));
+    });
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at
  *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't

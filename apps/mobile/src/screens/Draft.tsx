@@ -43,6 +43,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton }
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
+import { teamLabel } from '@drip/core/data/college';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -1043,7 +1044,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     <PosPill pos={p.pos} size={8} />
                     <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
-                      {p.team} · #{p.rank}
+                      {teamLabel(p)} · #{p.rank}
                       {dyn != null ? ` · DYN ${dyn}` : ''}
                       {adp != null ? ` · ADP ${adp.toFixed(0)}` : ''}
                       {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
@@ -1293,7 +1294,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                         <PosPill pos={p.pos} size={8} />
                         <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
-                          {p.team} · #{p.rank}
+                          {teamLabel(p)} · #{p.rank}
                           {dyn != null ? ` · DYN ${dyn}` : ''}
                           {adp != null ? ` · ADP ${adp.toFixed(0)}` : ''}
                           {proj != null ? ` · ${proj.toFixed(1)}p` : ''}
@@ -1473,7 +1474,7 @@ function EditPickSheet({ leagueId, pick, player, teamName, available, busy, onCl
               <InjuryNow slug={p.slug} size={7.5} />
             </View>
             <PosPill pos={p.pos} size={8} />
-            <Mono size={9} tone="faint">{p.team} · #{p.rank}</Mono>
+            <Mono size={9} tone="faint">{teamLabel(p)} · #{p.rank}</Mono>
           </Pressable>
         ))}
       </ScrollView>
