@@ -6,8 +6,9 @@
 // 2025 season line, and the ★ favorite (0139, account-scoped so a star set
 // here is lit on the web).
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { tap } from './feedback';
+import { openLink } from './openLink';
 import type { Pos } from '@drip/core/types';
 import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
@@ -269,7 +270,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
               <View style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingBottom: 6, marginBottom: 2 }}>
                 <Mono size={8} tone="faint" weight="700" track={0.12}>📰 LATELY</Mono>
                 {(news ?? []).map((n) => (
-                  <Pressable key={n.id} disabled={!n.url} onPress={() => { if (n.url) { tap(); void Linking.openURL(n.url); } }}
+                  <Pressable key={n.id} disabled={!n.url} onPress={() => { if (n.url) { tap(); void openLink(n.url); } }}
                     style={({ pressed }) => ({ marginTop: 4, opacity: pressed ? 0.6 : 1 })}>
                     <Text numberOfLines={2} style={{ fontSize: 11, color: t.text, lineHeight: 15 }}>{n.headline}</Text>
                     <Mono size={8} tone="faint">

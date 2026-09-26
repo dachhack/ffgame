@@ -11,7 +11,9 @@
 // changelog (STATUS.md, generated at web build). Web-only entries count for
 // the list but not for the number — they are not a reason to reinstall.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { tap } from './feedback';
+import { openLink } from './openLink';
 import { APP_VERSION } from '@drip/core/version';
 import { APK_MANIFEST_URL, APK_ZIP_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
 import { useTheme, MONO } from '../theme.native';
@@ -96,13 +98,13 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
               downloaded fine, make it the default for android." Unzip and tap
               the APK inside. */}
           {behind > 0 && (
-            <Pressable onPress={() => { void Linking.openURL(APK_ZIP_URL); }}
-              style={{ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11 }}>
+            <Pressable onPress={() => { tap(); void openLink(APK_ZIP_URL); }}
+              style={({ pressed }) => ({ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11, opacity: pressed ? 0.55 : 1 })}>
               <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>⬇ GET V{st.latest?.toUpperCase()} (ZIP)</Text>
             </Pressable>
           )}
-          <Pressable onPress={() => { void Linking.openURL(CHANGELOG_PAGE_URL); }}
-            style={{ flex: 1, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 11 }}>
+          <Pressable onPress={() => { tap(); void openLink(CHANGELOG_PAGE_URL); }}
+            style={({ pressed }) => ({ flex: 1, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 11, opacity: pressed ? 0.55 : 1 })}>
             <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.dim }}>FULL LOG ON THE SITE ↗</Text>
           </Pressable>
         </View>

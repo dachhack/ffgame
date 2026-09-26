@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.7 — links that never fail quietly
+
+The founder, on the What's-new sheet (build v0.556.3): "Now I can't click on
+anything in the footer." Both footer buttons called `void
+Linking.openURL(url)`, so a refused intent looked exactly like a dead button.
+Not reproduced here, and RN's IntentModule shows no obvious refusal. New
+apps/mobile/src/ui/openLink.ts: Linking first, then expo-web-browser (a Custom
+Tab), then an alert naming the error and the link. Used by both footer buttons
+and the player card's news links. The footer buttons now dim while pressed, so
+the next report tells a blocked touch (no dim) from a failing link (dim,
+nothing opens).
+
 ### v0.556.6 — college game lines in NFL weeks
 
 The founder: "fix the devy game lines in NFL weeks too." A mixed league's
