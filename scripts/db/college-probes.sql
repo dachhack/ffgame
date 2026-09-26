@@ -192,6 +192,29 @@ begin
   perform cp_true((select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93613')
                 < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93612'),
     'cp9c with no season, the older player ranks first');
+  -- ══ cp10. THE BLEND (0379) ══════════════════════════════════════════════
+  -- This season's three games count fully; last season's ten count half.
+  perform upsert_college_stats(2026, jsonb_build_array(
+    jsonb_build_object('espn_id', '93611', 'gp', 3, 'rush_yds', 600, 'rush_td', 6),
+    jsonb_build_object('espn_id', '93612', 'gp', 3, 'rush_yds', 300, 'rush_td', 3)));
+  -- 93611: eff 3 + 5 = 8; rush yds (600 + 500) / 8 = 137.5; rush td (6 + 5) / 8 = 1.375;
+  -- rec (0 + 10) / 8 = 1.25; rec yds (0 + 100) / 8 = 12.5 → PPR 13.75 + 8.25 + 1.25 + 1.25 = 24.5.
+  perform cp_true((select line ->> 'rushYd' = '137.50' and ppg = 24.5 and eff = 8 and season = 2026 from _college_proj('93611')),
+    'cp10 the blend: ' || (select row_to_json(p)::text from _college_proj('93611') p));
+  perform cp_true((select ppg = 16 from _college_proj('93612')), 'cp10a three games this season is enough on their own');
+  perform cp_true(not exists (select 1 from _college_proj('93613')), 'cp10b two games, and nothing else: no line');
+  r := college_directory(array['RB'], 2000);
+  perform cp_true((select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611')
+                < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93612')
+            and (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93612')
+                < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93613'),
+    'cp10c the directory ranks by it: producer, then the freshman who has played, then the cameo');
+  perform cp_ok(set_league_position_access(lid, '["COLLEGE"]'::jsonb), 'cp10d COLLEGE back on (cp8 turned it off)');
+  perform cp_ok(seed_league_pool(lid, '[{"slug":"c-93611","full":"Rank Producer","pos":"RB"},{"slug":"c-93613","full":"Rank Cameo","pos":"RB"}]'::jsonb), 'cp10d pool');
+  r := college_pool_lines(lid);
+  perform cp_true(jsonb_array_length(r) = 1 and r -> 0 ->> 'slug' = 'c-93611' and (r -> 0 ->> 'ppg')::numeric = 24.5,
+    'cp10e THE POINT: the draft room gets a line for every pool player who has one: ' || r::text);
+  perform cp_true(has_function_privilege('authenticated', 'college_pool_lines(uuid)', 'execute'), 'cp10f the draft rooms can read it');
   delete from college_player_stats where espn_id like '936%';
 
   delete from league_pool where league_id = lid;

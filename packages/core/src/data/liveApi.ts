@@ -3601,6 +3601,16 @@ export async function installCollegeProjections(week: number): Promise<number> {
   return list.filter((r) => r.line).length;
 }
 
+/** 0379: a line for every college player in this league's pool — the draft
+ *  rooms install it so PROJ ranks college players (the boards install the
+ *  rostered ones, per week, with installCollegeProjections). */
+export async function installCollegePoolProjections(leagueId: string): Promise<number> {
+  const rows = await rpc<{ slug: string; line?: ProjStatLine | null }[]>('college_pool_lines', { p_league_id: leagueId });
+  const list = Array.isArray(rows) ? rows : [];
+  setCollegeProjections(list);
+  return list.length;
+}
+
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
@@ -3947,7 +3957,9 @@ export const draftTick = (leagueId: string) => rpc<{ ok: boolean; error?: string
 
 export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string; team: string; rank: number; waived_until: string | null; espn_id?: string | null; sleeper_id?: string | null;
   /** A college player's school (0365), filled by `leaguePool` — print it with `teamLabel`. */
-  school?: string | null; }
+  school?: string | null;
+  /** A college player's class (0379): ESPN's experience years, 1 = FR … 4+ = SR. */
+  cls?: number | null; }
 /** EVERY ROW, NOT THE FIRST THOUSAND (v0.489.3).
  *
  *  PostgREST answers any select with at most its max-rows (1000 here) — a
@@ -3984,9 +3996,14 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
     // the directory, one extra call and only when the pool holds any.
     .then(async (rows) => {
       if (!rows.some((r) => /^c-\d+$/.test(r.slug))) return rows;
-      const col = await leaguePoolCollege(leagueId).catch(() => null);
+      // 0379: and their projections, so PROJ ranks them wherever the pool is
+      // listed — the draft room, the wire. Best-effort: no line reads "—".
+      const [col] = await Promise.all([
+        leaguePoolCollege(leagueId).catch(() => null),
+        installCollegePoolProjections(leagueId).catch(() => 0),
+      ]);
       const by = col?.ok ? col.players ?? {} : {};
-      return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr } : r));
+      return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year } : r));
     });
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at

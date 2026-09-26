@@ -284,7 +284,10 @@ export function hasProjection(slug: string, sleeperId?: string | null): boolean 
   return PROJ_2026.has(slug) || (sleeperId != null && PROJ_2026_SID.has(sleeperId))
     || PROJ_KICK[slug] != null || PROJ_DST[slug] != null
     || PROJ_HC[slug] != null || PROJ_PUNT[slug] != null || PROJ_FB[slug] != null
-    || idpLineFor(slug, sleeperId) != null;
+    || idpLineFor(slug, sleeperId) != null
+    // 0379: a college player with an installed line (the draft rooms install
+    // one for every pool player; the boards, the rostered ones).
+    || COLLEGE_LINES.has(slug);
 }
 
 export function kdstBase(slug: string, sleeperId?: string | null): number {

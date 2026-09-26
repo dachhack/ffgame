@@ -32,6 +32,38 @@ import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
 
+/** Every position a draft room can filter by (v0.554.0): the chips are then
+ *  trimmed to the league's own (leagueEligiblePos + zero caps), so IDP, FB,
+ *  HC and P appear exactly where the league plays them. One list for both
+ *  hosts — the app's used to stop at DEF. */
+export const DRAFT_POS_FILTERS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
+
+/** NFL / college, for a pool that holds both (devy and mixed leagues). */
+export type LevelFilter = 'all' | 'nfl' | 'cfb';
+export const LEVEL_FILTERS: { id: LevelFilter; label: string }[] = [
+  { id: 'all', label: 'ALL' }, { id: 'nfl', label: 'NFL' }, { id: 'cfb', label: 'CFB' },
+];
+/** College class chips — ESPN's experience years; 4 covers seniors and beyond. */
+export const CLASS_FILTERS: { id: number; label: string }[] = [
+  { id: 1, label: 'FR' }, { id: 2, label: 'SO' }, { id: 3, label: 'JR' }, { id: 4, label: 'SR+' },
+];
+/** Does a pool row pass the level and class filters? A class choice means
+ *  college: an NFL player never matches one. */
+export function levelClassMatch(p: { slug: string; cls?: number | null }, level: LevelFilter, cls: ReadonlySet<number>): boolean {
+  const college = /^c-\d+$/.test(p.slug);
+  if (level === 'nfl' && college) return false;
+  if (level === 'cfb' && !college) return false;
+  if (cls.size) {
+    if (!college || p.cls == null) return false;
+    return cls.has(Math.min(4, Math.max(1, p.cls)));
+  }
+  return true;
+}
+/** Search: a name, an NFL team or (0379) a school. */
+export const poolSearchMatch = (p: { full_name: string; team: string; school?: string | null }, needle: string): boolean =>
+  !needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)
+  || (p.school ?? '').toLowerCase().includes(needle);
+
 export type PoolSort = 'rank' | 'adp' | 'proj' | 'own' | 'dyn';
 
 export const POOL_SORTS: { id: PoolSort; label: string; hint: string }[] = [

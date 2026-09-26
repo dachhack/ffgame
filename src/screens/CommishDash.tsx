@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
@@ -11,6 +11,54 @@ import { parseScoring, type LeagueScoring } from '@drip/core/engine/leagueScorin
 // The builder's position chips (0163) — base positions only; combos are made by
 // lighting several chips on one spot.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const;
+
+/** A spot's eligible positions as one control (v0.554.0): the button reads
+ *  what the spot takes ("RB · WR · TE") and opens a checklist. Position order
+ *  in the stored spec follows the option list, whatever order they're ticked. */
+function PosMultiSelect({ options, value, onChange, disabled, chip }: {
+  options: string[]; value: string[]; onChange: (pos: string[]) => void; disabled?: boolean;
+  chip: (p: string, on: boolean) => React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const ordered = options.filter((p) => value.includes(p)).concat(value.filter((p) => !options.includes(p)));
+  const toggle = (p: string) => onChange(value.includes(p) ? ordered.filter((q) => q !== p) : options.filter((q) => q === p || value.includes(q)));
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)} className="mono"
+        title="the positions this spot accepts — click to change"
+        style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: RADIUS, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
+          color: ordered.length ? 'var(--text)' : 'var(--warn)', background: 'var(--bg)', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}`, minWidth: 90, textAlign: 'left' }}>
+        {ordered.length ? ordered.join(' · ') : 'pick positions'} <span style={{ color: 'var(--faint)' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 30, background: 'var(--surface)', border: '1px solid var(--bd)',
+          borderRadius: RADIUS, padding: 6, minWidth: 170, boxShadow: '0 6px 20px rgba(0,0,0,0.25)' }}>
+          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--faint)', padding: '2px 4px 6px', borderBottom: '1px solid var(--bd)', marginBottom: 4 }}>
+            ELIGIBLE: <span style={{ color: ordered.length ? 'var(--text)' : 'var(--warn)', fontWeight: 700 }}>{ordered.length ? `${slotSpecLabel(ordered)}${slotSpecLabel(ordered) !== ordered.join('/') ? ` (${ordered.join('/')})` : ''}` : 'none yet'}</span>
+          </div>
+          {options.map((p) => {
+            const on = value.includes(p);
+            return (
+              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 4px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={on} onChange={() => toggle(p)} />
+                <span className="mono" style={chip(p, on)}>{p}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 import { LeagueRow, type LeagueTab } from './AdminPage';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar, inp, btn } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
@@ -672,7 +720,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {spots.map((sp, i) => (
               <div key={i} data-spot={i}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', border: `1px solid ${drag === i ? 'var(--you)' : 'var(--bd)'}`, borderRadius: RADIUS, padding: '5px 8px', opacity: drag === i ? 0.55 : 1, background: drag === i ? 'var(--bg)' : undefined }}>
                 {/* DRAG HANDLE, ON POINTER EVENTS (v0.297.1). It was HTML5 drag
                     — `draggable` + dragstart/drop — which a touch screen never
                     fires: the finger scrolled the page instead, and once the
@@ -708,14 +756,12 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   className="mono" aria-label={`reorder spot ${i + 1}`}
                   style={{ background: 'none', border: 'none', color: drag === i ? 'var(--you)' : 'var(--faint)', cursor: busy ? 'default' : 'grab', fontSize: 15, padding: '2px 4px', lineHeight: 1, touchAction: 'none' }}>⠿</button>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', width: 22 }}>{i + 1}</span>
-                {builderPos.map((p) => {
-                  const on = sp.pos.includes(p);
-                  return (
-                    <button key={p} disabled={busy}
-                      onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
-                      className="mono" style={posChip(p, on)}>{p}</button>
-                  );
-                })}
+                {/* ONE DROPDOWN, NOT A ROW OF CHIPS (v0.554.0, founder: "change the
+                    position selection in roster construction so that it stays on
+                    one line"): the header names what the spot accepts; the list
+                    underneath ticks positions on and off. */}
+                <PosMultiSelect options={builderPos} value={sp.pos} disabled={busy} chip={posChip}
+                  onChange={(pos) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos })); setSpotsDirty(true); }} />
                 <input value={sp.label}
                   onChange={(e) => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, label: e.target.value.slice(0, 24) })); setSpotsDirty(true); }}
                   placeholder={slotSpecLabel(sp.pos)} maxLength={24}
