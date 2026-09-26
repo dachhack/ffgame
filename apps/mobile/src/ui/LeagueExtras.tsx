@@ -742,9 +742,11 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                 <Mono size={9} tone="faint">STARTS WK</Mono>
-                {[15, 16, 17].map((w) => (
-                  <Chip key={w} label={String(w)} on={st.playoff_start_week === w}
-                    onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start week ${w}`); }} />
+                {/* College-calendar leagues (0374) play their bracket in college
+                    Weeks 12–14 at the latest (board weeks 212–214). */}
+                {(st.playoff_start_week > 200 ? [212, 213, 214] : [15, 16, 17]).map((w) => (
+                  <Chip key={w} label={w > 200 ? `CFB ${w - 200}` : String(w)} on={st.playoff_start_week === w}
+                    onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start ${w > 200 ? `CFB week ${w - 200}` : `week ${w}`}`); }} />
                 ))}
               </View>
               <View style={{ marginTop: 8 }}>

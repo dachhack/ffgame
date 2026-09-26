@@ -18,6 +18,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.549.0 — college playoffs
+
+College-calendar leagues play a bracket again (0371 had switched it off).
+The bracket machinery never cared what a week was called — each round is
+`start_week + round`, locking at that week's first kickoff — so it runs on
+board weeks 201+ unchanged. What 0374 changes is the calendar:
+- **Default:** 4 teams from college Week 13 (board week 213): semis Week 13,
+  final Week 14; an 8-team bracket runs Weeks 13–15. The regular season ends
+  the week before (`league_last_regular_week`).
+- **`set_playoff_rules`:** on the college calendar, a start between college
+  Week 2 and 15 (as 2–15 or 202–215), and the bracket must end by Week 15 —
+  no college regular-season games follow it.
+- **`set_league_calendar`:** switching either way clears a stored start week.
+- **Apps:** the web stepper counts CFB weeks 2–15; the app's chips offer
+  CFB 12 / 13 / 14.
+- The worker's hourly progression builds round 1 when the college regular
+  season is final and advances rounds as the college context closes weeks —
+  no worker change needed.
+
 ### v0.548.0 — AI lineups rank college players
 
 Every AI lineup (auto-slot, unmanaged seats, best-ball fills, the seat wire)
