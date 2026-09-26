@@ -18,7 +18,7 @@ import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag, liveTeamFor } from '@drip/core/data/slugMeta';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { shortName } from '@drip/core/data/players';
-import { collegeNameFor } from '@drip/core/data/college';
+import { collegeNameFor, boardTeamFor, isCollegeSlug } from '@drip/core/data/college';
 import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -859,15 +859,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return (slug: string | null | undefined, slotPos?: string[], slot?: string): BoardEntry | null => {
       if (!slug) return null;
       const meta = slugMeta(slug);
-      const g = gameFor(meta.team, slate);
-      const simLive = simTeams.size > 0 && simTeams.has(normTeam(meta.team ?? ''));
+      // A college player's game is matched by his school on a college week.
+      const team = boardTeamFor(slug, meta.team, matchup?.week);
+      const g = gameFor(team, slate);
+      const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
-        : g ? entryState(g.kickoff, meta.team, nowTs, finalTeams) : 'pre';
+        : g ? entryState(g.kickoff, team, nowTs, finalTeams) : 'pre';
       return {
         slug,
         name: prettySlug(slug),
         pos: meta.pos ?? '',
-        team: meta.team ?? null,
+        team: team || null,
         live: pts(slug, slotPos),
         // LEAGUE- AND SPOT-AWARE (v0.308.0) — see the web twin. Was the raw
         // bake, so a custom-scoring league projected under rules it does not
@@ -886,16 +888,16 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,
         // founder: rows sat on the kickoff time and bare points while the sim
         // streamed). Both refresh with playsAt — each poll re-renders them.
-        clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, meta.team) : null,
+        clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, team) : null,
         statline: st !== 'pre' && matchup ? boardStatline(mkPlayer(slug), matchup.week, true) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
         // know used to read "BYE" on the day he played his opener.
-        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(meta.team, slate) ? 'BYE' : null),
+        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(team, slate) ? 'BYE' : null),
         injury: injuryFor(matchup?.week ?? 1, slug),
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
-        roof: g && meta.team ? roofFor(venueTeam(meta.team, g)) : null,
+        roof: g && team && !isCollegeSlug(slug) ? roofFor(venueTeam(team, g)) : null,
         primetime: isPrimetime(g?.kickoff),
       };
     };
@@ -1382,9 +1384,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   by side read as "bigger is winning" everywhere else. */}
               <Pressable onPress={() => setSlateOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open the NFL slate. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
+                accessibilityLabel={`Open the ${(matchup?.week ?? 0) > 200 ? 'college' : 'NFL'} slate. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
                 style={{ width: '100%', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 4, borderRadius: 5, borderWidth: 1, borderColor: lineChip.tone === 'live' ? t.you : t.bd, backgroundColor: t.bg }}>
-                <Mono size={7.5} tone="faint" weight="700" track={0.1}>NFL SLATE</Mono>
+                <Mono size={7.5} tone="faint" weight="700" track={0.1}>{(matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}</Mono>
                 <Mono size={10.5} weight="700" style={{ color: lineChip.tone === 'live' ? t.you : t.text }}>
                   {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
                 </Mono>
@@ -1503,7 +1505,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
       <Overlay
         visible={!!board && slateOpen}
-        title="NFL SLATE"
+        title={(matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}
         subtitle={`${slateTotals.games} ${slateTotals.games === 1 ? 'game' : 'games'}${slateTotals.live ? ` · ${slateTotals.live} live` : ''} · ${slateTotals.involved} with a starter from this matchup`}
         onClose={() => setSlateOpen(false)}>
         {!!board && (

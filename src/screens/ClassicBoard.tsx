@@ -24,7 +24,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag } from '@drip/core/data/slugMeta';
 import { shortName } from '@drip/core/data/players';
-import { collegeNameFor } from '@drip/core/data/college';
+import { collegeNameFor, boardTeamFor, isCollegeSlug } from '@drip/core/data/college';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel } from '@drip/core/data/gameFeed';
 import { boardStatline } from '@drip/core/engine/sim';
@@ -1015,15 +1015,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     return (slug: string | null | undefined, slotPos?: string[], slot?: string): BoardEntry | null => {
       if (!slug) return null;
       const m = slugMeta(slug);
-      const g = gameFor(m.team, slate);
-      const simLive = simTeams.size > 0 && simTeams.has(normTeam(m.team ?? ''));
+      // A college player's game is matched by his school on a college week.
+      const team = boardTeamFor(slug, m.team, matchup?.week);
+      const g = gameFor(team, slate);
+      const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
-        : g ? entryState(g.kickoff, m.team, nowTs, finalTeams) : 'pre';
+        : g ? entryState(g.kickoff, team, nowTs, finalTeams) : 'pre';
       return {
         slug,
         name: prettySlug(slug),
         pos: m.pos ?? '',
-        team: m.team ?? null,
+        team: team || null,
         live: pts(slug, slotPos),
         // Season PPG is the projection. It is honest about what it is — a
         // per-game average, not a matchup-adjusted forecast — and it's the
@@ -1043,18 +1045,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,
         // founder: rows sat on the kickoff time and bare points while the sim
         // streamed). Both refresh with playsAt — each poll re-renders them.
-        clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, m.team) : null,
+        clock: st === 'live' ? feedClockLabel(matchup?.week ?? 1, team) : null,
         // FULL format (v0.368.3): the card gives the statline its whole width
         // and lets it wrap, so nothing needs abbreviating away any more.
         statline: st !== 'pre' && matchup ? boardStatline(mkPlayer(slug), matchup.week, false) : null,
         // 'BYE' is a CLAIM, and it needs proof: a known team and a loaded
         // slate. Without both this says nothing — a player the bake doesn't
         // know used to read "BYE" on the day he played his opener.
-        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(m.team, slate) ? 'BYE' : null),
+        opponent: g ? `${g.home ? 'vs' : '@'} ${g.opponent}` : (isBye(team, slate) ? 'BYE' : null),
         injury: injuryFor(matchup?.week ?? 1, slug),
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
-        roof: g && m.team ? roofFor(venueTeam(m.team, g)) : null,
+        roof: g && team && !isCollegeSlug(slug) ? roofFor(venueTeam(team, g)) : null,
         primetime: isPrimetime(g?.kickoff),
       };
     };
@@ -1616,7 +1618,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                   background: 'var(--bg)', borderRadius: 5, padding: '5px 4px',
                   border: `1px solid ${lineChip.tone === 'live' ? 'var(--you)' : 'var(--bd)'}`,
                 }}>
-                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>NFL SLATE</div>
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{(matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}</div>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 800, lineHeight: 1.3, color: lineChip.tone === 'live' ? 'var(--you)' : 'var(--text)' }}>
                   {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
                 </div>
@@ -1686,7 +1688,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                   in — so a sixteen-game sheet was captioned "8 GAMES", a
                   caption contradicting the thing it captions. */}
               <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)' }}>
-                NFL SLATE · {slateTotals.games} {slateTotals.games === 1 ? 'GAME' : 'GAMES'}
+                {(matchup?.week ?? 0) > 200 ? 'COLLEGE' : 'NFL'} SLATE · {slateTotals.games} {slateTotals.games === 1 ? 'GAME' : 'GAMES'}
                 {slateTotals.live > 0 && <span style={{ color: 'var(--warn)' }}>{` · ${slateTotals.live} LIVE`}</span>}
               </span>
               <button onClick={() => setSlateOpen(false)} aria-label="close the slate" className="mono"
