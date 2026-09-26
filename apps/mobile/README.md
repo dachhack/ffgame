@@ -12,8 +12,8 @@ exercise the whole stack — Supabase auth and reads/writes, the slate and
 per-window lock rules, the metric catalogue, the premium gate, the coin wallet.
 
 Release APKs are built locally (`android/gradlew assembleRelease`) and signed
-with the committed playtest key — see **Signing** below. iOS has never been
-built or run.
+with the committed playtest key — see **Signing** below. iOS runs in the
+Simulator (see **iOS (Simulator)**); TestFlight is the next step.
 
 ## Running it
 
@@ -162,17 +162,75 @@ repo before. `withCoreBundleInput` is the fix and this is the check that the fix
 is still working — an unchanged hash after a change to `packages/core` means the
 bundle is stale, not that the build was fast.
 
-### iOS
+### iOS (Simulator)
 
-Needs macOS with Xcode — there is no way to run or emulate iOS elsewhere.
+Needs macOS with Xcode — there is no way to run or emulate iOS elsewhere. No
+paid Apple Developer account is needed for the Simulator.
+
+One-time setup: install Xcode, open it once so it installs an iOS Simulator
+runtime, then `sudo xcode-select -s /Applications/Xcode.app` and
+`brew install cocoapods`.
 
 ```bash
-npm run ios            # expo run:ios — builds and boots the Simulator
+npm install            # from the REPO ROOT
+cd apps/mobile
+npm run ios            # expo run:ios — prebuilds ios/, installs pods, builds, boots the Simulator
+npm start              # later sessions: Metro for the dev build already installed
 ```
 
-No paid Apple Developer account is needed for the Simulator. For a build you
-can put on a real iPhone, `npm run ios:simulator` covers Simulator-only via EAS,
-and TestFlight distribution needs the $99/yr enrollment.
+The first build takes a while (pods + a full native compile). `ios/` is
+generated and gitignored, like `android/`; `npm run prebuild` regenerates both.
+
+No Mac build handy? `npm run ios:simulator` builds a Simulator `.app` on EAS
+(free Expo account); drag it onto a booted Simulator to install. It still needs
+a Mac to run.
+
+What differs from Android, on purpose:
+
+- **Sign in by email or the browser Google flow.** Native Google sign-in is
+  Android-only (`src/auth/googleNative.ts`) until an iOS OAuth client exists —
+  without one GIDSignIn crashes the app rather than failing.
+- **Push goes straight to Apple.** On iOS `src/ui/push.ts` registers the raw
+  APNs token as platform `ios`, and the worker sends it via `server/src/apns.js`
+  — no Firebase on iOS. It needs the APNs key on the worker (Fly secrets
+  `APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID`; see `server/.env.example`);
+  until then iPhone pushes wait in the outbox as `waiting-apns`. Simulator and
+  Xcode builds get sandbox tokens, TestFlight production ones; the worker
+  tries production, then sandbox.
+- **No premium checkout.** Apple requires its own in-app purchase for digital
+  content, so the iOS app shows no price and no buy button
+  (`canSellPremium` in `LivePicks.tsx`). Premium bought on the web or Android
+  still applies at sign-in.
+- **No home-screen widget.** `react-native-android-widget` is Android's; its
+  registration and repaints are skipped on iOS and Settings hides the entry.
+
+### iOS on playtesters' iPhones (TestFlight)
+
+Needs the Apple Developer Program membership. From `apps/mobile`:
+
+```bash
+npx eas login                                        # Expo account
+npx eas build --profile production --platform ios    # signs in to Apple; EAS creates the certs + profile
+npx eas submit --profile production --platform ios --latest   # uploads to App Store Connect
+```
+
+The first `eas submit` can create the app record in App Store Connect; put the
+numeric Apple ID it gets (App Store Connect → the app → App Information) in
+`eas.json` → `submit.production.ios.ascAppId`, and your Team ID in
+`appleTeamId`, so later submits don't ask. Build numbers auto-increment
+(`appVersionSource: remote`).
+
+After processing (~10–30 min) the build appears under TestFlight. Internal
+testers (your App Store Connect team, up to 100) can install at once; external
+testers (a public link, up to 10,000) need the first build through Beta App
+Review. Builds expire after 90 days.
+
+`ios.infoPlist.ITSAppUsesNonExemptEncryption` is `false` in app.json: the app's
+only cryptography is the OS's HTTPS, which is exempt, and declaring it stops
+every upload waiting at "Missing Compliance". If the app ever ships its own
+encryption, that answer changes.
+
+See `docs/store-listing.md` for the full App Store path.
 
 ### Google sign-in without the browser
 
@@ -339,7 +397,9 @@ In rough order of how much they'll cost:
   the system sans.
 - **Card face gradient.** The dot texture is faithful (a real tiled PNG); the
   radial gradient's centre highlight has no RN equivalent and is still missing.
-- **iOS.** Never built or run. Needs a Mac; TestFlight needs the $99 enrolment.
+- **iOS.** Runs in the Simulator (signed in against production). No widget or
+  native Google sign-in there; push waits on the APNs key; no premium checkout.
+  Not yet on TestFlight.
 
 Sign-in is done (magic link + Google OAuth, `src/screens/SignIn.tsx`); invite
 codes, commish codes and solo passes still live on the web's `LiveOnboard`.

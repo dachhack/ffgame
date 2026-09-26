@@ -10,7 +10,10 @@
     "scheme": "dripfantasy",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dripfantasy.app"
+      "bundleIdentifier": "com.dripfantasy.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.dripfantasy.app",
@@ -95,7 +98,8 @@
       "expo-web-browser",
       "./plugins/withCoreBundleInput",
       "./plugins/withPlaytestSigning",
-      "./plugins/withReleaseShrink"
+      "./plugins/withReleaseShrink",
+      "./plugins/withSceneLifecycle"
     ]
   }
 }

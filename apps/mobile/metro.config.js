@@ -12,6 +12,16 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('node:path');
 
+// No lazy bundles in dev. With lazy on, Metro serves every dynamic import()
+// as a separate bundle fetched at runtime, and core's
+// `import('@supabase/supabase-js')` (supabaseClient.ts) came back in the iOS
+// dev build as "Requiring unknown module" / "Cannot set property 'importedAll'
+// of undefined" — sign-in dead. Release builds inline every import already;
+// this makes dev match. Set here rather than only in the npm scripts so a
+// bare `npx expo start` gets it too: the CLI reads it per manifest request,
+// after this file has loaded.
+process.env.EXPO_NO_METRO_LAZY = '1';
+
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 

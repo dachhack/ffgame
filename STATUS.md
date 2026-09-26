@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.539.0 — the app runs on iPhone
+
+Founder: "what would it take to mint a ios version of the app?" — then ran it
+in the Simulator, signed in against production: "it works. it's beautiful".
+- **Launch on iOS 27:** expo 57.0.25 and `plugins/withSceneLifecycle.js`
+  adopt the UIScene life cycle the iOS 27 SDK requires (the SDK 57 template
+  doesn't; delete the plugin on SDK 58).
+- **Dev bundles:** a native-only Babel plugin turns `import()` into
+  `require()`, so Metro never serves a lazy split bundle — core's lazy
+  supabase-js import had left sign-in dead in the dev build.
+- **iOS gaps, on purpose:** native Google sign-in is Android-only (the browser
+  flow works); the widget is Android's; the iOS app sells nothing — no price,
+  no checkout (App Review 3.1.1). Premium bought elsewhere still applies.
+- **iPhone push:** the app registers its APNs token as platform `ios`; the
+  worker sends straight to Apple (`server/src/apns.js`, HTTP/2 + ES256 JWT,
+  production then sandbox). Needs the `APNS_KEY_P8` / `APNS_KEY_ID` /
+  `APNS_TEAM_ID` Fly secrets; without them iPhone pushes wait as
+  `waiting-apns`.
+- **TestFlight-ready:** exempt-encryption declared; README has the Simulator
+  and `eas build` / `eas submit` steps.
+
 ### v0.538.0 — the computer answers back in chat
 
 Founder: "Could it paste in the chat a generic response that the message was

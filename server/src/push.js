@@ -27,6 +27,7 @@
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
+import { apnsSend, apnsCreds } from './apns.js';
 import { sweepComputer } from './computer.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 
@@ -473,9 +474,10 @@ async function detectLineup() {
 }
 
 // ── sender ──────────────────────────────────────────────────────────────────
-// Two channels, per device platform: 'web' rows hold a browser subscription
-// JSON and go out via the Web Push protocol (webpush.js, VAPID creds); every
-// other platform is an FCM device token. A row is only marked sent once at
+// Three channels, per device platform: 'web' rows hold a browser subscription
+// JSON and go out via the Web Push protocol (webpush.js, VAPID creds); 'ios'
+// rows hold an APNs device token and go straight to Apple (apns.js, a .p8
+// key); every other platform is an FCM device token. A row is only marked sent once at
 // least one of its devices' channels had credentials — with a channel's creds
 // absent, its devices wait in the queue rather than being burned.
 /** 🪓 THE BLADE (0273). guillotine_tick writes a league_txn row the moment it
@@ -545,17 +547,19 @@ async function detectBitten() {
 // oldest-first, fifty of them — a month of browser-only recipients and no
 // VAPID key on the server — were the whole page, and every push behind them
 // waited forever. The mark is also what my_push_log (0276) shows the manager.
-const WAITING = { web: 'waiting-vapid', fcm: 'waiting-fcm' };
+const WAITING = { web: 'waiting-vapid', fcm: 'waiting-fcm', apns: 'waiting-apns' };
 
 async function flush() {
   const token = await fcmAccessToken();
   const vapid = vapidKeys();
-  if (!token && !vapid) return; // no creds on either channel — leave the queue standing
+  const apns = apnsCreds();
+  if (!token && !vapid && !apns) return; // no creds on any channel — leave the queue standing
   let q = db().from('push_outbox')
     .select('id, app_user_id, kind, title, body, data')
     .is('sent_at', null);
   if (!vapid) q = q.or(`error.is.null,error.neq.${WAITING.web}`);
   if (!token) q = q.or(`error.is.null,error.neq.${WAITING.fcm}`);
+  if (!apns) q = q.or(`error.is.null,error.neq.${WAITING.apns}`);
   const { data: pending } = await q.order('id').limit(50);
   if (!pending?.length) return;
   const uids = [...new Set(pending.map((p) => p.app_user_id))];
@@ -567,8 +571,9 @@ async function flush() {
   }
   let sent = 0;
   for (const p of pending) {
-    // A widget ping has no browser to go to: web devices are skipped for it.
-    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false && !(p.kind === 'widget' && t.platform === 'web'));
+    // A widget ping has no browser or iPhone to go to (the home-screen widget
+    // is Android's): web and iOS devices are skipped for it.
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
     // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;
@@ -578,12 +583,14 @@ async function flush() {
     // delivered — my_push_log reads it back to the manager verbatim.
     let ok = 0; const refused = [];
     for (const d of devices) {
-      const web = d.platform === 'web';
-      if (web ? !vapid : !token) { waiting = web ? WAITING.web : WAITING.fcm; continue; }
+      const ch = d.platform === 'web' ? 'web' : d.platform === 'ios' ? 'apns' : 'fcm';
+      if (!{ web: vapid, apns, fcm: token }[ch]) { waiting = WAITING[ch]; continue; }
       attempted = true;
-      const r = web ? await webPushSend(d.token, p) : await fcmSend(token, d.token, p);
+      const r = ch === 'web' ? await webPushSend(d.token, p)
+        : ch === 'apns' ? await apnsSend(d.token, p)
+        : await fcmSend(token, d.token, p);
       if (r.ok) { ok += 1; sent += 1; continue; }
-      refused.push(`${web ? 'browser' : 'phone'} refused: ${r.error}`);
+      refused.push(`${{ web: 'browser', apns: 'iPhone', fcm: 'phone' }[ch]} refused: ${r.error}`);
       if (r.dead) await db().from('push_token').delete().eq('token', d.token);
     }
     if (!attempted) {
