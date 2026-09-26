@@ -155,6 +155,20 @@ begin
   r := set_league_pool_filter((r ->> 'league_id')::uuid, '{"level":"pro"}'::jsonb);
   perform dv_true((r ->> 'ok')::boolean is false, 'dv8b an unknown level is refused');
 
+  -- ══ dv9. ROLLOVER (0368) ═════════════════════════════════════════════════
+  -- Team 1 holds one college player in devy and a full NFL side.
+  perform dv_ok(set_keeper_count(lid, 1), 'dv9 one keeper');
+  r := rollover_league(lid, 14, false);
+  perform dv_ok(r, 'dv9a rollover');
+  plain := (r ->> 'league_id')::uuid;
+  perform dv_true((select spot from native_roster where league_id = plain and slug = 'c-93701' and roster_id = 1) = 'devy',
+    'dv9b the devy player carries, still in devy');
+  perform dv_true((select count(*) from native_roster where league_id = plain and roster_id = 1 and spot <> 'devy') = 1,
+    'dv9c and the keeper count still means one NFL keeper');
+  perform dv_true((select keeper_slots from draft where league_id = plain) = 3, 'dv9d the draft counts keepers + devy as pre-filled');
+  perform dv_true((r ->> 'keeper_slots')::int = 3, 'dv9e and says so');
+  delete from league_pool where league_id = plain;
+
   delete from league_pool where league_id in (lid, plain);
   raise notice 'devy probes done';
 end $$;
