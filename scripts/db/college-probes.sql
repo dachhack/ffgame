@@ -221,7 +221,16 @@ begin
             and (select (e ->> 'vor')::numeric from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611') = 8.5,
     'cp10g THE POINT: ranked by value over his position, not raw points — the back before the 30-a-game QB');
   perform cp_ok(set_league_position_access(lid, '["COLLEGE"]'::jsonb), 'cp10d COLLEGE back on (cp8 turned it off)');
+  -- ══ cp11. CONFERENCES (0382) ════════════════════════════════════════════
+  update college_player set school_id = '9361' where espn_id = '93611';
+  perform cp_true(not has_function_privilege('authenticated', 'upsert_college_schools(jsonb)', 'execute'), 'cp11 only the worker writes schools');
+  perform upsert_college_schools('[{"school_id":"9361","school_abbr":"RKU","conference":"SEC","conf_id":8,"tier":"P4"},{"school_id":"x","conference":"Nope","tier":"D2"}]'::jsonb);
+  perform cp_true((select count(*) from college_school where school_id in ('9361', 'x')) = 1, 'cp11a a row with an unknown tier is refused');
   perform cp_ok(seed_league_pool(lid, '[{"slug":"c-93611","full":"Rank Producer","pos":"RB"},{"slug":"c-93613","full":"Rank Cameo","pos":"RB"}]'::jsonb), 'cp10d pool');
+  r := league_pool_college(lid);
+  perform cp_true(r -> 'players' -> 'c-93611' ->> 'conference' = 'SEC' and r -> 'players' -> 'c-93611' ->> 'tier' = 'P4',
+    'cp11b the pool reads a college player''s conference and tier: ' || (r -> 'players' -> 'c-93611')::text);
+  delete from college_school where school_id = '9361';
   r := college_pool_lines(lid);
   perform cp_true(jsonb_array_length(r) = 1 and r -> 0 ->> 'slug' = 'c-93611' and (r -> 0 ->> 'ppg')::numeric = 24.5,
     'cp10e THE POINT: the draft room gets a line for every pool player who has one: ' || r::text);

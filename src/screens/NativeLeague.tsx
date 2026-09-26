@@ -60,7 +60,7 @@ import {
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -122,11 +122,24 @@ function starApply<T>(list: T[], mode: StarMode, favs: Set<string>, slugOf: (x: 
 }
 /** NFL / CFB and college class (0379) — shown only where the pool holds
  *  college players (devy, mixed and college-only leagues). */
-function LevelClassChips({ level, setLevel, cls, setCls, showLevel }: {
+function LevelClassChips({ level, setLevel, cls, setCls, showLevel, conf, setConf, confOpts }: {
   level: LevelFilter; setLevel: (l: LevelFilter) => void; cls: Set<number>; setCls: (c: Set<number>) => void; showLevel: boolean;
+  conf: string; setConf: (c: string) => void; confOpts: { group: 'NFL' | 'College'; value: string; label: string }[];
 }) {
+  const groups = (['NFL', 'College'] as const).map((g) => ({ g, opts: confOpts.filter((o) => o.group === g) })).filter((x) => x.opts.length);
   return (
     <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* CONFERENCE / DIVISION (0382): AFC/NFC and the eight divisions for NFL
+          players, Power 4 / Group of 5 and each conference for college ones. */}
+      {confOpts.length > 0 && (
+        <select value={conf} onChange={(e) => setConf(e.target.value)} className="mono" title="conference / division"
+          style={{ fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, background: 'var(--bg)', color: conf === 'all' ? 'var(--dim)' : 'var(--text)', border: `1px solid ${conf === 'all' ? 'var(--bd)' : 'var(--you)'}` }}>
+          <option value="all">ALL CONFERENCES</option>
+          {groups.map(({ g, opts }) => (
+            <optgroup key={g} label={g}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
+          ))}
+        </select>
+      )}
       {showLevel && LEVEL_FILTERS.map((o) => <Chip key={o.id} on={level === o.id} onClick={() => setLevel(o.id)}>{o.label}</Chip>)}
       <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: showLevel ? 6 : 0 }}>CLASS</span>
       {CLASS_FILTERS.map((o) => (
@@ -1006,6 +1019,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [level, setLevel] = useState<LevelFilter>('all');
   const [cls, setCls] = useState<Set<number>>(new Set());
+  const [conf, setConf] = useState('all');
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
@@ -1241,15 +1255,17 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       // and all thirty-two defenses (see tenure.ts).
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && levelClassMatch(p, level, cls)
+      && confMatch(p, conf)
       && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap, level, cls]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap, level, cls, conf]);
   // 0379: which college filters this pool needs — class for any college
   // player, NFL/CFB only where both kinds are in it.
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
   }, [pool]);
+  const confOpts = useMemo(() => confFilterOptions(pool), [pool]);
 
   /** The caller's seat in this league, and the queue that hangs off it. */
   const loadTeam = () => {
@@ -1970,7 +1986,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             )}
             <StarChips mode={starMode} setMode={setStarMode} />
           </div>
-          {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} />}
+          {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} conf={conf} setConf={setConf} confOpts={confOpts} />}
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ are already
               printed beside every name. */}
@@ -2760,6 +2776,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   const [nflTeam, setNflTeam] = useState('ALL');
   const [level, setLevel] = useState<LevelFilter>('all');
   const [cls, setCls] = useState<Set<number>>(new Set());
+  const [conf, setConf] = useState('all');
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   // 0341: WHAT THE WIRE IS DOING — Sleeper's trending adds, per slug, and
@@ -3046,13 +3063,15 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       // the same one a 0172 rookies-only spot follows.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && levelClassMatch(p, level, cls)
+      && confMatch(p, conf)
       && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf]);
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
   }, [pool]);
+  const confOpts = useMemo(() => confFilterOptions(pool), [pool]);
   /** The teams actually IN this pool, so the picker never offers an empty
    *  filter — a league whose pool is one conference should not list 32. */
   const poolTeams = useMemo(
@@ -3516,7 +3535,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ))}
           <StarChips mode={starMode} setMode={setStarMode} />
         </div>
-        {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} />}
+        {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} conf={conf} setConf={setConf} confOpts={confOpts} />}
         {/* THE ORDER (v0.302.0). Rank is what the draft clock follows, so it
             stays the default; the other three answer questions rank can't. */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>

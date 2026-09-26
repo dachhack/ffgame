@@ -2,7 +2,7 @@
 // retirement rule — a sweep with ANY failed roster must not retire anybody.
 // Fixtures are cut from real 2026 ESPN responses (Alabama's roster shape, the
 // core API's $ref list); no network.
-import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows, mergeStatRows } from '../src/poll/college.js';
+import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows, mergeStatRows, schoolsFromStandings } from '../src/poll/college.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -132,6 +132,23 @@ const teamsFeed = { items: [
   const one = m.find((r) => r.espn_id === '1');
   ok(m.length === 2 && one.rush_yds === 900 && one.rec_yds === 400 && one.gp === 12,
     'a back\'s rushing and receiving walks become one line');
+}
+
+// ── conferences (0382) ──
+{
+  const feed = { children: [
+    { id: '8', abbreviation: 'sec', standings: { entries: [{ team: { id: '333', abbreviation: 'ALA' } }, { team: { id: '61', abbreviation: 'UGA' } }] } },
+    { id: '18', abbreviation: 'ind', standings: { entries: [{ team: { id: '87', abbreviation: 'ND' } }] } },
+    // a conference split into divisions keeps its teams one level down
+    { id: '15', abbreviation: 'midam', children: [{ standings: { entries: [{ team: { id: '2459', abbreviation: 'NIU' } }] } }] },
+    { id: '999', abbreviation: 'new', standings: { entries: [{ team: { id: '1', abbreviation: 'X' } }] } },
+  ] };
+  const rows = schoolsFromStandings(feed);
+  const by = Object.fromEntries(rows.map((r) => [r.school_abbr, r]));
+  ok(by.ALA?.conference === 'SEC' && by.ALA.tier === 'P4' && by.ALA.school_id === '333', 'Alabama: SEC, Power 4');
+  ok(by.ND?.tier === 'IND' && by.NIU?.conference === 'MAC' && by.NIU.tier === 'G5', 'an independent, and a divided conference\'s teams');
+  ok(!by.X && rows.length === 4, 'an unknown conference is skipped, not guessed');
+  ok(schoolsFromStandings(null).length === 0, 'no feed, no rows');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
