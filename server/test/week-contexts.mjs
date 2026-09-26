@@ -7,7 +7,7 @@
 // the configuration that does the right thing — the old flag, left set past the
 // opener, would have stopped the regular season from ever locking or resolving
 // while the logs looked healthy.
-import { contextsFor } from '../src/index.js';
+import { contextsFor, withCollege } from '../src/index.js';
 
 let fails = 0;
 const eq = (a, b, msg) => {
@@ -51,6 +51,16 @@ console.log('PASS  regular season survives every preseason state');
 const same = contextsFor(null, 4, 4);
 const weeks = same.map((c) => c.espnWeek + c.offset);
 eq(new Set(weeks).size, weeks.length, 'preseason wk4 and regular wk4 land on different board weeks');
+
+// ── The college calendar (0371): its own context at board week 200 + N ──
+{
+  const base = contextsFor(null, 5, null);
+  const w = withCollege(base, 4);
+  eq(w.map((c) => `${c.sport ?? 'nfl'}:${c.espnWeek}→${c.espnWeek + c.offset}`), ['nfl:5→5', 'college:4→204'],
+    'college Week 4 runs beside NFL week 5, at board week 204, after it');
+  eq(withCollege(base, null).length, 1, 'no college league (or no college week) → no college context');
+  eq(withCollege(base, 16).length, 1, 'past college Week 15 (bowls) → no college context');
+}
 
 console.log(fails ? `\n${fails} FAILURE(S)` : '\nALL PASS — week contexts');
 process.exit(fails ? 1 : 0);

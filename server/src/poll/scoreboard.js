@@ -5,8 +5,12 @@
 // callers pass config.seasonType so a preseason game can be ingested for rehearsal.
 import { windowIdsFromKickoffs } from '../../../packages/core/src/data/nflSlate.ts';
 
-const SB = (season, week, seasonType = 2) =>
-  `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasonType}&week=${week}`;
+// sport 'college' (0371) reads ESPN's college-football board, FBS only
+// (groups=80), with room for a full Saturday (limit=300).
+const LEAGUE_PATH = (sport) => (sport === 'college' ? 'college-football' : 'nfl');
+const SPORT_Q = (sport) => (sport === 'college' ? '&groups=80&limit=300' : '');
+const SB = (season, week, seasonType = 2, sport = 'nfl') =>
+  `https://site.api.espn.com/apis/site/v2/sports/football/${LEAGUE_PATH(sport)}/scoreboard?dates=${season}&seasontype=${seasonType}&week=${week}${SPORT_Q(sport)}`;
 
 async function getJson(url, tries = 4) {
   for (let i = 0; i < tries; i++) {
@@ -32,13 +36,13 @@ const gamesCache = new Map();   // key → { at, games }
 
 /** Normalized games for a season-week. state ∈ pre | in | post.
  *  `maxAgeMs` > 0 permits a cached answer that recent — fixtures only. */
-export async function getGames(season, week, seasonType = 2, maxAgeMs = 0) {
-  const key = `${season}:${week}:${seasonType}`;
+export async function getGames(season, week, seasonType = 2, maxAgeMs = 0, sport = 'nfl') {
+  const key = `${sport}:${season}:${week}:${seasonType}`;
   if (maxAgeMs > 0) {
     const hit = gamesCache.get(key);
     if (hit && Date.now() - hit.at < maxAgeMs) return hit.games;
   }
-  const d = await getJson(SB(season, week, seasonType));
+  const d = await getJson(SB(season, week, seasonType, sport));
   const games = (d.events ?? []).map((e) => {
     const comp = e.competitions?.[0] ?? {};
     const cs = comp.competitors ?? [];
@@ -50,6 +54,9 @@ export async function getGames(season, week, seasonType = 2, maxAgeMs = 0) {
       state: e.status?.type?.state ?? comp.status?.type?.state ?? 'pre', // pre|in|post
       completed: !!(e.status?.type?.completed),
       teams,
+      // ESPN team ids (0371): the college context polls a game only when one
+      // of these schools has a rostered player.
+      teamIds: cs.map((c) => (c.team?.id != null ? String(c.team.id) : null)).filter(Boolean),
       home: cs.find((c) => c.homeAway === 'home')?.team?.abbreviation ?? teams[0],
       away: cs.find((c) => c.homeAway === 'away')?.team?.abbreviation ?? teams[1],
     };
@@ -133,9 +140,9 @@ export async function gamesToPoll(season, week, seasonType = 2) {
  *  an explicit `week` param reports the week it is showing. Needed in preseason,
  *  where Sleeper's /state/nfl week sits at 0 all August and can't drive week
  *  rollover. Null on any fetch/shape problem (callers keep their fallback). */
-export async function espnCurrentWeek(season, seasonType = 2) {
+export async function espnCurrentWeek(season, seasonType = 2, sport = 'nfl') {
   try {
-    const d = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasonType}`, 2);
+    const d = await getJson(`https://site.api.espn.com/apis/site/v2/sports/football/${LEAGUE_PATH(sport)}/scoreboard?dates=${season}&seasontype=${seasonType}${SPORT_Q(sport)}`, 2);
     const n = Number(d?.week?.number);
     return Number.isFinite(n) && n >= 1 ? n : null;
   } catch { return null; }
