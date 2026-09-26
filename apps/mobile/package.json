@@ -5,9 +5,9 @@
   "main": "index.ts",
   "description": "Drip Fantasy native app (Expo). Player surfaces only — admin and commissioner tools stay on the web.",
   "scripts": {
-    "start": "expo start --dev-client",
-    "ios": "expo run:ios",
-    "android": "expo run:android",
+    "start": "EXPO_NO_METRO_LAZY=1 expo start --dev-client",
+    "ios": "EXPO_NO_METRO_LAZY=1 expo run:ios",
+    "android": "EXPO_NO_METRO_LAZY=1 expo run:android",
     "prebuild": "expo prebuild --clean",
     "bundle": "expo export --platform all --output-dir dist",
     "typecheck": "tsc --noEmit",
@@ -15,6 +15,7 @@
     "apk:local": "eas build --profile preview --platform android --local",
     "ios:simulator": "eas build --profile preview-simulator --platform ios"
   },
+  "//scripts": "EXPO_NO_METRO_LAZY=1 on the dev-server scripts: without it Metro serves each dynamic import() as a separate lazy bundle, and core's `import('@supabase/supabase-js')` (supabaseClient.ts) came back as 'Requiring unknown module' in the iOS dev build. Release builds inline every import already, so this only makes dev behave like what ships.",
   "//": "Native module versions are the ones Expo SDK 57 pins in its bundledNativeModules.json. `npx expo install` normally resolves these; it needs api.expo.dev, so if that is unreachable read that file instead of guessing.",
   "dependencies": {
     "@drip/core": "*",
