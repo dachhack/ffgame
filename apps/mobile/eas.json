@@ -41,6 +41,7 @@
   "submit": {
     "production": {
       "ios": {
+        "ascAppId": "6816293644",
         "appleTeamId": "N6DAWPD9J2",
         "language": "en-US"
       },

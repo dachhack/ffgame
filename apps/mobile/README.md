@@ -221,10 +221,12 @@ comment when pasted, and runs the text. `eas build` signs in to Apple and lets
 EAS create the certificate and profile; `eas submit` uploads to App Store
 Connect.)
 
-The first `eas submit` can create the app record in App Store Connect; put the
-numeric Apple ID it gets (App Store Connect → the app → App Information) in
-`eas.json` → `submit.production.ios.ascAppId`, and your Team ID in
-`appleTeamId`, so later submits don't ask. Add those keys only with real
+The app exists in App Store Connect (Apple ID `6816293644`, team
+`N6DAWPD9J2`) and both ids are in `eas.json` → `submit.production.ios`, so
+submits go straight through. EAS holds the distribution certificate, the
+provisioning profile and an APP_MANAGER App Store Connect API key for
+`@dachhack/drip-fantasy`. Later builds are one line:
+`eas build --profile production --platform ios --auto-submit`. Add those keys only with real
 values: **eas.json is schema-checked** — an empty string, or any unknown key
 (so no `"//"` comment keys), fails every `eas build` with "eas.json is not
 valid". Notes about its profiles live here instead: `preview` is the
