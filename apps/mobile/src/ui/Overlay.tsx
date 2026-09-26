@@ -74,13 +74,29 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
   const anim = useRef(new Animated.Value(1)).current;
   const H = Dimensions.get('window').height;
 
+  // THE SHEET MUST ARRIVE (v0.556.3, founder: "I still can't click anything
+  // in the header besides 'my leagues'" — every control that opens a sheet was
+  // dead on Android after the RN 0.86.3 / Expo upgrade). The slide used to
+  // start in the same effect that made the Modal visible, on the NATIVE driver.
+  // Under the new architecture a native-driven animation started before the
+  // Modal's window exists can be dropped: the Modal is up, but the sheet sits
+  // one screen-height down and the backdrop at opacity 0 — an invisible layer
+  // whose only job is to close itself on the next tap. So the tap "did
+  // nothing", and the tap after it closed a sheet nobody saw.
+  // Now the slide starts when the Modal says it is SHOWN (onShow), with a
+  // timer as a backstop, and runs on the JS driver, which cannot be lost to a
+  // window that isn't there yet. A sheet is one short slide; JS is plenty.
+  const slideIn = () => Animated.timing(anim, {
+    toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+  }).start();
   useEffect(() => {
-    Animated.timing(anim, {
-      toValue: visible ? 0 : 1,
-      duration: visible ? 260 : 180,
-      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    if (!visible) {
+      Animated.timing(anim, { toValue: 1, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: false }).start();
+      return;
+    }
+    const backstop = setTimeout(slideIn, 120);
+    return () => clearTimeout(backstop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, anim]);
 
   /** Dragging works in PIXELS while `anim` is a 0–1 ratio, so the gesture writes
@@ -88,7 +104,9 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
    *  into one would make the release animation fight whatever the finger left
    *  behind. */
   const drag = useRef(new Animated.Value(0)).current;
-  const settle = () => Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 2 }).start();
+  // Same driver as `anim` (v0.556.3): the two are summed in one transform, and
+  // a JS-driven and a native-driven value cannot share a node.
+  const settle = () => Animated.spring(drag, { toValue: 0, useNativeDriver: false, bounciness: 2 }).start();
 
   const pan = useRef(
     PanResponder.create({
@@ -106,7 +124,7 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
   ).current;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} onShow={slideIn} statusBarTranslucent>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View
           style={[
