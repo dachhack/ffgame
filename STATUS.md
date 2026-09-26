@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.6 — college game lines in NFL weeks
+
+The founder: "fix the devy game lines in NFL weeks too." A mixed league's
+college starters play NFL weeks, and the worker scores each one's college
+game inside the week's window (classic_kickoff_for, the mirror), but the
+board read only the NFL slate, so their rows read "no game listed". 0384
+`college_games_in_nfl_week(week)`: the college slate rows (201..223) inside
+nfl_week_window. Both boards read it when either side holds a college player
+and match his game by school; his `team` stays blank in an NFL week, so NFL
+chips, feeds and roof marks never take a school code for an NFL team. No
+college feed is loaded there, so core `collegeEntryState` calls the game
+final 5 hours after kickoff (the score-as-is rule). Probe mx7.
+
 ### v0.556.5 — the college slate on the matchup board
 
 The founder: "yes, build the college slate for the board." On a college

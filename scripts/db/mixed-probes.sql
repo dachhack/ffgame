@@ -148,6 +148,14 @@ begin
   perform mx_ok(set_league_roster_shape(dv, 2, 0, 0, 0, 2), 'mx6a devy spots');
   perform mx_true(not league_is_mixed(dv), 'mx6b devy leagues keep college players on the shelf');
 
+  -- ══ mx7. THE BOARD'S COLLEGE GAMES IN AN NFL WEEK (0384) ═════════════════
+  r := college_games_in_nfl_week(5);
+  perform mx_true(exists (select 1 from jsonb_array_elements(r) e where e ->> 'home' = 'MXALA' and (e ->> 'week')::int = 205)
+                  and exists (select 1 from jsonb_array_elements(r) e where e ->> 'home' = 'MXUGA')
+                  and not exists (select 1 from jsonb_array_elements(r) e where (e ->> 'week')::int = 206),
+    'mx7 NFL week 5 carries the college games in its window, not next week''s: ' || r::text);
+  perform mx_true(college_games_in_nfl_week(205) = '[]'::jsonb, 'mx7a a college week is not an NFL week');
+
   delete from league_pool where league_id in (lid, dv);
   delete from college_player where espn_id in ('94001', '94002', '94003');
   delete from nfl_slate where season = '2032';
