@@ -831,7 +831,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. Bench and taxi lock at the draft; IR spots can be added (or taken away, once empty) at any time.
+            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. After the draft every count can still change — never below what a team holds — and each change is posted to league chat.
           </div>
           {extraPos.includes('COLLEGE') && <GraduationConflictsPanel leagueId={leagueId} />}
 

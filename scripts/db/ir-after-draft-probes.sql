@@ -5,8 +5,8 @@
 --   • the failure as found: a classic league drafted with no IR spots refuses
 --     every stash ("IR is full — 0 spots"), and the shape setter refused to
 --     add one after the draft;
---   • after the draft the commissioner adds an IR spot; bench and taxi stay
---     locked (the refusal says which, and what still moves); a member cannot;
+--   • after the draft the commissioner adds an IR spot, and (0376) can move
+--     the bench and taxi too, announced in chat; a member cannot;
 --   • the Out player goes on IR, the second one finds the spot full, the seat
 --     he freed takes a signing, and the roster is still legal at rounds + 1;
 --   • a spot someone is standing in cannot be removed; an empty one can;
@@ -91,15 +91,24 @@ begin
 
   -- ══ THE COMMISSIONER ADDS ONE, AFTER THE DRAFT ═══════════════════════════
   perform probe_as('a');
-  perform assert_err(set_league_roster_shape(lid, 3, 0, 0), 'lock once the draft starts',
-    'ia2 the bench is still locked');
-  perform assert_true(position('IR spots can still' in (set_league_roster_shape(lid, 3, 0, 0) ->> 'error')) > 0,
-    'ia2a …and the refusal says what still moves');
-  perform assert_err(set_league_roster_shape(lid, 2, 1, 0), 'lock once the draft starts',
-    'ia2b so is the taxi squad');
+  -- 0376: after the draft the bench and taxi move too, and chat says so.
+  r := set_league_roster_shape(lid, 3, 0, 0);
+  perform assert_ok(r, 'ia2 the bench grows after the draft (0376)');
+  perform assert_true((r ->> 'rounds')::int = 6 and (select rounds from draft where league_id = lid) = 6, 'ia2a the roster grows with it');
+  perform assert_true((select body from league_message where league_id = lid order by id desc limit 1)
+                      = 'Roster spots changed by the commissioner: bench 2 → 3.', 'ia2b the league hears about it');
+  perform assert_true((select txn ->> 'kind' from league_message where league_id = lid order by id desc limit 1) = 'roster_shape',
+    'ia2c …as a house line carrying what changed');
+  perform assert_err(set_league_roster_shape(lid, 1, 0, 0), 'the bench can drop to 2',
+    'ia2d the bench cannot shrink below a team''s players');
+  perform assert_ok(set_league_roster_shape(lid, 2, 1, 0), 'ia2e bench back to 2, and a taxi spot');
+  perform assert_true((select body from league_message where league_id = lid order by id desc limit 1)
+                      = 'Roster spots changed by the commissioner: bench 3 → 2, taxi 0 → 1.', 'ia2f one line names both');
+  perform assert_ok(set_league_roster_shape(lid, 2, 0, 0), 'ia2g taxi back to 0');
   r := set_league_roster_shape(lid, 2, 0, 0);
-  perform assert_ok(r, 'ia2c asking for the shape it has reads it back');
-  perform assert_true((r -> 'shape' ->> 'ir')::int = 0 and (r ->> 'rounds')::int = 5, 'ia2d …unchanged');
+  perform assert_ok(r, 'ia2h asking for the shape it has reads it back');
+  perform assert_true((r -> 'shape' ->> 'ir')::int = 0 and (r ->> 'rounds')::int = 5, 'ia2i …unchanged');
+  perform assert_true((select count(*) from league_message where league_id = lid and txn ->> 'kind' = 'roster_shape') = 3, 'ia2j …and says nothing');
   r := set_league_roster_shape(lid, 2, 0, 1);
   perform assert_ok(r, 'ia3 one IR spot, after the draft');
   perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 1, "out": 0}'::jsonb, 'ia3a the shape carries it');
@@ -107,11 +116,12 @@ begin
     'ia3b the roster grew by one; the draft did not');
   perform assert_true((select rounds from draft where league_id = lid) = 6, 'ia3c draft.rounds moved with it');
   perform assert_true(league_active_seats(lid) = 5, 'ia3d active seats are what they were');
-  -- The client sends whatever bench it shows; a stale or default bench beside
-  -- a real IR change must not block the IR change.
-  r := set_league_roster_shape(lid, 6, 0, 2);
-  perform assert_ok(r, 'ia3e a stale bench beside an IR change is ignored, not refused');
-  perform assert_true(r -> 'shape' = '{"bench": 2, "taxi": 0, "ir": 2, "out": 0}'::jsonb, 'ia3f …the bench held, IR moved');
+  perform assert_true((select body from league_message where league_id = lid order by id desc limit 1)
+                      = 'Roster spots changed by the commissioner: IR 0 → 1.', 'ia3e an IR change is announced too');
+  r := set_league_roster_shape(lid, 3, 0, 2);
+  perform assert_ok(r, 'ia3f a bench change beside an IR change applies both (0376)');
+  perform assert_true(r -> 'shape' = '{"bench": 3, "taxi": 0, "ir": 2, "out": 0}'::jsonb, 'ia3f …' || r::text);
+  perform assert_ok(set_league_roster_shape(lid, 2, 0, 1), 'ia3f back');
   perform assert_ok(set_league_roster_shape(lid, 2, 0, 1), 'ia3g back to one');
 
   -- ══ THE OUT PLAYER GOES ON IR ════════════════════════════════════════════
@@ -147,6 +157,7 @@ begin
     'ia7a the bench is derived from the rounds (8 − 3 starters)');
   perform assert_true((r ->> 'rounds')::int = 10, 'ia7b the roster is rounds + IR');
   perform assert_true(league_active_seats(lid2) = seats, 'ia7c active seats did not move');
+  -- 0376: the bench it was sent (0) was the client's default beside an IR change.
 
   raise notice 'ir-after-draft probes done';
 end $$;

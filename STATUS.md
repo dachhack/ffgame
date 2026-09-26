@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.551.0 — roster spots change after the draft; COLLEGE chip on mobile
+
+- **Roster spots after the draft (0376).** Once the draft is complete, a
+  commissioner can change bench, taxi and devy counts as well as IR and OUT.
+  Growing a section opens spots, filled from free agency as usual. Shrinking
+  one is refused while any team holds more players there than the new count
+  ("the bench can drop to N"). The bench is counted with the lineup, since
+  active players fill both. While the draft is live, bench, taxi and devy
+  stay locked; IR and OUT keep their old rule. A league that never saved a
+  shape keeps 0296's protection: a bench sent beside an IR/OUT change is the
+  client's default and is ignored.
+- **Logged in chat.** Every post-draft change, IR and OUT included, posts one
+  house line: "Roster spots changed by the commissioner: bench 5 → 6, taxi
+  2 → 0." The payload is `{kind: 'roster_shape', from, to}`. Pre-draft setup
+  posts nothing.
+- **Mobile COLLEGE chip.** Admins get an "⚡ ADMIN · EXTRA POSITIONS" row in
+  the mobile commissioner tools with HC / P / IDP / FB / RET / COLLEGE, plus
+  the NFL/college calendar switch once COLLEGE is on, matching the web admin
+  page.
+- Probes: ir-after-draft ia2–ia3, out-spot os5c–d, devy dv4c–f, taxi-ir tx11.
+
 ### v0.550.1 — college read-back
 
 A read-only report of what the worker stored for rostered college players, to

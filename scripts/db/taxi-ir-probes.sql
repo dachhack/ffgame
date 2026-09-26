@@ -146,7 +146,7 @@ begin
   update draft set status = 'live' where league_id = lid;
   set local role authenticated;
   perform probe_as('b');
-  perform assert_err(set_league_roster_shape(lid, 5, 1, 1), 'lock once the draft', 'tx11 bench frozen mid-draft (0296: IR alone still moves)');
+  perform assert_err(set_league_roster_shape(lid, 5, 1, 1), 'can change once the draft is over', 'tx11 bench frozen mid-draft (0376: it moves once the draft is over; IR moves now)');
 
 end $$;
 
