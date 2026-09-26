@@ -18,6 +18,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.542.0 — every merge reaches the phones, no build needed
+
+Founder: "how do updates work? I make like 50 updates a day." An APK per
+change meant a reinstall per change, and an iPhone build per change was
+impossible (20+ min on EAS, then Apple's processing).
+- **EAS Update:** `expo-updates` in the app; every merge touching
+  `apps/mobile/` or `packages/core/` publishes its JS to the `production`
+  channel (`.github/workflows/eas-update.yml`, needs `EXPO_TOKEN`).
+- **When it lands:** checked at launch and on every foreground; applied after
+  the app was away 5+ minutes, or at the next cold start (`src/updates.ts`) —
+  never mid-tap.
+- **Native changes still need a build:** runtimeVersion is a fingerprint of
+  the native side (`fingerprint.config.js` drops versionCode/buildNumber and
+  `extra`, which change per build without changing native code — checked: the
+  same hash from a clean checkout, after prebuild, and as gradle resolves it).
+- **Needs one new build of each app** to carry expo-updates; after that, JS
+  changes skip builds entirely.
+
 ### v0.541.0 — a "get the iOS app" chip, waiting on its link
 
 web only, no APK.

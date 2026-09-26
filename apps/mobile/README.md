@@ -205,6 +205,28 @@ What differs from Android, on purpose:
 - **No home-screen widget.** `react-native-android-widget` is Android's; its
   registration and repaints are skipped on iOS and Settings hides the entry.
 
+### Updates without a build (EAS Update, OTA)
+
+Every merge to `main` that touches `apps/mobile/` or `packages/core/` publishes
+its JavaScript to the `production` channel
+(`.github/workflows/eas-update.yml`, needs the `EXPO_TOKEN` repo secret).
+Installed iPhone and Android builds fetch it on launch and on every return to
+the foreground, and apply it once the app has been away 5+ minutes, or at the
+next cold start (`src/updates.ts`). Nobody reinstalls anything.
+
+**Only JS travels this way.** `runtimeVersion` is a fingerprint of the native
+side (`app.json`, `fingerprint.config.js` — version numbers and `extra`
+excluded, so per-build counters don't split it), and an update only reaches
+builds with the same fingerprint. A merge that changes native code — a new
+native package, an Expo upgrade, plugins or permissions in `app.json` — needs
+a new build: the APK rebuilds itself on merge; for iOS run
+`eas build --profile production --platform ios --auto-submit`. The OTA job's
+summary prints both fingerprints.
+
+By hand (same thing CI does): `eas update --channel production
+--environment production --message "…"`. Dev builds (`npm run ios`) ignore
+updates and load from Metro.
+
 ### iOS on playtesters' iPhones (TestFlight)
 
 Needs the Apple Developer Program membership. From `apps/mobile`:

@@ -1,0 +1,84 @@
+name: Publish the app update (OTA)
+
+# EVERY MERGE REACHES THE PHONES (v0.542.0). Founder: "how do updates work? I
+# make like 50 updates a day." A new APK or TestFlight build per change can't
+# keep up, so the JavaScript of every merge that touches the app is published
+# with `eas update` to the one "production" channel. Installed iPhone and
+# Android builds pick it up themselves: checked at launch and on every return
+# to the foreground, applied after the app has been away a few minutes
+# (apps/mobile/src/updates.ts). No build, no TestFlight, no reinstall.
+#
+# Only builds whose NATIVE fingerprint matches get an update (runtimeVersion
+# policy 'fingerprint', apps/mobile/fingerprint.config.js). A merge that
+# changes native code — a new native package, an Expo upgrade, app.json
+# permissions — publishes an update no existing build accepts; the next APK
+# (release-apk.yml, automatic) and the next `eas build` for iOS carry it
+# instead. The step summary prints the fingerprints so that is visible.
+#
+# Needs one repository secret, EXPO_TOKEN (expo.dev → Account settings →
+# Access tokens). Without it this job says so and passes, rather than turning
+# main red before the token exists.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/core/**'
+      - '.github/workflows/eas-update.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update
+  # A newer merge supersedes an update still publishing: apps only ever want
+  # the latest, and two racing publishes would land in either order.
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Token present?
+        id: token
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice::EXPO_TOKEN is not set — skipping the OTA publish. Add it under Settings → Secrets and variables → Actions."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.ok == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.token.outputs.ok == 'true'
+
+      - name: Native fingerprints (which builds this update can reach)
+        if: steps.token.outputs.ok == 'true'
+        working-directory: apps/mobile
+        run: |
+          for p in ios android; do
+            h=$(npx expo-updates fingerprint:generate --platform "$p" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))")
+            echo "$p fingerprint: $h"
+            echo "- **$p** runtime (fingerprint): \`$h\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Publish to the production channel
+        if: steps.token.outputs.ok == 'true'
+        working-directory: apps/mobile
+        run: |
+          msg=$(git log -1 --pretty=%s | cut -c1-200)
+          npx -y eas-cli@latest update \
+            --channel production \
+            --environment production \
+            --platform all \
+            --message "$msg" \
+            --non-interactive
+          echo "Published: $msg" >> "$GITHUB_STEP_SUMMARY"

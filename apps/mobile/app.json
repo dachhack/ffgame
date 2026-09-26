@@ -3,11 +3,26 @@
     "name": "Drip Fantasy",
     "icon": "./assets/icon.png",
     "slug": "drip-fantasy",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "dripfantasy",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ca795b60-9950-44e2-8d29-542e60454c1d",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.dripfantasy.app",
