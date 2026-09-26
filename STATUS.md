@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.10 — web links open in the in-app browser first
+
+The founder, on v0.556.7's What's-new footer: "they fade but nothing opens".
+So the tap lands, no alert showed, and nothing opened: Linking.openURL
+reported success, or never answered, without a browser appearing. openLink
+now tries expo-web-browser (a Custom Tab, which sign-in already uses on this
+phone) first for http(s) links, then Linking. Each attempt has a 2.5s
+deadline, and if every route fails an alert names each error and the link.
+
 ### v0.556.9 — college weeks go by date: "Week of 9/28/2026"
 
 The founder: "The week 205 thing is throwing me off. Can we do 'week of
