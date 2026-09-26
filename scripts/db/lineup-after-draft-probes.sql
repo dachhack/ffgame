@@ -49,6 +49,7 @@ begin
     {"slug":"la-wr1","full":"Wr One","pos":"WR","team":"KC","exp":3},{"slug":"la-wr2","full":"Wr Two","pos":"WR","team":"KC","exp":3},
     {"slug":"la-wr3","full":"Wr Three","pos":"WR","team":"KC","exp":3},
     {"slug":"la-qb1","full":"Qb One","pos":"QB","team":"KC","exp":3},{"slug":"la-qb2","full":"Qb Two","pos":"QB","team":"KC","exp":3},
+    {"slug":"la-qb3","full":"Qb Three","pos":"QB","team":"KC","exp":3},
     {"slug":"la-te1","full":"Te One","pos":"TE","team":"KC","exp":3},{"slug":"la-te2","full":"Te Two","pos":"TE","team":"KC","exp":3},
     {"slug":"la-k1","full":"K One","pos":"K","team":"KC"}]'::jsonb);
 
@@ -69,6 +70,14 @@ begin
               and not _autopick_spot_fits('{"pos":["RB"],"level":"nfl"}', 'RB', 'college', '', null), 'la1f a spot''s level');
   perform la_true(not _autopick_spot_fits('{"pos":["RB"],"max_exp":0}', 'RB', 'nfl', 'KC', 3)
               and not _autopick_spot_fits('{"pos":["RB"],"flags":["Rookie"]}', 'RB', 'nfl', 'KC', 0), 'la1g tenure filters, and a flagged spot never matches');
+  -- 0381: THE BENCH HAS DEPTH. Every QB ranked above everyone else: with one
+  -- QB spot, a team stops at two quarterbacks while anyone else is left.
+  update league_pool set rank = rank - 1000 where league_id = lid and pos = 'QB';
+  insert into native_roster (league_id, roster_id, slug) values (lid, 1, 'la-qb2');
+  perform la_true(native_autopick_slug(lid, 1, 12) <> 'la-qb3' and native_autopick_slug(lid, 1, 12) not like 'la-qb%',
+    'la1m THE POINT: two QBs held, one QB spot — the bench takes someone else (got ' || native_autopick_slug(lid, 1, 12) || ')');
+  delete from native_roster where league_id = lid and slug = 'la-qb2';
+  update league_pool set rank = rank + 1000 where league_id = lid and pos = 'QB';
   delete from native_roster where league_id = lid;
   -- A kicker spot waits for the last rounds (0195), even while open.
   perform la_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]},{"pos":["RB","WR","TE"]},{"pos":["K"]}]'::jsonb), 'la1h add a K spot');

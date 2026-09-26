@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.554.2 — autodraft builds a bench; college ranks by value over replacement
+
+The founder's all-autodraft college draft filled every bench spot with QBs
+(0381). Two causes:
+- 0379 ranked college players by PPR per game, where passing puts QBs on
+  top of the board.
+- A builder league caps no position its lineup starts, so nothing stopped
+  the QBs piling up.
+
+The fixes:
+- **Value over replacement.** `college_directory` now orders by ppg minus a
+  typical last starter at the position (the 24th QB, 36th RB, 48th WR, 16th
+  TE; the position's lowest when fewer have a line), and returns `vor`.
+  Pools seeded or refreshed from now on use it.
+- **Bench depth.** After the lineup is filled, autopick takes the
+  best-ranked player at a position still below twice the starting spots that
+  accept it (one QB spot → 2 QBs). Only then does it pick purely by rank.
+  K and DEF keep the last-round rule.
+- Measured, with every QB ranked above everyone else: 8 teams × 15 rounds
+  give each team exactly 2 QBs.
+- Probes: lineup-after-draft la1m, college cp10g.
+
 ### v0.554.1 — an all-autodraft room drafts in seconds again
 
 The founder watched a college league with every seat on autodraft stall.
