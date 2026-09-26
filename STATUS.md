@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.553.0 — new leagues score weeks already played, at the commissioner's call
+
+A classic league made mid-week used to start the following week. Now (0378):
+- **Backdate the season.** Before any week is scored, a commissioner can move
+  the start back to any week already under way this season, on the league's
+  own calendar (NFL 1–18 or college 201–215). The schedule is re-laid from
+  there, and the draft's own re-lay keeps it (`settings_json.backdate`, read
+  by `league_first_open_week`; `_shift_schedule_to_open_week` stands down).
+  The worker only locks and finalizes the week it is playing, so backdated
+  weeks sit untouched until they're scored. The league is told in chat.
+- **Score as-is.** `commish_score_as_is` queues a week that has kicked off
+  and isn't final; `server/src/scoreAsIs.js` drains the queue on the tick:
+  - polls any game of the week for this league's teams and schools with no
+    stored plays (the worker follows only rostered schools), mirroring
+    college games into the NFL week for a mixed league;
+  - sets each managed seat's lineup: what it saved for the week, otherwise
+    its saved lineup from the week it plays next (players still on its
+    active roster only), with empty spots filled by the auto-slot planner
+    (projections, byes, injuries). AI and unclaimed seats are left to the
+    resolver;
+  - a week that's over is finalized, stamped and written up; a week still
+    being played stays live, so games already played count and the rest
+    plays out as usual;
+  - posts the results (or "lineups set") to chat.
+- **UI.** "⏮ WEEKS ALREADY PLAYED" in the web console's MATCHUPS tab and in
+  the mobile commissioner tools (report section): the start-week picker, and
+  a SCORE AS-IS button per started week, with its status.
+- Classic only. A final week is left to the re-score (0353).
+- Probes: score-as-is (backdate range, draft re-lay, queue rules, state,
+  drip refused). Test: server/test/score-as-is.mjs (lineup planning, week
+  over).
+
 ### v0.552.0 — the starting lineup changes after the draft; autopick fills it first
 
 - **Lineup after the draft (0377).** Once the draft is complete, and between

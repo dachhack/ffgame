@@ -241,3 +241,4 @@ $RUN -f scripts/db/graduation-probes.sql | grep -E "PROBE FAIL|ALL GRADUATION PR
 $RUN -f scripts/db/college-calendar-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-CALENDAR PROBES" || { echo "COLLEGE-CALENDAR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/mixed-probes.sql | grep -E "PROBE FAIL|ALL MIXED PROBES" || { echo "MIXED PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/lineup-after-draft-probes.sql | grep -E "PROBE FAIL|ALL LINEUP-AFTER-DRAFT PROBES" || { echo "LINEUP-AFTER-DRAFT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/score-as-is-probes.sql | grep -E "PROBE FAIL|ALL SCORE-AS-IS PROBES" || { echo "SCORE-AS-IS PROBES FAILED"; exit 1; }
