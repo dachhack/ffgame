@@ -33,6 +33,7 @@ import {
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
+  leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -2454,6 +2455,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 draft is what it FILLS — IR spots are the difference. */}
             <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out}{shape.ir + shape.out > 0 ? ' (no IR/OUT)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
+          {extraPos.includes('COLLEGE') && <GraduationConflictsCard leagueId={leagueId} />}
           {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────
               Who may ride it and when it shuts — and unlike the shape, these
               move at ANY time. */}
@@ -2638,6 +2640,50 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       )}
       {note && <Mono size={9} tone={note.startsWith('✓') ? 'faint' : 'warn'} style={{ marginTop: 8 }}>{note}</Mono>}
     </Card>
+  );
+}
+
+/** GRADUATION CONFLICTS (0370) — the web's panel, for the app. A devy player
+ *  reached the NFL while another team rosters him as an NFL player; the
+ *  commissioner says whose he is. Renders nothing when there is nothing open. */
+function GraduationConflictsCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [rows, setRows] = useState<GraduationConflict[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => leagueGraduationConflicts(leagueId).then((r) => setRows(r.ok ? r.conflicts ?? [] : [])).catch(() => {});
+  useEffect(() => { void load(); }, [leagueId]);
+  if (!rows.length && !note) return null;
+  const settle = async (espnId: string, keep: 'devy' | 'nfl') => {
+    if (busy) return;
+    tap(); setBusy(true); setNote(null);
+    try {
+      const r = await commishResolveGraduation(leagueId, espnId, keep);
+      if (r.ok) { commit(); setNote('✓ settled'); } else { warn(); setNote(r.error ?? 'failed'); }
+      await load();
+    } finally { setBusy(false); }
+  };
+  return (
+    <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 6, padding: 8 }}>
+      <Mono size={9} weight="700" tone="warn">🎓 GRADUATION CONFLICTS · one player, two teams</Mono>
+      {rows.map((c) => (
+        <View key={c.espn_id} style={{ marginTop: 8, gap: 6 }}>
+          <Text style={{ fontSize: fs(12), color: t.text }}>
+            {c.full_name ?? c.nfl_slug}
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.faint }}> — Team {c.devy_roster} holds him as devy, Team {c.nfl_roster} as an NFL player</Text>
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {([['devy', c.devy_roster], ['nfl', c.nfl_roster]] as const).map(([keep, team]) => (
+              <Pressable key={keep} disabled={busy} onPress={() => void settle(c.espn_id, keep)}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingVertical: 6, paddingHorizontal: 10, opacity: busy ? 0.5 : 1 }}>
+                <Mono size={9} weight="700">Keep Team {team}</Mono>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ))}
+      {note && <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>{note}</Mono>}
+    </View>
   );
 }
 

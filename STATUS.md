@@ -18,6 +18,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.545.0 — devy follow-ups: school labels and graduation conflicts
+
+- **School, not a blank:** `leaguePool` fills a college player's school from
+  `league_pool_college` (one extra call, only when the pool holds any), and
+  `teamLabel` prints it wherever the draft board, the wire and the roster
+  print an NFL team (web + app). `team` itself stays blank, since school codes
+  collide with NFL ones.
+- **0370 graduation conflicts:** when a graduating devy player is already
+  rostered by another team as an NFL player, the commissioner now settles it:
+  `league_graduation_conflicts` lists them, `commish_resolve_graduation` keeps
+  the devy holder or the NFL holder and runs the graduation. A panel under
+  the roster shape (web + app) shows only when something is open.
+
 ### v0.544.0 — college players, phase 2: devy spots
 
 NFL classic leagues can hold devy spots: college players sit there, never

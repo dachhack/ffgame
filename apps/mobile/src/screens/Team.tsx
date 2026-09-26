@@ -26,7 +26,7 @@ import {
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
 } from '@drip/core/data/liveApi';
-import { isCollegeSlug } from '@drip/core/data/college';
+import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
@@ -266,7 +266,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
             <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
-              <Mono size={8.5} tone="faint">{sub ?? p.team}</Mono>
+              <Mono size={8.5} tone="faint">{sub ?? teamLabel(p)}</Mono>
               <InjuryBadge status={inj ?? null} size={7.5} />
               <FlagChip slug={p.slug} size={7.5} />
             </View>
@@ -1155,7 +1155,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
-                  <Mono size={8.5} tone="faint">{p.team}</Mono>
+                  <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
                   <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />
                   {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
@@ -1356,7 +1356,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                 <PosPill pos={p.pos} size={8} />
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
                 {fillFor !== 'taxi' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
-                <Mono size={8.5} tone="faint">{p.team}</Mono>
+                <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
                 <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : '\u2192TX'}</Mono>
               </View>
               {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}
