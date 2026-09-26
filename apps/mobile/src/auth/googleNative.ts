@@ -29,6 +29,7 @@
 //   3. Supabase → Authentication → Providers → Google → Authorized Client IDs:
 //      both ids. Supabase rejects an ID token whose audience it doesn't know,
 //      which is what stops anyone bringing their own token.
+import { Platform } from 'react-native';
 import { googleWebClientId } from '@drip/core/data/liveConfig';
 import { signInWithGoogleIdToken } from '@drip/core/data/liveApi';
 
@@ -37,6 +38,12 @@ import { signInWithGoogleIdToken } from '@drip/core/data/liveApi';
  *  import so a build without it — Expo Go, or a prebuild that dropped it —
  *  falls back to the browser instead of failing to load this screen. */
 export function nativeGoogleReady(): boolean {
+  // ANDROID ONLY. On iOS the same module needs an iOS OAuth client (iosClientId
+  // + its reversed id registered as a URL scheme via the plugin's
+  // `iosUrlScheme`), and without them GIDSignIn raises a native exception — a
+  // hard crash, not a catchable error. No iOS client exists yet, so iOS takes
+  // the browser flow, which works with nothing extra configured.
+  if (Platform.OS !== 'android') return false;
   if (!googleWebClientId()) return false;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

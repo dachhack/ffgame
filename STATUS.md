@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.539.0 — college players, phase 1: the directory and the gates
+### v0.543.0 — college players, phase 1: the directory and the gates
 
 Founder: devy leagues, college-only leagues, and leagues where NFL and college
 players both score, all classic only (design doc: "College Players: Devy,
@@ -41,6 +41,71 @@ can put a college player in its pool yet.
   school and class to members.
 - **Admin:** COLLEGE chip in Extra Positions, which now shows the refusal.
   Web only.
+### v0.542.0 — every merge reaches the phones, no build needed
+
+Founder: "how do updates work? I make like 50 updates a day." An APK per
+change meant a reinstall per change, and an iPhone build per change was
+impossible (20+ min on EAS, then Apple's processing).
+- **EAS Update:** `expo-updates` in the app; every merge touching
+  `apps/mobile/` or `packages/core/` publishes its JS to the `production`
+  channel (`.github/workflows/eas-update.yml`, needs `EXPO_TOKEN`).
+- **When it lands:** checked at launch and on every foreground; applied after
+  the app was away 5+ minutes, or at the next cold start (`src/updates.ts`) —
+  never mid-tap.
+- **Native changes still need a build:** runtimeVersion is a fingerprint of
+  the native side (`fingerprint.config.js` drops versionCode/buildNumber and
+  `extra`, which change per build without changing native code — checked: the
+  same hash from a clean checkout, after prebuild, and as gradle resolves it).
+- **Needs one new build of each app** to carry expo-updates; after that, JS
+  changes skip builds entirely.
+
+### v0.541.0 — a "get the iOS app" chip, waiting on its link
+
+web only, no APK.
+
+Founder: "can we add to the web version a download the ios app chip?"
+- **Chip:** 🍎 GET THE iOS APP sits beside 📱 GET THE ANDROID APP on the
+  leagues page, same solid style, opening the TestFlight public link.
+- **Hidden until there is a link:** `IOS_TESTFLIGHT_URL` in
+  `packages/core/src/data/changelog.ts` is empty until Apple approves the first
+  external build and the public link exists. Pasting the link there switches
+  the chip on — nothing else to change.
+
+### v0.540.0 — an invite link belongs to whoever opened it
+
+web only, no APK.
+
+Founder: "that user is not in turf warriors though" — a brand-new App Review
+account, signed up in the same browser, sat on the waiting list of a full
+league it was never invited to.
+- **Cause:** a shared link stashes its code (`dripInviteCode`, and the
+  commish / DFS / solo-pass siblings) so it survives the sign-in round trip,
+  and nothing cleared it on sign-out. The next account to sign up in that
+  browser opened on the previous person's pre-filled join form.
+- **Fix:** core `signOut()` clears every stashed invite code first, before the
+  auth call, so even a failed sign-out can't leave one behind. Preferences are
+  untouched. `check:signoutinvite` pins it.
+
+### v0.539.0 — the app runs on iPhone
+
+Founder: "what would it take to mint a ios version of the app?" — then ran it
+in the Simulator, signed in against production: "it works. it's beautiful".
+- **Launch on iOS 27:** expo 57.0.25 and `plugins/withSceneLifecycle.js`
+  adopt the UIScene life cycle the iOS 27 SDK requires (the SDK 57 template
+  doesn't; delete the plugin on SDK 58).
+- **Dev bundles:** a native-only Babel plugin turns `import()` into
+  `require()`, so Metro never serves a lazy split bundle — core's lazy
+  supabase-js import had left sign-in dead in the dev build.
+- **iOS gaps, on purpose:** native Google sign-in is Android-only (the browser
+  flow works); the widget is Android's; the iOS app sells nothing — no price,
+  no checkout (App Review 3.1.1). Premium bought elsewhere still applies.
+- **iPhone push:** the app registers its APNs token as platform `ios`; the
+  worker sends straight to Apple (`server/src/apns.js`, HTTP/2 + ES256 JWT,
+  production then sandbox). Needs the `APNS_KEY_P8` / `APNS_KEY_ID` /
+  `APNS_TEAM_ID` Fly secrets; without them iPhone pushes wait as
+  `waiting-apns`.
+- **TestFlight-ready:** exempt-encryption declared; README has the Simulator
+  and `eas build` / `eas submit` steps.
 
 ### v0.538.0 — the computer answers back in chat
 

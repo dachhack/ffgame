@@ -11,7 +11,7 @@
 // exactly as they do on web. That is the whole point of the extraction — a rule
 // change lands in one file and both apps get it.
 import { useCallback, useEffect, useMemo, useState, useRef} from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LOCKED_METRIC_UNLOCK } from '@drip/core/data/metrics';
 import { windowForTeam, hasSlate, setRuntimeSlate, weekLabel, windowsForWeek, windowDateLabel, windowTimeLabel, gamesInWindow, nflGameForTeam, kickoffLabel, isPreseasonWeek, LOCK_LEAD_MS, windowPhase } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
@@ -722,10 +722,19 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   }, [picks, matchup, hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const puLocked = (id: string) => !matchPremium && !isFreePowerup(id);
-  const upgradeMsg = 'Premium power-up — unlock premium ($5 you · $30 league) to arm it.';
+  // NO SELLING ON iOS. Premium is digital content, and Apple requires its own
+  // in-app purchase for that (App Review 3.1.1) — a Stripe checkout, a price,
+  // or a pointer to buy it elsewhere is what gets a build rejected. So the iOS
+  // app sells nothing and names no price: premium bought on the web or Android
+  // resolves at sign-in like any entitlement (matchPremium), and everything a
+  // premium matchup unlocks works here unchanged.
+  const canSellPremium = Platform.OS !== 'ios';
+  const upgradeMsg = canSellPremium
+    ? 'Premium power-up — unlock premium ($5 you · $30 league) to arm it.'
+    : 'Premium power-up — this matchup isn’t premium, so it can’t be armed.';
 
   const checkout = (kind: 'personal' | 'league') => {
-    if (!roster) return;
+    if (!roster || !canSellPremium) return;
     markGatedAttempt('checkout:' + kind);
     startCheckout(kind, roster.leagueId).catch((e) => setErr(e instanceof Error ? e.message : 'Checkout failed.'));
   };
@@ -1388,7 +1397,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
             they always were: the AI arms nothing, so the lever attaches to
             nothing.
             What stays is the premium upsell, and only when it applies. */}
-        {controller !== 'ai' && !matchPremium && (
+        {controller !== 'ai' && !matchPremium && canSellPremium && (
           <View style={{ marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
             <Notice>
               <Mono size={9.5} tone="you" weight="700">🔒 Premium unlocks K/DST/IDP + the full power-up set + special events. Both sides of a premium matchup get the full set — never pay-to-win.</Mono>

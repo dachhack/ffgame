@@ -46,6 +46,13 @@ export const APK_URL = 'https://github.com/dachhack/ffgame/releases/download/apk
 export const APK_ZIP_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/drip-fantasy.apk.zip';
 export const APK_MANIFEST_URL = 'https://github.com/dachhack/ffgame/releases/download/apk-latest/manifest.json';
 export const APK_RELEASE_PAGE_URL = 'https://github.com/dachhack/ffgame/releases/tag/apk-latest';
+/** THE iPHONE APP — the TestFlight PUBLIC LINK (https://testflight.apple.com/join/…).
+ *  Empty until Apple approves the first external build (Beta App Review);
+ *  every "get the iOS app" surface hides while it is empty, so a link that
+ *  can't work yet is never offered. Paste the link here to switch them on.
+ *  Testers open it on the iPhone, install TestFlight, and get every later
+ *  build automatically (each expires after 90 days). */
+export const IOS_TESTFLIGHT_URL = '';
 
 /** "v0.392.1" / "0.392.1" → [0, 392, 1]. Non-numeric tails read as 0. */
 export function parseVersion(v: string | null | undefined): number[] {

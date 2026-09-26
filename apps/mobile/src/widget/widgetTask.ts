@@ -26,6 +26,7 @@
 // core's platform seam), keyed by the widget id Android gives it: which
 // league it shows. (The ⇄ score/lineup flip went with v0.500.0's drip card.)
 import React from 'react';
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { registerWidgetTaskHandler, requestWidgetUpdate, type WidgetTaskHandlerProps, type WidgetInfo } from 'react-native-android-widget';
@@ -161,6 +162,9 @@ async function handler(props: WidgetTaskHandlerProps): Promise<void> {
  *  callers need not check first. `fresh` skips
  *  the caches — the app in the foreground knows things first. */
 export async function refreshMatchupWidgets(opts: { fresh?: boolean } = {}): Promise<void> {
+  // Home-screen widgets are Android's (react-native-android-widget). The
+  // library already no-ops elsewhere; returning here skips the reads too.
+  if (Platform.OS !== 'android') return;
   syncWidgetTheme();
   try {
     await requestWidgetUpdate({
@@ -204,6 +208,10 @@ TaskManager.defineTask(PUSH_TASK, async () => { await refreshMatchupWidgets(); }
  *  installed (storage) and before the root component registers (HeadlessJS
  *  needs the task handler in place when the bundle loads). */
 export function registerMatchupWidget(): void {
+  // Android only: the HeadlessJS handler has nothing to drive on iOS, and the
+  // silent-push task would want a remote-notification background mode the iOS
+  // build doesn't declare (push is Android-only too — see src/ui/push.ts).
+  if (Platform.OS !== 'android') return;
   registerWidgetTaskHandler(handler);
   Notifications.registerTaskAsync(PUSH_TASK).catch(() => { /* Expo Go / a build without notifications */ });
 }
