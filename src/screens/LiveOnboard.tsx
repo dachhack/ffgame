@@ -23,7 +23,7 @@ import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
 import { slateWeeks, weekGameFeeds, weekLivePlays } from '@drip/core/data/liveApi';
-import { APK_ZIP_URL } from '@drip/core/data/changelog';
+import { APK_ZIP_URL, IOS_TESTFLIGHT_URL } from '@drip/core/data/changelog';
 import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { AdminPage, type LeagueTab } from './AdminPage';
@@ -1173,6 +1173,17 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           color: 'var(--on-accent)', background: 'var(--you)',
           border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
         }}>📱 GET THE ANDROID APP</a>
+        {/* 🍎 GET THE iOS APP (v0.541.0, founder: "add to the web version a
+            download the ios app chip"). Same solid style as its Android twin;
+            it opens the TestFlight public link, which does the rest on the
+            phone. Hidden until IOS_TESTFLIGHT_URL is set — see changelog.ts. */}
+        {IOS_TESTFLIGHT_URL && (
+          <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
+            color: 'var(--on-accent)', background: 'var(--you)',
+            border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
+          }}>🍎 GET THE iOS APP</a>
+        )}
         <button onClick={onFind} className="mono" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',

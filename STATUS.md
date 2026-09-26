@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.541.0 — a "get the iOS app" chip, waiting on its link
+
+web only, no APK.
+
+Founder: "can we add to the web version a download the ios app chip?"
+- **Chip:** 🍎 GET THE iOS APP sits beside 📱 GET THE ANDROID APP on the
+  leagues page, same solid style, opening the TestFlight public link.
+- **Hidden until there is a link:** `IOS_TESTFLIGHT_URL` in
+  `packages/core/src/data/changelog.ts` is empty until Apple approves the first
+  external build and the public link exists. Pasting the link there switches
+  the chip on — nothing else to change.
+
+### v0.540.0 — an invite link belongs to whoever opened it
+
+web only, no APK.
+
+Founder: "that user is not in turf warriors though" — a brand-new App Review
+account, signed up in the same browser, sat on the waiting list of a full
+league it was never invited to.
+- **Cause:** a shared link stashes its code (`dripInviteCode`, and the
+  commish / DFS / solo-pass siblings) so it survives the sign-in round trip,
+  and nothing cleared it on sign-out. The next account to sign up in that
+  browser opened on the previous person's pre-filled join form.
+- **Fix:** core `signOut()` clears every stashed invite code first, before the
+  auth call, so even a failed sign-out can't leave one behind. Preferences are
+  untouched. `check:signoutinvite` pins it.
+
 ### v0.539.0 — the app runs on iPhone
 
 Founder: "what would it take to mint a ios version of the app?" — then ran it
