@@ -61,8 +61,15 @@ export function WhatsNewBanner({ st, onOpen }: { st: UpdateState; onOpen: () => 
   const t = useTheme();
   if (!st.latest || st.behind <= 0) return null;
   return (
-    <Pressable onPress={onOpen} accessibilityRole="button"
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: t.you }}>
+    // ABOVE THE FOLDING TOP (v0.556.1, founder: "I am having trouble clicking
+    // the you are x versions behind banner"). App.tsx's folding header sits at
+    // zIndex 2 and, once a screen scrolls, slides up by its own height at
+    // opacity 0 — straight over this strip. Invisible views still take
+    // touches, so the banner stopped answering after any scroll. Raised above
+    // it (zIndex + elevation, the latter for Android's stacking), the header
+    // now folds away underneath instead.
+    <Pressable onPress={onOpen} accessibilityRole="button" hitSlop={{ top: 4, bottom: 4 }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: t.you, zIndex: 10, elevation: 10 }}>
       <Text style={{ fontSize: 12 }}>⬆</Text>
       <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, color: t.onAccent }}>
         YOU ARE {st.behind} {st.behind === 1 ? 'VERSION' : 'VERSIONS'} BEHIND · v{st.latest} IS OUT

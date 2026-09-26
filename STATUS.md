@@ -18,6 +18,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.1 — the "versions behind" banner can be tapped again
+
+The founder reported they couldn't tap the app's "YOU ARE N VERSIONS BEHIND"
+banner. The folding top (brand bar + league title, zIndex 2) slides up by its
+own height at opacity 0 once a screen scrolls, which puts it right over the
+banner above it. An invisible view still takes touches, so the banner went
+dead after any scroll. The banner now sits above it (zIndex + elevation for
+Android) with a slightly taller tap area; the header folds away underneath.
+
 ### v0.556.0 — conference, tier and class rules for spots and for the league
 
 The founder asked for "division 1 only, or MAC and SEC; an SEC flex and a MAC
