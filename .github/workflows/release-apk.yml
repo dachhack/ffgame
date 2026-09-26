@@ -100,6 +100,12 @@ jobs:
 
       - name: Build the release APK (arm64)
         working-directory: apps/mobile/android
+        # A STEP LIMIT BELOW THE JOB'S (v0.542.1). Run 161 hung inside gradle
+        # until the 45-minute job limit cancelled it — and a cancelled job
+        # never reaches the `tail` below, so the log that would have said
+        # where it hung died in $RUNNER_TEMP. Timing out the STEP first makes
+        # it a failure, and the step after this one prints the log.
+        timeout-minutes: 30
         run: |
           # THE LOG HAS TO SURVIVE THE FAILURE. A step's shell is `bash -e`, so
           # `./gradlew … > log` followed by `rc=$?` never reaches `rc=$?` when
@@ -121,6 +127,19 @@ jobs:
             tail -40 "$RUNNER_TEMP/gradle.log"
           fi
           exit $rc
+
+      - name: Gradle log (when the build hung or failed)
+        if: failure()
+        run: |
+          f="$RUNNER_TEMP/gradle.log"
+          if [ -f "$f" ]; then
+            echo "gradle.log: $(wc -l < "$f") lines — the last 300 follow"
+            tail -300 "$f"
+            echo "--- last tasks started ---"
+            grep -E '^> Task' "$f" | tail -20 || true
+          else
+            echo "no gradle.log"
+          fi
 
       - name: Verify before publishing
         working-directory: apps/mobile
