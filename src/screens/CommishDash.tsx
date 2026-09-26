@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
@@ -204,7 +204,7 @@ export function LastSeenPanel({ leagueId }: { leagueId: string }) {
 // (0172) as raw input strings, so partial typing never fights the keyboard.
 // v0.300.0: the filter also carries FLAGS — the commissioner's own labels as a
 // condition on who may stand in the spot.
-type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string };
+type SpotDraft = { pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college' };
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
   fTeams: (x.teams ?? []).join(', '),
@@ -212,6 +212,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fMax: x.max_exp != null ? String(x.max_exp) : '',
   fFlags: [...(x.flags ?? [])],
   zero: x.zero_pts != null ? String(x.zero_pts) : '',
+  ...(x.level ? { level: x.level } : {}),
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -224,6 +225,7 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     ...(mn != null && Number.isFinite(mn) ? { min_exp: mn } : {}),
     ...(mx != null && Number.isFinite(mx) ? { max_exp: mx } : {}),
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
+    ...(s.level ? { level: s.level } : {}),   // 0372: mixed leagues
     // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the toggle below can't produce it either.
     ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
@@ -459,6 +461,11 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [rounds, setRounds] = useState<number | null>(null);
   // 0171: admin-enabled extra positions + the commissioner's pool filter.
   const [extraPos, setExtraPos] = useState<string[]>([]);
+  // MIXED (0372): COLLEGE on, NFL calendar, no devy spots — the spot level
+  // control shows only then (the server refuses a level anywhere else).
+  const [collegeCal, setCollegeCal] = useState(false);
+  useEffect(() => { leagueIsCollegeCalendar(leagueId).then((r) => setCollegeCal(r === true)).catch(() => {}); }, [leagueId]);
+  const mixed = extraPos.includes('COLLEGE') && !collegeCal && shape.devy === 0;
   const [fltTeams, setFltTeams] = useState('');
   const [fltMin, setFltMin] = useState('');
   const [fltMax, setFltMax] = useState('');
@@ -717,6 +724,13 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
                   onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
                   className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
+                {/* LEVEL (0372): in a mixed league a spot takes either, NFL
+                    players only, or college players only. Cycles ANY → NFL → CFB. */}
+                {mixed && (
+                  <button disabled={busy} title="Who may stand here in a mixed league: anyone, NFL players only, or college players only"
+                    onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, level: !x.level ? 'nfl' : x.level === 'nfl' ? 'college' : undefined })); setSpotsDirty(true); }}
+                    className="mono" style={{ ...pill(!!sp.level), padding: '3px 8px', fontSize: 11 }}>{sp.level === 'college' ? '🎓 CFB' : sp.level === 'nfl' ? '🏈 NFL' : 'ANY'}</button>
+                )}
                 {/* THE ZERO-FILL RULE (v0.303.0): what this spot banks when it
                     is empty, or when whoever stands in it scores nothing. On
                     best-ball spots too since 0304 (v0.430.2): the fill seats a
