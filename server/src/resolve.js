@@ -18,6 +18,7 @@
 // General + best-ball backups on top of per-slot resolveSlot. DEF suppress,
 // cross-window TE-TD nukes, and the K banker bonus remain simplified there.
 import { db } from './supabase.js';
+import { installCollegeMetaFor } from './lock.js';
 import { config } from './config.js';
 import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows, playsFor } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
@@ -612,6 +613,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         const { data: lp } = await db().from('league_pool').select('slug,pos,exp,sleeper_id')
           .eq('league_id', matchup.league_id).range(0, 1999);
         for (const r of lp ?? []) { poolBySlug.set(r.slug, r); if (r.pos) poolPos.set(r.slug, r.pos); }
+      }
+      // 0383: a conference / class spot rule needs the college facts, only
+      // when this matchup's rosters hold college players at all.
+      if ((ros ?? []).some((r) => /^c-\d+$/.test(r.slug)) && slotDefs.some((d) => d.flt?.confs?.length || d.flt?.classes?.length)) {
+        await installCollegeMetaFor((ros ?? []).map((r) => r.slug));
       }
       // A PICKUP COUNTS FROM THE GAME HE WAS OWNED FOR (v0.434.4). A player
       // added after his team's kickoff this week does not enter the fills:

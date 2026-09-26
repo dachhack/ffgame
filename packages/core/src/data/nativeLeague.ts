@@ -23,7 +23,7 @@ import { ADP_2026, ADP_BY_SID, adpValue } from './adp2026';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 import { collegeDirectory } from './liveApi';
-import { collegeSlug } from './college';
+import { collegeSlug, collegeRuleAllows } from './college';
 
 export interface DraftPoolEntry {
   slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number;
@@ -98,7 +98,9 @@ export interface PoolOpts {
   /** Commissioner's allowable-player filter: team whitelist and/or a tenure
    *  window (years_exp — 0 = rookie). Pseudo-players (K/DST/HC/P) pass the
    *  tenure filter always; the team filter applies to them too. */
-  filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null;
+  filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null;
+    /** 0383: college players from these conferences / tiers and classes only. */
+    confs?: string[] | null; classes?: number[] | null } | null;
 }
 
 function hcPuntEntries(positions: string[]): (DraftPoolEntry & { score: number })[] {
@@ -241,7 +243,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   // retired WR name-twin. After the slice, so a renamed row can't be one the
   // cap was about to discard anyway.
   const wantCollege = extras.includes('COLLEGE') && level !== 'nfl' && (level === 'college' || !tenureFiltered);
-  const college = wantCollege ? await collegePoolEntries(extras, level === 'college' ? 2000 : 600, onProgress) : [];
+  const college = wantCollege ? await collegePoolEntries(extras, level === 'college' ? 2000 : 600, onProgress, opts?.filter) : [];
   const nfl = disambiguateSlugs(rows.slice(0, cap - college.length).map(({ score: _score, srank: _srank, ...r }) => r));
   // After the NFL players, best first: the pool's rank is its order, and the
   // devy spots fill from this tail (autopick takes college players only once a
@@ -252,13 +254,18 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
 /** College players for a pool (0369's ranking), keyed c-<espn_id>. Their
  *  `team` stays blank: a school code is not an NFL code, and several collide
  *  (MIA, HOU, CIN, BUF), which would tie a college player to an NFL kickoff. */
-async function collegePoolEntries(extras: string[], limit: number, onProgress?: (note: string) => void): Promise<DraftPoolEntry[]> {
+async function collegePoolEntries(extras: string[], limit: number, onProgress?: (note: string) => void,
+  rule?: { confs?: string[] | null; classes?: number[] | null } | null): Promise<DraftPoolEntry[]> {
   const positions = ['QB', 'RB', 'WR', 'TE'];
   if (extras.includes('IDP')) positions.push('DL', 'LB', 'DB');
   if (extras.includes('FB')) positions.push('FB');
   try {
-    const rows = await collegeDirectory(positions, limit);
-    return (Array.isArray(rows) ? rows : []).map((r) => ({
+    const rows = await collegeDirectory(positions, (rule?.confs?.length || rule?.classes?.length) ? 2000 : limit);
+    // 0383: the league's college rule — only those conferences and classes.
+    return (Array.isArray(rows) ? rows : [])
+      .filter((r) => collegeRuleAllows({ conf: r.conference ?? null, tier: r.tier ?? null, cls: r.class_year }, rule?.confs, rule?.classes))
+      .slice(0, limit)
+      .map((r) => ({
       slug: collegeSlug(r.espn_id), full: r.full, pos: r.pos, team: '', espnId: r.espn_id,
     }));
   } catch {

@@ -25,6 +25,7 @@ import { buildLeagueReport, postReport } from './report.js';
 import { installWeekSlate } from './rescore.js';
 import { pollGame, nflWeekWindows } from './poll/plays.js';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
+import { installCollegeMetaFor } from './lock.js';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
@@ -138,6 +139,7 @@ async function setLineups(league, week, matchups, over) {
 
   const pool = ok(await db().from('league_pool').select('slug, pos, team, exp, sleeper_id').eq('league_id', league.id).range(0, 2999), 'pool');
   const meta = new Map(pool.map((p) => [p.slug, p]));
+  await installCollegeMetaFor(pool.map((p) => p.slug));   // 0383: conference / class spot rules
   const flags = ok(await db().from('player_flag').select('slug, rules').eq('league_id', league.id), 'flags');
   const noStart = new Set(flags.filter((f) => f.rules?.no_start === true).map((f) => f.slug));
   const ros = ok(await db().from('native_roster').select('roster_id, slug').eq('league_id', league.id).eq('spot', 'active'), 'roster');

@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.0 — conference, tier and class rules for spots and for the league
+
+The founder asked for "division 1 only, or MAC and SEC; an SEC flex and a MAC
+flex; a SR+ spot" (0383). Rule values: a conference, a tier (P4 / G5 / IND),
+or FBS (every FBS school, which is Division I's top level). Classes: FR / SO
+/ JR / SR+ (1–4; 5th-years count as SR+).
+- **A spot:** `confs` / `classes` on a lineup spot make it a college spot
+  from those schools or classes. It needs COLLEGE on and can't also be
+  NFL-only. It is enforced by:
+  - core `slotAllows`, which the boards, auto-slot and the resolver's fill
+    use; the facts come from `setCollegeMeta`, installed by `leaguePool` on
+    the clients and by `college_meta_for` on the worker (lock.js auto-slot,
+    scoreAsIs, resolve);
+  - autodraft (`_college_rule_ok` via a slug-aware `_autopick_spot_fits`).
+- **The league:** `confs` / `classes` on the pool filter limit which
+  college players are seeded (`college_directory` now returns `conference`
+  and `tier`, and `buildDraftPool` filters). NFL players are unaffected.
+  Applied at the next pool refresh; locked at the draft.
+- **UI:** 🎓 CONFERENCE and 🎓 CLASS chips in each spot's 🔎 filter and in
+  the league's PLAYER FILTERS (web and app), shown where COLLEGE is on.
+  Saving the pool filter now keeps its stored `level` (a college calendar's
+  "college only"); it used to drop it.
+- Web: a spot row wraps while its filter panel is open (single line otherwise).
+- Probes: college-rules (new suite). Checks: check-college §10.
+
 ### v0.555.0 — conference and division filters in devy drafts
 
 - **College conferences (0382).** New `college_school` table: each FBS

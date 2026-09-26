@@ -7,7 +7,7 @@
 // This pins both, and pins that no NFL-style slug can be read as college.
 // Run: npx tsx scripts/check-college.mjs
 import { readFileSync } from 'node:fs';
-import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS } from '../packages/core/src/data/college.ts';
+import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS, setCollegeMeta, collegeRuleAllows } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
@@ -124,6 +124,20 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   ok(!confMatch(josh, 'SEC') && !confMatch(bama, 'AFC') && confMatch(josh, 'all'), 'an NFL value never lists a college player, and back');
   const opts = confFilterOptions([bama, niu, josh]).map((o) => o.value);
   ok(opts.join() === 'AFC,AFC East,P4,G5,MAC,SEC', 'only the options this pool can answer: ' + opts.join());
+}
+
+// ── 10. conference / class spot rules (0383) ──
+{
+  setCollegeMeta({ 'c-71': { conf: 'SEC', tier: 'P4', cls: 4 }, 'c-72': { conf: 'MAC', tier: 'G5', cls: 1 } });
+  const [sec, sr, fbs] = classicSlotsFromSpec([{ pos: ['RB', 'WR', 'TE'], confs: ['SEC'] }, { pos: ['WR'], classes: [4] }, { pos: ['WR'], confs: ['FBS'] }]);
+  const bama = { id: 'c-71', pos: 'WR', team: '' }, niu = { id: 'c-72', pos: 'WR', team: '' }, pro = { id: 'puka-nacua', pos: 'WR', team: 'LAR' };
+  ok(slotAllows(sec, bama) && !slotAllows(sec, niu), 'THE POINT: an SEC flex takes the SEC player, not the MAC one');
+  ok(slotAllows(sr, bama) && !slotAllows(sr, niu), 'a SR+ spot takes the senior, not the freshman');
+  ok(!slotAllows(sec, pro) && !slotAllows(sr, pro), 'a rule spot is college-only');
+  ok(slotAllows(fbs, niu) && !slotAllows(fbs, { id: 'c-99', pos: 'WR', team: '' }), 'FBS takes any FBS school; no facts, no pass');
+  ok(slotFilterLabel(sec.flt) === 'SEC' && slotFilterLabel(sr.flt) === 'SR+', 'the spot says what it takes');
+  ok(collegeRuleAllows({ conf: 'MAC', tier: 'G5', cls: 5 }, ['G5'], [4]) && !collegeRuleAllows(null, ['G5'], null) && collegeRuleAllows(null, [], []),
+    'tier and class together; an empty rule passes everyone');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

@@ -37,6 +37,7 @@ import {
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
+import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
 
@@ -1645,8 +1646,13 @@ function CommishSeen({ leagueId }: { leagueId: string }) {
 // `k` is a client-only stable key: drag-to-reorder (v0.267.0) needs row views
 // that SURVIVE a reorder — index keys would remount the row mid-gesture and
 // kill the pan responder. Never sent to the server (fromSpotDraft ignores it).
-type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college' };
+type SpotDraft = { k: number; pos: string[]; bb?: boolean; label: string; fTeams: string; fMin: string; fMax: string; fFlags: string[]; zero: string; level?: 'nfl' | 'college';
+  /** 0383 */ fConfs?: string[]; fClasses?: number[] };
 let spotKeySeq = 1;
+// COLLEGE RULES (0383): the chip values, in order, and their names.
+const RULE_CONFS: string[] = [...COLLEGE_TIERS, ...COLLEGE_CONFERENCES];
+const RULE_NAME: Record<string, string> = { FBS: 'ALL FBS (D-I)', P4: 'POWER 4', G5: 'GROUP OF 5', IND: 'INDEPENDENTS' };
+const flipIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   k: spotKeySeq++,
   pos: [...x.pos], bb: !!x.bb, label: x.label ?? '',
@@ -1656,6 +1662,7 @@ const toSpotDraft = (x: SlotSpec): SpotDraft => ({
   fFlags: [...(x.flags ?? [])],
   zero: x.zero_pts != null ? String(x.zero_pts) : '',
   ...(x.level ? { level: x.level } : {}),
+  fConfs: [...(x.confs ?? [])], fClasses: [...(x.classes ?? [])],
 });
 const fromSpotDraft = (s: SpotDraft): SlotSpec => {
   const teams = s.fTeams.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -1671,12 +1678,14 @@ const fromSpotDraft = (s: SpotDraft): SlotSpec => {
     // twin has carried them since the day they landed.
     ...(s.fFlags.length ? { flags: s.fFlags } : {}),
     ...(s.level ? { level: s.level } : {}),   // 0372: mixed leagues
+    ...(s.fConfs?.length ? { confs: s.fConfs } : {}),       // 0383
+    ...(s.fClasses?.length ? { classes: s.fClasses } : {}),
     // The zero-fill rule (0200); on best-ball spots too since 0304.
     // refuses the pair, and the control below can't produce it either.
     ...(s.zero.trim() !== '' && Number.isFinite(Number(s.zero)) ? { zero_pts: Number(s.zero) } : {}),
   };
 };
-const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length || s.zero.trim());
+const spotHasFlt = (s: SpotDraft) => !!(s.fTeams.trim() || s.fMin.trim() || s.fMax.trim() || s.fFlags.length || s.zero.trim() || s.fConfs?.length || s.fClasses?.length);
 
 // Scoring groups + presets, mirroring the web (v0.219.0) so the two hosts
 // describe the catalog the same way. A preset RESETS then applies its deltas,
@@ -1950,6 +1959,9 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     } finally { setBusy(false); }
   };
   const [fltTeams, setFltTeams] = useState('');
+  const [fltConfs, setFltConfs] = useState<string[]>([]);
+  const [fltClasses, setFltClasses] = useState<number[]>([]);
+  const [fltLevel, setFltLevel] = useState<'nfl' | 'college' | null>(null);
   const [fltMin, setFltMin] = useState('');
   const [fltMax, setFltMax] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1991,6 +2003,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       setFltTeams((r.pool_filter?.teams ?? []).join(', '));
       setFltMin(r.pool_filter?.min_exp != null ? String(r.pool_filter.min_exp) : '');
       setFltMax(r.pool_filter?.max_exp != null ? String(r.pool_filter.max_exp) : '');
+      setFltConfs(r.pool_filter?.confs ?? []); setFltClasses(r.pool_filter?.classes ?? []); setFltLevel(r.pool_filter?.level ?? null);
     } }).catch(() => {});
     leagueKdst(leagueId).then(setKdstState).catch(() => {});
   }, [leagueId]);
@@ -2471,6 +2484,28 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                     </Mono>
                   </View>
                 )}
+                {/* COLLEGE RULES (0383): an SEC flex, a MAC flex, a SR+ spot. */}
+                {extraPos.includes('COLLEGE') && (
+                  <View style={{ marginTop: 10 }}>
+                    <Mono size={9} tone="faint" weight="700" track={0.12}>🎓 COLLEGE CONFERENCE</Mono>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                      {RULE_CONFS.map((c) => (
+                        <Pill key={c} on={(sp.fConfs ?? []).includes(c)} label={RULE_NAME[c] ?? c.toUpperCase()}
+                          onPress={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fConfs: flipIn(x.fConfs ?? [], c) })); setSpotsDirty(true); }} />
+                      ))}
+                    </View>
+                    <Mono size={9} tone="faint" weight="700" track={0.12} style={{ marginTop: 8 }}>🎓 CLASS</Mono>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                      {[1, 2, 3, 4].map((c) => (
+                        <Pill key={c} on={(sp.fClasses ?? []).includes(c)} label={collegeClassLabel(c)}
+                          onPress={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, fClasses: flipIn(x.fClasses ?? [], c).sort() })); setSpotsDirty(true); }} />
+                      ))}
+                    </View>
+                    <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
+                      {(sp.fConfs?.length || sp.fClasses?.length) ? 'this spot takes college players from these conferences / classes only' : 'pick none for no college rule'}
+                    </Mono>
+                  </View>
+                )}
 
                 {/* ── THE ZERO-FILL RULE (v0.303.0) ────────────────────────
                     What this spot banks when it is EMPTY, or when whoever
@@ -2610,15 +2645,32 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 const teams = fltTeams.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
                 const mn = fltMin.trim() === '' ? null : Number(fltMin);
                 const mx = fltMax.trim() === '' ? null : Number(fltMax);
-                const r = await setLeaguePoolFilter(leagueId, (!teams.length && mn == null && mx == null) ? null : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx });
+                // The stored level (a college calendar's) rides along; 0383 adds the college rules.
+                const keepLevel = fltLevel ? { level: fltLevel } : {};
+                const r = await setLeaguePoolFilter(leagueId, (!teams.length && mn == null && mx == null && !fltConfs.length && !fltClasses.length)
+                  ? (fltLevel ? keepLevel : null)
+                  : { teams: teams.length ? teams : null, min_exp: mn, max_exp: mx, ...keepLevel,
+                      ...(fltConfs.length ? { confs: fltConfs } : {}), ...(fltClasses.length ? { classes: fltClasses } : {}) });
                 setNote(r.ok ? '✓ filter saved — refresh the player pool to apply' : (r.error ?? 'failed'));
               })(); }} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.you }}>SAVE</Text>
               </Pressable>
               <TeamChips value={fltTeams} disabled={busy} onChange={setFltTeams} />
             </View>
+            {extraPos.includes('COLLEGE') && (
+              <View style={{ marginTop: 8 }}>
+                <Mono size={8} tone="faint" weight="700">🎓 COLLEGE CONFERENCE</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
+                  {RULE_CONFS.map((c) => <Pill key={c} on={fltConfs.includes(c)} label={RULE_NAME[c] ?? c.toUpperCase()} onPress={() => setFltConfs((cur) => flipIn(cur, c))} />)}
+                </View>
+                <Mono size={8} tone="faint" weight="700" style={{ marginTop: 6 }}>🎓 CLASS</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
+                  {[1, 2, 3, 4].map((c) => <Pill key={c} on={fltClasses.includes(c)} label={collegeClassLabel(c)} onPress={() => setFltClasses((cur) => flipIn(cur, c).sort())} />)}
+                </View>
+              </View>
+            )}
             <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(11) }}>
-              Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
+              College rules limit which college players are seeded (NFL players unaffected) · Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
             </Mono>
           </View>
         </View>

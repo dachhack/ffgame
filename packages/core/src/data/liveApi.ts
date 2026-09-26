@@ -12,6 +12,7 @@ import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE } from './nflSlate';
+import { setCollegeMeta } from './college';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
@@ -1903,7 +1904,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1943,7 +1944,7 @@ export const lineupSaveNote = (r: { bench_grew?: number; picks_cleared?: number 
   + (r.bench_grew ? ` · bench +${r.bench_grew} so every team stays legal` : '')
   + (r.picks_cleared ? ` · ${r.picks_cleared} saved lineup spot${r.picks_cleared === 1 ? '' : 's'} cleared` : '')
   + (r.bench_grew || r.picks_cleared ? ' · posted to league chat' : '');
-export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null) =>
+export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null) =>
   tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; starters?: number; rounds?: number; /** 0377: after the draft */ bench_grew?: number; picks_cleared?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
@@ -3518,7 +3519,7 @@ export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =
 
 /** Commissioner (0171, pre-draft): allowable-player filter for the pool —
  *  team whitelist and/or tenure window. Null/empty clears. */
-export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null) =>
+export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null) =>
   rpc<{ ok: boolean; error?: string; filter?: unknown }>('set_league_pool_filter', {
     p_league_id: leagueId, p_filter: filter,
   });
@@ -3567,6 +3568,7 @@ export type CollegeDirectoryRow = {
   espn_id: string; full: string; pos: string; school_abbr: string | null;
   class_label: string | null; class_year: number | null;
   season: number | null; gp: number | null; ppg: number | null; ord: number;
+  /** 0381/0383 */ vor?: number | null; conference?: string | null; tier?: string | null;
 };
 // ── The college calendar (0371) ─────────────────────────────────────────────
 // A college-only league plays college Saturdays at board weeks 201+. Admin
@@ -4006,6 +4008,8 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
         installCollegePoolProjections(leagueId).catch(() => 0),
       ]);
       const by = col?.ok ? col.players ?? {} : {};
+      // 0383: the facts a conference / class spot rule checks, for slotAllows.
+      setCollegeMeta(Object.fromEntries(Object.entries(by).map(([slug, m]) => [slug, { conf: m.conference ?? null, tier: m.tier ?? null, cls: m.class_year }])));
       return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year, conf: by[r.slug].conference ?? null, tier: by[r.slug].tier ?? null } : r));
     });
 }

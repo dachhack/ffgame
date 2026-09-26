@@ -52,3 +52,37 @@ export const COLLEGE_POSITIONS: readonly Pos[] = ['QB', 'RB', 'WR', 'TE', 'K', '
  *  NFL ones), everyone else's team. */
 export const teamLabel = (p: { team: string; school?: string | null }): string =>
   p.school || p.team;
+
+// ── Conference / tier / class, for eligibility rules (0383) ─────────────────
+// A spot or a league can be limited to college players from certain
+// conferences (or a tier: P4 / G5 / IND / FBS) or classes (1 = FR … 4 = SR+).
+// slotAllows is synchronous, so the facts it needs are installed here by the
+// host — leaguePool on the clients, college_meta_for on the worker.
+export type CollegeMeta = { conf?: string | null; tier?: string | null; cls?: number | null };
+const COLLEGE_META = new Map<string, CollegeMeta>();
+/** Merge (not replace): several leagues' pools may be installed in one session. */
+export function setCollegeMeta(rows: Record<string, CollegeMeta> | { slug: string; conf?: string | null; tier?: string | null; cls?: number | null }[]): void {
+  const list = Array.isArray(rows) ? rows.map((r) => [r.slug, r] as const) : Object.entries(rows);
+  for (const [slug, m] of list) if (isCollegeSlug(slug)) COLLEGE_META.set(slug, { conf: m.conf ?? null, tier: m.tier ?? null, cls: m.cls ?? null });
+}
+export const collegeMetaFor = (slug: string | null | undefined): CollegeMeta | null => (slug ? COLLEGE_META.get(slug) ?? null : null);
+
+/** The values a conference rule may name. 'FBS' is every FBS school. */
+export const COLLEGE_TIERS = ['FBS', 'P4', 'G5', 'IND'] as const;
+export const COLLEGE_CONFERENCES = ['ACC', 'Big 12', 'Big Ten', 'SEC', 'American', 'C-USA', 'MAC', 'Mountain West', 'Pac-12', 'Sun Belt', 'Independent'] as const;
+export const collegeClassLabel = (c: number): string => (c <= 1 ? 'FR' : c === 2 ? 'SO' : c === 3 ? 'JR' : 'SR+');
+
+/** Does a college player pass a conference / class rule? No facts, no pass —
+ *  the no-guess rule every other filter follows. Empty lists pass everyone. */
+export function collegeRuleAllows(m: CollegeMeta | null, confs?: string[] | null, classes?: number[] | null): boolean {
+  if (confs?.length) {
+    if (!m || !(m.conf || m.tier)) return false;
+    const ok = confs.some((c) => c === 'FBS' ? !!m.tier : c === m.tier || c === m.conf);
+    if (!ok) return false;
+  }
+  if (classes?.length) {
+    if (m?.cls == null) return false;
+    if (!classes.includes(Math.min(4, Math.max(1, m.cls)))) return false;
+  }
+  return true;
+}
