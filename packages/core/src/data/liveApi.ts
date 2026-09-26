@@ -3096,6 +3096,7 @@ export function pushLogStatus(r: PushLogRow): { glyph: string; text: string; ton
   if (r.sent_at) return { glyph: '✗', text: r.error === 'no devices' ? 'no device was registered' : `refused: ${r.error}`, tone: 'bad' };
   if (r.error === 'waiting-vapid') return { glyph: '⏳', text: 'waiting — the server has no browser push key yet', tone: 'wait' };
   if (r.error === 'waiting-fcm') return { glyph: '⏳', text: 'waiting — the server has no phone push key yet', tone: 'wait' };
+  if (r.error === 'waiting-apns') return { glyph: '⏳', text: 'waiting — the server has no iPhone push key yet', tone: 'wait' };
   return { glyph: '⏳', text: 'queued — the worker sends within a minute', tone: 'wait' };
 }
 

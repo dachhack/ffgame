@@ -12,8 +12,8 @@ exercise the whole stack — Supabase auth and reads/writes, the slate and
 per-window lock rules, the metric catalogue, the premium gate, the coin wallet.
 
 Release APKs are built locally (`android/gradlew assembleRelease`) and signed
-with the committed playtest key — see **Signing** below. iOS is prepared for
-the Simulator (see **iOS (Simulator)**) but has not yet been built on a Mac.
+with the committed playtest key — see **Signing** below. iOS runs in the
+Simulator (see **iOS (Simulator)**); TestFlight is the next step.
 
 ## Running it
 
@@ -190,8 +190,17 @@ What differs from Android, on purpose:
 - **Sign in by email or the browser Google flow.** Native Google sign-in is
   Android-only (`src/auth/googleNative.ts`) until an iOS OAuth client exists —
   without one GIDSignIn crashes the app rather than failing.
-- **No push.** `src/ui/push.ts` registers on Android only; the worker sends
-  through FCM, which needs an APNs key before it can reach an iPhone.
+- **Push goes straight to Apple.** On iOS `src/ui/push.ts` registers the raw
+  APNs token as platform `ios`, and the worker sends it via `server/src/apns.js`
+  — no Firebase on iOS. It needs the APNs key on the worker (Fly secrets
+  `APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID`; see `server/.env.example`);
+  until then iPhone pushes wait in the outbox as `waiting-apns`. Simulator and
+  Xcode builds get sandbox tokens, TestFlight production ones; the worker
+  tries production, then sandbox.
+- **No premium checkout.** Apple requires its own in-app purchase for digital
+  content, so the iOS app shows no price and no buy button
+  (`canSellPremium` in `LivePicks.tsx`). Premium bought on the web or Android
+  still applies at sign-in.
 - **No home-screen widget.** `react-native-android-widget` is Android's; its
   registration and repaints are skipped on iOS and Settings hides the entry.
 
@@ -388,8 +397,9 @@ In rough order of how much they'll cost:
   the system sans.
 - **Card face gradient.** The dot texture is faithful (a real tiled PNG); the
   radial gradient's centre highlight has no RN equivalent and is still missing.
-- **iOS.** Prepared for the Simulator, not yet built on a Mac; no push, widget or
-  native Google sign-in there. TestFlight needs the $99 enrolment.
+- **iOS.** Runs in the Simulator (signed in against production). No widget or
+  native Google sign-in there; push waits on the APNs key; no premium checkout.
+  Not yet on TestFlight.
 
 Sign-in is done (magic link + Google OAuth, `src/screens/SignIn.tsx`); invite
 codes, commish codes and solo passes still live on the web's `LiveOnboard`.
