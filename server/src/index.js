@@ -217,7 +217,7 @@ async function mixedLeaguesExist() {
   }
   return mixedHit.on;
 }
-async function nflWeekWindows(season) {
+async function cachedNflWeekWindows(season) {
   if (!nflWindowsHit || Date.now() - nflWindowsHit.at > 30 * 60e3) {
     const { data, error } = await db().from('nfl_slate').select('week,kickoff')
       .eq('season', String(season)).gte('week', 1).lte('week', 18);
@@ -683,7 +683,7 @@ async function tickContext(ctx, season) {
   // Mixed leagues read college plays at the NFL week holding the kickoff.
   const mirrorOf = new Map();
   if (sport === 'college' && await mixedLeaguesExist()) {
-    const windows = await nflWeekWindows(season);
+    const windows = await cachedNflWeekWindows(season);
     for (const g of games) { const w = nflWeekForKickoff(g.kickoffMs, windows); if (w != null) mirrorOf.set(g.eventId, w); }
   }
   for (const eventId of toPoll) {

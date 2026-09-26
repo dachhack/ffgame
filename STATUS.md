@@ -29,10 +29,13 @@ players beside NFL ones, scored live in the same NFL week.
   builder cycles ANY → NFL → CFB per spot (web + app).
 - **Scoring:** after polling a college game, the worker copies its
   college-player rows (`c-` slugs only — the adapter's team units would
-  collide with the NFL's) into the NFL week whose window holds the kickoff:
-  48h before the week's first kickoff to 12h after its last, the same rule as
-  SQL `nfl_week_window`. Week N then resolves by slug and week as always.
-  Labor Day Monday and Week 0 fall in no NFL week.
+  collide with the NFL's) into the NFL week whose window holds the kickoff.
+  Windows are contiguous: week N runs from 12h after week N−1's last kickoff
+  to 12h after its own (Week 1 opens at midnight ET the day before its
+  opener), the same rule as SQL `nfl_week_window`. On the real 2026 calendar
+  every college week lands whole in one NFL week (college Week N+1 → NFL
+  Week N); college Week 1, Labor Day Monday included, lands in none. Week N
+  then resolves by slug and week as always.
 - **Locking:** `classic_kickoff_for` now answers for a college player — his
   school's game in the NFL week's window, or that week's game on the college
   calendar — so the lineup guard, the add/drop guard and the new
