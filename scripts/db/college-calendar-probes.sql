@@ -102,7 +102,7 @@ begin
   r := set_playoff_rules(lid, null, 20);
   perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'college playoffs must start between%', 'cc7 no Week 20');
   r := set_playoff_rules(lid, null, 15);
-  perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'a bracket of 4 needs 2 weeks — start by college Week 14%',
+  perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'a bracket of 4 needs 2 weeks — start by Week 14 so it ends by Week 15%',
     'cc7a a 4-team bracket cannot start Week 15 (it would run past Week 15)');
   perform cc_ok(set_playoff_rules(lid, 2, 15), 'cc7b a 2-team final in Week 15 fits');
   perform cc_true(league_playoff_start(lid) = 215, 'cc7c a college week number is stored as its board week');
@@ -120,6 +120,21 @@ begin
                 = (select min(kickoff) from nfl_slate where season = '2031' and week = 204),
     'cc7g and locks at that college week''s first kickoff');
   delete from matchup where league_id = lid and is_playoff;
+
+  -- ══ cc8. BOWL WEEKS (0375) ═══════════════════════════════════════════════
+  -- Bowl season lands at 216+; a TBD placeholder row is enough to open a week.
+  insert into nfl_slate (season, week, home, away, win, kickoff, game_id) values
+    ('2031', 216, 'NAVY', 'ARMY', 'wk', now() + interval '80 days', 'cc6'),
+    ('2031', 217, 'TBD-cc7', 'TBD', 'wk', now() + interval '87 days', 'cc7')
+  on conflict do nothing;
+  perform cc_ok(set_playoff_rules(lid, 2, 217), 'cc8 a final in BOWL 2 fits');
+  perform cc_true(league_playoff_start(lid) = 217, 'cc8a stored at board week 217');
+  r := set_playoff_rules(lid, 2, 218);
+  perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' = 'college playoffs must start between college Week 2 and Bowl week 2',
+    'cc8b no week past the last bowl week, and the bound is named as a bowl week');
+  perform cc_true(classic_kickoff_for(null, 216, 'c-93901') is null, 'cc8e a player whose school has no bowl has no game');
+  perform cc_true(college_week_label(217) = 'Bowl week 2' and college_week_label(213) = 'Week 13', 'cc8f week labels');
+  perform cc_ok(set_playoff_rules(lid, 2, 15), 'cc8g back to a Week 15 final');
   update matchup set status = 'scheduled', home_final = null, away_final = null where league_id = lid;
   update draft set status = 'pending' where league_id = lid;
 

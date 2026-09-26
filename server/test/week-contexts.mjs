@@ -60,6 +60,10 @@ eq(new Set(weeks).size, weeks.length, 'preseason wk4 and regular wk4 land on dif
     'college Week 4 runs beside NFL week 5, at board week 204, after it');
   eq(withCollege(base, null).length, 1, 'no college league (or no college week) → no college context');
   eq(withCollege(base, 16).length, 1, 'past college Week 15 (bowls) → no college context');
+  // 0375: a bowl week replaces the regular college context.
+  const b = withCollege(base, 15, 217);
+  eq(b.map((c) => `${c.sport ?? 'nfl'}:${c.seasonType}:${c.espnWeek}→${c.boardWeek ?? c.espnWeek + c.offset}`), ['nfl:2:5→5', 'college:3:2→217'],
+    'BOWL 2 runs as the college context, at board week 217, in place of Week 15');
 }
 
 console.log(fails ? `\n${fails} FAILURE(S)` : '\nALL PASS — week contexts');
