@@ -72,7 +72,7 @@ export function LeagueSettingsHost() {
 
 
 // ── THE SHEET THE GEAR OPENS ────────────────────────────────────────────────
-function LeagueSettingsSheet({ req, onClose }: { req: LeagueSettingsReq; onClose: () => void }) {
+export function LeagueSettingsSheet({ req, onClose }: { req: LeagueSettingsReq; onClose: () => void }) {
   return (
     <Overlay visible title="League settings" subtitle="TEAMS · RULES · HISTORY · ALERTS" onClose={onClose}>
       <LeagueMenu leagueId={req.leagueId} teamName={req.teamName} rosterId={req.rosterId}

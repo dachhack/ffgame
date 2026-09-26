@@ -18,6 +18,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.2 — the league ⚙ SETTINGS chip opens its sheet directly
+
+The founder reported the league ⚙ SETTINGS chip "still not clickable. Does
+nothing" in the Android app (v0.556.0, every league tab). The chip reached its
+sheet through a module-level bus: `openLeagueSettings` handed a request stored
+by `setLeagueSettingsCtx` to a listener that `LeagueSettingsHost` registered,
+and returned silently if either end was missing. The shell that draws the
+chip now owns the sheet: a `leagueSheet` state plus a memoised request built
+from `open`, rendering `LeagueSettingsSheet` itself. A tap sets state and the
+sheet renders, with nothing in between that can drop it. A league change
+closes it. The bus exports are left in LeagueHome but unused.
+
 ### v0.556.1 — the "versions behind" banner can be tapped again
 
 The founder reported they couldn't tap the app's "YOU ARE N VERSIONS BEHIND"
