@@ -6,7 +6,7 @@
 // be shipping a native library nothing imported; bring it back when there is a
 // real stack (a tab bar, deep links into a screen, a back gesture that has to
 // feel native) rather than to model one push.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -30,7 +30,7 @@ import { isAdmin } from '@drip/core/data/liveApi';
 import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
-import { LeagueHome, LeagueSettingsHost, openLeagueSettings, setLeagueSettingsCtx } from './src/screens/LeagueHome';
+import { LeagueHome, LeagueSettingsSheet, type LeagueSettingsReq } from './src/screens/LeagueHome';
 import { tap } from './src/ui/feedback';
 import { ChatChipDot } from './src/ui/unread';
 import { registerForPush } from './src/ui/push';
@@ -195,21 +195,26 @@ export function App() {
    *  The CHIP is rendered here, for as long as `open` is set, so its context
    *  belongs here too. Cleared when the league closes, so it can never open a
    *  league you have left. */
-  useEffect(() => {
-    if (!open) { setLeagueSettingsCtx(null); return; }
-    setLeagueSettingsCtx({
-      leagueId: open.leagueId,
-      rosterId: open.rosterId,
-      native: open.native,
-      commish: !!open.commish,
-      onGo: (room) => setView(room),
-      onMessage: (peerId, peer) => { setChatDm({ peerId, peer }); setView('chat'); },
-      onTrade: (rid) => { setTradePartner(rid); setView('team'); },
-      onShop: () => { setShopSignal((n) => n + 1); setView('picks'); },
-      onBack: () => setOpen(null),
-    });
-    return () => setLeagueSettingsCtx(null);
-  }, [open]);
+  // v0.556.2 (founder: "Settings chip still not clickable. Does nothing"):
+  // no module-level bus any more. The chip used to call openLeagueSettings,
+  // which handed a request to a listener LeagueSettingsHost registered — and
+  // returned silently if either end was missing. The shell that draws the
+  // chip now owns the sheet's open state and renders it itself: a tap sets
+  // state, the sheet renders. Nothing in between can drop it.
+  const [leagueSheet, setLeagueSheet] = useState(false);
+  const leagueReq: LeagueSettingsReq | null = useMemo(() => (open ? {
+    leagueId: open.leagueId,
+    rosterId: open.rosterId,
+    native: open.native,
+    commish: !!open.commish,
+    onGo: (room) => setView(room),
+    onMessage: (peerId, peer) => { setChatDm({ peerId, peer }); setView('chat'); },
+    onTrade: (rid) => { setTradePartner(rid); setView('team'); },
+    onShop: () => { setShopSignal((n) => n + 1); setView('picks'); },
+    onBack: () => setOpen(null),
+  } : null), [open]);
+  // A league change (or leaving) closes the sheet, so it never shows a stale league.
+  useEffect(() => { setLeagueSheet(false); }, [open?.leagueId]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { chromeDrv.reset(); }, [view, open?.leagueId]);
 
@@ -438,7 +443,7 @@ export function App() {
                 second gear asks you to guess which is which, and a grey
                 hairline against a grey header is not a control, it is a
                 decoration. It carries the accent and its own word now. */}
-            <Pressable hitSlop={10} onPress={() => { tap(); openLeagueSettings(); }}
+            <Pressable hitSlop={10} onPress={() => { tap(); setLeagueSheet(true); }}
               accessibilityRole="button" accessibilityLabel="League settings and info"
               style={{
                 borderWidth: 1, borderColor: theme.you, borderRadius: 999,
@@ -601,7 +606,7 @@ export function App() {
           <ErrorBoundary>{body()}</ErrorBoundary>
           <WhatsNewSheet visible={whatsNewOpen} st={update} onClose={() => setWhatsNewOpen(false)} />
           <PlayerCardHost />
-          <LeagueSettingsHost />
+          {leagueSheet && leagueReq && <LeagueSettingsSheet req={leagueReq} onClose={() => setLeagueSheet(false)} />}
           <AllFieldsSheet visible={fieldsOpen} onClose={() => setFieldsOpen(false)} />
           <SettingsModal
             visible={settingsOpen}
