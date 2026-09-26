@@ -18,6 +18,7 @@ import { playRisk } from '@drip/core/engine/golfFloor';
 import { slugMeta, normTeam, setSlugMetaOverrides, setSlugSleeperIds, stripSlugTag, liveTeamFor } from '@drip/core/data/slugMeta';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { shortName } from '@drip/core/data/players';
+import { collegeNameFor } from '@drip/core/data/college';
 import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -43,7 +44,7 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -275,7 +276,7 @@ function BoardCell({ e, align, onGame, onName }: {
       )}
       <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
         <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
-        {e.team ? ` · ${e.team}` : ''}
+        {(e.team || collegeNameFor(e.slug)?.school) ? ` · ${e.team || collegeNameFor(e.slug)?.school}` : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
       {/* Venue/night marks ride only the pre-kick line — game info, and the
@@ -317,6 +318,9 @@ const mkPlayer = (slug: string) => {
   return { id: slug, name: slug, full: slug, pos: m.pos, team: m.team, stats: { ...ZERO } };
 };
 const prettySlug = (slug: string): string => {
+  // A college slug is an ESPN id — its name comes from the league's pool.
+  const cn = collegeNameFor(slug);
+  if (cn) return shortName(cn.full);
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
@@ -568,6 +572,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // Best-effort — a Sleeper-mirror league has no native pool and answers
         // with an empty map, which costs nothing and resolves the other 960.
         leaguePoolIds(leagueId).then((r2) => setSlugSleeperIds(r2?.ids ?? {})).catch(() => {});
+        // College players are ESPN ids until the league's names are in (v0.556.4).
+        ensureCollegeNames(leagueId, pl.map((x) => x.slug)).then((got) => { if (got) setFlagsVer((v) => v + 1); }).catch(() => {});
         const map: Record<string, string | null> = {};
         const seal: Record<string, boolean> = {};
         for (const p of pk) {
@@ -651,7 +657,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     // store a lineup) fields its best projected lineup from its roster, and
     // without this the board would show that seat empty while the resolver
     // scored it. In the founder's own leagues that is seven seats in eight.
-    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) }))); } }).catch(() => {});
+    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows, gf] = await Promise.all([

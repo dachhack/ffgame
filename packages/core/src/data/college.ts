@@ -58,6 +58,20 @@ export const teamLabel = (p: { team: string; school?: string | null }): string =
 // conferences (or a tier: P4 / G5 / IND / FBS) or classes (1 = FR … 4 = SR+).
 // slotAllows is synchronous, so the facts it needs are installed here by the
 // host — leaguePool on the clients, college_meta_for on the worker.
+// ── Names, for boards that only hold a slug (v0.556.4) ──────────────────────
+// A college slug is an ESPN id, so prettifying it printed "C. 5105849". The
+// host installs the league's names (leaguePool does, from league_pool) and a
+// board asks here first. Unknown slug → null, and the caller falls back.
+const COLLEGE_NAMES = new Map<string, { full: string; school: string | null }>();
+export function setCollegeNames(rows: { slug: string; full?: string | null; full_name?: string | null; school?: string | null }[]): void {
+  for (const r of rows) {
+    const full = r.full ?? r.full_name;
+    if (isCollegeSlug(r.slug) && full) COLLEGE_NAMES.set(r.slug, { full, school: r.school ?? COLLEGE_NAMES.get(r.slug)?.school ?? null });
+  }
+}
+export const collegeNameFor = (slug: string | null | undefined): { full: string; school: string | null } | null =>
+  (slug ? COLLEGE_NAMES.get(slug) ?? null : null);
+
 export type CollegeMeta = { conf?: string | null; tier?: string | null; cls?: number | null };
 const COLLEGE_META = new Map<string, CollegeMeta>();
 /** Merge (not replace): several leagues' pools may be installed in one session. */
