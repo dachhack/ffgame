@@ -29,7 +29,7 @@ import {
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
@@ -324,6 +324,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [level, setLevel] = useState<LevelFilter>('all');
   const [cls, setCls] = useState<Set<number>>(new Set());
+  const [conf, setConf] = useState('all');
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   // 0340/0341: Sleeper's trending adds per slug, and whether owned players are
@@ -597,13 +598,15 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       // Unknown tenure matches no band but ANY — the pool's no-guess rule.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && levelClassMatch(p, level, cls)
+      && confMatch(p, conf)
       && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf]);
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
   }, [pool]);
+  const confOpts = useMemo(() => confFilterOptions(pool), [pool]);
   /** The teams actually IN this pool, so the filter never offers an empty one. */
   const poolTeams = useMemo(
     () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
@@ -1107,6 +1110,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             {CLASS_FILTERS.map((o) => (
               <Chip key={o.id} label={o.label} on={cls.has(o.id)}
                 onPress={() => { tap(); setCls((cur) => { const n = new Set(cur); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n; }); }} />
+            ))}
+            {/* CONFERENCE / DIVISION (0382) */}
+            {confOpts.length > 0 && <Mono size={8} tone="faint">CONF</Mono>}
+            {confOpts.length > 0 && <Chip label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
+            {confOpts.map((o) => (
+              <Chip key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
             ))}
           </View>
         )}

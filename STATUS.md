@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.555.0 — conference and division filters in devy drafts
+
+- **College conferences (0382).** New `college_school` table: each FBS
+  school's conference and tier (P4 = ACC / Big 12 / Big Ten / SEC; G5 = the
+  other conferences; IND = independents). The college sweep writes it from
+  ESPN's FBS standings, one request (live check: 138 schools, 67 Power 4).
+  `league_pool_college` returns `conference` and `tier`, and `leaguePool`
+  carries them as `conf` / `tier`.
+- **The filter.** Wherever the pool holds college players (draft room and
+  wire, web and app), one CONFERENCE / DIVISION control:
+  - AFC / NFC and the eight NFL divisions, when the pool has NFL players;
+  - Power 4 / Group of 5 / Independents and each conference, when it has
+    college players;
+  - only options that would list somebody.
+  It's a dropdown on web and chips on mobile. `confMatch` and
+  `confFilterOptions` live in core poolSort, and LAR and LA are both the
+  Rams.
+- Tests: college-poll (standings parse), check-college §9, probes cp11.
+  Conferences fill in on the next college sweep.
+
 ### v0.554.2 — autodraft builds a bench; college ranks by value over replacement
 
 The founder's all-autodraft college draft filled every bench spot with QBs

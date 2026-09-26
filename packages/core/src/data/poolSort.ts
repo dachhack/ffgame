@@ -31,6 +31,7 @@ import { adpValue } from './adp2026';
 import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
+import { NFL_DIVISIONS } from './kdst';
 
 /** Every position a draft room can filter by (v0.554.0): the chips are then
  *  trimmed to the league's own (leagueEligiblePos + zero caps), so IDP, FB,
@@ -59,6 +60,43 @@ export function levelClassMatch(p: { slug: string; cls?: number | null }, level:
   }
   return true;
 }
+/** CONFERENCE / DIVISION (0382). One filter value for both kinds of player:
+ *  'AFC' / 'NFC' / 'AFC East' … for NFL players, 'P4' / 'G5' / 'SEC' … for
+ *  college ones. 'all' passes everyone; an NFL value never matches a college
+ *  player and a college value never matches an NFL one. */
+export type ConfFilter = string;
+const TEAM_ALIAS: Record<string, string> = { lar: 'la', wsh: 'was', jac: 'jax', lvr: 'lv' };
+const DIV_OF = new Map<string, { conf: string; div: string }>();
+for (const d of NFL_DIVISIONS) for (const t of d.teams) DIV_OF.set(t, { conf: d.conf, div: `${d.conf} ${d.div}` });
+/** An NFL team code's conference and division, whatever spelling the pool uses. */
+export function nflDivisionOf(team: string | null | undefined): { conf: string; div: string } | null {
+  const t = (team ?? '').toLowerCase();
+  return DIV_OF.get(TEAM_ALIAS[t] ?? t) ?? null;
+}
+export function confMatch(p: { slug: string; team: string; conf?: string | null; tier?: string | null }, sel: ConfFilter): boolean {
+  if (!sel || sel === 'all') return true;
+  if (/^c-\d+$/.test(p.slug)) return p.tier === sel || p.conf === sel;
+  const d = nflDivisionOf(p.team);
+  return !!d && (d.conf === sel || d.div === sel);
+}
+const TIER_LABEL: Record<string, string> = { P4: 'Power 4', G5: 'Group of 5', IND: 'Independents' };
+/** The filter's options for THIS pool: NFL conferences and divisions where the
+ *  pool has NFL players, college tiers and conferences where it has college
+ *  ones — nothing offered that would list nobody. */
+export function confFilterOptions(pool: { slug: string; team: string; conf?: string | null; tier?: string | null }[]): { group: 'NFL' | 'College'; value: string; label: string }[] {
+  const nfl = new Set<string>(); const tiers = new Set<string>(); const confs = new Set<string>();
+  for (const p of pool) {
+    if (/^c-\d+$/.test(p.slug)) { if (p.tier) tiers.add(p.tier); if (p.conf) confs.add(p.conf); }
+    else { const d = nflDivisionOf(p.team); if (d) { nfl.add(d.conf); nfl.add(d.div); } }
+  }
+  const out: { group: 'NFL' | 'College'; value: string; label: string }[] = [];
+  for (const c of ['AFC', 'NFC']) if (nfl.has(c)) out.push({ group: 'NFL', value: c, label: c });
+  for (const d of NFL_DIVISIONS) { const v = `${d.conf} ${d.div}`; if (nfl.has(v)) out.push({ group: 'NFL', value: v, label: v }); }
+  for (const t of ['P4', 'G5', 'IND']) if (tiers.has(t)) out.push({ group: 'College', value: t, label: TIER_LABEL[t] });
+  for (const c of [...confs].sort()) if (c !== 'Independent') out.push({ group: 'College', value: c, label: c });
+  return out;
+}
+
 /** Search: a name, an NFL team or (0379) a school. */
 export const poolSearchMatch = (p: { full_name: string; team: string; school?: string | null }, needle: string): boolean =>
   !needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)

@@ -3555,6 +3555,7 @@ export const leaguePoolIds = (leagueId: string) =>
 export type CollegePoolMeta = {
   espn_id: string; school: string | null; school_abbr: string | null;
   class_label: string | null; class_year: number | null; active: boolean | null;
+  /** 0382 */ conference?: string | null; tier?: string | null;
 };
 export const leaguePoolCollege = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
@@ -3959,7 +3960,9 @@ export interface LeaguePoolPlayer { slug: string; full_name: string; pos: string
   /** A college player's school (0365), filled by `leaguePool` — print it with `teamLabel`. */
   school?: string | null;
   /** A college player's class (0379): ESPN's experience years, 1 = FR … 4+ = SR. */
-  cls?: number | null; }
+  cls?: number | null;
+  /** A college player's conference and tier (0382): 'SEC' / 'P4', … */
+  conf?: string | null; tier?: string | null; }
 /** EVERY ROW, NOT THE FIRST THOUSAND (v0.489.3).
  *
  *  PostgREST answers any select with at most its max-rows (1000 here) — a
@@ -4003,7 +4006,7 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
         installCollegePoolProjections(leagueId).catch(() => 0),
       ]);
       const by = col?.ok ? col.players ?? {} : {};
-      return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year } : r));
+      return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year, conf: by[r.slug].conference ?? null, tier: by[r.slug].tier ?? null } : r));
     });
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at

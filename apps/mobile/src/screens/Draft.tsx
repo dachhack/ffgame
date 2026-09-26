@@ -30,7 +30,7 @@ import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
-import { sortPool, POOL_SORTS, projFor, adpFor, installLiveMarket, clearLiveMarket, dynFor, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, projFor, adpFor, installLiveMarket, clearLiveMarket, dynFor, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -108,6 +108,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
   const [level, setLevel] = useState<LevelFilter>('all');
   const [cls, setCls] = useState<Set<number>>(new Set());
+  const [conf, setConf] = useState('all');
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   // Show already-drafted players in the list (v0.351.0, founder: "add a
   // filter to show already drafted players") — struck through, no button.
@@ -332,15 +333,17 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       // and all thirty-two defenses (see tenure.ts).
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && levelClassMatch(p, level, cls)
+      && confMatch(p, conf)
       && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap, level, cls]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap, level, cls, conf]);
   // 0379: college filters where the pool has college players — class always,
   // NFL/CFB only where both kinds are in it.
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
   }, [pool]);
+  const confOpts = useMemo(() => confFilterOptions(pool), [pool]);
 
   useEffect(() => {
     if (!auction || myRoster == null || !st) return;
@@ -1012,6 +1015,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               {CLASS_FILTERS.map((o) => (
                 <Chip key={o.id} label={o.label} on={cls.has(o.id)}
                   onPress={() => { tap(); setCls((cur) => { const n = new Set(cur); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n; }); }} />
+              ))}
+              {/* CONFERENCE / DIVISION (0382) */}
+              {confOpts.length > 0 && <Mono size={8} tone="faint">CONF</Mono>}
+              {confOpts.length > 0 && <Chip label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
+              {confOpts.map((o) => (
+                <Chip key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
               ))}
             </ScrollView>
           )}

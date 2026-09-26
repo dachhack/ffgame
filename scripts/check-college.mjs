@@ -12,7 +12,7 @@ import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
 import { setCollegeProjections, collegeHasGame, projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, hasProjection } from '../packages/core/src/engine/projScoring.ts';
-import { levelClassMatch, poolSearchMatch, projFor, DRAFT_POS_FILTERS } from '../packages/core/src/data/poolSort.ts';
+import { levelClassMatch, poolSearchMatch, projFor, DRAFT_POS_FILTERS, confMatch, confFilterOptions, nflDivisionOf } from '../packages/core/src/data/poolSort.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -112,6 +112,18 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   ok(poolSearchMatch({ full_name: 'Cam Ward', team: '', school: 'MIA' }, 'mia') && !poolSearchMatch({ full_name: 'X', team: 'KC', school: null }, 'mia'),
     'search finds a school');
   ok(['DL', 'LB', 'DB', 'FB', 'HC', 'P'].every((p) => DRAFT_POS_FILTERS.includes(p)), 'the draft position list carries IDP and the extras');
+}
+
+// ── 9. conference / division filters (0382) ──
+{
+  const bama = { slug: 'c-1', team: '', conf: 'SEC', tier: 'P4' }, niu = { slug: 'c-2', team: '', conf: 'MAC', tier: 'G5' };
+  const josh = { slug: 'josh-allen', team: 'BUF' }, puka = { slug: 'puka-nacua', team: 'LAR' };
+  ok(confMatch(bama, 'SEC') && confMatch(bama, 'P4') && !confMatch(niu, 'P4') && confMatch(niu, 'G5'), 'college: a conference, and Power 4 / Group of 5');
+  ok(confMatch(josh, 'AFC') && confMatch(josh, 'AFC East') && !confMatch(josh, 'NFC'), 'NFL: conference and division');
+  ok(nflDivisionOf('LAR')?.div === 'NFC West' && confMatch(puka, 'NFC West'), 'LAR and LA are the same Rams');
+  ok(!confMatch(josh, 'SEC') && !confMatch(bama, 'AFC') && confMatch(josh, 'all'), 'an NFL value never lists a college player, and back');
+  const opts = confFilterOptions([bama, niu, josh]).map((o) => o.value);
+  ok(opts.join() === 'AFC,AFC East,P4,G5,MAC,SEC', 'only the options this pool can answer: ' + opts.join());
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

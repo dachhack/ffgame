@@ -28,6 +28,34 @@ import { collegePos } from '../../../packages/core/src/data/college.ts';
 const CORE_TEAMS = (season) =>
   `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
 const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
+// 0382: every FBS conference and its teams, in one request.
+const STANDINGS = (season) => `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80&season=${season}`;
+
+// ESPN conference group ids → the short name the draft filter shows, and its tier.
+export const CONFERENCES = {
+  1: ['ACC', 'P4'], 4: ['Big 12', 'P4'], 5: ['Big Ten', 'P4'], 8: ['SEC', 'P4'],
+  151: ['American', 'G5'], 12: ['C-USA', 'G5'], 15: ['MAC', 'G5'], 17: ['Mountain West', 'G5'],
+  9: ['Pac-12', 'G5'], 37: ['Sun Belt', 'G5'], 18: ['Independent', 'IND'],
+};
+
+/** PURE (0382): ESPN's FBS standings → one row per school with its conference.
+ *  A conference's teams sit under its `standings.entries`, or under its
+ *  children's when it splits into divisions. An unknown conference id is
+ *  skipped rather than guessed. */
+export function schoolsFromStandings(feed) {
+  const out = [];
+  for (const c of feed?.children ?? []) {
+    const known = CONFERENCES[Number(c.id)];
+    if (!known) continue;
+    const entries = [...(c.standings?.entries ?? []), ...(c.children ?? []).flatMap((d) => d.standings?.entries ?? [])];
+    for (const e of entries) {
+      const t = e?.team;
+      if (!t?.id) continue;
+      out.push({ school_id: String(t.id), school_abbr: t.abbreviation ?? null, conference: known[0], conf_id: Number(c.id), tier: known[1] });
+    }
+  }
+  return out;
+}
 
 // ESPN fills only the category a request names (a plain `offense` page came
 // back with every stat blank), so each season is three walks — passing,
@@ -200,6 +228,15 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
     if (error) log('college retire', error.message);
     else retired = Number(data?.retired ?? 0);
   }
+
+  // 0382: conferences, from one standings request. Best-effort.
+  try {
+    const schools = schoolsFromStandings(await fetchJson(STANDINGS(season)));
+    if (schools.length) {
+      const { error } = await rpc('upsert_college_schools', { p_rows: schools });
+      if (error) log('college conferences', error.message);
+    }
+  } catch (e) { log('college conferences', e.message); }
 
   // 0369: last season's lines and this season's so far — the pool's ranking.
   let stats = 0;
