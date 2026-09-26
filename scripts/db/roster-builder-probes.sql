@@ -186,13 +186,13 @@ begin
   perform assert_ok(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
     'sb11y put the name back');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true},{"pos":["WR"]}]'::jsonb),
-    'rename spots, or shrink', 'sb11a growing is refused');
+    'can change once the draft is over', 'sb11a growing is refused mid-draft (0377: it can once the draft is over)');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["WR"]}]'::jsonb),
-    'can only be RENAMED', 'sb11b a prefix-length EDIT is refused');
+    'can change once the draft is over', 'sb11b a prefix-length EDIT is refused mid-draft');
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"],"bb":true}]'::jsonb),
-    'can only be RENAMED', 'sb11c flipping best ball on a surviving spot is an edit');
+    'can change once the draft is over', 'sb11c flipping best ball on a surviving spot is an edit');
   perform assert_err(set_league_classic_slots(lid, null),
-    'locks once the draft', 'sb11d clearing the spec post-draft is refused');
+    'edit its spots instead', 'sb11d clearing the spec post-draft is refused');
   -- THE LEGAL SHRINK: drop the tail spot. Cosmetic differences must not fail
   -- it — lowercase pos and an implicit bb are the CLEANED form of the same spot.
   r := set_league_classic_slots(lid, '[{"pos":["qb"]}]'::jsonb);
@@ -205,7 +205,7 @@ begin
     'sb12c the draft itself is untouched');
   -- and the hatch never reopens the door it closed
   perform assert_err(set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"bb":true}]'::jsonb),
-    'rename spots, or shrink', 'sb13 growing back is still refused');
+    'can change once the draft is over', 'sb13 growing back is still refused mid-draft');
 
 end $$;
 

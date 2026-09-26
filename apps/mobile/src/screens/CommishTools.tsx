@@ -21,7 +21,7 @@ import {
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter,
+  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter,
   setLeagueGolf,
   setTaxiRules, setIrRules, setOutRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
@@ -2099,7 +2099,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueClassicSlots(leagueId, spots.map(fromSpotDraft));
-      if (r.ok) { commit(); setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setNote('✓ lineup saved'); }
+      if (r.ok) { commit(); setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setNote(lineupSaveNote(r)); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -2543,7 +2543,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · after the draft every count can still change (never below what a team holds), and each change is posted to league chat.
+            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · after the draft the starting spots and every count can still change between weeks (never leaving a team illegal), and each change is posted to league chat.
           </Mono>
           {admin && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
