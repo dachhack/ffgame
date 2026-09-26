@@ -18,6 +18,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.554.0 — college projections in drafts; devy and IDP draft filters; one-line position picker
+
+- **College projections (0379).** No feed projects college players, so the
+  app builds its own estimate: each player's per-game line blended from this
+  season (a game counts fully) and last season (a game counts half), with at
+  least 3 effective games required (`_college_proj`). One estimate now
+  drives:
+  - the pool's seed order (`college_directory`, so RANK and autopick);
+  - the AI's weekly lines (`college_proj_lines`);
+  - NEW `college_pool_lines(league)`: a line for every college player in a
+    pool. `leaguePool` installs it, so PROJ ranks college players in the
+    draft room and on the wire (they used to read "—" and sort last).
+  Freshmen without stats still have no line. College defenders have none yet
+  (only offense is swept).
+- **Draft filters.**
+  - One position list for both apps (`DRAFT_POS_FILTERS`). The app's draft
+    room stopped at DEF; it now offers DL/LB/DB/FB/HC/P wherever the league
+    plays them.
+  - Where the pool holds college players (draft room and wire, web and app):
+    NFL / CFB chips (shown only when both kinds are in the pool), CLASS chips
+    (FR / SO / JR / SR+), and search by school.
+- **Lineup builder.** A spot's positions are one dropdown instead of a
+  wrapping row of chips. The header reads what the spot takes ("RB · WR · TE
+  ▾") and opens a checklist naming the spot ("ELIGIBLE: FLEX (RB/WR/TE)").
+  The web row stays on one line; the app opens a sheet.
+- Probes: college cp10 (the blend, directory order, pool lines). Checks:
+  check-college §8.
+
 ### v0.553.0 — new leagues score weeks already played, at the commissioner's call
 
 A classic league made mid-week used to start the following week. Now (0378):

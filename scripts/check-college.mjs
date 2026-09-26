@@ -11,7 +11,8 @@ import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
-import { setCollegeProjections, collegeHasGame, projectedPoints, setLeagueProjScoring, clearLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
+import { setCollegeProjections, collegeHasGame, projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, hasProjection } from '../packages/core/src/engine/projScoring.ts';
+import { levelClassMatch, poolSearchMatch, projFor, DRAFT_POS_FILTERS } from '../packages/core/src/data/poolSort.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -95,6 +96,22 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const lu = optimalLineup([flex], [P('c-4'), P('c-3'), P('c-2'), P('c-1')], val);
   ok(lu.spots[0].player?.id === 'c-1', `THE POINT: the AI starts the best college player with a game (got ${lu.spots[0].player?.id})`);
   setCollegeProjections([], 7);
+}
+
+// ── 8. drafts (0379 / v0.554.0) ──
+{
+  setCollegeProjections([{ slug: 'c-9', line: { passYd: 0, passTd: 0, int: 0, rushYd: 100, rushTd: 1, rec: 2, recYd: 20, recTd: 0 } }]);
+  ok(hasProjection('c-9') && projFor('c-9', 'RB') === 20 && projFor('c-10', 'RB') === null,
+    'THE POINT: an installed college line is a projection the draft PROJ column can rank (20.0/g)');
+  setCollegeProjections([]);
+  const cfb = { slug: 'c-9', cls: 2 }, nfl = { slug: 'bijan-robinson' }, sr = { slug: 'c-8', cls: 5 };
+  ok(levelClassMatch(cfb, 'cfb', new Set()) && !levelClassMatch(nfl, 'cfb', new Set()) && !levelClassMatch(cfb, 'nfl', new Set())
+     && levelClassMatch(nfl, 'all', new Set()), 'NFL / CFB level filter');
+  ok(levelClassMatch(cfb, 'all', new Set([2])) && !levelClassMatch(cfb, 'all', new Set([1])) && !levelClassMatch(nfl, 'all', new Set([2]))
+     && levelClassMatch(sr, 'all', new Set([4])), 'class filter: sophomores; a class choice means college; 5th-years count as SR+');
+  ok(poolSearchMatch({ full_name: 'Cam Ward', team: '', school: 'MIA' }, 'mia') && !poolSearchMatch({ full_name: 'X', team: 'KC', school: null }, 'mia'),
+    'search finds a school');
+  ok(['DL', 'LB', 'DB', 'FB', 'HC', 'P'].every((p) => DRAFT_POS_FILTERS.includes(p)), 'the draft position list carries IDP and the extras');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

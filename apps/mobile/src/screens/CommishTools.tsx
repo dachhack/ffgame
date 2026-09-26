@@ -37,7 +37,7 @@ import {
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
-import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
+import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_CODES } from '@drip/core/data/kdst';
 
 // The builder's position chips (0163) — combos are made by lighting several.
@@ -1847,6 +1847,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // the founder's "button to pop up a position label editor"; the 0172 filter
   // popover folded into it so the row itself never wraps).
   const [editIdx, setEditIdx] = useState<number | null>(null);
+  // v0.554.0: the spot whose position list is open (one-line picker).
+  const [posPickIdx, setPosPickIdx] = useState<number | null>(null);
   // ── Drag-to-reorder (v0.267.0, replacing the ▲▼ arrows) ──
   // One drag at a time: the lifted row's key (styling), its live index (ref —
   // gesture handlers read refs so re-renders mid-drag never go stale), the
@@ -2245,20 +2247,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                       pinned right so the ROW never wraps (founder). A custom
                       label reads as its own line inside the card. */}
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                    {[...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))].map((p) => {
-                      const on = sp.pos.includes(p);
-                      // A lit chip wears the POSITION's colour (v0.216.1) — same
-                      // palette PosPill uses, so the builder speaks the draft
-                      // board's language. Unknown tokens fall back to neutral.
-                      const c = t.pos[p as keyof typeof t.pos] ?? { bg: t.you, fg: t.onAccent, bd: t.you };
-                      return (
-                        <Pressable key={p} disabled={busy}
-                          onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : [...x.pos, p] })); setSpotsDirty(true); }}
-                          style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
-                          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
-                        </Pressable>
-                      );
-                    })}
+                    {/* ONE LINE (v0.554.0, founder): the spot's positions as a
+                        header that opens the checklist, not a wrapping chip row. */}
+                    <Pressable disabled={busy} onPress={() => { tap(); setPosPickIdx(i); }} hitSlop={4}
+                      style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg, flexShrink: 1 }}>
+                      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: sp.pos.length ? t.text : t.warn }}>
+                        {sp.pos.length ? `${sp.pos.join(' · ')} ▾` : 'pick positions ▾'}
+                      </Text>
+                    </Pressable>
                     {!!sp.label.trim() && (
                       <Mono size={7.5} tone="you" numberOfLines={1} style={{ width: '100%' }}>“{sp.label.trim()}”</Mono>
                     )}
@@ -2386,6 +2382,42 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               up a position label editor". Label front and center; the 0172
               per-slot filters and the remove action ride along, so the row
               itself stays one clean line. Edits are live; SAVE LINEUP applies. */}
+          <Overlay visible={posPickIdx != null && posPickIdx < spots.length}
+            title={`Spot ${(posPickIdx ?? 0) + 1} · positions`}
+            subtitle="Tick every position this spot may start — then SAVE LINEUP."
+            onClose={() => setPosPickIdx(null)}>
+            {posPickIdx != null && spots[posPickIdx] && (() => {
+              const i = posPickIdx; const sp = spots[i];
+              const opts = [...BUILDER_POSITIONS.filter((q) => !['DL','LB','DB'].includes(q) || extraPos.includes('IDP')), ...['FB','HC','P','RET'].filter((q) => extraPos.includes(q))];
+              const chosen = opts.filter((q) => sp.pos.includes(q));
+              const name = chosen.length ? slotSpecLabel(chosen) : '';
+              return (
+                <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28, gap: 6 }}>
+                  <Mono size={9} tone="faint" weight="700" track={0.12}>ELIGIBLE</Mono>
+                  <Mono size={11} weight="700" tone={chosen.length ? 'text' : 'warn'}>
+                    {chosen.length ? `${name}${name !== chosen.join('/') ? ` (${chosen.join('/')})` : ''}` : 'none yet'}
+                  </Mono>
+                  {opts.map((p) => {
+                    const on = sp.pos.includes(p);
+                    const c = t.pos[p as keyof typeof t.pos] ?? { bg: t.you, fg: t.onAccent, bd: t.you };
+                    return (
+                      <Pressable key={p} disabled={busy}
+                        onPress={() => { tap(); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, pos: on ? x.pos.filter((q) => q !== p) : opts.filter((q) => q === p || x.pos.includes(q)) })); setSpotsDirty(true); }}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.bd }}>
+                        <Text style={{ fontFamily: MONO, fontSize: fs(13), color: on ? t.you : t.faint, width: 18 }}>{on ? '☑' : '☐'}</Text>
+                        <View style={{ borderRadius: 3, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: on ? c.bg : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? c.bd : t.bd }}>
+                          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: on ? c.fg : t.dim }}>{p}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                  <View style={{ marginTop: 10, alignItems: 'center' }}>
+                    <LinkButton label="DONE" tone="you" onPress={() => { tap(); setPosPickIdx(null); }} />
+                  </View>
+                </ScrollView>
+              );
+            })()}
+          </Overlay>
           <Overlay visible={editIdx != null && editIdx < spots.length}
             title={`✏️ Spot ${(editIdx ?? 0) + 1}`}
             subtitle="Name it, limit who may fill it, or remove it — then SAVE LINEUP."

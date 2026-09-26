@@ -60,7 +60,7 @@ import {
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -78,7 +78,7 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 const errStyle: React.CSSProperties = { fontSize: 10.5, color: 'var(--opp)', marginTop: 9, lineHeight: 1.4 };
 const hdr: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em', color: 'var(--dim)', fontWeight: 700, marginBottom: 8 };
 
-const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB', 'FB', 'HC', 'P'] as const;
+const POS_FILTERS = ['ALL', ...DRAFT_POS_FILTERS] as const;
 const posLabel = (p: string) => (p === 'DEF' ? 'D/ST' : p);
 /** Cap stepper sentinel: values ≥ this render as ∞ and are stored as null. */
 const CAP_UNLIMITED = 11;
@@ -120,6 +120,23 @@ function starApply<T>(list: T[], mode: StarMode, favs: Set<string>, slugOf: (x: 
   if (mode === 'first') return list.slice().sort((a, b) => (favs.has(slugOf(b)) ? 1 : 0) - (favs.has(slugOf(a)) ? 1 : 0));
   return list;
 }
+/** NFL / CFB and college class (0379) — shown only where the pool holds
+ *  college players (devy, mixed and college-only leagues). */
+function LevelClassChips({ level, setLevel, cls, setCls, showLevel }: {
+  level: LevelFilter; setLevel: (l: LevelFilter) => void; cls: Set<number>; setCls: (c: Set<number>) => void; showLevel: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+      {showLevel && LEVEL_FILTERS.map((o) => <Chip key={o.id} on={level === o.id} onClick={() => setLevel(o.id)}>{o.label}</Chip>)}
+      <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: showLevel ? 6 : 0 }}>CLASS</span>
+      {CLASS_FILTERS.map((o) => (
+        <Chip key={o.id} on={cls.has(o.id)}
+          onClick={() => { const n = new Set(cls); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); setCls(n); }}>{o.label}</Chip>
+      ))}
+    </div>
+  );
+}
+
 function StarChips({ mode, setMode }: { mode: StarMode; setMode: (m: StarMode) => void }) {
   return (
     <>
@@ -987,6 +1004,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   // here, which is the ask.
   const [tenure, setTenure] = useState<TenureBand>('any');
   const [posSel, setPosSel] = useState<Set<string>>(new Set());
+  const [level, setLevel] = useState<LevelFilter>('all');
+  const [cls, setCls] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
@@ -1221,9 +1240,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       // teamUnits: false — "show me rookies" is not answered by every kicker
       // and all thirty-two defenses (see tenure.ts).
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
-      && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
+      && levelClassMatch(p, level, cls)
+      && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap, level, cls]);
+  // 0379: which college filters this pool needs — class for any college
+  // player, NFL/CFB only where both kinds are in it.
+  const poolKinds = useMemo(() => {
+    const college = pool.some((p) => /^c-\d+$/.test(p.slug));
+    return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
+  }, [pool]);
 
   /** The caller's seat in this league, and the queue that hangs off it. */
   const loadTeam = () => {
@@ -1921,7 +1947,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           embed: settings and teams only there. */}
       {tab === 'players' && !embedded && (
         <div style={card}>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>
@@ -1944,6 +1970,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             )}
             <StarChips mode={starMode} setMode={setStarMode} />
           </div>
+          {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} />}
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ are already
               printed beside every name. */}
@@ -2731,6 +2758,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // Waiver-wire filters beyond position (founder): tenure band and NFL team.
   const [tenure, setTenure] = useState<TenureBand>('any');
   const [nflTeam, setNflTeam] = useState('ALL');
+  const [level, setLevel] = useState<LevelFilter>('all');
+  const [cls, setCls] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<PoolSort>('rank');
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   // 0341: WHAT THE WIRE IS DOING — Sleeper's trending adds, per slug, and
@@ -3016,9 +3045,14 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       // Unknown tenure matches no band but ANY — the pool's no-guess rule,
       // the same one a 0172 rookies-only spot follows.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
-      && (!needle || p.full_name.toLowerCase().includes(needle) || p.team.toLowerCase().includes(needle)));
+      && levelClassMatch(p, level, cls)
+      && poolSearchMatch(p, needle));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls]);
+  const poolKinds = useMemo(() => {
+    const college = pool.some((p) => /^c-\d+$/.test(p.slug));
+    return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
+  }, [pool]);
   /** The teams actually IN this pool, so the picker never offers an empty
    *  filter — a league whose pool is one conference should not list 32. */
   const poolTeams = useMemo(
@@ -3473,7 +3507,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 : ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — this league has no free agency`)
             : ''}
         </div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or teams…" style={{ ...input, marginBottom: 10 }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>ALL</Chip>
           {posChips.map((p) => (
@@ -3482,6 +3516,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ))}
           <StarChips mode={starMode} setMode={setStarMode} />
         </div>
+        {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} />}
         {/* THE ORDER (v0.302.0). Rank is what the draft clock follows, so it
             stays the default; the other three answer questions rank can't. */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
