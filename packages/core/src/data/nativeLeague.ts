@@ -22,6 +22,8 @@ import { NFL_CODES } from './kdst';
 import { ADP_2026, ADP_BY_SID, adpValue } from './adp2026';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
+import { collegeDirectory } from './liveApi';
+import { collegeSlug } from './college';
 
 export interface DraftPoolEntry {
   slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number;
@@ -96,7 +98,7 @@ export interface PoolOpts {
   /** Commissioner's allowable-player filter: team whitelist and/or a tenure
    *  window (years_exp — 0 = rookie). Pseudo-players (K/DST/HC/P) pass the
    *  tenure filter always; the team filter applies to them too. */
-  filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null;
+  filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null;
 }
 
 function hcPuntEntries(positions: string[]): (DraftPoolEntry & { score: number })[] {
@@ -150,6 +152,12 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   }
 
   const extras = opts?.positions ?? [];
+  // COLLEGE (0365/0366): the admin's switch adds college players after the
+  // NFL ones. A pool filter's level narrows to one side — 'college' is a devy
+  // draft's pool — and a tenure window (a rookie draft) is an NFL question, so
+  // it leaves college players out unless the level asks for them.
+  const level = opts?.filter?.level ?? null;
+  const wantNfl = level !== 'college';
   const wantIdp = extras.includes('IDP');
   const wantFb = extras.includes('FB');
   const teams = opts?.filter?.teams?.length ? new Set(opts.filter.teams.map((t) => t.toUpperCase())) : null;
@@ -215,9 +223,9 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   // Sleeper doesn't know. So: a filtered pool drops them, an unfiltered one
   // keeps them all.
   const tenureFiltered = minExp != null || maxExp != null;
-  const pseudo = (tenureFiltered ? [] : [...kdstEntries(), ...hcPuntEntries(extras)])
+  const pseudo = (tenureFiltered || !wantNfl ? [] : [...kdstEntries(), ...hcPuntEntries(extras)])
     .filter((e) => !teams || teams.has(e.team.toUpperCase()));
-  const rows: (DraftPoolEntry & { score: number; srank?: number })[] = [...best.values(), ...pseudo];
+  const rows: (DraftPoolEntry & { score: number; srank?: number })[] = wantNfl ? [...best.values(), ...pseudo] : [];
   // search_rank breaks score TIES before the slug does: two active name-twins
   // share a slug-keyed ADP, and the one Sleeper considers relevant must rank
   // first — sorted-best-first is what disambiguateSlugs uses to decide who
@@ -232,7 +240,31 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   // Kenneth Walker that was the actual RB, beaten to the clean slug by his
   // retired WR name-twin. After the slice, so a renamed row can't be one the
   // cap was about to discard anyway.
-  return disambiguateSlugs(rows.slice(0, cap).map(({ score: _score, srank: _srank, ...r }) => r));
+  const wantCollege = extras.includes('COLLEGE') && level !== 'nfl' && (level === 'college' || !tenureFiltered);
+  const college = wantCollege ? await collegePoolEntries(extras, level === 'college' ? 2000 : 600, onProgress) : [];
+  const nfl = disambiguateSlugs(rows.slice(0, cap - college.length).map(({ score: _score, srank: _srank, ...r }) => r));
+  // After the NFL players, best first: the pool's rank is its order, and the
+  // devy spots fill from this tail (autopick takes college players only once a
+  // team's NFL spots are full).
+  return [...nfl, ...college];
+}
+
+/** College players for a pool (0369's ranking), keyed c-<espn_id>. Their
+ *  `team` stays blank: a school code is not an NFL code, and several collide
+ *  (MIA, HOU, CIN, BUF), which would tie a college player to an NFL kickoff. */
+async function collegePoolEntries(extras: string[], limit: number, onProgress?: (note: string) => void): Promise<DraftPoolEntry[]> {
+  const positions = ['QB', 'RB', 'WR', 'TE'];
+  if (extras.includes('IDP')) positions.push('DL', 'LB', 'DB');
+  if (extras.includes('FB')) positions.push('FB');
+  try {
+    const rows = await collegeDirectory(positions, limit);
+    return (Array.isArray(rows) ? rows : []).map((r) => ({
+      slug: collegeSlug(r.espn_id), full: r.full, pos: r.pos, team: '', espnId: r.espn_id,
+    }));
+  } catch {
+    onProgress?.('College directory unavailable — seeding NFL players only.');
+    return [];
+  }
 }
 
 /** ── THE POOL DOCTOR (v0.376.3) ───────────────────────────────────────────

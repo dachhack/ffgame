@@ -24,7 +24,9 @@ import {
   leagueGameMode, type GameModeInfo,
   type LeaguePoolPlayer, type NativeTeamState,
   leagueTxnLimits, type TxnLimits,
+  leaguePoolCollege, type CollegePoolMeta,
 } from '@drip/core/data/liveApi';
+import { isCollegeSlug } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort } from '@drip/core/data/poolSort';
@@ -211,7 +213,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
  *      player, two taps to confirm, and the same button wherever you found him.
  */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj, emptyLabel }: {
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj, emptyLabel, sub }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -233,6 +235,9 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
    *  in the team view") — O/D/Q/IR, or nothing. The screen has read the
    *  sheet for the IR gate since 0198; it just never drew it on the row. */
   inj?: string | null;
+  /** Replaces the team beside the position — a devy player's school and
+   *  class (0366). */
+  sub?: string;
 }) {
   const posC = badgePos ? t.pos[badgePos as keyof typeof t.pos] : undefined;
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
@@ -261,7 +266,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
             <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
-              <Mono size={8.5} tone="faint">{p.team}</Mono>
+              <Mono size={8.5} tone="faint">{sub ?? p.team}</Mono>
               <InjuryBadge status={inj ?? null} size={7.5} />
               <FlagChip slug={p.slug} size={7.5} />
             </View>
@@ -306,7 +311,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [team, setTeam] = useState<NativeTeamState | null>(null);
   // TRANSACTION LIMITS (0358): what this team has left — the web twin's line.
   const [limits, setLimits] = useState<TxnLimits | null>(null);
-  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' | 'devy' }[]>([]);
+  // College players' school and class (0365), for the DEVY section.
+  const [college, setCollege] = useState<Record<string, CollegePoolMeta>>({});
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
   const [q, setQ] = useState('');
   // 0323: link mode on the claims card — the ticked ids, in tick order.
@@ -436,7 +443,8 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     // — the wire prices players off Stathead's board, whose names drift from
     // our slugs; ids don't. Name fallback stays if the read fails.
     leaguePoolIds(leagueId).then((r) => setSlugSleeperIds(r?.ids ?? {})).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb');
+      if (g.shape?.devy) leaguePoolCollege(leagueId).then((c) => { if (c.ok) setCollege(c.players ?? {}); }).catch(() => {}); } }).catch(() => {});
     keeperState(leagueId).then((k) => {
       if (!k.ok) return;
       setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0));
@@ -567,6 +575,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       ir: shown.filter((p) => p.spot === 'ir'),
       out: shown.filter((p) => p.spot === 'out'),
       taxi: shown.filter((p) => p.spot === 'taxi'),
+      devy: shown.filter((p) => p.spot === 'devy'),
     };
   }, [shown, slotDefs, slotNames, expMap]);
 
@@ -923,6 +932,28 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
               slotVerb="taxi squad" onSlot={canStash ? () => openSpot('taxi', null) : undefined} />
+          ))}
+        </>)}
+
+        {/* ── DEVY (0366) — college players, who never start. A graduate
+            (now on an NFL team) shows his NFL line; his chip moves him to
+            active. Same section as the web's. */}
+        {(bySpot.devy.length > 0 || !!gm?.shape?.devy) && (<>
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
+            DEVY ({bySpot.devy.length}{gm?.shape?.devy ? `/${gm.shape.devy}` : ''})
+          </Mono>
+          {bySpot.devy.map((p) => {
+            const c = college[p.slug];
+            const grad = !isCollegeSlug(p.slug);
+            return (
+              <RosterRow key={p.slug} badge="DV" tone="you" p={p} busy={busy} t={t}
+                sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+            );
+          })}
+          {Array.from({ length: Math.max(0, (gm?.shape?.devy ?? 0) - bySpot.devy.length) }, (_, i) => (
+            <RosterRow key={`dv-empty-${i}`} badge="DV" tone="you" p={null} busy={busy} t={t}
+              emptyLabel="Open — claim a college player from the wire" />
           ))}
         </>)}
 

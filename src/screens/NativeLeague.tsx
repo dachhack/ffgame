@@ -55,7 +55,9 @@ import {
   setLeagueFormat, type LeagueFormat,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
   leagueTxnLimits, type TxnLimits,
+  leaguePoolCollege, type CollegePoolMeta,
 } from '@drip/core/data/liveApi';
+import { isCollegeSlug } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort } from '@drip/core/data/poolSort';
@@ -2417,7 +2419,7 @@ function KeepersCard({ leagueId, myRoster, mine }: {
  *  labels FIT the box rather than being cut to fit it; a longer custom name
  *  wraps inside the same width.
  */
-function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emptyLabel }: {
+function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emptyLabel, sub }: {
   badge: string;
   badgePos?: string;
   /** A CSS colour for the badge on IR/taxi lines; starters take their position's. */
@@ -2431,6 +2433,9 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emp
   slotVerb?: string;
   /** The NFL report's designation (v0.424.0) — O/D/Q/IR, or nothing. */
   inj?: string | null;
+  /** The small line under the name, when "pos · team" is the wrong thing to
+   *  say — a devy player's school and class (0366). */
+  sub?: string;
 }) {
   const fg = tone ?? (badgePos ? `var(--pos-${badgePos}-fg, var(--dim))` : 'var(--dim)');
   const bg = tone || !badgePos ? 'transparent' : `var(--pos-${badgePos}-bg, transparent)`;
@@ -2459,7 +2464,7 @@ function RosterLine({ badge, badgePos, tone, p, busy, onSlot, slotVerb, inj, emp
           <button onClick={() => openPlayerCard({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team })}
             style={{ background: 'none', border: 0, padding: 0, flex: 1, minWidth: 0, textAlign: 'left', cursor: 'pointer' }}>
             <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name}</span>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{sub ?? `${p.pos} · ${p.team}`}</span>
           </button>
           <InjuryTag status={inj} />
           <FlagChip slug={p.slug} />
@@ -2714,8 +2719,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // TRANSACTION LIMITS (0358): what this team has left, said before the tap
   // that would be refused rather than after it.
   const [limits, setLimits] = useState<TxnLimits | null>(null);
-  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' }[]>([]);
+  const [rosters, setRosters] = useState<{ roster_id: number; slug: string; spot?: 'active' | 'taxi' | 'ir' | 'out' | 'devy' }[]>([]);
   const [pool, setPool] = useState<LeaguePoolPlayer[]>([]);
+  // College players' school and class (0365), for the DEVY section.
+  const [college, setCollege] = useState<Record<string, CollegePoolMeta>>({});
   const [q, setQ] = useState('');
   // POSITIONS ARE A MULTI-SELECT NOW (v0.302.0, founder: "allow multiple select
   // in the waiver filters"). Empty = every position the league can roster,
@@ -2883,7 +2890,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     // map empty, which makes every tenure band except ANY come back empty
     // rather than wrong; the filter says so via its own count.
     leaguePoolExp(leagueId).then((m) => { if (alive) setExpMap(m); }).catch(() => {});
-    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb'); } }).catch(() => {});
+    leagueGameMode(leagueId).then((g) => { if (alive && g.ok) { setGm(g); setLeagueProjScoring(leagueCatalogOf(g)); setDynFormat(leagueSuperflex(g) ? 'sf' : '1qb');
+      if (g.shape?.devy) leaguePoolCollege(leagueId).then((c) => { if (alive && c.ok) setCollege(c.players ?? {}); }).catch(() => {}); } }).catch(() => {});
     keeperState(leagueId).then((k) => { if (alive && k.ok) setKeeperCount(isDynastyContinuity(k.continuity) ? 0 : (k.keeper_count ?? 0)); }).catch(() => {});
     // A drop made from the PLAYER CARD (v0.285.0) has no way to call this
     // screen — the card is a module-level overlay. It rings the bus instead,
@@ -2957,6 +2965,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       ir: shown.filter((p) => p.spot === 'ir'),
       out: shown.filter((p) => p.spot === 'out'),
       taxi: shown.filter((p) => p.spot === 'taxi'),
+      devy: shown.filter((p) => p.spot === 'devy'),
     };
   }, [shown, slotDefs, slotNames, expMap]);
 
@@ -3328,6 +3337,28 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterLine key={`tx-empty-${i}`} badge="TX" tone="var(--you)" p={null} busy={busy}
               slotVerb="taxi squad" onSlot={canStash ? () => openSpot('taxi', null) : undefined} />
+          ))}
+        </>)}
+
+        {/* DEVY (0366) — college players, who never start. They arrive here
+            by the draft or a claim and leave by graduating: a player now on an
+            NFL team shows his NFL line, and his chip moves him to active. */}
+        {(bySpot.devy.length > 0 || !!gm?.shape?.devy) && (<>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
+            DEVY ({bySpot.devy.length}{gm?.shape?.devy ? `/${gm.shape.devy}` : ''})
+          </div>
+          {bySpot.devy.map((p) => {
+            const c = college[p.slug];
+            const grad = !isCollegeSlug(p.slug);
+            return (
+              <RosterLine key={p.slug} badge="DV" tone="var(--you)" p={p} busy={busy}
+                sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [p.pos, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+            );
+          })}
+          {Array.from({ length: Math.max(0, (gm?.shape?.devy ?? 0) - bySpot.devy.length) }, (_, i) => (
+            <RosterLine key={`dv-empty-${i}`} badge="DV" tone="var(--you)" p={null} busy={busy}
+              emptyLabel="Open — claim a college player from the wire" />
           ))}
         </>)}
 

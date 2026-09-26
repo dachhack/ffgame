@@ -1856,7 +1856,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // Current key order, refreshed every render AND spliced eagerly on swap, so
   // a fast drag crossing two rows in one frame reads correct neighbours.
   const orderRef = useRef<number[]>([]);
-  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number; out: number }>({ bench: 6, taxi: 0, ir: 0, out: 0 });
+  const [shape, setShape] = useState<{ bench: number; taxi: number; ir: number; out: number; devy: number }>({ bench: 6, taxi: 0, ir: 0, out: 0, devy: 0 });
   // The draft's own window (0064, widened to 99 in 0192). Roster size IS the
   // round count, so this bounds starters + bench + taxi + IR.
   const MAX_ROUNDS = 99;
@@ -1951,7 +1951,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
         ? r.slots.map(toSpotDraft)
         : legacy.map((d) => toSpotDraft({ pos: [...d.pos], bb: (r.bestball ?? []).includes(d.slot) })));
       setSpotsDirty(false);
-      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0, out: r.shape.out ?? 0 });
+      if (r.shape) setShape({ bench: r.shape.bench ?? 6, taxi: r.shape.taxi ?? 0, ir: r.shape.ir ?? 0, out: r.shape.out ?? 0, devy: r.shape.devy ?? 0 });
       setRounds(r.rounds ?? null);
       setExtraPos(r.positions ?? []);
       setFltTeams((r.pool_filter?.teams ?? []).join(', '));
@@ -2072,12 +2072,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     } catch { warn(); }
     finally { setBusy(false); }
   };
-  const saveShape = async (next: { bench: number; taxi: number; ir: number; out: number }) => {
+  const saveShape = async (next: { bench: number; taxi: number; ir: number; out: number; devy: number }) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir, next.out);
-      if (r.ok) { commit(); setShape(r.shape ? { bench: r.shape.bench, taxi: r.shape.taxi, ir: r.shape.ir, out: r.shape.out ?? 0 } : next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
+      // DEVY (0366) is only sent where college players are on.
+      const r = await setLeagueRosterShape(leagueId, next.bench, next.taxi, next.ir, next.out,
+        extraPos.includes('COLLEGE') ? next.devy : undefined);
+      if (r.ok) { commit(); setShape(r.shape ? { bench: r.shape.bench, taxi: r.shape.taxi, ir: r.shape.ir, out: r.shape.out ?? 0, devy: r.shape.devy ?? 0 } : next); setRounds(r.rounds ?? null); setNote('✓ roster shape saved'); }
       else { warn(); setNote(r.error ?? 'failed'); }
     } catch { warn(); }
     finally { setBusy(false); }
@@ -2179,7 +2181,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       )}
       {view === 'lineup' && mode === 'classic' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
-        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out;
+        const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out + shape.devy;
         return (
         <View>
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
@@ -2436,7 +2438,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             {/* THE TOTAL IS THE CEILING (0192): bench 20 / taxi 8 / IR 8 were
                 per-box numbers that ran a deep dynasty out of room with rounds
                 to spare. The draft's 5–99 window is the only real limit. */}
-            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir'], ['OUT', 'out']] as const).map(([label, key]) => (
+            {([['BENCH', 'bench'], ['TAXI', 'taxi'], ['IR', 'ir'], ['OUT', 'out'], ...(extraPos.includes('COLLEGE') ? [['DEVY', 'devy']] as const : [])] as const).map(([label, key]) => (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>{label}</Text>
                 <Pressable disabled={busy || shape[key] === 0} onPress={() => { tap(); void saveShape({ ...shape, [key]: Math.max(0, shape[key] - 1) }); }} hitSlop={6}>
