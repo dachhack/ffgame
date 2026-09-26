@@ -33,12 +33,12 @@ create or replace function league_is_mixed(p_league_id uuid) returns boolean
 $$;
 grant execute on function league_is_mixed(uuid) to authenticated;
 
--- The span of an NFL board week, generous at both ends: from 60 hours before
+-- The span of an NFL board week, generous at both ends: from 48 hours before
 -- its first kickoff (a Tuesday) to 12 hours after its last. Every college
 -- game of that Thursday–Saturday falls inside.
 create or replace function nfl_week_window(p_week int, out lo timestamptz, out hi timestamptz)
   language sql stable security definer set search_path = public as $$
-  select min(kickoff) - interval '60 hours', max(kickoff) + interval '12 hours'
+  select min(kickoff) - interval '48 hours', max(kickoff) + interval '12 hours'
     from nfl_slate
    where week = p_week and season = (select max(season) from nfl_slate where week = p_week)
 $$;

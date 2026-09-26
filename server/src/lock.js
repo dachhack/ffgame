@@ -239,6 +239,10 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
 
   const dueIds = [];
   for (const p of picks) {
+    // College players seal by the database's own rule (seal_due_college_picks,
+    // 0372) — their blank team would otherwise seal them at the week's FIRST
+    // kickoff, a Thursday-night lock on a Saturday game.
+    if (p.player_slug && /^c-\d+$/.test(p.player_slug)) continue;
     // An EMPTY spot has nobody to be late for; it seals with the week so a
     // manager can still fill it right up to their next kickoff.
     const team = p.player_slug ? teamOf(leagueOf.get(p.matchup_id), p.player_slug) : null;

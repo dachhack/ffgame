@@ -11,7 +11,7 @@ import { config } from './config.js';
 import { getState } from './sleeper.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
-import { pollGame } from './poll/plays.js';
+import { pollGame, nflWeekForKickoff } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
@@ -205,6 +205,32 @@ async function collegeWeek(season) {
     cfbWeekHit = { week: w ?? cfbWeekHit?.week ?? null, at: Date.now() };
   }
   return cfbWeekHit.week;
+}
+
+// MIXED LEAGUES (0372): are there any (10 min), and the NFL week windows a
+// college kickoff maps into (30 min; nfl_week_window's rule in SQL).
+let mixedHit = null, nflWindowsHit = null;
+async function mixedLeaguesExist() {
+  if (!mixedHit || Date.now() - mixedHit.at > 10 * 60e3) {
+    const { data, error } = await db().rpc('mixed_leagues_exist');
+    mixedHit = { on: error ? (mixedHit?.on ?? false) : !!data, at: Date.now() };
+  }
+  return mixedHit.on;
+}
+async function nflWeekWindows(season) {
+  if (!nflWindowsHit || Date.now() - nflWindowsHit.at > 30 * 60e3) {
+    const { data, error } = await db().from('nfl_slate').select('week,kickoff')
+      .eq('season', String(season)).gte('week', 1).lte('week', 18);
+    const by = new Map();
+    for (const r of data ?? []) {
+      const t = Date.parse(r.kickoff); if (!Number.isFinite(t)) continue;
+      const e = by.get(r.week) ?? { lo: t, hi: t };
+      e.lo = Math.min(e.lo, t); e.hi = Math.max(e.hi, t); by.set(r.week, e);
+    }
+    const windows = [...by.entries()].map(([week, e]) => ({ week, lo: e.lo - 48 * 3600e3, hi: e.hi + 12 * 3600e3 }));
+    nflWindowsHit = { windows: error ? (nflWindowsHit?.windows ?? []) : windows, at: Date.now() };
+  }
+  return nflWindowsHit.windows;
 }
 
 // Schools with a rostered player in a college-calendar league (0371), cached
@@ -608,6 +634,13 @@ async function tickContext(ctx, season) {
     const swapped = await sealDueClassicPicks(week, teamKickoffs(slate));
     if (swapped) log(`[${ctx.tag}] sealed`, swapped, 'classic picks (per player)');
   } catch (e) { log(`[${ctx.tag}] classic seal`, e.message); }
+  // College players (0371/0372) seal at their own game by the database's rule
+  // (classic_kickoff_for): their pool team is blank, so the map above can't.
+  try {
+    const { data: cs, error: csErr } = await db().rpc('seal_due_college_picks', { p_week: week });
+    if (csErr) log(`[${ctx.tag}] college seal`, csErr.message);
+    else if (cs) log(`[${ctx.tag}] sealed`, cs, 'college picks');
+  } catch (e) { log(`[${ctx.tag}] college seal`, e.message); }
 
   // Poll live games → plays, keyed at the board week. Reuses the scoreboard above.
   // FINALS GET A LATE PASS (v0.388.12): a completed game is re-polled every
@@ -647,7 +680,16 @@ async function tickContext(ctx, season) {
     } catch (e) { simPurgedWeeks.delete(week); log(`[${ctx.tag}] sim purge`, e.message); }
   }
   let wrote = 0;
-  for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex, sport); } catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); } }
+  // Mixed leagues read college plays at the NFL week holding the kickoff.
+  const mirrorOf = new Map();
+  if (sport === 'college' && await mixedLeaguesExist()) {
+    const windows = await nflWeekWindows(season);
+    for (const g of games) { const w = nflWeekForKickoff(g.kickoffMs, windows); if (w != null) mirrorOf.set(g.eventId, w); }
+  }
+  for (const eventId of toPoll) {
+    try { wrote += await pollGame(eventId, week, playerIndex, sport, { mirrorWeek: mirrorOf.get(eventId) ?? null }); }
+    catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); }
+  }
   if (toPoll.length) log(`[${ctx.tag}] polled`, toPoll.length, 'games,', wrote, 'play rows');
 
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
