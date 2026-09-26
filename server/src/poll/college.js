@@ -29,6 +29,9 @@ const CORE_TEAMS = (season) =>
   `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
 const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
 
+const STATS = (season, page) =>
+  `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/statistics/byathlete?season=${season}&seasontype=2&limit=1000&page=${page}&category=offense&isqualified=false&group=80`;
+
 const DAY = 86400000;
 const CHUNK = 500;
 const CONCURRENCY = 4;
@@ -70,6 +73,58 @@ export function rosterRows(roster) {
     }
   }
   return out;
+}
+
+// ESPN prints numbers as strings with thousands separators, and '-' for none.
+const num = (v) => {
+  if (v == null || v === '-' || v === '') return null;
+  const n = Number(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? Math.round(n) : null;
+};
+
+/** One page of ESPN's byathlete stats → college_player_stats rows (0369).
+ *  Columns are found by NAME in the page's own category headers, so a
+ *  reordered feed can't shift yards into touchdowns. */
+export function statRows(page) {
+  const idx = {};
+  for (const c of page?.categories ?? []) idx[c.name] = c.names ?? [];
+  const pick = (cats, cat, name) => {
+    const i = (idx[cat] ?? []).indexOf(name);
+    const col = cats.find((c) => c.name === cat);
+    return i < 0 || !col ? null : num((col.totals ?? col.values ?? [])[i]);
+  };
+  const out = [];
+  for (const a of page?.athletes ?? []) {
+    const id = String(a?.athlete?.id ?? '');
+    if (!/^\d+$/.test(id)) continue;
+    const c = a.categories ?? [];
+    out.push({
+      espn_id: id,
+      gp: pick(c, 'general', 'gamesPlayed'),
+      pass_yds: pick(c, 'passing', 'passingYards'), pass_td: pick(c, 'passing', 'passingTouchdowns'),
+      ints: pick(c, 'passing', 'interceptions'),
+      rush_yds: pick(c, 'rushing', 'rushingYards'), rush_td: pick(c, 'rushing', 'rushingTouchdowns'),
+      rec: pick(c, 'receiving', 'receptions'), rec_yds: pick(c, 'receiving', 'receivingYards'),
+      rec_td: pick(c, 'receiving', 'receivingTouchdowns'),
+    });
+  }
+  return out;
+}
+
+/** Every page of one season's offensive lines → upsert_college_stats. */
+export async function runStatsSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args)) {
+  let rows = 0;
+  for (let page = 1, pages = 1; page <= pages && page <= 10; page++) {
+    const d = await fetchJson(STATS(season, page));
+    pages = Number(d?.pagination?.pages ?? 1);
+    const batch = statRows(d);
+    for (let i = 0; i < batch.length; i += CHUNK) {
+      const { data, error } = await rpc('upsert_college_stats', { p_season: season, p_rows: batch.slice(i, i + CHUNK) });
+      if (error) { log('college stats', season, error.message); return rows; }
+      rows += Number(data?.rows ?? 0);
+    }
+  }
+  return rows;
 }
 
 /** How long to wait between sweeps on a given date: daily Feb–Aug, weekly otherwise. */
@@ -125,7 +180,14 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
     if (error) log('college retire', error.message);
     else retired = Number(data?.retired ?? 0);
   }
-  return { schools: ids.length, rows: wrote, failed, retired };
+
+  // 0369: last season's lines and this season's so far — the pool's ranking.
+  let stats = 0;
+  for (const yr of [Number(season) - 1, Number(season)]) {
+    try { stats += await runStatsSweep(yr, log, fetchJson, rpc); }
+    catch (e) { log('college stats', yr, e.message); }
+  }
+  return { schools: ids.length, rows: wrote, failed, retired, stats };
 }
 
 let last = 0;
@@ -136,7 +198,7 @@ export function sweepCollege(season, log = () => {}) {
   if (inflight || Date.now() - last < sweepEveryMs()) return false;
   last = Date.now();
   inflight = runCollegeSweep(season, log)
-    .then((r) => log(`college: ${r.rows} players from ${r.schools} schools` +
+    .then((r) => log(`college: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines` +
       (r.failed ? `, ${r.failed} rosters failed (no retirement this sweep)` : `, ${r.retired} retired`) +
       (r.error ? ` — ${r.error}` : '')))
     .catch((e) => log('college sweep error', e.message))

@@ -173,6 +173,27 @@ begin
   perform cp_true((select not (settings_json -> 'positions_extra' @> '["COLLEGE"]'::jsonb) from league where id = lid),
     'cp8a and it is gone from settings');
 
+  -- ══ cp9. THE RANKING (0369) ══════════════════════════════════════════════
+  perform upsert_college_players(jsonb_build_array(
+    jsonb_build_object('espn_id', '93611', 'full_name', 'Rank Producer', 'pos', 'RB', 'class_year', 3),
+    jsonb_build_object('espn_id', '93612', 'full_name', 'Rank Freshman', 'pos', 'RB', 'class_year', 1),
+    jsonb_build_object('espn_id', '93613', 'full_name', 'Rank Cameo', 'pos', 'RB', 'class_year', 2)));
+  perform upsert_college_stats(2025, jsonb_build_array(
+    jsonb_build_object('espn_id', '93611', 'gp', 10, 'rush_yds', 1000, 'rush_td', 10, 'rec', 20, 'rec_yds', 200),
+    jsonb_build_object('espn_id', '93613', 'gp', 2, 'rush_yds', 400, 'rush_td', 5)));
+  perform cp_true(not has_function_privilege('authenticated', 'upsert_college_stats(int, jsonb)', 'execute'),
+    'cp9 only the worker writes stats');
+  r := college_directory(array['RB'], 2000);
+  perform cp_true((select (e ->> 'ppg')::numeric = 20.0 from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611'),
+    'cp9a PPR per game: (100 + 60 + 20 + 20) / 10 = 20');
+  perform cp_true((select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93611')
+                < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93613'),
+    'cp9b a two-game cameo does not count as a season');
+  perform cp_true((select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93613')
+                < (select (e ->> 'ord')::int from jsonb_array_elements(r) e where e ->> 'espn_id' = '93612'),
+    'cp9c with no season, the older player ranks first');
+  delete from college_player_stats where espn_id like '936%';
+
   delete from league_pool where league_id = lid;
   delete from college_player where espn_id like '936%';
   raise notice 'college probes done';

@@ -2,7 +2,7 @@
 // retirement rule — a sweep with ANY failed roster must not retire anybody.
 // Fixtures are cut from real 2026 ESPN responses (Alabama's roster shape, the
 // core API's $ref list); no network.
-import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs } from '../src/poll/college.js';
+import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows } from '../src/poll/college.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -95,6 +95,32 @@ const teamsFeed = { items: [
   ok(sweepEveryMs(new Date('2027-04-15T00:00:00Z')) === 86400000, 'daily in the offseason (transfers, signings)');
   ok(sweepEveryMs(new Date('2026-10-15T00:00:00Z')) === 7 * 86400000, 'weekly in season');
   if (prev != null) process.env.COLLEGE_POLL_MS = prev;
+}
+
+// ── 5. season stat lines (0369) — cut from ESPN's 2025 byathlete page ──
+{
+  const page = {
+    categories: [
+      { name: 'general', names: ['gamesPlayed', 'fumblesForced'] },
+      { name: 'passing', names: ['completions', 'passingYards', 'passingTouchdowns', 'interceptions'] },
+      { name: 'rushing', names: ['rushingAttempts', 'rushingYards', 'yardsPerRushAttempt', 'rushingTouchdowns'] },
+      { name: 'receiving', names: ['receptions', 'receivingTargets', 'receivingYards', 'receivingTouchdowns'] },
+    ],
+    athletes: [
+      { athlete: { id: '4918103' }, categories: [
+        { name: 'general', totals: ['13', '-'] },
+        { name: 'passing', totals: ['-', '-', '-', '-'] },
+        { name: 'rushing', totals: ['295', '1,659', '5.6', '16'] },
+        { name: 'receiving', totals: ['30', '41', '286', '0'] },
+      ] },
+      { athlete: { id: 'bad' }, categories: [] },
+    ],
+  };
+  const [r, ...rest] = statRows(page);
+  ok(rest.length === 0, 'a bad id is dropped');
+  ok(r.espn_id === '4918103' && r.gp === 13 && r.rush_yds === 1659 && r.rush_td === 16, 'columns found by name, thousands separator read');
+  ok(r.rec === 30 && r.rec_yds === 286 && r.rec_td === 0, 'receiving read past the targets column');
+  ok(r.pass_yds === null && r.ints === null, "'-' is none, not zero");
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
