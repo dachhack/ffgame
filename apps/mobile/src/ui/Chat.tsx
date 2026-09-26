@@ -28,6 +28,7 @@ import { useKeyboardInset } from './keyboard';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 const fmtWhen = (at: string): string => {
   const d = new Date(at);
@@ -105,7 +106,7 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
       <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{m.body}</Text>
       <Pressable onPress={() => { tap(); onOpen(); }} hitSlop={6}
         style={{ alignSelf: 'flex-start', marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, backgroundColor: t.bg }}>
-        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.warn }}>📋 OPEN WEEK {week ?? '?'} REPORT ▸</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.warn }}>📋 OPEN {week != null ? weekTitle(week) : 'WEEK ?'} REPORT ▸</Text>
       </Pressable>
     </View>
   );

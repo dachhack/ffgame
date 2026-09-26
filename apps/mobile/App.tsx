@@ -26,7 +26,8 @@ import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
-import { isAdmin } from '@drip/core/data/liveApi';
+import { isAdmin, loadCollegeWeekDates } from '@drip/core/data/liveApi';
+import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
@@ -118,6 +119,15 @@ export function App() {
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
   const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
+
+  // COLLEGE WEEKS BY DATE (v0.556.9): "WEEK OF 9/28/2026", not "WEEK 205".
+  // Every week label reads the installed dates synchronously; the version
+  // bump re-renders the tree once they arrive.
+  const [, setWeekDatesVer] = useState(0);
+  useEffect(() => {
+    if (!session) return;
+    void loadCollegeWeekDates(String(LIVE_SEASON)).then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
+  }, [session?.user.id]);
 
   // ── THE HOME-SCREEN WIDGET (v0.421.0) ──────────────────────────────────
   // Repaint it whenever the app comes forward or the account changes: the

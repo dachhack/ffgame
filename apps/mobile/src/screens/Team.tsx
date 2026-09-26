@@ -49,6 +49,7 @@ import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 /** Every spot chip is this wide, so the player column starts at the same x on
  *  every row (v0.289.0).
@@ -783,7 +784,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           wire will refuse (politely, since 0272) if it is worked anyway. */}
       {team.eliminated != null && (
         <Notice tone="opp">
-          <Mono size={10} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {team.eliminated}</Mono>
+          <Mono size={10} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN {weekTitle(team.eliminated)}</Mono>
           <Mono size={9} tone="dim" style={{ marginTop: 3, lineHeight: 13 }}>
             The guillotine took this team — its roster went to the frenzy, and the wire is closed to it for the rest of the season. Your seat at the table stays: the chat, the pots, and the chopping block.
           </Mono>

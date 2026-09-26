@@ -18,6 +18,7 @@ import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueEx
 import { ScoringView, RosterRulesView, RegisterView, RecruitView, ApiKeysView } from '../ui/LeagueInfo';
 import { LeagueHistoryView } from '../ui/LeagueHistory';
 import { useLeagueScroll } from '../ui/scrollChrome';
+import { weekTitle } from '@drip/core/data/nflSlate';
 
 export type LeagueRoom = 'picks' | 'draft' | 'team' | 'chat' | 'commishtools';
 
@@ -180,7 +181,7 @@ export function LeagueHome(props: {
           <Pressable hitSlop={8} disabled={at <= 0} onPress={() => step(-1)}>
             <Mono size={13} weight="700" tone={at <= 0 ? 'faint' : 'you'}>‹</Mono>
           </Pressable>
-          <Mono size={10} weight="700" tone="dim">WEEK {week ?? '—'}</Mono>
+          <Mono size={10} weight="700" tone="dim">{week != null ? weekTitle(week) : 'WEEK —'}</Mono>
           <Pressable hitSlop={8} disabled={at < 0 || at >= weeks.length - 1} onPress={() => step(1)}>
             <Mono size={13} weight="700" tone={at < 0 || at >= weeks.length - 1 ? 'faint' : 'you'}>›</Mono>
           </Pressable>

@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.9 — college weeks go by date: "Week of 9/28/2026"
+
+The founder: "The week 205 thing is throwing me off. Can we do 'week of
+9/16/2026' … with the weekly date instead?" A college week is now named by
+the Monday of the Eastern week its first game falls in (Week 5 of 2026, Thu
+Oct 1 – Sat Oct 3, is the week of 9/28/2026).
+- core nflSlate: `setCollegeWeekDates` / `collegeWeekOf`, installed once per
+  season by `loadCollegeWeekDates` (liveApi, nfl_slate weeks > 200; both app
+  shells call it on sign-in and bump a render). weekTitle → "WEEK OF
+  9/28/2026", weekLabel → "WK 9/28", weekTick → "9/28", new weekName →
+  "Week of 9/28/2026". boardWeekTitle uses it, falling back to the board's
+  own kickoffs. playedWeekName = weekName. NFL weeks read as before.
+- Raw "WEEK {n}" / "WK {n}" swapped for them on the classic board (stepper,
+  bye chips, chopped/bitten, adjustments, week sheet), commissioner desk,
+  league home, history, extras, team, leagues list, player card, chat report,
+  and the web twins.
+
 ### v0.556.8 — TBD kickoffs and a week title that names the Saturday
 
 The founder saw "Sat, 12:00 AM vs ALA" and a Georgia Tech BYE on a new devy

@@ -20,7 +20,7 @@ import { headshot, teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
 import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
-import { nflGameForTeam, kickoffLabel } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, kickoffLabel, weekLabel } from '@drip/core/data/nflSlate';
 import { projFor } from '@drip/core/data/poolSort';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
@@ -240,7 +240,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             // 0329: the WEEK's number, refreshed hourly — it knows about the
             // injury, the bye and the depth chart; the August bake cannot.
             // 0330 puts the OPPONENT in the label beside it.
-            [week != null ? `WK ${week}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
+            [week != null ? `${weekLabel(week)}${wkProj?.matchup ? ` ${wkProj.matchup}` : ''}` : 'WK',
               wkProj != null ? wkProj.pts.toFixed(1) : '—'],
           ] as const).map(([k, v]) => (
             <View key={k} style={{ flex: 1, alignItems: 'center' }}>

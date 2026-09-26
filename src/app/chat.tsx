@@ -28,6 +28,7 @@ import { gifProvider, type GifResult } from '@drip/core/data/gifs';
 import { CHAT_IMAGE_CAPTION_MAX, isChatImageUrl, removeChatImage, uploadChatImage } from '@drip/core/data/chatImage';
 import { canEditDm, canEditMessage, editNote, editSeed, editTarget } from '@drip/core/data/chatEdit';
 import { prepareChatImage, pastedImage, droppedImage } from './imagePost';
+import { weekTitle, weekName } from '@drip/core/data/nflSlate';
 
 // ── chat v2 (0148): inline media, @mentions, polls, pins ────────────────────
 
@@ -121,7 +122,7 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
       <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.body}</div>
       <button onClick={onOpen} className="mono"
         style={{ marginTop: 4, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: 'var(--warn)', background: 'var(--bg)', border: '1px solid var(--warn)' }}>
-        📋 OPEN WEEK {week ?? '?'} REPORT ▸
+        📋 OPEN {week != null ? weekTitle(week) : 'WEEK ?'} REPORT ▸
       </button>
     </div>
   );
@@ -242,7 +243,7 @@ export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; wee
     // zIndex 80: the chat panel is a ModalBackdrop at 70, and a Sheet's default
     // 60 opened BEHIND it (founder, mobile web: "the weekly report is behind
     // the chat").
-    <Sheet title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose} max={520} zIndex={80}>
+    <Sheet title={`📋 ${weekName(week)} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose} max={520} zIndex={80}>
       <div style={{ padding: '10px 15px 16px', overflowY: 'auto' }}>
         {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
         {!err && !rep && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}

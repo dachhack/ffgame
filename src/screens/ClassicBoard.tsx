@@ -17,7 +17,7 @@ import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
-import { setRuntimeSlate, boardWeekTitle } from '@drip/core/data/nflSlate';
+import { setRuntimeSlate, boardWeekTitle, weekTitle, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -1401,8 +1401,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   if (byeWeek != null) return (
     <NoGameScreen week={byeWeek} bye onBack={onBack}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} className="mono" style={weekBtn(canGo(-1))}>‹ WK {byeWeek - 1}</button>
-        <button onClick={() => goWeek(1)} disabled={!canGo(1)} className="mono" style={weekBtn(canGo(1))}>WK {byeWeek + 1} ›</button>
+        <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} className="mono" style={weekBtn(canGo(-1))}>‹ {weekLabel(byeWeek - 1)}</button>
+        <button onClick={() => goWeek(1)} disabled={!canGo(1)} className="mono" style={weekBtn(canGo(1))}>{weekLabel(byeWeek + 1)} ›</button>
         {weekList.length > 0 && (
           <button onClick={() => { const n = nextMatchupSeat(weekList, ros?.rosterId); if (n != null) setViewRid(n === mySeat ? null : n); }}
             className="mono" style={weekBtn(true)} title="The week's matchups">▸ {matchupOrdinal(weekList, ros?.rosterId)}</button>
@@ -1539,7 +1539,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           fell saw a normal board with an empty lineup and nothing saying why. */}
       {chopped != null && !browsing && (
         <div className="mono" style={{ marginTop: 7, border: '1px solid var(--opp)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--opp) 8%, var(--surface))' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🪓 CHOPPED IN WEEK {chopped}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--opp)' }}>🪓 CHOPPED IN {weekTitle(chopped)}</div>
           <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
             Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
           </div>
@@ -1550,7 +1550,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       {bitten && (
         <div className="mono" style={{ marginTop: 7, border: '1px solid var(--warn)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>
-            🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN WEEK ${bitten.week}`}
+            🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN ${weekTitle(bitten.week)}`}
           </div>
           <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3, lineHeight: 1.4 }}>
             {bitten.pending
@@ -2026,7 +2026,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
 
       {adjusts.length > 0 && (
         <div style={card}>
-          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 6 }}>✏️ COMMISSIONER ADJUSTMENTS · WEEK {adjWeek}</div>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--faint)', marginBottom: 6 }}>✏️ COMMISSIONER ADJUSTMENTS · {(adjWeek != null ? weekTitle(adjWeek) : "WEEK")}</div>
           {adjusts.map((a) => (
             <div key={a.slug} className="mono" style={{ fontSize: 10.5, lineHeight: 1.7 }}>
               <b>{a.name}</b> <span style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)', fontWeight: 700 }}>{a.points > 0 ? '+' : ''}{r1(Number(a.points))}</span>

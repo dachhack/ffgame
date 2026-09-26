@@ -23,7 +23,7 @@ import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
-import { setRuntimeSlate, boardWeekTitle } from '@drip/core/data/nflSlate';
+import { setRuntimeSlate, boardWeekTitle, weekTitle, weekLabel } from '@drip/core/data/nflSlate';
 import type { Pos, WindowId } from '@drip/core/types';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
@@ -1249,8 +1249,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   if (byeWeek != null) return (
     <NoGame week={byeWeek} bye>
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
-        <Chip label={`‹ WK ${byeWeek - 1}`} disabled={!canGo(-1)} onPress={() => goWeek(-1)} />
-        <Chip label={`WK ${byeWeek + 1} ›`} disabled={!canGo(1)} onPress={() => goWeek(1)} />
+        <Chip label={`‹ ${weekLabel(byeWeek - 1)}`} disabled={!canGo(-1)} onPress={() => goWeek(-1)} />
+        <Chip label={`${weekLabel(byeWeek + 1)} ›`} disabled={!canGo(1)} onPress={() => goWeek(1)} />
         {weekList.length > 0 && (
           <Chip label={`▸ ${matchupOrdinal(weekList, seat)}`} a11y="the week's matchups"
             onPress={() => setRingOpen(true)} />
@@ -1336,7 +1336,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             screen. Now the board says it, where they actually look. */}
         {chopped != null && !browsing && (
           <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
-            <Mono size={11} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN WEEK {chopped}</Mono>
+            <Mono size={11} tone="opp" weight="700" track={0.08}>🪓 CHOPPED IN {weekTitle(chopped)}</Mono>
             <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
               Your team was the low score that week, so the guillotine took it: the roster went to the frenzy and this seat can't add players again. You keep your seat at the table — the chat, the pots, and the block, where the rest of the season plays out.
             </Mono>
@@ -1349,7 +1349,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         {bitten && (
           <View style={{ marginBottom: 9, borderWidth: 1, borderColor: t.warn, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
             <Mono size={11} tone="warn" weight="700" track={0.08}>
-              🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN WEEK ${bitten.week}`}
+              🩸 {bitten.pending ? 'A BITE IS DECLARED' : `BITTEN IN ${weekTitle(bitten.week)}`}
             </Mono>
             <Mono size={8.5} tone="dim" style={{ lineHeight: 13 }}>
               {bitten.pending
@@ -1479,7 +1479,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       <Overlay
         visible={ringOpen}
         title="THE WEEK'S MATCHUPS"
-        subtitle={`WEEK ${matchup?.week ?? byeWeek ?? ''} · ${weekList.length} ${weekList.length === 1 ? 'PAIR' : 'PAIRS'} · TAP ONE TO VIEW`}
+        subtitle={`${(matchup?.week ?? byeWeek) != null ? weekTitle((matchup?.week ?? byeWeek)!) : 'WEEK'} · ${weekList.length} ${weekList.length === 1 ? 'PAIR' : 'PAIRS'} · TAP ONE TO VIEW`}
         onClose={() => setRingOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 8 }}>
           {orderMatchups(weekList).map((m, i) => {
@@ -1864,7 +1864,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
       {adjusts.length > 0 && (
         <Card>
-          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 6 }}>{`✏️ COMMISSIONER ADJUSTMENTS · WEEK ${adjWeek}`}</Mono>
+          <Mono size={9} tone="faint" weight="700" style={{ marginBottom: 6 }}>{`✏️ COMMISSIONER ADJUSTMENTS · ${(adjWeek != null ? weekTitle(adjWeek) : "WEEK")}`}</Mono>
           {adjusts.map((a) => (
             <Text key={a.slug} style={{ fontSize: 11, lineHeight: 17, color: t.text }}>
               <Text style={{ fontWeight: '700' }}>{a.name}</Text>
