@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.554.1 — an all-autodraft room drafts in seconds again
+
+The founder watched a college league with every seat on autodraft stall.
+`draft_tick` made every consecutive autodraft pick in one call, and the draft
+room calls it as the signed-in user, whose statements stop at 8 seconds. On a
+2,000-player pool, 120 picks took 8.2s, so the call was cancelled and every
+pick in it rolled back. Each autopick had grown to about 85 ms, because every
+pool row re-checked the taken players, the devy count and, since 0377, its
+position's cap. 0380:
+- `native_autopick_slug` asks those things once per pick (the taken players
+  as one array, the devy count, a position → cap map). Same rules and same
+  picks; about 16 ms each.
+- `draft_tick` stops at 25 picks per call (was 200); the room re-polls every
+  3 seconds.
+- Measured: a 120-pick draft with every seat on autodraft completes in about
+  0.5 seconds of database time, over five calls.
+
 ### v0.554.0 — college projections in drafts; devy and IDP draft filters; one-line position picker
 
 - **College projections (0379).** No feed projects college players, so the
