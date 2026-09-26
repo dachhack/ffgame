@@ -11,7 +11,7 @@ import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustmen
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, collegeEntryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
@@ -23,7 +23,7 @@ import { SimStrip } from './SimStrip';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
-import { setRuntimeSlate } from '@drip/core/data/nflSlate';
+import { setRuntimeSlate, boardWeekTitle } from '@drip/core/data/nflSlate';
 import type { Pos, WindowId } from '@drip/core/types';
 import { boardStatline } from '@drip/core/engine/sim';
 import {
@@ -881,6 +881,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       const g = cg ?? gameFor(team, slate);
       const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+        // A TBD kickoff's time is a placeholder (midnight Eastern of game day),
+        // so it says nothing about the game having started — until that day is over.
+        : g?.tbd && g.kickoff && nowTs < Date.parse(g.kickoff) + 86_400_000 ? 'pre'
         : cg ? collegeEntryState(cg.kickoff, nowTs)
         : g ? entryState(g.kickoff, team, nowTs, finalTeams) : 'pre';
       return {
@@ -902,7 +905,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         proj: showValue({ id: slug, pos: meta.pos ?? '', team: meta.team },
           slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
-        kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
+        kickoff: g?.tbd ? tbdKickLabel(g.kickoff) : g?.kickoff ? fmtKick(g.kickoff) : null,
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,
         // founder: rows sat on the kickoff time and bare points while the sim
         // streamed). Both refresh with playsAt — each poll re-renders them.
@@ -916,7 +919,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
         roof: g && team && !isCollegeSlug(slug) ? roofFor(venueTeam(team, g)) : null,
-        primetime: isPrimetime(g?.kickoff),
+        primetime: !g?.tbd && isPrimetime(g?.kickoff),
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
@@ -1278,7 +1281,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             <Pressable onPress={() => goWeek(-1)} disabled={!canGo(-1)} hitSlop={8}>
               <Mono size={12} tone={canGo(-1) ? 'dim' : 'faint'}>‹</Mono>
             </Pressable>
-            <Mono size={9} tone="dim" weight="700" track={0.1}>WEEK {matchup.week}</Mono>
+            <Mono size={9} tone="dim" weight="700" track={0.1}>{boardWeekTitle(matchup.week, slate.map((g) => g.kickoff))}</Mono>
             <Pressable onPress={() => goWeek(1)} disabled={!canGo(1)} hitSlop={8}>
               <Mono size={12} tone={canGo(1) ? 'dim' : 'faint'}>›</Mono>
             </Pressable>

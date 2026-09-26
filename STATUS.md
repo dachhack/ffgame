@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.556.8 — TBD kickoffs and a week title that names the Saturday
+
+The founder saw "Sat, 12:00 AM vs ALA" and a Georgia Tech BYE on a new devy
+league's board. GT's bye was right: the league was made on a Saturday, so it
+opened at college Week 5 (Oct 3), when GT is off. But "WEEK 205" didn't say
+which Saturday. And 12:00 AM was ESPN's placeholder for a kickoff it hasn't
+set (timeValid false, date at midnight Eastern).
+- 0385 `nfl_slate.time_tbd`: getGames reads timeValid, slateFromGames
+  carries it, and the college slate (daily sweep, bowls too) writes it.
+  college_games_in_nfl_week hands it on. liveSlate reads it, and retries
+  without it before the migration lands.
+- Board: a TBD game reads "Sat TBD" (day in Eastern), isn't primetime, and
+  stays 'pre' through its day rather than going "live" at the placeholder.
+- core `boardWeekTitle`: a college week's stepper reads "WEEK 5 · OCT 3"
+  (bowls "BOWL WEEK n · …"), the Eastern day most of its games fall on. NFL
+  weeks keep "WEEK n".
+
 ### v0.556.7 — links that never fail quietly
 
 The founder, on the What's-new sheet (build v0.556.3): "Now I can't click on

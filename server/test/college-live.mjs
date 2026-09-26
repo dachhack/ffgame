@@ -17,6 +17,13 @@ const rows = collegeSlateRows(2026, 3, [
 ]);
 ok(rows.length === 2 && rows.every((r) => r.week === COLLEGE_BASE + 3 && r.season === '2026'), 'college Week 3 is board week 203');
 ok(rows[1].home === 'MIA' && rows[1].game_id === '402', 'school codes stand as ESPN gives them (MIA the Hurricanes, week 203 only)');
+{
+  const tbd = collegeSlateRows(2026, 5, [
+    { eventId: '501', date: '2026-10-03T04:00Z', home: 'ALA', away: 'MSST', timeTbd: true },
+    { eventId: '502', date: '2026-10-03T19:30Z', home: 'EMU', away: 'MASS' },
+  ]);
+  ok(tbd[0].time_tbd === true && tbd[1].time_tbd === false, 'a kickoff ESPN has not set is written as TBD (0385), a set one is not');
+}
 
 // ── mixed leagues (0372): which NFL week a college kickoff scores in ──
 {

@@ -53,6 +53,9 @@ export async function getGames(season, week, seasonType = 2, maxAgeMs = 0, sport
       kickoffMs: Date.parse(e.date),
       state: e.status?.type?.state ?? comp.status?.type?.state ?? 'pre', // pre|in|post
       completed: !!(e.status?.type?.completed),
+      // ESPN's "time not set yet" (0385): the date then reads midnight Eastern,
+      // which a board would print as a 12:00 AM kickoff.
+      timeTbd: comp.timeValid === false,
       teams,
       // ESPN team ids (0371): the college context polls a game only when one
       // of these schools has a rostered player.
@@ -109,7 +112,7 @@ export function slateFromGames(games) {
   // and live_play are already stored under, and dropping it here is what forced
   // pot settlement's SQL to join slate↔feed on a team-code string — the join
   // the LAR/LA vocabulary split silently broke (join-audit finding 1).
-  return gs.map((g, i) => ({ away: fixTeam(g.away), home: fixTeam(g.home), win: ids ? ids[i] : windowFromKickoff(g.date), kickoff: g.date, gameId: g.eventId }));
+  return gs.map((g, i) => ({ away: fixTeam(g.away), home: fixTeam(g.home), win: ids ? ids[i] : windowFromKickoff(g.date), kickoff: g.date, gameId: g.eventId, timeTbd: !!g.timeTbd }));
 }
 
 /** The live slate for a season-week from ESPN (fetches the scoreboard). */

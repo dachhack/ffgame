@@ -16,8 +16,8 @@ import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustmen
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, collegeEntryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
-import { setRuntimeSlate } from '@drip/core/data/nflSlate';
+import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { setRuntimeSlate, boardWeekTitle } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -1037,6 +1037,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       const g = cg ?? gameFor(team, slate);
       const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+        // A TBD kickoff's time is a placeholder (midnight Eastern of game day),
+        // so it says nothing about the game having started — until that day is over.
+        : g?.tbd && g.kickoff && nowTs < Date.parse(g.kickoff) + 86_400_000 ? 'pre'
         : cg ? collegeEntryState(cg.kickoff, nowTs)
         : g ? entryState(g.kickoff, team, nowTs, finalTeams) : 'pre';
       return {
@@ -1059,7 +1062,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         proj: showValue({ id: slug, pos: m.pos ?? "", team: m.team },
           slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
         state: st,
-        kickoff: g?.kickoff ? fmtKick(g.kickoff) : null,
+        kickoff: g?.tbd ? tbdKickLabel(g.kickoff) : g?.kickoff ? fmtKick(g.kickoff) : null,
         // The clock and the statline are FEED facts, not slate facts (v0.368.0,
         // founder: rows sat on the kickoff time and bare points while the sim
         // streamed). Both refresh with playsAt — each poll re-renders them.
@@ -1075,7 +1078,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // Where the game is played, and whether it's a night game — both facts,
         // both read off the slate the board already has. NOT weather (0237).
         roof: g && team && !isCollegeSlug(slug) ? roofFor(venueTeam(team, g)) : null,
-        primetime: isPrimetime(g?.kickoff),
+        primetime: !g?.tbd && isPrimetime(g?.kickoff),
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
@@ -1466,7 +1469,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
             <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'var(--faint)' }}>
               <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} aria-label="previous week"
                 style={{ ...stepBtn, opacity: canGo(-1) ? 1 : 0.3 }}>‹</button>
-              <span style={{ fontWeight: 700, color: 'var(--dim)', minWidth: 52, textAlign: 'center' }}>WEEK {matchup.week}</span>
+              <span style={{ fontWeight: 700, color: 'var(--dim)', minWidth: 52, textAlign: 'center' }}>{boardWeekTitle(matchup.week, slate.map((g) => g.kickoff))}</span>
               <button onClick={() => goWeek(1)} disabled={!canGo(1)} aria-label="next week"
                 style={{ ...stepBtn, opacity: canGo(1) ? 1 : 0.3 }}>›</button>
             </span>

@@ -596,14 +596,14 @@ export function lineupChipSummary(chips: SlateChip[], side: 'home' | 'away', fil
   };
 }
 
-export function gameFor(team: string | null | undefined, slate: { home: string; away: string; kickoff?: string | null }[]):
-  { opponent: string; kickoff: string | null; home: boolean } | null {
+export function gameFor(team: string | null | undefined, slate: { home: string; away: string; kickoff?: string | null; time_tbd?: boolean }[]):
+  { opponent: string; kickoff: string | null; home: boolean; tbd?: boolean } | null {
   if (!team) return null;
   const up = team.toUpperCase();
   const g = slate.find((x) => x.home?.toUpperCase() === up || x.away?.toUpperCase() === up);
   if (!g) return null;
   const isHome = g.home?.toUpperCase() === up;
-  return { opponent: isHome ? g.away : g.home, kickoff: g.kickoff ?? null, home: isHome };
+  return { opponent: isHome ? g.away : g.home, kickoff: g.kickoff ?? null, home: isHome, tbd: !!g.time_tbd };
 }
 
 /** Is this player genuinely on a BYE — or do we just not know?
@@ -656,6 +656,19 @@ export function isPrimetime(kickoff: string | null | undefined): boolean {
     return Number.isFinite(hour) && hour >= 19;
   } catch {
     return false;   // no tz database — say nothing rather than guess
+  }
+}
+
+/** "Sat TBD" — a kickoff ESPN hasn't set (0385). Its placeholder time is
+ *  midnight Eastern, so the day is read in Eastern: the reader's own zone
+ *  would put a Saturday game on Friday evening out west. */
+export function tbdKickLabel(iso: string | null | undefined): string {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return 'TBD';
+  try {
+    return `${new Date(t).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })} TBD`;
+  } catch {
+    return 'TBD';
   }
 }
 

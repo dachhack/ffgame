@@ -1181,12 +1181,20 @@ export async function getMatchupState(matchupId: string): Promise<WindowScore[]>
 /** The live NFL slate for a week (worker-written from ESPN, migration 0029) —
  *  drives slate-gating + the K/DST bye check for the real current season. Empty
  *  until the worker has synced that week (then the client falls back to baked). */
-export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null }
+export interface SlateGame { away: string; home: string; win: string; kickoff?: string | null;
+  /** 0385: ESPN hasn't set the kickoff time; `kickoff` is a placeholder midnight. */
+  time_tbd?: boolean }
 export async function liveSlate(week: number, season?: string): Promise<SlateGame[]> {
-  let q = (await client()).from('nfl_slate').select('season, away, home, win, kickoff').eq('week', week);
-  if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
-  const { data } = await q;
-  const rows = (data ?? []) as (SlateGame & { season?: string })[];
+  const read = async (cols: string) => {
+    let q = (await client()).from('nfl_slate').select(cols).eq('week', week);
+    if (season) q = q.eq('season', season); // 2025 (demo) + 2026 rows share week #s — scope by season
+    return q;
+  };
+  // time_tbd (0385) — read without it if the column isn't there yet, so a
+  // client ahead of its migration still gets the slate.
+  let { data, error } = await read('season, away, home, win, kickoff, time_tbd');
+  if (error) ({ data } = await read('season, away, home, win, kickoff'));
+  const rows = (data ?? []) as unknown as (SlateGame & { season?: string })[];
   // Unscoped: keep only the newest season carrying this week, so a stale prior
   // season's (past) kickoffs can never drive window-lock gating (window_kickoff()
   // in migration 0058 scopes the same way).
@@ -1199,7 +1207,7 @@ export async function liveSlate(week: number, season?: string): Promise<SlateGam
 
 /** The college games inside an NFL week's window (0384) — a mixed league's
  *  college starters play in them, and the board reads their game lines here. */
-export async function collegeGamesInNflWeek(week: number): Promise<{ week: number; home: string; away: string; kickoff: string | null }[]> {
+export async function collegeGamesInNflWeek(week: number): Promise<{ week: number; home: string; away: string; kickoff: string | null; time_tbd?: boolean }[]> {
   if (!(week >= 1 && week <= 100)) return [];
   const { data, error } = await (await client()).rpc('college_games_in_nfl_week', { p_week: week });
   if (error) throw new Error(error.message);
