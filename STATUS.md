@@ -18,6 +18,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.538.0 — the computer answers back in chat
+
+Founder: "Could it paste in the chat a generic response that the message was
+received? Maybe have 20 or so snarky responses banked with a computer icon?"
+- **Reply:** once a league chat line is filed, the worker posts a house line in
+  that chat: author "💻 Computer", one of 20 banked snarks (picked by message
+  id), and the issue number. A DM gets no reply (a DM line needs a human
+  author), so its receipt stays the push.
+- **0364:** new league_message kind 'computer' (kind check re-added by name),
+  and `_chat_message_json` v7 names the author "💻 Computer". Old clients show
+  it as a plain line under that name, with nothing to update.
+- **Pushes:** the every-message subscription skips it, like the other house
+  lines.
+
+### v0.537.0 — @computer files a chat line as a GitHub issue
+
+Founder: "I want to tag @computer in any chat and have you read it and address
+my questions", then "just the me to you GitHub issue route" and "I'll add the
+action".
+- **Worker (`server/src/computer.js`):** each push sweep looks for "@computer"
+  in league chat and DM lines from COMPUTER_USERS (app_user ids). Each line is
+  filed once as an issue on dachhack/ffgame, labeled `computer`, with
+  "@computer" in the body for the founder's Action to pick up. Only the tagged
+  line goes in, never other members' messages. The asker gets a "Sent to
+  Computer · #N" push.
+- **0363 `computer_ask`:** the once-only claim, taken before the issue opens
+  and released if GitHub refuses, so the next sweep retries.
+- **Off until configured:** the repo secrets GH_ISSUES_TOKEN (fine-grained PAT,
+  this repo, Issues read+write) and COMPUTER_USERS are staged to Fly by
+  deploy-worker. The answering Action is the founder's own workflow.
+
+### v0.536.0 — scoped rules reach IDP, head coaches and punters
+
+Founder: "yes, widen scoped rules to IDP, HC and P". The scorer already
+matched a rule on the player's own position and the server (0145) already
+kept any 1-3 letter code, so only the editors were narrow.
+- **Editors (web + app):** the Adjustments scoped-rule picker now offers DL,
+  LB, DB, HC and P beside QB/RB/WR/TE/K/DEF. It stops at 8 positions, the
+  stored rule's limit, instead of dropping extras on save.
+- **Test:** check:scoped covers an LB rule hitting LBs and missing DBs, HC
+  and P rules on team units, HC + team scope, and lower-case stored codes.
+
 ### v0.535.0 — QB hits and passes defended score live, then get confirmed
 
 Founder: "there is no defender on incomplete passes?" There is. ESPN names

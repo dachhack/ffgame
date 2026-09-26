@@ -28,6 +28,7 @@ import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
 import { apnsSend, apnsCreds } from './apns.js';
+import { sweepComputer } from './computer.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
@@ -244,7 +245,7 @@ async function detectChat() {
       // drops, and turning it into a move-by-move feed would be a change
       // nobody asked for made to a setting they already set. The lines are in
       // chat for anyone who opens it.
-      if (m.kind === 'poll' || m.kind === 'report' || m.kind === 'txn') continue;
+      if (m.kind === 'poll' || m.kind === 'report' || m.kind === 'txn' || m.kind === 'computer') continue;
       const mentioned = new Set(m.mentions ?? []);
       for (const uid of wanted.get(m.league_id) ?? []) {
         if (uid === m.author_id) continue;   // you wrote it
@@ -671,6 +672,9 @@ export { flush as __flushForTest };
 
 export async function sweepPush() {
   await detectChat().catch((e) => log('chat detector error', e.message));
+  // @computer (v0.537.0): file the founder's tagged lines as GitHub issues; the
+  // receipt push rides the same outbox as everything else.
+  await sweepComputer().then(enqueue).catch((e) => log('computer sweep error', e.message));
   await detectMembers().catch((e) => log('members detector error', e.message));
   await detectTrades().catch((e) => log('trades detector error', e.message));
   await detectDraft().catch((e) => log('draft detector error', e.message));
