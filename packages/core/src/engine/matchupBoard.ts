@@ -659,6 +659,15 @@ export function isPrimetime(kickoff: string | null | undefined): boolean {
   }
 }
 
+/** A college game's state on an NFL week's board: no college feed is loaded
+ *  there, so "final" is judged by the clock — 5 hours after kickoff, the same
+ *  rule the worker's score-as-is sweep uses. */
+export function collegeEntryState(kickoff: string | null | undefined, now: number): 'pre' | 'live' | 'done' {
+  const t = kickoff ? Date.parse(kickoff) : NaN;
+  if (!Number.isFinite(t) || t > now) return 'pre';
+  return now - t >= 5 * 3600_000 ? 'done' : 'live';
+}
+
 /** 'pre' | 'live' | 'done' for a player, from their game's kickoff and whether
  *  the league's play stream has moved past it.
  *

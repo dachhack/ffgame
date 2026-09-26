@@ -11,7 +11,7 @@ import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustmen
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, collegeEntryState, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
@@ -44,7 +44,7 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { ensureCollegeNames, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -370,6 +370,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [stashReady, setStashReady] = useState(false);
   const [pool, setPool] = useState<PoolPlayer[]>([]);
   const [oppPool, setOppPool] = useState<PoolPlayer[]>([]);
+  // A MIXED LEAGUE'S COLLEGE STARTERS IN AN NFL WEEK (0384): their games sit
+  // on the college calendar (201+), inside this week's window. Read only when
+  // either side holds a college player.
+  const [collegeSlate, setCollegeSlate] = useState<{ home: string; away: string; kickoff: string | null }[]>([]);
+  const cWeek = matchup?.week ?? 0;
+  const hasCollege = pool.some((x) => isCollegeSlug(x.slug)) || oppPool.some((x) => isCollegeSlug(x.slug));
+  useEffect(() => {
+    let stop = false;
+    if (!hasCollege || cWeek < 1 || cWeek > 100) { setCollegeSlate([]); return; }
+    collegeGamesInNflWeek(cWeek).then((g) => { if (!stop) setCollegeSlate(g); }).catch(() => {});
+    return () => { stop = true; };
+  }, [hasCollege, cWeek]);
   const [mine, setMine] = useState<Record<string, string | null>>({});
   // Which of MY spots the server has sealed (0178: one player at a time, at
   // his own kickoff — so this is per slot, not one flag for the week).
@@ -861,9 +873,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       const meta = slugMeta(slug);
       // A college player's game is matched by his school on a college week.
       const team = boardTeamFor(slug, meta.team, matchup?.week);
-      const g = gameFor(team, slate);
+      // In an NFL week a college player's game comes off the college games in
+      // its window, matched by school; `team` stays blank there, so the NFL
+      // chips and feeds never mistake a school code for an NFL one.
+      const cg = isCollegeSlug(slug) && (matchup?.week ?? 0) <= 100
+        ? gameFor(collegeNameFor(slug)?.school, collegeSlate) : null;
+      const g = cg ?? gameFor(team, slate);
       const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
+        : cg ? collegeEntryState(cg.kickoff, nowTs)
         : g ? entryState(g.kickoff, team, nowTs, finalTeams) : 'pre';
       return {
         slug,
@@ -902,7 +920,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue]);
+  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.

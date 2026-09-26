@@ -1197,6 +1197,15 @@ export async function liveSlate(week: number, season?: string): Promise<SlateGam
   return rows;
 }
 
+/** The college games inside an NFL week's window (0384) — a mixed league's
+ *  college starters play in them, and the board reads their game lines here. */
+export async function collegeGamesInNflWeek(week: number): Promise<{ week: number; home: string; away: string; kickoff: string | null }[]> {
+  if (!(week >= 1 && week <= 100)) return [];
+  const { data, error } = await (await client()).rpc('college_games_in_nfl_week', { p_week: week });
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? data : [];
+}
+
 /** Every (week, kickoff) the slate holds for a season — what the leagues page
  *  feeds fieldsWeekFrom to pick the week the ▦ FIELDS sheet shows (v0.390.0). */
 export async function slateWeeks(season: string): Promise<{ week: number; kickoff: string | null }[]> {
