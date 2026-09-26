@@ -1,52 +1,51 @@
 {
-  "cli": { "version": ">= 12.0.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
-    "//": "This app CANNOT run in Expo Go — react-native-mmkv v4 is a Nitro module with native code. Every profile below therefore produces a real build. See apps/mobile/README.md.",
-
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "ios": { "simulator": true },
-      "android": { "buildType": "apk" },
-      "channel": "development"
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
-
     "preview": {
-      "//": "The playtester build. `distribution: internal` means an install link rather than a store submission, and `buildType: apk` makes the Android artifact directly sideloadable — a .aab cannot be installed by hand.",
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "ios": { "simulator": false },
-      "channel": "preview",
-      "//env": "Fill to point this profile at a non-production Supabase project, or to set VITE_POSTHOG_KEY so playtest builds report analytics (they send nothing without it, and it is read at BUILD time — a build handed out without the key can't be switched on later). Unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so an empty env is a working production build — see apps/mobile/app.config.js.",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      },
       "env": {}
     },
-
     "preview-simulator": {
-      "//": "iOS build that runs in the Xcode Simulator without a paid Apple Developer account. Handy for reviewing screens on a Mac before enrolling.",
       "distribution": "internal",
-      "ios": { "simulator": true },
-      "channel": "preview"
+      "ios": {
+        "simulator": true
+      }
     },
-
     "production": {
-      "//": "Store submission. Android switches to .aab, which Play requires and which cannot be sideloaded.",
       "distribution": "store",
-      "android": { "buildType": "app-bundle" },
-      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
       "autoIncrement": true
     }
   },
   "submit": {
-    "//": "0330: the store-submission half. Both sides read CREDENTIALS from the environment rather than holding them here — an App Store Connect key and a Play service-account JSON are secrets, and a repo is not where they live. Set them in EAS (`eas secret:create`) or in the shell that runs `eas submit`. The non-secret ids ARE here, because they are facts about the app and belong in a reviewable diff.",
     "production": {
       "ios": {
-        "//": "ascAppId is the numeric id App Store Connect gives the app once it exists there — fill it after the first `eas submit`, which can create it. appleTeamId is your developer team. EXPO_APPLE_APP_SPECIFIC_PASSWORD or an ASC API key (EXPO_ASC_KEY_ID / EXPO_ASC_ISSUER_ID / EXPO_ASC_KEY_P8) authenticates the upload.",
-        "ascAppId": "",
-        "appleTeamId": "",
+        "ascAppId": "6816293644",
+        "appleTeamId": "N6DAWPD9J2",
         "language": "en-US"
       },
       "android": {
-        "//": "GOOGLE_SERVICE_ACCOUNT_KEY_PATH points at the Play service-account JSON. `internal` puts a build in front of your own testers without a review; move to `production` when the listing is ready.",
         "track": "internal",
         "releaseStatus": "draft",
         "changesNotSentForReview": false

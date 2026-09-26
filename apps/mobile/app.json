@@ -23,7 +23,10 @@
       }
     },
     "extra": {
-      "//": "Build-time config for core's platform shim. Deliberately EMPTY: unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so a plain build is a working production build. To point at another project, set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_YAHOO_CLIENT_ID / VITE_MARK_FREE in the environment — app.config.js layers them in. See the header there."
+      "//": "Build-time config for core's platform shim. Deliberately EMPTY: unset keys fall through to the production defaults in packages/core/src/data/liveConfig.ts, so a plain build is a working production build. To point at another project, set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_YAHOO_CLIENT_ID / VITE_MARK_FREE in the environment — app.config.js layers them in. See the header there.",
+      "eas": {
+        "projectId": "ca795b60-9950-44e2-8d29-542e60454c1d"
+      }
     },
     "plugins": [
       [
@@ -100,6 +103,7 @@
       "./plugins/withPlaytestSigning",
       "./plugins/withReleaseShrink",
       "./plugins/withSceneLifecycle"
-    ]
+    ],
+    "owner": "dachhack"
   }
 }
