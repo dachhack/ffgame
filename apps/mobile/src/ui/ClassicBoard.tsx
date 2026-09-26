@@ -1147,7 +1147,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     applyMove(planSpotMove(slotDefs, effective.mine, slot, slug, (target, cand) => {
       const d = slotDefs.find((x) => x.slot === target);
       const p = pool.find((x) => x.slug === cand);
-      return !!d && !!p && slotAllows(d, { pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
+      return !!d && !!p && slotAllows(d, { id: cand, pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
     }, bestball));
 
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
@@ -1698,7 +1698,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
           const eligible = pool
             .filter((p) => !stashed.has(p.slug))
-            .filter((p) => slotAllows(slotDef, { pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+            .filter((p) => slotAllows(slotDef, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
             .filter((p) => !kickedOff(p.slug))
             .filter((p) => spotOf.get(p.slug) !== pickerSlot)
             // Starting in a spot that has locked means he cannot leave it: the
