@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.539.0 — college players, phase 1: the directory and the gates
+
+Founder: devy leagues, college-only leagues, and leagues where NFL and college
+players both score, all classic only (design doc: "College Players: Devy,
+College-Only and Mixed Leagues"). Phase 1 is the shared foundation; no league
+can put a college player in its pool yet.
+- **Directory:** new worker poll `server/src/poll/college.js` fills
+  `college_player` from ESPN: the FBS list from the core API (148 schools for
+  2026; the site API ignores `groups=80`), then each school's roster. Keyed by
+  ESPN athlete id, which ESPN keeps when a player reaches the NFL. Weekly in
+  season, daily Feb–Aug, detached from the tick. A sweep with any failed
+  roster retires nobody.
+- **Identity:** a college player's slug is `c-<espn_id>` (digits only, so an
+  NFL `c-smith` never qualifies). `packages/core/src/data/college.ts` holds the
+  rule and ESPN's position mapping (EDGE→DL, S/CB→DB, PK→K; OL/LS dropped).
+- **0365:** `college_player` + service-role writers; `league_pool.level`
+  generated from the slug, so every pool copy keeps it; COLLEGE joins the
+  admin position groups, refused on Drip, and a league holding it cannot go to
+  Drip (RPC error, plus a trigger on `league` as backstop); `seed_league_pool`
+  takes college rows only where COLLEGE is on; `league_pool_college` serves
+  school and class to members.
+- **Admin:** COLLEGE chip in Extra Positions, which now shows the refusal.
+  Web only.
+
 ### v0.538.0 — the computer answers back in chat
 
 Founder: "Could it paste in the chat a generic response that the message was

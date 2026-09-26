@@ -3499,6 +3499,15 @@ export const commishRepairPoolRow = (leagueId: string, slug: string,
 // player whose slug had to be disambiguated still finds his projection.
 export const leaguePoolIds = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; ids?: Record<string, string> }>('league_pool_ids', { p_league_id: leagueId });
+
+// ── College rows in the pool, with school and class (0365) ─────────────────
+// Keyed by slug (c-<espn_id>); NFL rows are not listed.
+export type CollegePoolMeta = {
+  espn_id: string; school: string | null; school_abbr: string | null;
+  class_label: string | null; class_year: number | null; active: boolean | null;
+};
+export const leaguePoolCollege = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number; first_week?: number; last_week?: number }>(
     'native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });

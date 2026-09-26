@@ -235,3 +235,4 @@ $RUN -f scripts/db/redraw-probes.sql | grep -E "PROBE FAIL|ALL REDRAW PROBES" ||
 $RUN -f scripts/db/txn-limit-probes.sql | grep -E "PROBE FAIL|ALL TXN-LIMIT PROBES" || { echo "TXN-LIMIT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/seed-override-probes.sql | grep -E "PROBE FAIL|ALL SEED-OVERRIDE PROBES" || { echo "SEED-OVERRIDE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/roster-legal-probes.sql | grep -E "PROBE FAIL|ALL ROSTER-LEGAL PROBES" || { echo "ROSTER-LEGAL PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/college-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE PROBES" || { echo "COLLEGE PROBES FAILED"; exit 1; }

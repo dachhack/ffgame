@@ -1,0 +1,145 @@
+// THE COLLEGE DIRECTORY (0365) — every FBS fantasy-position player, by ESPN id.
+//
+// Phase 1 of college players (devy, college-only and mixed leagues; classic
+// only). This poll only FILLS college_player; nothing puts those players in a
+// league pool yet.
+//
+// WHERE FROM. ESPN's free endpoints, the same family the NFL pollers read:
+//   · the FBS team list from the core API (`groups/80`). The site API's
+//     `teams?groups=80` ignores the filter and returns 300 schools, FCS
+//     included; the core API returned 148 for 2026.
+//   · one roster per school from the site API (~100 athletes each, with
+//     position, class year and jersey).
+//
+// NO NAME MATCHING. The key is the ESPN athlete id, which ESPN keeps when a
+// player reaches the NFL; the slug a league would hold him by is c-<espn_id>
+// (packages/core/src/data/college.ts).
+//
+// RETIREMENT. finish_college_sweep marks inactive anyone the sweep did not see,
+// so it runs ONLY after every school's roster came back. One timeout skips the
+// retirement for that sweep rather than retiring a school.
+//
+// CADENCE. Weekly in season; daily from February through August, when
+// transfers and signings move players between schools. The sweep is ~150
+// requests, so it runs detached from the tick and never delays live scoring.
+import { db } from '../supabase.js';
+import { collegePos } from '../../../packages/core/src/data/college.ts';
+
+const CORE_TEAMS = (season) =>
+  `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
+const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
+
+const DAY = 86400000;
+const CHUNK = 500;
+const CONCURRENCY = 4;
+
+/** FBS school ids from the core API's list of `$ref` links. */
+export function fbsTeamIds(feed) {
+  const out = [];
+  for (const it of feed?.items ?? []) {
+    const m = /\/teams\/(\d+)(?:[/?]|$)/.exec(it?.$ref ?? '');
+    if (m && !out.includes(m[1])) out.push(m[1]);
+  }
+  return out;
+}
+
+/** One school's roster → college_player rows. Non-fantasy positions drop. */
+export function rosterRows(roster) {
+  const team = roster?.team ?? {};
+  const out = [];
+  for (const group of roster?.athletes ?? []) {
+    for (const a of group?.items ?? []) {
+      const pos = collegePos(a?.position?.abbreviation);
+      const id = String(a?.id ?? '');
+      const name = (a?.fullName ?? a?.displayName ?? '').trim();
+      if (!pos || !/^\d+$/.test(id) || !name) continue;
+      const status = a?.status?.type;
+      out.push({
+        espn_id: id,
+        full_name: name,
+        pos,
+        espn_pos: a.position.abbreviation,
+        school_id: team.id != null ? String(team.id) : null,
+        school: team.displayName ?? null,
+        school_abbr: team.abbreviation ?? null,
+        class_year: Number.isFinite(a?.experience?.years) ? a.experience.years : null,
+        class_label: a?.experience?.abbreviation ?? null,
+        jersey: a?.jersey != null ? String(a.jersey) : null,
+        active: status == null ? true : status === 'active',
+      });
+    }
+  }
+  return out;
+}
+
+/** How long to wait between sweeps on a given date: daily Feb–Aug, weekly otherwise. */
+export function sweepEveryMs(now = new Date()) {
+  if (process.env.COLLEGE_POLL_MS) return Number(process.env.COLLEGE_POLL_MS);
+  const m = now.getUTCMonth(); // 0 = January
+  return m >= 1 && m <= 7 ? DAY : 7 * DAY;
+}
+
+// Three tries, like the scoreboard poller: one dropped connection in ~150
+// requests would otherwise cost the whole sweep its retirement pass.
+async function getJson(url, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' } });
+      if (res.ok) return res.json();
+      last = new Error(`${res.status} ${url}`);
+    } catch (e) { last = e; }
+    if (i < tries - 1) await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+  }
+  throw last;
+}
+
+/** Fetch every roster, write the rows, and retire the unseen if nothing failed. */
+export async function runCollegeSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args)) {
+  const started = new Date().toISOString();
+  const ids = fbsTeamIds(await fetchJson(CORE_TEAMS(season)));
+  if (!ids.length) return { schools: 0, rows: 0, failed: 0, retired: 0, error: 'no FBS teams' };
+
+  const rows = [];
+  let failed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const id = ids[next++];
+      try { rows.push(...rosterRows(await fetchJson(ROSTER(id)))); }
+      catch (e) { failed++; log('college roster', id, e.message); }
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+  let wrote = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { data, error } = await rpc('upsert_college_players', { p_rows: rows.slice(i, i + CHUNK) });
+    if (error) return { schools: ids.length, rows: wrote, failed, retired: 0, error: error.message };
+    wrote += Number(data?.rows ?? 0);
+  }
+
+  let retired = 0;
+  if (failed === 0) {
+    const { data, error } = await rpc('finish_college_sweep', { p_started: started });
+    if (error) log('college retire', error.message);
+    else retired = Number(data?.retired ?? 0);
+  }
+  return { schools: ids.length, rows: wrote, failed, retired };
+}
+
+let last = 0;
+let inflight = null;
+
+/** The tick's entry point: starts a sweep when one is due, never awaits it. */
+export function sweepCollege(season, log = () => {}) {
+  if (inflight || Date.now() - last < sweepEveryMs()) return false;
+  last = Date.now();
+  inflight = runCollegeSweep(season, log)
+    .then((r) => log(`college: ${r.rows} players from ${r.schools} schools` +
+      (r.failed ? `, ${r.failed} rosters failed (no retirement this sweep)` : `, ${r.retired} retired`) +
+      (r.error ? ` — ${r.error}` : '')))
+    .catch((e) => log('college sweep error', e.message))
+    .finally(() => { inflight = null; });
+  return true;
+}
