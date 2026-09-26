@@ -24,6 +24,7 @@ import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
 import { sweepGraduation } from './poll/graduate.js';
+import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS } from './poll/collegeSlate.js';
 import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
@@ -174,11 +175,47 @@ export function contextsFor(forcedSeasonType, regWeek, preWeek) {
  *  August ends — there is nothing to switch off. */
 async function activeContexts(season) {
   const forced = config.forcedSeasonType;
-  const [regW, preW] = await Promise.all([
+  const [regW, preW, cfbW] = await Promise.all([
     forced != null && forced !== REGULAR_SEASON ? Promise.resolve(1) : regularWeek(season),
     forced === REGULAR_SEASON ? Promise.resolve(null) : espnWeekFor(season, forced ?? PRESEASON),
+    forced != null ? Promise.resolve(null) : collegeWeek(season),
   ]);
-  return contextsFor(forced, regW, preW);
+  return withCollege(contextsFor(forced, regW, preW), cfbW);
+}
+
+/** PURE (0371): the college context joins at board week 200 + N while ESPN's
+ *  college regular season is in weeks 1..15 and some league uses the college
+ *  calendar (collegeWeek answers null otherwise). Last, so the NFL ticks first. */
+export function withCollege(ctxs, cfbWeek) {
+  if (cfbWeek == null || cfbWeek < 1 || cfbWeek > COLLEGE_WEEKS) return ctxs;
+  return [...ctxs, { seasonType: REGULAR_SEASON, offset: COLLEGE_BASE, espnWeek: cfbWeek, sport: 'college' }];
+}
+
+// ESPN's current college week, cached 30 min — and null (no context at all)
+// unless a league is on the college calendar, checked every 10.
+let cfbWeekHit = null, cfbInUseHit = null;
+async function collegeWeek(season) {
+  if (!cfbInUseHit || Date.now() - cfbInUseHit.at > 10 * 60e3) {
+    const { data, error } = await db().rpc('college_calendar_in_use');
+    cfbInUseHit = { on: error ? (cfbInUseHit?.on ?? false) : !!data, at: Date.now() };
+  }
+  if (!cfbInUseHit.on) return null;
+  if (!cfbWeekHit || Date.now() - cfbWeekHit.at > 30 * 60e3) {
+    const w = await espnCurrentWeek(season, REGULAR_SEASON, 'college').catch(() => null);
+    cfbWeekHit = { week: w ?? cfbWeekHit?.week ?? null, at: Date.now() };
+  }
+  return cfbWeekHit.week;
+}
+
+// Schools with a rostered player in a college-calendar league (0371), cached
+// 5 min: the college context polls only their games out of ~60 a Saturday.
+let liveSchoolsHit = null;
+async function collegeLiveSchools() {
+  if (!liveSchoolsHit || Date.now() - liveSchoolsHit.at > 5 * 60e3) {
+    const { data, error } = await db().rpc('college_live_schools');
+    liveSchoolsHit = { set: error ? (liveSchoolsHit?.set ?? new Set()) : new Set((data ?? []).map(String)), at: Date.now() };
+  }
+  return liveSchoolsHit.set;
 }
 
 /** Is any game in the tick's pooled slate live, or within ~24h of kickoff? Drives
@@ -427,9 +464,23 @@ async function closePriorWeek(regWeek, season) {
   await closeWeek(`wk ${prior}`, prior, games, season, true);
 }
 
+/** The college twin of closePriorWeek (0371): ESPN rolls its college week
+ *  early in the week, so last Saturday's matchups are closed from here. No
+ *  reports (NFL only), same five-minute throttle. */
+let lastPriorCollegeClose = 0;
+async function closePriorCollegeWeek(cfbWeek, season) {
+  if (cfbWeek <= 1 || Date.now() - lastPriorCollegeClose < PRIOR_WEEK_MS) return;
+  lastPriorCollegeClose = Date.now();
+  const prior = cfbWeek - 1;
+  const games = await getGames(season, prior, REGULAR_SEASON, 0, 'college');
+  if (!games.length || !games.every((g) => g.completed)) return;
+  await closeWeek(`cfb ${prior}`, COLLEGE_BASE + prior, games, season, false);
+}
+
 async function tickContext(ctx, season) {
   const week = ctx.espnWeek + ctx.offset;
-  const games = await getGames(season, ctx.espnWeek, ctx.seasonType);
+  const sport = ctx.sport ?? 'nfl';
+  const games = await getGames(season, ctx.espnWeek, ctx.seasonType, 0, sport);
 
   // FINAL STATES OUTLIVE THE POLL SET (v0.342.1). gamesToPollFrom drops a game
   // the moment the SCOREBOARD reports it post+completed — but game_feed.state
@@ -464,7 +515,7 @@ async function tickContext(ctx, season) {
     // playoffs, the guillotine and coin all stall. The runtime slate is set
     // first so the final resolve derives the real windows even on a cold start
     // (a worker restart between the last live tick and this one).
-    if (games.length) await closeWeek(ctx.tag, week, games, season, ctx.seasonType === REGULAR_SEASON);
+    if (games.length) await closeWeek(ctx.tag, week, games, season, ctx.seasonType === REGULAR_SEASON && sport === 'nfl');
     return games;
   }
 
@@ -569,7 +620,14 @@ async function tickContext(ctx, season) {
   const finalsDue = (games ?? []).filter((g) => g.state === 'post' && g.completed
     && (finalPolled.get(g.eventId) ?? 0) <= Date.now() - FINAL_REPOLL_MS).map((g) => g.eventId);
   for (const id of finalsDue) finalPolled.set(id, Date.now());
-  const toPoll = [...gamesToPollFrom(games), ...finalsDue];
+  let toPoll = [...gamesToPollFrom(games), ...finalsDue];
+  // COLLEGE (0371): ~60 FBS games a Saturday, and only the ones with a
+  // rostered player in a college-calendar league are worth a request.
+  if (sport === 'college') {
+    const schools = await collegeLiveSchools();
+    const want = new Set(games.filter((g) => (g.teamIds ?? []).some((id) => schools.has(id))).map((g) => g.eventId));
+    toPoll = toPoll.filter((id) => want.has(id));
+  }
   // SIMULATOR ROWS NEVER OUTLIVE THE REAL FEED (v0.387.2). live_play and
   // game_feed key on WEEK alone — no season — so a June dress rehearsal that
   // replayed baked 2025 Week 1 into week 1 (game_id 'SIM' / 'SIM:LV@NE') was
@@ -589,7 +647,7 @@ async function tickContext(ctx, season) {
     } catch (e) { simPurgedWeeks.delete(week); log(`[${ctx.tag}] sim purge`, e.message); }
   }
   let wrote = 0;
-  for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex); } catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); } }
+  for (const eventId of toPoll) { try { wrote += await pollGame(eventId, week, playerIndex, sport); } catch (e) { log(`[${ctx.tag}] poll game`, eventId, e.message); } }
   if (toPoll.length) log(`[${ctx.tag}] polled`, toPoll.length, 'games,', wrote, 'play rows');
 
   const { data: live } = await db().from('matchup').select('*').eq('week', week).in('status', ['live', 'final']);
@@ -637,8 +695,11 @@ async function tickContext(ctx, season) {
 async function tick() {
   const season = config.season;
   const contexts = (await activeContexts(season)).map((c) => ({
-    ...c, tag: c.seasonType === PRESEASON ? `pre ${c.espnWeek}` : `wk ${c.espnWeek}`,
+    ...c, tag: c.sport === 'college' ? `cfb ${c.espnWeek}` : c.seasonType === PRESEASON ? `pre ${c.espnWeek}` : `wk ${c.espnWeek}`,
   }));
+  // The NFL's own contexts: the per-week sweeps below (projections, weekly
+  // budgets, the prior-week close) are NFL business and never see week 201+.
+  const nflContexts = contexts.filter((c) => c.sport !== 'college');
 
   // Every active context, in order (preseason first — it's the one with live
   // games in August). Sequential rather than parallel: they share the player
@@ -651,7 +712,12 @@ async function tick() {
 
   // ADMIN REPORT REQUESTS (0277) are swept every tick, whatever the week is
   // doing, and the week Sleeper just rolled off gets closed (v0.393.3).
-  const reg = contexts.find((c) => c.seasonType === REGULAR_SEASON);
+  const reg = nflContexts.find((c) => c.seasonType === REGULAR_SEASON);
+  const cfb = contexts.find((c) => c.sport === 'college');
+  if (cfb) {
+    try { await closePriorCollegeWeek(cfb.espnWeek, season); }
+    catch (e) { log('prior college week close error', e.message); }
+  }
   if (reg) {
     try { const forced = await sweepRequests(season); if (forced) log('forced', forced, 'weekly reports'); }
     catch (e) { log('report requests error', e.message); }
@@ -735,7 +801,7 @@ async function tick() {
   // late is still news. Every active week gets a pass, so a Tuesday poll
   // fills next week while the current one is still being played.
   try {
-    const pr = await sweepProjections(config.season, contexts.map((c) => c.espnWeek + c.offset), log, playerIndex);
+    const pr = await sweepProjections(config.season, nflContexts.map((c) => c.espnWeek + c.offset), log, playerIndex);
     if (pr.projections || pr.news || pr.season) log('projections:', pr.projections, 'player-weeks,', pr.season, 'season lines,', pr.news, 'news items');
   } catch (e) { log('projection sweep error', e.message); }
 
@@ -751,6 +817,12 @@ async function tick() {
   // roster requests, so it runs detached: the tick starts it and moves on.
   try { sweepCollege(config.season, log); }
   catch (e) { log('college sweep error', e.message); }
+  // THE COLLEGE SLATE (0371), daily: all fifteen weeks at board week 200 + N,
+  // so a league switched to the college calendar can lay its schedule at once.
+  try {
+    const cs = await sweepCollegeSlate(config.season, log);
+    if (cs.rows) log('college slate:', cs.rows, 'games over', cs.weeks, 'weeks');
+  } catch (e) { log('college slate error', e.message); }
 
   // DEVY GRADUATION (0367). Daily, detached: a college player ESPN now lists
   // on an NFL team moves to his NFL slug in every league holding him.
@@ -767,7 +839,7 @@ async function tick() {
   // Native leagues: advance live draft clocks, clear due waiver claims, and
   // drop each active week's coin allowance (idempotent — see native.js).
   try {
-    const nat = await sweepNative(log, contexts.map((c) => c.espnWeek + c.offset));
+    const nat = await sweepNative(log, nflContexts.map((c) => c.espnWeek + c.offset));
     if (nat.autopicks || nat.claimsWon || nat.claimsLost || nat.allowance || nat.drafted) {
       log('native sweep:', nat.autopicks, 'autopicks,', nat.claimsWon, 'claims won,', nat.claimsLost, 'lost,', nat.allowance, 'allowances,', nat.drafted, 'drafts started');
     }

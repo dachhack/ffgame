@@ -19,7 +19,7 @@ import { lineupReport, lineupReportLine } from '@drip/core/data/widgetExtras';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
-import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
+import { isPreseasonWeek, weekTitle } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
 import { slateWeeks, weekGameFeeds, weekLivePlays } from '@drip/core/data/liveApi';
@@ -1644,7 +1644,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
             {weeks.map(([wk, ms]) => (
               <div key={wk} style={{ ...card, marginBottom: 10 }}>
                 <div style={hdr}>
-                  {isPreseasonWeek(wk) ? `PRESEASON WK ${preseasonWeekNum(wk)}` : `WEEK ${wk}`}
+                  {weekTitle(wk)}
                   {isPreseasonWeek(wk) && <span style={{ color: 'var(--faint)', fontWeight: 400, letterSpacing: '0.06em' }}> · PRACTICE, DOESN'T COUNT</span>}
                 </div>
                 {ms.map((r, i) => {

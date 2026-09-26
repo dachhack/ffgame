@@ -16,7 +16,7 @@ import {
   leagueTrades, nativeTeamState, nativeRosters, leaguePool,
   convertLeagueToNative, type ConvertSummary, commishRepairPoolRow, nativeReschedule,
   playoffState, setPlayoffRules, advancePlayoffs, autoGeneratePlayoffs, leagueDefaultSeeds, commishSeedPlayoffs,
-  leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess,
+  leagueGameMode, setLeagueClassicAccess, setLeaguePositionAccess, leagueIsCollegeCalendar, setLeagueCalendar,
   keeperState, rolloverLeague, type KeeperState,
   pickAssets, type PickAssetRow,
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
@@ -1086,7 +1086,37 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
       })}
       <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
       {err && <span className="mono" style={{ fontSize: 10.5, color: 'var(--opp)' }}>{err}</span>}
+      {on?.includes('COLLEGE') && <CalendarToggle leagueId={leagueId} />}
     </div>
+  );
+}
+
+// THE COLLEGE CALENDAR (0371): a college-only league plays college Saturdays.
+// Shown beside the COLLEGE chip; the server refuses (and we say why) after the
+// draft, without COLLEGE, or with devy spots.
+function CalendarToggle({ leagueId }: { leagueId: string }) {
+  const [college, setCollege] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { leagueIsCollegeCalendar(leagueId).then((r) => setCollege(r === true)).catch(() => {}); }, [leagueId]);
+  const flip = async () => {
+    if (college === null || busy) return;
+    setBusy(true);
+    try {
+      const r = await setLeagueCalendar(leagueId, college ? 'nfl' : 'college');
+      if (r.ok) { setCollege(!college); setErr(null); } else setErr(r.error ?? 'refused');
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button onClick={() => void flip()} disabled={college === null || busy} className="mono"
+        style={{ fontSize: 11.5, fontWeight: 700, borderRadius: RADIUS, padding: '3px 10px', cursor: 'pointer',
+          color: college ? 'var(--on-accent)' : 'var(--dim)', background: college ? 'var(--you)' : 'var(--bg)',
+          border: `1px solid ${college ? 'var(--you)' : 'var(--bd)'}`, opacity: college === null || busy ? 0.5 : 1 }}>
+        🏈 {college ? 'COLLEGE CALENDAR' : 'NFL CALENDAR'}
+      </button>
+      {err && <span className="mono" style={{ fontSize: 10.5, color: 'var(--opp)' }}>{err}</span>}
+    </>
   );
 }
 

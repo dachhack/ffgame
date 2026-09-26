@@ -15,7 +15,7 @@ import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
 import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
-import { isPreseasonWeek, preseasonWeekNum, kickoffLabel } from '@drip/core/data/nflSlate';
+import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
 import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
@@ -217,7 +217,7 @@ export function FieldBoard({ week, entries, scheduled, onClose, onRefresh }: {
       )}
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}` : `WEEK ${week}`}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {weekTitle(week)}</span>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button onClick={toggleFollow} className="mono" aria-pressed={follow}
               title="auto-scroll to the field where the newest play just landed"

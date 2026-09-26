@@ -18,6 +18,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.546.0 — college players, phase 3: college-only leagues
+
+A classic league can play the college calendar: college players only, scored
+live off ESPN's college play-by-play, locking at the college week's first
+kickoff.
+- **Board weeks 201+ (0371):** every live table keys on a bare week, so
+  college Week N is board week 200 + N — the preseason's +100 trick again.
+  `is_practice_week` is now 101..199 (and `isPreseasonWeek` with it), so a
+  college week counts for standings and coin.
+- **The calendar:** `set_league_calendar` (admin, before the draft; needs
+  COLLEGE, no devy spots) stores `calendar: 'college'`, narrows the pool to
+  college players, gives a K/DEF-free lineup (QB, 2 RB, 3 WR, TE, FLEX) when
+  the old one wanted a kicker or defense, and re-lays the schedule on the
+  first open college weeks (cap: Week 15). No playoffs on the college
+  calendar yet (`league_playoff_teams` = 0).
+- **Worker:** a daily college slate sweep writes all 15 weeks into
+  `nfl_slate` at 201..215. A college context joins the tick when a league uses
+  the calendar and ESPN is in college weeks 1..15; it polls only games whose
+  schools have an active rostered player (`college_live_schools`), and every
+  boxscore athlete resolves to `c-<espn_id>` — never through the NFL index.
+  Projections, weekly budgets and the NFL prior-week close skip it; a college
+  prior-week close finalizes last Saturday.
+- **Scoring check (Liberty at Coastal Carolina, 2026 Week 4):** 20 of 25
+  players' rushing/receiving match ESPN's box exactly. The rest: ESPN's college
+  box counts sacks as rushing (NCAA rule); we score sacks separately, the NFL
+  convention, and two penalty-flagged plays are handled as the NFL adapter
+  always has.
+- **Apps:** week labels read "CFB 3" / "CFB WK 3"; an admin calendar switch
+  beside the COLLEGE chip.
+- **Known gaps:** AI/auto-slotted lineups rank college players with no
+  projection (all zero); no college playoffs; bowls are not played.
+
 ### v0.545.0 — devy follow-ups: school labels and graduation conflicts
 
 - **School, not a blank:** `leaguePool` fills a college player's school from

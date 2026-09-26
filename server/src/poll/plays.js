@@ -5,7 +5,12 @@
 import { gameToRealPlays, gameToFeed, gameStatus, gameEvents } from '../../../scripts/espn/espnAdapter.mjs';
 import { db } from '../supabase.js';
 
-const SUM = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`;
+const SUM = (id, sport = 'nfl') =>
+  `https://site.api.espn.com/apis/site/v2/sports/football/${sport === 'college' ? 'college-football' : 'nfl'}/summary?event=${id}`;
+
+/** A college boxscore athlete IS his slug (0365): c-<espn_id>. No directory,
+ *  no names — and a namesake in the NFL index can never absorb his plays. */
+export const collegeResolveSlug = (_name, espnId) => (espnId != null && /^\d+$/.test(String(espnId)) ? `c-${espnId}` : null);
 
 async function getJson(url, tries = 3) {
   for (let i = 0; i < tries; i++) {
@@ -16,8 +21,8 @@ async function getJson(url, tries = 3) {
 }
 
 /** Poll one game and upsert its normalized plays. Returns rows written. */
-export async function pollGame(eventId, week, playerIndex) {
-  const sum = await getJson(SUM(eventId));
+export async function pollGame(eventId, week, playerIndex, sport = 'nfl') {
+  const sum = await getJson(SUM(eventId, sport));
   // ID-FIRST (0200): buildRoster hands us each boxscore athlete's ESPN id
   // alongside the display name — the id names the athlete actually in THIS
   // game, so a namesake elsewhere in the league can never absorb these plays.
@@ -26,7 +31,8 @@ export async function pollGame(eventId, week, playerIndex) {
   // The team is the fallback's disambiguator (v0.345.0) — buildRoster knows
   // which club each boxscore athlete appeared for, and for the 2026 rookie
   // class (no espn_id in Sleeper's directory) the name path is the only path.
-  const resolveSlug = (name, espnId, team) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name, team);
+  const resolveSlug = sport === 'college' ? collegeResolveSlug
+    : (name, espnId, team) => playerIndex.slugForEspnId(espnId) ?? playerIndex.slugForName(name, team);
   const pbp = gameToRealPlays(sum, resolveSlug);
 
   // LIVE QB HITS / PASSES DEFENDED STAND DOWN ONCE CONFIRMED (v0.535.0). The
@@ -38,7 +44,8 @@ export async function pollGame(eventId, week, playerIndex) {
   let confirmed = false;
   // Only a finished game can have been confirmed — skip the lookup while one
   // is being played (it would run on every 25-second poll).
-  if (feedEarly && sum?.header?.competitions?.[0]?.status?.type?.completed) {
+  // (NFL only: the nflverse true-up never covers a college game.)
+  if (sport !== 'college' && feedEarly && sum?.header?.competitions?.[0]?.status?.type?.completed) {
     const [, [awayT, homeT]] = feedEarly;
     const { data: nv } = await db().from('live_play').select('id')
       .eq('week', week).in('k', ['qbhit', 'pd']).like('game_id', `%\\_${awayT}\\_${homeT}`).limit(1);

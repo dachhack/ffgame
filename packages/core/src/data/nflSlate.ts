@@ -353,8 +353,23 @@ function fmtSodShort(sod: number): string {
 // colliding with the already-loaded regular-season weeks 1-3. The slate/plays for
 // these weeks are written by the worker (seasonType=1) at the same offset.
 export const PRESEASON_BASE = 100;
-/** Is this a preseason (offset) board week? */
-export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE;
+/** Is this a preseason (offset) board week? 101..199 — 201+ is the college
+ *  calendar (0371), which is real, counted football. */
+export const isPreseasonWeek = (week: number): boolean => week > PRESEASON_BASE && week < COLLEGE_BASE;
+
+// ── College weeks (0371) ─────────────────────────────────────────────────────
+// A college-calendar league plays college Week N at board week 200 + N, the
+// preseason's trick again: every live table keys on the bare week, so college
+// Week 3 cannot share week 3 with the NFL.
+export const COLLEGE_BASE = 200;
+export const isCollegeWeek = (week: number): boolean => week > COLLEGE_BASE;
+/** The college week number for a board week (203 → 3). */
+export const collegeWeekNum = (week: number): number => week - COLLEGE_BASE;
+/** A board week as a heading: "PRESEASON WK 2", "CFB WK 3", "WEEK 5". */
+export const weekTitle = (week: number): string =>
+  (isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}`
+    : isCollegeWeek(week) ? `CFB WK ${collegeWeekNum(week)}`
+    : `WEEK ${week}`);
 /** The 1-based preseason week number for an offset board week (101 → 1). */
 export const preseasonWeekNum = (week: number): number => week - PRESEASON_BASE;
 /** The POSTSEASON weeks, as nflverse numbers them and the bake carries them
@@ -370,12 +385,14 @@ export const isPostseasonWeek = (week: number): boolean => week >= 19 && week <=
  *  outside this file, and neither does "WK 22". */
 export const weekLabel = (week: number): string =>
   (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
+    : isCollegeWeek(week) ? `CFB ${collegeWeekNum(week)}`
     : POSTSEASON_LABEL[week] ? POSTSEASON_LABEL[week]
     : `WK ${week}`);
 
 /** The same, stripped for a narrow column: "P2" / "WC" / "5". */
 export const weekTick = (week: number): string =>
   (isPreseasonWeek(week) ? `P${preseasonWeekNum(week)}`
+    : isCollegeWeek(week) ? `C${collegeWeekNum(week)}`
     : POSTSEASON_LABEL[week] ?? String(week));
 
 /** How many preseason weeks a preseason league carries. FOUR for 2026: ESPN's

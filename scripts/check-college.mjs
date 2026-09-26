@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
+import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -42,6 +43,15 @@ const map = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FB: 'FB', PK: 'K', P: 'P',
   DL: 'DL', LB: 'LB', CB: 'DB', S: 'DB', DB: 'DB', OL: null, C: null, LS: null, ATH: null };
 for (const [espn, want] of Object.entries(map)) ok(collegePos(espn) === want, `ESPN ${espn} → ${want}`);
 ok(Object.values(map).filter(Boolean).every((p) => COLLEGE_POSITIONS.includes(p)), 'every mapped position is storable');
+
+// ── 5. college weeks (0371): 201+ is college, 101..199 preseason ──
+ok(isPreseasonWeek(102) && !isPreseasonWeek(203) && !isPreseasonWeek(5), 'preseason is 101..199 only');
+ok(isCollegeWeek(203) && !isCollegeWeek(103) && !isCollegeWeek(3), 'college is 201+');
+ok(weekLabel(203) === 'CFB 3' && weekTick(203) === 'C3' && weekTitle(203) === 'CFB WK 3', 'college weeks read as CFB');
+ok(weekLabel(102) === 'PRE 2' && weekTitle(5) === 'WEEK 5', 'preseason and NFL labels unchanged');
+const cal = readFileSync(new URL('../supabase/migrations/0371_college_calendar.sql', import.meta.url), 'utf8')
+  .split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal), 'SQL practice weeks match isPreseasonWeek (101..199)');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL COLLEGE CHECKS PASS');
