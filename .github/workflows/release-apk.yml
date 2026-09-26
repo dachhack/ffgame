@@ -74,6 +74,30 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform android --no-install
 
+      # R8 NEEDS ROOM (v0.546.1). Runs 161–165 produced no APK: R8 died with
+      # `java.lang.OutOfMemoryError: Metaspace` in minifyReleaseWithR8
+      # (lintVitalAnalyzeRelease failing beside it) once v0.542.0 added
+      # expo-updates, and gradle then sat until the time limit instead of
+      # exiting. The template's gradle JVM is -Xmx2048m with a 512 MB
+      # Metaspace; the runner has 16 GB.
+      #
+      # WHY HERE AND NOT IN A CONFIG PLUGIN: plugins are part of the native
+      # fingerprint that OTA updates are matched on (apps/mobile/
+      # fingerprint.config.js). Changing one would give every build a new
+      # runtime and strand the installed iPhone and Android builds from all
+      # later updates. This file is not in the fingerprint, and only this
+      # release build runs R8.
+      - name: Give gradle (R8) more memory
+        working-directory: apps/mobile/android
+        run: |
+          jvm='org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8'
+          if grep -q '^org.gradle.jvmargs=' gradle.properties; then
+            sed -i "s|^org.gradle.jvmargs=.*|$jvm|" gradle.properties
+          else
+            echo "$jvm" >> gradle.properties
+          fi
+          grep '^org.gradle.jvmargs=' gradle.properties
+
       # THE NDK, INSTALLED UP FRONT AND RETRIED (v0.511.1). Run 131 died in
       # 2m: gradle auto-installs the NDK React Native pins the first time it
       # configures :app, and that download came back truncated ("Archive is
