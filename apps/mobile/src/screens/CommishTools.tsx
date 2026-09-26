@@ -34,6 +34,7 @@ import {
   setLeagueContinuity, type LeagueContinuity, isDynastyContinuity,
   setLeagueName, setLeagueAvatar, myEnrollments, commishDeleteLeague,
   leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
+  isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { classicSlots, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -1923,6 +1924,29 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   const [collegeCal, setCollegeCal] = useState(false);
   useEffect(() => { leagueIsCollegeCalendar(leagueId).then((r) => setCollegeCal(r === true)).catch(() => {}); }, [leagueId]);
   const mixed = extraPos.includes('COLLEGE') && !collegeCal && shape.devy === 0;
+  // ADMIN ONLY (0171/0365/0371): the extra position groups — COLLEGE among
+  // them — and the college calendar, the web admin page's chips, here too.
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => { isAdmin().then((r) => setAdmin(r === true)).catch(() => {}); }, []);
+  const flipExtraPos = async (g: string) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const next = extraPos.includes(g) ? extraPos.filter((x) => x !== g) : [...extraPos, g];
+      const r = await setLeaguePositionAccess(leagueId, next);
+      if (r.ok) { commit(); setExtraPos(r.positions ?? next); setNote(`✓ ${g} ${next.includes(g) ? 'on' : 'off'} — refresh the player pool (draft room)`); }
+      else { warn(); setNote(r.error ?? 'refused'); }
+    } finally { setBusy(false); }
+  };
+  const flipCalendar = async () => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueCalendar(leagueId, collegeCal ? 'nfl' : 'college');
+      if (r.ok) { commit(); setCollegeCal(!collegeCal); setNote(`✓ ${collegeCal ? 'NFL' : 'college'} calendar`); }
+      else { warn(); setNote(r.error ?? 'refused'); }
+    } finally { setBusy(false); }
+  };
   const [fltTeams, setFltTeams] = useState('');
   const [fltMin, setFltMin] = useState('');
   const [fltMax, setFltMax] = useState('');
@@ -2519,8 +2543,24 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </View>
           )}
           <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
-            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · bench and taxi lock at the draft; IR spots can be added any time.
+            Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · after the draft every count can still change (never below what a team holds), and each change is posted to league chat.
           </Mono>
+          {admin && (
+            <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+              <Mono size={8.5} tone="faint" weight="700">⚡ ADMIN · EXTRA POSITIONS</Mono>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                {(['HC', 'P', 'IDP', 'FB', 'RET', 'COLLEGE'] as const).map((g) => (
+                  <Pill key={g} on={extraPos.includes(g)} label={g} onPress={() => { tap(); void flipExtraPos(g); }} />
+                ))}
+                {extraPos.includes('COLLEGE') && (
+                  <Pill on={collegeCal} label={collegeCal ? '🏈 COLLEGE CALENDAR' : '🏈 NFL CALENDAR'} onPress={() => { tap(); void flipCalendar(); }} />
+                )}
+              </View>
+              <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
+                COLLEGE is for classic leagues. The college calendar (college players only, college Saturdays) must be set before the draft.
+              </Mono>
+            </View>
+          )}
           {extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>
           )}

@@ -117,9 +117,13 @@ begin
   update league set settings_json = jsonb_set(settings_json, '{roster_shape,devy}', '1') where id = lid;
   perform dv_true(roster_illegal_reason(lid, 1) like 'the devy squad holds 2 (limit 1)%', 'dv4b an overfull devy shelf is illegal');
   update league set settings_json = jsonb_set(settings_json, '{roster_shape,devy}', '2') where id = lid;
-  r := set_league_roster_shape(lid, null, null, null, null, 3);
-  perform dv_true((r ->> 'ok')::boolean is false and r ->> 'error' = 'devy spots lock once the draft starts',
-    'dv4c devy spots lock after the draft');
+  -- 0376: after the draft a devy spot can be added, and can't be taken from
+  -- a team using both.
+  perform dv_ok(set_league_roster_shape(lid, null, null, null, null, 3), 'dv4c a devy spot added after the draft');
+  perform dv_true((select body from league_message where league_id = lid order by id desc limit 1) like '%devy 2 → 3%', 'dv4d …announced');
+  r := set_league_roster_shape(lid, null, null, null, null, 1);
+  perform dv_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'a team has 2 players in devy spots%', 'dv4e not below what a team holds');
+  perform dv_ok(set_league_roster_shape(lid, null, null, null, null, 2), 'dv4f back to 2');
 
   -- ══ dv5. TRADES ══════════════════════════════════════════════════════════
   insert into native_roster (league_id, roster_id, slug) values (lid, 2, 'c-93703'), (lid, 2, 'dv-qb2');

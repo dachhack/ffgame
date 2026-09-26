@@ -130,9 +130,11 @@ begin
   perform assert_ok(r, 'os5 a third OUT spot after the draft');
   perform assert_true((r -> 'shape' ->> 'out')::int = 3 and (r ->> 'rounds')::int = 10 and (r ->> 'draft_rounds')::int = 6, 'os5a the roster grows, the draft does not: ' || r::text);
   perform assert_err(set_league_roster_shape(lid, null, null, 1, 1), 'players on OUT', 'os5b a shelf someone stands on cannot be removed');
-  perform assert_err(set_league_roster_shape(lid, 5, null, 1, 3), 'bench and taxi squad lock', 'os5c the bench is still locked, and the message names both shelves');
-  perform assert_true(position('OUT spots' in (set_league_roster_shape(lid, 5, null, 1, 3) ->> 'error')) > 0, 'os5d …by name');
-
+  -- 0376: while the draft is live the drafted sections hold; IR and OUT move.
+  update draft set status = 'live' where league_id = lid;
+  perform assert_err(set_league_roster_shape(lid, 5, null, 1, 3), 'can change once the draft is over', 'os5c the bench waits for the draft to finish');
+  perform assert_true(position('IR and OUT spots can change now' in (set_league_roster_shape(lid, 5, null, 1, 3) ->> 'error')) > 0, 'os5d …and says what moves now');
+  update draft set status = 'complete' where league_id = lid;
   delete from league where id = lid;
   delete from injury_status where player_slug like 'os-%';
   raise notice 'out-spot probes done';
