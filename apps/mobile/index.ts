@@ -20,6 +20,7 @@ import { registerRootComponent } from 'expo';
 import { initAnalytics } from '@drip/core/analytics';
 import { initNativeAnalytics } from './src/analytics.native';
 import { App } from './App';
+import { installOtaUpdates } from './src/updates';
 
 // Analytics before the first render, mirroring the web's main.tsx: the sink is
 // registered first so `app_open` is the first event out rather than the first
@@ -31,4 +32,7 @@ initNativeAnalytics();
 initAnalytics({ native: true });
 
 registerMatchupWidget();
+// Over-the-air updates: check on every return to the foreground and apply a
+// downloaded update after a long enough absence (src/updates.ts).
+installOtaUpdates();
 registerRootComponent(App);
