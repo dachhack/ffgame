@@ -74,9 +74,9 @@ begin
   perform cc_true((select lock_at from matchup where league_id = lid and week = 201 limit 1)
                 = (select min(kickoff) from nfl_slate where season = '2031' and week = 201),
     'cc3e lock_at is the college week''s first kickoff');
-  perform cc_true(league_playoff_teams(lid) = 0 and league_last_regular_week(lid) = 215, 'cc3f no playoffs; the season ends at 215');
-  r := generate_playoffs(lid, null, true);
-  perform cc_true((r ->> 'ok')::boolean and (r ->> 'playoffs') = 'off', 'cc3g the auto bracket is a quiet no-op');
+  -- 0374: college playoffs, on by default: 4 teams from college Week 13.
+  perform cc_true(league_playoff_teams(lid) = 4 and league_playoff_start(lid) = 213 and league_last_regular_week(lid) = 212,
+    'cc3f playoffs default on: Week 13 start, so the regular season ends at Week 12');
 
   -- ══ cc4. THE BACKSTOP ════════════════════════════════════════════════════
   boom := false;
@@ -98,6 +98,31 @@ begin
   perform cc_true('93333' = any(college_live_schools()), 'cc5b his school is polled');
   perform cc_true(college_calendar_in_use(), 'cc5c the worker sees a college league');
 
+  -- ══ cc7. COLLEGE PLAYOFFS (0374) ═════════════════════════════════════════
+  r := set_playoff_rules(lid, null, 20);
+  perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'college playoffs must start between%', 'cc7 no Week 20');
+  r := set_playoff_rules(lid, null, 15);
+  perform cc_true((r ->> 'ok')::boolean is false and r ->> 'error' like 'a bracket of 4 needs 2 weeks — start by college Week 14%',
+    'cc7a a 4-team bracket cannot start Week 15 (it would run past Week 15)');
+  perform cc_ok(set_playoff_rules(lid, 2, 15), 'cc7b a 2-team final in Week 15 fits');
+  perform cc_true(league_playoff_start(lid) = 215, 'cc7c a college week number is stored as its board week');
+  -- A played regular season (201..203) and a bracket the week after it.
+  insert into nfl_slate (season, week, home, away, win, kickoff, game_id)
+    values ('2031', 204, 'ALA', 'UGA', 'wk', now() + interval '23 days', 'cc5') on conflict do nothing;
+  perform cc_ok(set_playoff_rules(lid, 2, 204), 'cc7d start Week 4 (given as board week 204)');
+  update draft set status = 'complete' where league_id = lid;
+  update matchup set status = 'final', home_final = 100, away_final = 90 where league_id = lid and not is_playoff;
+  r := generate_playoffs(lid, null, true);
+  perform cc_ok(r, 'cc7e the worker''s auto bracket builds once the college regular season is final');
+  perform cc_true((select count(*) = 1 and min(week) = 204 from matchup where league_id = lid and is_playoff),
+    'cc7f the final is on college Week 4');
+  perform cc_true((select lock_at from matchup where league_id = lid and is_playoff)
+                = (select min(kickoff) from nfl_slate where season = '2031' and week = 204),
+    'cc7g and locks at that college week''s first kickoff');
+  delete from matchup where league_id = lid and is_playoff;
+  update matchup set status = 'scheduled', home_final = null, away_final = null where league_id = lid;
+  update draft set status = 'pending' where league_id = lid;
+
   -- ══ cc6. AND BACK ════════════════════════════════════════════════════════
   delete from native_roster where league_id = lid;
   r := set_league_calendar(lid, 'nfl');
@@ -105,6 +130,7 @@ begin
   perform cc_true((select settings_json ->> 'calendar' is null and settings_json -> 'pool_filter' ->> 'level' is null
                      from league where id = lid), 'cc6a calendar and level cleared');
   perform cc_true((select max(week) from matchup where league_id = lid) < 200, 'cc6b the schedule is back on NFL weeks');
+  perform cc_true(league_playoff_start(lid) = 15, 'cc6c and the college playoff start is cleared (NFL default 15)');
 
   delete from league_pool where league_id = lid;
   delete from college_player where espn_id = '93901';

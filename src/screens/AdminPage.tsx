@@ -4480,9 +4480,11 @@ function PlayoffPanel({ leagueId }: { leagueId: string }) {
             <div style={{ textAlign: 'center' }}>
               <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>START WEEK</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, opacity: st.underway ? 0.5 : 1 }}>
-                <button onClick={() => !st.underway && setStartWeek(Math.max(2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
-                <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek}</span>
-                <button onClick={() => !st.underway && setStartWeek(Math.min(18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
+                {/* A college-calendar league (0374) counts college weeks, 2–15,
+                    at board weeks 202–215; the server keeps the bracket inside Week 15. */}
+                <button onClick={() => !st.underway && setStartWeek(Math.max(startWeek > 200 ? 202 : 2, startWeek - 1))} className="mono" style={stepBtnStyle}>−</button>
+                <span className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', minWidth: 24, textAlign: 'center' }}>{startWeek > 200 ? `CFB ${startWeek - 200}` : startWeek}</span>
+                <button onClick={() => !st.underway && setStartWeek(Math.min(startWeek > 200 ? 215 : 18, startWeek + 1))} className="mono" style={stepBtnStyle}>＋</button>
               </div>
             </div>
           )}
