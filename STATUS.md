@@ -18,6 +18,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.547.0 — college players, phase 4: NFL and college players in one lineup
+
+A MIXED league — COLLEGE on, NFL calendar, no devy spots — starts college
+players beside NFL ones, scored live in the same NFL week.
+- **Spot levels (0372):** a lineup spot may take NFL players only, college
+  players only, or either (the default). Stored only for a mixed league,
+  refused elsewhere; the backstop keeps it from outliving the mix. The shared
+  engine (`slotAllows`) enforces it for pickers, fills and the resolver; the
+  builder cycles ANY → NFL → CFB per spot (web + app).
+- **Scoring:** after polling a college game, the worker copies its
+  college-player rows (`c-` slugs only — the adapter's team units would
+  collide with the NFL's) into the NFL week whose window holds the kickoff:
+  48h before the week's first kickoff to 12h after its last, the same rule as
+  SQL `nfl_week_window`. Week N then resolves by slug and week as always.
+  Labor Day Monday and Week 0 fall in no NFL week.
+- **Locking:** `classic_kickoff_for` now answers for a college player — his
+  school's game in the NFL week's window, or that week's game on the college
+  calendar — so the lineup guard, the add/drop guard and the new
+  `seal_due_college_picks` all lock him at his own kickoff, not Thursday night.
+  Phase 3 leagues get per-player college locks from the same function. The
+  worker's team-kickoff seal now skips college players.
+- **Worker readers:** `college_calendar_in_use` and `college_live_schools`
+  include mixed leagues; `mixed_leagues_exist` gates the copying.
+- **Known gaps:** college players have no games in fantasy playoff weeks
+  (the college season ends around NFL Week 14) — use ANY spots, not CFB-only,
+  for those weeks; AI lineups still don't rank college players.
+
 ### v0.546.0 — college players, phase 3: college-only leagues
 
 A classic league can play the college calendar: college players only, scored

@@ -42,6 +42,7 @@ begin
   -- NFL week 5 of season 2032 (future Thursday + Sunday), and two college weeks:
   -- 205 (inside NFL week 5's window: began an hour ago) and 206 (next week).
   insert into nfl_slate (season, week, home, away, win, kickoff, game_id) values
+    ('2032', 4, 'NYJ', 'NE', 'wk', now() - interval '3 days', 'mxn0'),   -- week 5's window opens 12h after this
     ('2032', 5, 'BUF', 'MIA', 'wk', thu, 'mxn1'),
     ('2032', 5, 'KC', 'DEN', 'wk', thu + interval '3 days', 'mxn2'),
     ('2032', 205, 'MXALA', 'MXFSU', 'wk', sat, 'mxc1'),

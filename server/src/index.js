@@ -11,7 +11,7 @@ import { config } from './config.js';
 import { getState } from './sleeper.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
-import { pollGame, nflWeekForKickoff } from './poll/plays.js';
+import { pollGame, nflWeekForKickoff, nflWeekWindows } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
@@ -227,7 +227,7 @@ async function nflWeekWindows(season) {
       const e = by.get(r.week) ?? { lo: t, hi: t };
       e.lo = Math.min(e.lo, t); e.hi = Math.max(e.hi, t); by.set(r.week, e);
     }
-    const windows = [...by.entries()].map(([week, e]) => ({ week, lo: e.lo - 48 * 3600e3, hi: e.hi + 12 * 3600e3 }));
+    const windows = nflWeekWindows([...by.entries()].map(([week, e]) => ({ week, first: e.lo, last: e.hi })));
     nflWindowsHit = { windows: error ? (nflWindowsHit?.windows ?? []) : windows, at: Date.now() };
   }
   return nflWindowsHit.windows;

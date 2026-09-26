@@ -33,14 +33,22 @@ create or replace function league_is_mixed(p_league_id uuid) returns boolean
 $$;
 grant execute on function league_is_mixed(uuid) to authenticated;
 
--- The span of an NFL board week, generous at both ends: from 48 hours before
--- its first kickoff (a Tuesday) to 12 hours after its last. Every college
--- game of that Thursday–Saturday falls inside.
+-- The span of an NFL board week, CONTIGUOUS with its neighbours: it starts
+-- where the previous week ended (12 hours after its last kickoff — Tuesday
+-- morning) and ends 12 hours after its own last kickoff. So Tuesday-night
+-- MACtion belongs to the week ahead, and no college game falls between weeks.
+-- Week 1 has no predecessor and starts at midnight Eastern on the day before
+-- its opener — the 2026 opener is Wednesday 9 Sep, so Labor Day Monday (SMU
+-- at FSU) scores in no NFL week.
 create or replace function nfl_week_window(p_week int, out lo timestamptz, out hi timestamptz)
   language sql stable security definer set search_path = public as $$
-  select min(kickoff) - interval '48 hours', max(kickoff) + interval '12 hours'
-    from nfl_slate
-   where week = p_week and season = (select max(season) from nfl_slate where week = p_week)
+  with seas as (select max(season) as s from nfl_slate where week = p_week),
+       cur as (select min(kickoff) as first, max(kickoff) as last from nfl_slate, seas where week = p_week and season = seas.s),
+       prev as (select max(kickoff) as last from nfl_slate, seas where week = p_week - 1 and season = seas.s)
+  select coalesce(prev.last + interval '12 hours',
+                  date_trunc('day', (cur.first - interval '24 hours') at time zone 'America/New_York') at time zone 'America/New_York'),
+         cur.last + interval '12 hours'
+    from cur, prev
 $$;
 
 -- 0179's function, plus a college player's own kickoff.

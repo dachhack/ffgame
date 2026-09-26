@@ -21,8 +21,30 @@ async function getJson(url, tries = 3) {
 }
 
 /** THE NFL WEEK A COLLEGE KICKOFF BELONGS TO (0372): the week whose window —
- *  48h before its first kickoff (the Tuesday) to 12h after its last, nfl_week_window's rule
+ *  contiguous windows of nflWeekWindows, nfl_week_window's rule
  *  in SQL — holds it. Null outside every window (college Week 0/1, bowls). */
+/** THE NFL WEEK WINDOWS (0372), contiguous: week N runs from 12h after week
+ *  N−1's last kickoff (Tuesday morning) to 12h after its own last — so a
+ *  Tuesday-night college game belongs to the week ahead and none fall between.
+ *  Week 1 (no predecessor) opens at midnight Eastern on the day before its
+ *  opener. SQL nfl_week_window states the same rule.
+ *  `spans`: [{ week, first, last }] in epoch ms. */
+export function nflWeekWindows(spans) {
+  const byWeek = new Map((spans ?? []).map((s) => [s.week, s]));
+  return [...byWeek.values()].sort((a, b) => a.week - b.week).map((s) => {
+    const prev = byWeek.get(s.week - 1);
+    return { week: s.week, lo: prev ? prev.last + 12 * 3600e3 : etMidnight(s.first - 24 * 3600e3), hi: s.last + 12 * 3600e3 };
+  });
+}
+
+// Midnight Eastern of the day holding `ms`.
+function etMidnight(ms) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false })
+    .formatToParts(new Date(ms));
+  const n = (t) => Number(parts.find((p) => p.type === t)?.value ?? 0) % 24;
+  return ms - ((n('hour') * 60 + n('minute')) * 60 + n('second')) * 1000 - (ms % 1000);
+}
+
 export function nflWeekForKickoff(ms, windows) {
   if (!Number.isFinite(ms)) return null;
   for (const w of windows ?? []) if (ms >= w.lo && ms <= w.hi) return w.week;
