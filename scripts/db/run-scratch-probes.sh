@@ -240,3 +240,4 @@ $RUN -f scripts/db/devy-probes.sql | grep -E "PROBE FAIL|ALL DEVY PROBES" || { e
 $RUN -f scripts/db/graduation-probes.sql | grep -E "PROBE FAIL|ALL GRADUATION PROBES" || { echo "GRADUATION PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-calendar-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-CALENDAR PROBES" || { echo "COLLEGE-CALENDAR PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/mixed-probes.sql | grep -E "PROBE FAIL|ALL MIXED PROBES" || { echo "MIXED PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/lineup-after-draft-probes.sql | grep -E "PROBE FAIL|ALL LINEUP-AFTER-DRAFT PROBES" || { echo "LINEUP-AFTER-DRAFT PROBES FAILED"; exit 1; }

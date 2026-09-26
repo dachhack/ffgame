@@ -18,6 +18,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.552.0 — the starting lineup changes after the draft; autopick fills it first
+
+- **Lineup after the draft (0377).** Once the draft is complete, and between
+  weeks (no week kicked off and not yet final), a commissioner can add,
+  remove or change starting spots. Slot names are positional (S1…Sn), so:
+  - saved, unlocked lineups for weeks not yet played are cleared in every
+    spot that changed; played weeks are untouched;
+  - with fewer spots, the bench grows as needed so no team goes illegal, and
+    the roster size (draft.rounds) follows;
+  - a lineup with no spot for a position teams hold is refused, because a
+    position no spot starts can't be rostered (0361);
+  - chat gets one line, old lineup → new ("QB · RB · WR · FLEX → …"), plus
+    notes for bench growth and cleared lineups. A pure rename posts nothing.
+  During a live draft, renames (0201) and removing spots from the end (0181)
+  still work; nothing else does.
+- **Autopick fills the lineup first.** While a team has an open starting
+  spot, autopick takes the best-ranked player who fits one: position,
+  NFL/college level, team and tenure filters, within the position caps. Then
+  the bench fills by rank. Kicker- and defense-only spots keep 0195's rule
+  (filled in the last rounds). A flag-limited spot is left to the manager.
+  Leagues with no lineup spec (drip, pre-0161 classic) are unchanged.
+- Save notes on web and mobile say what a post-draft lineup save did.
+- Probes: new lineup-after-draft suite; roster-builder sb11–sb13 and
+  rename-spot rn4–rn6 updated to the new rule.
+
 ### v0.551.0 — roster spots change after the draft; COLLEGE chip on mobile
 
 - **Roster spots after the draft (0376).** Once the draft is complete, a

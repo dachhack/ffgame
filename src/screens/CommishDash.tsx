@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
@@ -562,7 +562,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       // The ROSTER RULES panel prints a roster size DERIVED from these spots
       // (v0.297.1) — it re-reads on this notice instead of showing what it read
       // on mount.
-      if (r.ok) { setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setRounds(r.rounds ?? null); setNote('✓ lineup saved'); notifyLeagueSettingsChanged(leagueId); }
+      if (r.ok) { setSpots(r.slots ? r.slots.map(toSpotDraft) : spots); setSpotsDirty(false); setRounds(r.rounds ?? null); setNote(lineupSaveNote(r)); notifyLeagueSettingsChanged(leagueId); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -831,7 +831,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             )}            </span>
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. After the draft every count can still change — never below what a team holds — and each change is posted to league chat.
+            You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. After the draft the starting spots and every count can still change between weeks — never leaving a team illegal — and each change is posted to league chat.
           </div>
           {extraPos.includes('COLLEGE') && <GraduationConflictsPanel leagueId={leagueId} />}
 

@@ -1909,8 +1909,14 @@ export const setLeagueClassicRoster = (leagueId: string, roster: Record<string, 
 /** The roster POSITION BUILDER (0163): an ordered list of starting spots,
  *  each with its own eligible-position set + best-ball flag. Wins over the
  *  0161 counts when present; null/[] clears back to them. Draft-frozen. */
+/** 0377: what a post-draft lineup save did, for the save note. */
+export const lineupSaveNote = (r: { bench_grew?: number; picks_cleared?: number }) =>
+  '✓ lineup saved'
+  + (r.bench_grew ? ` · bench +${r.bench_grew} so every team stays legal` : '')
+  + (r.picks_cleared ? ` · ${r.picks_cleared} saved lineup spot${r.picks_cleared === 1 ? '' : 's'} cleared` : '')
+  + (r.bench_grew || r.picks_cleared ? ' · posted to league chat' : '');
 export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null) =>
-  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; starters?: number; rounds?: number }>('set_league_classic_slots',
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; starters?: number; rounds?: number; /** 0377: after the draft */ bench_grew?: number; picks_cleared?: number }>('set_league_classic_slots',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
 /** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as

@@ -75,29 +75,29 @@ begin
   perform assert_ok(r, 'rn3 a name may also be REMOVED post-draft');
   perform assert_true((r -> 'slots' -> 0 ? 'label') = false, 'rn3a …and the spot goes back to its derived name');
 
-  -- ══ AND NOTHING ELSE ═════════════════════════════════════════════════════
-  perform assert_err(set_league_classic_slots(lid,
+  -- ══ AND (0377) EVERYTHING ELSE, BETWEEN WEEKS ═══════════════════════════
+  perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["WR"],"label":"Nate''s Revenge"},{"pos":["RB","WR","TE"],"bb":true}]'::jsonb),
-    'can only be RENAMED', 'rn4 what a spot ACCEPTS is still frozen');
-  perform assert_err(set_league_classic_slots(lid,
+    'rn4 what a spot ACCEPTS can change after the draft now (0377)');
+  perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"],"label":"Nate''s Revenge","bb":true},{"pos":["RB","WR","TE"],"bb":true}]'::jsonb),
-    'can only be RENAMED', 'rn4a so is best ball');
-  perform assert_err(set_league_classic_slots(lid,
+    'rn4a so can best ball');
+  perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"],"label":"Nate''s Revenge","zero_pts":10},{"pos":["RB","WR","TE"],"bb":true}]'::jsonb),
-    'can only be RENAMED', 'rn4b so is the zero-fill — it decides points');
-  perform assert_err(set_league_classic_slots(lid,
+    'rn4b so can the zero-fill');
+  perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"],"label":"Nate''s Revenge","teams":["KC"]},{"pos":["RB","WR","TE"],"bb":true}]'::jsonb),
-    'can only be RENAMED', 'rn4c and so is a per-spot filter');
+    'rn4c and a per-spot filter');
 
   -- ══ THE SHRINK HATCH STILL WORKS ═════════════════════════════════════════
   r := set_league_classic_slots(lid, '[{"pos":["QB"]},{"pos":["RB"],"label":"Nate''s Revenge"}]'::jsonb);
   perform assert_ok(r, 'rn5 0181''s shrink from the end still works');
   perform assert_true(jsonb_array_length(r -> 'slots') = 2, 'rn5a …and the lineup really is shorter');
-  perform assert_err(set_league_classic_slots(lid,
+  perform assert_ok(set_league_classic_slots(lid,
     '[{"pos":["QB"]},{"pos":["RB"],"label":"Nate''s Revenge"},{"pos":["TE"]}]'::jsonb),
-    'rename spots, or shrink', 'rn6 a GROW is still refused');
+    'rn6 a GROW is allowed after the draft (0377)');
   perform assert_err(set_league_classic_slots(lid, null),
-    'locks once the draft starts', 'rn6a and so is clearing the spec');
+    'edit its spots instead', 'rn6a clearing the spec is still refused');
 
   -- A rename AND a shrink in one save is fine — the surviving spots are still
   -- what they were apart from their names.
