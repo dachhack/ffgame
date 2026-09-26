@@ -857,7 +857,7 @@ export async function leagueWeeks(leagueId: string): Promise<number[]> {
   const { data } = await (await client()).from('matchup').select('week').eq('league_id', leagueId);
   const weeks = [...new Set(((data ?? []) as { week: number }[]).map((r) => r.week))];
   // Preseason sorts BEFORE week 1 — it is played first, however it is numbered.
-  const key = (w: number) => (w > 100 ? w - 200 : w);
+  const key = (w: number) => (w > 100 && w < 200 ? w - 200 : w);   // college weeks (201+, 0371) keep their order
   return weeks.sort((a, b) => key(a) - key(b));
 }
 
@@ -3531,6 +3531,15 @@ export type CollegeDirectoryRow = {
   class_label: string | null; class_year: number | null;
   season: number | null; gp: number | null; ppg: number | null; ord: number;
 };
+// ── The college calendar (0371) ─────────────────────────────────────────────
+// A college-only league plays college Saturdays at board weeks 201+. Admin
+// only, before the draft; needs COLLEGE on and no devy spots. Switching re-lays
+// the schedule and, for college, the pool filter and a K/DEF-free lineup.
+export const leagueIsCollegeCalendar = (leagueId: string) =>
+  rpc<boolean>('league_is_college_calendar', { p_league_id: leagueId });
+export const setLeagueCalendar = (leagueId: string, calendar: 'nfl' | 'college') =>
+  rpc<{ ok: boolean; error?: string; calendar?: string }>('set_league_calendar', { p_league_id: leagueId, p_calendar: calendar });
+
 // ── Graduation conflicts (0370) ───────────────────────────────────────────
 // A devy player who graduated while another team rosters him as an NFL player.
 // The league waits for the commissioner: keep the devy holder or the NFL one.

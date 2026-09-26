@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FieldView } from '../app/FieldView';
 import { gameFeedFor, loadGameFeedWeek, setLiveGameFeed, feedRowsToWeek, type GamePlay } from '@drip/core/data/gameFeed';
 import { weekGameFeeds } from '@drip/core/data/liveApi';
-import { isPreseasonWeek, preseasonWeekNum } from '@drip/core/data/nflSlate';
+import { weekTitle } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
@@ -48,7 +48,7 @@ export function FieldGame({ week, team, onClose }: { week: number; team: string;
   const feed = useMemo(() => { void feedsAt; return gameFeedFor(week, team); }, [week, team, feedsAt]);
   // Newest first — the question this page answers is "what just happened".
   const plays = useMemo(() => (feed ? [...feed.plays].reverse() : []), [feed]);
-  const wkLabel = isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}` : `WEEK ${week}`;
+  const wkLabel = weekTitle(week);
 
   const logo = (abbr: string) => {
     const u = teamLogo(abbr);
