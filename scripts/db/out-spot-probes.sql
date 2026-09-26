@@ -121,7 +121,7 @@ begin
   perform assert_ok(set_roster_spot(lid, 'os-doubt', 'out'), 'os4j …and the Doubtful man takes the place');
   perform assert_true((select count(*) from native_roster where league_id = lid and roster_id = b_seat and spot <> 'active') = 3,
     'os4k three stashed: two OUT, one IR');
-  perform assert_err(set_roster_spot(lid, 'os-fit', 'bench'), 'spot must be active, taxi, ir, or out', 'os4l the spot vocabulary names OUT');
+  perform assert_err(set_roster_spot(lid, 'os-fit', 'bench'), 'spot must be active, taxi, ir, out, or devy', 'os4l the spot vocabulary names OUT (and devy, 0366)');
 
   -- ══ AFTER THE DRAFT: OUT MOVES LIKE IR ═══════════════════════════════════
   perform probe_as('a');

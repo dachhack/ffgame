@@ -22,6 +22,8 @@ import { sweepAdp } from './poll/adp.js';
 import { sweepTrending } from './poll/trending.js';
 import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
+import { sweepCollege } from './poll/college.js';
+import { sweepGraduation } from './poll/graduate.js';
 import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
@@ -744,6 +746,16 @@ async function tick() {
     const xr = await sweepXref(config.season, log);
     if (xr.rows) log('crosswalk:', xr.rows, 'players');
   } catch (e) { log('crosswalk sweep error', e.message); }
+
+  // THE COLLEGE DIRECTORY (0365). Weekly in season, daily Feb–Aug. About 150
+  // roster requests, so it runs detached: the tick starts it and moves on.
+  try { sweepCollege(config.season, log); }
+  catch (e) { log('college sweep error', e.message); }
+
+  // DEVY GRADUATION (0367). Daily, detached: a college player ESPN now lists
+  // on an NFL team moves to his NFL slug in every league holding him.
+  try { sweepGraduation(playerIndex, log); }
+  catch (e) { log('graduation sweep error', e.message); }
 
   // THE DYNASTY BOARD (0335). Weekly, gated inside the sweep: a dynasty value
   // is a long-horizon opinion of a career and does not move on a Tuesday.

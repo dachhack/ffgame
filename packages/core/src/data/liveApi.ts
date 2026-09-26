@@ -1873,7 +1873,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null; can_edit?: boolean }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -1913,17 +1913,19 @@ export const setLeagueClassicSlots = (leagueId: string, slots: { pos: string[]; 
     Ev.commishAction, { tool: 'roster_builder', count: slots?.length ?? 0 });
 /** BENCH/TAXI/IR counts (0164) — classic, pre-draft; draft rounds re-derive as
  *  starters + bench + taxi + ir. */
-export const setLeagueRosterShape = (leagueId: string, bench: number, taxi: number, ir: number, out = 0) =>
+export const setLeagueRosterShape = (leagueId: string, bench: number, taxi: number, ir: number, out = 0, devy?: number) =>
   // `rounds` is the ROSTER (what a team may hold, IR/OUT included);
   // `draft_rounds` is what the draft actually runs — they stopped being one
   // number in 0193, because an injured shelf is a spot you stash into, not one
   // you draft. OUT (0307) is IR's week-to-week sibling.
-  tracked(rpc<{ ok: boolean; error?: string; shape?: { bench: number; taxi: number; ir: number; out?: number }; rounds?: number; draft_rounds?: number }>('set_league_roster_shape',
-    { p_league_id: leagueId, p_bench: bench, p_taxi: taxi, p_ir: ir, p_out: out }),
+  // DEVY (0366) is drafted like bench and taxi, and only sent when given, so
+  // a build that doesn't know it calls the five-argument form and leaves it be.
+  tracked(rpc<{ ok: boolean; error?: string; shape?: { bench: number; taxi: number; ir: number; out?: number; devy?: number }; rounds?: number; draft_rounds?: number }>('set_league_roster_shape',
+    { p_league_id: leagueId, p_bench: bench, p_taxi: taxi, p_ir: ir, p_out: out, ...(devy === undefined ? {} : { p_devy: devy }) }),
     Ev.commishAction, { tool: 'roster_shape' });
 /** Move a rostered player between ACTIVE / TAXI / IR (0164). Owner or commish;
  *  IR needs a real injury designation; caps enforced server-side. */
-export type RosterSpot = 'active' | 'taxi' | 'ir' | 'out';
+export type RosterSpot = 'active' | 'taxi' | 'ir' | 'out' | 'devy';
 export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot) =>
   rpc<{ ok: boolean; error?: string; slug?: string; spot?: string }>('set_roster_spot',
     { p_league_id: leagueId, p_slug: slug, p_spot: spot });
@@ -3480,7 +3482,7 @@ export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =
 
 /** Commissioner (0171, pre-draft): allowable-player filter for the pool —
  *  team whitelist and/or tenure window. Null/empty clears. */
-export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null } | null) =>
+export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null } | null) =>
   rpc<{ ok: boolean; error?: string; filter?: unknown }>('set_league_pool_filter', {
     p_league_id: leagueId, p_filter: filter,
   });
@@ -3511,6 +3513,26 @@ export const commishRepairPoolRow = (leagueId: string, slug: string,
 // player whose slug had to be disambiguated still finds his projection.
 export const leaguePoolIds = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; ids?: Record<string, string> }>('league_pool_ids', { p_league_id: leagueId });
+
+// ── College rows in the pool, with school and class (0365) ─────────────────
+// Keyed by slug (c-<espn_id>); NFL rows are not listed.
+export type CollegePoolMeta = {
+  espn_id: string; school: string | null; school_abbr: string | null;
+  class_label: string | null; class_year: number | null; active: boolean | null;
+};
+export const leaguePoolCollege = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
+
+// ── The college directory, best first (0369) ────────────────────────────────
+// Ranked by last full season's PPR per game (an estimate, not a projection);
+// players with no 4-game season follow, by class year.
+export type CollegeDirectoryRow = {
+  espn_id: string; full: string; pos: string; school_abbr: string | null;
+  class_label: string | null; class_year: number | null;
+  season: number | null; gp: number | null; ppg: number | null; ord: number;
+};
+export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
+  rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number; first_week?: number; last_week?: number }>(
     'native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });

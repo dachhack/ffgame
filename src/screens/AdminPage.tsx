@@ -1050,12 +1050,14 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
 }
 
 // Per-league POSITION flags (0171): which extra position groups the admin has
-// unlocked — HC / P / IDP / FB / RET. Commissioners see the builder chips and
-// pool entries only where these are on. Rendered beside the classic unlock.
+// unlocked — HC / P / IDP / FB / RET, and COLLEGE (0365, classic leagues
+// only). Commissioners see the builder chips and pool entries only where these
+// are on. Rendered beside the classic unlock.
 function PositionAccessRow({ leagueId }: { leagueId: string }) {
-  const GROUPS = ['HC', 'P', 'IDP', 'FB', 'RET'] as const;
+  const GROUPS = ['HC', 'P', 'IDP', 'FB', 'RET', 'COLLEGE'] as const;
   const [on, setOn] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) setOn(r.positions ?? []); }).catch(() => {});
   }, [leagueId]);
@@ -1065,7 +1067,7 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
     try {
       const next = on.includes(g) ? on.filter((x) => x !== g) : [...on, g];
       const r = await setLeaguePositionAccess(leagueId, next);
-      if (r.ok) setOn(r.positions ?? next);
+      if (r.ok) { setOn(r.positions ?? next); setErr(null); } else setErr(r.error ?? 'refused');
     } finally { setBusy(false); }
   };
   return (
@@ -1083,6 +1085,7 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
         );
       })}
       <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
+      {err && <span className="mono" style={{ fontSize: 10.5, color: 'var(--opp)' }}>{err}</span>}
     </div>
   );
 }
